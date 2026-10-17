@@ -459,7 +459,16 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
                 return state
             round_dir.mkdir(parents=True, exist_ok=True)
             selected_path = round_dir / 'selected-cases.jsonl'
-            selected_path.write_text(''.join(json.dumps(row) + '\n' for row in selected))
+            if selected_path.exists():
+                from ..common.hashing import canonical_json_sha256_hex
+                if canonical_json_sha256_hex(list(read_jsonl(selected_path)))!=canonical_json_sha256_hex(selected):
+                    raise ValueError('sealed RL selected case objects or order changed')
+                # The durable selection snapshot sorts nested dictionary keys.
+                # Its equivalent objects must not reserialize an existing wire
+                # file: the collection receipt binds that file's exact bytes.
+            else:
+                from ..common.jsonio import write_bytes_durable
+                write_bytes_durable(selected_path, ''.join(json.dumps(row) + '\n' for row in selected).encode('utf-8'))
             policy = sha256_file_hex(Path(state['checkpoint']))
             values = {**{k: v for k, v in config.items() if isinstance(v, (str, int, float, list))},
                       'checkpoint': state['checkpoint'], 'policy_id': policy, 'out': str(round_dir),
