@@ -224,7 +224,7 @@ def test_shared_reader_rejects_unsupported_files(tmp_path):
     with pytest.raises(Reject,match='unsupported acquired'):list(acquired.iter_acquired_file_rows(path))
 
 
-def test_recovered_acquisition_requires_exact_archive_and_complete_inventory(tmp_path):
+def test_recovered_acquisition_requires_exact_archive_and_complete_inventory(tmp_path,monkeypatch):
     import tarfile
     from io import BytesIO
     from neuralese_data.acquired_agents import validate_recovery_manifest
@@ -316,7 +316,16 @@ def test_recovered_acquisition_requires_exact_archive_and_complete_inventory(tmp
     }
     receipt['embedded_archive_manifest']['local_path']=str(proof_path.relative_to(root))
     archive.unlink()
+    manifest.write_text(json.dumps(receipt))
     assert validate_recovery_manifest('D13',receipt,manifest,root=root)==receipt
+    monkeypatch.setattr(agents,'EXPANSION_ROOT',tmp_path)
+    prior_receipt=acquired.ACQUIRED_RECEIPTS.get('D13')
+    acquired.ACQUIRED_RECEIPTS['D13']=manifest
+    try:
+        assert acquired.load_acquisition('D13')==receipt
+    finally:
+        if prior_receipt is None: acquired.ACQUIRED_RECEIPTS.pop('D13',None)
+        else: acquired.ACQUIRED_RECEIPTS['D13']=prior_receipt
     verification_path.write_text(verification_raw.decode()+' ')
     with pytest.raises(Reject,match='sidecar differs'):
         validate_recovery_manifest('D13',receipt,manifest,root=root)

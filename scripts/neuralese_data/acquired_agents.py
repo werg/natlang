@@ -180,8 +180,19 @@ def load_acquisition(ref):
     receipt = json.loads(receipt_path.read_text())
     receipt = validate_acquisition(ref, receipt, receipt_path, root=root)
     archive = receipt.get('source_archive') or {}
-    if archive.get('path'):
-        archive_path = Path(archive['path']).resolve(strict=True)
+    archive_path = Path(archive['path']).resolve() if archive.get('path') else None
+    if archive_path is not None and archive_path.is_file():
+        archive_stat = archive_path.stat()
+        archive_binding = (archive_path, _stat_identity(archive_stat))
+    elif (archive_path is not None
+            and receipt.get('schema') == 'natlang.external-source-recovery/1'
+            and archive.get('verified_local_archive')):
+        # This branch is available only after validate_acquisition verifies
+        # both retained sidecars and every extracted source member.
+        archive_binding = (receipt_path, _stat_identity(stat))
+    elif archive_path is not None:
+        # Keep the original fail-closed behavior for ordinary acquired sources
+        # and for recovery receipts without the explicit pruned-archive proof.
         archive_stat = archive_path.stat()
         archive_binding = (archive_path, _stat_identity(archive_stat))
     else:
