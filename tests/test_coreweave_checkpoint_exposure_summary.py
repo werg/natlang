@@ -63,3 +63,48 @@ def test_cursor_captures_summary_from_one_existing_safe_decode_and_suppresses_lo
     assert completed.returncode==0,completed.stderr
     assert json.loads(completed.stdout)['chosen']['training_summary']['assigned_repair']is True
     assert other.is_file()
+
+
+def test_explicit_overlap_views_preserve_exact_credits_without_additive_total():
+    frame={'options':{'stage_id':'ordinary'},'source_row_bindings':{'a':'aa'},'exposure_counts':{'a':2}}
+    state={'step':3,'training':frame};before=copy.deepcopy(state)
+    spec={'stage_id':'ordinary','allow_overlapping_cohorts':True,'cohorts':{'aggregate':{},'teacher':{}}}
+    result=summarize_cohorts(state,spec,lambda _:SimpleNamespace(entries=[{'id':'a','binding':'aa'}]))
+    assert result['cohorts']['aggregate']['actual_visits']==result['cohorts']['teacher']['actual_visits']==2
+    assert 'never sum'in result['overlap_policy']and 'actual_visits'not in result
+    assert state==before
+    with pytest.raises(ValueError,match='repeats'):
+        summarize_cohorts(state,spec,lambda _:SimpleNamespace(entries=[{'id':'a','binding':'aa'}]*2))
+    calls=iter(['aa','different'])
+    with pytest.raises(ValueError,match='binding'):
+        summarize_cohorts(state,spec,lambda _:SimpleNamespace(entries=[{'id':'a','binding':next(calls)}]))
+    with pytest.raises(ValueError,match='boolean'):
+        summarize_cohorts(state,{**spec,'allow_overlapping_cohorts':'true'},lambda _:None)
+
+
+def test_actual_named_optimizer_buffer_inventory_is_current_and_readonly(monkeypatch):
+    from pathlib import Path
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1]/"training"/"neuralese"))
+    import torch
+    from natlang_neuralese.train.optim import PortMuonAdamW
+    ordinary=torch.nn.Parameter(torch.ones(3));latent=torch.nn.Parameter(torch.ones(2,2))
+    optimizer=PortMuonAdamW([('interface.rows',ordinary)],lr=.001,vocab_size=100,
+        latent=[('backbone.layers.0.self_attn.q_proj.weight',latent,.001,1.)],
+        latent_optimizer='muonsr',latent_options={'ns':'quintic'})
+    optimizer.auxiliary.state[ordinary]['exp_avg']=torch.zeros_like(ordinary)
+    optimizer.latent.state[latent]['momentum']=torch.zeros_like(latent,dtype=torch.bfloat16)
+    saved=optimizer.state_dict();before=copy.deepcopy(saved);rng=torch.get_rng_state().clone()
+    frame={'step':1,'source_row_bindings':{'a':'aa'},'exposure_counts':{'a':1}}
+    state={'step':2,'training':{'options':{'stage_id':'dpo'},'optimizer':saved,'sft_progress':{'ordinary':frame}}}
+    spec={'stage_id':'ordinary','optimizer_state_inventory':True,'cohorts':{'teacher':{}}}
+    result=summarize_cohorts(state,spec,lambda _:SimpleNamespace(entries=[{'id':'a','binding':'aa'}]))
+    rows={r['name']:r for r in result['current_optimizer_inventory']['parameters']}
+    assert rows['interface.rows']['route']=='adamw'
+    row=rows['backbone.layers.0.self_attn.q_proj.weight'];assert row['route']=='muonsr'and row['parameter_dtype']=='torch.float32'
+    assert row['buffers']['momentum']['dtype']=='torch.bfloat16'
+    assert result['current_optimizer_stage_id']=='dpo'and result['stage_id']=='ordinary'
+    assert torch.equal(rng,torch.get_rng_state())
+    for route,child in before.items():
+        if isinstance(child,dict)and 'state'in child:
+            for key,values in child['state'].items():
+                for name,value in values.items():assert torch.equal(value,saved[route]['state'][key][name])

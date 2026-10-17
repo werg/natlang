@@ -230,3 +230,5 @@ result and verifies the unchanged pin before any checkpoint copy or model-state
 decode. Full private upload and independent GET remain the existing separate
 acknowledgement gate. Optional actor-view work gets a longer asynchronous RPC
 window; this change adds no tensor/model mutation or alternate reader.
+
+Checkpoint observation views (2026-10-17): an explicit diagnostic setting may name overlapping cohorts, while each individual cohort remains unique and every repeated row must retain the same authenticated binding. These are separate views of saved credits, never additive exposure. The default remains disjoint. A second optional exact observation enumerates current saved optimizer routes, declared parameter dtypes and actual buffer dtypes/shapes from the already-loaded state; it neither infers missing buffers nor loads/executes a model. Crisp code implements these exact identity and metadata checks.
