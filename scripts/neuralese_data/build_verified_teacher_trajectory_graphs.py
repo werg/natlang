@@ -991,6 +991,21 @@ def seed_content_fingerprints(paths, fingerprint):
     return seen, inputs
 
 
+def explicit_history_profile_receipt(args, tokenizer):
+    """Bind an explicit override without conflating it with a backbone default.
+
+    The tokenizer's effective policy is always recorded under ``tokenizer``;
+    this separate conditional field records who selected a nondefault
+    rendering profile so downstream teacher admission can reconstruct IDs.
+    """
+    requested = getattr(args, 'history_reasoning_policy', None)
+    actual = (getattr(tokenizer, 'natlang_history_reasoning', None) or {}).get('policy')
+    if requested is not None and actual != requested:
+        raise ValueError('explicit teacher rendering profile differs from the bound tokenizer profile')
+    return ({'explicit_history_reasoning_policy': requested}
+            if requested is not None else {})
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, required=True)
@@ -1015,6 +1030,7 @@ def main():
     from natlang_neuralese.serve.chat import bind_history_reasoning
     bind_history_reasoning(tokenizer, policy=args.history_reasoning_policy, require_declared=True,
                            allow_transition=args.history_reasoning_policy is not None)
+    explicit_profile_receipt = explicit_history_profile_receipt(args, tokenizer)
     source_fingerprint = tokenizer_fingerprint(tokenizer)
     role_ids = provision(tokenizer)
     expanded_fingerprint = tokenizer_fingerprint(tokenizer)
@@ -1121,6 +1137,7 @@ def main():
         raise
     args.output.mkdir(parents=True, exist_ok=True)
     receipt = {"schema": "natlang.verified-teacher-native-graph-build/1", "status": "passed",
+        **explicit_profile_receipt,
         "model_key": args.model_key, "model_id": model_id,
         "source": {"path": str(args.source), "sha256": binding["source_sha256"],
                    "rows": len(row_hashes), "row_bindings": row_hashes},

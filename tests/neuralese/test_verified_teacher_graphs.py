@@ -7,6 +7,22 @@ import pytest
 from scripts.neuralese_data import build_verified_teacher_trajectory_graphs as converter
 
 
+def test_teacher_receipt_binds_only_explicit_history_profile():
+    from types import SimpleNamespace
+
+    # Mellum's declared default is KEEP, but that is not evidence that an
+    # explicit conversion override was selected. Preserve the absence of the
+    # field for legacy/default receipts; record an explicit override only when
+    # the converter requested and actually bound that profile.
+    tokenizer = SimpleNamespace(natlang_history_reasoning={'policy': 'keep'})
+    assert converter.explicit_history_profile_receipt(SimpleNamespace(history_reasoning_policy=None), tokenizer) == {}
+    assert converter.explicit_history_profile_receipt(SimpleNamespace(history_reasoning_policy='keep'), tokenizer) == {
+        'explicit_history_reasoning_policy': 'keep'}
+    with pytest.raises(ValueError, match='differs from the bound tokenizer profile'):
+        converter.explicit_history_profile_receipt(
+            SimpleNamespace(history_reasoning_policy='last_turn_only'), tokenizer)
+
+
 def _row():
     return {'id': 'execution-a', 'version': 'natlang.teacher_trajectory.native/1',
         'task': {'program_ir': {'version': 'natlang.program/2', 'split': 'train',
