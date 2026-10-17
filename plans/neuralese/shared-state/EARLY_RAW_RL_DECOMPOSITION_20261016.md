@@ -29,15 +29,58 @@ Identity hashing, tokenizer export, exact checkpoint restore, archive verificati
 state publication and provider/resource plumbing are crisp shared mechanisms.
 No model-facing prompt, reward or task definition changes are needed.
 
-Implementation frontier (2026-10-16): mechanisms 1–3 are implemented in
-`rl/native_raw_policy.py`, the existing production factory/controller and the
-shared native trainer. A real tiny-model policy update restores the bare parent
-optimizer and RNG; its prior foundation row keeps three of four required visits
-in `sft_progress`, and a repeated completed invocation leaves checkpoint bytes
-unchanged. Deployment now provisions the adjustable semantic `policy_schedule`
-from step 5 without inventing collected sources. Step 4's actual per-student
-bootstrap/resource handoff and the complete production rollout/update/SFT cycle
-remain outstanding. These changes alone do not mean raw RL is running in cloud.
+Implementation frontier (2026-10-17): mechanisms 1–3 and the per-role
+bootstrap/ownership machinery are implemented. Full-size LFM raw execution has
+actually occurred: trained actor step 10407 (`0d781ea562e1d0c664ae11b835296c584c061bc2c84eeb775703722c76158d2e`)
+produced three admitted whole graphs and two genuine GRPO updates, saved at
+10409 (`6966fee5ab9ab1c9cc0794e2d5506997937f4790a190bc97f3be87d74e4e0d4a`).
+The graphs have 44,017 / 9,810 / 43,757 forward tokens and 44,314 / 9,914 /
+44,208 compiled KV slots; the executed full-size capacity proof passed with a
+14,873,030,144-byte CUDA peak. This is historical execution evidence, not a
+claim that a recurring production cycle is currently active.
+
+Exact custody is recorded in
+`/home/werg/data/dgxops/lfm10407-to10409-historical-fullsize-raw-execution-audit-20261017.json`
+(SHA-256 `11942701145fe492346f906095d0d97fd7cd87a6a4089f8e343d43d8c153ad09`).
+It binds the original failed 797 request/result, explicit tool-history repair,
+unchanged actor samples/rewards/events, actual graph IDs/bindings, MAX proof,
+training report and readiness receipt. The original failed operation remains
+failed; the separate owned repair and honest canonical retry account the earned
+updates. Later full-size geometries still use the existing actual-source
+capacity mechanism when required, rather than inheriting this example blindly.
+
+The remaining recurring-cycle blocker is operational deployment. Read-only live
+control snapshots at 22:36 UTC are
+`/home/werg/data/dgxops/{lfm,mellum}-current-sourcehost-raw-control-frontier-20261017.json`.
+The LF central cursor still names checkpoint 10409, cycle 2/SFT stage 0. The
+Mellum cursor retains its already-earned first RL round, while its active plan
+still names the older one-stage scaffold recipe. Both actual student lineages
+have since earned direct ordinary/preference updates. The active plans do not
+yet declare per-source-host ownership/exchange, although staged shared CPU21
+code supports it. CPU21 also predates current-source argument normalization.
+These are not communication-foundation, VAE-readiness or new-curriculum gates.
+
+Complete the next useful handoff through the existing mechanisms:
+
+1. Prepare source-host controls while the current learner keeps training. Bind
+   all source-role arguments from the actual adopted recipe, current qualified
+   numerical runtime, whole pending obligations and explicit ordinary 1000 /
+   preference 250 update quanta. Retain asynchronous protected task evaluation.
+2. At a genuinely useful saved boundary, authenticate the complete owned
+   operation chain, including typed failed-monitor saved-update recovery where
+   applicable. Decode the final current full parent once on its own source host;
+   older closed operations use their exact metadata authority. Preserve every
+   optimizer/RNG value and stage/row credit, then CAS the candidate state/cursor.
+   Never replay Mellum's earned round or LF's completed repaired collection.
+3. Configure the shared per-role coordinator/provider with explicit disjoint
+   ownership and `semantic_consumer=mellum`. Keep full parent verification on
+   each source host; exchange small authenticated readiness controls. This does
+   not assert joint readiness or authorize a second optimizer.
+4. Run the existing qualified 140-case TRAIN curriculum through a real current
+   actor, full-episode collection/admission and RL/RFT learner, then return to
+   every mandatory recipe stage. Twelve newer tasks and completed communication
+   foundation are not prerequisites for this early raw cycle. Record actual
+   actor/collection/save/restore costs and current checkpoints after execution.
 
 Successful native batches with no reward spread use positive whole-episode RFT,
 including ordinary tasks with no communication. A native all-failure batch uses
@@ -99,8 +142,10 @@ continuations retain global steps 1..4 and communication visits 1,1,2,2. Mellum
 runs BF16/bf16x6 with executed current-FP8 projection counters in all four phases
 (ledger native-raw-mellum-real-interleave-cuda-20261016: 1 PASS, 8.41 s).
 Rewards/actions in these fixtures are diagnostic inputs, not task-lift evidence.
-Actual full-size cloud batch geometry/backend qualification and safe operational
-handoff remain necessary; no production raw-RL launch is claimed by this commit.
+Those fixtures alone grant no full-size cloud qualification. The separately bound
+historical LF execution above supplies actual full-size evidence for its exact
+three graphs; a current recurring-cycle launch and larger geometry remain
+separate operational and execution obligations.
 
 Original launch and terminal records are also copied byte-for-byte into immutable
 handoff evidence. Their original path/SHA bindings remain explicit for requirement
