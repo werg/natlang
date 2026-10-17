@@ -136,7 +136,15 @@ export const SOURCES = {
   sst2: {
     name: 'SST-2', homepage: 'https://nlp.stanford.edu/sentiment/', license: 'unknown (research use)',
     release: 'Hugging Face stanfordnlp/sst2', revision: '8d51e7e4887a4caaa95b3fbebbf53c0490b58bbb',
-    files: [{ path: 'data/train-00000-of-00001.parquet', split: 'train', convert: 'parquet' }],
+    files: [{ path: 'data/train-00000-of-00001.parquet', split: 'train', convert: 'parquet' },
+      { path: 'stanfordSentimentTreebank.zip', split: 'mixed', role: 'full-sentence-membership',
+        sha256: '3f5209483b46bbf129cacbbbe6ae02fe780407034f61cf6342b7833257c3f1db',
+        url: 'https://nlp.stanford.edu/~socherr/stanfordSentimentTreebank.zip',
+        extract: ['stanfordSentimentTreebank/datasetSentences.txt', 'stanfordSentimentTreebank/datasetSplit.txt'],
+        members: {
+          sentences: { path: 'stanfordSentimentTreebank/datasetSentences.txt', sha256: 'f7ae959a5ff0565eb860c3f2e600dde118bcb49aee63df8fa9b9a806da235553', bytes: 1290263 },
+          splits: { path: 'stanfordSentimentTreebank/datasetSplit.txt', sha256: 'ad567db10ae5275963f1ac3dd5ec21214b1d688c7aab582e2616ef4b3f970a5a', bytes: 83764 },
+        } }],
     url: (revision, path) => `https://huggingface.co/datasets/stanfordnlp/sst2/resolve/${revision}/${path}`,
   },
   ag_news: {
@@ -226,7 +234,7 @@ async function main() {
       source.generate(target, cache);
     }
     for (const file of source.files) {
-      const url = source.url(source.revision, file.path);
+      const url = file.url ?? source.url(source.revision, file.path);
       const target = cachePath(cache, key, source.revision, file.path);
       let bytes;
       try { bytes = await readFile(target); }

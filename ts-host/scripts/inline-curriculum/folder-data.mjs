@@ -2,6 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { SOURCES, cachePath } from './acquire.mjs';
+import { loadSstFullSentenceContext, sstRecordContext } from './source-context.mjs';
 import { pendingSourceReview } from '../../dist/teacher/source-review.js';
 import { noteSourceItem } from './source-review-intake.mjs';
 import { normalizeSourceText, sourceRecordId, sourceRecordSplit } from './source-split.mjs';
@@ -21,6 +22,7 @@ const quality = new Map();
 const quarantine = (dataset, id, reason) => { quality.set(`${dataset}:${id}:${reason}`, { dataset, id, reason }); };
 export const datasetQualityReport = () => [...quality.values()];
 const loaded = new Map();
+
 export function labeledRows(dataset, split = 'train') {
   if (!LABELED_FIELDS[dataset]) throw new Error(`unknown labeled dataset ${dataset}`);
   if (split !== 'train' && split !== 'test') throw new Error('dataset split must be train or test');
@@ -30,6 +32,7 @@ export function labeledRows(dataset, split = 'train') {
     try { lines = readFileSync(`${cachePath(CACHE, dataset, source.revision, file.path)}.jsonl`, 'utf8'); }
     catch { throw new Error(`${dataset} is not cached; run node scripts/inline-curriculum/acquire.mjs --source ${dataset}`); }
     const unique = new Map(), conflicts = new Set();
+    const context = dataset === 'sst2' ? loadSstFullSentenceContext(CACHE) : null;
     for (const line of lines.split(/\r?\n/)) {
       if (!line) continue;
       const row = JSON.parse(line), text = normalizeSourceText(row[fields.text] ?? '');
@@ -44,7 +47,13 @@ export function labeledRows(dataset, split = 'train') {
       if (unique.has(id) && unique.get(id).label !== label) {
         unique.delete(id); conflicts.add(id); quarantine(dataset, id, 'conflicting_labels'); continue;
       }
-      unique.set(id, { id, text, label });
+      const record = { id, text, label };
+      if (context) {
+        const sourceContext = sstRecordContext(record, context.index, context.authority);
+        if (!sourceContext) { quarantine(dataset, id, 'source_context_not_full_sentence'); continue; }
+        record.source_context = sourceContext;
+      }
+      unique.set(id, record);
     }
     loaded.set(dataset, [...unique.values()].sort((a, b) => a.id.localeCompare(b.id)));
     // Advice only: in crisp mode (the default) this notes nothing.

@@ -76,7 +76,7 @@ function drawItems(rng, sources, count, split) {
   for (let i = 0; i < count; i++) {
     const name = rng.pick(sources);
     const row = rng.pick(eligibleRows(name, split));
-    items.push({ source: name, text: row.text, label: row.label, sourceId: sourceRecordId(name, row.text, '') });
+    items.push({ source: name, text: row.text, label: row.label, sourceId: sourceRecordId(name, row.text, ''), ...(row.source_context ? { source_context: row.source_context } : {}) });
   }
   return items;
 }
@@ -170,7 +170,7 @@ export function datasetWorkbench(seed, index, split = 'train') {
       function decidesRow(row) { return route ? rules.some(r => r.source === x.source && membership(r.bucket, row.label)) : membership(bucket, row.label); }
       if (!pool.length) return x;
       const row = rng.pick(pool);
-      return { ...x, text: row.text, label: row.label, sourceId: sourceRecordId(x.source, row.text, '') };
+      return { ...x, text: row.text, label: row.label, sourceId: sourceRecordId(x.source, row.text, ''), source_context: row.source_context };
     });
     const ea = op.expected(base), eb = op.expected(other);
     if (JSON.stringify(ea) === JSON.stringify(eb)) continue;
@@ -197,6 +197,8 @@ export function datasetWorkbench(seed, index, split = 'train') {
       record.gold_sources = sources.map(s => `${s}-labels`);
       record.dataset = sources.join('+');
       record.dataset_records = items.map(x => x.sourceId);
+      const context = items.flatMap(x => x.source_context ? [x.source_context] : []);
+      if (context.length) record.generation.source_context = context;
       // A mixed inbox keeps each item's original dataset identity for source
       // review and cross-corpus split checks. The builder consumes this exact
       // per-record binding when it assigns source_groups.

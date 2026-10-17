@@ -7,6 +7,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { SOURCES, cachePath } from './acquire.mjs';
+import { loadSstFullSentenceContext, sstRecordContext } from './source-context.mjs';
 import { normalizeSourceText, sourceRecordId, sourceRecordSplit } from './source-split.mjs';
 import { Random, curriculumCase, evalCall, returnCall } from './lib.mjs';
 
@@ -54,6 +55,7 @@ export function rowsOf(name, split = 'train') {
     let text;
     try { text = readFileSync(`${cachePath(CACHE, name, source.revision, file.path)}.jsonl`, 'utf8'); }
     catch { throw new Error(`${source.name} is not in the dataset cache; run node scripts/inline-curriculum/acquire.mjs --source ${name}`); }
+    const context = name === 'sst2' ? loadSstFullSentenceContext(CACHE) : null;
     const rows = text.split('\n').filter(Boolean).map(line => JSON.parse(line))
       .map(row => ({ text: normalizeSourceText(row[spec.text]), label: String(row[spec.label]) }))
       .filter(row => row.text.length >= (spec.minLength ?? 15) && row.text.length <= 320 && !(spec.exclude ?? []).includes(row.label));
@@ -64,7 +66,11 @@ export function rowsOf(name, split = 'train') {
       if (existing === undefined) labels.set(key, row.label);
       else if (existing !== row.label) labels.set(key, null);
     }
-    loaded.set(name, rows.filter(row => labels.get(visibleLabelKey(row.text)) !== null));
+    const eligible = rows.filter(row => labels.get(visibleLabelKey(row.text)) !== null);
+    loaded.set(name, context ? eligible.flatMap(row => {
+      const proof = sstRecordContext({ ...row, id: sourceRecordId(name, row.text, '') }, context.index, context.authority);
+      return proof ? [{ ...row, source_context: proof }] : [];
+    }) : eligible);
   }
   return loaded.get(name).filter(row => sourceRecordSplit(sourceRecordId(name, row.text, '')) === split);
 }
@@ -140,7 +146,7 @@ export function labeledJudgments(seed, index, split = 'train') {
   const pool = d.labels && d.only ? [...new Set(rowsOf(name, split).map(row => row.label))] : labels;
   const items = itemsFor(rng, name, pool, rng.int(5, 9), target, split)
     .map((row, i) => ({ id: `${d.idPrefix}${i + 1}`, text: row.text, day: rng.int(1, 15), label: row.label,
-      sourceId: sourceRecordId(name, row.text, '') }));
+      sourceId: sourceRecordId(name, row.text, ''), ...(row.source_context ? { source_context: row.source_context } : {}) }));
   const question = d.classify ?? `Which of ${labels.map(l => JSON.stringify(l)).join(', ')} is request about?`;
   const task = byClass ? rng.pick(CLASS_TASKS)(d, labels, items, question) :
     rng.pick(TASKS)(d, target, items, labelSpecs[target], rng);
@@ -162,6 +168,7 @@ export function labeledJudgments(seed, index, split = 'train') {
       record.gold_sources = [`${name}-labels`];
       record.dataset = name;
       record.dataset_records = items.map(item => item.sourceId);
+      if (name === 'sst2') record.generation.source_context = items.map(item => item.source_context);
       return record;
     });
 }
