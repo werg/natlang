@@ -274,7 +274,7 @@ def test_attention_only_resume_keeps_failed_runtime_readiness_proof():
     assert not result['runtime_reference']['passed']and not result['attention_complete_comparison']['passed']
 
 
-@pytest.mark.parametrize('other_change',['linear','norm'])
+@pytest.mark.parametrize('other_change',['linear','linear-backout','linear-tf32-backout','norm'])
 def test_simultaneous_other_change_retains_strict_cached_gate(monkeypatch,other_change):
     from natlang_neuralese.train.native_state_sft import qualify_precision_transition
     from natlang_neuralese.model.native_precision import set_native_attention_precision
@@ -289,7 +289,7 @@ def test_simultaneous_other_change_retains_strict_cached_gate(monkeypatch,other_
     monkeypatch.setattr(transition,'qualify_attention_transition',lambda *a,**kw:report)
     if other_change=='norm':monkeypatch.setattr(native_parameter_precision,'norm_execution_changes_arithmetic',lambda *a:True)
     with pytest.raises(ValueError,match='cached-reference'):
-        qualify_precision_transition(model,Tokenizer(),roles,config,previous_precision='ieee',previous_attention_precision='ieee',previous_norm_execution='stock'if other_change=='norm'else None,checkpoint_sha256='a'*64,forward_atol=1e-4,gradient_atol=1e-5,device='cpu',optimizer=opt)
+        qualify_precision_transition(model,Tokenizer(),roles,config,previous_precision='bf16x6'if other_change=='linear-backout'else'tf32x3'if other_change=='linear-tf32-backout'else'ieee',previous_attention_precision='ieee',previous_norm_execution='stock'if other_change=='norm'else None,checkpoint_sha256='a'*64,forward_atol=1e-4,gradient_atol=1e-5,device='cpu',optimizer=opt)
 
 
 @pytest.mark.parametrize('family',['lfm','mellum'])

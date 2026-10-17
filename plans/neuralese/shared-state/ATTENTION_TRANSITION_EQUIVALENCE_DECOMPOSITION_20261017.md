@@ -13,8 +13,8 @@ cached execution, including every declared parameter and input adjoint.
    beyond the existing declared absolute/relative noise gates rejects transition.
 4. Record transition equivalence separately. Keep failed full/cached readiness
    reports unchanged; equivalence does not qualify communication or a VAE.
-5. Only an attention-only change may use this outcome. Combined linear or norm
-   changes retain the existing strict cached-reference gate.
+5. Only an attention-only change may use this outcome. Combined linear changes in any direction (including a return to IEEE), or norm
+   changes, retain the existing strict cached-reference gate.
 
 The policy is the instruction above. Crisp code performs exact report/inventory
 joins and finite numeric comparisons at the existing trainer transition hook.

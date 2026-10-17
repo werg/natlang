@@ -608,6 +608,7 @@ def qualify_precision_transition(model, tokenizer, roles, config, *, previous_pr
                                  checkpoint_sha256, forward_atol, gradient_atol, device, backend=None,
                                  previous_attention_precision=None, previous_norm_execution=None, optimizer=None):
     """Check changed production arithmetic on the restored live weights, once."""
+    any_linear_changed = config.get('native_linear_precision', 'ieee') != previous_precision
     linear_changed = config.get('native_linear_precision', 'ieee') == 'bf16x6' and previous_precision != 'bf16x6'
     attention_changed = (previous_attention_precision is not None
         and config.get('native_attention_precision', 'ieee') != previous_attention_precision)
@@ -631,7 +632,7 @@ def qualify_precision_transition(model, tokenizer, roles, config, *, previous_pr
                 checkpoint_sha256=checkpoint_sha256,forward_atol=forward_atol,gradient_atol=gradient_atol,
                 backend=backend)
             report=attention_report['candidate_cached_reference']
-            attention_only_equivalent=(not linear_changed and not norm_changed
+            attention_only_equivalent=(not any_linear_changed and not norm_changed
                 and(attention_report.get('transition_equivalence')or{}).get('passed')is True)
             if not attention_report['passed']and not attention_only_equivalent:
                 raise ValueError('native attention transition failed unchanged cached-reference and complete cross-mode checks: '+
