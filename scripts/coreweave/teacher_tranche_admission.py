@@ -28,6 +28,124 @@ def _exact(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
 
 
+def completed_source_phase(directory, recovery_reference, execution_reference):
+    """Snapshot successful source custody; current conversion/admission remain required.
+
+    Call only after the source operator succeeds, then durably store this value.
+    On resume use verify_completed_source_phase with that bound receipt. Runtime
+    rebuilds must not rewrite historical derived quality-verifier metadata.
+    """
+    directory = Path(directory)
+    states, references = {}, {}
+
+    def state(path):
+        value = path.stat()
+        return (value.st_dev, value.st_ino, value.st_size, value.st_mtime_ns, value.st_ctime_ns)
+
+    def bound(reference):
+        path = Path(reference['path'])
+        before = state(path)
+        actual = file_binding(path)
+        if (type(reference.get('bytes')) is not int
+                or any(actual[key] != reference[key] for key in ('sha256', 'bytes'))
+                or state(path) != before):
+            raise ValueError('completed source phase input changed')
+        prior = references.get(str(path))
+        if prior is not None and prior != actual:
+            raise ValueError('completed source phase has conflicting bindings')
+        references[str(path)], states[str(path)] = actual, before
+        return actual
+
+    def document(reference):
+        return read_bound(bound(reference))
+
+    def local(path):
+        return document(file_binding(path))
+
+    proof = local(directory / 'canonical-source-verification.json')
+    transfer = local(directory / 'transfer-receipt.json')
+    local(directory / 'batch-source-bindings.json')
+    source = bound(proof['source'])
+    if (Path(source['path']) != directory / 'native-trajectories.jsonl'
+            or proof.get('schema') != 'natlang.teacher-live-tranche-canonical-source-verification/1'
+            or proof.get('status') != 'passed' or proof.get('training_admission') is not False
+            or type(proof.get('rows')) is not int or proof['rows'] < 1
+            or transfer.get('schema') != 'natlang.verified-teacher-trajectory-transfer/1'
+            or transfer.get('training_admission') is not False
+            or any(transfer['combined'].get(key) != source[key] for key in ('path', 'sha256', 'bytes'))
+            or transfer['combined'].get('rows') != proof['rows']):
+        raise ValueError('completed source phase lacks exact positive source verification')
+    ids = set()
+    with Path(source['path']).open() as stream:
+        for line in stream:
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            outcome = row.get('outcome') or {}
+            checks = outcome.get('checks')
+            if (not isinstance(row.get('id'), str) or row['id'] in ids
+                    or outcome.get('status') != 'done' or outcome.get('accepted') is not True
+                    or (outcome.get('oracle') or {}).get('accepted') is not True
+                    or not isinstance(checks, dict) or not checks
+                    or any(value is not True for value in checks.values())):
+                raise ValueError('completed source phase contains a nonpositive or repeated row')
+            ids.add(row['id'])
+    if len(ids) != proof['rows']:
+        raise ValueError('completed source phase row count changed')
+    for reference in transfer['files']:
+        bound(reference)
+    recovery = document(recovery_reference)
+    if (recovery['restoration'].get('status') != 'passed'
+            or recovery['archive_identity']['sha256'] != transfer['private_export']['archive_sha256']):
+        raise ValueError('completed source phase archive custody differs')
+    private = local(Path(recovery['private_receipt']))
+    if any(type(recovery['archive_identity'].get(key)) is not type(private.get('identity', {}).get(key))
+           or recovery['archive_identity'][key] != private['identity'][key]
+           or recovery['archive_identity'][key] != private.get('independent_verification', {}).get(key)
+           for key in ('sha256', 'bytes')):
+        raise ValueError('completed source phase lacks matching private full-GET custody')
+    restored = Path(recovery['restored'])
+    manifest = local(restored / 'tranche-manifest.json')
+
+    def member(name, reference):
+        path = restored / name
+        if not path.resolve().is_relative_to(restored.resolve()):
+            raise ValueError('completed source member escapes its restored archive')
+        bound({**reference, 'path': str(path)})
+
+    for name, reference in manifest['context'].items():
+        member('context/' + name, reference)
+    for item in manifest['outputs']:
+        member(item['output'], {'sha256': item['output_sha256'], 'bytes': item['output_bytes']})
+        member(item['output_manifest'], {'sha256': item['manifest_sha256'], 'bytes': item['manifest_bytes']})
+        for reference in (item.get('held_payloads') or {}).values():
+            member(reference['path'], reference)
+    if (type(proof.get('selected_outputs')) is not int
+            or proof['selected_outputs'] != len(manifest['outputs'])):
+        raise ValueError('completed source phase lost selected output custody')
+    execution = document(execution_reference)
+    inventory = document(execution['inventory'])
+    for reference in [execution['pipeline'], inventory['helper'], *inventory['operators']]:
+        bound(reference)
+    for path, before in states.items():
+        if state(Path(path)) != before:
+            raise ValueError('completed source phase input changed during verification')
+    return {'schema': 'natlang.teacher-completed-source-phase/1',
+            'directory': str(directory), 'source_rows': len(ids),
+            'recovery': recovery_reference, 'execution': execution_reference,
+            'files': list(references.values()), 'training_admission': False,
+            'requires_fresh_conversion_and_admission': True}
+
+
+def verify_completed_source_phase(receipt_reference, directory):
+    """Authenticate every original byte before skipping completed source work."""
+    receipt = read_bound(receipt_reference)
+    expected = completed_source_phase(directory, receipt['recovery'], receipt['execution'])
+    if _exact(receipt) != _exact(expected):
+        raise ValueError('completed source phase receipt differs from original custody')
+    return receipt
+
+
 @dataclass(frozen=True)
 class Tranche:
     batch: int

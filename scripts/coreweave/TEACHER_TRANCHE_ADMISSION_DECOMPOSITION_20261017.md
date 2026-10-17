@@ -40,3 +40,15 @@ export nor reference qualification grants training admission or exposure.
 ## Evaluation-only quality views
 
 An explicit quality-view name separates a verified evaluation continuation from a new generation attempt. Keep the actual batch, tranche, repair attempt (if any), export archive and recovered raw files unchanged. Only derived admission files and the corpus identity receive the named view suffix. The existing source-quality verifier must reconstruct the view from its original captures; naming grants no admission. All registered predecessor corpora, including the original view, remain in the exact deduplication closure. Original earlier-tranche obligations are retained; a quality view creates no fictional generation attempts.
+
+## Completed source phase custody
+
+A restart resumes a completed source phase by authenticating its exact original
+source, transfer, packet, recovered raw captures and executed operator closure.
+The supervisor records a durable completion receipt only after the source phase
+succeeds. The receipt preserves historical quality-verifier metadata, which a
+later runtime rebuild must not rewrite. It is custody, not an admission grant.
+The converter and final admission verifier always run again with their current
+source/oracle and global protection checks. A missing or changed completion
+receipt cannot skip reconstruction. Exact hashing and before/after file-state
+checks are crisp mechanisms; the existing quality policy is unchanged.
