@@ -62,8 +62,8 @@ def test_sample_rewards_join_uses_exact_group_sample_not_sorted_group_outcomes()
     # score.groups stores a group-level outcome list whose order is not the
     # queue sample order. The per-sample rewards file carries the real keys.
     entries = [
-        {'key': 's7-task-000-00', 'group': 0, 'sample': 0, 'output': '/result/00'},
-        {'key': 's7-task-000-01', 'group': 0, 'sample': 1, 'output': '/result/01'},
+        {'key': 's7-task-000-00', 'group': 0, 'index': 0, 'count': 1, 'sample': 0, 'output': '/result/00'},
+        {'key': 's7-task-000-01', 'group': 0, 'index': 0, 'count': 1, 'sample': 1, 'output': '/result/01'},
     ]
     cases = [{'id': 'program-a'}]
     rewards = [
@@ -75,11 +75,11 @@ def test_sample_rewards_join_uses_exact_group_sample_not_sorted_group_outcomes()
         ('s7-task-000-00', 'task_success'), ('s7-task-000-01', 'semantic_mismatch')]
 
 
-@pytest.mark.parametrize('mutation', ['case-id', 'key', 'duplicate-reward', 'missing-reward'])
+@pytest.mark.parametrize('mutation', ['case-id', 'key', 'stale-index', 'count', 'duplicate-task-id', 'duplicate-reward', 'missing-reward'])
 def test_sample_reward_join_rejects_misbound_or_incomplete_rows(mutation):
     entries = [
-        {'key': 's7-task-000-00', 'group': 0, 'sample': 0},
-        {'key': 's7-task-000-01', 'group': 0, 'sample': 1},
+        {'key': 's7-task-000-00', 'group': 0, 'index': 0, 'count': 1, 'sample': 0},
+        {'key': 's7-task-000-01', 'group': 0, 'index': 0, 'count': 1, 'sample': 1},
     ]
     cases = [{'id': 'program-a'}]
     rewards = [
@@ -88,6 +88,9 @@ def test_sample_reward_join_rejects_misbound_or_incomplete_rows(mutation):
     ]
     if mutation == 'case-id': rewards[1]['task_id'] = 'program-b'
     elif mutation == 'key': entries[1]['key'] = 's7-task-000-00'
+    elif mutation == 'stale-index': entries[1]['index'] = 1
+    elif mutation == 'count': entries[1]['count'] = 2
+    elif mutation == 'duplicate-task-id': cases[0]['id'] = 'program-b'; cases.append({'id': 'program-b'})
     elif mutation == 'duplicate-reward': rewards[1]['sample'] = 0
     else: rewards.pop()
     with pytest.raises(ValueError):

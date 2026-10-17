@@ -37,6 +37,8 @@ def sample_rewards(entries, rewards, cases):
         if not isinstance(task_id, str) or not task_id:
             raise ValueError('teacher source case has no exact task ID')
         case_ids.append(task_id)
+    if len(set(case_ids)) != len(case_ids):
+        raise ValueError('teacher source cases contain duplicate task IDs')
 
     indexed = {}
     for row in rewards:
@@ -54,8 +56,11 @@ def sample_rewards(entries, rewards, cases):
     result = []
     for entry in entries:
         group, sample = entry.get('group'), entry.get('sample')
-        if type(group) is not int or type(sample) is not int or not (0 <= group < len(case_ids)):
-            raise ValueError('teacher queue entry has invalid group/sample')
+        index, count = entry.get('index'), entry.get('count')
+        if (type(group) is not int or type(sample) is not int or
+                not (0 <= group < len(case_ids)) or type(index) is not int or
+                index != group or type(count) is not int or count != 1):
+            raise ValueError('teacher queue entry has invalid index/group/sample/count')
         identity = (group, sample)
         if identity in queue_keys:
             raise ValueError('duplicate teacher queue sample identity')
