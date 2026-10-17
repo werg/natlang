@@ -123,18 +123,11 @@ corresponding FP32 comparison localized the difference to shape-dependent BF16
 arithmetic. No replacement of old probabilities or artificial ratio-one claim is
 permitted.
 
-The actual LFM shared-trainer RFT continuation completed one full epoch: 48
-updates, 19 distinct trajectory documents after deduplication, 48 target windows,
-9,394 supervised tokens and 6,445 target tokens. It retained full optimizer state
-from parent 6257 and wrote a new recoverable checkpoint. Its report is
-`/home/werg/data/dgxops/rl-lfm-shared-rft-validation-20261015/report.json`.
-This validates a real seed-stage continuation, not rewarded model improvement
-or adoption by the current cloud lineage. The existing full-size mixed-stage
-resume test also passed, with 13.4 GiB measured peak memory. The matched post-seed
-train-task check again scored zero successes in four
-rollouts, all with model action failures and no infrastructure errors. This seed
-pass has not demonstrated task improvement. Controller restart checks remain
-separate from this learner result. The controller also passed focused restart,
+The earlier projected-channel RFT diagnostic on parent6257 was discarded after
+the shared-state replacement. Its run artifacts have been removed; they provide
+no qualification for current training. Track actual shared-state progress in
+`SHARED_STATE_MIGRATION_20261015.md` and the live coordination status.
+The controller also passed focused restart,
 publication, policy-binding and new-task admission checks. The standing full-check service
 validates integrated main; focused checks resolve concrete changes without
 repeatedly occupying a second full-suite allocation.
