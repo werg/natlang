@@ -23,6 +23,31 @@ def read(reference):
     return json.loads(raw)
 
 
+
+def registry_append(before_reference,after_reference):
+    """Verify an exact append, without granting new-source admission."""
+    before,after=read(before_reference),read(after_reference)
+    if not isinstance(before,dict)or not isinstance(after,dict):
+        raise ValueError('source registries must be objects')
+    original,current=before.get('corpora'),after.get('corpora')
+    if not isinstance(original,list)or not isinstance(current,list):
+        raise ValueError('source registries need complete corpus declarations')
+    for rows in(original,current):
+        names=[row.get('id')if isinstance(row,dict)else None for row in rows]
+        if any(not isinstance(name,str)or not name for name in names)or len(set(names))!=len(names):
+            raise ValueError('source registry corpus identities must be distinct')
+    # JSON structure remains typed: Python equality alone conflates 1 and 1.0.
+    comparison={**after,'corpora':current[:len(original)]}
+    canonical=lambda value:json.dumps(value,sort_keys=True,separators=(',',':'),allow_nan=False)
+    if canonical(before)!=canonical(comparison)or len(current)<len(original):
+        raise ValueError('source registry changed an existing declaration or field')
+    return {'schema':'natlang.teacher-source-registry-append/1',
+        'before':before_reference,'after':after_reference,'original_corpora':len(original),
+        'current_corpora':len(current),'appended_corpus_ids':[row['id']for row in current[len(original):]],
+        'training_admission':False,
+        'scope':'exact registry append only; runtime/protection/program/source guards remain caller requirements'}
+
+
 def immutable(path,value):
     raw=value if isinstance(value,bytes)else(json.dumps(value,indent=2)+'\n').encode()
     if path.exists():
