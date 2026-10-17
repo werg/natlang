@@ -147,9 +147,9 @@ def remote_code(*, role, root, known, last, extra, pin_directory, minimum_availa
     if bool(training_summary_spec) != bool(training_summary_runtime):
         raise ValueError('training summary needs its bound specification and qualified runtime')
     if training_summary_spec:
-        try:from .checkpoint_exposure_summary import summarize_cohorts
-        except ImportError:from checkpoint_exposure_summary import summarize_cohorts
-        summary_prelude=inspect.getsource(summarize_cohorts)+'\n'
+        try:from .checkpoint_exposure_summary import summarize_cohorts, optimizer_state_inventory
+        except ImportError:from checkpoint_exposure_summary import summarize_cohorts, optimizer_state_inventory
+        summary_prelude=inspect.getsource(optimizer_state_inventory)+'\n'+inspect.getsource(summarize_cohorts)+'\n'
         summary_prelude+='SUMMARY_SPEC='+repr(training_summary_spec)+'\nSUMMARY_RUNTIME='+repr(str(training_summary_runtime))+'\n'
         summary_prelude+='''def capture_training_summary(value):
  try:
