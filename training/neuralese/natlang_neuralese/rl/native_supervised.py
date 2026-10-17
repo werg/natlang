@@ -98,7 +98,8 @@ def continuation_config(config,stage,*,checkpoint,adapter,out):
     parameters=effective_stage_parameters(stage,[],recipe)
     parameters={key:value for key,value in parameters.items() if value is not None}
     if adapter is not None:parameters.pop('communication_foundation',None)
-    parameters.pop('memory_qualification',None)  # one restored-parent capacity check, not every CE quantum
+    if stage['kind']!='native_offline_preference':
+        parameters.pop('memory_qualification',None)  # ordinary CE uses its restored-parent qualification
     parameters['refresh_at_checkpoint']=True
     parameters['stage_id']=stage['id']
     parameters['recipe_binding']=native_recipe_binding(Path(config['production_recipe']),recipe_lineage(config))

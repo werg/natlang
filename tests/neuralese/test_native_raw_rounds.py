@@ -475,3 +475,15 @@ def test_hot_plan_failure_stops_owned_sibling_before_executor_drains(tmp_path,mo
     with pytest.raises(ValueError,match='live raw plan'):
         raw.run(plan,out,stop=stop,poll_seconds=.01)
     assert drained.is_set() and stop.requested
+
+
+def test_raw_continuation_does_not_execute_inactive_future_preference_stage(tmp_path,monkeypatch):
+    directory,config,stop,calls=fixture(tmp_path,monkeypatch)
+    path=Path(config['production_recipe']);recipe=json.loads(path.read_text())
+    recipe['stages'].insert(0,{'id':'future-preference','kind':'native_offline_preference',
+        'admitted':False,'requires':[],'inputs':{},'parameters':{}})
+    write_json_durable(path,recipe)
+    result=raw.student_cycle('plan',{},None,directory,stop=stop)
+    assert result['cycle']==1
+    supervised=[value for kind,value in calls if kind=='sft']
+    assert supervised and all(value['production_stage']=='full'for value in supervised)

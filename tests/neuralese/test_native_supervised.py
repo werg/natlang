@@ -163,3 +163,78 @@ def test_offline_continuation_binds_actual_objective_and_effective_revision(tmp_
     assert supervised.stage_pending(adapter,'student','offline',sources,2,objective={**contract,'beta':.8})
     assert supervised.stage_pending(adapter,'student','offline',sources,2,objective={**contract,'sha256':'new-file'})
     assert 'native_offline_preference' in supervised.MANDATORY_STAGE_KINDS
+
+
+@pytest.mark.parametrize('kind',['native_state_sft','native_offline_preference'])
+def test_explicit_preference_capacity_survives_emitted_command_and_prepared_request(tmp_path,monkeypatch,kind):
+    """Exercise command/descriptor plumbing; the capacity runner is a numerical fixture."""
+    from natlang_neuralese.rl import production
+    from natlang_neuralese.eval import native_memory as memory
+    from natlang_neuralese.train import native_resident as resident
+    from natlang_neuralese.train.native_preference import NativePreferenceObjective,SCHEMA,KIND
+    parent=tmp_path/'parent.pt';parent.write_bytes(b'unchanged full optimizer fixture')
+    train=tmp_path/'train';train.write_text('{}\n');held=tmp_path/'held';held.write_text('{}\n')
+    objective_path=tmp_path/'objective.json'
+    objective_path.write_text(json.dumps({'schema':SCHEMA,'kind':KIND,'beta':.1,'margin':0.,
+        'rows':{'pair':{'graph_sha256':'b'*64},'reference':{'graph_sha256':'e'*64}}}))
+    objective=NativePreferenceObjective(objective_path)
+    source=SimpleNamespace(path=train,entries=[{'id':'pair','binding':{'sha256':'b'*64}},
+        {'id':'reference','binding':{'sha256':'e'*64}}])
+    examples=[SimpleNamespace(id=name,split='train',plan=SimpleNamespace(token_count=count,slot_sources=(1,)*count))
+              for name,count in [('pair',8),('reference',3)]]
+    source.iter_indices=lambda indices:iter(examples[index]for index in indices)
+    live_objective=SimpleNamespace(kind=KIND,rows=objective.rows,binding=objective.binding,forward_inputs=lambda context:{})
+    descriptor=tmp_path/'descriptor.json';descriptor.write_text(json.dumps({
+        'schema':'natlang.native-preference-capacity-case/1','source':resident.binding(train),
+        'objective':objective.binding(),
+        'case':{'id':'pair','graph_sha256':'b'*64,'split':'train','geometry':{'forward_tokens':8,'kv_slots':8}},
+        'numerical_reference':{'id':'reference','graph_sha256':'e'*64,'split':'train',
+                               'geometry':{'forward_tokens':3,'kv_slots':3}}}))
+    qualification=resident.binding(descriptor)
+    stage={'id':'qualified-stage','kind':kind,'requires':[],
+        'inputs':{'native_graphs':'train','held_native_graphs':'held',
+                  **({'objective_spec':'objective'}if kind=='native_offline_preference'else{})},
+        'parameters':{'epochs':1,'checkpoint_every':4,'eval_every':4,'memory_qualification':qualification}}
+    recipe=tmp_path/'recipe.json';recipe.write_text(json.dumps({'schema':'natlang.neuralese-training-recipe/1',
+        'id':'qualification-forwarding','input_bindings':{name:resident.binding(path)for name,path in
+            [('train',train),('held',held),('objective',objective_path)]},'stages':[stage]}))
+    config={'native_state':True,'production_recipe':str(recipe),'production_stage':stage['id'],
+        'recipe_lineage_sha256':'a'*64,'seed_command':['python','-m','natlang_neuralese.train.native_state_sft',
+            '--native-graphs','{seed_native_graphs}','--out','{learner_out}','{seed_trainer_args}']}
+    declared,_=supervised.continuation_config(config,stage,checkpoint=str(parent),adapter=None,out=tmp_path/'job')
+    monkeypatch.setattr(resident,'_source_witness',lambda value:{'source':resident.binding(train),'indexes':[]})
+    monkeypatch.setattr(memory,'capacity_identity',lambda *args:{'restored':'same-parent'})
+    prepared=[];commands=[]
+    def capacity(*args,**kwargs):
+        reference=json.loads(args[5].memory_qualification)
+        request=json.loads(resident.bound(reference).read_text())
+        prepared.append(request)
+        assert kwargs['checkpoint_sha256']==sha256_file_hex(parent)
+        assert kwargs['objective'] is live_objective
+        return {'passed':True}
+    monkeypatch.setattr(memory,'_run_one_prepared',capacity)
+    def trainer(command,check):
+        commands.append(command)
+        if kind=='native_offline_preference':
+            assert command[2]=='natlang_neuralese.train.native_preference'
+            assert command[command.index('--objective-spec')+1]==str(objective_path)
+            args=SimpleNamespace(memory_qualification=command[command.index('--memory-qualification')+1],
+                                 out=tmp_path/'job/learner')
+            assert json.loads(args.memory_qualification)==qualification
+            memory.run_prepared(None,None,source,None,{},args,backend=None,
+                checkpoint_sha256=sha256_file_hex(parent),objective=live_objective)
+        else:assert '--memory-qualification'not in command
+        directory=tmp_path/'job/learner';directory.mkdir(parents=True,exist_ok=True)
+        (directory/'checkpoint.pt').write_bytes(b'published update fixture')
+        (directory/'report.json').write_text(json.dumps({'completed':True,'numerics_ok':True,'mandatory_sft':{'complete':True}}))
+    monkeypatch.setattr(production.subprocess,'run',trainer)
+    state={'checkpoint':str(parent)}
+    supervised.execute(declared,state,tmp_path/'state.json',None)
+    assert len(commands)==1
+    if kind=='native_offline_preference':
+        assert prepared[0]['cases'][0]['id']=='pair'
+        assert prepared[0]['reference']['id']=='reference'
+        assert prepared[0]['objective']==objective.binding()
+        assert prepared[0]['identity']=={'restored':'same-parent'}
+    else:assert prepared==[]
+    assert parent.read_bytes()==b'unchanged full optimizer fixture'

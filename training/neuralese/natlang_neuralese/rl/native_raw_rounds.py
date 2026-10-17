@@ -293,7 +293,8 @@ def student_cycle(plan_path,declaration,handoff,directory,*,stop):
         cursor.pop('pending_rl_round',None)
         write_json_durable(cursor_path,cursor)
     recipe=resolve_recipe_data(config['production_recipe'])
-    stages=[stage for stage in recipe['stages'] if stage['kind'] in MANDATORY_STAGE_KINDS]
+    stages=[stage for stage in recipe['stages']
+            if stage['kind'] in MANDATORY_STAGE_KINDS and stage.get('admitted') is not False]
     foundation=[stage for stage in stages if stage['id']==config['production_stage']]
     if len(foundation)!=1:raise ValueError('raw continuation lost its actual foundation recipe stage')
     # The actual foundation trainer is last, so its receipt certifies the current
