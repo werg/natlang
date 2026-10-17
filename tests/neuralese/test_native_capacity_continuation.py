@@ -319,3 +319,99 @@ def test_policy_gate_sft_contract_is_rechecked_transitively(tmp_path, monkeypatc
     with pytest.raises(ValueError, match='ordinary SFT only'):
         mechanism._proof_cases(binding(evidence_path), identity=review['identity'],
             code_sha=digest(new_code), parent='b'*64)
+
+
+@pytest.mark.parametrize('mutation', [None, 'old-trainer', 'new-trainer', 'helper',
+    'old-helper-present', 'missing-helper', 'extra-model', 'objective', 'policy-required',
+    'optimizer', 'small-allowance'])
+def test_ordinary_writer_policy_requires_exact_addition_and_ordinary_identity(mutation):
+    pins=mechanism.ORDINARY_WRITER_COMPOSITION
+    review={'optimizer_policy':mechanism.ORDINARY_WRITER_POLICY,
+        'old_code':{name:pair[0] for name,pair in pins.items() if pair[0] is not None},
+        'new_code':{name:pair[1] for name,pair in pins.items()},
+        'identity':{'objective':None},'fresh_policy_capacity_required':True,
+        'optimizer_state_unchanged':True,'metadata_extra_bytes':64<<20,
+        'ordinary_parameters':[{'name':'learned rows','shape':[4,2304],'dtype':'torch.float32'}]}
+    trainer='train/native_state_sft.py';helper='train/native_operation_report.py'
+    if mutation=='old-trainer':review['old_code'][trainer]='a'*64
+    elif mutation=='new-trainer':review['new_code'][trainer]='b'*64
+    elif mutation=='helper':review['new_code'][helper]='c'*64
+    elif mutation=='old-helper-present':review['old_code'][helper]='d'*64
+    elif mutation=='missing-helper':review['new_code'].pop(helper)
+    elif mutation=='extra-model':review['new_code']['model/forward.py']='e'*64
+    elif mutation=='objective':review['identity']['objective']={'schema':'native-policy'}
+    elif mutation=='policy-required':review['fresh_policy_capacity_required']=False
+    elif mutation=='optimizer':review['optimizer_state_unchanged']=False
+    elif mutation=='small-allowance':review['metadata_extra_bytes']=(64<<20)-1
+    if mutation:
+        with pytest.raises(ValueError):
+            mechanism._ordinary_writer_contract(review)
+            mechanism._memory_allowance(review)
+    else:
+        mechanism._ordinary_writer_contract(review)
+        assert mechanism._memory_allowance(review)==64<<20
+        assert mechanism.allowed_changes(mechanism.ORDINARY_WRITER_POLICY)==set(pins)
+
+
+def writer_chain(tmp_path,monkeypatch):
+    old,new,review,proof=fixture(tmp_path)
+    pins=mechanism.ORDINARY_WRITER_COMPOSITION
+    old_code={name:pair[0] for name,pair in pins.items() if pair[0] is not None}
+    new_code={name:pair[1] for name,pair in pins.items()}
+    # The inventory verifier is independently exercised by the base tests;
+    # these exact pinned maps isolate full certificate/recursive policy flow.
+    monkeypatch.setattr(mechanism,'code_inventory',lambda root:old_code if root==old else new_code)
+    measured=json.loads(proof.read_text());measured['runtime_code_sha256']=digest(old_code)
+    proof.write_text(json.dumps(measured))
+    cert_path=Path(review['source_certificate']['path']);certificate=json.loads(cert_path.read_text())
+    certificate.update(runtime_code_sha256=digest(old_code),evidence=binding(proof))
+    cert_path.write_text(json.dumps(certificate))
+    review.update(old_code=old_code,new_code=new_code,
+        changes={name:{'old':pair[0],'new':pair[1]} for name,pair in pins.items()},
+        optimizer_policy=mechanism.ORDINARY_WRITER_POLICY,source_certificate=binding(cert_path),
+        fresh_policy_capacity_required=True,optimizer_state_unchanged=True,metadata_extra_bytes=64<<20)
+    return old,new,review,proof
+
+
+@pytest.mark.parametrize('tamper',[None,'trainer','helper','missing-helper','policy-required'])
+def test_writer_inherited_evidence_rechecks_exact_pins_even_when_rehashed(tmp_path,monkeypatch,tamper):
+    old,new,review,_=writer_chain(tmp_path,monkeypatch)
+    output=invoke(tmp_path,old,new,review)
+    cert=json.loads(output.read_text());evidence=json.loads(Path(cert['evidence']['path']).read_text())
+    assert evidence['new_parent_measured'] is False
+    assert evidence['measured_parent_checkpoint_sha256']=='a'*64
+    assert evidence['continued_parent_checkpoint_sha256']=='b'*64
+    assert evidence['extra_bytes_per_memory_domain']==64<<20
+    assert evidence['measured_peaks']==[{'id':'actual maximum','device_bytes':8<<30,'host_bytes':4<<30}]
+    assert 'report-writer-only' in cert['scope'] and 'fresh policy measurement required' in cert['scope']
+    cases=mechanism._proof_cases(cert['evidence'],identity=review['identity'],
+        code_sha=digest(review['new_code']),parent='b'*64)
+    assert cases[0]['inherited_extra_bytes']==64<<20
+    if tamper is None:
+        assert invoke(tmp_path,old,new,review)==output
+        return
+    if tamper=='trainer':review['new_code']['train/native_state_sft.py']='f'*64
+    elif tamper=='helper':review['new_code']['train/native_operation_report.py']='e'*64
+    elif tamper=='missing-helper':review['new_code'].pop('train/native_operation_report.py')
+    else:review['fresh_policy_capacity_required']=False
+    review['changes']={name:{'old':review['old_code'].get(name),'new':review['new_code'].get(name)}
+        for name in review['old_code'].keys()|review['new_code'].keys()
+        if review['old_code'].get(name)!=review['new_code'].get(name)}
+    review_path=Path(evidence['review']['path']);review_path.write_text(json.dumps(review))
+    evidence['review']=binding(review_path);evidence['runtime_code_sha256']=digest(review['new_code'])
+    evidence_path=Path(cert['evidence']['path']);evidence_path.write_text(json.dumps(evidence))
+    with pytest.raises(ValueError,match='ordinary SFT only|exact two-file'):
+        mechanism._proof_cases(binding(evidence_path),identity=review['identity'],
+            code_sha=digest(review['new_code']),parent='b'*64)
+
+
+@pytest.mark.parametrize('mutation',['device-headroom','host-headroom','reserve','layout','identity'])
+def test_writer_continuation_keeps_existing_measured_memory_and_identity_guards(tmp_path,monkeypatch,mutation):
+    old,new,review,_=writer_chain(tmp_path,monkeypatch)
+    if mutation=='device-headroom':review['device_memory_bytes']=8<<30
+    elif mutation=='host-headroom':review['host_memory_limit_bytes']=4<<30
+    elif mutation=='reserve':review['reserve_bytes']=(1<<30)-1
+    elif mutation=='layout':review['parameter_layout_unchanged']=False
+    else:review['identity']={**review['identity'],'checkpoint_input_offload':True}
+    with pytest.raises(ValueError):invoke(tmp_path,old,new,review)
+    assert not(tmp_path/'out').exists()
