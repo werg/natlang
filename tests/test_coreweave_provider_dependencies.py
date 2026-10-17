@@ -459,3 +459,17 @@ def test_separately_bound_operational_inputs_are_in_actual_file_closure(tmp_path
     Path(script['path']).write_text('changed observer')
     with pytest.raises(ValueError,match='dependency hash changed'):
         deps.dependency_closure({'config':config},namespace=str(tmp_path))
+
+
+def test_declared_semantic_participants_use_actual_complete_checkpoint_closure(tmp_path,monkeypatch):
+    checkpoint=write(tmp_path/'checkpoint.pt','test-binary-input')
+    calls=[]
+    def dependencies(path,**kwargs):
+        calls.append((path,kwargs));return {checkpoint['sha256']:Path(checkpoint['path'])}
+    monkeypatch.setattr(deps,'composite_dependencies',dependencies)
+    closure=deps.dependency_closure({'semantic_participants':[checkpoint]},namespace=str(tmp_path))
+    assert closure['files']==[checkpoint] and not closure['assets']
+    assert len(calls)==1 and calls[0][1]['semantic_only']is True
+    Path(checkpoint['path']).write_text('changed')
+    with pytest.raises(ValueError):
+        deps.dependency_closure({'semantic_participants':[checkpoint]},namespace=str(tmp_path))

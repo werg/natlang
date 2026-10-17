@@ -626,7 +626,7 @@ def deep_merge(base, override):
     return merged
 
 
-def resolve_recipe_data(path, _chain=()):
+def resolve_recipe_data(path, _chain=(), *, _files=None):
     """Return the canonical, fully inherited recipe object for ``path`` (``extends`` and ``overrides`` consumed).
 
     ``extends`` names a recipe id; the parent is the sibling file in the same directory whose ``id`` equals it.
@@ -638,6 +638,7 @@ def resolve_recipe_data(path, _chain=()):
     """
     path = Path(path).resolve()
     recipe = json.loads(path.read_text())
+    if _files is not None:_files.append({'path':str(path),'sha256':sha(path),'bytes':path.stat().st_size})
     if 'extends' not in recipe:
         if 'overrides' in recipe:
             raise ValueError('overrides without extends')
@@ -659,7 +660,7 @@ def resolve_recipe_data(path, _chain=()):
             continue
     if len(candidates) != 1:
         raise ValueError('extends must match exactly one recipe id in the same directory: ' + parent_id)
-    parent = resolve_recipe_data(candidates[0], chain)
+    parent = resolve_recipe_data(candidates[0], chain, _files=_files)
     if parent.get('schema') != recipe.get('schema') or not isinstance(parent.get('stages'), list):
         raise ValueError('recipe and parent must share a multi-stage schema')
     top = {key: value for key, value in overrides.items() if key not in ('stages', 'stages_added')}
@@ -707,6 +708,13 @@ def resolve_recipe_data(path, _chain=()):
     for key in INHERITANCE_KEYS:
         resolved.pop(key, None)
     return resolved
+
+
+def recipe_file_dependencies(path):
+    """Exact files consumed by the existing inherited recipe resolver."""
+    files=[]
+    resolve_recipe_data(path,_files=files)
+    return files
 
 
 def recipe_identity_sha256(path):

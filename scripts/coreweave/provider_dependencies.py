@@ -301,6 +301,8 @@ def dependency_closure(request, *, namespace='/work/native-production', readonly
         if progress.get('full_report'):bound(progress['full_report'])
         if state.get('pending_semantic_source'):
             policy_sources([state['pending_semantic_source']])
+    for reference in request.get('semantic_participants',[]):
+        checkpoint(reference,semantic_only=True)
     if request.get('semantic_adapter'):
         semantic_adapter(request['semantic_adapter'])
     return {'files': list(files.values()), 'assets': list(assets.values())}

@@ -707,17 +707,22 @@ def _release_requirement(declaration,value,*,verified_handoff=None):
     return requirement
 
 
-def validate_release(path,plan_path,*,allow_live=False):
+def validate_release(path,plan_path,*,allow_live=False,eligibility=False):
     from ..train.native_resident import owner_alive
     record=json.loads(Path(path).read_text());plan=json.loads(Path(plan_path).read_text())
+    from .native_role_release import ownership
+    owned,exchange=ownership(plan)
     if (record.get('schema')!=SCHEMA or record.get('plan_sha256')!=sha256_file_hex_cached(plan_path)
-            or record.get('released') is not True):return None
+            or(record.get('released')is not True and not(eligibility and exchange and record.get('released')is False))):return None
     if not allow_live and owner_alive(record.get('owner') or {}):return None
     models=record.get('models') or {}
-    if set(models)!={model['model'] for model in plan['models']}:raise ValueError('raw release omitted an actual student owner')
+    if set(models)!=owned:raise ValueError('raw release omitted an actual student owner')
+    if exchange is not None and record.get('owned_models')!=sorted(owned):
+        raise ValueError('raw release changed its explicit source-host ownership')
     result={}
     from ..train.native_readiness import validate_ready
     for declaration in plan['models']:
+        if declaration['model']not in owned:continue
         value=models[declaration['model']]
         config=json.loads(_bound(value['config']).read_text())
         if (config.get('runtime_binding',config.get('bootstrap_binding')) or {}).get('plan_sha256')!=record['plan_sha256']:
@@ -748,6 +753,8 @@ def run(plan_path,out,*,cycles=None,stop=None,poll_seconds=60):
     if (plan.get('schema')!='natlang.native-raw-rl-bootstrap/1' or not plan.get('models')
             or len({row['model'] for row in plan['models']})!=len(plan['models'])
             or not 0<poll_seconds<=60):raise ValueError('raw bootstrap requires distinct declared students and bounded polling')
+    from . import native_role_release as roles
+    owned_models,exchange=roles.ownership(plan);role_contract=roles.contract(plan)if exchange else None
     out=Path(out).resolve();out.mkdir(parents=True,exist_ok=True)
     owned=stop is None;stop=StopSignal().install() if owned else stop
     try:
@@ -756,10 +763,13 @@ def run(plan_path,out,*,cycles=None,stop=None,poll_seconds=60):
             state_path=out/'state.json'
             if state_path.exists() and validate_release(state_path,plan_path) is not None:return json.loads(state_path.read_text())
             state={'schema':SCHEMA,'plan_sha256':sha256_file_hex_cached(plan_path),'owner':process_owner(),
-                'released':False,'models':{},'production_complete':False}
-            counts={row['model']:0 for row in plan['models']}
+                'released':False,'models':{},'production_complete':False,
+                **({'owned_models':sorted(owned_models)}if exchange else {})}
+            counts={name:0 for name in owned_models}
             eligible=set();rendezvous=False;active={};blocked={}
-            with ThreadPoolExecutor(max_workers=len(plan['models'])) as pool:
+            if exchange:
+                write_json_durable(state_path,state);roles.withdraw(plan,state_path)
+            with ThreadPoolExecutor(max_workers=len(owned_models)) as pool:
                 try:
                     while True:
                         updated=json.loads(plan_path.read_text())
@@ -771,9 +781,15 @@ def run(plan_path,out,*,cycles=None,stop=None,poll_seconds=60):
                                    {row['model']:{key:row['handoff_requirement'].get(key) for key in
                                     ('foundation_sources','foundation_epochs','readiness_boundary')} for row in plan['models']}):
                             raise ValueError('live raw plan cannot silently replace a student optimizer owner')
+                        if roles.ownership(updated)!=(owned_models,exchange)or(exchange and roles.contract(updated)!=role_contract):
+                            raise ValueError('live raw plan cannot change source-host role ownership or fixed cohorts')
                         plan=updated
                         state['plan_sha256']=sha256_file_hex_cached(plan_path)
-                        models={row['model']:row for row in plan['models']}
+                        models={row['model']:row for row in plan['models']if row['model']in owned_models}
+                        if exchange and eligible==owned_models and not stop.requested:
+                            try:rendezvous=roles.eligible(plan)
+                            except(ValueError,OSError,KeyError)as error:
+                                rendezvous=False;state['role_exchange_error']={'error_type':type(error).__name__,'error':str(error)}
                         if not stop.requested and not rendezvous:
                             for name,model in models.items():
                                 if name in active or (cycles is not None and counts[name]>=cycles):continue
@@ -825,7 +841,18 @@ def run(plan_path,out,*,cycles=None,stop=None,poll_seconds=60):
                         # Do not idle the first eligible student. Only after every
                         # student has reached an actual eligible boundary do we stop
                         # resubmitting and drain their currently owned operations.
-                        if eligible==set(models):rendezvous=True
+                        if eligible==set(models):
+                            if exchange:
+                                write_json_durable(state_path,state)
+                                try:
+                                    roles.publish(plan_path,state_path,kind='eligible')
+                                    rendezvous=roles.eligible(plan)
+                                    state.pop('role_exchange_error',None)
+                                except(ValueError,OSError,KeyError)as error:
+                                    rendezvous=False;state['role_exchange_error']={'error_type':type(error).__name__,'error':str(error)}
+                            else:rendezvous=True
+                        elif exchange:
+                            write_json_durable(state_path,state);roles.withdraw(plan,state_path)
                 except BaseException:
                     # The executor drains only after every owned worker has
                     # observed this shared stop, including config/IO failures.

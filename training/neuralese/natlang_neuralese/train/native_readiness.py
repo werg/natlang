@@ -178,9 +178,25 @@ def validate_ready(path, requirement):
             'communication_foundation': receipt.get('communication_foundation')}
 
 
+def _role_local_released(config):
+    if not config.get('raw_rl_bootstrap'):return False
+    from ..rl.native_role_release import local_released
+    return local_released(config)
+
+
 def ready_participants(config):
     if config.get('raw_rl_bootstrap'):
         from ..rl.native_raw_rounds import raw_out,validate_release
+        raw_plan_path=_bound(config['raw_rl_bootstrap'])
+        raw_plan=json.loads(raw_plan_path.read_text())
+        from ..rl import native_role_release as roles
+        if roles.ownership(raw_plan)[1]is not None:
+            try:
+                if not roles.local_released(config):
+                    return [],[{'reason':'local source-host optimizer has not released current checkpoint'}]
+                return roles.ready_participants(raw_plan)
+            except (ValueError,OSError,KeyError)as error:
+                return [],[{'reason':'source-host role handoff needs repair: '+str(error),'repair_required':True}]
         raw_state=raw_out(config)/'state.json'
         if raw_state.exists():
             try:released=validate_release(raw_state,_bound(config['raw_rl_bootstrap']))
@@ -532,7 +548,8 @@ def _run(config_path, *, once=False, stop):
             participants = out/'participants.json'
             retry_ready = retry is None or time.time() >= retry['next_retry_at']
             if (child is None and len(ready)<2 and config.get('raw_rl_bootstrap') and not last_success
-                    and not semantic_publication and not once and not stop.requested and retry_ready):
+                    and not semantic_publication and not once and not stop.requested and retry_ready
+                    and not _role_local_released(config)):
                 try:
                     child,launch=_launch_child(raw_bootstrap_command(config),'native-raw-rl',config,out,execution_signature,None)
                     child_kind='native-raw-rl'
@@ -656,8 +673,10 @@ def _run(config_path, *, once=False, stop):
                     time.sleep(interval)
                     continue
                 if child_kind == 'native-raw-rl':
+                    from ..rl.native_role_release import seal_local
+                    sealed=seal_local(config)
                     from ..rl.native_raw_rounds import raw_out,validate_release
-                    if validate_release(raw_out(config)/'state.json',_bound(config['raw_rl_bootstrap'])) is None:
+                    if sealed is None and validate_release(raw_out(config)/'state.json',_bound(config['raw_rl_bootstrap'])) is None:
                         retry=_retry_failure(retry,child_kind,execution_signature,interval,
                             error='raw owner exited without current checkpoint/readiness release')
                         state.update(retry=retry,status='retry_wait',child_pid=None,child_kind=None)

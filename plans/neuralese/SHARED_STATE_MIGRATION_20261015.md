@@ -249,3 +249,11 @@ reports are `lfm9478-*-diagnostic-root*-20261017.json` under the DGX operations
 directory. Continue localization and repair before claiming complete-gradient
 qualification or cross-model readiness; do not widen gates or infer task
 regression from this diagnostic. Both models still owe complete recipe exposure.
+
+### Source-host scheduling and current readiness (2026-10-17)
+
+The shared source-host role mechanism now explicitly partitions raw optimizer ownership, validates each local full parent and complete communication/runtime/task evidence, and exchanges immutable bound eligibility/final-release proofs. The declared semantic consumer is Mellum for the current two-model deployment: its large parent stays local; the remote LFM checkpoint and exact consumed metadata are transferred only after actual joint-stage consumption is requested. A future third model is not a barrier to two genuinely ready participants. A single designated consumer prevents duplicate joint optimizers. Original raw cursors, optimizer/RNG/source credits, inherited recipes and mandatory ordinary deficits remain authoritative.
+
+This is implemented and locally tested scheduling/transport, **not a cloud deployment or VAE-readiness claim**. Both actual fixed 26,312-graph communication foundations remain incomplete. Complete full-parameter communication-gradient qualification is also unresolved: the actual LFM 9478 diagnostic still fails the strict checks despite small relative errors. Legacy channel-only evidence cannot grant full-backbone readiness. No shared-space VAE training or qualification is earned by this change. Useful student SGD continues while those concrete prerequisites are repaired.
+
+The implementation and exact mechanism/policy boundary are documented in [SOURCE_HOST_ROLE_RENDEZVOUS_DECOMPOSITION_20261017.md](shared-state/SOURCE_HOST_ROLE_RENDEZVOUS_DECOMPOSITION_20261017.md). Focused checks include the unchanged real both-port RL→SFT→RL restore/update path, full readiness rejection cases, independent portable checkpoint copying and actual semantic loading through original legacy recipe/launch/exit guards. Deployment remains with the cloud owner after independent composition review.
