@@ -19,6 +19,8 @@ def evidence(plan_path,declaration,handoff,config):
     files.update({str(path):binding(path) for path in inputs.values()})
     def add(reference):
         path=_bound(reference);files[str(path)]=binding(path);return path
+    def external_controls(value):
+        for reference in (value.get('external_runtime')or{}).get('launch_control',{}).values():add(reference)
     def plan(value):
         for path,sha in value.get('inputs',{}).items():add({'path':path,'sha256':sha})
     record=json.loads(add(handoff).read_text())
@@ -31,7 +33,7 @@ def evidence(plan_path,declaration,handoff,config):
             if key=='current':plan(value['payload']['plan'])
     transition=declaration.get('drained_recipe_handoff')
     if transition:
-        value=json.loads(add(transition).read_text())
+        value=json.loads(add(transition).read_text());external_controls(value)
         for key in ('old_plan','new_plan'):
             plan(json.loads(add(value[key]).read_text()))
         for key in ('recipe','retirement'):
@@ -83,6 +85,7 @@ def evidence(plan_path,declaration,handoff,config):
             for reference in (current_record.get('resident') or {}).values():
                 if isinstance(reference,dict) and reference.get('path') and reference.get('sha256'):add(reference)
         if transition:
+            external_controls(transition)
             for key in ('old_plan','new_plan'):plan(json.loads(add(transition[key]).read_text()))
             for key in ('recipe','retirement'):
                 if transition.get(key):add(transition[key])

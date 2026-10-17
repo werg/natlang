@@ -142,3 +142,24 @@ def test_external_qualified_package_cannot_change_after_drained_authority(extern
     x=external
     with(x['newpackage']/'__init__.py').open('a')as f:f.write('\n# wrong external runtime\n')
     with pytest.raises(ValueError):handoff.verify_drained_recipe_handoff(x['transition'],handoff=x['handoff'])
+
+
+def test_external_launch_controls_are_in_bootstrap_cache_closure(external,monkeypatch,tmp_path):
+    from natlang_neuralese.rl import native_bootstrap_metadata as metadata
+    from natlang_neuralese.common import runtime_inventory
+    x=external;_rejoin(x)
+    bootstrap=json.loads(Path(x['bootstrap']['path']).read_text());captured=json.loads(Path(bootstrap['intent']['path']).read_text())
+    x['declaration']['handoff_requirement'].update(trainer_launch=captured.get('source_launch',captured['launch']),
+        trainer_exit=bootstrap.get('source_terminal',bootstrap['terminal'])['path'])
+    write(x['plan'],{'models':[x['declaration']]})
+    monkeypatch.setattr(runtime_inventory,'task_runtime_inventory',lambda path:{'fixture':'complete collector inventory'})
+    monkeypatch.setattr(raw,'_inputs',lambda declaration:{'cases':Path(declaration['cases']['path'])})
+    raw.configure_model(x['plan'],x['declaration'],x['bootstrap'],x['root'])
+    config=json.loads(x['config'].read_text());value=metadata.evidence(x['plan'],x['declaration'],x['bootstrap'],config)
+    transition=json.loads(Path(x['transition']['path']).read_text())
+    controls=transition['external_runtime']['launch_control']
+    assert all(reference['path']in value['files']for reference in controls.values())
+    receipt=tmp_path/'metadata.json';metadata.save(receipt,x['plan'],x['declaration'],x['bootstrap'],config)
+    assert metadata.unchanged(receipt,x['plan'],x['declaration'],x['bootstrap'],config)
+    Path(controls['supervisor']['path']).write_text('# changed authority snapshot\n')
+    with pytest.raises(ValueError):metadata.unchanged(receipt,x['plan'],x['declaration'],x['bootstrap'],config)

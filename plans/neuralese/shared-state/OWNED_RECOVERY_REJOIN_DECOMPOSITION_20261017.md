@@ -51,3 +51,8 @@ or communication-readiness qualification.
 The typed failed-monitor saved-update recovery is a separate follow-up, still
 required before deploying the current LF historical chain. This change neither
 relabels that failed operation nor claims that a controller cutover has occurred.
+
+Bootstrap metadata cache evidence also binds every captured external launch control
+snapshot. Both direct and later runtime-transition closures include these files;
+changing a supervisor snapshot invalidates the cache instead of bypassing the
+full authority verifier. This adds control dependencies only.
