@@ -35,3 +35,12 @@ publish that packet as ready or skip its obligation. A per-output lease prevents
 concurrent append writers. After interruption, only allowlisted derived files
 without a prepared envelope are regenerated; their exact hashes are recorded,
 while original inputs and fsynced per-program verdicts remain untouched.
+
+The actual first external-disk preparation spent its time in cold SQLite reads:
+its query plan scanned `programs` and evaluated correlated eligibility before
+checking the finite selected set. Both eligibility and ranking now force the
+selected set first with an exact cross join; predicates and per-source ordering
+are unchanged. The known-unready list explicitly retains original row order.
+The original readonly attempt had no packet output, was stopped by its exact
+unit, and retained its mechanism/spec/headers for this assigned diagnosis. No
+catalog snapshot copy or source mutation is needed.

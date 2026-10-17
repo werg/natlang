@@ -112,3 +112,16 @@ def test_zero_qualified_packet_is_authenticated_and_kept_pending(tmp_path):
     dummy=tmp_path/'never.py';dummy.write_text('raise AssertionError("cached zero proof")');out=tmp_path/'out';out.mkdir()
     ref=qualify(manifest['candidate_inventory'],binding(old),binding(dummy),out);ready=json.loads(Path(ref['path']).read_text())
     assert not ready['complete']and ready['entries']==[entries[0]]and ready['blocked_unready_packets'][0]['pending_cases']==1
+
+
+def test_eligibility_and_packet_ranking_do_not_scan_full_program_blob_table(tmp_path,monkeypatch):
+    root,source,prefix,_=corpus(tmp_path);original=sqlite3.connect;plans=[]
+    class Observed(sqlite3.Connection):
+        def execute(self,sql,*args,**kwargs):
+            if sql.startswith('SELECT p.sha FROM selected')or sql.startswith('WITH source AS'):
+                plan=list(super().execute('EXPLAIN QUERY PLAN '+sql,*args,**kwargs));plans.append(plan)
+                assert not any(row[-1]=='SCAN p'for row in plan)
+            return super().execute(sql,*args,**kwargs)
+    monkeypatch.setattr(sqlite3,'connect',lambda *a,**kw:original(*a,factory=Observed,**kw))
+    ref=prepare(root,source,prefix,tmp_path/'out',2)
+    assert len(plans)==2 and json.loads(Path(ref['path']).read_text())['appended_cases']==2

@@ -82,11 +82,11 @@ def prepare(catalog,source_reference,prefix_reference,out,packet_rows=64):
       AND NOT EXISTS(SELECT 1 FROM occurrences o WHERE o.program_sha=p.sha AND o.reason IN('held_group','quality_group','pending_source_review','nontrain','exact_decision_program_hold'))'''
     missing=db.execute('SELECT s.sha FROM selected s LEFT JOIN programs p ON p.sha=s.sha WHERE p.sha IS NULL').fetchall()
     if missing:raise ValueError('original candidate is absent from its source catalog')
-    unready=[row[0]for row in db.execute('SELECT p.sha FROM programs p JOIN selected s ON p.sha=s.sha WHERE NOT('+eligible+')')]
+    unready=[row[0]for row in db.execute('SELECT p.sha FROM selected s CROSS JOIN programs p ON p.sha=s.sha WHERE NOT('+eligible+') ORDER BY p.rowid')]
     immutable(out/'unready-programs.json',{'program_sha256':unready,'reason':'current catalog conflict or protected/incomplete occurrence; not omitted','training_admission':False})
     query='''WITH source AS(SELECT p.sha,p.family,p.rowid ordinal,
       (SELECT min(o.file) FROM occurrences o JOIN files f ON f.path=o.file WHERE o.program_sha=p.sha AND o.reason IS NULL AND f.complete=1) file
-      FROM programs p JOIN selected s ON p.sha=s.sha WHERE '''+eligible+'''),
+      FROM selected s CROSS JOIN programs p ON p.sha=s.sha WHERE '''+eligible+'''),
       ranked AS(SELECT *,row_number()OVER(PARTITION BY family,file ORDER BY ordinal) round FROM source)
       SELECT sha,family,file FROM ranked ORDER BY round,file,sha'''
     packet=[];references=list(prefix['packets']);total=0
