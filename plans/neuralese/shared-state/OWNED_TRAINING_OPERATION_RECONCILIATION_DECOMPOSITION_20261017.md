@@ -82,3 +82,21 @@ The existing scalar remains the fallback. Thus preference can receive 250/eval50
 while ordinary receives 1000/eval250; no stage is skipped or called complete.
 Malformed/nonpositive cadences and undeclared stage IDs reject. This is declared
 policy data with exact cadence verification, not a second scheduler.
+
+The completed norm-entry owner used a previously reviewed read-only restore
+observer instead of a literal trainer module command. This is an exact verifier
+case: accept only that observer's pinned source bytes, its complete fixed flag
+layout, a byte-bound original trainer argv, and the actual preceding parent.
+Then apply the same output/stage/recipe joins to the original argv. Record both
+observer and original-argv bindings in the chain. Arbitrary wrappers, altered
+observer code, changed parents, or unbound argument files reject; the direct
+trainer branch is unchanged. This recognizes genuine historical execution and
+does not create a new launch, decode a historical optimizer, or relax readiness.
+
+A verified owned-operation acknowledgement at the end of the complete finite
+stage inventory is between cycles even though the durable cursor still says
+`phase=sft`. When its exact candidate cursor has no pending policy round, all
+stage IDs acknowledged, and controller state is `collect`, configure the next
+actor and collector immediately. Otherwise the old pending-operation protection
+would freeze the old actor through the configuration fast path. Unfinished SFT,
+pending policy round zero or greater, and active learner state retain protection.

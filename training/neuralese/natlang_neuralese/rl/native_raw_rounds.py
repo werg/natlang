@@ -250,6 +250,34 @@ def _supervised_stage_inventory(recipe,foundation_id):
     return [stage for stage in stages if stage['id']!=foundation_id]+foundation
 
 
+_OWNED_RESTORE_OBSERVER_SHA256='7b1f69d53cd7a8690e3d32940337c6c56f040fca8c0ad2b2dfee93d431c63e9e'
+
+
+def _owned_training_invocation(argv,parent):
+    """Resolve only the exact reviewed read-only historical restore observer."""
+    if '--argv-binding' not in argv:return argv,None
+    flags=['--argv-binding','--parent','--runtime-root','--out']
+    if (len(argv)!=11 or argv[:2]!=['python','-u'] or argv[3::2]!=flags):
+        raise ValueError('owned restore observer changed its exact invocation')
+    observer=binding(_bound({'path':argv[2],'sha256':_OWNED_RESTORE_OBSERVER_SHA256}))
+    reference=json.loads(argv[4]);original=_bound(reference);restored=json.loads(argv[6])
+    if (restored.get('sha256')!=parent['sha256']
+            or Path(restored['path']).resolve()!=Path(parent['path']).resolve()
+            or (restored.get('bytes') is not None and Path(restored['path']).stat().st_size!=restored['bytes'])):
+        raise ValueError('owned restore observer changed its actual preceding parent')
+    command=json.loads(original.read_text())
+    if (not isinstance(command,list) or any(not isinstance(item,str)for item in command)
+            or command[:3]!=['python','-u','-m'] or len(command)<4
+            or command[3]not in('natlang_neuralese.train.native_state_sft','natlang_neuralese.train.native_preference')
+            or command.count('--continue-from')!=1
+            or command.index('--continue-from')+1>=len(command)
+            or Path(command[command.index('--continue-from')+1]).resolve()!=Path(parent['path']).resolve()
+            or not Path(argv[8]).is_absolute() or not Path(argv[10]).is_absolute()):
+        raise ValueError('owned restore observer lost its exact original trainer command')
+    return command,{'observer':observer,'original_argv':binding(original),
+                    'parent':restored,'runtime':argv[8],'observations':argv[10]}
+
+
 def _owned_operation_chain(operations,published,model_id,lineage):
     """Authenticate completed finite work without decoding historical optimizers."""
     from .native_raw_handoff import verify_handoff_metadata
@@ -279,18 +307,20 @@ def _owned_operation_chain(operations,published,model_id,lineage):
         matching=[]
         for child in intent['children']:
             argv=[part.decode()for part in bytes.fromhex(child['argv_hex']).split(b'\0')if part]
+            argv,observer=_owned_training_invocation(argv,prior)
             def argument(flag):
                 if argv.count(flag)!=1 or argv.index(flag)+1>=len(argv):return None
                 return argv[argv.index(flag)+1]
             out=argument('--out');binding_arg=argument('--recipe-binding')
             if (out and Path(out).resolve()==Path(operation['receipt']['path']).resolve().parent
                     and argument('--stage-id')==stage_id and binding_arg
-                    and json.loads(binding_arg)==actual_recipe):matching.append(child)
+                    and json.loads(binding_arg)==actual_recipe):matching.append({'child':child,'restore_observer':observer})
         if len(matching)!=1:
             raise ValueError('owned operation receipt lacks its exact captured trainer invocation')
         result.append({'handoff':operation['handoff'],'receipt':operation['receipt'],
             'parent':prior,'checkpoint':checkpoint,'stage_id':stage_id,'stage':stages[0],
-            'recipe':actual_recipe,'new_optimizer_updates':updates})
+            'recipe':actual_recipe,'new_optimizer_updates':updates,
+            **({'restore_observer':matching[0]['restore_observer']}if matching[0]['restore_observer']else{})})
         prior=checkpoint
     if not result:raise ValueError('owned reconciliation needs actual completed operations')
     return result

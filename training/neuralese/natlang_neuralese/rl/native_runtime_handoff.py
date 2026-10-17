@@ -372,6 +372,22 @@ def verify_runtime_handoff(reference,*,bootstrap):
     return value
 
 
+def _owned_cycle_boundary(proof,cursor,state,recipe,production_stage):
+    """An authenticated end-of-cycle acknowledgement has no sealed next packet."""
+    if not proof.get('owned_operations'):return False
+    from .native_raw_rounds import _supervised_stage_inventory
+    ids=[stage['id']for stage in _supervised_stage_inventory(recipe,production_stage)]
+    owned=_read(proof['owned_operations']);ack=cursor.get('owned_operation_reconciliation')or{}
+    return (cursor.get('phase')=='sft' and 'pending_rl_round'not in cursor
+            and cursor.get('next_stage')==len(ids)
+            and owned.get('acknowledged_finite_stages')==ids
+            and ack.get('receipt')==proof['owned_operations']['path']
+            and ack.get('request_sha256')==owned.get('request_sha256')
+            and ack.get('runtime_configuration_required')is True
+            and state.get('phase')=='collect'
+            and not state.get('pending_native_checkpoint') and not state.get('pending_semantic_source'))
+
+
 def configure_runtime_handoff(plan_path,declaration,bootstrap,config_path):
     """Rebind invocation metadata; never republish a parent or rewrite a cursor."""
     reference=declaration['runtime_handoff'];proof=verify_runtime_handoff(reference,bootstrap=bootstrap)
@@ -433,7 +449,9 @@ def configure_runtime_handoff(plan_path,declaration,bootstrap,config_path):
     from .native_rounds import configure_provider
     record=_read(proof['handoff'])
     cursor=json.loads(Path(proof['sources']['cursor']['path']).read_text())
-    pending=cursor.get('phase')=='sft' or bool(cursor.get('pending_rl_round'))
+    state=json.loads(Path(proof['sources']['state']['path']).read_text())
+    pending=(cursor.get('phase')=='sft' or 'pending_rl_round'in cursor)
+    if _owned_cycle_boundary(proof,cursor,state,recipe,stage_id):pending=False
     _scheduling_controls(config,declaration,plan_path,record,pending=pending)
     config['runtime_handoff']=reference
     config['runtime_binding']={'plan_sha256':binding(plan_path)['sha256'],'handoff':bootstrap}

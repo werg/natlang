@@ -13,6 +13,51 @@ from natlang_neuralese.common.jsonio import write_json_durable as write
 
 
 @pytest.fixture
+def restore_observer(tmp_path,monkeypatch):
+    # A pinned harmless source fixture exercises the verifier's exact-byte gate;
+    # production accepts only the separately reviewed observer SHA.
+    observer=tmp_path/'observer.py';observer.write_text('# fixed read-only observer fixture\n')
+    monkeypatch.setattr(raw,'_OWNED_RESTORE_OBSERVER_SHA256',resident.binding(observer)['sha256'])
+    parent_path=tmp_path/'parent.pt';parent_path.write_bytes(b'actual immutable parent')
+    parent=resident.binding(parent_path)
+    command=['python','-u','-m','natlang_neuralese.train.native_state_sft',
+             '--continue-from',parent['path'],'--out',str(tmp_path/'learner'),
+             '--stage-id','sft','--recipe-binding','{}']
+    original=tmp_path/'original-argv.json';write(original,command)
+    argv=['python','-u',str(observer),'--argv-binding',json.dumps(resident.binding(original)),
+          '--parent',json.dumps({**parent,'bytes':parent_path.stat().st_size}),
+          '--runtime-root',str(tmp_path/'runtime'),'--out',str(tmp_path/'observations')]
+    return argv,parent,command,observer,original
+
+
+def test_exact_read_only_restore_observer_resolves_bound_trainer_command(restore_observer):
+    argv,parent,command,observer,original=restore_observer
+    result,evidence=raw._owned_training_invocation(argv,parent)
+    assert result==command
+    assert evidence['observer']==resident.binding(observer)
+    assert evidence['original_argv']==resident.binding(original)
+    direct=['python','-u','-m','natlang_neuralese.train.native_state_sft','--out','literal']
+    assert raw._owned_training_invocation(direct,parent)==(direct,None)
+
+
+@pytest.mark.parametrize('tamper',['source','original','parent','size','duplicate','reordered','module','restore-path'])
+def test_restore_observer_cannot_borrow_another_invocation(restore_observer,tamper):
+    argv,parent,command,observer,original=restore_observer
+    if tamper=='source':observer.write_text('# altered observer\n')
+    elif tamper=='original':original.write_text('[]')
+    elif tamper in('parent','size'):
+        value=json.loads(argv[6]);value['sha256'if tamper=='parent'else'bytes']='0'*64 if tamper=='parent'else 1;argv[6]=json.dumps(value)
+    elif tamper=='duplicate':argv+=['--argv-binding',argv[4]]
+    elif tamper=='reordered':argv[5],argv[7]=argv[7],argv[5]
+    else:
+        if tamper=='module':command[3]='untrusted.module'
+        else:command[command.index('--continue-from')+1]=str(original)
+        write(original,command);argv[4]=json.dumps(resident.binding(original))
+    with pytest.raises((ValueError,AssertionError)):
+        raw._owned_training_invocation(argv,parent)
+
+
+@pytest.fixture
 def owned(ordinary,tmp_path):
     x=ordinary;continuation=json.loads(x['owner_continuation'].read_text())
     state_path=x['out']/'state.json';state=json.loads(state_path.read_text())
@@ -150,6 +195,42 @@ def test_scheduler_cannot_dispatch_old_recipe_after_owned_publication(owned,monk
     monkeypatch.setattr(raw,'configure_model',lambda *args:x['config'])
     with pytest.raises(raw.StudentConfigurationError,match='runtime configuration'):
         raw.student_cycle(x['plan'],x['declaration'],x['bootstrap'],x['root'],stop=SimpleNamespace(requested=False))
+
+
+def test_owned_cycle_boundary_installs_next_actor_and_collector_before_fastpath(owned,tmp_path):
+    from natlang_neuralese.rl import native_runtime_handoff as runtime
+    x=owned;config=json.loads(x['config'].read_text());config['actor_command']=['old-actor'];write(x['config'],config)
+    published=invoke(x)
+    proof=runtime.prepare_runtime_handoff(x['bootstrap'],x['handoff'],None,x['config'],
+        tmp_path/'next-unsealed-runtime.json',bare_direct_owner=x['bare'],owned_operations=published)
+    collector=tmp_path/'new-collector';(collector/'dist/teacher').mkdir(parents=True);(collector/'dist/teacher/cli.js').write_text('/* fixture */')
+    declaration=copy.deepcopy(x['declaration']);declaration.update(runtime_handoff=proof,runtime=str(collector))
+    declaration['commands']['actor_command']=['new-qualified-actor']
+    write(x['plan'],{'models':[declaration]})
+    raw.configure_model(x['plan'],declaration,x['bootstrap'],x['root'])
+    actual=json.loads(x['config'].read_text())
+    assert actual['actor_command']==['new-qualified-actor']and actual['runtime']==str(collector)
+    assert actual['runtime_binding']['plan_sha256']==resident.binding(x['plan'])['sha256']
+    raw.configure_model(x['plan'],declaration,x['bootstrap'],x['root'])
+    assert json.loads(x['config'].read_text())['actor_command']==['new-qualified-actor']
+
+
+@pytest.mark.parametrize('unfinished',['sft','round-zero','round-one','learner','unacknowledged','stale-receipt','pending-checkpoint'])
+def test_incomplete_owned_work_retains_sealed_collection_protection(tmp_path,unfinished):
+    from natlang_neuralese.rl import native_runtime_handoff as runtime
+    p=tmp_path/'publication.json';write(p,{'acknowledged_finite_stages':['sft'],'request_sha256':'request'})
+    proof={'owned_operations':resident.binding(p)}
+    cursor={'phase':'sft','next_stage':1,'owned_operation_reconciliation':{
+        'receipt':str(p),'request_sha256':'request','runtime_configuration_required':True}}
+    state={'phase':'collect'};recipe={'stages':[{'id':'sft','kind':'native_state_sft'}]}
+    assert runtime._owned_cycle_boundary(proof,cursor,state,recipe,'sft')
+    if unfinished=='sft':cursor['next_stage']=0
+    elif unfinished.startswith('round-'):cursor['pending_rl_round']=0 if unfinished=='round-zero'else 1
+    elif unfinished=='learner':state['phase']='learner_pending'
+    elif unfinished=='pending-checkpoint':state['pending_native_checkpoint']='sealed.pt'
+    elif unfinished=='stale-receipt':cursor['owned_operation_reconciliation']['request_sha256']='other'
+    else:cursor['owned_operation_reconciliation']['runtime_configuration_required']=False
+    assert not runtime._owned_cycle_boundary(proof,cursor,state,recipe,'sft')
 
 
 def test_cli_rejects_missing_operation_controls_before_checkpoint_decode(owned,tmp_path,monkeypatch):
