@@ -1,8 +1,35 @@
 import hashlib,json,sqlite3
 from pathlib import Path
 import pytest
+from types import SimpleNamespace
+from scripts.coreweave import teacher_reference_append
 from scripts.coreweave.teacher_generation_guardian import binding,write
 from scripts.coreweave.teacher_reference_append import prepare,qualify
+
+
+@pytest.fixture(autouse=True)
+def reference_storage(monkeypatch):
+    # These small protocol fixtures must not depend on unrelated production
+    # writes crossing the machine's reserve during the suite. Keep the real
+    # guard, but supply its host-capacity dependency locally to this module.
+    storage = SimpleNamespace(disk_usage=lambda path: SimpleNamespace(free=64 * 1024**3))
+    monkeypatch.setattr(teacher_reference_append, 'shutil', storage)
+    return storage
+
+
+@pytest.mark.parametrize('location', ['output', 'checkout'])
+def test_reference_reserve_rejects_either_full_filesystem(tmp_path, reference_storage, location):
+    checkout = Path(teacher_reference_append.__file__).resolve()
+    low = tmp_path if location == 'output' else checkout
+    reference_storage.disk_usage = lambda path: SimpleNamespace(
+        free=20 * 1024**3 - 1 if path == low else 64 * 1024**3)
+    with pytest.raises(RuntimeError, match='reserve below 20 GiB'):
+        teacher_reference_append.floor(tmp_path)
+
+
+def test_reference_reserve_accepts_its_exact_boundary(tmp_path, reference_storage):
+    reference_storage.disk_usage = lambda path: SimpleNamespace(free=20 * 1024**3)
+    teacher_reference_append.floor(tmp_path)
 
 
 def corpus(tmp_path):
