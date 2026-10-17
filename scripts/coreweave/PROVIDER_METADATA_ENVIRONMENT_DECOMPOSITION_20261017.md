@@ -6,9 +6,12 @@ The provider is crisp external transport and exact verifier plumbing.
 1. Prefix the resource's explicit string environment before any imports in
    dependency_code, including its standalone CPU-loader use. Apply the same
    prefix in remote for hash checks, mirror inventories and other metadata.
-   Default empty environment preserves existing generated code bytes.
+   Bind `NATLANG_REPO` to the configured resource runtime, overriding stale
+   host environment/profile paths. Use this same environment for detached
+   workers and metadata imports. The runtime already owns the worker's
+   PYTHONPATH; its queue runner must come from that same deployed tree.
 2. Avoid repeating the same prefix when dependency code already contains it.
-   Do not alter model-worker RUNNER, resource selection, source hashes,
+   Do not alter model-worker RUNNER source, resource selection, source hashes,
    checkpoint loading/trust, runtime inventories or ownership semantics.
 3. Record host-observed sandbox binding, large script upload, exec RPC and
    cleanup durations for existing operations. These include SDK overhead; they
@@ -17,7 +20,7 @@ The provider is crisp external transport and exact verifier plumbing.
    return/error classes. Never log source code, environment values or output.
    Telemetry failure warns without replacing the original operation outcome.
 5. Test early import/loader environment, actual short/large remote subprocesses,
-   unchanged empty-environment output, failure preservation and timing fields.
+   runtime-root resolution in a real detached child, failure preservation and timing fields.
    Independent review precedes any controlled provider adoption.
 
 Ledger provider-metadata-environment-20261017 passes 44 focused provider-worker

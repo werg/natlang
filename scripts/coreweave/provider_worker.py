@@ -74,11 +74,19 @@ class SDKIO:
             self.clients[sid] = cwctl.read_sandbox(sid, patience=60)
         return self.clients[sid]
 
-    def _metadata_environment(self, sid):
-        env = self.config['sandboxes'].get(sid, {}).get('env', {})
+    def _runtime_environment(self, sid):
+        resource = self.config['sandboxes'].get(sid, {})
+        env = resource.get('env', {})
         if (not isinstance(env, dict) or any(not isinstance(key, str) or not isinstance(value, str)
                                              for key, value in env.items())):
             raise ValueError('provider metadata environment must contain string names and values')
+        env = dict(env)
+        if resource.get('runtime'):
+            env['NATLANG_REPO'] = resource['runtime']
+        return env
+
+    def _metadata_environment(self, sid):
+        env = self._runtime_environment(sid)
         return 'import os;os.environ.update('+repr(env)+');' if env else ''
 
     def _record_metadata_timing(self, timing):
@@ -324,7 +332,7 @@ print(json.dumps(value))
         spec = {'request_id': request['request_id'], 'kind': request['kind'], 'runtime': resource['runtime'],
                 'argv': [resource.get('python', 'python'), '-u', '-m', 'natlang_neuralese.rl.native_bridge',
                          '--request', request_path, '--result', result_path],
-                'env': {**resource.get('env', {}), 'PYTHONSAFEPATH': '1',
+                'env': {**self._runtime_environment(sid), 'PYTHONSAFEPATH': '1',
                         'PYTHONPATH': resource['runtime']+'/training/neuralese'}}
         old = self.read_optional(sid, directory+'/launch.json')
         if old:

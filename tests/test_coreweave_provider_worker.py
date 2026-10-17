@@ -109,13 +109,21 @@ def test_large_metadata_corruption_fails_before_execution_and_keeps_private_evid
     assert 'AssertionError' in evidence['stderr']
 
 
-def test_detached_runner_lock_and_receipt_prevent_duplicate_execution(tmp_path):
+def test_detached_runner_lock_and_receipt_prevent_duplicate_execution(tmp_path,monkeypatch):
     script = tmp_path / 'runner.py'; script.write_text(worker.RUNNER)
     counter = tmp_path / 'executions.txt'
-    command = [sys.executable, '-c', 'import pathlib,time;p=pathlib.Path('+repr(str(counter))+');'
+    repo=str(Path(__file__).parents[1])
+    monkeypatch.setenv('NATLANG_REPO','/retired/host-only-checkout')
+    client=worker.SDKIO({'receipts':str(tmp_path/'receipts'),'sandboxes':{
+        'worker':{'runtime':repo,'env':{'NATLANG_REPO':'/another/retired-checkout'}}}})
+    command = [sys.executable, '-c', 'import pathlib,time;from natlang_neuralese.common.paths import root;'
+               'assert root("repo")==pathlib.Path('+repr(repo)+');'
+               'assert (root("repo")/"scripts/run_bonsai_queue.py").is_file();'
+               'p=pathlib.Path('+repr(str(counter))+');'
                "p.open('a').write('once\\n');time.sleep(.2)"]
     (tmp_path / 'worker-spec.json').write_text(json.dumps({'request_id': 'exact-request',
-        'runtime': str(Path(__file__).parents[1]), 'kind': 'round', 'argv': command, 'env': {'CUDA_VISIBLE_DEVICES': ''}}))
+        'runtime': repo, 'kind': 'round', 'argv': command,
+        'env': {**client._runtime_environment('worker'),'CUDA_VISIBLE_DEVICES': ''}}))
     first = subprocess.Popen([sys.executable, str(script)], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     second = subprocess.Popen([sys.executable, str(script)], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     first.communicate(timeout=10); second.communicate(timeout=10)
@@ -278,7 +286,7 @@ def test_dependency_cpu_composition_rejects_incomplete_or_unscoped_bindings(tmp_
 def test_dependency_code_without_cpu_composition_keeps_existing_runtime(tmp_path):
     client=worker.SDKIO({'receipts':str(tmp_path),'sandboxes':{'worker':{'runtime':'/unchanged/runtime'}}})
     source=Path(worker.__file__).with_name('provider_dependencies.py').read_text()
-    assert client.dependency_code('worker')==('import sys,json;sys.path.insert(0,'+
+    assert client.dependency_code('worker')==("import os;os.environ.update({'NATLANG_REPO': '/unchanged/runtime'});"+'import sys,json;sys.path.insert(0,'+
         repr('/unchanged/runtime/training/neuralese')+');exec(compile('+repr(source)+
         ',"provider-dependencies","exec"));')
 
