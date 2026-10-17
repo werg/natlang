@@ -205,12 +205,25 @@ def render_messages(messages: list[dict], tools: list | None, apply_template, sp
             fn = call.get("function", call)
             arguments = fn.get("arguments")
             if _is_parts(arguments):
-                arguments = flatten(arguments, escape=False)
-            arguments = normalize_tool_arguments(arguments)
+                # The initial message normalization above already decodes
+                # OpenAI JSON-text arguments. Only a content-part list needs
+                # a second decode after its text runs have been joined. In
+                # particular, a valid JSON string scalar such as `"hello"`
+                # must remain the decoded string `hello`, not be parsed again
+                # as fresh JSON text.
+                arguments = normalize_tool_arguments(flatten(arguments, escape=False))
             def inline(value):
                 # An argument value that is a part list holding a block (as replies return a written value:
                 # `"value": [{"type": "neuralese", "id": …}]`) renders as that block inside the value's string.
                 if _is_parts(value) and any(part["type"] in ("neuralese", "native_state") for part in value):
+                    # Only a complete content-addressed native-state ID denotes
+                    # an imported state. A short lookalike inside JSON tool
+                    # arguments remains ordinary data for runtime validation.
+                    if any(part["type"] == "native_state" for part in value) and any(
+                            part["type"] == "native_state" and
+                            not re.fullmatch(r"nzs1_[a-z2-7]{52}", part.get("id", ""))
+                            for part in value):
+                        return value
                     value = flatten(value, escape=False)
                     marker = input_pattern.fullmatch(value)
                     if marker and value_types.get(int(marker.group(1))) == "unknown":

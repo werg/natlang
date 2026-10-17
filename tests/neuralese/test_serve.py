@@ -384,3 +384,38 @@ def test_typed_structured_argument_uses_native_boundary_but_embedded_code_stays_
     rendered = render_messages([{"role": "assistant", "tool_calls": calls}], None, _template)
     text = "".join(part if isinstance(part, str) else "#" for part in rendered.segments)
     assert "code='const x = #; return x;'" in text
+
+
+@pytest.mark.parametrize('raw,expected', [
+    ('"true"', 'true'),
+    ('"{\\"value\\":1}"', '{"value":1}'),
+])
+def test_tool_arguments_decode_json_text_once(raw, expected):
+    captured = {}
+
+    def template(messages, tools):
+        captured['arguments'] = messages[0]['tool_calls'][0]['function']['arguments']
+        return 'rendered'
+
+    calls = [{"type": "function", "function": {"name": "record", "arguments": raw}}]
+    rendered = render_messages([{"role": "assistant", "tool_calls": calls}], None, template)
+    assert captured['arguments'] == expected
+    assert rendered.segments == ['rendered']
+
+
+def test_tool_argument_native_state_parts_require_a_canonical_full_id():
+    def render_value(block_id):
+        calls = [{"type": "function", "function": {"name": "return_result", "arguments": json.dumps({
+            "value": [{"type": "native_state", "id": block_id}]})}}]
+        return render_messages([{"role": "assistant", "tool_calls": calls}], None, _template,
+                               native_state=True)
+
+    valid = render_value("nzs1_" + "a" * 52)
+    assert len(valid.blocks) == 1 and valid.blocks[0] == "nzs1_" + "a" * 52
+    assert any(isinstance(part, int) for part in valid.segments)
+
+    truncated = "nzs1_w42ancp7k5"
+    ordinary = render_value(truncated)
+    assert ordinary.blocks == []
+    rendered_text = "".join(part for part in ordinary.segments if isinstance(part, str))
+    assert truncated in rendered_text

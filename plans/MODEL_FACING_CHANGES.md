@@ -993,6 +993,21 @@ capture-inventory rejection, measure that recovery in the next approximately48
 live executor samples; mechanism tests do not qualify new error-wording effects.
 Semantic-codec RL remains guarded until genuine differentiable lowering passes.
 
+### Exact tool-argument decoding and native-state references (2026-10-17; measurement pending)
+
+Chat-history rendering now decodes OpenAI JSON-text tool arguments once. Valid
+JSON string scalars remain strings even when their contents resemble another
+JSON value. A native-state part nested in tool arguments is converted to a
+state placeholder only when its ID has the complete canonical
+`nzs1_` plus 52-character content ID; truncated lookalikes remain ordinary
+argument data for downstream validation. Complete IDs and existing ordinary
+Neuralese part rendering are unchanged. This corrects model-visible history
+for affected tool calls. The rendering and recovery guidance is documented in
+both authoring and integration skills. Debt: measure about48 live executor
+samples for scalar arguments and nested native-state arguments per affected
+runtime variant in the next teacher window; deterministic renderer tests do
+not establish the behavior change's effect on model outcomes.
+
 ### Native marker failure feedback (2026-10-16; measurement pending)
 
 The negotiated native marker recovery path now returns the existing native

@@ -44,6 +44,8 @@ Persistent eval helpers support TypeScript `as const` assertions for literal and
 
 For native shared-state turns, keep `{type: 'native_state', id}` references structured through message history and nested tool-call arguments. Before a request, restore each referenced artifact from the runtime store; if the server reports `neuralese-unknown-native-state`, fetch the same ID and retry without rewriting its arguments. The server may splice KV/hybrid state only when the exact model identities match; a foreign block uses its stored text for target-tokenizer re-encoding and discards foreign tensors. Retain the `natlang.native-rl-sampling/1` receipt and copy every referenced produced state artifact before releasing the serving owner.
 
+Tool-call JSON text is decoded exactly once while building model history. Preserve scalar strings as strings, and treat a nested native-state reference as importable only when it carries the full canonical `nzs1_` ID. If a state ID is incomplete, keep the source argument unchanged and recover the complete ID from the original state receipt before retrying.
+
 ## Student prompt rendering
 
 Use `promptRendering: "program-header"` in the model profile (or runtime `model`
