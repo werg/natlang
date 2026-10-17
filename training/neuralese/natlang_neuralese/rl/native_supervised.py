@@ -135,6 +135,56 @@ def stage_pending(adapter,participant,stage,sources,epochs,*,objective=None):
         and progress.get('epochs')==epochs)
 
 
+
+def _resume_source_arguments(config,directory,values):
+    """Do not reapply an obsolete append predecessor to an already adopted source."""
+    command=list(config['seed_command'])
+    roles=(('continued_native_graphs','seed_native_graphs',0),
+           ('continued_held_native_graphs','held_native_graphs',1))
+    argument_lists=[command,values['trainer_args'],values['seed_trainer_args']]
+    def present(flag):
+        return any(any(value==flag or value.startswith(flag+'=') for value in args)
+                   for args in argument_lists)
+    checkpoint=Path(directory)/'checkpoint.pt'
+    if (config.get('native_actor_mode')!='raw-state' or not checkpoint.is_file()
+            or not any(present('--'+role.replace('_','-')) for role,_,_ in roles)):
+        return command,None
+    from ..train.native_resident import binding,bound,current
+    from ..train.checkpoint_policy import CheckpointPolicy
+    from .native_raw_policy import require_raw_training
+    reference=binding(checkpoint)
+    saved=CheckpointPolicy.load(checkpoint)
+    training=require_raw_training(saved)
+    stage=config['trainer_parameters'].get('stage_id',config['production_stage'])
+    if ((training.get('options') or {}).get('stage_id')!=stage
+            or (training.get('identity') or {}).get('objective') is not None):
+        return command,None
+    receipts=training.get('source_receipts') or []
+    if len(receipts)<2:raise ValueError('supervised retry checkpoint lost its actual source receipts')
+    resident_directory=config['trainer_parameters'].get('resident_data_directory',config.get('resident_data_directory'))
+    resident=current(resident_directory) if resident_directory else None
+    selected=(resident['payload'] if resident and resident['payload']['stage_id']==stage else None)
+    omitted={}
+    for role,name,index in roles:
+        flag='--'+role.replace('_','-')
+        if not present(flag):continue
+        target=(selected['train' if index==0 else 'held'] if selected else binding(config[name]))
+        bound(target)
+        if target['sha256']!=receipts[index].get('sha256'):continue
+        for args in argument_lists:
+            cursor=0
+            while cursor<len(args):
+                if args[cursor]==flag:
+                    if cursor+1>=len(args):raise ValueError('supervised retry has a missing source argument')
+                    del args[cursor:cursor+2]
+                elif args[cursor].startswith(flag+'='):del args[cursor]
+                else:cursor+=1
+        omitted[role]=target
+    if binding(checkpoint)!=reference:raise ValueError('supervised retry checkpoint changed during source verification')
+    if not omitted:return command,None
+    return command,{'checkpoint':reference,'stage_id':stage,'already_current_sources':omitted}
+
+
 def execute(config,state,state_path,control):
     """Existing bridge kind=round enters here without starting a rollout actor."""
     from .production import run_command
@@ -153,9 +203,11 @@ def execute(config,state,state_path,control):
         'seed_trainer_args':stage_parameter_args(config['trainer_parameters'])}
     if control is not None:values['_run_control']=control
     if config.get('before_update'):run_command(config['before_update'],values)
+    command,reused=_resume_source_arguments(config,directory,values)
+    if reused is not None:state['resumed_current_source_inputs']=reused
     state.update(phase='updating_mandatory_sft',pending_update_kind='mandatory_sft')
     write_json_durable(state_path,state)
-    run_command(config['seed_command'],values)
+    run_command(command,values)
     checkpoint=directory/'checkpoint.pt'
     if not checkpoint.is_file() or not report_path.is_file():
         if control is not None and control.stop.requested:
