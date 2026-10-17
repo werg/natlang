@@ -168,6 +168,8 @@ def validate_acquisition(ref, receipt, receipt_path, *, root):
     """Shared prepublication and read-time acquisition verifier."""
     from natlang_neuralese.common.hashing import sha256_file_hex_cached
     root=Path(root);receipt_path=Path(receipt_path)
+    if receipt.get('schema') == 'natlang.external-source-recovery/1':
+        return validate_recovery_manifest(ref, receipt, receipt_path, root=root)
     if receipt.get('status') == 'acquired' and receipt.get('revision'):
         return receipt
     if (receipt.get('schema') != 'natlang.acquired-file-snapshot/1'
@@ -208,6 +210,74 @@ def validate_acquisition(ref, receipt, receipt_path, *, root):
                 raise Reject('selected source file differs from pinned Git blob')
         else:
             raise Reject('selected source catalogue lacks immutable remote file identity')
+    return receipt
+
+
+def validate_recovery_manifest(ref, receipt, receipt_path, *, root):
+    """Validate an explicitly recovered pinned source without impersonating its lost receipt.
+
+    A recovery manifest binds the authenticated private archive, the pinned
+    upstream identity, and a freshly hashed complete file inventory.  The
+    unavailable historical acquisition receipt remains an explicit fact.
+    """
+    from natlang_neuralese.common.hashing import sha256_file_hex_cached
+    import hashlib
+    root=Path(root).resolve();receipt_path=Path(receipt_path).resolve()
+    if (receipt.get('ref') != ref or receipt.get('status') != 'recovered'
+            or receipt.get('training_admission') is not False
+            or not isinstance(receipt.get('repo'),str) or not receipt['repo']
+            or not isinstance(receipt.get('revision'),str) or not receipt['revision']):
+        raise Reject('recovered source identity or status is invalid: '+str(ref))
+    history=receipt.get('historical_acquisition_receipt') or {}
+    archive=receipt.get('source_archive') or {}
+    if (history.get('available') is not False
+            or not isinstance(history.get('expected_sha256'),str)
+            or len(history['expected_sha256']) != 64
+            or any(char not in '0123456789abcdef' for char in history['expected_sha256'])
+            or archive.get('verified') is not True
+            or archive.get('private') is not True
+            or type(archive.get('bytes')) is not int or archive['bytes'] <= 0
+            or not isinstance(archive.get('sha256'),str)
+            or len(archive['sha256']) != 64
+            or any(char not in '0123456789abcdef' for char in archive['sha256'])
+            or not isinstance(archive.get('run'),str)
+            or not isinstance(archive.get('name'),str)
+            or not isinstance(archive.get('path'),str)):
+        raise Reject('recovered source lacks an exact archive and historical-receipt status')
+    archive_path=Path(archive.get('path','')).resolve(strict=True)
+    if archive_path.stat().st_size != archive['bytes'] or sha256_file_hex_cached(archive_path) != archive['sha256']:
+        raise Reject('recovered source archive differs from its private-object binding')
+    if receipt_path.parent.resolve() != root:
+        raise Reject('recovery manifest is outside its bound source root')
+    files=receipt.get('files')
+    if not isinstance(files,list) or not files:
+        raise Reject('recovered source has no complete file inventory')
+    seen=set()
+    for entry in files:
+        if not isinstance(entry,dict):
+            raise Reject('recovered source inventory entry is invalid')
+        name=entry.get('path');size=entry.get('bytes');digest=entry.get('sha256')
+        path=Path(name) if isinstance(name,str) else Path('..')
+        if (not isinstance(name,str) or path.is_absolute() or '..' in path.parts
+                or name in seen or type(size) is not int or size < 0
+                or not isinstance(digest,str) or len(digest) != 64
+                or any(char not in '0123456789abcdef' for char in digest)):
+            raise Reject('recovered source inventory contains an unsafe or duplicate entry')
+        materialized=(root / path).resolve(strict=True)
+        if not materialized.is_relative_to(root):
+            raise Reject('recovered source inventory escapes its source root')
+        if materialized.stat().st_size != size or sha256_file_hex_cached(materialized) != digest:
+            raise Reject('recovered source inventory file differs from its exact content binding')
+        seen.add(name)
+    inventory_sha=hashlib.sha256(json.dumps(files,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+    expected=receipt.get('expected_source_inventory') or {}
+    if (inventory_sha != receipt.get('file_inventory_sha256')
+            or inventory_sha != expected.get('sha256')
+            or type(expected.get('files')) is not int
+            or type(expected.get('bytes')) is not int
+            or len(files) != expected.get('files')
+            or sum(entry['bytes'] for entry in files) != expected.get('bytes')):
+        raise Reject('recovered source inventory differs from the retained source-stage binding')
     return receipt
 
 

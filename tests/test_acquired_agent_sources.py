@@ -193,3 +193,41 @@ def test_shared_reader_rejects_unsupported_files(tmp_path):
     path=tmp_path/'README.md';path.write_text('source card')
     assert not acquired.supported_acquired_file(path)
     with pytest.raises(Reject,match='unsupported acquired'):list(acquired.iter_acquired_file_rows(path))
+
+
+def test_recovered_acquisition_requires_exact_archive_and_complete_inventory(tmp_path):
+    import tarfile
+    from io import BytesIO
+    from neuralese_data.acquired_agents import validate_recovery_manifest
+    root=tmp_path/'D13';root.mkdir()
+    payload=root/'sessions.jsonl';payload.write_text('{"messages":[]}\n')
+    archive=tmp_path/'D13-pinned-source.tar'
+    with tarfile.open(archive,'w') as stream:
+        data=b'upstream archive bytes';info=tarfile.TarInfo('D13/example.txt');info.size=len(data)
+        stream.addfile(info,BytesIO(data))
+    files=[{'path':payload.name,'bytes':payload.stat().st_size,
+            'sha256':hashlib.sha256(payload.read_bytes()).hexdigest()}]
+    inventory_sha=hashlib.sha256(json.dumps(files,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+    receipt={
+        'schema':'natlang.external-source-recovery/1','ref':'D13','repo':'CooperBench/team-coop',
+        'revision':'7348f4baa12d53c2c2d537943e7846ff8587e411','status':'recovered',
+        'training_admission':False,'files':files,'file_inventory_sha256':inventory_sha,
+        'expected_source_inventory':{'files':1,'bytes':payload.stat().st_size,'sha256':inventory_sha},
+        'historical_acquisition_receipt':{'available':False,'expected_sha256':'1'*64},
+        'source_archive':{'verified':True,'private':True,'path':str(archive),'bytes':archive.stat().st_size,
+            'sha256':hashlib.sha256(archive.read_bytes()).hexdigest(),'run':'werg/natlang/ywcj2mvb',
+            'name':'mellum/example/D13-pinned-source.tar'},
+    }
+    manifest=root/'recovery-manifest.json';manifest.write_text(json.dumps(receipt))
+    assert validate_recovery_manifest('D13',receipt,manifest,root=root)==receipt
+    receipt['expected_source_inventory']['bytes']+=1
+    with pytest.raises(Reject,match='inventory differs'):
+        validate_recovery_manifest('D13',receipt,manifest,root=root)
+    receipt['expected_source_inventory']['bytes']-=1
+    payload.write_text('{"messages":[1]}\n')
+    with pytest.raises(Reject,match='inventory file differs'):
+        validate_recovery_manifest('D13',receipt,manifest,root=root)
+    payload.write_text('{"messages":[]}\n')
+    receipt['source_archive']['sha256']='0'*64
+    with pytest.raises(Reject,match='archive differs'):
+        validate_recovery_manifest('D13',receipt,manifest,root=root)
