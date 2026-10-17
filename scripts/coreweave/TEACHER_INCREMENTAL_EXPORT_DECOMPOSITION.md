@@ -25,3 +25,22 @@ receipts. A colon is a literal safe POSIX filename character inside the existing
 backslashes, whitespace or escape characters. This is filename custody only,
 not a new sample or repair-success classification. A separate existing publisher
 frontier can export the bound repair attempt while the next main batch runs.
+
+# Natural feeder exit during publisher discovery (2026-10-18)
+
+The publisher must follow a genuine batch transition without confusing a
+missing old `/proc` entry with a changed actor. The guardian remains the sole
+generation authority; the publisher does not start or stop collectors.
+
+1. Verify the existing boot, config revision, state and exact feeder birth.
+2. If the old process has disappeared or exited and the exact batch phase is
+   complete, keep polling in non-exporting draining state while the guardian
+   commits its boundary. There is no arbitrary closure deadline.
+3. Follow advanced custody only after the same authenticated config/state names
+   an advanced batch and the exact old boundary bytes are bound and verified.
+4. Keep unchanged wrong births, boots, config revisions and unbound transitions
+   fatal. Export no active rows from the stale snapshot. The ordinary boundary
+   exporter still reconstructs all completion accounting before publication.
+
+These are crisp process-custody and immutable-byte verifiers. There is no new
+generation selection policy, prompt, actor identity field, or training admission.

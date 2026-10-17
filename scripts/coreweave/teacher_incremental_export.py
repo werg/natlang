@@ -929,6 +929,73 @@ def _validate_live_identity(config: dict, sandbox, read_file: Callable[[str], by
             'runtime_path': expected['runtime_path']}
 
 
+def _closed_guardian_transition(publisher, guardian_raw, state, batch, read_file, *, owner_exited):
+    """Verify an advanced state and its exact old boundary; export no active rows."""
+    control = publisher['control_dir']
+    config_ref = publisher['guardian_config']
+
+    def bound_json(reference, label):
+        if (not isinstance(reference, dict) or not {'path', 'sha256', 'bytes'} <= reference.keys()
+                or type(reference['bytes']) is not int or reference['bytes'] < 0):
+            raise ValueError(label + ' lacks an exact file binding')
+        raw = read_file(reference['path'])
+        if len(raw) != reference['bytes'] or _sha(raw) != reference['sha256']:
+            raise ValueError(label + ' changed')
+        return _json(raw, label)
+
+    if read_file('/proc/sys/kernel/random/boot_id').decode().strip() != publisher['sandbox_boot_id']:
+        raise ValueError('guardian transition changed its boot identity')
+    if read_file(config_ref['path']) != guardian_raw:
+        raise ValueError('guardian config changed during feeder transition')
+    fresh_raw = read_file(f'{control}/state.json')
+    fresh = _json(fresh_raw, 'guardian transition state')
+    if (fresh.get('schema') != state['schema'] or fresh.get('config') != config_ref):
+        raise ValueError('guardian transition state changed its config authority')
+    next_batch, next_owner = fresh.get('active_batch'), fresh.get('owner')
+    advanced = (type(fresh.get('next_batch')) is int and fresh['next_batch'] > batch
+                and (next_batch is None and next_owner is None or
+                     type(next_batch) is int and next_batch > batch and isinstance(next_owner, dict)))
+    if advanced:
+        if next_owner is not None and (next_owner.get('boot_id') != publisher['sandbox_boot_id']
+                or type(next_owner.get('pid')) is not int
+                or not str(next_owner.get('start_ticks', '')).isdigit()):
+            raise ValueError('advanced guardian feeder changed its process/boot authority')
+        expected_path = f'{control}/boundaries/batch-{batch:04d}.json'
+        reference = fresh.get('last_boundary')
+        if not isinstance(reference, dict) or reference.get('path') != expected_path:
+            closed = (fresh.get('source_sequence') or {}).get('closed', {}).get(str(batch))
+            receipt = bound_json(closed, 'closed source-sequence transition')
+            if receipt.get('batch') != batch:
+                raise ValueError('closed source-sequence transition names another batch')
+            reference = receipt.get('boundary')
+        if not isinstance(reference, dict) or reference.get('path') != expected_path:
+            raise ValueError('advanced guardian lacks its exact prior batch boundary')
+        boundary = bound_json(reference, 'closed guardian transition boundary')
+        if (boundary.get('schema') != 'natlang.teacher-generation-boundary/1'
+                or boundary.get('batch') != batch or not isinstance(boundary.get('completion'), dict)
+                or not isinstance(boundary.get('individual_outcomes'), list)):
+            raise ValueError('guardian transition boundary has no canonical completion custody')
+        bindings = boundary.get('bindings') or {}
+        source = f"{publisher['generation_root']}/evidence-collections-v2/batch-{batch:04d}"
+        for name in ('queue.jsonl', 'journal.jsonl', 'score.json', 'teacher-source.json'):
+            item = bindings.get(name)
+            if (not isinstance(item, dict) or item.get('path') != source + '/' + name
+                    or type(item.get('bytes')) is not int or item['bytes'] < 0
+                    or not isinstance(item.get('sha256'), str)
+                    or not re.fullmatch('[0-9a-f]{64}', item['sha256'])):
+                raise ValueError('guardian transition boundary lost its exact source bindings')
+        return fresh, fresh_raw, reference
+    if fresh.get('owner') != state.get('owner') or fresh.get('active_batch') != batch:
+        raise ValueError('guardian owner changed without authenticated batch advancement')
+    phase = _json(read_file(f"{publisher['generation_root']}/feed-evidence-phase.json"),
+                  'drained teacher feed phase')
+    if owner_exited and phase.get('batch') == batch and phase.get('phase') == 'batch_complete':
+        # Closing may need arbitrarily long to durably collect outcomes. This
+        # result grants no new export custody; the service simply polls again.
+        return fresh, fresh_raw, None
+    raise ValueError('missing guardian feeder has no authenticated closed transition')
+
+
 def discover_guardian_batch(publisher: dict, sandbox,
                             read_file: Callable[[str], bytes]) -> dict | None:
     """Derive a poll config only from the exact live guardian owner and sealed batch.
@@ -1015,31 +1082,39 @@ def discover_guardian_batch(publisher: dict, sandbox,
 
     # Check PID/start-time/boot and feeder argv inside the sandbox rather than
     # trusting a stale state file. Values are validated integers/strings above.
-    probe = ("import pathlib,json,sys; p=int(sys.argv[1]); ticks=sys.argv[2]; boot=sys.argv[3]; "
-             "feeder=sys.argv[4]; batch=sys.argv[5]; r=pathlib.Path('/proc')/str(p); "
-             "s=(r/'stat').read_text().rsplit(')',1)[1].split(); "
-             "a=(r/'cmdline').read_bytes().split(b'\\0')[:-1]; env=(r/'environ').read_bytes().split(b'\\0'); "
-             "actual={'pid':p,'start_ticks':s[19],'boot_id':pathlib.Path('/proc/sys/kernel/random/boot_id').read_text().strip(),"
-             "'argv':[x.decode(errors='replace') for x in a]}; "
-             "ok=s[0]!='Z' and actual['start_ticks']==ticks and actual['boot_id']==boot and "
-             "feeder in actual['argv'] and ('NATLANG_TEACHER_START_BATCH='+batch).encode() in env; "
-             "print(json.dumps({'valid':ok,'identity':actual}))")
+    probe = """import pathlib,json,sys
+p=int(sys.argv[1]);ticks=sys.argv[2];boot=sys.argv[3];feeder=sys.argv[4];batch=sys.argv[5]
+actual_boot=pathlib.Path('/proc/sys/kernel/random/boot_id').read_text().strip()
+try:
+ r=pathlib.Path('/proc')/str(p);s=(r/'stat').read_text().rsplit(')',1)[1].split()
+ a=(r/'cmdline').read_bytes().split(b'\\0')[:-1];env=(r/'environ').read_bytes().split(b'\\0')
+ actual={'pid':p,'start_ticks':s[19],'boot_id':actual_boot,'argv':[x.decode(errors='replace') for x in a]}
+ birth=actual['start_ticks']==ticks and actual_boot==boot
+ ok=s[0]!='Z' and birth and feeder in actual['argv'] and ('NATLANG_TEACHER_START_BATCH='+batch).encode() in env
+ print(json.dumps({'valid':ok,'identity':actual,'exited':s[0]=='Z' and birth}))
+except (FileNotFoundError,ProcessLookupError):
+ print(json.dumps({'valid':False,'missing':True,'boot_id':actual_boot}))
+"""
     checked = sandbox.exec(['python', '-c', probe, str(owner['pid']), str(owner['start_ticks']),
                             owner['boot_id'], guardian['feeder'], str(batch)], timeout_seconds=20).result(timeout=30)
-    if checked.returncode != 0:
-        raise ValueError('could not verify live guardian feeder identity')
-    process = _json(checked.stdout.encode(), 'live guardian feeder probe')
+    process = (_json(checked.stdout.encode(), 'live guardian feeder probe')
+               if checked.returncode == 0 else {'probe_failed': True})
     if process.get('valid') is not True:
-        phase_path = f"{publisher['generation_root']}/feed-evidence-phase.json"
-        phase = _json(read_file(phase_path), 'drained teacher feed phase')
-        if phase.get('batch') == batch and phase.get('phase') == 'batch_complete':
-            # The feeder has exited but the guardian has not yet atomically
-            # published last_boundary. Keep polling this exact epoch; the next
-            # state transition will expose the immutable boundary receipt.
-            return {'draining': True, 'batch': batch, 'guardian_state': state,
-                    'guardian_state_sha256': _sha(state_raw), 'sandbox_id': publisher['sandbox_id'],
-                    'closed_boundaries': closed_boundaries}
-        raise ValueError('guardian feeder PID/start/boot/argv/batch differs from active state')
+        if process.get('missing') and process.get('boot_id') != publisher['sandbox_boot_id']:
+            raise ValueError('missing guardian feeder probe changed its boot identity')
+        if not any(process.get(key) is True for key in ('missing', 'exited', 'probe_failed')):
+            raise ValueError('guardian feeder PID/start/boot/argv/batch differs from active state')
+        fresh, fresh_raw, boundary_ref = _closed_guardian_transition(
+            publisher, guardian_raw, state, batch, read_file,
+            owner_exited=process.get('missing') is True or process.get('exited') is True)
+        refs = {reference['path']: reference for reference in closed_boundaries}
+        if boundary_ref is not None and boundary_ref['path'] in refs and refs[boundary_ref['path']] != boundary_ref:
+            raise ValueError('guardian transition changed an already observed boundary binding')
+        if boundary_ref is not None:
+            refs[boundary_ref['path']] = boundary_ref
+        return {'draining': True, 'batch': batch, 'guardian_state': fresh,
+                'guardian_state_sha256': _sha(fresh_raw), 'sandbox_id': publisher['sandbox_id'],
+                'closed_boundaries': list(refs.values()), 'verified_owner_transition': boundary_ref is not None}
 
     source_root = f"{publisher['generation_root']}/evidence-collections-v2/batch-{batch:04d}"
     cases_path = f'{source_root}/source-cases.jsonl'
