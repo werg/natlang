@@ -220,3 +220,64 @@ def test_provider_never_ferries_over_a_published_runtime_alias():
     io.remote=lambda *args,**kwargs:False
     with pytest.raises(ValueError,match='cannot overwrite published runtime'):
         io.mirror('source','target',{'path':'/work/native-production/runtime/training/neuralese/recipes/live.json','bytes':1,'sha256':'a'*64})
+
+
+def test_dependency_cpu_composition_loads_before_resolver_and_checks_bytes(tmp_path, monkeypatch):
+    import builtins
+    root='/work/native-production/cpu-metadata-test'
+    manifest=tmp_path/'modules.json';manifest.write_text('{}')
+    loader=tmp_path/'loader.py'
+    loader.write_text('import pathlib,hashlib,builtins\ndef load(reference):\n'
+        ' raw=pathlib.Path(reference["path"]).read_bytes()\n'
+        ' assert len(raw)==reference["bytes"] and hashlib.sha256(raw).hexdigest()==reference["sha256"]\n'
+        ' builtins._provider_cpu_test_loaded=True\n')
+    def binding(path):
+        return {'path':root+'/'+path.name,'bytes':path.stat().st_size,
+                'sha256':worker.hashlib.sha256(path.read_bytes()).hexdigest()}
+    config={'runtime':'/unchanged/numerical-runtime','cpu_helper_loader':binding(loader),
+            'cpu_helpers':binding(manifest)}
+    client=worker.SDKIO({'receipts':str(tmp_path/'receipts'),'sandboxes':{'worker':config}})
+    original=Path.read_text
+    monkeypatch.setattr(Path,'read_text',lambda path,*a,**kw:
+        'assert __import__("builtins")._provider_cpu_test_loaded' if path.name=='provider_dependencies.py'
+        else original(path,*a,**kw))
+    monkeypatch.setattr(builtins,'_provider_cpu_test_loaded',False,raising=False)
+    code=client.dependency_code('worker').replace(root,str(tmp_path))
+    exec(code,{})
+    assert builtins._provider_cpu_test_loaded is True
+    builtins._provider_cpu_test_loaded=False
+    loader.write_text(loader.read_text()+'# changed after binding\n')
+    with pytest.raises(AssertionError,match='CPU loader changed'):
+        exec(code,{})
+    assert builtins._provider_cpu_test_loaded is False
+
+    loader.write_text('import builtins\ndef load(reference):\n builtins._provider_cpu_test_loaded=True\n')
+    config['cpu_helper_loader']=binding(loader)
+    code=client.dependency_code('worker').replace(root,str(tmp_path))
+    read_bytes=Path.read_bytes
+    def replaced_after_read(path):
+        raw=read_bytes(path)
+        if path==loader:
+            path.write_text('raise RuntimeError("unverified replacement executed")\n')
+        return raw
+    monkeypatch.setattr(Path,'read_bytes',replaced_after_read)
+    exec(code,{})
+    assert builtins._provider_cpu_test_loaded is True
+
+
+def test_dependency_cpu_composition_rejects_incomplete_or_unscoped_bindings(tmp_path):
+    config={'runtime':'/unchanged/numerical-runtime','cpu_helpers':{'path':'unused'}}
+    client=worker.SDKIO({'receipts':str(tmp_path),'sandboxes':{'worker':config}})
+    with pytest.raises(ValueError,match='both its loader'):
+        client.dependency_code('worker')
+    config['cpu_helper_loader']={'path':'/tmp/unscoped.py','bytes':1,'sha256':'a'*64}
+    with pytest.raises(ValueError,match='namespace'):
+        client.dependency_code('worker')
+
+
+def test_dependency_code_without_cpu_composition_keeps_existing_runtime(tmp_path):
+    client=worker.SDKIO({'receipts':str(tmp_path),'sandboxes':{'worker':{'runtime':'/unchanged/runtime'}}})
+    source=Path(worker.__file__).with_name('provider_dependencies.py').read_text()
+    assert client.dependency_code('worker')==('import sys,json;sys.path.insert(0,'+
+        repr('/unchanged/runtime/training/neuralese')+');exec(compile('+repr(source)+
+        ',"provider-dependencies","exec"));')

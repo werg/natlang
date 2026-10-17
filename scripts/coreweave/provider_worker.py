@@ -137,10 +137,23 @@ class SDKIO:
         write_json_durable(self.root/(key+'.json'), value)
 
     def dependency_code(self, sid):
-        runtime = self.config['sandboxes'][sid]['runtime']
+        configured = self.config['sandboxes'][sid]
+        runtime = configured['runtime']
         source = Path(__file__).with_name('provider_dependencies.py').read_text()
-        return ('import sys,json;sys.path.insert(0,'+repr(runtime+'/training/neuralese')+');'
-                'exec(compile('+repr(source)+',"provider-dependencies","exec"));')
+        code = 'import sys,json;sys.path.insert(0,'+repr(runtime+'/training/neuralese')+');'
+        if configured.get('cpu_helpers') or configured.get('cpu_helper_loader'):
+            if not configured.get('cpu_helpers') or not configured.get('cpu_helper_loader'):
+                raise ValueError('provider CPU composition needs both its loader and module manifest')
+            loader = checked_binding(configured['cpu_helper_loader'])
+            modules = checked_binding(configured['cpu_helpers'])
+            code += ('import pathlib,hashlib;'
+                     'p=pathlib.Path('+repr(loader['path'])+');'
+                     'raw=p.read_bytes();'
+                     'assert len(raw)=='+str(loader['bytes'])+' and hashlib.sha256(raw).hexdigest()=='+repr(loader['sha256'])+',"provider CPU loader changed";'
+                     'namespace={"__file__":str(p),"__name__":"provider_cpu_loader"};'
+                     'exec(compile(raw,str(p),"exec"),namespace);'
+                     'namespace["load"]('+repr(modules)+');')
+        return code+'exec(compile('+repr(source)+',"provider-dependencies","exec"));'
 
     def dependency_closure(self, sid, request):
         return self.remote(sid, self.dependency_code(sid)+
