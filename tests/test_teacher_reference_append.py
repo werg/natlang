@@ -139,9 +139,10 @@ def test_uncommitted_derived_outputs_rebuild_from_original_inputs_and_verdicts(t
     assert json.loads(receipts[0].read_text())['uncommitted_outputs'][0]['sha256']==hashlib.sha256(b'partial output').hexdigest()
 
 
-def test_zero_qualified_packet_is_authenticated_and_kept_pending(tmp_path):
+@pytest.mark.parametrize('independent_packets',[False,True])
+def test_zero_qualified_packet_is_authenticated_and_kept_pending(tmp_path,independent_packets):
     from test_teacher_source_sequence import setup
-    control,state,config=setup(tmp_path);decl=config['source_sequence'];manifest=json.loads(Path(decl['ready_manifest']).read_text());entries=manifest['entries']
+    control,state,config=setup(tmp_path,packet_count=3 if independent_packets else 2);decl=config['source_sequence'];manifest=json.loads(Path(decl['ready_manifest']).read_text());entries=manifest['entries']
     old=tmp_path/'old.json';write(old,{'entries':[entries[0]]})
     item=json.loads(Path(entries[1]['qualified_packet']['path']).read_text());q=json.loads(Path(item['qualification']['path']).read_text())
     verdict=Path(q['verdicts']['path']);row=json.loads(verdict.read_text());row['passed']=False;verdict.write_text(json.dumps(row)+'\n')
@@ -152,9 +153,24 @@ def test_zero_qualified_packet_is_authenticated_and_kept_pending(tmp_path):
     join=json.loads(Path(item['references']['global_protection_join']['path']).read_text());join['selected_packet_sha256']=binding(empty)['sha256'];jp=tmp_path/'zero-join.json';write(jp,join)
     item.update(qualification=binding(qp),cases=binding(empty),counts={'qualified':0,'candidates':1,'pending':1},references={'selected_cases':binding(empty),'selection':binding(sp),'global_protection_join':binding(jp)})
     write(Path(entries[1]['candidate_packet']['path']).parent/'qualification/prepared.json',item)
+    if independent_packets:
+        third=json.loads(Path(entries[2]['qualified_packet']['path']).read_text())
+        third['counts']={'qualified':1,'candidates':1}
+        write(Path(entries[2]['candidate_packet']['path']).parent/'qualification/prepared.json',third)
     dummy=tmp_path/'never.py';dummy.write_text('raise AssertionError("cached zero proof")');out=tmp_path/'out';out.mkdir()
-    ref=qualify(manifest['candidate_inventory'],binding(old),binding(dummy),out);ready=json.loads(Path(ref['path']).read_text())
-    assert not ready['complete']and ready['entries']==[entries[0]]and ready['blocked_unready_packets'][0]['pending_cases']==1
+    authority=tmp_path/'authority.json';write(authority,config['source_sequence']['authority'])
+    ref=qualify(manifest['candidate_inventory'],binding(old),binding(dummy),out,independent_packets=independent_packets,
+      qualification_authority_reference=binding(authority)if independent_packets else None);ready=json.loads(Path(ref['path']).read_text())
+    assert not ready['complete']and ready['entries'][0]==entries[0]and ready['blocked_unready_packets'][0]['pending_cases']==1
+    if independent_packets:
+        assert len(ready['entries'])==2
+        assert ready['entries'][1]['candidate_packet']==entries[2]['candidate_packet']
+        assert ready['entries'][1]['ordinal']==1 and ready['entries'][1]['candidate_ordinal']==2
+        published=json.loads(Path(ready['candidate_inventory']['path']).read_text())
+        assert published['packets']==[entry['candidate_packet']for entry in ready['entries']]+[entries[1]['candidate_packet']]
+        assert not published['unprocessed_packets']
+        assert published['qualification_source_inventory']==manifest['candidate_inventory']
+    else:assert ready['entries']==[entries[0]]
 
 
 def test_eligibility_and_packet_ranking_do_not_scan_full_program_blob_table(tmp_path,monkeypatch):
@@ -214,3 +230,50 @@ def test_withdrawing_source_never_unprotects_its_held_content(tmp_path):
     inventory=json.loads(Path(result['path']).read_text());assert inventory['appended_cases']==1
     unready=json.loads(Path(inventory['unready']['path']).read_text())
     assert sha[2] in unready['program_sha256']
+
+
+def test_adaptive_append_retains_authored_prefix_and_quarantines_old_variants(tmp_path):
+    root,source,original,sha=corpus(tmp_path)
+    authored=root/'authored.jsonl';authored.write_text('{"id":"independent-authoring"}\n')
+    proof=root/'authored-proof.json';write(proof,{'cases':1,'cases_binding':binding(authored)})
+    prefix=root/'ready-prefix.json';write(prefix,{'packets':[binding(proof)],'cases':1})
+    original_source=json.loads(Path(source['path']).read_text())
+    rows=Path(original_source['cases_binding']['path']).read_bytes().splitlines()
+    blocked=root/'blocked.jsonl';blocked.write_bytes(rows[2]+b'\n')
+    blocked_proof=root/'blocked-proof.json';write(blocked_proof,{'cases':1,'cases_binding':binding(blocked)})
+    excluded=root/'excluded.json';write(excluded,{'packets':[binding(blocked_proof)],'cases':1})
+    # A historical raw prefix no longer present in the current catalog remains
+    # dedup debt rather than forcing a restart of authored/qualified work.
+    current=root/'current.jsonl';current.write_bytes(b'\n'.join(rows[1:])+b'\n')
+    updated=root/'current-proof.json';write(updated,{**original_source,'cases':5,'cases_binding':binding(current)})
+    out=tmp_path/'adaptive-out'
+    result=prepare(root,binding(updated),binding(prefix),out,1,
+      dedup_inventory_reference=original,exclusion_inventory_reference=binding(excluded))
+    inventory=json.loads(Path(result['path']).read_text())
+    assert inventory['packets'][0]==binding(proof)
+    assert inventory['appended_cases']==1 and inventory['cases']==2
+    packet=json.loads(Path(inventory['packets'][1]['path']).read_text())
+    assert list(teacher_reference_append.candidate_hashes(packet['cases_binding']))==[sha[3]]
+    accounting=json.loads((out/'adaptive-exclusion-accounting.json').read_text())
+    assert sha[0] in accounting['absent_excluded_variants']
+    assert not accounting['training_admission']
+    # Cached preparation must still authenticate the exact exclusion bodies.
+    blocked.write_text('tampered quarantine')
+    with pytest.raises(ValueError,match='input changed'):
+        prepare(root,binding(updated),binding(prefix),out,1,
+          dedup_inventory_reference=original,exclusion_inventory_reference=binding(excluded))
+
+
+def test_adaptive_exclusions_cannot_replace_original_dedup_authority(tmp_path):
+    root,source,prefix,_=corpus(tmp_path)
+    with pytest.raises(ValueError,match='original dedup inventory'):
+        prepare(root,source,prefix,tmp_path/'out',exclusion_inventory_reference=prefix)
+
+
+def test_adaptive_append_rejects_duplicate_source_even_when_already_excluded(tmp_path):
+    root,source,prefix,_=corpus(tmp_path)
+    body=json.loads(Path(source['path']).read_text());cases=Path(body['cases_binding']['path'])
+    cases.write_bytes(cases.read_bytes()+cases.read_bytes().splitlines()[0]+b'\n')
+    updated=root/'duplicates.json';write(updated,{**body,'cases':7,'cases_binding':binding(cases)})
+    with pytest.raises(ValueError,match='repeated a program variant'):
+        prepare(root,binding(updated),prefix,tmp_path/'out',dedup_inventory_reference=prefix)

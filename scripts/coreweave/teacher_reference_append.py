@@ -159,32 +159,62 @@ def eligible_program_sql():
           ('held_group','quality_group','pending_source_review','nontrain','exact_decision_program_hold'))'''
 
 
-def prepare(catalog,source_reference,prefix_reference,out,packet_rows=64):
+def _inventory_programs(reference):
+    inventory=read(reference);programs=set();count=0
+    for packet in inventory['packets']:
+        proof=read(packet);hashes=list(candidate_hashes(proof['cases_binding']))
+        if len(hashes)!=proof['cases'] or len(set(hashes))!=len(hashes):
+            raise ValueError('candidate packet count or exact variant identity differs')
+        programs.update(hashes);count+=len(hashes)
+    if count!=inventory['cases']:
+        raise ValueError('candidate inventory count differs from bound packets')
+    return programs
+
+
+def prepare(catalog,source_reference,prefix_reference,out,packet_rows=64,*,dedup_inventory_reference=None,exclusion_inventory_reference=None):
     source=read(source_reference);prefix=read(prefix_reference)
     if packet_rows<1:raise ValueError('positive finite packet size required')
     out=Path(out);out.mkdir(parents=True,exist_ok=True);floor(out)
-    contract={'source':source_reference,'prefix':prefix_reference,'packet_rows':packet_rows}
+    contract={'source':source_reference,'prefix':prefix_reference,'packet_rows':packet_rows,
+      **({'dedup_inventory':dedup_inventory_reference}if dedup_inventory_reference else {}),
+      **({'excluded_inventory':exclusion_inventory_reference}if exclusion_inventory_reference else {})}
     immutable(out/'inputs.json',contract)
     target=out/'packet-inventory.json'
-    if target.exists():
-        result=json.loads(target.read_text())
-        for ref in result['packets']:read(ref)
-        return binding(target)
     prior=set()
     for reference in prefix['packets']:
         proof=read(reference)
         for key in candidate_hashes(proof['cases_binding']):
             if key in prior:raise ValueError('candidate prefix repeated a program variant')
             prior.add(key)
+    if len(prior)!=prefix['cases']:raise ValueError('candidate prefix count differs')
+    # A retained ready prefix can contain authored/derived programs absent from
+    # the raw catalog. Preserve it while explicit historical inventories prevent
+    # reissuing old or quarantined variants as newly discovered work.
+    if exclusion_inventory_reference and not dedup_inventory_reference:
+        raise ValueError('adaptive exclusions require the original dedup inventory')
+    excluded_programs=set(prior)
+    if dedup_inventory_reference:excluded_programs.update(_inventory_programs(dedup_inventory_reference))
+    if exclusion_inventory_reference:excluded_programs.update(_inventory_programs(exclusion_inventory_reference))
+    if target.exists():
+        result=json.loads(target.read_text())
+        for ref in result['packets']:read(ref)
+        return binding(target)
     db=sqlite3.connect('file:'+str(Path(catalog)/'catalog.sqlite')+'?mode=ro',uri=True)
     db.execute('PRAGMA temp_store=FILE');db.execute('CREATE TEMP TABLE selected(sha TEXT PRIMARY KEY)')
-    selected=set();excluded=0
+    selected=set();excluded=0;seen_candidates=set()
     for key in candidate_hashes(source['cases_binding']):
-        if key in prior:excluded+=1;continue
-        if key in selected:raise ValueError('source repeated a program variant')
+        if key in seen_candidates:raise ValueError('source repeated a program variant')
+        seen_candidates.add(key)
+        if key in excluded_programs:excluded+=1;continue
         selected.add(key);db.execute('INSERT INTO selected VALUES(?)',(key,))
     if len(selected)+excluded!=source['cases']:raise ValueError('source candidate count differs')
-    if excluded!=len(prior):raise ValueError('candidate prefix is not an exact subset of source candidates')
+    if not dedup_inventory_reference and excluded!=len(prior):raise ValueError('candidate prefix is not an exact subset of source candidates')
+    if dedup_inventory_reference:
+        immutable(out/'adaptive-exclusion-accounting.json',{
+          'retained_prefix':prefix_reference,'raw_dedup_inventory':dedup_inventory_reference,
+          'excluded_inventory':exclusion_inventory_reference,'unique_excluded_variants':len(excluded_programs),
+          'present_excluded_variants':excluded,'absent_excluded_variants':sorted(excluded_programs-seen_candidates),
+          'training_admission':False,'scope':'generation dedup/quarantine only; current catalog eligibility still required'})
     db.commit();db.execute('BEGIN')
     if source.get('source_population'):
         population_data=read(source['source_population'])
@@ -247,16 +277,33 @@ def prepare(catalog,source_reference,prefix_reference,out,packet_rows=64):
       'training_admission':False,'generator_calls':0,'packet_size_is_selection_cap':False})
 
 
-def qualify(inventory_reference,prefix_ready_reference,qualifier_reference,out):
+def qualify(inventory_reference,prefix_ready_reference,qualifier_reference,out,*,independent_packets=False,qualification_authority_reference=None):
     inventory=read(inventory_reference);prefix=read(prefix_ready_reference);out=Path(out)
     entries=list(prefix['entries'])
     if [e['candidate_packet']for e in entries]!=inventory['packets'][:len(entries)]:raise ValueError('readiness prefix differs from candidate order')
-    first=read(entries[0]['qualified_packet']);qualification=read(first['qualification']);inputs=read(qualification['inputs'])
-    authority={'protection':inputs['authority']['protection'],'decision_hold_bindings':inputs['authority']['decision_holds'],
-      'reference_runtime_sha256':qualification['runtime_inventory_sha256']}
+    if qualification_authority_reference:
+        authority=read(qualification_authority_reference)
+    else:
+        if independent_packets:raise ValueError('independent packets require explicit current qualification authority')
+        first=read(entries[0]['qualified_packet']);qualification=read(first['qualification']);inputs=read(qualification['inputs'])
+        authority={'protection':inputs['authority']['protection'],'decision_hold_bindings':inputs['authority']['decision_holds'],
+          'reference_runtime_sha256':qualification['runtime_inventory_sha256']}
     pending=[];later=[];results=[];blocked=False
+    def ready_inventory():
+        if not independent_packets:return inventory_reference
+        # The source-sequence contract requires ready entries to be the exact
+        # inventory prefix. Keep pending candidates explicitly after that prefix.
+        unprocessed=inventory['packets'][len(prefix['entries'])+len(results):]
+        packets=[entry['candidate_packet']for entry in entries]+[entry['candidate_packet']for entry in pending]+unprocessed
+        cases=sum(read(packet)['cases']for packet in packets)
+        if len(packets)!=len(inventory['packets']):raise ValueError('independent packet accounting lost candidates')
+        body={**inventory,'packets':packets,'qualification_source_inventory':inventory_reference,
+          'cases':cases,'unprocessed_packets':unprocessed,'qualification_authority':qualification_authority_reference,
+          'independent_packet_qualification':True,'training_admission':False}
+        digest=hashlib.sha256(json.dumps(body,sort_keys=True).encode()).hexdigest()
+        return immutable(out/('ready-candidate-inventory-'+digest+'.json'),body)
     write(out/'ready-packet-sequence.json',{'schema':'natlang.strong-teacher-ready-packet-sequence/1',
-      'candidate_inventory':inventory_reference,'entries':entries,'complete':False,
+      'candidate_inventory':ready_inventory(),'entries':entries,'complete':False,
       'training_admission':False,'teacher_generations':0,'production_adopted':False})
     for index,reference in enumerate(inventory['packets'][len(entries):],len(entries)):
         floor(out);proof=read(reference);cases=checked(proof['cases_binding']);folder=Path(reference['path']).parent/'qualification';prepared=folder/'prepared.json'
@@ -285,13 +332,17 @@ def qualify(inventory_reference,prefix_ready_reference,qualifier_reference,out):
             or read(qualification['inputs'])['cases']!=proof['cases_binding']):
             raise ValueError('cached reference counts/source differ from actual candidates')
         _packet(entry,{'authority':authority},allow_empty=True)
+        if independent_packets:
+            entry['candidate_ordinal']=index
+            if entry['qualified_cases']:entry['ordinal']=len(entries)
         if not entry['qualified_cases']:blocked=True;pending.append(entry)
+        elif independent_packets:entries.append(entry)
         elif blocked:later.append(entry)
         else:entries.append(entry)
         results.append(entry)
         write(out/'qualification-progress.json',{'processed_packets':results,'zero_qualified':pending,'later_qualified':later,'complete':False})
         write(out/'ready-packet-sequence.json',{'schema':'natlang.strong-teacher-ready-packet-sequence/1',
-          'candidate_inventory':inventory_reference,'entries':entries,'complete':False,'blocked_unready_packets':pending,
+          'candidate_inventory':ready_inventory(),'entries':entries,'complete':False,'blocked_unready_packets':pending,
           'later_qualified_packets':later,'training_admission':False,'teacher_generations':0,'production_adopted':False})
         print(json.dumps({'ordinal':index,'qualified':entry['qualified_cases'],'pending':entry['pending_cases']}),flush=True)
     report={'processed_packets':results,'zero_qualified':pending,'later_qualified':later,'complete':True,'training_admission':False}
@@ -308,8 +359,11 @@ def main():
         if spec.get('driver')and binding(Path(__file__))!=spec['driver']:raise ValueError('reference driver changed')
         immutable(out/'execution-spec.json',spec)
         immutable(out/'reference-append-mechanism.py',Path(__file__).read_bytes())
-        inventory=prepare(spec['catalog'],spec['source'],spec['prefix_inventory'],out,spec.get('packet_rows',64))
+        inventory=prepare(spec['catalog'],spec['source'],spec['prefix_inventory'],out,spec.get('packet_rows',64),
+          dedup_inventory_reference=spec.get('dedup_inventory'),exclusion_inventory_reference=spec.get('excluded_inventory'))
         print(json.dumps({'inventory':inventory}),flush=True)
-        print(json.dumps({'ready':qualify(inventory,spec['prefix_ready'],spec['qualifier'],out)}),flush=True)
+        print(json.dumps({'ready':qualify(inventory,spec['prefix_ready'],spec['qualifier'],out,
+          independent_packets=spec.get('independent_packet_qualification',False),
+          qualification_authority_reference=spec.get('qualification_authority'))}),flush=True)
 
 if __name__=='__main__':main()

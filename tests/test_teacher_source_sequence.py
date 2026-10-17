@@ -14,7 +14,7 @@ def put(path,value):
     guardian.write(path,value);return guardian.binding(path)
 
 
-def setup(tmp_path, *, bad=None):
+def setup(tmp_path, *, bad=None, packet_count=2):
     root=tmp_path/'generation';root.mkdir();control=tmp_path/'control';control.mkdir()
     runtime=tmp_path/'runtime';runtime.mkdir();runtime_file=runtime/'cli.js';runtime_file.write_bytes(b'qualified runtime')
     runtime_inventory={'cli.js':guardian.binding(runtime_file)}
@@ -23,7 +23,7 @@ def setup(tmp_path, *, bad=None):
     holds=[{'path':'original/holds.jsonl','sha256':'b'*64,'bytes':10}]
     authority={'protection':protection,'decision_hold_bindings':holds,'reference_runtime_sha256':runtime_sha}
     entries=[];packets=[]
-    for index in range(2):
+    for index in range(packet_count):
         folder=tmp_path/f'packet{index}';folder.mkdir()
         record={'version':'natlang.program/2','id':f'train-task-{index}','split':'train','source_groups':[f'group-{index}'],
             'semantics':{'expected':1}}
