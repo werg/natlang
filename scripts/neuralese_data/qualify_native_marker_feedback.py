@@ -12,6 +12,7 @@ import subprocess
 import sys
 import threading
 import time
+import traceback
 import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -243,8 +244,19 @@ class RecordingProxy:
         class Handler(BaseHTTPRequestHandler):
             def log_message(self,*args):pass
             def send(self,status,raw,kind):
-                self.send_response(status);self.send_header('content-type',kind)
-                self.send_header('content-length',str(len(raw)));self.end_headers();self.wfile.write(raw)
+                try:
+                    self.send_response(status);self.send_header('content-type',kind)
+                    self.send_header('content-length',str(len(raw)));self.end_headers();self.wfile.write(raw)
+                except (BrokenPipeError,ConnectionResetError) as error:
+                    # The response was processed before delivery. A closed client
+                    # is transport censoring, not a corrupt observation or model failure.
+                    with observer.lock:
+                        directory=observer.directory/'client-disconnects';directory.mkdir(exist_ok=True)
+                        write_json_durable(directory/f'{time.time_ns()}.json',{
+                            'schema':'natlang.native-feedback-client-disconnect/1',
+                            'at':time.time(),'path':self.path,'response_status':status,
+                            'response_bytes':len(raw),'type':type(error).__name__,'message':str(error),
+                            'diagnostic_only':True,'training_admitted':False})
             def relay(self):
                 try:
                     started=time.time();body=self.rfile.read(int(self.headers.get('content-length','0')))
@@ -266,7 +278,8 @@ class RecordingProxy:
                 except urllib.error.HTTPError as error:self.send(error.code,error.read(),error.headers.get_content_type())
                 except Exception as error:
                     # Persist exact local failure separately; never synthesize a model failure.
-                    write_json_durable(observer.directory/'observer-error.json',{'type':type(error).__name__,'message':str(error)})
+                    write_json_durable(observer.directory/'observer-error.json',{
+                        'type':type(error).__name__,'message':str(error),'traceback':traceback.format_exc()})
                     self.send(502,json.dumps({'error':{'code':'feedback-observer','message':type(error).__name__}}).encode(),'application/json')
             do_GET=relay;do_POST=relay;do_PUT=relay;do_DELETE=relay
         return Handler
@@ -364,6 +377,7 @@ def run(args):
             'actual_sampled_turns':sum(x['sampled_turns'] for x in observations),
             'protocol_failures':sum(x['protocol_failures'] for x in observations),'observations':[binding(path) for path in sorted((directory/'observations').glob('[0-9]*.json'))],
             'observer_error':(directory/'observations/observer-error.json').exists(),
+            'client_disconnects':[binding(path) for path in sorted((directory/'observations/client-disconnects').glob('*.json'))],
             'unfinished_workflows':'censored by declared diagnostic window; no model-negative rewards',
             'diagnostic_only':True,'training_admitted':False,'feedback_quality_passed':None}
         report.update(feedback_metrics(observations))

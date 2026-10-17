@@ -23,6 +23,37 @@ def failed_response():
             'samples':[{'index':0,'token_id':7,'terminal':False}],'generated_inputs':[]}}
 
 
+def test_closed_client_delivery_is_censored_separately_from_observer_failures(tmp_path):
+    import socket
+    proxy=feedback.RecordingProxy('http://unused','candidate',tmp_path,{})
+    handler=object.__new__(proxy.handler())
+    handler.path='/v1/chat/completions'
+    handler.send_response=lambda *args:None
+    handler.send_header=lambda *args:None
+    handler.end_headers=lambda:None
+    local,remote=socket.socketpair()
+    try:
+        remote.close()
+        handler.wfile=local.makefile('wb',buffering=0)
+        handler.send(200,b'actual response','application/json')
+        receipts=list((tmp_path/'client-disconnects').glob('*.json'))
+        assert len(receipts)==1
+        value=json.loads(receipts[0].read_text())
+        assert value['type']=='BrokenPipeError' and value['response_status']==200
+        assert value['response_bytes']==15 and value['training_admitted'] is False
+        assert not (tmp_path/'observer-error.json').exists()
+        # An upstream/capture failure is still an observer error, even if
+        # the client has independently gone away before its error response.
+        handler.command='GET';handler.headers={}
+        handler.rfile=__import__('io').BytesIO()
+        def fail(*args,**kwargs):raise ValueError('actual upstream failure')
+        proxy.fetch=fail
+        handler.relay()
+        assert json.loads((tmp_path/'observer-error.json').read_text())['type']=='ValueError'
+    finally:
+        handler.wfile.close();local.close();remote.close()
+
+
 def test_legacy_projection_requires_exact_real_capture_boundary():
     value=failed_response()
     assert feedback.project_response(value,'candidate')==(200,value)

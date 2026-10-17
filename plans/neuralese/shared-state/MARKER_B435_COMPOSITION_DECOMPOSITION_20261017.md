@@ -71,3 +71,23 @@ at least one actual sampled capture, then resume the full queue; its completed
 first key is skipped. This changes diagnostic orchestration only, never prompts,
 samples, rewards or numerical training. A missing capture stops before wasting
 the other 47 cases; preserve the actual first draw without resampling it.
+
+## Distinguish observation from delivery
+
+The observer first verifies and durably stores the actual response, then delivers
+it to the client. BrokenPipeError or ConnectionResetError during that final
+socket write is a censored client disconnect. Store a separate immutable receipt
+and include it in the report. Failures during upstream fetch, capture validation
+or artifact storage remain observer errors, with their traceback retained.
+This is exact transport accounting; prompts, runtime feedback and rewards do not
+change. Neither a disconnect nor an unfinished diagnostic workflow is a model
+negative or admitted training sample.
+
+The completed LF9088 student windows contain 133 baseline and 155 candidate
+actual turns. Candidate feedback was consumed twice, with both subsequent
+responses protocol accepted. Task outputs were accepted in 20/48 baseline and
+21/48 candidate windows; missing outputs are censored, not successes. The old
+candidate report also records BrokenPipeError without a traceback. Preserve that
+report and its unresolved error provenance: the new classification mechanism
+does not retroactively prove which old operation raised it. These observations
+alone establish neither a statistically reliable lift nor Mellum qualification.
