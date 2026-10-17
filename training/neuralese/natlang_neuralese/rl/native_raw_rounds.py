@@ -54,7 +54,16 @@ def _seed_quantum(config,record):
 
 def _supervised_quantum(config,parameters):
     if 'supervised_quantum_updates' in config:
-        parameters['checkpoint_every']=config['supervised_quantum_updates']
+        quantum=config['supervised_quantum_updates']
+        # Existing trainer requires checkpoint/eval alignment. At most one
+        # held evaluation per short quantum when the old cadence is longer.
+        from ..train.native_state_sft import build_parser
+        previous=parameters.get('eval_every',build_parser().get_default('eval_every'))
+        evaluation=min(previous,quantum)
+        if quantum % evaluation:
+            raise ValueError('supervised quantum must be a multiple of its shorter held evaluation cadence')
+        parameters['checkpoint_every']=quantum
+        parameters['eval_every']=evaluation
         parameters['refresh_at_checkpoint']=True
 
 

@@ -30,7 +30,9 @@ changing the declared finite-boundary scheduling policy.
 Optional per-model `rows_per_round` and `supervised_quantum_updates` are positive
 integers; their absence preserves existing defaults. The latter uses the shared
 checkpoint-every/refresh boundary for seed and mandatory supervised operations
-only. It changes no epochs, objective, geometry, optimizer history or earned
+only. If the previous held cadence is longer, evaluate once at the quantum
+boundary (250→16); retain a shorter cadence when it divides the quantum, and
+reject incompatible shorter cadences. Held token/graph coverage is unchanged. It changes no epochs, objective, geometry, optimizer history or earned
 credits. Existing checkpoint alignment means the actual report delta remains
 authoritative, rather than promising exactly N updates. A pending old packet
 retains its cases, selection, source and bootstrap binding; only supervised stop

@@ -140,19 +140,45 @@ def test_raw_scheduling_controls_reject_invalid_before_handoff(field,value,tmp_p
 def test_supervised_quantum_changes_only_checkpoint_boundary_in_real_emitted_args(tmp_path,monkeypatch):
     from natlang_neuralese.train.recipe import stage_parameter_args
     plan=tmp_path/'plan';write(plan,{'supervised_quantum_updates':16,'rows_per_round':4})
-    original={'learning_rate':3e-6,'epochs':3,'checkpoint_every':250,'native_linear_precision':'bf16x6'}
+    original={'learning_rate':3e-6,'epochs':3,'checkpoint_every':250,'eval_every':250,
+        'held_eval_tokens':8192,'held_eval_graphs':8,'native_linear_precision':'bf16x6',
+        'fp8_training':'triton-experts','fp8_recipe':'current','checkpoint_layers':True}
     config={'trainer_parameters':original.copy(),'seed_trainer_parameters':{},
         'seed_command':['python','seed','{trainer_args}'],'rows_per_round':32}
     declaration={'rows_per_round':4,'supervised_quantum_updates':16}
     raw._scheduling_controls(config,declaration,plan,{},pending=True)
     assert config['rows_per_round']==32  # Current selection remains the old packet.
     mandatory=original.copy();raw._supervised_quantum(config,mandatory)
-    assert mandatory=={**original,'checkpoint_every':16,'refresh_at_checkpoint':True}
+    assert mandatory=={**original,'checkpoint_every':16,'eval_every':16,'refresh_at_checkpoint':True}
     actual=[];monkeypatch.setattr(production.subprocess,'run',lambda argv,**kw:actual.append(argv))
     production.run_command(config['seed_command'],{'seed_trainer_args':stage_parameter_args(config['seed_trainer_parameters'])})
     assert actual[0][actual[0].index('--checkpoint-every')+1]=='16'
     assert actual[0][actual[0].index('--epochs')+1]=='3'
+    assert actual[0][actual[0].index('--eval-every')+1]=='16'
+    assert actual[0][actual[0].index('--held-eval-tokens')+1]=='8192'
     assert '--refresh-at-checkpoint' in actual[0]
     assert config['trainer_parameters']==original
     raw._scheduling_controls(config,declaration,plan,{},pending=False)
     assert config['rows_per_round']==4
+
+
+def test_quantum_emitted_full_settings_pass_actual_trainer_early_validation(tmp_path,monkeypatch):
+    import random,torch
+    from natlang_neuralese.train import native_state_sft as trainer
+    from natlang_neuralese.train.recipe import stage_parameter_args
+    parameters={'checkpoint_every':250,'eval_every':250,'held_eval_tokens':8192,'held_eval_graphs':8,
+        'learning_rate':3e-6,'native_linear_precision':'bf16x6','fp8_training':'triton-experts',
+        'fp8_recipe':'current','checkpoint_layers':True,'checkpoint_input_offload':True}
+    raw._supervised_quantum({'supervised_quantum_updates':16},parameters)
+    class ValidatedBeforeAnyModelLoad(Exception):pass
+    def stop(*args,**kw):raise ValidatedBeforeAnyModelLoad()
+    monkeypatch.setattr(trainer,'CheckpointPolicy',stop)
+    argv=['--native-graphs','unused','--held-native-graphs','unused','--out',str(tmp_path/'out'),
+          *stage_parameter_args(parameters)]
+    state=random.getstate()
+    try:
+        with torch.random.fork_rng(),pytest.raises(ValidatedBeforeAnyModelLoad):trainer.main(argv)
+    finally:random.setstate(state)
+    incompatible={'eval_every':10}
+    with pytest.raises(ValueError,match='shorter held evaluation cadence'):
+        raw._supervised_quantum({'supervised_quantum_updates':16},incompatible)
