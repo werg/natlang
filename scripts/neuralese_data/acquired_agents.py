@@ -984,7 +984,8 @@ def openresearcher_structured_acquired(limit=None):
         try:
             if not isinstance(row,dict) or not isinstance(row.get('messages'),list):
                 raise Reject('structured research session has no original messages')
-            messages,tools=agents.harmony_messages(row['messages'])
+            header_normalizations=[]
+            messages,tools=agents.harmony_messages(row['messages'],normalization_proof=header_normalizations)
             metadata=[{key:item.get(key) for key in ('role','channel','recipient','content_type','name')}
                       for item in row['messages']]
             task=row.get('qid')
@@ -996,6 +997,8 @@ def openresearcher_structured_acquired(limit=None):
             t.lineage['notes']['original_research_channels']={'messages':metadata,'question':row.get('question'),
                 'answer':row.get('answer'),'chunk_idx':row.get('chunk_idx'),'num_chunks':row.get('num_chunks'),
                 'status':row.get('status'),'error':row.get('error')}
+            if header_normalizations:
+                t.lineage['notes']['original_research_channels']['header_normalizations']=header_normalizations
             if row.get('status') not in (None,'success','completed') or row.get('error'):
                 t.outcome['label']='failed'
             t.outcome['details'].update(reported_status=row.get('status'),reported_error=row.get('error'))

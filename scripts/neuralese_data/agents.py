@@ -14,12 +14,13 @@ from __future__ import annotations
 import ast
 import glob
 import gzip
+import hashlib
 import json
 import re
 from pathlib import Path
 
 from .common import Reject
-from .records import group_key, strip_markup, source
+from .records import group_key, strip_markup, source, canonical_json
 from .trajectory import Trajectory, licence, message, split_think, task_hash, tool_call
 
 TRAJ_EXT = Path("/mnt/external/bgkit-data/trajectories_ext")
@@ -186,13 +187,23 @@ def _prune(value):
     return value
 
 
-def harmony_messages(raw: list) -> tuple[list,list]:
+def harmony_messages(raw: list, *, normalization_proof=None) -> tuple[list,list]:
     """Preserve each original Harmony context/channel/dispatch/observation."""
     prepared=[];tools=[];pending=[]
     for index,original in enumerate(raw):
         item=dict(original);role=item.get('role');content=_harmony_text(item.get('content'))
         tools.extend(_harmony_tools(item.get('content')))
         item['content']=content
+        if (role=='assistant' and item.get('recipient')=='assistant<|channel|>analysis'
+                and not item.get('tool_calls')):
+            if normalization_proof is not None:
+                normalization_proof.append({'index':index,'kind':'encoded-self-analysis-recipient',
+                    'original':{'recipient':item['recipient'],'channel':item.get('channel')},
+                    'normalized':{'recipient':'assistant','channel':'analysis'},
+                    'content_text_sha256':hashlib.sha256((content or '').encode('utf-8')).hexdigest(),
+                    'original_content_canonical_sha256':hashlib.sha256(
+                        canonical_json(original.get('content')).encode('utf-8')).hexdigest()})
+            item['recipient']='assistant';item['channel']='analysis'
         if role=='assistant' and item.get('recipient') and item['recipient']!='assistant':
             if item.get('tool_calls'):raise Reject('research dispatch has two conflicting call representations')
             if not isinstance(content,str):raise Reject('research dispatch lacks original arguments')
