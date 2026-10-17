@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter
+import inspect
 import json
 import os
 from pathlib import Path
@@ -19,13 +20,18 @@ from scripts.neuralese_data.build_acquired_full_session_graphs import (
 from natlang_neuralese.serve.chat import RequestError
 from scripts.neuralese_data.build_verified_teacher_trajectory_graphs import current_protection
 from scripts.neuralese_data.decision_holds import load_decision_holds
+from scripts.neuralese_data.admission_resume import (
+    artifact_bindings, load_model_checkpoint, load_or_compute_model_checkpoint,
+    model_checkpoint_identity, save_model_checkpoint,
+)
 
 ROOT = Path(os.environ.get('NATLANG_REPO_ROOT', Path(__file__).resolve().parents[2])).resolve()
 
 
 def bound(path, binding):
     path = Path(path)
-    if sha256_file_hex(path) != binding['sha256'] or ('bytes' in binding and path.stat().st_size != binding['bytes']):
+    if (sha256_file_hex_cached(path, trust_archive_receipt=False) != binding['sha256']
+            or ('bytes' in binding and path.stat().st_size != binding['bytes'])):
         raise ValueError('immutable acquired artifact changed: ' + str(path))
     return path
 
@@ -453,8 +459,137 @@ def native_conversion_directory(native_root, export_path, export, model):
     return root / keys[0] / model
 
 
-def verify_conversion(directory, export_path, *, protection, held_sources, decision_bindings, source_rows, conversion_protection=None):
+def _admission_verifier_files():
+    """Exact Python modules whose code can change the cached conversion verdict."""
+    functions = (sessions, source_target_ids, completed_shards, session_exclusion,
+                 prevalidate_session_tool_arguments, prove_render_pending_runtime_continuation,
+                 current_protection, load_decision_holds, parse_graph, tokenizer_inventory,
+                 write_json_durable, sha256_file_hex_cached, RequestError,
+                 decision_contract, verify_graph_source, _prevalidate_source_for_conversion,
+                 load_model_checkpoint, load_or_compute_model_checkpoint,
+                 model_checkpoint_identity, save_model_checkpoint)
+    paths = {Path(__file__).resolve()}
+    for function in functions:
+        source = inspect.getsourcefile(function)
+        if source:
+            paths.add(Path(source).resolve())
+    from scripts.neuralese_data.continue_acquired_protection import verify_protection_sets, verify_session_transition
+    for function in (verify_protection_sets, verify_session_transition):
+        source = inspect.getsourcefile(function)
+        if source:
+            paths.add(Path(source).resolve())
+    return sorted(paths)
+
+
+def _model_resume_identity(*, export_path, source_path, original, rows, model, base,
+                           tokenizer, protection, conversion_protection,
+                           decision_bindings, global_accounting, directory,
+                           member_scope, source_closure_receipt=None):
+    """Bind cached model verification to the exact source, conversion and current policy."""
+    directory = Path(directory).resolve(strict=True)
+    export = json.loads(Path(export_path).read_text(encoding='utf-8'))
+    artifacts = [Path(export_path), Path(source_path)]
+    if source_closure_receipt is not None and Path(source_closure_receipt).is_file():
+        artifacts.append(Path(source_closure_receipt))
+    artifacts.extend(path for path in directory.rglob('*') if path.is_file())
+    source_identity = {
+        'export_path': str(Path(export_path).resolve(strict=True)),
+        'normalized_source_path': str(Path(source_path).resolve(strict=True)),
+        'normalized_sessions': len(rows),
+        'original_source': original,
+        'export_complete_sessions': export['complete_sessions'],
+        'source_output_sha256': export['outputs'][Path(source_path).name],
+        'global_accounting': global_accounting,
+        'member_scope': member_scope,
+    }
+    policy = {
+        'eligibility_protection': protection['proof'],
+        'conversion_protection': conversion_protection['proof'] if conversion_protection else None,
+        'decision_holds': decision_contract(decision_bindings),
+    }
+    return model_checkpoint_identity(
+        source=source_identity,
+        model={'name': model, 'base': str(Path(base).resolve(strict=True)),
+               'tokenizer_inventory': tokenizer},
+        policy=policy,
+        artifacts=artifacts,
+        verifier_files=_admission_verifier_files(),
+    )
+
+
+def _verify_conversion_shard(directory, shard, source_slice, *, expected_sources,
+                            expected_omissions, expected_counts, protection, held_sources, fingerprint):
+    """Fully verify one durable source shard, including its complete graph views."""
+    shard_path = Path(shard['path']).parent
+    receipt = json.loads((shard_path / 'receipt.json').read_text())
+    seen_omissions = set()
+    for row in sessions(shard_path / 'omissions.jsonl'):
+        key = canonical_json_sha256_hex([row['id'], row['source_row']])
+        expected = expected_omissions.get(key)
+        if key in seen_omissions or expected is None or any(row.get(name) != value for name, value in expected.items()):
+            raise ValueError('native shard omission ledger differs from exact source omissions')
+        seen_omissions.add(key)
+    if seen_omissions != set(expected_omissions):
+        raise ValueError('native shard omission ledger lost source omissions')
+
+    source_by_hash = {canonical_json_sha256_hex(value): value for value in expected_sources}
+    if len(source_by_hash) != len(expected_sources):
+        raise ValueError('native shard source range repeats an exact positive session')
+    graph_ids = set(); owed = set(); whole_sources = set()
+    groups = {'train': set(), 'test': set()}; counts = Counter(); proofs = []; outputs = []
+    for output in receipt['outputs']:
+        path = shard_path / output['path']
+        split = Path(output['path']).parent.name
+        if split not in groups or path.resolve() != (shard_path / split / 'native-graphs.jsonl.zst').resolve():
+            raise ValueError('native shard output escapes its split aggregate')
+        rows = 0; tokens = 0; maximum = 0
+        for graph in sessions(path):
+            provenance = graph.get('conversion', {}).get('acquired_session', {})
+            value = source_by_hash.get(provenance.get('normalized_session_sha256'))
+            if value is None:
+                raise ValueError('native shard graph has no exact eligible source from its bound range')
+            expected, width, actual_split = verify_graph_source(
+                graph, value, protection=protection, held_sources=held_sources, fingerprint=fingerprint)
+            if actual_split != split or graph['id'] in graph_ids:
+                raise ValueError('native shard duplicated a graph or stored it under the wrong split')
+            graph_ids.add(graph['id']); owed.update(expected)
+            if provenance['view'] == 'whole-trajectory':
+                whole_sources.add(provenance['normalized_session_sha256'])
+            rows += 1; tokens += width; maximum = max(maximum, width)
+            groups[split].update(graph['source_groups']); counts['graphs:' + split] += 1
+            if provenance['view'] != 'whole-trajectory':
+                counts['auxiliary_reasoning_graphs:' + split] += 1
+            proofs.append({'id': graph['id'], 'graph_sha256': canonical_json_sha256_hex(graph),
+                'normalized_session_sha256': canonical_json_sha256_hex(value), 'source_row': value['source_row'],
+                'view': provenance['view'], 'split': split, 'source_groups': graph['source_groups'],
+                'tokens': width, 'source_outcome': value['trajectory']['outcome'], 'oracle_verified': False})
+        if rows != output['rows']:
+            raise ValueError('native shard graph count differs from its receipt')
+        outputs.append({**output, 'tokens': tokens, 'max_row_tokens': maximum, 'split': split})
+    if graph_ids != owed or whole_sources != set(source_by_hash):
+        raise ValueError('native shard lacks a complete whole-session or required reasoning view')
+    if +(Counter(expected_counts) + Counter(counts)) != +Counter(receipt['counts']):
+        raise ValueError('native shard source and graph accounting differs from its receipt')
+    return {'proofs': proofs, 'groups': {key: sorted(value) for key, value in groups.items()},
+            'counts': dict(counts), 'outputs': outputs, 'graph_ids': sorted(graph_ids),
+            'whole_sources': sorted(whole_sources), 'owed_ids': sorted(owed)}
+
+
+def _sha256_concat(paths):
+    import hashlib
+    digest = hashlib.sha256()
+    for path in paths:
+        with Path(path).open('rb') as stream:
+            while chunk := stream.read(1024 * 1024):
+                digest.update(chunk)
+    return digest.hexdigest()
+
+
+def verify_conversion(directory, export_path, *, protection, held_sources, decision_bindings, source_rows,
+                      conversion_protection=None, shard_checkpoint_root=None, checkpoint_context=None):
     directory = Path(directory).resolve(strict=True); receipt_path = directory / 'receipt.json'
+    if checkpoint_context is None:
+        checkpoint_context = {}
     receipt = json.loads(receipt_path.read_text())
     if receipt.get('schema') != 'natlang.acquired-full-session-graphs/1':
         raise ValueError('cohort member needs a completed native conversion receipt')
@@ -534,46 +669,118 @@ def verify_conversion(directory, export_path, *, protection, held_sources, decis
             expected_sources[canonical_json_sha256_hex(value)] = value
     if len(expected_sources) != expected_counts['positive_sessions']:
         raise ValueError('normalized source repeats exact positive session occurrences')
-    seen_omissions = set()
-    for row in sessions(directory / 'omissions.jsonl'):
-        key = canonical_json_sha256_hex([row['id'], row['source_row']])
-        expected = expected_omissions.get(key)
-        if key in seen_omissions or expected is None or any(row.get(name) != value for name, value in expected.items()):
-            raise ValueError('native omission ledger differs from exact original excluded occurrences')
-        seen_omissions.add(key)
-    if seen_omissions != set(expected_omissions):
-        raise ValueError('native omission ledger lost excluded source sessions')
-    seen = set(); owed = set(); groups = {'train': set(), 'test': set()}; counts = Counter(); proofs = []; outputs = []
+    # Validate every committed shard independently and durably checkpoint its
+    # complete graph/source proof. A preemption therefore repeats only the
+    # unfinished shard, while the cohort-level duplicate, accounting, split,
+    # parity and current-policy checks still run before publication.
+    seen_occurrences = set()
+    for value in source_rows:
+        occurrence = canonical_json_sha256_hex([value['trajectory']['id'], value['source_row']])
+        if occurrence in seen_occurrences:
+            raise ValueError('normalized source repeats an occurrence across admission rows')
+        seen_occurrences.add(occurrence)
     if len(receipt['outputs']) != 2 or {Path(item['path']).parent.name for item in receipt['outputs']} != {'train', 'test'}:
         raise ValueError('native cohort must bind exactly train and test aggregate outputs')
+    aggregate_paths = {}
     for output in receipt['outputs']:
         path = bound(output['path'], output); split = path.parent.name
-        if path.resolve() != (directory / split / 'native-graphs.jsonl.zst').resolve() or split not in groups:
+        if path.resolve() != (directory / split / 'native-graphs.jsonl.zst').resolve() or split not in {'train', 'test'}:
             raise ValueError('native cohort output escapes its completed aggregate')
-        rows = 0; tokens = 0; maximum = 0
-        for graph in sessions(path):
-            provenance = graph.get('conversion', {}).get('acquired_session', {})
-            value = expected_sources.get(provenance.get('normalized_session_sha256'))
-            if value is None: raise ValueError('native graph has no exact eligible normalized source')
-            expected, width, actual_split = verify_graph_source(graph, value, protection=protection,
-                held_sources=held_sources, fingerprint=receipt['expanded_tokenizer_fingerprint'])
-            if actual_split != split or graph['id'] in seen:
-                raise ValueError('native graph duplicated or stored under a wrong split')
-            owed.update(expected); seen.add(graph['id']); rows += 1; tokens += width; maximum = max(maximum, width)
-            groups[split].update(graph['source_groups']); counts['graphs:' + split] += 1
-            if provenance['view'] != 'whole-trajectory': counts['auxiliary_reasoning_graphs:' + split] += 1
-            proofs.append({'id': graph['id'], 'graph_sha256': canonical_json_sha256_hex(graph),
-                'normalized_session_sha256': canonical_json_sha256_hex(value), 'source_row': value['source_row'],
-                'view': provenance['view'], 'split': split, 'source_groups': graph['source_groups'],
-                'tokens': width, 'source_outcome': value['trajectory']['outcome'], 'oracle_verified': False})
-        if rows != output['rows']: raise ValueError('aggregate graph count differs from conversion receipt')
-        outputs.append({**output, 'tokens': tokens, 'max_row_tokens': maximum, 'split': split})
-    whole_sources = {proof['normalized_session_sha256'] for proof in proofs if proof['view'] == 'whole-trajectory'}
+        aggregate_paths[split] = (path, output)
+    if set(aggregate_paths) != {'train', 'test'}:
+        raise ValueError('native cohort aggregate split inventory is incomplete')
+
+    shard_results = []
+    for shard in shards:
+        start, stop = shard['start'], shard['stop']
+        source_slice = source_rows[start:stop]
+        if len(source_slice) != stop - start:
+            raise ValueError('native shard range escapes the normalized source')
+        positive = [value for value in source_slice if canonical_json_sha256_hex(value) in expected_sources]
+        slice_omissions = {}
+        expected_shard_counts = Counter()
+        for value in source_slice:
+            occurrence = canonical_json_sha256_hex([value['trajectory']['id'], value['source_row']])
+            omission_key = canonical_json_sha256_hex([value['trajectory']['id'], value['source_row']])
+            if omission_key in expected_omissions:
+                slice_omissions[omission_key] = expected_omissions[omission_key]
+                expected_shard_counts[expected_omissions[omission_key]['reason']] += 1
+            elif canonical_json_sha256_hex(value) in expected_sources:
+                expected_shard_counts['positive_sessions'] += 1
+            else:
+                raise ValueError('source occurrence is neither eligible nor explicitly omitted')
+        shard_path = Path(shard['path']).parent
+        shard_receipt = json.loads((shard_path / 'receipt.json').read_text())
+        shard_artifacts = [shard_path / 'receipt.json', shard_path / 'omissions.jsonl',
+                           *(shard_path / item['path'] for item in shard_receipt['outputs'])]
+        bound_artifacts = [export_path, source, receipt_path, state_path, *shard_artifacts]
+        if checkpoint_context.get('source_closure_receipt'):
+            bound_artifacts.append(checkpoint_context['source_closure_receipt'])
+        shard_model_identity = dict(checkpoint_context)
+        shard_model_identity['artifacts'] = artifact_bindings(bound_artifacts)
+        shard_identity = {
+            'schema': 'natlang.acquired-admission-shard-checkpoint-identity/1',
+            'model_identity': shard_model_identity,
+            'range': {'start': start, 'stop': stop,
+                      'source_rows_sha256': canonical_json_sha256_hex(
+                          [canonical_json_sha256_hex(value) for value in source_slice])},
+            'artifacts': artifact_bindings(bound_artifacts),
+        }
+        def validate_shard(shard=shard, source_slice=source_slice, positive=positive,
+                           slice_omissions=slice_omissions, expected_shard_counts=expected_shard_counts):
+            return _verify_conversion_shard(
+                directory, shard, source_slice, expected_sources=positive,
+                expected_omissions=slice_omissions, expected_counts=expected_shard_counts,
+                protection=protection, held_sources=held_sources,
+                fingerprint=receipt['expanded_tokenizer_fingerprint'])
+        if shard_checkpoint_root is None:
+            result = validate_shard()
+        else:
+            result, _, _ = load_or_compute_model_checkpoint(
+                Path(shard_checkpoint_root) / f"{start:08d}-{stop:08d}", shard_identity, validate_shard)
+        shard_results.append((shard, result))
+
+    seen = set(); owed = set(); whole_sources = set()
+    groups = {'train': set(), 'test': set()}; counts = Counter(); proofs = []
+    output_stats = {split: {'rows': 0, 'tokens': 0, 'max_row_tokens': 0, 'shard_paths': []}
+                    for split in ('train', 'test')}
+    for shard, result in shard_results:
+        shard_path = Path(shard['path']).parent
+        owed.update(result['owed_ids'])
+        for proof in result['proofs']:
+            if proof['id'] in seen:
+                raise ValueError('native cohort duplicated a graph across completed shards')
+            seen.add(proof['id']); proofs.append(proof)
+            if proof['view'] == 'whole-trajectory':
+                whole_sources.add(proof['normalized_session_sha256'])
+            if proof['normalized_session_sha256'] not in expected_sources:
+                raise ValueError('cached native shard proof has no current eligible source')
+        for split in ('train', 'test'):
+            groups[split].update(result['groups'][split])
+            output = next(item for item in result['outputs'] if item['split'] == split)
+            stats = output_stats[split]
+            stats['rows'] += output['rows']; stats['tokens'] += output['tokens']
+            stats['max_row_tokens'] = max(stats['max_row_tokens'], output['max_row_tokens'])
+            stats['shard_paths'].append(shard_path / output['path'])
+        counts.update(result['counts'])
+    for split, (aggregate_path, output) in aggregate_paths.items():
+        stats = output_stats[split]
+        if stats['rows'] != output['rows']:
+            raise ValueError('aggregate graph count differs from completed source shards')
+        if _sha256_concat(stats['shard_paths']) != output['sha256']:
+            raise ValueError('aggregate output is not the exact ordered concatenation of verified shard outputs')
     if seen != owed or whole_sources != set(expected_sources):
         raise ValueError('native cohort lacks complete whole-session or required reasoning views')
     actual = Counter({**expected_counts, **counts})
     if +actual != +Counter(receipt['counts']) or groups['train'] & groups['test']:
         raise ValueError('native graph source accounting or train/held closure differs')
+    outputs = [{**output, 'tokens': output_stats[Path(output['path']).parent.name]['tokens'],
+                'max_row_tokens': output_stats[Path(output['path']).parent.name]['max_row_tokens'],
+                'split': Path(output['path']).parent.name} for output in receipt['outputs']]
+    # Preserve the historical aggregate proof order (train stream, then test
+    # stream) even though validation and durable checkpoints are shard-local.
+    proofs = [proof for split in ('train', 'test') for _, result in shard_results
+              for proof in result['proofs'] if proof['split'] == split]
     return receipt, outputs, proofs, groups
 
 
@@ -644,6 +851,8 @@ def main(argv=None):
     inventories = {name: tokenizer_inventory(base) for name, base in models.items()}
     manifests = {model: {'train': [], 'test': []} for model in models}
     by_model = {}; proof_rows = []; include = []; bindings = []; normalized_count = 0
+    validation_checkpoints = []
+    checkpoint_rechecks = []
     model_source_views = {}
     all_groups = {'train': set(), 'test': set()}
     for export_path in paths:
@@ -659,9 +868,36 @@ def main(argv=None):
         model_source_views = {}
         for model in models:
             directory = native_conversion_directory(args.native_root, export_path, export, model)
-            receipt, outputs, proofs, groups = verify_conversion(directory, export_path, protection=protection,
-                held_sources=held_sources, decision_bindings=decision_bindings, source_rows=rows,
-                conversion_protection=conversion_protection)
+            identity = _model_resume_identity(
+                export_path=export_path, source_path=source, original=original, rows=rows,
+                model=model, base=models[model], tokenizer=inventories[model],
+                protection=protection, conversion_protection=conversion_protection,
+                decision_bindings=decision_bindings, global_accounting=global_accounting,
+                directory=directory, member_scope=member_scope,
+                source_closure_receipt=args.source_closure_receipt)
+            checkpoint_root = args.native_root / '.admission-checkpoints' / args.id / export_path.parent.name / model
+            def validate_model():
+                receipt, outputs, proofs, groups = verify_conversion(directory, export_path, protection=protection,
+                    held_sources=held_sources, decision_bindings=decision_bindings, source_rows=rows,
+                    conversion_protection=conversion_protection,
+                    shard_checkpoint_root=checkpoint_root / 'shards', checkpoint_context=identity)
+                return {'receipt': receipt, 'outputs': outputs, 'proofs': proofs,
+                        'groups': {split: sorted(values) for split, values in groups.items()}}
+            result, checkpoint, resumed = load_or_compute_model_checkpoint(
+                checkpoint_root, identity, validate_model)
+            receipt, outputs, proofs = result['receipt'], result['outputs'], result['proofs']
+            groups = {split: set(values) for split, values in result['groups'].items()}
+            validation_checkpoints.append({
+                'model': model, 'source_export': str(export_path.resolve()),
+                'path': str(checkpoint.resolve()), 'sha256': sha256_file_hex_cached(
+                    checkpoint, trust_archive_receipt=False), 'reused': resumed,
+                'identity_sha256': canonical_json_sha256_hex(identity),
+            })
+            checkpoint_rechecks.append({
+                'identity': identity, 'export_path': export_path, 'source_path': source,
+                'original': original, 'rows': rows, 'model': model, 'base': models[model],
+                'tokenizer': inventories[model], 'directory': directory,
+            })
             if receipt['prepared_tokenizer']['base_files'] != inventories[model]:
                 raise ValueError('native cohort model selector differs from its exact tokenizer base inventory')
             whole = whole_trajectory_source_view(proofs)
@@ -694,6 +930,20 @@ def main(argv=None):
     if current_protection(args.protection) != protection or load_decision_holds(
             sorted((ROOT / 'training/decision-holds').glob('*.jsonl')))[1] != decision_bindings:
         raise ValueError('current protections changed during cohort verification')
+    if args.source_closure_receipt is not None and not args.force_full_source_closure:
+        if verify_global_source_closure(args.protection, protection,
+                receipt_path=args.source_closure_receipt) != global_accounting:
+            raise ValueError('full acquired-source closure changed during cohort verification')
+    for check in checkpoint_rechecks:
+        current_identity = _model_resume_identity(
+            export_path=check['export_path'], source_path=check['source_path'],
+            original=check['original'], rows=check['rows'], model=check['model'],
+            base=check['base'], tokenizer=check['tokenizer'], protection=protection,
+            conversion_protection=conversion_protection, decision_bindings=decision_bindings,
+            global_accounting=global_accounting, directory=check['directory'],
+            member_scope=member_scope, source_closure_receipt=args.source_closure_receipt)
+        if current_identity != check['identity']:
+            raise ValueError('model conversion artifacts changed before admission publication')
     out.mkdir()
     with (out / 'row-proof.jsonl').open('w') as stream:
         for proof in proof_rows: stream.write(json.dumps(proof, ensure_ascii=False, separators=(',', ':')) + '\n')
@@ -709,6 +959,7 @@ def main(argv=None):
         'complete_acquired_source_accounting': global_accounting,
         'protection': protection['proof'], 'decision_holds': decision_bindings,
         'pending_source_groups_sha256': canonical_json_sha256_hex(sorted(protection['pending'])),
+        'completed_model_validation_checkpoints': validation_checkpoints,
         'model_tokenizer_inventories': inventories,
         'train_held_group_intersections': 0, 'row_proof_sha256': sha256_file_hex(out / 'row-proof.jsonl'),
         'training_sources': 'aggregate outputs only; durability shards are not additional sources'}

@@ -160,14 +160,33 @@ def test_actual_completed_durable_conversion_rejoins_all_positive_and_failed_sou
     monkeypatch.setattr(builder,'current_protection',lambda path:protection)
     holds=sorted((Path(builder.__file__).resolve().parents[2]/'training/decision-holds').glob('*.jsonl'))
     ids,bindings=load_decision_holds(holds);output=tmp_path/'graphs'
-    argv=['--export-receipt',str(receipt),'--base-tokenizer',str(base),'--protection','fixture','--output',str(output)]
+    argv=['--export-receipt',str(receipt),'--base-tokenizer',str(base),'--protection','fixture','--output',str(output),
+          '--chunk-sessions','1']
     for hold in holds:argv+=['--decision-hold',str(hold)]
     builder.main(argv)
+    checkpoint_root=tmp_path/'admission-checkpoints'; context={'model':'lfm25' if 'lfm' in str(base) else 'mellum21',
+        'current_protection':protection['proof'],'tokenizer':'fixture'}
     checked,outputs,proofs,groups=verify_conversion(output,receipt,protection=protection,
-        held_sources=ids|{v.split(':decision:',1)[0] for v in ids},decision_bindings=bindings,source_rows=rows)
+        held_sources=ids|{v.split(':decision:',1)[0] for v in ids},decision_bindings=bindings,source_rows=rows,
+        shard_checkpoint_root=checkpoint_root,checkpoint_context=context)
     assert checked['counts']['positive_sessions']==1 and checked['counts']['source-reported-non-positive']==1
     assert all(p['source_outcome']['label']!='failed' for p in proofs)
     assert len(proofs)==sum(item['rows'] for item in outputs) and not groups['test']
+    shard_checkpoints=sorted(checkpoint_root.glob('*/*.json'))
+    assert len(shard_checkpoints)==2
+    # Model verification is interrupted after the first complete file: only
+    # the missing second shard must rerun on resume.
+    shard_checkpoints[-1].unlink()
+    admission=__import__('scripts.neuralese_data.prepare_acquired_session_admission',fromlist=['_verify_conversion_shard'])
+    original_verify=admission._verify_conversion_shard; recomputed=[]
+    def counted_verify(directory,shard,*args,**kwargs):
+        recomputed.append((shard['start'],shard['stop']))
+        return original_verify(directory,shard,*args,**kwargs)
+    monkeypatch.setattr(admission,'_verify_conversion_shard',counted_verify)
+    resumed=verify_conversion(output,receipt,protection=protection,
+        held_sources=ids|{v.split(':decision:',1)[0] for v in ids},decision_bindings=bindings,source_rows=rows,
+        shard_checkpoint_root=checkpoint_root,checkpoint_context=context)
+    assert resumed==(checked,outputs,proofs,groups) and recomputed==[(1,2)]
     alias=tmp_path/'logical-graphs';alias.symlink_to(output,target_is_directory=True)
     assert verify_conversion(alias,receipt,protection=protection,
         held_sources=ids|{v.split(':decision:',1)[0] for v in ids},decision_bindings=bindings,
