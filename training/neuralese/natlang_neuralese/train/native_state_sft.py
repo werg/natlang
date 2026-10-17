@@ -938,8 +938,9 @@ def main(argv=None):
         raise ValueError('communication foundation requires its complete declared admitted source manifest')
     if args.communication_foundation:
         from .native_continuation import verify_initial_foundation_cohort
+        foundation_frame = carried_progress.get(args.stage_id or 'native-graph-ce') or {}
         verify_initial_foundation_cohort(train, foundation_source,
-            already_declared=bool((resume or {}).get('options', {}).get('communication_foundation')))
+            already_declared=bool((foundation_frame.get('options') or {}).get('communication_foundation')))
     objective = None
     objective_binding = None
     if args.objective_spec is not None:
