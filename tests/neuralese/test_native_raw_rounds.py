@@ -336,6 +336,7 @@ def test_live_raw_task_plan_adopts_after_sealed_operation_without_resetting_curr
         calls.append(args.cases)
         return {'native_state':True,'checkpoint':str(args.checkpoint),'out':str(args.out),
             'cases':str(args.cases),'production_recipe':str(args.production_recipe),
+            'production_stage':args.production_stage,
             'seed_command':['python','seed','{trainer_args}'],'rows_per_round':32,
             'seed_trainer_parameters':{},'trainer_parameters':{'checkpoint_every':250}}
     monkeypatch.setattr(production,'configure_native',configure)

@@ -40,7 +40,8 @@ def _inputs(declaration):
 def _seed_quantum(config,record):
     """Bind the complete supervised settings to the finite seed operation."""
     config['seed_trainer_parameters']={**config.get('trainer_parameters',{}),
-        **config.get('seed_trainer_parameters',{}),'refresh_at_checkpoint':True}
+        **config.get('seed_trainer_parameters',{}),'refresh_at_checkpoint':True,
+        'stage_id':config['production_stage']}
     if record.get('resident'):
         directory=record['resident']['directory']
         config['resident_data_directory']=directory

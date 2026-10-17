@@ -26,6 +26,7 @@ def test_unchanged_config_rechecks_sources_and_ownership_without_deserializing_p
     plan=tmp_path/'plan.json';write(plan,{'models':[declaration]})
     def configure(args):
         return {'out':str(args.out),'checkpoint':str(args.checkpoint),'production_recipe':str(args.production_recipe),
+            'production_stage':args.production_stage,
             'seed_native_graphs':str(args.seed_native_graphs),'held_native_graphs':str(args.held_native_graphs),
             'trainer_parameters':{},'seed_trainer_parameters':{}}
     monkeypatch.setattr(production,'configure_native',configure)
@@ -86,6 +87,7 @@ def test_hot_task_plan_keeps_latest_committed_resident_sources(actual_drain,tmp_
     def configure(args):
         seen.append(args)
         return {'out':str(args.out),'checkpoint':str(args.checkpoint),'production_recipe':str(args.production_recipe),
+            'production_stage':args.production_stage,
             'seed_native_graphs':str(args.seed_native_graphs),'held_native_graphs':str(args.held_native_graphs),
             'trainer_parameters':{},'seed_trainer_parameters':{}}
     monkeypatch.setattr(production,'configure_native',configure)
@@ -107,7 +109,8 @@ def test_seed_quantum_emits_full_backend_rates_and_explicit_objective_overrides(
     from natlang_neuralese.train.recipe import stage_parameter_args
     parameters={'learning_rate':3e-6,'checkpoint_layers':True,'fp8_training':'triton-experts',
         'fp8_recipe':'current','native_linear_precision':'bf16x6','checkpoint_input_offload':True}
-    config={'trainer_parameters':parameters.copy(),'seed_trainer_parameters':{'learning_rate':0.0003},
+    config={'production_stage':'native_full_sft',
+        'trainer_parameters':parameters.copy(),'seed_trainer_parameters':{'learning_rate':0.0003},
         'seed_command':['python','-m','natlang_neuralese.train.native_state_sft','{trainer_args}'],
         'learner_command':['python','learner','{trainer_args}']}
     original=dict(parameters)
@@ -123,10 +126,52 @@ def test_seed_quantum_emits_full_backend_rates_and_explicit_objective_overrides(
         assert flag in argv
         if value is not True:assert argv[argv.index(flag)+1]==str(value)
     assert '--refresh-at-checkpoint' in argv
+    assert argv[argv.index('--stage-id')+1]=='native_full_sft'
     assert config['trainer_parameters']==original
     assert config['learner_command']==['python','learner','{trainer_args}']
     before=json.dumps(config,sort_keys=True);raw._seed_quantum(config,{'resident':{'directory':'/actual/resident'}})
     assert json.dumps(config,sort_keys=True)==before
+
+
+def test_seed_emitted_stage_initializes_actual_resident_and_mandatory_keeps_own_stage(tmp_path,monkeypatch):
+    from test_native_resident import setup
+    from natlang_neuralese.train import native_resident as resident
+    from natlang_neuralese.train.native_state_sft import build_parser
+    from natlang_neuralese.train.recipe import stage_parameter_args
+    from natlang_neuralese.rl.native_supervised import continuation_config
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE',str(tmp_path/'cache'))
+    paths,directory,manager,_=setup(tmp_path)
+    config={'production_stage':'sft','production_recipe':manager.recipe_binding['path'],
+        'recipe_lineage_sha256':manager.recipe_binding['lineage_sha256'],
+        'trainer_parameters':{'learning_rate':3e-6,'checkpoint_layers':True},
+        'seed_trainer_parameters':{'stage_id':'obsolete-unrelated-stage'},
+        'seed_command':['python','-m','natlang_neuralese.train.native_state_sft',
+            '--native-graphs',str(paths['old']),'--held-native-graphs',str(paths['held']),
+            '--out',str(tmp_path/'seed'),'{trainer_args}']}
+    raw._seed_quantum(config,{'resident':{'directory':str(directory)}})
+    emitted=[]
+    monkeypatch.setattr(production.subprocess,'run',lambda argv,**kw:emitted.append(argv))
+    production.run_command(config['seed_command'],{
+        'seed_trainer_args':stage_parameter_args(config['seed_trainer_parameters'])})
+    args=build_parser().parse_args(emitted[0][3:])
+    assert args.stage_id=='sft' and args.refresh_at_checkpoint
+    resumed=resident.ResidentAdoption(args.resident_data_directory,stage_id=args.stage_id,
+        recipe_binding=manager.recipe_binding,train=manager.train,held=manager.held,
+        geometry_qualification=directory.parent.parent/'geometry-capacity.json')
+    assert resumed.initial['stage_id']=='sft'
+    assert resumed.train is manager.train and resumed.held is manager.held
+    assert config['trainer_parameters']=={'learning_rate':3e-6,'checkpoint_layers':True}
+    recipe=json.loads(Path(config['production_recipe']).read_text())
+    other={**recipe['stages'][0],'id':'other-mandatory-stage'}
+    mandatory,_=continuation_config(config,other,checkpoint='same-current-parent',adapter=None,
+        out=tmp_path/'mandatory')
+    # Mandatory execution expands trainer_parameters into BOTH placeholders;
+    # the ordinary seed's stage must not override the selected mandatory stage.
+    mandatory_args=build_parser().parse_args(['--native-graphs',str(paths['old']),
+        '--held-native-graphs',str(paths['held']),'--out',str(tmp_path/'mandatory'),
+        *stage_parameter_args(mandatory['trainer_parameters'])])
+    assert mandatory_args.stage_id=='other-mandatory-stage'
+    assert mandatory['seed_trainer_parameters']['stage_id']=='sft'
 
 
 @pytest.mark.parametrize('field',['rows_per_round','supervised_quantum_updates'])
@@ -143,7 +188,7 @@ def test_supervised_quantum_changes_only_checkpoint_boundary_in_real_emitted_arg
     original={'learning_rate':3e-6,'epochs':3,'checkpoint_every':250,'eval_every':250,
         'held_eval_tokens':8192,'held_eval_graphs':8,'native_linear_precision':'bf16x6',
         'fp8_training':'triton-experts','fp8_recipe':'current','checkpoint_layers':True}
-    config={'trainer_parameters':original.copy(),'seed_trainer_parameters':{},
+    config={'production_stage':'native_full_sft','trainer_parameters':original.copy(),'seed_trainer_parameters':{},
         'seed_command':['python','seed','{trainer_args}'],'rows_per_round':32}
     declaration={'rows_per_round':4,'supervised_quantum_updates':16}
     raw._scheduling_controls(config,declaration,plan,{},pending=True)
