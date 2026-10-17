@@ -220,7 +220,7 @@ def test_invalid_original_tool_argument_is_explicit_pending_and_admission_rechec
         rendering_configuration={'history_reasoning':{'backbone':'lfm2'}},
         binding={'schema':'test-prepared-tokenizer','rendering_configuration':
             {'history_reasoning':{'backbone':'lfm2'}}},validate=lambda base:None)
-    monkeypatch.setattr(builder,'prepare_tokenizer',lambda base:prepared)
+    monkeypatch.setattr(builder,'prepare_tokenizer',lambda base, **kwargs:prepared)
     monkeypatch.setattr(builder.AutoTokenizer,'from_pretrained',lambda *a,**k:object())
     monkeypatch.setattr(builder,'tokenizer_fingerprint',lambda t:'a'*64)
     monkeypatch.setattr(builder,'provision',lambda t:None)
