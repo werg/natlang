@@ -431,6 +431,8 @@ def run(args) -> dict:
     baseline = engine.tokenizer.natlang_history_reasoning["policy"]
     if baseline not in ("keep", "last_turn_only"):
         raise ValueError(f"checkpoint history profile is not a supported comparison baseline: {baseline!r}")
+    if baseline != "last_turn_only":
+        raise ValueError("this live window requires an LFM checkpoint still bound to last_turn_only")
     if args.baseline is not None and args.baseline != baseline:
         raise ValueError(f"requested baseline {args.baseline!r} differs from checkpoint-bound {baseline!r}")
     if args.cases_per_variant != 48:
