@@ -121616,6 +121616,34 @@
           "emitted_rows": 46
         }
       }
+    },
+    {
+      "id": "decision-rich-train-20261017-v4-scaffold",
+      "owner": "dgx",
+      "path": "runs/decision-rich-train-20261017-v4-scaffold",
+      "include": [
+        "cases.jsonl",
+        "union-audit.json",
+        "broad-selection-proof.json",
+        "task-source-manifest.json",
+        "additional-scaffold-cases.jsonl",
+        "additional-scaffold-qualification.json",
+        "qualification-label-continuation.json",
+        "normalized-additional-scaffold-qualification.json"
+      ],
+      "source_class": "immutable-RL-task-source-with-source-bound-live-qualified-curriculum-extension",
+      "split": "Train-only RL task source; preserves all 128 prior tasks byte-for-byte and adds 12 source-qualified tasks with the loader’s canonical qualification value.",
+      "admission": "RL-task-source-only; no native SFT graph rows or student exposure claim.",
+      "training_admission": true,
+      "training_admission_reason": "All 128 prior rows are unchanged; 12 task rows retain the existing accepted 48-row Qwen source qualification, represented as the canonical loader value. This is task-source eligibility only; no model exposure or execution is claimed.",
+      "derived_from": [
+        "decision-rich-train-20261017-v3-scaffold",
+        "qwen-public-return-repair48-native-graphs-20261017-v1"
+      ],
+      "task_source_manifest": "runs/decision-rich-train-20261017-v4-scaffold/task-source-manifest.json",
+      "snapshot_manifest": "training/corpus-manifests/decision-rich-train-20261017-v4-scaffold.json",
+      "license_provenance": "The 128 original task rows retain their source license facts. The 12 authored curriculum tasks are project-generated; Qwen qualification source uses the separately registered teacher-data corpus provenance.",
+      "notes": "The 12 added rows differ from the prior packet only by mapping source field live-48-accepted to the current loader enum qualified. Exact source qualification evidence remains in additional-scaffold-qualification.json and qualification-label-continuation.json. Registration does not claim task execution or model exposure."
     }
   ],
   "coverage_backlog": [

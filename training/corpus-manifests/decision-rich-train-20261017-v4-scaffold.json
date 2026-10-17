@@ -1,0 +1,51 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "decision-rich-train-20261017-v4-scaffold",
+  "owner": "dgx",
+  "path": "runs/decision-rich-train-20261017-v4-scaffold",
+  "files": [
+    {
+      "path": "additional-scaffold-cases.jsonl",
+      "bytes": 14573,
+      "sha256": "e0cb8e5847a70f0ec764558a217db30dcf6773771773d54652b51684775f89a1",
+      "lines": 12
+    },
+    {
+      "path": "additional-scaffold-qualification.json",
+      "bytes": 4860,
+      "sha256": "eff2b42847f29a19f37ee6be6eff71947e43b4cbd2ffe9339d4ba10f7fd2ebec"
+    },
+    {
+      "path": "broad-selection-proof.json",
+      "bytes": 15186,
+      "sha256": "64159bebab0fe0ce493e9a8b401641a5af29085d9a672d0441c9281f35ffa54d"
+    },
+    {
+      "path": "cases.jsonl",
+      "bytes": 14005980,
+      "sha256": "e4e4da077fd32a9a68e0d966bcfea3ff25d6afbc76c1526d3b7611fff9cebac9",
+      "lines": 140
+    },
+    {
+      "path": "normalized-additional-scaffold-qualification.json",
+      "bytes": 5332,
+      "sha256": "0262d8a7257f7dafe90457695542e6edd34a7574ac219ae70ab5fe1c71352539"
+    },
+    {
+      "path": "qualification-label-continuation.json",
+      "bytes": 2627,
+      "sha256": "1c2f7d0a6cc25a049db5057ed7099305654204394e7d26d27d3234e979c3c727"
+    },
+    {
+      "path": "task-source-manifest.json",
+      "bytes": 2159,
+      "sha256": "87cbf122996cf6e3ced80ab0e7d5672c2ae806da9f67533243b70a3a4e90d9e2"
+    },
+    {
+      "path": "union-audit.json",
+      "bytes": 70466,
+      "sha256": "bfc9ac20c42cb48e79d4c8e28b53483ea23fdea0e1d768462cd01b687b4c1321"
+    }
+  ],
+  "bytes": 14121183
+}
