@@ -202,6 +202,58 @@ def _teacher_source_binding(raw: bytes, *, batch: int, source_sha256: str) -> di
     return source
 
 
+def _execution_source(context: dict[str, bytes], entries: list[dict]) -> tuple[int, str]:
+    """Authenticate the existing student-root packet without collapsing repeats."""
+    cases = _jsonl_rows(context['source-cases.jsonl'], 'sealed source cases')
+    teacher = _json(context['teacher-source.json'], 'teacher source')
+    packet_present = 'packet.jsonl' in context or 'preparation.json' in context
+    if packet_present:
+        if not {'packet.jsonl', 'preparation.json'} <= context.keys():
+            raise ValueError('prepared execution needs packet and preparation bytes')
+        preparation = _json(context['preparation.json'], 'rollout preparation')
+        source_path = teacher.get('source_cases')
+        if (not isinstance(source_path, str)
+                or preparation.get('schema') != 'natlang.task-rollout-preparation/1'
+                or preparation.get('root_mode') != 'student'
+                or preparation.get('source_cases') != source_path
+                or preparation.get('source_sha256') != _sha(context['source-cases.jsonl'])
+                or preparation.get('packet_sha256') != _sha(context['packet.jsonl'])):
+            raise ValueError('execution preparation differs from sealed source/packet')
+        package = Path(__file__).resolve().parents[2] / 'training/neuralese'
+        if str(package) not in sys.path:
+            sys.path.insert(0, str(package))
+        from natlang_neuralese.common.task_roots import student_root_row
+        packet = _jsonl_rows(context['packet.jsonl'], 'executed student-root packet')
+        canonical = lambda rows: json.dumps(rows, sort_keys=True, ensure_ascii=False,
+                                            separators=(',', ':'), allow_nan=False)
+        if canonical(packet) != canonical([student_root_row(row) for row in cases]):
+            raise ValueError('executed packet differs from the existing student-root transformation')
+        expected_source = str(Path(source_path).with_name('packet.jsonl'))
+        executed_sha = _sha(context['packet.jsonl'])
+    else:
+        packet, executed_sha = cases, _sha(context['source-cases.jsonl'])
+        expected_source = teacher.get('source_cases')
+    if not packet:
+        raise ValueError('executed source packet is empty')
+    for row in entries:
+        index, count = row.get('index'), row.get('count')
+        if (type(index) is not int or type(count) is not int or index < 0
+                or count < 1 or index + count > len(packet)
+                or (expected_source is not None and row.get('source') != expected_source)):
+            raise ValueError('queue job is outside its exact executed source range')
+    return len(cases), executed_sha
+
+
+def _execution_paths(entries: list[dict], source_root: str, cases_path: str) -> dict:
+    sources = {row.get('source') for row in entries}
+    if sources == {cases_path}:
+        return {}
+    if sources != {f'{source_root}/packet.jsonl'}:
+        raise ValueError('active queue does not bind one sealed executable source')
+    return {'packet.jsonl': f'{source_root}/packet.jsonl',
+            'preparation.json': f'{source_root}/preparation.json'}
+
+
 def _repair_payload_bindings(completion: dict) -> dict[str, dict]:
     repair_keys = {row['key'] for row in (completion.get('completion') or {}).get('repair_required', [])
                    if isinstance(row, dict) and isinstance(row.get('key'), str)}
@@ -246,6 +298,7 @@ def seal_tranche(*, batch: int, number: int, entries: list[dict], context: dict[
         raise ValueError('tranche needs exact source-case bytes')
     _teacher_source_binding(context['teacher-source.json'], batch=batch,
                             source_sha256=_sha(context['source-cases.jsonl']))
+    _, executed_source_sha = _execution_source(context, entries)
     for name in context:
         path = Path(name)
         if path.is_absolute() or '..' in path.parts or not name or '\\' in name:
@@ -293,7 +346,7 @@ def seal_tranche(*, batch: int, number: int, entries: list[dict], context: dict[
                 or manifest.get('completed') != len(result_states)
                 or manifest.get('missing') != missing
                 or 'source-cases.jsonl' not in context
-                or manifest.get('source_sha256') != input_identity['source-cases.jsonl']['sha256']
+                or manifest.get('source_sha256') != executed_source_sha
                 or manifest.get('range') != {'start': entry.get('index'),
                                                'count': (entry.get('finish_event', {}).get('output_accounting', {})
                                                          .get('expected_jobs'))}
@@ -949,8 +1002,12 @@ def discover_guardian_batch(publisher: dict, sandbox,
             raise ValueError('active batch source bytes differ from its immutable started receipt')
 
     entries = _jsonl_rows(queue_raw, 'active teacher queue')
-    if not entries or any(row.get('source') != cases_path for row in entries):
-        raise ValueError('active queue rows do not bind the one sealed source-case file')
+    if not entries:
+        raise ValueError('active teacher queue is empty')
+    execution_paths = _execution_paths(entries, source_root, cases_path)
+    execution_context = {'source-cases.jsonl': cases_raw, 'teacher-source.json': teacher_raw,
+                         **{name: read_file(path) for name, path in execution_paths.items()}}
+    source_case_count, _ = _execution_source(execution_context, entries)
     if (teacher.get('actual_teacher_execution_identity', {}).get('sha256')
             != guardian['teacher_identity'].get('sha256')):
         raise ValueError('teacher source execution identity differs from active guardian config')
@@ -966,7 +1023,7 @@ def discover_guardian_batch(publisher: dict, sandbox,
     worker_pids = phase.get('worker_pids')
     output_root = phase.get('out')
     source_model = (teacher.get('teacher') or {}).get('model')
-    if (type(phase.get('cases')) is not int or phase.get('cases') != len(entries)
+    if (type(phase.get('cases')) is not int or phase.get('cases') != source_case_count
             or not isinstance(source_model, str) or phase.get('teacher') != source_model
             or output_root != source_root
             or not isinstance(worker_pids, list) or len(worker_pids) != worker_count
@@ -980,7 +1037,7 @@ def discover_guardian_batch(publisher: dict, sandbox,
                     or not Path(os.path.normpath(path)).is_relative_to(os.path.normpath(output_root))):
                 raise ValueError('queue worker output path escapes the exact feed output root')
     list_code = ("import pathlib,json,sys; p=pathlib.Path(sys.argv[1]); "
-        "n=lambda x:int(x.name.rsplit('-',1)[1].split('.',1)[0]); "
+        "n=lambda x:int(x.rsplit('-',1)[1].split('.',1)[0]); "
         "q=sorted((x.name for x in p.glob('queue-worker-*.jsonl')),key=n); "
         "j=sorted((x.name for x in p.glob('journal-worker-*.jsonl')),key=n); "
         "print(json.dumps({'queues':q,'journals':j}))")
@@ -1011,7 +1068,7 @@ def discover_guardian_batch(publisher: dict, sandbox,
     return {'sandbox_id': publisher['sandbox_id'], 'batch': batch,
         'queue_path': queue_path, 'journal_path': f'{source_root}/journal.jsonl',
         'context_paths': {'teacher-source.json': teacher_path,
-                          'source-cases.jsonl': cases_path},
+                          'source-cases.jsonl': cases_path, **execution_paths},
         'directory': f"{publisher['directory_root']}/batch-{batch:04d}",
         'role': publisher['role'], 'chunk_size': publisher['chunk_size'],
         'exporter_path': publisher['exporter_path'], 'identity': identity,
@@ -1091,6 +1148,9 @@ def export_guardian_closed_boundary(publisher: dict, active: dict, *, sandbox,
     rewards_path = f'{source_root}/rewards.jsonl'
     repair_queue_path = f'{control}/repairs/batch-{batch:04d}/queue.jsonl'
     queue_rows = _jsonl_rows(queue_raw, 'closed guardian queue')
+    execution_paths = _execution_paths(queue_rows, source_root, source_cases)
+    _execution_source({'source-cases.jsonl': cases_raw, 'teacher-source.json': teacher_raw,
+                       **{name: read_file(path) for name, path in execution_paths.items()}}, queue_rows)
     queue_keys = [row.get('key') for row in queue_rows]
     outcomes = boundary.get('individual_outcomes') or []
     outcome_by_key = {row.get('key'): row for row in outcomes if isinstance(row, dict)}
@@ -1127,7 +1187,7 @@ def export_guardian_closed_boundary(publisher: dict, active: dict, *, sandbox,
     files = {'teacher-source.json': teacher_source, 'source-cases.jsonl': source_cases,
         'queue.jsonl': queue_path, 'journal.jsonl': journal_path, 'score.json': score_path,
         'rewards.jsonl': rewards_path, 'completion.json': reference['path'],
-        'repair-queue.jsonl': repair_queue_path}
+        'repair-queue.jsonl': repair_queue_path, **execution_paths}
     for name, binding in _repair_payload_bindings(boundary).items():
         files[name] = binding['source_path']
     # Keep the no-repair empty snapshot local to this call; read_file remains
@@ -1145,7 +1205,8 @@ def export_guardian_closed_boundary(publisher: dict, active: dict, *, sandbox,
     # Flush those exact completed rows against the guardian's bound final
     # journal before sealing the repair/unstarted control boundary.
     export_finished_tranches(batch=batch, queue_path=queue_path, journal_path=journal_path,
-        context_paths={'teacher-source.json': teacher_source, 'source-cases.jsonl': source_cases},
+        context_paths={'teacher-source.json': teacher_source, 'source-cases.jsonl': source_cases,
+                       **execution_paths},
         directory=batch_directory, read_file=boundary_reader, export_file=export_file,
         chunk_size=publisher['chunk_size'], flush_partial=True,
         prune_after_private_verification=True, queue_snapshot=queue_raw,

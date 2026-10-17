@@ -176,7 +176,7 @@ def test_owner_poller_fails_closed_on_restarted_sandbox_boot(tmp_path, monkeypat
     assert 'boot identity differs' in state['identity_error']
 
 
-def test_guardian_discovery_accepts_exact_anchor_without_started_receipt():
+def test_guardian_discovery_accepts_exact_anchor_without_started_receipt(tmp_path):
     from types import SimpleNamespace
     from scripts.coreweave.teacher_incremental_export import discover_guardian_batch
     import hashlib
@@ -185,11 +185,11 @@ def test_guardian_discovery_accepts_exact_anchor_without_started_receipt():
     teacher_path = '/work/generation/evidence-collections-v2/batch-0021/teacher-source.json'
     cases = b''.join((json.dumps({'program_ir': {'id': f'task-{index}'}})+'\n').encode()
                      for index in range(24))
-    queue_rows = [{'key':f's7-task-{index:03d}-00','index':index,'count':1,'sample':0,'seed':index,
+    queue_rows = [{'key':f's7-task-{index//2:03d}-{index%2:02d}','index':index//2,'count':1,'sample':index%2,'seed':index,
         'source':cases_path,'output':f'/work/generation/evidence-collections-v2/batch-0021/out/{index}/results.jsonl',
         'jobs':f'/work/generation/evidence-collections-v2/batch-0021/out/{index}/jobs',
-        'task_id':f'task-{index}'} for index in range(24)]
-    queue = b''.join((json.dumps(row)+'\n').encode() for row in queue_rows)
+        'task_id':f'task-{index//2}'} for index in range(48)]
+    queue = b''.join((json.dumps(row)+'\n').encode()for row in queue_rows)
     teacher = {'schema':'natlang.sandbox-strong-teacher-collection/1','batch':21,
         'source_cases_sha256':hashlib.sha256(cases).hexdigest(),
         'teacher':{'model':'qwen-test'},
@@ -212,15 +212,17 @@ def test_guardian_discovery_accepts_exact_anchor_without_started_receipt():
             'worker_pids':list(range(100,124)),'out':'/work/generation/evidence-collections-v2/batch-0021',
             'cases':24,'teacher':'qwen-test'}).encode()}
     worker_names=[]
-    for index,row in enumerate(queue_rows):
+    listing=tmp_path/'listing';listing.mkdir()
+    for index in range(24):
         qname=f'queue-worker-{index}.jsonl';jname=f'journal-worker-{index}.jsonl'
-        remote[f'/work/generation/evidence-collections-v2/batch-0021/{qname}']=(json.dumps(row)+'\n').encode()
+        remote[f'/work/generation/evidence-collections-v2/batch-0021/{qname}']=b''.join((json.dumps(row)+'\n').encode()for row in queue_rows[index::24])
         remote[f'/work/generation/evidence-collections-v2/batch-0021/{jname}']=b''
-        worker_names.append((qname,jname))
+        worker_names.append((qname,jname));(listing/qname).touch();(listing/jname).touch()
     def exec_(argv,**kwargs):
         if argv[0]=='cat': out='boot-1\n'
-        elif argv[1]=='-c' and 'glob' in argv[2]: out=json.dumps({'queues':[x[0] for x in worker_names],
-            'journals':[x[1] for x in worker_names]})
+        elif argv[1]=='-c' and 'glob' in argv[2]:
+            import subprocess,sys
+            out=subprocess.check_output([sys.executable,'-c',argv[2],str(listing)],text=True)
         else: out=json.dumps({'valid':True,'identity':{'pid':123,'start_ticks':'456','boot_id':'boot-1',
             'argv':['python','/work/control/feed.py']}})
         return SimpleNamespace(result=lambda **_:SimpleNamespace(returncode=0,stdout=out,stderr=''))
@@ -385,6 +387,8 @@ def test_guardian_closed_boundary_flushes_partial_and_seals_exact_outcomes(tmp_p
     import scripts.coreweave.teacher_incremental_export as module
     from scripts.coreweave.teacher_generation_guardian import assess
     entries, queue, journal, context, _, finish = _fixture()
+    for row in entries:row['source']='/generation/evidence-collections-v2/batch-0019/source-cases.jsonl'
+    queue=b''.join(json.dumps(row).encode()+b'\n'for row in entries);context['queue.jsonl']=queue
     teacher_value=json.loads(context['teacher-source.json']);teacher_value['actual_task_runtime']='/work/runtime'
     context['teacher-source.json']=json.dumps(teacher_value).encode()
     score={'schema':'natlang.s7-task-rollout-score/1','rollouts':2,'outcome_counts':{'task_success':2}}
@@ -739,3 +743,64 @@ def test_final_boundary_preserves_actual_repair_error_without_complete_batch_cla
         directory=tmp_path/'repair-boundary')
     assert boundary['boundary']['batch_can_advance'] is False
     assert boundary['boundary']['training_admission'] is False
+
+
+def _prepared_packet_fixture():
+    from natlang_neuralese.common.task_roots import student_root_row
+    entries, queue, journal, context, outputs, _ = _fixture()
+    cases = [{'id': name, 'split': 'train', 'n': 1, 'curriculum': {
+        'trajectory_contract': {'authored_root_eval': 'reference()', 'authored_root_sha256': 'a'*64}}}
+        for name in ('task-a', 'task-b')]
+    context['source-cases.jsonl'] = b''.join(json.dumps(row).encode()+b'\n' for row in cases)
+    context['packet.jsonl'] = b''.join(json.dumps(student_root_row(row)).encode()+b'\n' for row in cases)
+    teacher=json.loads(context['teacher-source.json']);teacher.update(source_cases='/batch/source-cases.jsonl',
+        source_cases_sha256=hashlib.sha256(context['source-cases.jsonl']).hexdigest())
+    context['teacher-source.json']=json.dumps(teacher).encode()
+    context['preparation.json']=json.dumps({'schema':'natlang.task-rollout-preparation/1',
+        'root_mode':'student','source_cases':'/batch/source-cases.jsonl',
+        'source_sha256':hashlib.sha256(context['source-cases.jsonl']).hexdigest(),
+        'packet_sha256':hashlib.sha256(context['packet.jsonl']).hexdigest()}).encode()
+    for row in entries:
+        row['source']='/batch/packet.jsonl'
+        payload,raw=outputs[row['key']];manifest=json.loads(raw)
+        manifest.update(source=row['source'],source_sha256=hashlib.sha256(context['packet.jsonl']).hexdigest())
+        outputs[row['key']]=payload,json.dumps(manifest).encode()
+    queue=b''.join(json.dumps(row).encode()+b'\n'for row in entries);context['queue.jsonl']=queue
+    return entries,queue,journal,context,outputs
+
+
+def test_prepared_student_packet_full_tranche_retains_both_sources(tmp_path):
+    entries,queue,journal,context,outputs=_prepared_packet_fixture()
+    result=seal_tranche(batch=19,number=0,entries=completed_entries(queue,journal),
+        context=context,outputs=outputs,directory=tmp_path)
+    assert result['context']['packet.jsonl']['sha256']==hashlib.sha256(context['packet.jsonl']).hexdigest()
+    assert result['context']['source-cases.jsonl']['sha256']==hashlib.sha256(context['source-cases.jsonl']).hexdigest()
+    assert result['context']['packet.jsonl']!=result['context']['source-cases.jsonl']
+    assert len(result['outputs'])==2
+
+
+@pytest.mark.parametrize('tamper',['packet','numeric_type','source_sha','root_mode','missing_preparation','range'])
+def test_prepared_packet_rejects_changed_execution_contract(tmp_path,tamper):
+    entries,queue,journal,context,outputs=_prepared_packet_fixture()
+    if tamper in ('packet','numeric_type'):
+        packet=[json.loads(row)for row in context['packet.jsonl'].splitlines()]
+        packet[0]['n']=2 if tamper=='packet'else 1.0
+        context['packet.jsonl']=b''.join(json.dumps(row).encode()+b'\n'for row in packet)
+        preparation=json.loads(context['preparation.json']);preparation['packet_sha256']=hashlib.sha256(context['packet.jsonl']).hexdigest()
+        context['preparation.json']=json.dumps(preparation).encode()
+    elif tamper in ('source_sha','root_mode'):
+        preparation=json.loads(context['preparation.json']);preparation['source_sha256'if tamper=='source_sha'else'root_mode']='0'*64 if tamper=='source_sha'else'authored'
+        context['preparation.json']=json.dumps(preparation).encode()
+    elif tamper=='missing_preparation':del context['preparation.json']
+    else:entries[0]['index']=2
+    with pytest.raises(ValueError):
+        seal_tranche(batch=19,number=0,entries=entries,context=context,outputs=outputs,directory=tmp_path)
+
+
+def test_prepared_packet_manifest_must_bind_executed_not_original_bytes(tmp_path):
+    entries,queue,journal,context,outputs=_prepared_packet_fixture()
+    payload,raw=outputs[entries[0]['key']];manifest=json.loads(raw)
+    manifest['source_sha256']=hashlib.sha256(context['source-cases.jsonl']).hexdigest()
+    outputs[entries[0]['key']]=payload,json.dumps(manifest).encode()
+    with pytest.raises(ValueError,match='completed source range'):
+        seal_tranche(batch=19,number=0,entries=completed_entries(queue,journal),context=context,outputs=outputs,directory=tmp_path)
