@@ -123497,6 +123497,194 @@
         "qwen-verified-positive-native-graphs-20261017-recovery7853-tranche0002",
         "qwen-verified-positive-native-graphs-20261017-recovery7853-tranche0003"
       ]
+    },
+    {
+      "id": "qwen-verified-positive-native-graphs-20261017-recovery7853-tranche0005",
+      "owner": "dgx",
+      "path": "runs/qwen-verified-positive-native-graphs-20261017-recovery7853-tranche0005",
+      "include": [
+        "lfm25/receipt.json",
+        "lfm25/train/native-graphs.jsonl.zst",
+        "lfm25/test/native-graphs.jsonl.zst",
+        "mellum21/receipt.json",
+        "mellum21/train/native-graphs.jsonl.zst",
+        "mellum21/test/native-graphs.jsonl.zst",
+        "validation-proof.json",
+        "decision-hold-closure-proof.json"
+      ],
+      "source_class": "verified-strong-teacher-positive-native-whole-trajectory-ordinary-SFT-graphs",
+      "training_admission": true,
+      "training_admission_reason": "Both complete model views passed exact private-export recovery, original full-trajectory source/oracle/current protection, decision-hold, source-bound graph identity, and complete action accounting. Registration establishes no student exposure.",
+      "admission": "7 usable teacher trajectories from 8 exact-success original trajectories; 1 whole trajectory remains an explicitly bound assigned materializer repair. All 539 original actions are conserved as eligible, ordinary omissions, or exact rejected-row omissions; no rejected-row action is admitted.",
+      "source_binding": {
+        "raw_source": {
+          "bytes": 35662043,
+          "path": "/mnt/external/natlang-development-data/teacher-incremental-7853-standard-20261017/admission/tranche-0005/native-trajectories.jsonl",
+          "sha256": "5ca586b9de333f319819240b271e827fbaeaf424c92b9f9e38832dcb7524d81f"
+        },
+        "transfer_receipt": {
+          "bytes": 23845,
+          "path": "/mnt/external/natlang-development-data/teacher-incremental-7853-standard-20261017/admission/tranche-0005/transfer-receipt.json",
+          "sha256": "cc9409f3b1097a3cc591ec2c8768fc0245fd0411ed304c1d138f8a8974bde773"
+        },
+        "batch_source_bindings": {
+          "bytes": 1540,
+          "path": "/mnt/external/natlang-development-data/teacher-incremental-7853-standard-20261017/admission/tranche-0005/batch-source-bindings.json",
+          "sha256": "fdcd9a40d3ae2197941cbf4e98bee72b3243ac6f1f56fdcd6c46ce42ce56838c"
+        },
+        "canonical_source_verification": {
+          "bytes": 2480,
+          "path": "/mnt/external/natlang-development-data/teacher-incremental-7853-standard-20261017/admission/tranche-0005/canonical-source-verification.json",
+          "sha256": "29b7fddd3d96978f65c479c339d1c9576e8e8de45890c8561c9714720fedec11"
+        },
+        "current_protection": {
+          "bytes": 364774,
+          "path": "/home/werg/data/dgxops/acquired-connected-source-protection-20261016-v2/protection-manifest.json",
+          "sha256": "1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704"
+        },
+        "decision_hold_closure": {
+          "bytes": 1592,
+          "path": "/home/werg/natlang/runs/qwen-verified-positive-native-graphs-20261017-recovery7853-tranche0005/decision-hold-closure-proof.json",
+          "sha256": "b6e717dd75c43d743f5e1968602e0e5255543d1b5e6b47e9e5afbb63c14357d3"
+        },
+        "validation_proof": {
+          "path": "/home/werg/natlang/runs/qwen-verified-positive-native-graphs-20261017-recovery7853-tranche0005/validation-proof.json",
+          "sha256": "7b7a5275d39dde17a658a4ee1113af4cf5f74a201167f9739634ab7229f6c691"
+        },
+        "raw_task_source": {
+          "path": "/mnt/external/natlang-development-data/teacher-incremental-7853-standard-20261017/admission-recovery/tranche-0005/restored/context/source-cases.jsonl",
+          "sha256": "e4e4da077fd32a9a68e0d966bcfea3ff25d6afbc76c1526d3b7611fff9cebac9"
+        },
+        "executed_packet": {
+          "path": "/mnt/external/natlang-development-data/teacher-incremental-7853-standard-20261017/admission-recovery/tranche-0005/restored/context/packet.jsonl",
+          "sha256": "e7bdf3398e1c74961a3ce104e5a9ef0d2353e330c84807d74c21f79e99eece61"
+        },
+        "actor": {
+          "bytes": 8930,
+          "path": "/work/datajobs/teacher-guarded-recovery-20261017/generation-epoch/teacher-serving-actor.json",
+          "sha256": "ef1e653cff3d05d9076051885346ea08e6d550c610cf9153fe48eefb2aa4be28"
+        },
+        "execution_identity": {
+          "bytes": 587,
+          "path": "/work/datajobs/teacher-guarded-recovery-20261017/generation-epoch/teacher-execution-identity.json",
+          "sha256": "15f338095d146a8057894e0a8df46376111333250cf63c74f0bc3c7f71326729"
+        },
+        "models": {
+          "lfm25": {
+            "action_omissions": 127,
+            "decision_admission": {
+              "output_sha256": "00e2bdb83d58eee46b6494eb319d5edf7dd1f5b3e4d74ed2f08ec513e047af61",
+              "path": "/mnt/external/natlang-development-data/teacher-incremental-7853-standard-20261017/admission/tranche-0005/decision-admission-cache/aaf37117ee9b1c05325956a6953c5958a4575ee6148c28974d89f8b6275292da/receipt.json",
+              "sha256": "9e31302e3a49e4de4fbf5239592e4e4f2b93d05b5074aaa6628675044b7d8026",
+              "summary": {
+                "accepted_rows": 7,
+                "authored_actions_held": 0,
+                "eligible_decisions": 412,
+                "output": "decisions.jsonl",
+                "rejected_rows": 1,
+                "replayed_context_decisions": 0,
+                "training_decisions": 442
+              }
+            },
+            "eligible_turns": 412,
+            "exact_dedup_omissions": 5,
+            "expanded_tokenizer_fingerprint": "be949ec48f44e17b2b17e1131aeb1dab4262175ba20f9783ecd8e59c27a58105",
+            "outputs": {
+              "test": {
+                "bytes": 13,
+                "max_row_tokens": 0,
+                "path": "/home/werg/natlang/runs/qwen-verified-positive-native-graphs-20261017-recovery7853-tranche0005/lfm25/test/native-graphs.jsonl.zst",
+                "rows": 0,
+                "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c",
+                "tokens": 0
+              },
+              "train": {
+                "bytes": 282945,
+                "max_row_tokens": 9465,
+                "path": "/home/werg/natlang/runs/qwen-verified-positive-native-graphs-20261017-recovery7853-tranche0005/lfm25/train/native-graphs.jsonl.zst",
+                "rows": 407,
+                "sha256": "ef4f2f20cfa2ba5c36a72f121fc80a51e99edf8b24dbcc1e76765c3ddc154ac1",
+                "tokens": 2906302
+              }
+            },
+            "receipt": {
+              "bytes": 69909,
+              "path": "/home/werg/natlang/runs/qwen-verified-positive-native-graphs-20261017-recovery7853-tranche0005/lfm25/receipt.json",
+              "sha256": "c07ba3f52524e3c4b1818a63b740c3cdd42dd27077aaa3d14889183be8aa1b28"
+            },
+            "source_rows": 8
+          },
+          "mellum21": {
+            "action_omissions": 127,
+            "decision_admission": {
+              "output_sha256": "00e2bdb83d58eee46b6494eb319d5edf7dd1f5b3e4d74ed2f08ec513e047af61",
+              "path": "/mnt/external/natlang-development-data/teacher-incremental-7853-standard-20261017/admission/tranche-0005/decision-admission-cache/aaf37117ee9b1c05325956a6953c5958a4575ee6148c28974d89f8b6275292da/receipt.json",
+              "sha256": "9e31302e3a49e4de4fbf5239592e4e4f2b93d05b5074aaa6628675044b7d8026",
+              "summary": {
+                "accepted_rows": 7,
+                "authored_actions_held": 0,
+                "eligible_decisions": 412,
+                "output": "decisions.jsonl",
+                "rejected_rows": 1,
+                "replayed_context_decisions": 0,
+                "training_decisions": 442
+              }
+            },
+            "eligible_turns": 412,
+            "exact_dedup_omissions": 5,
+            "expanded_tokenizer_fingerprint": "fbf22d8773d09be802cb9977895067db36cdfba747fcb24b02ddbf1312d3778f",
+            "outputs": {
+              "test": {
+                "bytes": 13,
+                "max_row_tokens": 0,
+                "path": "/home/werg/natlang/runs/qwen-verified-positive-native-graphs-20261017-recovery7853-tranche0005/mellum21/test/native-graphs.jsonl.zst",
+                "rows": 0,
+                "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c",
+                "tokens": 0
+              },
+              "train": {
+                "bytes": 276808,
+                "max_row_tokens": 10661,
+                "path": "/home/werg/natlang/runs/qwen-verified-positive-native-graphs-20261017-recovery7853-tranche0005/mellum21/train/native-graphs.jsonl.zst",
+                "rows": 407,
+                "sha256": "5833e8c566942ab02674971c15544bf1c7087404384851a59ad90921535b3b22",
+                "tokens": 2948030
+              }
+            },
+            "receipt": {
+              "bytes": 70026,
+              "path": "/home/werg/natlang/runs/qwen-verified-positive-native-graphs-20261017-recovery7853-tranche0005/mellum21/receipt.json",
+              "sha256": "57a9fe4ffdfca4dc374a82367018f5d2e0050155b5a59cb1ee1a9e13b4cbddd1"
+            },
+            "source_rows": 8
+          }
+        },
+        "source_row_omissions": [
+          {
+            "actions": 97,
+            "assigned_repair": true,
+            "reason": "canonical materializer cannot link one observed outcome to its decision",
+            "source_row_id": "teacher-program:78af8412b0bc024c8f08",
+            "source_row_sha256": "33cc0928c61f445672d56d849f76081e888a4cea57316e9e2870679e3d59175f",
+            "training_admission": false
+          }
+        ],
+        "source_row_rejection_proof": {
+          "bytes": 2061,
+          "path": "/home/werg/data/dgxops/teacher7853-tranche0005-materializer-rejection-20261017/proof.json",
+          "sha256": "7c3b74ccda8e5f2990d1e0ff9ac47fa6f2453650daf3dca695c34f33dd7430ce"
+        }
+      },
+      "license_provenance": "Project-collected trajectories from pinned RadixArk/Qwen3.8-Flash-Next-NVFP4 stronger self-hosted base teacher; source model license provenance retained as fact.",
+      "split": "Train-only; empty test views. Current connected held/quality/pending source and decision protections remain excluded.",
+      "note": "New recovery epoch, not reconstructed historical generation. Ordinary one-node text graphs do not claim authentic shared-state communication edges; base-teacher samples are not student on-policy data. Actual exposure is zero until recorded by training.",
+      "derived_from": [
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-tranche0000",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-tranche0001",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-tranche0002",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-tranche0003",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-tranche0004"
+      ]
     }
   ],
   "coverage_backlog": [
