@@ -41,6 +41,30 @@ LINEAGE_METADATA_COMPOSITION = (
     'ca5acf17bbcdfd0eaeff2712e9af07a990960d8235c6ab5bb89ae2625d04321e',
     '14e903b5baf160a35f7d33b75eafa83bc5a79a466aef4737a956c8d244abf9e8',
 )
+POLICY_GATE_SFT_POLICY = 'native-frozen-policy-gate-ordinary-sft-v1'
+POLICY_GATE_SFT_COMPOSITION = {
+    'eval/native_memory.py': ('69885bd62fdfd4d2bdc73e5d4ac2f3c41aa4a006ecc4a72bd8125b1b2735d392', '05b23b60f54795f48261515022ee4fc6b01eedd5e87bbfcdfec98f3510e7dbeb'),
+    'rl/native_replay.py': ('976e066cbe4103fd67a75bf97547a9a2b5f12398223a28e9686330e27522b0e2', '99340bac53db80afdc8fcc3d8f2d9beba73c42ad0a2813857ef80cd2abbd78dd'),
+    'rl/native_stage.py': ('6dfa075691aae40bb97a7f5ed495c7ea1f29b257f05072fa1e217224840c4ac8', '9e8559a9e96c4ed94194a6b3bf0c9803b308d475380e0485f9b9c6e2c3997f8f'),
+    'rl/production.py': ('207e44e05ccd970819695fddec66851fea8ee7c7d46acb11f7f5f3051c18e7f4', '6a02e01c1b0d623001ed19c34baed867ec456b74a89dcdf4f0e952cca99288bc'),
+    'train/native_state_sft.py': ('14e903b5baf160a35f7d33b75eafa83bc5a79a466aef4737a956c8d244abf9e8', 'c2b1688724eed94117f2ea1019bd7354579f5aeaeec0390719dac051e0fc461f'),
+}
+
+
+def _policy_gate_sft_contract(review):
+    if review['optimizer_policy'] != POLICY_GATE_SFT_POLICY:
+        return
+    if (review.get('identity', {}).get('objective') is not None
+            or review.get('fresh_policy_capacity_required') is not True):
+        raise ValueError('policy-gate continuation is ordinary SFT only; actual policy capacity remains required')
+    changes = {name for name in review['old_code'].keys() | review['new_code'].keys()
+               if review['old_code'].get(name) != review['new_code'].get(name)}
+    if (changes != set(POLICY_GATE_SFT_COMPOSITION)
+            or any((review['old_code'].get(name), review['new_code'].get(name)) != pair
+                   for name, pair in POLICY_GATE_SFT_COMPOSITION.items())):
+        raise ValueError('ordinary SFT continuation requires the exact five-file frozen policy-gate composition')
+
+
 ATTENTION_INDEX_POLICY = 'native-graph-attention-index-reuse-v1'
 ATTENTION_INDEX_REVIEW_SHA256 = 'e100c0814676e340b6c2bf3341dee101d02958a249757304ca3fb2df16a0b7a2'
 ATTENTION_INDEX_COMPOSITIONS = {
@@ -59,6 +83,7 @@ def allowed_changes(policy):
     return {POLICY: ALLOWED_CHANGES, METADATA_POLICY: METADATA_CHANGES,
             LOADER_IO_POLICY: LOADER_IO_CHANGES,
             LINEAGE_METADATA_POLICY: {LINEAGE_METADATA_FILE},
+            POLICY_GATE_SFT_POLICY: set(POLICY_GATE_SFT_COMPOSITION),
             ATTENTION_INDEX_POLICY: {'model/shared_state.py'}}.get(policy, set())
 
 
@@ -148,7 +173,7 @@ def _memory_allowance(review):
         if (parameter.get('dtype') != 'torch.float32' or not parameter.get('shape')
                 or any(type(n) is not int or n < 1 for n in parameter['shape'])):
             raise ValueError('capacity continuation requires the unchanged FP32 ordinary layout')
-    if review['optimizer_policy'] in {METADATA_POLICY, LOADER_IO_POLICY, ATTENTION_INDEX_POLICY, LINEAGE_METADATA_POLICY}:
+    if review['optimizer_policy'] in {METADATA_POLICY, LOADER_IO_POLICY, ATTENTION_INDEX_POLICY, LINEAGE_METADATA_POLICY, POLICY_GATE_SFT_POLICY}:
         extra = review.get('metadata_extra_bytes')
         if (review.get('optimizer_state_unchanged') is not True
                 or type(extra) is not int or extra < (64 << 20)):
@@ -201,6 +226,7 @@ def _proof_cases(reference, *, identity, code_sha, parent, seen=()):
             raise ValueError('inherited capacity limits differ from actual source cases')
         _attention_index_contract(review, value['limits'])
         _lineage_metadata_contract(review)
+        _policy_gate_sft_contract(review)
         extra = value.get('extra_bytes_per_memory_domain')
         if type(extra) is not int or extra != _memory_allowance(review):
             raise ValueError('inherited capacity lost its additional memory allowance')
@@ -234,7 +260,7 @@ def continue_capacity(review_binding, *, old_package, new_package, out):
     if (review.get('schema') != 'natlang.native-capacity-continuation-review/1'
             or review.get('approved') is not True
             or review.get('parameter_layout_unchanged') is not True
-            or review.get('optimizer_policy') not in {POLICY, METADATA_POLICY, LOADER_IO_POLICY, ATTENTION_INDEX_POLICY, LINEAGE_METADATA_POLICY}):
+            or review.get('optimizer_policy') not in {POLICY, METADATA_POLICY, LOADER_IO_POLICY, ATTENTION_INDEX_POLICY, LINEAGE_METADATA_POLICY, POLICY_GATE_SFT_POLICY}):
         raise ValueError('capacity continuation requires an approved exact optimizer review')
     old, new = code_inventory(old_package), code_inventory(new_package)
     if old != review.get('old_code') or new != review.get('new_code'):
@@ -258,6 +284,7 @@ def continue_capacity(review_binding, *, old_package, new_package, out):
         raise ValueError('capacity limits differ from actual source cases')
     _attention_index_contract(review, limits)
     _lineage_metadata_contract(review)
+    _policy_gate_sft_contract(review)
     # Adam first/second moments, retained old buffers, telemetry snapshots and
     # per-parameter update intermediates. No backbone-sized copy is authorized.
     extra = _memory_allowance(review)
@@ -307,6 +334,7 @@ def continue_capacity(review_binding, *, old_package, new_package, out):
             ('optimizer/telemetry-only' if policy == POLICY else
              'exact frozen attention-index-only' if policy == ATTENTION_INDEX_POLICY else
              'exact frozen saved-recipe-metadata-only' if policy == LINEAGE_METADATA_POLICY else
+             'exact frozen policy-gate ordinary-SFT-only (fresh policy measurement required)' if policy == POLICY_GATE_SFT_POLICY else
              'CPU scheduling/pending-obligation-only') +
             ' continuation; new parent not measured'})
     return certificate

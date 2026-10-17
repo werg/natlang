@@ -261,3 +261,61 @@ def test_loader_io_requires_its_separate_explicit_review_policy(tmp_path,policy)
             'old':review['old_code']['train/native_pending_sources.py'],
             'new':review['new_code']['train/native_pending_sources.py']}}
         assert invoke(again,new,later,review).is_file()
+
+
+@pytest.mark.parametrize('mutation', [None, 'old', 'new', 'extra', 'missing', 'objective', 'policy-gate'])
+def test_frozen_policy_gate_continuation_is_exact_and_ordinary_sft_only(mutation):
+    pins = mechanism.POLICY_GATE_SFT_COMPOSITION
+    review = {'optimizer_policy': mechanism.POLICY_GATE_SFT_POLICY,
+        'old_code': {name: pair[0] for name, pair in pins.items()},
+        'new_code': {name: pair[1] for name, pair in pins.items()},
+        'identity': {}, 'fresh_policy_capacity_required': True,
+        'optimizer_state_unchanged': True, 'metadata_extra_bytes': 64 << 20,
+        'ordinary_parameters': [{'name': 'learned rows', 'shape': [4, 2304], 'dtype': 'torch.float32'}]}
+    name = 'rl/native_stage.py'
+    if mutation == 'old': review['old_code'][name] = 'a'*64
+    elif mutation == 'new': review['new_code'][name] = 'b'*64
+    elif mutation == 'extra': review['new_code']['model/forward.py'] = 'c'*64
+    elif mutation == 'missing': review['new_code'][name] = review['old_code'][name]
+    elif mutation == 'objective': review['identity']['objective'] = {'schema': 'native-policy'}
+    elif mutation == 'policy-gate': review['fresh_policy_capacity_required'] = False
+    if mutation:
+        with pytest.raises(ValueError): mechanism._policy_gate_sft_contract(review)
+    else:
+        mechanism._policy_gate_sft_contract(review)
+        assert mechanism.allowed_changes(mechanism.POLICY_GATE_SFT_POLICY) == set(pins)
+        assert mechanism._memory_allowance(review) == 64 << 20
+
+
+def test_policy_gate_sft_contract_is_rechecked_transitively(tmp_path, monkeypatch):
+    old, new, review, proof = fixture(tmp_path)
+    pins = mechanism.POLICY_GATE_SFT_COMPOSITION
+    old_code = {name: pair[0] for name, pair in pins.items()}
+    new_code = {name: pair[1] for name, pair in pins.items()}
+    monkeypatch.setattr(mechanism, 'code_inventory', lambda root: old_code if root == old else new_code)
+    saved = json.loads(proof.read_text()); saved['runtime_code_sha256'] = digest(old_code)
+    proof.write_text(json.dumps(saved))
+    cert_path = Path(review['source_certificate']['path'])
+    certificate = json.loads(cert_path.read_text())
+    certificate.update(runtime_code_sha256=digest(old_code), evidence=binding(proof))
+    cert_path.write_text(json.dumps(certificate))
+    review.update(old_code=old_code, new_code=new_code,
+        changes={name: {'old': pair[0], 'new': pair[1]} for name, pair in pins.items()},
+        optimizer_policy=mechanism.POLICY_GATE_SFT_POLICY,
+        source_certificate=binding(cert_path), fresh_policy_capacity_required=True,
+        optimizer_state_unchanged=True, metadata_extra_bytes=64 << 20)
+    output = invoke(tmp_path, old, new, review)
+    cert = json.loads(output.read_text())
+    evidence = json.loads(Path(cert['evidence']['path']).read_text())
+    assert evidence['measured_parent_checkpoint_sha256'] == 'a'*64
+    assert evidence['new_parent_measured'] is False
+    assert 'fresh policy measurement required' in cert['scope']
+    assert mechanism._proof_cases(cert['evidence'], identity=review['identity'],
+        code_sha=digest(new_code), parent='b'*64)
+    review['fresh_policy_capacity_required'] = False
+    review_path = Path(evidence['review']['path']); review_path.write_text(json.dumps(review))
+    evidence['review'] = binding(review_path)
+    evidence_path = Path(cert['evidence']['path']); evidence_path.write_text(json.dumps(evidence))
+    with pytest.raises(ValueError, match='ordinary SFT only'):
+        mechanism._proof_cases(binding(evidence_path), identity=review['identity'],
+            code_sha=digest(new_code), parent='b'*64)
