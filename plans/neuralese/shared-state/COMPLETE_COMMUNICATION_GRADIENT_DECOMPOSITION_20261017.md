@@ -61,3 +61,43 @@ FP8 qualification. The retained-gradient and comparison-pair byte counts are
 not peak memory measurements: cached partial accumulations, autograd return
 tuples, metric temporaries and actual destination activations also consume
 memory and must be measured before a full-size cloud proof.
+
+Actual trained LFM diagnosis (2026-10-17)
+---------------------------------------
+
+The full step9478 parent is
+`f07a57e3d98224360b8a509f8f410be3de2fd37830e176c989164d2e83ebcb89`
+(2,523,898,927 bytes), restored by independent private GET. Its complete
+communication check compares 150 declared trainable parameters plus connected
+input embeddings. Under the recorded production arithmetic, 100 of these 151
+comparisons fail the existing strict absolute/relative elementwise gates; all
+are finite. Forward difference is 1.43e-6 and consumer CE difference 1.14e-5.
+Selecting IEEE linear arithmetic alone does not resolve this (101 failures).
+These are failed readiness checks, not evidence that actual SGD should stop.
+
+Intermediate tracing localizes the first forward discrepancy in layer zero:
+
+- Adapter output, layer input and elementwise squared norm input are bitwise
+  equal between flat and cached execution.
+- The FP32 `mean(-1)` reduction first differs by 1.164e-10 when invocation
+  shapes differ. Reciprocal square root then differs by 3.815e-6, and the norm
+  output by 4.768e-7. This occurs with both recorded and IEEE GEMM arithmetic.
+- Calling that same norm one token row at a time gives bitwise matching flat
+  and cached norm outputs. This diagnostic isolates reduction scheduling;
+  it is not a proposed serial implementation for production.
+
+A subsequent local diagnostic reuses the existing shared Triton RMSNorm on
+all 45 HF LFM norms, asserting FP32 inputs/weights to preserve their dtype
+semantics. The complete check still fails 96/151 comparisons, with forward
+1.07e-6 and CE 1.24e-5 differences. Therefore making the first reduction
+independent of row count alone is not a complete repair. No replacement norm,
+changed threshold, optimizer update, checkpoint rewrite or production
+qualification was adopted from these diagnostics. Complete derivative and
+actual optimizer-update checks remain necessary; do not describe the failed
+checks as a proven model limitation or an established task-regression cause.
+
+Durable owner-host receipts in `/home/werg/data/dgxops/` are
+`lfm9478-complete-gradient-diagnostic-root-v2-20261017.json`,
+`lfm9478-norm-reduction-divergence-root-20261017.json`, and
+`lfm9478-existing-fusednorm-gradient-diagnostic-root-20261017.json`.
+The restored parent remains assigned to this unresolved investigation.
