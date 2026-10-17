@@ -62,8 +62,12 @@ ORDINARY_WRITER_COMPOSITION = {
 
 
 WHOLE_HEAD_SOURCE_POLICY = 'native-whole-head-source-profile-ordinary-sft-v1'
-WHOLE_HEAD_SOURCE_PROOF_SHA256 = '7ac5641ff170ed75b67d4416d57e29631a3d9889c89d4a32baa2ba380080a9fc'
-WHOLE_HEAD_SOURCE_INVENTORIES = ('42cbc4cce6df3a36d244767e3aae023c872daf0ee437ff6c05390e4670d31210', 'd885adc940a356d3f8cd012b0aa35a0a8357ead83a598d73626cfe5b5a979fe0')
+WHOLE_HEAD_SOURCE_PROOF_SHA256 = 'b7e28c394e26a6426c015e056b2c345c83616a31a382b078ab00e78d550e5387'
+WHOLE_HEAD_SOURCE_REVIEWED = {
+    'd885adc940a356d3f8cd012b0aa35a0a8357ead83a598d73626cfe5b5a979fe0': '7ac5641ff170ed75b67d4416d57e29631a3d9889c89d4a32baa2ba380080a9fc',
+    '0ec7a87108f19f4b0fc44898b3cbb2031547f33b60d5ba0389bae07b8e720236': WHOLE_HEAD_SOURCE_PROOF_SHA256,
+}
+WHOLE_HEAD_SOURCE_INVENTORIES = ('42cbc4cce6df3a36d244767e3aae023c872daf0ee437ff6c05390e4670d31210', '0ec7a87108f19f4b0fc44898b3cbb2031547f33b60d5ba0389bae07b8e720236')
 WHOLE_HEAD_SOURCE_CHANGES = frozenset(['data/native_source_tree.py', 'data/native_sources.py', 'eval/native_memory.py', 'eval/task_cadence.py', 'maple/model.py', 'model/native_bundle.py', 'model/native_composite.py', 'model/native_model.py', 'model/native_parameter_precision.py', 'model/native_precision.py', 'model/native_shared_checkpoint.py', 'model/shared_state.py', 'rl/native_bootstrap_metadata.py', 'rl/native_raw_handoff.py', 'rl/native_raw_policy.py', 'rl/native_raw_rounds.py', 'rl/native_refresh.py', 'rl/native_replay.py', 'rl/native_rounds.py', 'rl/native_runtime_handoff.py', 'rl/native_stage.py', 'rl/native_supervised.py', 'rl/production.py', 'rl/task_source.py', 'serve/engine.py', 'serve/http.py', 'serve/native_protocol.py', 'serve/native_recorded_objective.py', 'train/fp8_backend.py', 'train/native_operation_report.py', 'train/native_plan_recovery.py', 'train/native_readiness.py', 'train/native_resident_geometry_refresh.py', 'train/native_semantic.py', 'train/native_semantic_stage.py', 'train/native_source_preparation.py', 'train/native_state_sft.py', 'train/recipe.py'])
 
 
@@ -78,10 +82,11 @@ def _whole_head_source_contract(review):
             or config.get('native_attention_precision', 'ieee') != 'ieee'
             or config.get('native_ordinary_precision') is not None):
         raise ValueError('whole HEAD continuation preserves ordinary source-v1/IEEE/storage; new profiles and policy require actual capacity')
-    if tuple(digest(review[key]) for key in ('old_code','new_code')) != WHOLE_HEAD_SOURCE_INVENTORIES:
+    old_digest,new_digest = (digest(review[key]) for key in ('old_code','new_code'))
+    if old_digest != WHOLE_HEAD_SOURCE_INVENTORIES[0] or new_digest not in WHOLE_HEAD_SOURCE_REVIEWED:
         raise ValueError('whole HEAD continuation differs from the exact independently reviewed full inventories')
     reference = review.get('whole_head_arithmetic_proof') or {}
-    if reference.get('sha256') != WHOLE_HEAD_SOURCE_PROOF_SHA256:
+    if reference.get('sha256') != WHOLE_HEAD_SOURCE_REVIEWED[new_digest]:
         raise ValueError('whole HEAD continuation lacks the exact arithmetic and source-parser witness')
     proof = json.loads(bound(reference).read_text())
     if (proof.get('schema') != 'natlang.whole-main-source-arithmetic-proof/1'

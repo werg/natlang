@@ -5,7 +5,7 @@ storage profiles, actual full optimizer/RNG/source exposure and measured capacit
 An ordinary metadata continuation must not become a new numerical measurement,
 a norm-storage upgrade, a policy-objective capacity proof, or task qualification.
 
-1. Bind the complete old 4ea and current 293e2 runtime inventories. Reject every
+1. Bind the complete old 4ea and current f8fe2 runtime inventories. Reject every
    unreviewed byte change, including a module outside the changed set.
 2. Bind the exact source-v1/IEEE AST/parser witness and its historical actual
    CPU/CUDA output/adjoint references. Missing legacy execution fields retain
@@ -27,7 +27,7 @@ profile checks, recursive verification and durable output. It adds no trainer,
 model math, allocator, policy scheduler or model-facing text.
 
 The pinned witness is `WHOLE_HEAD_SOURCE_PROFILE_PROOF_20261017.json`, SHA256
-7ac5641ff170ed75b67d4416d57e29631a3d9889c89d4a32baa2ba380080a9fc.
+b7e28c394e26a6426c015e056b2c345c83616a31a382b078ab00e78d550e5387.
 It binds all 296 target Python modules. Thirty-eight modules differ from 4ea;
 whole Maple/shared-state ASTs normalize only explicit execution profile branches;
 20 ordinary trainer functions, optimizer implementations and kernel implementations
@@ -49,3 +49,14 @@ arithmetic witness regeneration passed in 2.27s/14.7MiB. Quick checks passed all
 22 ratchets and TS. No new model probe, MAX measurement or cloud mutation.
 The prepared LF9088 proposal remains unapproved and limited to that observed
 pin; bind the actual latest owned parent before a later production handoff.
+
+The final f8fe2 target includes the authenticated resident-recipe bridge and
+pre-worker student isolation. Its 296-module proof reuses the same exact source
+arithmetic. The earlier exact293e2 inventory/proof remains an explicit accepted
+historical pair so recursive verification never invalidates a prior reviewed
+continuation. Inventories and proof hashes cannot be mixed across those pairs.
+Final f8fe2 witness regeneration passed in2.25s/16.6MiB; full pinned inventory is
+0ec7a87108f19f4b0fc44898b3cbb2031547f33b60d5ba0389bae07b8e720236.
+`native-whole-head-final-capacity-tests-20261017`:87passed/2.40s/460.6MiB;
+quick22+TS green. Tests additionally reject mixing old/new exact witness pairs.
+No new model/MAX probe or actual adoption is represented by this refresh.

@@ -13,15 +13,15 @@
   },
   "capacity_qualified": false,
   "changed_numeric_modules": [
-    "model/native_parameter_precision.py",
-    "model/shared_state.py",
-    "model/native_bundle.py",
+    "maple/model.py",
     "model/native_model.py",
-    "model/native_shared_checkpoint.py",
-    "model/native_composite.py",
+    "model/native_parameter_precision.py",
+    "model/native_bundle.py",
     "model/native_precision.py",
+    "model/shared_state.py",
+    "model/native_shared_checkpoint.py",
     "train/fp8_backend.py",
-    "maple/model.py"
+    "model/native_composite.py"
   ],
   "checks": {
     "608_norm_storage_functions_exact": [
@@ -812,7 +812,7 @@
       "rl/native_output_lease.py": "15b7c715ca019708a1b070c4d3e04103b5e1fcb64e2575fb34686941531fef68",
       "rl/native_raw_handoff.py": "4f9394d52a2ecdc2f0fb21c8ec63aa9dac708162c4845b1663e347f81d1bfac3",
       "rl/native_raw_policy.py": "77676a8adbb280e0c905912477479d0ec5d1211c12e8f072c1b5a9f405061668",
-      "rl/native_raw_rounds.py": "a5d5f62fcad5c031394b0065e98dfa77a178f2de343153aa72e6d34c1a055cc6",
+      "rl/native_raw_rounds.py": "4a0a145e059ef29351a401208e5717ed34712a8cc613ac518e75f89ebd5f1b0b",
       "rl/native_refresh.py": "ac1302847869f82815a90f858d53034d170fba1f254dd113e3ac7bcbdb4aa172",
       "rl/native_replay.py": "3d649c2366272098b3b8c556be37e9e4c0112fd1dc1bf745d76f863496d07713",
       "rl/native_rounds.py": "1193600933147a52c96ee933f73da1253647ac7a55f48ba4eae4c61728ec20a1",
@@ -991,5 +991,5 @@
       "model/native_graph_plan.py": "1c6d9c826364519fb61869282bf4d786c351dc391a07adc8e6cc9f3299fbcfcc"
     }
   },
-  "target_commit": "293e2c2f1f103e49133e7633f3a4b6dd81040ee5"
+  "target_commit": "f8fe2e0ac"
 }

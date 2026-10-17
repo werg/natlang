@@ -98,3 +98,12 @@ def test_whole_head_retains_measured_limits_identity_and_all_memory_guards(tmp_p
     elif change=='optimizer':value['optimizer_state_unchanged']=False
     else:value['metadata_extra_bytes']=(64<<20)-1
     with pytest.raises(ValueError):invoke(tmp_path,old,new,value)
+
+
+def test_prior_reviewed_inventory_remains_verifiable_but_cannot_mix_witnesses():
+    value=review();old=PROOF.with_name('WHOLE_HEAD_SOURCE_PROFILE_PROOF_293E2_20261017.json')
+    value.update(new_code=json.loads(old.read_text())['inventories']['target'],whole_head_arithmetic_proof=binding(old))
+    mechanism._whole_head_source_contract(value)
+    value['whole_head_arithmetic_proof']=binding(PROOF)
+    with pytest.raises(ValueError,match='exact arithmetic'):
+        mechanism._whole_head_source_contract(value)
