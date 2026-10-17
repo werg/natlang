@@ -5,9 +5,11 @@ from pathlib import Path
 try:
     from .teacher_generation_guardian import binding,write
     from .teacher_source_sequence import _packet
+    from .teacher_catalog_storage import decode_body
 except ImportError:
     from teacher_generation_guardian import binding,write
     from teacher_source_sequence import _packet
+    from teacher_catalog_storage import decode_body
 
 
 def checked(reference):
@@ -207,7 +209,7 @@ def prepare(catalog,source_reference,prefix_reference,out,packet_rows=64):
         references.append(immutable(folder/'cases-proof.json',proof));total+=len(packet);packet=[]
         write(out/'progress.json',{'appended_packets':len(references)-len(prefix['packets']),'appended_cases':total,'complete':False})
     for sha,family,file in db.execute(query):
-        body=db.execute('SELECT body FROM programs WHERE sha=?',(sha,)).fetchone()[0];packet.append((sha,body,family,file))
+        body=decode_body(db.execute('SELECT body FROM programs WHERE sha=?',(sha,)).fetchone()[0],sha);packet.append((sha,body,family,file))
         if len(packet)==packet_rows:flush()
     flush();db.close()
     if total+len(unready)!=len(selected):raise ValueError('reference work silently omitted a remaining candidate')

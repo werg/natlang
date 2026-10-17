@@ -43,6 +43,22 @@ def test_prepare_exhausts_difference_preserves_prefix_and_pending_provenance(tmp
     with pytest.raises(ValueError,match='immutable'):prepare(root,source,prefix,out,2)
 
 
+def test_compressed_catalog_exports_identical_original_packets(tmp_path):
+    from scripts.coreweave.teacher_catalog_storage import encode_body
+    root,source,prefix,sha=corpus(tmp_path)
+    db=sqlite3.connect(root/'catalog.sqlite')
+    for key,body in db.execute('SELECT sha,body FROM programs').fetchall():
+        db.execute('UPDATE programs SET body=? WHERE sha=?',(encode_body(body),key))
+    db.commit();db.close()
+    result=prepare(root,source,prefix,tmp_path/'out',1)
+    inventory=json.loads(Path(result['path']).read_text())
+    seen=set()
+    for ref in inventory['packets'][1:]:
+        proof=json.loads(Path(ref['path']).read_text())
+        seen.add(hashlib.sha256(Path(proof['cases_binding']['path']).read_bytes().strip()).hexdigest())
+    assert seen=={sha[2],sha[3]}
+
+
 def test_prepare_rejects_changed_source_before_catalog_access(tmp_path):
     root,source,prefix,_=corpus(tmp_path);Path(json.loads(Path(source['path']).read_text())['cases_binding']['path']).write_text('changed')
     with pytest.raises(ValueError,match='input changed'):prepare(root,source,prefix,tmp_path/'out',2)
