@@ -126,8 +126,10 @@ a production optimization. Both preserve source optimizer/RNG state.
 
 This rules out shape-dependent normalization or native GEMM/attention alone
 as a sufficient explanation. Continue localization of the remaining arithmetic
-and accumulation differences and their amplification through the actual BF16
-Muon moments/Newton-Schulz recurrence. Do not relax readiness gates, deploy
+and accumulation differences and their amplification through the actual
+optimizer's moment update and BF16 Newton-Schulz recurrence. Distinguish stock
+backbone Muon from the separate BF16 MuonSR latent kernels; the latter's buffer
+dtype is not evidence about the former's saved buffers. Do not relax readiness gates, deploy
 serial norms, attribute task failures to these discrepancies without evidence,
 or repeat isolated first-layer checks as if they establish full equivalence.
 Useful production SGD continues with its real exposure and optimizer history.
@@ -151,7 +153,7 @@ diagnostics fail, including 88 parameters with moment differences. The worst
 Muon delta relative L2 difference is 0.00504 (absolute difference 2.35e-7 at that parameter).
 This localizes an additional arithmetic contribution; it does not establish
 which subset of reference changes suffices or justify expensive double products
-in production. Tiny gradient differences can cross BF16 moment rounding
+in production. Tiny gradient differences can cross BF16 orthogonalization rounding
 boundaries; their downstream effect still requires investigation.
 
 Receipt `lfm9478-stock-ffn-reference-updates-root-20261017.json` records the
@@ -159,6 +161,23 @@ actual original parent, all module names, inherited state, preserved source RNG
 and zero source updates. It ran in 171.1 seconds with 6.9 GB peak host memory
 and 8.41 GB CUDA allocation. This is a diagnostic execution, not production
 qualification or evidence of task-quality improvement. Production continues.
+
+Optimizer dtype follow-up (2026-10-17)
+------------------------------------
+
+The installed stock `torch.optim.Muon` initializes its momentum buffer with
+`zeros_like(p.grad)` and casts the orthogonalization input to BF16 separately.
+The shared `muon_kernels.momentum_nesterov` implementation is for MuonSR latents;
+its BF16-buffer contract must not be attributed to every backbone Muon buffer.
+The exact inherited-state restore above remains valid, but its existing compact
+receipt did not enumerate buffer dtypes. Two isolated CPU-only attempts to add
+that inventory hit their declared 2 and 4 GiB limits before producing a result,
+including the latter's metadata-only storage mapping. They performed no model
+execution or source updates and provide no dtype or numerical qualification.
+Use the actual optimizer class and saved buffer dtype when localizing the
+remaining update amplification; a BF16 backbone-momentum explanation remains
+unproved. Keep the assigned original checkpoint and existing full comparison
+receipts for that investigation.
 
 Feed-forward-only isolation (2026-10-17, 16:25 UTC)
 -------------------------------------------------
