@@ -508,11 +508,12 @@ def test_keep_profile_policy_binds_exact_reviewed_overlay_and_parser(role,mutati
         mechanism._history_profile_contract(review)
 
 
-def test_keep_bootstrap_executes_updated_helper_and_retains_historical_source(tmp_path,monkeypatch):
+@pytest.mark.parametrize('old_present',[True,False])
+def test_keep_bootstrap_executes_updated_helper_and_retains_historical_source(tmp_path,monkeypatch,old_present):
     import importlib.util
     old,new,review,proof=fixture(tmp_path)
     helper=mechanism.HISTORY_PROFILE_VERIFIER
-    (old/helper).write_text('# original frozen verifier\n')
+    if old_present:(old/helper).write_text('# original frozen verifier\n')
     (new/helper).write_bytes(Path(mechanism.__file__).read_bytes())
     for name in mechanism.HISTORY_PROFILE_SOURCE_POLICY_FILES:
         for root in (old,new):
@@ -525,7 +526,7 @@ def test_keep_bootstrap_executes_updated_helper_and_retains_historical_source(tm
     review.update(identity=identity,old_code=old_code,new_code=new_code,source_certificate=binding(cert),
         optimizer_policy=mechanism.HISTORY_PROFILE_POLICY,optimizer_state_unchanged=True,
         fresh_policy_capacity_required=True,metadata_extra_bytes=64<<20,
-        verifier_bootstrap={'source_revision':'a'*40,'source':binding(published),'old':binding(old/helper),'new':binding(new/helper)})
+        verifier_bootstrap={'source_revision':'a'*40,'source':binding(published),'old':binding(old/helper)if old_present else None,'new':binding(new/helper)})
     review['changes']={k:{'old':old_code.get(k),'new':new_code.get(k)}for k in old_code.keys()|new_code.keys()if old_code.get(k)!=new_code.get(k)}
     composition={'train/optim.py':(old_code['train/optim.py'],new_code['train/optim.py'])}
     def load(path,name):
@@ -535,6 +536,11 @@ def test_keep_bootstrap_executes_updated_helper_and_retains_historical_source(tm
     monkeypatch.setattr(mechanism,'HISTORY_PROFILE_COMPOSITIONS',{'fixture':composition})
     for key in ('old','new','source','source_revision'):
         malformed=copy.deepcopy(review);malformed['verifier_bootstrap'].pop(key)
+        with pytest.raises(ValueError):mechanism._history_profile_contract(malformed)
+    if not old_present:
+        malformed=copy.deepcopy(review);malformed['old_code'][helper]=None
+        with pytest.raises(ValueError):mechanism._history_profile_contract(malformed)
+        malformed=copy.deepcopy(review);malformed['verifier_bootstrap']['old']=binding(new/helper)
         with pytest.raises(ValueError):mechanism._history_profile_contract(malformed)
     updated=load(new/helper,'updated_capacity_helper')
     review_path=tmp_path/'review.json';review_path.write_text(json.dumps(review))

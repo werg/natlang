@@ -277,11 +277,16 @@ def _history_profile_verifier(review, *, executing=False):
     if old.get(HISTORY_PROFILE_VERIFIER)==new.get(HISTORY_PROFILE_VERIFIER):return
     witness=review.get('verifier_bootstrap') or {}
     if (not re.fullmatch(r'[0-9a-f]{40}',witness.get('source_revision',''))
-            or not old.get(HISTORY_PROFILE_VERIFIER) or not new.get(HISTORY_PROFILE_VERIFIER)):
+            or not new.get(HISTORY_PROFILE_VERIFIER)
+            or (HISTORY_PROFILE_VERIFIER in old and not old[HISTORY_PROFILE_VERIFIER])):
         raise ValueError('KEEP verifier bootstrap needs an immutable published source reference')
-    for key,expected in (('old',old[HISTORY_PROFILE_VERIFIER]),
+    if HISTORY_PROFILE_VERIFIER not in old:
+        if 'old' not in witness or witness['old'] is not None:
+            raise ValueError('KEEP verifier addition must explicitly bind absence in old inventory')
+    for key,expected in (('old',old.get(HISTORY_PROFILE_VERIFIER)),
                          ('new',new[HISTORY_PROFILE_VERIFIER]),
                          ('source',new[HISTORY_PROFILE_VERIFIER])):
+        if key=='old' and expected is None:continue
         reference=witness.get(key) or {}
         if reference.get('sha256')!=expected:
             raise ValueError('KEEP verifier bootstrap differs from approved inventory')
@@ -546,7 +551,12 @@ def continue_capacity(review_binding, *, old_package, new_package, out):
     _ordinary_writer_contract(review)
     _whole_head_source_contract(review)
     _history_profile_contract(review)
-    if policy == HISTORY_PROFILE_POLICY:_history_profile_verifier(review, executing=True)
+    if policy == HISTORY_PROFILE_POLICY:
+        if HISTORY_PROFILE_VERIFIER not in old:
+            prior_helper=Path(old_package)/HISTORY_PROFILE_VERIFIER
+            if prior_helper.exists() or prior_helper.is_symlink():
+                raise ValueError('KEEP verifier addition requires actual old helper absence')
+        _history_profile_verifier(review, executing=True)
     # Adam first/second moments, retained old buffers, telemetry snapshots and
     # per-parameter update intermediates. No backbone-sized copy is authorized.
     extra = _memory_allowance(review)
