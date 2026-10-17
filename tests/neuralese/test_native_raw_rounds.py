@@ -336,7 +336,8 @@ def test_live_raw_task_plan_adopts_after_sealed_operation_without_resetting_curr
         calls.append(args.cases)
         return {'native_state':True,'checkpoint':str(args.checkpoint),'out':str(args.out),
             'cases':str(args.cases),'production_recipe':str(args.production_recipe),
-            'seed_trainer_parameters':{},'trainer_parameters':{}}
+            'seed_command':['python','seed','{trainer_args}'],'rows_per_round':32,
+            'seed_trainer_parameters':{},'trainer_parameters':{'checkpoint_every':250}}
     monkeypatch.setattr(production,'configure_native',configure)
     plan=tmp_path/'plan';write_json_durable(plan,{'models':[declaration]})
     directory=tmp_path/'student'
@@ -344,14 +345,21 @@ def test_live_raw_task_plan_adopts_after_sealed_operation_without_resetting_curr
     config=json.loads(path.read_text());out=Path(config['out']);out.mkdir()
     state={'checkpoint':str(parent),'round':7,'trained_task_ids':['earlier-credit'],'trained_rounds':4}
     write_json_durable(out/'state.json',state);state_bytes=(out/'state.json').read_bytes()
-    declaration={**declaration,'cases':files['cases2']}
+    declaration={**declaration,'cases':files['cases2'],'rows_per_round':4,'supervised_quantum_updates':16}
     write_json_durable(plan,{'models':[declaration]})
     write_json_durable(directory/'cycle.json',{'phase':'sft','cycle':7,'next_stage':1})
     raw.configure_model(plan,declaration,witness,directory)
-    assert len(calls)==1 and json.loads(path.read_text())['cases']==files['cases1']['path']
+    held=json.loads(path.read_text())
+    assert len(calls)==1 and held['cases']==files['cases1']['path']
+    assert held['rows_per_round']==32 and held['seed_trainer_parameters']['checkpoint_every']==16
+    assert held['seed_command'][-1]=='{seed_trainer_args}'
+    assert held['bootstrap_binding']['plan_sha256']!=raw.binding(plan)['sha256']
+    assert held['supervised_quantum_control']=={'plan':raw.binding(plan),'updates':16}
     write_json_durable(directory/'cycle.json',{'phase':'rl','cycle':8,'next_stage':0})
     raw.configure_model(plan,declaration,witness,directory)
     assert len(calls)==2 and json.loads(path.read_text())['cases']==files['cases2']['path']
+    assert json.loads(path.read_text())['rows_per_round']==4
+    assert json.loads(path.read_text())['trainer_parameters']['checkpoint_every']==250
     assert (out/'state.json').read_bytes()==state_bytes
     # Older raw configs acquire the authenticated lineage only after their
     # already sealed supervised operation completes, without resampling tasks.

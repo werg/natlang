@@ -127,3 +127,32 @@ def test_seed_quantum_emits_full_backend_rates_and_explicit_objective_overrides(
     assert config['learner_command']==['python','learner','{trainer_args}']
     before=json.dumps(config,sort_keys=True);raw._seed_quantum(config,{'resident':{'directory':'/actual/resident'}})
     assert json.dumps(config,sort_keys=True)==before
+
+
+@pytest.mark.parametrize('field',['rows_per_round','supervised_quantum_updates'])
+@pytest.mark.parametrize('value',[0,-1,True,1.5,'4',None])
+def test_raw_scheduling_controls_reject_invalid_before_handoff(field,value,tmp_path,monkeypatch):
+    monkeypatch.setattr(raw,'verify_handoff',lambda *a,**kw:pytest.fail('invalid control must fail before checkpoint load'))
+    with pytest.raises(ValueError,match=field+' must be a positive integer'):
+        raw.configure_model(tmp_path/'plan',{field:value},{},tmp_path/'out')
+
+
+def test_supervised_quantum_changes_only_checkpoint_boundary_in_real_emitted_args(tmp_path,monkeypatch):
+    from natlang_neuralese.train.recipe import stage_parameter_args
+    plan=tmp_path/'plan';write(plan,{'supervised_quantum_updates':16,'rows_per_round':4})
+    original={'learning_rate':3e-6,'epochs':3,'checkpoint_every':250,'native_linear_precision':'bf16x6'}
+    config={'trainer_parameters':original.copy(),'seed_trainer_parameters':{},
+        'seed_command':['python','seed','{trainer_args}'],'rows_per_round':32}
+    declaration={'rows_per_round':4,'supervised_quantum_updates':16}
+    raw._scheduling_controls(config,declaration,plan,{},pending=True)
+    assert config['rows_per_round']==32  # Current selection remains the old packet.
+    mandatory=original.copy();raw._supervised_quantum(config,mandatory)
+    assert mandatory=={**original,'checkpoint_every':16,'refresh_at_checkpoint':True}
+    actual=[];monkeypatch.setattr(production.subprocess,'run',lambda argv,**kw:actual.append(argv))
+    production.run_command(config['seed_command'],{'seed_trainer_args':stage_parameter_args(config['seed_trainer_parameters'])})
+    assert actual[0][actual[0].index('--checkpoint-every')+1]=='16'
+    assert actual[0][actual[0].index('--epochs')+1]=='3'
+    assert '--refresh-at-checkpoint' in actual[0]
+    assert config['trainer_parameters']==original
+    raw._scheduling_controls(config,declaration,plan,{},pending=False)
+    assert config['rows_per_round']==4

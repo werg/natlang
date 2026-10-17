@@ -26,3 +26,15 @@ including the existing refresh boundary and resident source authority. Existing
 fully revalidated configurations receive the same correction before reuse;
 policy updates retain their own arguments. This closes argument plumbing, without
 changing the declared finite-boundary scheduling policy.
+
+Optional per-model `rows_per_round` and `supervised_quantum_updates` are positive
+integers; their absence preserves existing defaults. The latter uses the shared
+checkpoint-every/refresh boundary for seed and mandatory supervised operations
+only. It changes no epochs, objective, geometry, optimizer history or earned
+credits. Existing checkpoint alignment means the actual report delta remains
+authoritative, rather than promising exactly N updates. A pending old packet
+retains its cases, selection, source and bootstrap binding; only supervised stop
+cadence and seed-argument repair may apply, with the exact declaring plan bound
+separately. New packet size/task source adopt after that operation completes.
+There is no completed-group prefix finalizer in the current collector: stopping
+resumes the same sealed packet; it does not make a partial packet complete.

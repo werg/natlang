@@ -48,12 +48,35 @@ def _seed_quantum(config,record):
     if config.get('seed_command'):
         config['seed_command']=[part.replace('{trainer_args}','{seed_trainer_args}')
             for part in config['seed_command']]
+    _supervised_quantum(config,config['seed_trainer_parameters'])
+    return config
+
+
+def _supervised_quantum(config,parameters):
+    if 'supervised_quantum_updates' in config:
+        parameters['checkpoint_every']=config['supervised_quantum_updates']
+        parameters['refresh_at_checkpoint']=True
+
+
+def _scheduling_controls(config,declaration,plan_path,record,*,pending=False):
+    # Pending collection retains its sealed packet. Only subsequent supervised
+    # stop cadence may change; it is independently bound to the declaring plan.
+    if 'rows_per_round' in declaration and not pending:
+        config['rows_per_round']=declaration['rows_per_round']
+    if 'supervised_quantum_updates' in declaration:
+        config['supervised_quantum_updates']=declaration['supervised_quantum_updates']
+        config['supervised_quantum_control']={'plan':binding(plan_path),
+            'updates':declaration['supervised_quantum_updates']}
+    _seed_quantum(config,record)
     return config
 
 
 def configure_model(plan_path,declaration,handoff,out):
     from .production import configure_native
     from .native_rounds import configure_provider
+    for key in ('rows_per_round','supervised_quantum_updates'):
+        if key in declaration and (type(declaration[key]) is not int or declaration[key]<=0):
+            raise ValueError(key+' must be a positive integer')
     plan_path=Path(plan_path);out=Path(out);out.mkdir(parents=True,exist_ok=True)
     path=out/'config.json';verification=out/'bootstrap-verification.json'
     from .native_bootstrap_metadata import unchanged,save
@@ -122,18 +145,23 @@ def configure_model(plan_path,declaration,handoff,out):
             if prior.get('recipe_lineage_sha256')==lineage:
                 from .native_supervised import recipe_lineage
                 recipe_lineage(prior)
-                _seed_quantum(prior,record)
+                _scheduling_controls(prior,declaration,plan_path,record)
                 write_json_durable(path,prior)
                 save(verification,plan_path,declaration,handoff,prior)
                 return path
             cursor=json.loads((out/'cycle.json').read_text()) if (out/'cycle.json').exists() else {}
-            if cursor.get('phase')=='sft' or cursor.get('pending_rl_round'):return path
+            if cursor.get('phase')=='sft' or cursor.get('pending_rl_round'):
+                _scheduling_controls(prior,declaration,plan_path,record,pending=True)
+                write_json_durable(path,prior)
+                return path
             from .native_supervised import bind_recipe_lineage
-            bind_recipe_lineage(prior,lineage);_seed_quantum(prior,record);write_json_durable(path,prior)
+            bind_recipe_lineage(prior,lineage);_scheduling_controls(prior,declaration,plan_path,record);write_json_durable(path,prior)
             return path
         cursor=json.loads((out/'cycle.json').read_text()) if (out/'cycle.json').exists() else {}
         if cursor.get('phase')=='sft' or cursor.get('pending_rl_round'):
-            return path  # Finish the already sealed exact operation before hot config adoption.
+            _scheduling_controls(prior,declaration,plan_path,record,pending=True)
+            write_json_durable(path,prior)
+            return path  # Retain sealed cases/source/bootstrap identity; repair stop cadence only.
     args=SimpleNamespace(**inputs,model=declaration['model'],native_participant=None,semantic_adapter=None,
         semantic_refresh_config=None,checkpoint=_bound(record['checkpoint']),base=Path(declaration['base']),
         production_stage=declaration['production_stage'],runtime=runtime,out=out/'production',config=path,
@@ -144,7 +172,7 @@ def configure_model(plan_path,declaration,handoff,out):
     del saved  # No mapped tensor state survives this invocation.
     from .native_supervised import bind_recipe_lineage
     bind_recipe_lineage(config,lineage)
-    _seed_quantum(config,record)
+    _scheduling_controls(config,declaration,plan_path,record)
     config['raw_model_id']=actual
     configure_provider(config,declaration,{},owner,path)
     save(verification,plan_path,declaration,handoff,config)
@@ -231,6 +259,7 @@ def student_cycle(plan_path,declaration,handoff,directory,*,stop):
         jobdir=work/'supervised'/f'{index:03d}'
         continuation,sources=continuation_config(config,stage,checkpoint=str(_bound(checkpoint)),adapter=None,out=jobdir)
         parameters=continuation['trainer_parameters']
+        _supervised_quantum(config,parameters)
         is_foundation=stage['id']==config['production_stage']
         # Once the cohort is ready, ordinary mandatory deficits still receive
         # useful finite quanta; a final existing foundation qualification below
@@ -253,6 +282,7 @@ def student_cycle(plan_path,declaration,handoff,directory,*,stop):
         # but rechecks runtime/task behavior against current post-RL weights.
         checkpoint=_current_checkpoint(config);jobdir=work/'foundation-current'
         continuation,_=continuation_config(config,foundation[0],checkpoint=str(_bound(checkpoint)),adapter=None,out=jobdir)
+        _supervised_quantum(config,continuation['trainer_parameters'])
         continuation['trainer_parameters']['communication_foundation']=True
         if config.get('resident_data_directory'):
             continuation['trainer_parameters']['resident_data_directory']=config['resident_data_directory']
