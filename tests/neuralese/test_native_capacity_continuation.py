@@ -502,7 +502,49 @@ def test_keep_profile_policy_binds_exact_reviewed_overlay_and_parser(role,mutati
     else:
         mechanism._history_profile_contract(review)
         assert mechanism._memory_allowance(review)==64<<20
-        assert mechanism.allowed_changes(mechanism.HISTORY_PROFILE_POLICY)==set(composition)
+        assert mechanism.allowed_changes(mechanism.HISTORY_PROFILE_POLICY)==set(composition)|{mechanism.HISTORY_PROFILE_VERIFIER}
         # Already adopted one-file progress-copy optimization is not reverted.
         old['train/native_continuation.py']=new['train/native_continuation.py']
         mechanism._history_profile_contract(review)
+
+
+def test_keep_bootstrap_executes_updated_helper_and_retains_historical_source(tmp_path,monkeypatch):
+    import importlib.util
+    old,new,review,proof=fixture(tmp_path)
+    helper=mechanism.HISTORY_PROFILE_VERIFIER
+    (old/helper).write_text('# original frozen verifier\n')
+    (new/helper).write_bytes(Path(mechanism.__file__).read_bytes())
+    for name in mechanism.HISTORY_PROFILE_SOURCE_POLICY_FILES:
+        for root in (old,new):
+            path=root/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_text('# fixed parser\n')
+    old_code,new_code=code_inventory(old),code_inventory(new)
+    identity={**review['identity'],'model_config':{'history_reasoning_policy':'keep'}}
+    value=json.loads(proof.read_text());value.update(identity=identity,runtime_code_sha256=digest(old_code));proof.write_text(json.dumps(value))
+    cert=Path(review['source_certificate']['path']);value=json.loads(cert.read_text());value.update(identity=identity,runtime_code_sha256=digest(old_code),evidence=binding(proof));cert.write_text(json.dumps(value))
+    published=tmp_path/'published-helper.py';published.write_bytes((new/helper).read_bytes())
+    review.update(identity=identity,old_code=old_code,new_code=new_code,source_certificate=binding(cert),
+        optimizer_policy=mechanism.HISTORY_PROFILE_POLICY,optimizer_state_unchanged=True,
+        fresh_policy_capacity_required=True,metadata_extra_bytes=64<<20,
+        verifier_bootstrap={'source_revision':'a'*40,'source':binding(published),'old':binding(old/helper),'new':binding(new/helper)})
+    review['changes']={k:{'old':old_code.get(k),'new':new_code.get(k)}for k in old_code.keys()|new_code.keys()if old_code.get(k)!=new_code.get(k)}
+    composition={'train/optim.py':(old_code['train/optim.py'],new_code['train/optim.py'])}
+    def load(path,name):
+        spec=importlib.util.spec_from_file_location('natlang_neuralese.train.'+name,path);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+        monkeypatch.setattr(module,'HISTORY_PROFILE_COMPOSITIONS',{'fixture':composition})
+        return module
+    monkeypatch.setattr(mechanism,'HISTORY_PROFILE_COMPOSITIONS',{'fixture':composition})
+    for key in ('old','new','source','source_revision'):
+        malformed=copy.deepcopy(review);malformed['verifier_bootstrap'].pop(key)
+        with pytest.raises(ValueError):mechanism._history_profile_contract(malformed)
+    updated=load(new/helper,'updated_capacity_helper')
+    review_path=tmp_path/'review.json';review_path.write_text(json.dumps(review))
+    result=updated.continue_capacity(binding(review_path),old_package=old,new_package=new,out=tmp_path/'continued')
+    updated.verify_capacity_certificate(binding(result),identity=identity,code=new_code,parent='b'*64)
+    later=tmp_path/'later-helper.py';later.write_bytes((new/helper).read_bytes()+b'\n# later metadata verifier\n')
+    future=load(later,'future_capacity_helper')
+    future.verify_capacity_certificate(binding(result),identity=identity,code=new_code,parent='b'*64)
+    with pytest.raises(ValueError,match='executing helper'):
+        future.continue_capacity(binding(review_path),old_package=old,new_package=new,out=tmp_path/'wrong-executor')
+    published.write_text('# changed immutable published mechanism\n')
+    with pytest.raises(ValueError):
+        future.verify_capacity_certificate(binding(result),identity=identity,code=new_code,parent='b'*64)

@@ -10,6 +10,7 @@ import argparse
 from contextvars import ContextVar
 import json
 import math
+import re
 from pathlib import Path
 
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex as digest
@@ -268,6 +269,29 @@ HISTORY_PROFILE_COMPOSITIONS = {
 HISTORY_PROFILE_SOURCE_POLICY_FILES = ('data/native_sources.py', 'data/native_graph_schema.py', 'model/native_graph_plan.py', 'data/native_pair_schema.py', 'common/row_index.py', 'common/jsonio.py', 'common/hashing.py')
 
 
+HISTORY_PROFILE_VERIFIER = 'train/native_capacity_continuation.py'
+
+
+def _history_profile_verifier(review, *, executing=False):
+    old,new=review['old_code'],review['new_code']
+    if old.get(HISTORY_PROFILE_VERIFIER)==new.get(HISTORY_PROFILE_VERIFIER):return
+    witness=review.get('verifier_bootstrap') or {}
+    if (not re.fullmatch(r'[0-9a-f]{40}',witness.get('source_revision',''))
+            or not old.get(HISTORY_PROFILE_VERIFIER) or not new.get(HISTORY_PROFILE_VERIFIER)):
+        raise ValueError('KEEP verifier bootstrap needs an immutable published source reference')
+    for key,expected in (('old',old[HISTORY_PROFILE_VERIFIER]),
+                         ('new',new[HISTORY_PROFILE_VERIFIER]),
+                         ('source',new[HISTORY_PROFILE_VERIFIER])):
+        reference=witness.get(key) or {}
+        if reference.get('sha256')!=expected:
+            raise ValueError('KEEP verifier bootstrap differs from approved inventory')
+        bound(reference)
+    # Only generation binds the executing helper. Historical verification uses
+    # its immutable source reference, so later verifier upgrades retain ancestry.
+    if executing and binding(Path(__file__))['sha256']!=new[HISTORY_PROFILE_VERIFIER]:
+        raise ValueError('KEEP verifier bootstrap is not the executing helper')
+
+
 def _history_profile_contract(review):
     if review['optimizer_policy'] != HISTORY_PROFILE_POLICY:return
     config=(review.get('identity') or {}).get('model_config') or {}
@@ -277,18 +301,19 @@ def _history_profile_contract(review):
             or config.get('history_reasoning_policy') != 'keep'
             or review.get('fresh_policy_capacity_required') is not True
             or not changes
-            or not any(changes <= set(composition) and all(
+            or not any(changes <= set(composition) | {HISTORY_PROFILE_VERIFIER} and all(
                 old.get(name) in pair and new.get(name)==pair[1]
                 for name,pair in composition.items())
                 for composition in HISTORY_PROFILE_COMPOSITIONS.values())
             or any(not old.get(name) or old.get(name)!=new.get(name)
                    for name in HISTORY_PROFILE_SOURCE_POLICY_FILES)):
         raise ValueError('KEEP profile continuation needs exact reviewed module pairs and unchanged source parser; policy capacity stays fresh')
+    _history_profile_verifier(review)
 
 
 def allowed_changes(policy):
     return {POLICY: ALLOWED_CHANGES, METADATA_POLICY: METADATA_CHANGES,
-            HISTORY_PROFILE_POLICY: set(next(iter(HISTORY_PROFILE_COMPOSITIONS.values()))),
+            HISTORY_PROFILE_POLICY: set(next(iter(HISTORY_PROFILE_COMPOSITIONS.values()))) | {HISTORY_PROFILE_VERIFIER},
             LOADER_IO_POLICY: LOADER_IO_CHANGES,
             LINEAGE_METADATA_POLICY: {LINEAGE_METADATA_FILE},
             POLICY_GATE_SFT_POLICY: set(POLICY_GATE_SFT_COMPOSITION),
@@ -521,6 +546,7 @@ def continue_capacity(review_binding, *, old_package, new_package, out):
     _ordinary_writer_contract(review)
     _whole_head_source_contract(review)
     _history_profile_contract(review)
+    if policy == HISTORY_PROFILE_POLICY:_history_profile_verifier(review, executing=True)
     # Adam first/second moments, retained old buffers, telemetry snapshots and
     # per-parameter update intermediates. No backbone-sized copy is authorized.
     extra = _memory_allowance(review)
