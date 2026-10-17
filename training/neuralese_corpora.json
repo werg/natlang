@@ -180368,6 +180368,83 @@
         "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0021-repair0001-tranche0000",
         "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0022-tranche0001"
       ]
+    },
+    {
+      "build": {
+        "audit": "admission-d32-source03-paired-current-v5-20261017/audit.json",
+        "audit_sha256": "ca26d9023c77cc10b2a728e31b9705d2b6f5bad54602f967a2e46a8c6c77b50c"
+      },
+      "documents": {
+        "lfm25": {
+          "auxiliary_reasoning_graphs:train": 118636,
+          "graphs:train": 120408,
+          "max_row_tokens": 121354,
+          "positive_sessions": 1772,
+          "source-render-pending:tool-arguments": 31,
+          "tokens:test": 0,
+          "tokens:train": 4647829537
+        },
+        "mellum21": {
+          "graphs:train": 1775,
+          "max_row_tokens": 154001,
+          "positive_sessions": 1775,
+          "source-render-pending:tool-arguments": 28,
+          "tokens:test": 0,
+          "tokens:train": 109859490
+        }
+      },
+      "id": "d32-source03-paired-current-v5-20261017",
+      "include": [
+        "admission-d32-source03-paired-current-v5-20261017/audit.json",
+        "admission-d32-source03-paired-current-v5-20261017/lfm25-train-sources.json",
+        "admission-d32-source03-paired-current-v5-20261017/mellum21-train-sources.json",
+        "admission-d32-source03-paired-current-v5-20261017/protection-continuation-evidence/1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704/decision-holds/native-non-success-20261015-v1.jsonl",
+        "admission-d32-source03-paired-current-v5-20261017/protection-continuation-evidence/1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704/decision-holds/semantic-ticket-crisp-bypass-20261015-v3.jsonl",
+        "admission-d32-source03-paired-current-v5-20261017/protection-continuation-evidence/1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704/held-union/acquired-connected-source-groups.jsonl",
+        "admission-d32-source03-paired-current-v5-20261017/protection-continuation-evidence/1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704/held-union/acquired-remaining-complete-source/source-groups.jsonl",
+        "admission-d32-source03-paired-current-v5-20261017/protection-continuation-evidence/1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704/held-union/full/source-groups/text-data.jsonl",
+        "admission-d32-source03-paired-current-v5-20261017/protection-continuation-evidence/1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704/held-union/program-header/source-groups/text-data.jsonl",
+        "admission-d32-source03-paired-current-v5-20261017/protection-continuation-evidence/1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704/held-union/whole-trajectory/source-groups/text-data.jsonl",
+        "admission-d32-source03-paired-current-v5-20261017/protection-continuation-evidence/1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704/protection-manifest.json",
+        "admission-d32-source03-paired-current-v5-20261017/protection-continuation-evidence/1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704/quality-groups.jsonl",
+        "admission-d32-source03-paired-current-v5-20261017/protection-continuation-evidence/1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704/source-group-components.jsonl",
+        "admission-d32-source03-paired-current-v5-20261017/protection-continuation-evidence/1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704/source-reviews/datasets.json",
+        "admission-d32-source03-paired-current-v5-20261017/protection-continuation-evidence/1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704/source-reviews/family-holds.json",
+        "admission-d32-source03-paired-current-v5-20261017/protection-continuation-evidence/1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704/source-reviews/holds.jsonl",
+        "admission-d32-source03-paired-current-v5-20261017/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/decision-holds/native-non-success-20261015-v1.jsonl",
+        "admission-d32-source03-paired-current-v5-20261017/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/decision-holds/semantic-ticket-crisp-bypass-20261015-v3.jsonl",
+        "admission-d32-source03-paired-current-v5-20261017/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/held-union/acquired-connected-source-groups.jsonl",
+        "admission-d32-source03-paired-current-v5-20261017/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/held-union/acquired-remaining-complete-source/source-groups.jsonl",
+        "admission-d32-source03-paired-current-v5-20261017/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/held-union/full/source-groups/text-data.jsonl",
+        "admission-d32-source03-paired-current-v5-20261017/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/held-union/program-header/source-groups/text-data.jsonl",
+        "admission-d32-source03-paired-current-v5-20261017/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/held-union/whole-trajectory/source-groups/text-data.jsonl",
+        "admission-d32-source03-paired-current-v5-20261017/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/inherited-components.jsonl",
+        "admission-d32-source03-paired-current-v5-20261017/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/inherited-projection.json",
+        "admission-d32-source03-paired-current-v5-20261017/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/protection-manifest.json",
+        "admission-d32-source03-paired-current-v5-20261017/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/quality-groups.jsonl",
+        "admission-d32-source03-paired-current-v5-20261017/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/source-group-components.jsonl",
+        "admission-d32-source03-paired-current-v5-20261017/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/source-reviews/datasets.json",
+        "admission-d32-source03-paired-current-v5-20261017/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/source-reviews/family-holds.json",
+        "admission-d32-source03-paired-current-v5-20261017/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/source-reviews/holds.jsonl",
+        "admission-d32-source03-paired-current-v5-20261017/row-proof.jsonl",
+        "tool-argument-render-v1/d77de710b36675290f49f71e5672879487817acb79d258aff00ea51067416f42/mellum21/omissions.jsonl",
+        "tool-argument-render-v1/d77de710b36675290f49f71e5672879487817acb79d258aff00ea51067416f42/mellum21/receipt.json",
+        "tool-argument-render-v1/d77de710b36675290f49f71e5672879487817acb79d258aff00ea51067416f42/mellum21/resume-state.json",
+        "tool-argument-render-v1/d77de710b36675290f49f71e5672879487817acb79d258aff00ea51067416f42/mellum21/test/native-graphs.jsonl.zst",
+        "tool-argument-render-v1/d77de710b36675290f49f71e5672879487817acb79d258aff00ea51067416f42/mellum21/train/native-graphs.jsonl.zst",
+        "tool-argument-render-v3/d77de710b36675290f49f71e5672879487817acb79d258aff00ea51067416f42/lfm25/omissions.jsonl",
+        "tool-argument-render-v3/d77de710b36675290f49f71e5672879487817acb79d258aff00ea51067416f42/lfm25/receipt.json",
+        "tool-argument-render-v3/d77de710b36675290f49f71e5672879487817acb79d258aff00ea51067416f42/lfm25/resume-state.json",
+        "tool-argument-render-v3/d77de710b36675290f49f71e5672879487817acb79d258aff00ea51067416f42/lfm25/test/native-graphs.jsonl.zst",
+        "tool-argument-render-v3/d77de710b36675290f49f71e5672879487817acb79d258aff00ea51067416f42/lfm25/train/native-graphs.jsonl.zst"
+      ],
+      "license": "exact source license facts retained in each graph acquired_session provenance",
+      "owner": "dgx",
+      "path": "runs/acquired-connected-native-graphs-20261017-v3/D32",
+      "source_class": "source-curated-complete-acquired-agent-native-session-graphs",
+      "split": "original source split and complete cross-source global held-group closure; no truncation",
+      "training_admission": true,
+      "training_admission_reason": "One complete normalized source member is source-curated, not oracle or native-execution verified. Both pinned tokenizer views preserve the full global normalized-source held/quality/pending closure and exact decision holds. Other normalized source members remain explicitly pending."
     }
   ],
   "coverage_backlog": [
