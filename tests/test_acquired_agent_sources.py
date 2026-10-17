@@ -257,6 +257,29 @@ def test_recovered_acquisition_requires_exact_archive_and_complete_inventory(tmp
     }
     manifest=root/'recovery-manifest.json';manifest.write_text(json.dumps(receipt))
     assert validate_recovery_manifest('D13',receipt,manifest,root=root)==receipt
+    receipt['historical_acquisition_receipt']={
+        'available':False,
+        'expected_source_stage_proof_sha256':hashlib.sha256(embedded_bytes).hexdigest(),
+    }
+    assert validate_recovery_manifest('D13',receipt,manifest,root=root)==receipt
+    receipt['historical_acquisition_receipt']={'available':False}
+    with pytest.raises(Reject,match='exact archive and historical-receipt status'):
+        validate_recovery_manifest('D13',receipt,manifest,root=root)
+    receipt['historical_acquisition_receipt']={
+        'available':False,
+        'expected_source_stage_proof_sha256':hashlib.sha256(embedded_bytes).hexdigest(),
+    }
+    embedded_binding=receipt['embedded_archive_manifest']
+    receipt['embedded_archive_manifest']={'path':'D13/durability-manifest.json'}
+    with pytest.raises(Reject,match='exact embedded source-stage proof'):
+        validate_recovery_manifest('D13',receipt,manifest,root=root)
+    receipt['embedded_archive_manifest']=embedded_binding
+    receipt['historical_acquisition_receipt']['expected_source_stage_proof_sha256']='0'*64
+    with pytest.raises(Reject,match='unavailable historical receipt'):
+        validate_recovery_manifest('D13',receipt,manifest,root=root)
+    receipt['historical_acquisition_receipt']={
+        'available':False,'expected_sha256':'1'*64,
+    }
     receipt['expected_source_inventory']['bytes']+=1
     with pytest.raises(Reject,match='inventory differs'):
         validate_recovery_manifest('D13',receipt,manifest,root=root)
