@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.coreweave.teacher_batch_completion import batch_completion
+from scripts.coreweave.teacher_batch_completion import batch_completion, sample_rewards
 
 
 def fixture(tmp_path, legacy=False):
@@ -56,3 +56,39 @@ def test_complete_exact_model_failure_is_a_closed_collection_not_a_success_label
     proof=batch_completion([entry],[finish],[2],score)
     assert proof['can_advance'] and proof['exact_completed_queue_keys']==1
     assert proof['model_budget_failures']==[] and proof['training_admission'] is False
+
+
+def test_sample_rewards_join_uses_exact_group_sample_not_sorted_group_outcomes():
+    # score.groups stores a group-level outcome list whose order is not the
+    # queue sample order. The per-sample rewards file carries the real keys.
+    entries = [
+        {'key': 's7-task-000-00', 'group': 0, 'sample': 0, 'output': '/result/00'},
+        {'key': 's7-task-000-01', 'group': 0, 'sample': 1, 'output': '/result/01'},
+    ]
+    cases = [{'id': 'program-a'}]
+    rewards = [
+        {'task_id': 'program-a', 'group': 0, 'sample': 1, 'outcome': 'semantic_mismatch', 'reward': 0.0},
+        {'task_id': 'program-a', 'group': 0, 'sample': 0, 'outcome': 'task_success', 'reward': 1.0},
+    ]
+    joined = sample_rewards(entries, rewards, cases)
+    assert [(row['key'], row['outcome']) for row in joined] == [
+        ('s7-task-000-00', 'task_success'), ('s7-task-000-01', 'semantic_mismatch')]
+
+
+@pytest.mark.parametrize('mutation', ['case-id', 'key', 'duplicate-reward', 'missing-reward'])
+def test_sample_reward_join_rejects_misbound_or_incomplete_rows(mutation):
+    entries = [
+        {'key': 's7-task-000-00', 'group': 0, 'sample': 0},
+        {'key': 's7-task-000-01', 'group': 0, 'sample': 1},
+    ]
+    cases = [{'id': 'program-a'}]
+    rewards = [
+        {'task_id': 'program-a', 'group': 0, 'sample': 0, 'outcome': 'task_success', 'reward': 1.0},
+        {'task_id': 'program-a', 'group': 0, 'sample': 1, 'outcome': 'semantic_mismatch', 'reward': 0.0},
+    ]
+    if mutation == 'case-id': rewards[1]['task_id'] = 'program-b'
+    elif mutation == 'key': entries[1]['key'] = 's7-task-000-00'
+    elif mutation == 'duplicate-reward': rewards[1]['sample'] = 0
+    else: rewards.pop()
+    with pytest.raises(ValueError):
+        sample_rewards(entries, rewards, cases)

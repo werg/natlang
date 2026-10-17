@@ -19,6 +19,60 @@ def _hash(path):
     return result.hexdigest()
 
 
+def sample_rewards(entries, rewards, cases):
+    """Join terminal per-sample rewards to the exact queue/case identity.
+
+    ``score.json`` groups contain aggregate per-group outcome lists. Those
+    lists are not indexed by the queue's sample number, so they must never be
+    used to label individual result files. ``rewards.jsonl`` is the
+    per-rollout authority and is joined on (group, sample), with the task ID
+    checked against the source-case order and the queue key.
+    """
+    if not isinstance(cases, list) or not cases:
+        raise ValueError('teacher source cases must be a non-empty ordered list')
+    case_ids = []
+    for case in cases:
+        program = case.get('program_ir', case) if isinstance(case, dict) else None
+        task_id = program.get('id') if isinstance(program, dict) else None
+        if not isinstance(task_id, str) or not task_id:
+            raise ValueError('teacher source case has no exact task ID')
+        case_ids.append(task_id)
+
+    indexed = {}
+    for row in rewards:
+        if not isinstance(row, dict):
+            raise ValueError('teacher reward row must be an object')
+        group, sample, task_id = row.get('group'), row.get('sample'), row.get('task_id')
+        if type(group) is not int or type(sample) is not int or not isinstance(task_id, str):
+            raise ValueError('teacher reward row lacks typed group/sample/task identity')
+        key = (group, sample)
+        if key in indexed:
+            raise ValueError('duplicate teacher reward sample identity')
+        indexed[key] = row
+
+    queue_keys = set()
+    result = []
+    for entry in entries:
+        group, sample = entry.get('group'), entry.get('sample')
+        if type(group) is not int or type(sample) is not int or not (0 <= group < len(case_ids)):
+            raise ValueError('teacher queue entry has invalid group/sample')
+        identity = (group, sample)
+        if identity in queue_keys:
+            raise ValueError('duplicate teacher queue sample identity')
+        queue_keys.add(identity)
+        row = indexed.pop(identity, None)
+        if row is None or row['task_id'] != case_ids[group]:
+            raise ValueError('teacher reward does not bind the queued source case')
+        expected_key = f's7-task-{group:03d}-{sample:02d}'
+        if entry.get('key') != expected_key:
+            raise ValueError('teacher queue key differs from its group/sample identity')
+        result.append({**entry, 'outcome': row.get('outcome'), 'reward': row.get('reward'),
+                       'task_id': row['task_id'], 'finish_status': row.get('finish_status')})
+    if indexed:
+        raise ValueError('teacher rewards contain samples absent from the queue')
+    return result
+
+
 def batch_completion(entries, journal, returncodes, score, *, resolve_path=Path):
     """Verify collector accounting; model-budget errors retain exact error bytes.
 
