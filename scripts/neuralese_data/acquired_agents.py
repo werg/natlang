@@ -281,11 +281,16 @@ def validate_recovery_manifest(ref, receipt, receipt_path, *, root):
             or not isinstance(receipt.get('revision'),str) or not receipt['revision']):
         raise Reject('recovered source identity or status is invalid: '+str(ref))
     history=receipt.get('historical_acquisition_receipt') or {}
+    historical_sha=history.get('expected_sha256')
+    stage_proof_sha=history.get('expected_source_stage_proof_sha256')
     archive=receipt.get('source_archive') or {}
     if (history.get('available') is not False
-            or not isinstance(history.get('expected_sha256'),str)
-            or len(history['expected_sha256']) != 64
-            or any(char not in '0123456789abcdef' for char in history['expected_sha256'])
+            or (historical_sha is not None and
+                (not isinstance(historical_sha,str) or len(historical_sha) != 64
+                 or any(char not in '0123456789abcdef' for char in historical_sha)))
+            or (historical_sha is None and
+                (not isinstance(stage_proof_sha,str) or len(stage_proof_sha) != 64
+                 or any(char not in '0123456789abcdef' for char in stage_proof_sha)))
             or archive.get('verified') is not True
             or archive.get('private') is not True
             or type(archive.get('bytes')) is not int or archive['bytes'] <= 0
@@ -310,6 +315,8 @@ def validate_recovery_manifest(ref, receipt, receipt_path, *, root):
             or len(embedded['sha256']) != 64
             or any(char not in '0123456789abcdef' for char in embedded['sha256'])):
         raise Reject('recovery manifest lacks an exact embedded source-stage proof')
+    if historical_sha is None and stage_proof_sha != embedded['sha256']:
+        raise Reject('unavailable historical receipt must bind the exact retained source-stage proof')
     try:
         with tarfile.open(archive_path, 'r:*') as stream:
             member = stream.getmember(embedded_name)
