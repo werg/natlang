@@ -271,8 +271,16 @@ def test_conversion_runtime_drift_requires_the_exact_named_full_rerender_transit
     from copy import deepcopy
     from scripts.neuralese_data import prepare_acquired_preference_admission as admission
     from scripts.neuralese_data import build_acquired_preference_graphs as source_builder
-    current=source_builder._runtime()
+    live_current=source_builder._runtime()
     transition=admission._D24_RENDER_REQUALIFICATION
+    # This is an exact historical transition, not permission to requalify
+    # whatever renderer happens to be checked out when the test runs.
+    fixture=json.loads((Path(__file__).parent/'fixtures/d24-qualified-render-runtime-20261016.json').read_text())
+    current=deepcopy(fixture['runtime'])
+    assert current['fingerprint']==transition['to_fingerprint']
+    assert admission.canonical_json_sha256_hex(current['files'])==current['fingerprint']
+    current['files']['tokenizer_inventory']=deepcopy(live_current['files']['tokenizer_inventory'])
+    current['fingerprint']=admission.canonical_json_sha256_hex(current['files'])
     old=deepcopy(current)
     for key,(before,after) in transition['changed_files'].items():
         assert old['files'][key]['sha256']==after
@@ -296,6 +304,9 @@ def test_conversion_runtime_drift_requires_the_exact_named_full_rerender_transit
     mutated['fingerprint']=transition['from_fingerprint']
     with pytest.raises(ValueError,match='exact all-pair rerender continuation'):
         admission._conversion_runtime_transition(mutated,current)
+    if live_current!=current:
+        with pytest.raises(ValueError,match='exact all-pair rerender continuation'):
+            admission._conversion_runtime_transition(old,live_current)
 
 
 def test_tokenizer_inventory_transition_rejects_function_ast_drift(tmp_path,monkeypatch):

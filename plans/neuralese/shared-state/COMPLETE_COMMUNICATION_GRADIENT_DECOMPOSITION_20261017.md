@@ -138,3 +138,24 @@ Exact reports are `lfm9478-stored-updates-diagnostic-root-v2-20261017.json`,
 `lfm9478-reference-arithmetic-summary-root-20261017.json` in the same operations
 directory. The full inherited runs used at most 7.0 GB host memory and 4.93 GB
 CUDA allocation; these are local DGX diagnostic measurements, not cloud proofs.
+
+Stock feed-forward arithmetic localization (2026-10-17, 16:00 UTC)
+----------------------------------------------------------------
+
+The reference context did not cover stock LFM feed-forward `nn.Linear` calls.
+Adding the existing float64 reference product to those calls, while retaining
+the previous reference projections/attention and per-row source norms, passes
+all 151 complete communication gradient comparisons at the original tolerances.
+The exact inherited optimizer is still unchanged: 105/150 stored-update
+diagnostics fail, including 88 parameters with moment differences. The worst
+Muon delta relative L2 difference is 0.00504 (absolute difference 2.35e-7 at that parameter).
+This localizes an additional arithmetic contribution; it does not establish
+which subset of reference changes suffices or justify expensive double products
+in production. Tiny gradient differences can cross BF16 moment rounding
+boundaries; their downstream effect still requires investigation.
+
+Receipt `lfm9478-stock-ffn-reference-updates-root-20261017.json` records the
+actual original parent, all module names, inherited state, preserved source RNG
+and zero source updates. It ran in 171.1 seconds with 6.9 GB peak host memory
+and 8.41 GB CUDA allocation. This is a diagnostic execution, not production
+qualification or evidence of task-quality improvement. Production continues.

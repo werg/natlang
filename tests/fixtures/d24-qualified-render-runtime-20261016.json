@@ -1,0 +1,59 @@
+{
+  "runtime": {
+    "files": {
+      "builder": {
+        "sha256": "cf4346e17dcc2c9f4770e2d8fb142cf597563e6551b8d51329c5c224ba5aaf1b"
+      },
+      "conversion_output_lease": {
+        "sha256": "a7b47b5bd32afc0bf74f9de82f3e0656e541acb8f6eb28ec88b5dacaab85258c"
+      },
+      "decision_holds": {
+        "sha256": "01a97d9c285b116685d8d9f0803824c6cc4e6b48830d102e35faf09e19981783"
+      },
+      "graph_writer": {
+        "sha256": "3ec7f56da9d31194aa8454bf3b6e80c567d653aed7a6a41f3a3862559aed9243"
+      },
+      "jsonio": {
+        "sha256": "0716177d8690b53f3ea39f6e6dd3c1ebe5ff7407f02a7d095e9e59d4a1631114"
+      },
+      "native_graph_conversion": {
+        "sha256": "d8f03cb1ac1507d412e4c2afbd7088f8536cbfef0fb6490fe15bde18d2fa2411"
+      },
+      "normalized_preference_reader": {
+        "sha256": "e8389085359eb1a9c797bb0d53344d258286cdd0a8aaba738ad5b9dcceb4a5d3"
+      },
+      "pair_objective": {
+        "sha256": "e4351bb735119b7b19e8911c02b11119ade8f87291482d84878545cf87788d29"
+      },
+      "pair_renderer": {
+        "sha256": "ec6b8d645b37207fe1f330b80712f21954e578a630e159aab8e4d0045297de3c"
+      },
+      "preference_builder": {
+        "sha256": "d8f120e0ad0d00e11fd277812ef0556fdb438f50de141f798c9a62100ad15810"
+      },
+      "prompt_rendering": {
+        "sha256": "6d14d8d1f65583e324b5ce0b9a48202d5333fd25d5c2fd035487efe51650f0ba"
+      },
+      "serve_chat": {
+        "sha256": "12e9dfca075a1159b72fc5f2be1b7b376c65e5e8780a766adc62ad78a4ceea36"
+      },
+      "source_admission": {
+        "sha256": "618beef2bacb26995cdf391ce07e621f6ab43ab146ca91fa5f6033625d8fcda9"
+      },
+      "split_group_closure": {
+        "sha256": "c43c43dd083bb9e2e8d47677b77dbf7964cd513fe3c93e708dedf4fe2afe3411"
+      },
+      "text_corpus": {
+        "sha256": "004659afb57d4c23dd64262ed49ca4b3964938b60e701789a61b63091464773a"
+      },
+      "tokenizer_inventory": {
+        "sha256": "99eee6d5b2bbe87b8957b3df486951fdf37e8a102d73eaf0cbd91f7274924e9d"
+      },
+      "tokenizer_provision": {
+        "sha256": "87e1759ab01bcd252972a2ab1e797bddbe949463f92bf55dc747c1a0d3bf4cdb"
+      }
+    },
+    "fingerprint": "45902d4663905c5d0d261cabd90b0ba126272e9b4cb94aeb34976128d35e7e8a"
+  },
+  "source_commit": "2686ae90f129fc2dcbc6125a5045da574b024a2b"
+}
