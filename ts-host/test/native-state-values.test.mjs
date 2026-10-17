@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { createServer } from 'node:http';
-import { neuraleseServerModelTurn, encodeBlockBody } from '../dist/model/neuralese-server.js';
+import { neuraleseServerModelTurn, encodeBlockBody, requestNativeStateIds } from '../dist/model/neuralese-server.js';
 import { join } from 'node:path';
 import { MemoryNeuraleseStore, encodeNativeState, StandInNeuralesePort, hashingEmbedder } from '../dist/native/neuralese-store.js';
 import { neuraleseRef, neuraleseSentinel, isNeuraleseRef, soleSentinel, sourceWithLiteralCalls,
@@ -20,6 +20,21 @@ import { nativeStateFixture } from './fixtures/native-state.mjs';
 
 const runtimeFor = (store, architecture='fixture') => ({ store, dialect: `native-state/${architecture}` });
 const envFor = options => { const env = new TypeEnv(); env.dialects = dialectBinding(options); return env; };
+
+test('short native ID in historical tool arguments stays ordinary data', () => {
+  const full = 'nzs1_' + 'a'.repeat(52);
+  const short = { type: 'native_state', id: 'nzs1_w42ancp7k5' };
+  const valid = { type: 'native_state', id: full };
+  const history = value => [{ role: 'assistant', tool_calls: [{ function: {
+    name: 'return_result', arguments: JSON.stringify({ status: 'success', value }),
+  } }] }];
+  assert.deepEqual(requestNativeStateIds(history([short])), []);
+  assert.deepEqual(requestNativeStateIds(history([valid])), [full]);
+  assert.deepEqual(requestNativeStateIds(history([short, valid])), [full]);
+  assert.deepEqual(requestNativeStateIds(history({ nested: [short] })), []);
+  assert.deepEqual(requestNativeStateIds(history({ nested: [valid] })), [full]);
+  assert.equal(short.id, 'nzs1_w42ancp7k5');
+});
 
 test('native state is the existing typed value through parts, nested values, eval and soft bodies', async () => {
   const store = new MemoryNeuraleseStore(), artifact = await store.putNativeState(nativeStateFixture());

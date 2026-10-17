@@ -307,7 +307,7 @@ export function requestNativeStateIds(messages: readonly unknown[]): string[] {
     if (Array.isArray(value) && value.length && value.every(part => part && typeof part === 'object' &&
         (part.type === 'text' && typeof part.text === 'string' ||
          part.type === 'neuralese' && typeof part.id === 'string' ||
-         part.type === 'native_state' && typeof part.id === 'string'))) {
+         part.type === 'native_state' && isNativeStateId(part.id)))) {
       for (const part of value as RuntimeContentPart[]) if (part.type === 'native_state') ids.add(part.id);
       return;
     }

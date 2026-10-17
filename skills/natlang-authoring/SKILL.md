@@ -525,3 +525,10 @@ completed writes from the failed reply retain their actual provenance; an
 unfinished span is never a communication block. Do not copy an opaque state ID
 into an ordinary string result. The runtime retains the failed draw for graph
 learning instead of silently retrying the model transport.
+
+Native state IDs are complete content IDs. A shortened ID copied into a tool
+argument stays ordinary data for the declared result type; it cannot identify
+a cached state. Recover from the normal type error by returning the required
+ordinary value or by using the complete original state reference. Never guess
+a full ID from a prefix. Actual complete references keep artifact restoration
+and provenance checks.

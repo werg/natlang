@@ -541,3 +541,10 @@ The open/close/consume-marker/nested error codes mean repair the native reply
 or return the declared ordinary type. A `neuralese-native-protocol-integrity`
 error instead requires repairing the client/server receipt or restoring a
 matching runtime; model-generated text cannot supply a trusted receipt.
+
+Native state IDs are complete content IDs. A shortened ID copied into a tool
+argument stays ordinary data for the declared result type; it cannot identify
+a cached state. Recover from the normal type error by returning the required
+ordinary value or by using the complete original state reference. Never guess
+a full ID from a prefix. Actual complete references keep artifact restoration
+and provenance checks.

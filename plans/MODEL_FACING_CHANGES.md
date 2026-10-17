@@ -1006,3 +1006,14 @@ and do **not** measure this feedback. Debt: about48 live executor samples per
 variant in the next own-teacher window, preserving actor/runtime/task hashes;
 no task-quality or live-cutover qualification is claimed by deterministic
 HTTP/replay regressions.
+
+## 2026-10-17 — malformed native IDs in historical arguments
+
+The dependency scanner now applies the existing full native-ID predicate to
+part lists nested in historical tool arguments. Previously a shortened model
+copy could abort the next turn during artifact restoration before normal type
+feedback. Valid complete state references retain their restore requirements.
+Python argument rendering must make the same distinction. No prompt or error
+wording is added. Runtime recovery behavior is model-facing; live measurement
+of approximately48 executor samples per variant is pending in the next teacher
+window and recorded as debt, not as a reason to stall useful training.
