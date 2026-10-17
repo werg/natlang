@@ -13,6 +13,7 @@ from scripts.neuralese_data.close_acquired_source_protection import project
 from scripts.neuralese_data import prepare_acquired_session_admission as admission
 from scripts.neuralese_data.prepare_acquired_session_admission import verify_global_source_closure
 from scripts.neuralese_data.continue_acquired_protection import verify_protection_transition
+from scripts.neuralese_data import write_acquired_source_closure_receipt as closure_writer
 from scripts.neuralese_data.splits import close_group_sets
 
 
@@ -77,6 +78,35 @@ def test_publish_then_extend_without_original_normalized_text(tmp_path,monkeypat
     with pytest.raises(ValueError,match='immutable'):project(first,tmp_path/'extended',exports=[extra])
     component=second.parent/'inherited-components.jsonl';component.write_text('{}\n')
     with pytest.raises(ValueError,match='differs'):teacher.current_protection(second)
+
+
+def test_closure_receipt_writer_force_mode_hashes_without_cache(tmp_path,monkeypatch):
+    projection=project(base(tmp_path,monkeypatch),tmp_path/'closed')
+    closure_calls=[]
+    artifact_calls=[]
+    real_closure=admission.acquired_source_closure
+    real_artifacts=admission._source_closure_artifacts
+    def observe_closure(path,protection,*,use_cache=True):
+        closure_calls.append(use_cache)
+        return real_closure(path,protection,use_cache=use_cache)
+    def observe_artifacts(path,manifest,*,use_cache=True):
+        artifact_calls.append(use_cache)
+        return real_artifacts(path,manifest,use_cache=use_cache)
+    monkeypatch.setattr(admission,'acquired_source_closure',observe_closure)
+    monkeypatch.setattr(admission,'_source_closure_artifacts',observe_artifacts)
+    output=tmp_path/'closure-receipt.json'
+    closure_writer.main(['--protection',str(projection),'--output',str(output),
+                         '--force-full-validation'])
+    assert closure_calls==[False]
+    assert artifact_calls==[False]
+    receipt=json.loads(output.read_text())
+    assert receipt['training_admission'] is False
+    assert receipt['accounting']['normalized_sessions']==5
+    before=sha256_file_hex(output)
+    with pytest.raises(ValueError,match='immutable'):
+        closure_writer.main(['--protection',str(projection),'--output',str(output),
+                             '--force-full-validation'])
+    assert sha256_file_hex(output)==before
 
 
 def test_extension_resolves_declared_receipts_through_verified_mount_alias(tmp_path,monkeypatch):

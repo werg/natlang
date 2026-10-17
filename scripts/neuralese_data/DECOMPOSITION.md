@@ -290,6 +290,8 @@ decision.
    `--force-full-source-closure` bypasses the receipt and reruns the global
    streaming closure with uncached content hashes. It does not rewrite an
    existing receipt; writing a fresh receipt requires a new output path.
+   `write_acquired_source_closure_receipt.py --force-full-validation` provides
+   that uncached full pass while creating a receipt only at its new output path.
 
 The hash cache is a performance aid after an actual byte hash, not authority by
 itself. Its current threat model covers ordinary filesystem mutation and races;

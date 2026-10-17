@@ -13,12 +13,15 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--protection', required=True, type=Path)
     parser.add_argument('--output', required=True, type=Path)
+    parser.add_argument('--force-full-validation', action='store_true',
+                        help='bypass cached file digests and re-hash the complete normalized source closure')
     args = parser.parse_args(argv)
     if args.output.exists():
         raise ValueError('source closure receipts are immutable; choose a new output path')
     protection = current_protection(args.protection)
     accounting = verify_global_source_closure(args.protection, protection,
-                                              receipt_path=args.output)
+                                              write_receipt_path=args.output,
+                                              force_full_validation=args.force_full_validation)
     print(f'{args.output} {sha256_file_hex(args.output)} {accounting["normalized_sessions"]}')
 
 
