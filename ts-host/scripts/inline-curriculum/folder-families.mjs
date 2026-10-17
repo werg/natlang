@@ -224,7 +224,6 @@ export function folderEdit(seed, index, split = 'train', chosenTask) {
   record.gold_sources = ['coedit-targets'];
   record.dataset = 'coedit';
   record.dataset_records = rows.map(row => row.id);
-  if (dataset === 'sst2') record.generation.source_context = rows.map(row => row.source_context);
   record.generation.layout = { id: 'id', path: 'drafts/{id}.md', body: 'body', format: 'frontmatter' };
   return [record];
 }

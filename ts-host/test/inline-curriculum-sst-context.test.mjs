@@ -88,6 +88,19 @@ test('both actual SST2 loaders exclude context-free phrases and retain exact rec
       assert.equal(rows[0].source_context.members[0].sentence_index, 1);
       assert.equal(rows[0].source_context.record_label, 'negative');
     }
+    // Exercise the real unrelated CoEdIT generator: SST provenance must never
+    // introduce a free dataset variable or leak into another source family.
+    const coedit = join(root, 'coedit', SOURCES.coedit.revision, SOURCES.coedit.files[0].path);
+    mkdirSync(dirname(coedit), { recursive: true });
+    writeFileSync(coedit, Array.from({ length: 64 }, (_, i) => ({ task: 'gec',
+      src: `Fix grammar: This are the complete draft number ${i} for the source fixture.`,
+      tgt: `This is the complete draft number ${i} for the source fixture.` })).map(JSON.stringify).join('\n') + '\n');
+    const { folderEdit } = await import('../scripts/inline-curriculum/folder-families.mjs');
+    const [edit] = folderEdit(7001, 0, 'train', 'gec');
+    assert.equal(edit.dataset, 'coedit');
+    assert.ok(edit.dataset_records.length >= 20);
+    assert.equal(edit.generation.source_context, undefined);
+    assert.equal(edit.semantics.expected, edit.dataset_records.length);
   } finally {
     SOURCES.sst2.files = original;
     if (old === undefined) delete process.env.NATLANG_DATASETS; else process.env.NATLANG_DATASETS = old;
