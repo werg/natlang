@@ -111,7 +111,7 @@ def bootstrap_configs(plan_path, completion_path, out):
 
 
 
-def configure_provider(config,declaration,plan,binding,config_path):
+def configure_provider(config,declaration,plan,binding,config_path,*,write=True):
     """One exact provider/actor command contract for raw and joint bootstrap."""
     overrides = declaration.get('commands') or {}
     if set(overrides) - {'actor_command', 'learner_command', 'seed_command', 'round_command',
@@ -139,7 +139,7 @@ def configure_provider(config,declaration,plan,binding,config_path):
     config['source_admission'] = declaration.get('source_admission')
     if declaration.get('task_source'):
         config['task_source'] = declaration['task_source']
-    write_json_durable(config_path, config)
+    if write:write_json_durable(config_path, config)
     return config
 
 def bridge_result(command, request, stop):

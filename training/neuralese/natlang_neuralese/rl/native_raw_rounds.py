@@ -102,9 +102,16 @@ def configure_model(plan_path,declaration,handoff,out):
     from .native_bootstrap_metadata import unchanged,save
     if path.exists():
         prior=json.loads(path.read_text())
+        if prior.get('runtime_handoff') and not declaration.get('runtime_handoff'):
+            raise ValueError('raw continuation cannot discard its later runtime authority')
         owner={'plan_sha256':sha256_file_hex_cached(plan_path),'handoff':handoff}
-        if prior.get('bootstrap_binding')==owner and unchanged(verification,plan_path,declaration,handoff,prior):
+        if prior.get('runtime_binding',prior.get('bootstrap_binding'))==owner and unchanged(verification,plan_path,declaration,handoff,prior):
             return path
+        if declaration.get('runtime_handoff'):
+            from .native_runtime_handoff import configure_runtime_handoff
+            return configure_runtime_handoff(plan_path,declaration,handoff,path)
+    elif declaration.get('runtime_handoff'):
+        raise ValueError('later runtime authority requires its existing bootstrap and cursor')
     record,saved=verify_handoff(handoff,requirement=declaration['handoff_requirement'])
     actual=saved['model_config']['architecture']+':'+saved['model_config']['base_inventory_sha256']
     if actual!=declaration['handoff_requirement']['model_id']:
@@ -379,15 +386,26 @@ def _release_requirement(declaration,value,*,verified_handoff=None):
     """Recheck the existing resident append contract, preserving fixed foundation."""
     requirement={**declaration['handoff_requirement'],'trainer_exit':None,'trainer_launch':None,'resident_adoption':None}
     transition_ref=declaration.get('drained_recipe_handoff')
+    transition_handoff=None;retired_cursor=None
+    if declaration.get('runtime_handoff'):
+        from .native_runtime_handoff import verify_runtime_handoff
+        runtime=json.loads(_bound(declaration['runtime_handoff']).read_text())
+        bootstrap=declaration.get('handoff_receipt') or value.get('handoff') or runtime['bootstrap']
+        proof=verify_runtime_handoff(declaration['runtime_handoff'],bootstrap=bootstrap)
+        transition_ref=proof['recipe_handoff'];transition_handoff=proof['handoff']
+        retired_cursor=json.loads(_bound(proof['snapshots']['cursor']).read_text()).get('resident_current')
     if transition_ref:
         from .native_raw_handoff import verify_drained_recipe_handoff
         transition=json.loads(_bound(transition_ref).read_text())
         transition=verify_drained_recipe_handoff(transition_ref,handoff=transition['handoff'],
-            **({'verified_handoff':verified_handoff} if verified_handoff is not None else {}))
+            **({'verified_handoff':verified_handoff} if verified_handoff is not None and transition_handoff is None else {}))
         from ..train.recipe import recipe_identity_sha256
         requirement['recipe_sha256']=recipe_identity_sha256(_bound(transition['recipe']))
         requirement['recipe_lineage_sha256']=json.loads(_bound(transition['new_plan']).read_text())['recipe_sha256']
     reference=value.get('resident_current')
+    # A later handoff explicitly retired this exact historical generation.
+    # Keep the cursor receipt, but never reinterpret it as the new live plan.
+    if transition_handoff is not None and reference==retired_cursor:return requirement
     if reference is None:return requirement
     from ..train.native_resident import current,_contract
     from ..train.recipe import resolve_recipe_data,resolve_stage_inputs,recipe_identity_sha256
@@ -437,7 +455,7 @@ def validate_release(path,plan_path,*,allow_live=False):
     for declaration in plan['models']:
         value=models[declaration['model']]
         config=json.loads(_bound(value['config']).read_text())
-        if (config.get('bootstrap_binding') or {}).get('plan_sha256')!=record['plan_sha256']:
+        if (config.get('runtime_binding',config.get('bootstrap_binding')) or {}).get('plan_sha256')!=record['plan_sha256']:
             return None  # a sealed older operation must finish before live-plan adoption
         verify_handoff(value['handoff'],requirement=declaration['handoff_requirement'])
         current=json.loads(_bound(value['production_state']).read_text())

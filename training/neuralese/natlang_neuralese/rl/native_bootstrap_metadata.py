@@ -40,6 +40,31 @@ def evidence(plan_path,declaration,handoff,config):
             packages[key]=code_inventory(Path(value[key]))
             if packages[key]!=value[key.replace('_package','_code')]:
                 raise ValueError('bootstrap proof package identity changed')
+    later=declaration.get('runtime_handoff')
+    if later!=config.get('runtime_handoff'):
+        raise ValueError('bootstrap metadata lost its current later runtime authority')
+    if later:
+        value=json.loads(add(later).read_text())
+        if value.get('bootstrap')!=handoff:
+            raise ValueError('later runtime metadata changed the original bootstrap')
+        for reference in value['snapshots'].values():add(reference)
+        if value.get('previous'):add(value['previous'])
+        if value.get('operation'):
+            for key in ('request','result','state'):add(value['operation'][key])
+        transition=json.loads(add(value['recipe_handoff']).read_text())
+        for handoff_ref in [value['handoff'],transition['handoff']]:
+            current_record=json.loads(add(handoff_ref).read_text())
+            intent=json.loads(add(current_record['intent']).read_text())
+            add(intent['launch']);add(current_record['terminal']);add(current_record['checkpoint'])
+            for reference in (current_record.get('resident') or {}).values():
+                if isinstance(reference,dict) and reference.get('path') and reference.get('sha256'):add(reference)
+        for key in ('old_plan','new_plan'):plan(json.loads(add(transition[key]).read_text()))
+        for key in ('recipe','retirement'):
+            if transition.get(key):add(transition[key])
+        for key in ('old_package','new_package'):
+            packages['later_'+key]=code_inventory(Path(transition[key]))
+            if packages['later_'+key]!=transition[key.replace('_package','_code')]:
+                raise ValueError('later runtime proof package identity changed')
     cursor_path=Path(config['out']).parent/'cycle.json'
     if cursor_path.exists():
         cursor=json.loads(cursor_path.read_text())
