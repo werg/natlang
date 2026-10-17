@@ -39,7 +39,7 @@ def run_authority(run, policy_path, directory):
         yield claim
 
 
-def candidates(role, state, files, protected):
+def candidates(role, state, files, protected, *, kind='checkpoint'):
     receipt = state['receipt']
     identity = receipt['identity']
     fetched = receipt['independent_verification']
@@ -50,7 +50,9 @@ def candidates(role, state, files, protected):
         raise ValueError('retention requires independently verified full private recovery')
     if role not in ('lfm', 'mellum'):
         raise ValueError('unknown checkpoint export role')
-    latest = re.fullmatch(rf'{role}/([0-9a-f]{{64}})/{role}-native-checkpoint-step-(\d+)\.pt', receipt['name'])
+    if kind not in ('checkpoint','inference'):
+        raise ValueError('unknown retained native artifact kind')
+    latest = re.fullmatch(rf'{role}/([0-9a-f]{{64}})/{role}-native-{kind}-step-(\d+)\.pt', receipt['name'])
     if (not latest or latest[1] != identity['sha256'] or
             type(state['last_verified_step']) is not int or
             int(latest[2]) != state['last_verified_step']):
@@ -62,10 +64,69 @@ def candidates(role, state, files, protected):
     keep = {receipt['name'], *protected}
     found = []
     for f in files:
-        match = re.fullmatch(rf'{role}/[0-9a-f]{{64}}/{role}-(?:native-)?checkpoint-step-(\d+)\.pt', f.name)
+        spelling = '(?:native-)?checkpoint' if kind=='checkpoint' else 'native-inference'
+        match = re.fullmatch(rf'{role}/[0-9a-f]{{64}}/{role}-{spelling}-step-(\d+)\.pt', f.name)
         if match and int(match[1]) < state['last_verified_step'] and f.name not in keep:
             found.append(f)
     return found
+
+
+def inference_dependencies(role, declaration):
+    """Read existing transfer/request custody without loading any model bytes."""
+    protected=set(declaration['protected_files'])
+    def protect_receipt(receipt):
+        identity=receipt['identity'];proof=receipt['independent_verification']
+        match=re.fullmatch(rf'{role}/([0-9a-f]{{64}})/{role}-native-(?:inference|checkpoint)-step-(\d+)\.pt',receipt['name'])
+        if (receipt.get('private')is not True or receipt.get('run')!=declaration['run']
+                or type(identity.get('bytes'))is not int or identity['bytes']<=0
+                or any(proof.get(k)!=identity[k]for k in ('sha256','bytes'))
+                or not match or match[1]!=identity['sha256']):
+            raise ValueError('native retention dependency has no verified same-run artifact identity')
+        protected.add(receipt['name'])
+        return int(match[2])
+    def protect_parent(parent):
+        if (parent.get('schema')!='natlang.native-inference-source/1'
+                or not re.fullmatch('[0-9a-f]{64}',parent.get('training_checkpoint_sha256',''))
+                or type(parent.get('step'))is not int or parent['step']<0
+                or type(parent.get('training_checkpoint_bytes'))is not int or parent['training_checkpoint_bytes']<=0):
+            raise ValueError('native inference dependency has no exact full parent')
+        protected.add(f"{role}/{parent['training_checkpoint_sha256']}/{role}-native-checkpoint-step-{parent['step']}.pt")
+    for directory in declaration.get('inference_ingesters',[]):
+        directory=Path(directory)
+        for path in (directory/'incoming').glob('*.receipt.json'):
+            protect_receipt(json.loads(path.read_text()))
+        state=directory/'native-async-state.json'
+        active=json.loads(state.read_text()).get('active')if state.exists()else None
+        if active:
+            request=json.loads((Path(active['request'])/'request.json').read_text())
+            evidence=request['evaluation_provenance']
+            if evidence['source_checkpoint_sha256']!=active['checkpoint_sha256']:
+                raise ValueError('active inference request changed its source identity')
+            receipt=evidence['source_export'];step=protect_receipt(receipt)
+            if receipt['identity']['sha256']!=active['checkpoint_sha256']or step!=active['step']:
+                raise ValueError('active inference export receipt differs from the sealed source')
+            if evidence.get('inference_source')is not None:protect_parent(evidence['inference_source'])
+    view_path=declaration.get('inference_state')
+    view=json.loads(Path(view_path).read_text())if view_path and Path(view_path).exists()else None
+    if view is not None:
+        protect_receipt(view['receipt']);protect_parent(view['inference_source'])
+        if view['inference_source']['step']!=view['last_verified_step']:
+            raise ValueError('inference pointer differs from full-parent step')
+        if view['inference_source']['training_checkpoint_bytes']<=view['receipt']['identity']['bytes']:
+            raise ValueError('inference pointer is not a pruned full-parent view')
+    for path in declaration.get('inference_pending',[]):
+        if Path(path).exists():
+            pending=json.loads(Path(path).read_text());receipt=pending['full_private_receipt']
+            step=protect_receipt(receipt)
+            parent=pending['full_training_checkpoint']
+            if (parent!={'step':step,**receipt['identity']}or pending['step']!=step):
+                raise ValueError('pending inference full receipt differs from its declared parent')
+            protect_parent({'schema':'natlang.native-inference-source/1','step':parent['step'],
+                'training_checkpoint_sha256':parent['sha256'],'training_checkpoint_bytes':parent['bytes']})
+            identity=pending['identity']
+            if not re.fullmatch('[0-9a-f]{64}',identity['sha256']):raise ValueError('pending inference identity is invalid')
+            protected.add(f"{role}/{identity['sha256']}/{role}-native-inference-step-{pending['step']}.pt")
+    return protected,view
 
 
 def tick(policy_path, journal_directory, *, apply=False, api=None, ownership_directory=None):
@@ -92,13 +153,31 @@ def _prune_run(role, declaration, root, apply, api, policy_binding, claim):
     if state['receipt']['run'] != declaration['run']:
         raise ValueError('retention state belongs to a different storage run')
     files = list(api.run(declaration['run']).files(per_page=1000))
-    selected = candidates(role, state, files, declaration['protected_files'])
+    protected,view = inference_dependencies(role,declaration)
+    # During a download the existing incoming receipt knows the physical view
+    # and saved step; full-parent provenance is sealed only after loading it.
+    # Preserve same-step full parents across that gap, even if a newer pointer
+    # arrives. Unknown same-step aliases are kept until that consumer drains.
+    view_steps={int(match[1])for name in protected if (match:=re.fullmatch(
+        rf'{role}/[0-9a-f]{{64}}/{role}-native-inference-step-(\d+)\.pt',name))}
+    for file in files:
+        match=re.fullmatch(rf'{role}/[0-9a-f]{{64}}/{role}-(?:native-)?checkpoint-step-(\d+)\.pt',file.name)
+        if match and int(match[1])in view_steps:protected.add(file.name)
+    selected = candidates(role, state, files, protected)
+    if view is not None:
+        if view['last_verified_step']>state['last_verified_step']:
+            raise ValueError('inference pointer is ahead of verified full recovery')
+        if (view['last_verified_step']==state['last_verified_step'] and
+                view['inference_source']['training_checkpoint_sha256']!=state['receipt']['identity']['sha256']):
+            raise ValueError('inference pointer and full recovery disagree at the same step')
+        selected += candidates(role,view,files,protected,kind='inference')
     if apply:
         claim()  # Only valid recovery under an applying policy may acquire ownership.
     intent = {'at': time.time(), 'role': role, 'run': declaration['run'],
               'verified_latest': state['receipt']['name'], 'apply': apply,
               'verified_export_state': state, 'policy': policy_binding,
-              'protected_files': declaration['protected_files'],
+              'protected_files': sorted(protected),
+              **({'verified_inference_export_state':view}if view is not None else {}),
               'files': [{'name': f.name, 'bytes': f.size, 'md5': f.md5} for f in selected]}
     path = root / f'{role}-rolling-intent-{time.time_ns()}.json'
     if selected:

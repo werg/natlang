@@ -199,3 +199,20 @@ from the training checkpoint lock. A same-consumer release waits until packing
 has finished; removing the verified pin is serialized with commit/pin/prune.
 The actual race test holds packing open, proves release blocks, and independently
 acquires the training commit lock so archive compression cannot stall a save.
+
+## Superseded inference-view retention (2026-10-17)
+
+The standing owner policy retains current recovery and active consumers, then
+removes superseded artifacts. Extend the existing checkpoint retention unit:
+
+1. Verify the current full backup and independently fetched inference view.
+2. Protect the current view, explicit dependencies, active native-async requests
+   and incoming export receipts (including a transfer not yet queued).
+3. Protect those requests' full training parents as well as their physical views.
+4. Select only older canonical inference filenames in the declared same run.
+5. Write the existing exact deletion intent, delete, and verify absence.
+
+Artifact identity, queue/request custody, strict name matching and deletion are
+crisp durability/external-service mechanisms. No model policy or prompt changes.
+An invalid dependency fails the run closed; absent optional view state prunes
+no inference objects. Existing full-checkpoint retention remains the default.
