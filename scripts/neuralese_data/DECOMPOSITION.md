@@ -258,5 +258,9 @@ binds the member's exact normalized export and source hashes to the full parent
 inventory, checks every paired tokenizer view and every complete session, and
 keeps all sibling exports pending. It does not infer admission from a path name
 alone, waive source identity or split checks, or count registration as exposure.
+The paired conversion join resolves native receipts by the exact original
+source SHA bound in the normalized export contract, with a legacy export-ID
+path fallback only when the source-SHA path is absent. If both distinct paths
+contain receipts, it rejects the ambiguous join and requires one exact binding.
 This is an extension of the existing exact verifier, not a new source parser or
 training policy.

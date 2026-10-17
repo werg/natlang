@@ -58,6 +58,27 @@ def test_incremental_member_accepts_declared_complete_trajectory_without_broaden
         'source_rows':1,'trajectory_representation':'existing complete Trajectory dataclass'}}) is None
 
 
+def test_native_conversion_directory_resolves_source_sha_and_legacy_export_identity(tmp_path):
+    from scripts.neuralese_data.prepare_acquired_session_admission import native_conversion_directory
+    root=tmp_path/'native';export_path=tmp_path/'exports'/'export-id'/'export.json'
+    source_sha='a'*64;model='lfm25';by_source=root/source_sha/model;by_source.mkdir(parents=True)
+    (by_source/'receipt.json').write_text('{}')
+    export={'contract':{'source':{'sha256':source_sha}}}
+    assert native_conversion_directory(root,export_path,export,model)==by_source.resolve()
+    by_export=root/'export-id'/model;by_export.mkdir(parents=True)
+    (by_export/'receipt.json').write_text('{}')
+    with pytest.raises(ValueError,match='ambiguous'):
+        native_conversion_directory(root,export_path,export,model)
+
+
+def test_native_conversion_directory_keeps_legacy_fallback_for_unbound_source_hash(tmp_path):
+    from scripts.neuralese_data.prepare_acquired_session_admission import native_conversion_directory
+    root=tmp_path/'native';export_path=tmp_path/'exports'/'export-id'/'export.json'
+    legacy=root/'export-id'/'mellum21';legacy.mkdir(parents=True)
+    (legacy/'receipt.json').write_text('{}')
+    assert native_conversion_directory(root,export_path,{'contract':{'source':{}}},'mellum21')==legacy.resolve()
+
+
 @pytest.fixture(scope='module',params=BASES,ids=['lfm','mellum'])
 def admitted(request):
     base=request.param

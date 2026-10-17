@@ -388,6 +388,27 @@ def whole_trajectory_source_view(proofs):
     return whole
 
 
+def native_conversion_directory(native_root, export_path, export, model):
+    """Resolve native output by its original source SHA or legacy export identity."""
+    root = Path(native_root)
+    source_sha = export.get('contract', {}).get('source', {}).get('sha256')
+    keys = [export_path.parent.name]
+    if isinstance(source_sha, str) and len(source_sha) == 64 and all(c in '0123456789abcdef' for c in source_sha):
+        keys.append(source_sha)
+    candidates = []
+    for key in dict.fromkeys(keys):
+        candidate = root / key / model
+        if (candidate / 'receipt.json').is_file():
+            resolved = candidate.resolve(strict=True)
+            if resolved not in candidates:
+                candidates.append(resolved)
+    if len(candidates) > 1:
+        raise ValueError('native conversion lookup is ambiguous between export identity and source SHA')
+    if candidates:
+        return candidates[0]
+    return root / keys[0] / model
+
+
 def verify_conversion(directory, export_path, *, protection, held_sources, decision_bindings, source_rows, conversion_protection=None):
     directory = Path(directory).resolve(strict=True); receipt_path = directory / 'receipt.json'
     receipt = json.loads(receipt_path.read_text())
@@ -585,7 +606,7 @@ def main(argv=None):
                 raise ValueError('normalized session changed its pinned original source identity')
         model_source_views = {}
         for model in models:
-            directory = args.native_root / export_path.parent.name / model
+            directory = native_conversion_directory(args.native_root, export_path, export, model)
             receipt, outputs, proofs, groups = verify_conversion(directory, export_path, protection=protection,
                 held_sources=held_sources, decision_bindings=decision_bindings, source_rows=rows,
                 conversion_protection=conversion_protection)
