@@ -60,3 +60,10 @@ Final f8fe2 witness regeneration passed in2.25s/16.6MiB; full pinned inventory i
 `native-whole-head-final-capacity-tests-20261017`:87passed/2.40s/460.6MiB;
 quick22+TS green. Tests additionally reject mixing old/new exact witness pairs.
 No new model/MAX probe or actual adoption is represented by this refresh.
+
+The exact 378ff target has its own immutable source-arithmetic witness and full
+296-module inventory. Its additional continuation changes borrow metadata only
+when explicitly requested; ordinary training retains owned copies. The existing
+source-v1/IEEE/storage and ordinary-objective restrictions remain in force.
+Accept only that inventory paired with its own witness. Preserve historical
+inventory/witness pairs and every existing memory, layout and optimizer guard.

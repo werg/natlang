@@ -23,7 +23,8 @@ def test_pinned_complete_witness_matches_both_full_inventories_and_actual_refere
     witness=json.loads(PROOF.read_text())
     assert len(value['new_code'])==296
     changes={key for key in value['old_code'].keys()|value['new_code'].keys() if value['old_code'].get(key)!=value['new_code'].get(key)}
-    assert changes==mechanism.allowed_changes(mechanism.WHOLE_HEAD_SOURCE_POLICY)
+    assert mechanism.allowed_changes(mechanism.WHOLE_HEAD_SOURCE_POLICY)-changes=={'train/native_continuation.py'}
+    assert changes<=mechanism.allowed_changes(mechanism.WHOLE_HEAD_SOURCE_POLICY)
     assert witness['checks']['maple_module_exact_after_declared_norm_dispatch'] is True
     assert witness['checks']['shared_state_module_exact_after_explicit_profiles_and_identity_metadata'] is True
     assert witness['source_index_proof']['qualification']=='source-metadata-revalidation-20261016'
@@ -65,7 +66,8 @@ def chain(tmp_path,monkeypatch):
     certpath=Path(result['source_certificate']['path']);cert=json.loads(certpath.read_text())
     cert.update(identity=measured['identity'],runtime_code_sha256=digest(old_code),evidence=binding(proof));certpath.write_text(json.dumps(cert))
     result.update(pinned);result.update(identity=measured['identity'],source_certificate=binding(certpath),
-        changes={name:{'old':old_code.get(name),'new':new_code.get(name)} for name in mechanism.WHOLE_HEAD_SOURCE_CHANGES},
+        changes={name:{'old':old_code.get(name),'new':new_code.get(name)}
+                 for name in old_code.keys()|new_code.keys() if old_code.get(name)!=new_code.get(name)},
         optimizer_state_unchanged=True,metadata_extra_bytes=64<<20)
     return old,new,result,proof
 
@@ -106,4 +108,21 @@ def test_prior_reviewed_inventory_remains_verifiable_but_cannot_mix_witnesses():
     mechanism._whole_head_source_contract(value)
     value['whole_head_arithmetic_proof']=binding(PROOF)
     with pytest.raises(ValueError,match='exact arithmetic'):
+        mechanism._whole_head_source_contract(value)
+
+
+def test_378_inventory_requires_its_own_witness_and_exact_continuation_module():
+    proof=PROOF.with_name('WHOLE_HEAD_SOURCE_PROFILE_PROOF_378FF_20261017.json')
+    witness=json.loads(proof.read_text());value=review()
+    value.update(new_code=witness['inventories']['target'],whole_head_arithmetic_proof=binding(proof))
+    mechanism._whole_head_source_contract(value)
+    changed={name for name in value['old_code'].keys()|value['new_code'].keys()
+             if value['old_code'].get(name)!=value['new_code'].get(name)}
+    assert changed==mechanism.allowed_changes(mechanism.WHOLE_HEAD_SOURCE_POLICY)
+    value['whole_head_arithmetic_proof']=binding(PROOF)
+    with pytest.raises(ValueError,match='exact arithmetic'):
+        mechanism._whole_head_source_contract(value)
+    value['whole_head_arithmetic_proof']=binding(proof)
+    value['new_code']['train/native_continuation.py']='0'*64
+    with pytest.raises(ValueError,match='full inventories'):
         mechanism._whole_head_source_contract(value)
