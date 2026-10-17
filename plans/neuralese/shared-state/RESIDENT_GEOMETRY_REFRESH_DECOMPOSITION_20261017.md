@@ -26,3 +26,14 @@ that proof binding without reparsing its million-row source inventory.
 This is exact proof/durability plumbing, with no scheduling policy, admission,
 model arithmetic or model-facing text change. It remains a separate CPU helper;
 an old runtime can consume the unchanged request schema without an overlay.
+
+When preparation used another cache directory, an explicit old-cache-root may
+also relocate the exact witnesses to the running learner's unchanged cache root.
+Verify original witnesses with the existing verifier under the old root in this
+isolated helper process, restore the actual root, then copy only missing indexes
+one at a time. Publish a verified immutable temporary copy without clobbering a
+concurrent destination; never link the source cache. Reuse existing destinations
+only after exact key, policy, metadata and entry-digest verification. Change only
+the witnesses' cache bindings; preserve their keys and metadata hashes. Verify
+the relocated witnesses through the normal learner-root verifier before the same
+request CAS. No running model environment or source policy changes.

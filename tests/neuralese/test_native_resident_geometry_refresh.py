@@ -85,6 +85,63 @@ def test_completed_refresh_retains_historical_proof_after_actual_owner_restart(t
     assert proof_path.read_bytes()==proof_bytes
 
 
+def test_index_root_refresh_reuses_verified_existing_and_copies_only_missing(tmp_path,monkeypatch):
+    import pickle,os
+    from natlang_neuralese.common import row_index
+    _,directory,manager,request,new_certificate=queued(tmp_path,monkeypatch)
+    original=json.loads(resident.bound(request).read_text());old_root=row_index.cache_dir()
+    learner=tmp_path/'actual-learner-cache';learner.mkdir()
+    first=original['payload']['indexes'][0]
+    existing=learner/Path(first['cache']['path']).name
+    # Same full key/entries metadata, a different legitimate pickle encoding.
+    existing.write_bytes(pickle.dumps(row_index.load(Path(first['cache']['path'])),protocol=0))
+    existing_bytes=existing.read_bytes();existing_inode=existing.stat().st_ino
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE',str(learner))
+    with pytest.raises(ValueError,match='learner row-index cache'):refresh(directory,request)
+    result=refresh(directory,request,old_cache_root=old_root)
+    new=json.loads(resident.bound(result['request']).read_text())
+    assert existing.read_bytes()==existing_bytes and existing.stat().st_ino==existing_inode
+    assert os.environ['NATLANG_ROW_INDEX_CACHE']==str(learner)
+    expected=copy.deepcopy(original['payload'])
+    expected['geometry_qualification']=resident.binding(new_certificate)
+    for old,witness in zip(expected['indexes'],new['payload']['indexes'],strict=True):
+        assert {k:v for k,v in old.items() if k!='cache'}=={k:v for k,v in witness.items() if k!='cache'}
+        assert Path(witness['cache']['path']).parent==learner
+        assert Path(old['cache']['path']).stat().st_ino!=Path(witness['cache']['path']).stat().st_ino
+        old['cache']=witness['cache']
+    assert new['payload']==expected
+    assert refresh(directory,request,old_cache_root=old_root)==result
+    assert manager.poll(5) is not None
+    assert manager.train.ordered_ids()==['a','b','c']
+
+
+@pytest.mark.parametrize('bad',['old-root','destination','copy-race'])
+def test_index_relocation_rejects_wrong_root_conflict_and_copy_race(tmp_path,monkeypatch,bad):
+    import os,pickle
+    from natlang_neuralese.common import row_index
+    from natlang_neuralese.train import native_resident_geometry_refresh as module
+    _,directory,_,request,_=queued(tmp_path,monkeypatch)
+    old_root=row_index.cache_dir();learner=tmp_path/'learner';learner.mkdir()
+    original=json.loads(resident.bound(request).read_text());first=original['payload']['indexes'][0]
+    target=learner/Path(first['cache']['path']).name
+    if bad=='old-root':old_root=tmp_path/'wrong-root'
+    elif bad=='destination':
+        value=row_index.load(Path(first['cache']['path']));value['entries'][0]['id']='forged'
+        target.write_bytes(pickle.dumps(value))
+    else:
+        copy_file=module.shutil.copyfileobj
+        def changed(source,out,**kwargs):
+            copy_file(source,out,**kwargs);out.seek(0);out.write(b'corrupt')
+        monkeypatch.setattr(module.shutil,'copyfileobj',changed)
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE',str(learner))
+    pointer=(directory/'pending.json').read_bytes()
+    with pytest.raises(ValueError):refresh(directory,request,old_cache_root=old_root)
+    assert os.environ['NATLANG_ROW_INDEX_CACHE']==str(learner)
+    assert (directory/'pending.json').read_bytes()==pointer
+    assert not (directory/'current.json').exists()
+    assert not list(learner.glob('*.tmp'))
+
+
 @pytest.mark.parametrize('bad',['identity','authority','limits','source','index','pending','initial-race'])
 def test_refresh_rejects_changed_authority_or_proofs_without_publishing(tmp_path,monkeypatch,bad):
     paths,directory,manager,request,new_certificate=queued(tmp_path,monkeypatch)

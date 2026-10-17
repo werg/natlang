@@ -4,6 +4,10 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import os
+import shutil
+import tempfile
+from contextlib import contextmanager
 from pathlib import Path
 
 from . import native_resident as resident
@@ -11,7 +15,53 @@ from ..common.hashing import sha256_hex
 from ..common.jsonio import write_bytes_durable
 
 
-def refresh(directory, request, *, runtime_package=None, publish=True):
+@contextmanager
+def _cache_root(root):
+    """Scope the existing index verifier to this isolated CPU helper call."""
+    name='NATLANG_ROW_INDEX_CACHE';previous=os.environ.get(name)
+    os.environ[name]=str(root)
+    try:yield
+    finally:
+        if previous is None:os.environ.pop(name,None)
+        else:os.environ[name]=previous
+
+
+def _relocate_indexes(indexes, old_root):
+    from ..common import row_index
+    actual=row_index.cache_dir().resolve();old_root=Path(old_root).resolve()
+    with _cache_root(old_root):resident._check_indexes(indexes)
+    actual.mkdir(parents=True,exist_ok=True)
+    relocated=[];joins=[]
+    for witness in indexes:
+        source=resident.bound(witness['cache'])
+        target=row_index.entry_path('native-graphs',resident.digest(witness['key'])).resolve()
+        if not target.exists():
+            fd,name=tempfile.mkstemp(prefix=target.name+'.',suffix='.tmp',dir=actual)
+            temporary=Path(name)
+            try:
+                with os.fdopen(fd,'wb') as out,source.open('rb') as stream:
+                    shutil.copyfileobj(stream,out,length=1024*1024);out.flush();os.fsync(out.fileno())
+                if resident.sha256_file_hex(temporary)!=witness['cache']['sha256']:
+                    raise ValueError('resident index changed while copying verified bytes')
+                # Only this immutable new copy is linked for no-clobber atomic
+                # publication. The original cache is never hardlinked.
+                try:os.link(temporary,target)
+                except FileExistsError:pass
+            finally:temporary.unlink(missing_ok=True)
+        replacement={**witness,'cache':resident.binding(target)}
+        resident._check_indexes([replacement])
+        with target.open('rb') as stream:os.fsync(stream.fileno())
+        relocated.append(replacement)
+        joins.append({'old':witness['cache'],'new':replacement['cache'],
+            'key':witness['key'],'metadata_sha256':witness['metadata_sha256']})
+    fd=os.open(actual,os.O_RDONLY)
+    try:os.fsync(fd)
+    finally:os.close(fd)
+    resident._check_indexes(relocated)
+    return relocated,{'old_root':str(old_root),'learner_root':str(actual),'witnesses':joins}
+
+
+def refresh(directory, request, *, runtime_package=None, old_cache_root=None, publish=True):
     if type(publish) is not bool:
         raise ValueError('resident geometry refresh publish must be an explicit boolean')
     directory=Path(directory).resolve()
@@ -68,9 +118,12 @@ def refresh(directory, request, *, runtime_package=None, publish=True):
                 or any(type(v) is not int or v<0 for v in payload['geometry'].values())
                 or any(payload['geometry'][key]>limits[key] for key in limits)):
             raise ValueError('resident geometry refresh exceeds qualified whole-graph geometry')
-    resident._check_indexes(payload['indexes'])
+    if old_cache_root is None:
+        resident._check_indexes(payload['indexes']);indexes=payload['indexes'];relocation=None
+    else:indexes,relocation=_relocate_indexes(payload['indexes'],old_cache_root)
     replacement=copy.deepcopy(value)
     replacement['payload']['geometry_qualification']=initial['geometry_qualification']
+    replacement['payload']['indexes']=indexes
     replacement['generation']=resident.digest(replacement['payload'])
     requests=directory/'requests'
     new_path=requests/(replacement['generation']+'.json')
@@ -97,8 +150,9 @@ def refresh(directory, request, *, runtime_package=None, publish=True):
             'replacement':new_ref,'predecessor':predecessor,
             'old_geometry_qualification':payload['geometry_qualification'],
             'new_geometry_qualification':initial['geometry_qualification'],
-            'payload_changes':['geometry_qualification'],
+            'payload_changes':['geometry_qualification']+(['indexes'] if indexes!=payload['indexes'] else []),
             'scope':'same prepared append; no earned exposure or numerical requalification'}
+        if relocation:proof['index_cache_relocation']=relocation
         if proof_path.exists():
             previous=json.loads(proof_path.read_text())
             if {k:v for k,v in previous.items() if k not in ('initial','original_initial')}!=proof:
@@ -129,10 +183,11 @@ def main(argv=None):
     parser.add_argument('--request',type=Path,required=True)
     parser.add_argument('--request-sha256',required=True)
     parser.add_argument('--runtime-package',type=Path)
+    parser.add_argument('--old-cache-root',type=Path)
     parser.add_argument('--prepare-only',action='store_true')
     args=parser.parse_args(argv)
     print(json.dumps(refresh(args.directory,{'path':str(args.request.resolve()),'sha256':args.request_sha256},
-        runtime_package=args.runtime_package,publish=not args.prepare_only)))
+        runtime_package=args.runtime_package,old_cache_root=args.old_cache_root,publish=not args.prepare_only)))
     return 0
 
 
