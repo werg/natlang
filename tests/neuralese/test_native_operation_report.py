@@ -91,10 +91,9 @@ def test_streamed_canonical_hash_is_existing_exact_hash():
 
 
 def test_current_receipt_progress_avoids_checkpoint_unpickle_and_rejects_changed_report(tmp_path,monkeypatch):
-    from test_native_state_sft import test_refresh_only_boundary_does_not_force_task_window
     from natlang_neuralese.rl.native_raw_rounds import _progress
     from natlang_neuralese.train.checkpoint_policy import CheckpointPolicy
-    test_refresh_only_boundary_does_not_force_task_window(tmp_path,monkeypatch,True)
+    _real_report(tmp_path)
     out=tmp_path/'run';binding=report._binding(out/'checkpoint.pt')
     with monkeypatch.context() as patch:
         patch.setattr(CheckpointPolicy,'load',lambda *a,**kw:pytest.fail('current receipt must avoid full checkpoint unpickle'))
@@ -129,3 +128,23 @@ def test_owned_state_compaction_preserves_cursor_and_old_report_bytes(tmp_path):
     assert report.compact_controller_state(compact,path)==compact
     broken=copy.deepcopy(state);broken['last_learner_progress']['future_owner_guard']={'different':True}
     with pytest.raises(ValueError,match='differs from actual'):report.compact_controller_state(broken,path)
+
+
+
+def _real_report(tmp_path):
+    from test_native_model import tiny_source
+    from natlang_neuralese.model.native_model import load_native_model
+    from natlang_neuralese.data.native_graph import SCHEMA
+    from natlang_neuralese.train.native_state_sft import main
+    base=tmp_path/'base';tiny_source(base)
+    _,_,_,config=load_native_model(base,dtype=torch.float32,rank=4)
+    paths={}
+    for split in ('train','test'):
+        path=tmp_path/(split+'.jsonl');paths[split]=path
+        path.write_text(json.dumps({'schema':SCHEMA,'id':split,'split':split,
+            'source_groups':[split],'tokenizer_fingerprint':config['tokenizer_fingerprint'],
+            'nodes':[{'name':'answer','token_ids':[1,2,3],'target_weights':[0,1,1]}]})+'\n')
+    assert main(['--base',str(base),'--dtype','float32','--rank','4','--device','cpu',
+        '--native-graphs',str(paths['train']),'--held-native-graphs',str(paths['test']),
+        '--epochs','2','--checkpoint-every','1','--eval-every','1','--refresh-at-checkpoint',
+        '--out',str(tmp_path/'run')])==0
