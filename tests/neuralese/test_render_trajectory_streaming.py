@@ -469,6 +469,62 @@ def test_done_receipts_verify_output_checksums_without_rewriting_them(tmp_path):
             renderer.file_sha(Path(renderer.__file__).resolve()), old_sha})
 
 
+def test_resource_only_renderer_parent_continues_exact_trajectory_receipts(tmp_path, monkeypatch):
+    from scripts.neuralese_data.strip_generic_system_prompt import strip_row
+    renderer._G.clear()
+    renderer._G.update({'tok': {'lfm25': _CharacterChatTokenizer()}, 'pieces': {},
+                        'tokenizer_paths': {'lfm25': tmp_path}, 'strip_row': strip_row,
+                        'cross_trajectory_writer_sources': {}})
+    selected = tmp_path / 'selected.jsonl'
+    rows = _trajectory_rows()
+    with write_jsonl_text(selected) as stream:
+        for row in rows:
+            stream.write(renderer.canonical(row) + '\n')
+    out = tmp_path / 'work'
+    input_binding = renderer._render_input_binding({'lfm25': tmp_path}, {})
+    parent_sha = renderer.SEARCH_RESOURCE_ONLY_PARENT_RENDERER_SHA256
+    job = (str(selected), str(out), 'lfm25', {}, 'fixture', set(), set(), False,
+           None, ('whole-trajectory',), False, set(), None, input_binding, None, parent_sha)
+    parent_code = renderer._resource_parent_code_binding(parent_sha)
+    source_digest = renderer.file_sha(selected)
+    parent_job_binding = renderer._render_job_binding_from_job(job, source_digest, parent_code)
+    rows_by_trajectory = {}
+    for row in rows:
+        rows_by_trajectory.setdefault(renderer._trajectory_key(row), []).append(row)
+    renderer.render_shard(job)
+    receipts_root = out / 'trajectory-stream' / 'lfm25' / 'selected' / 'receipts'
+    for path in receipts_root.glob('*.json'):
+        receipt = json.loads(path.read_text())
+        trajectory = next(key for key in rows_by_trajectory
+                          if renderer.sha(key.encode('utf-8')) == path.stem)
+        source_hashes = [renderer.sha(renderer.canonical(row).encode('utf-8'))
+                         for row in rows_by_trajectory[trajectory]]
+        source_ids = [row['id'] for row in rows_by_trajectory[trajectory]]
+        receipt['binding'] = renderer._trajectory_render_binding(
+            parent_job_binding, trajectory, source_ids, source_hashes)
+        receipt['renderer_code_sha256'] = parent_sha
+        path.write_text(json.dumps(receipt, sort_keys=True) + '\n')
+
+    # The real resume path validates every old output, then writes a current
+    # shard marker that retains the old per-trajectory renderer identity.
+    calls = []
+    original = renderer._render_shard_materialized
+    def traced(job_to_render):
+        calls.append(job_to_render)
+        return original(job_to_render)
+    monkeypatch.setattr(renderer, '_render_shard_materialized', traced)
+    resumed = renderer.render_shard(job)
+    assert calls == []
+    assert resumed['renderer_code_sha256'] == renderer.file_sha(Path(renderer.__file__).resolve())
+    assert set(resumed['trajectory_renderers'].values()) == {parent_sha}
+    renderer._verify_trajectory_receipts(job, resumed, {
+        renderer.file_sha(Path(renderer.__file__).resolve()), parent_sha},
+        expected_job_binding=renderer._render_job_binding_from_job(
+            job, renderer.file_sha(selected), renderer._render_code_binding()))
+    with __import__('pytest').raises(ValueError, match='exact reviewed resource-only continuation'):
+        renderer._resource_parent_code_binding('f' * 64)
+
+
 def test_bounded_render_jobs_cancel_outstanding_and_do_not_queue_entire_corpus():
     from concurrent.futures import Future
     import pytest

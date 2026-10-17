@@ -74,6 +74,10 @@ LEGACY_SELECTOR_SEMANTICS_SHA256 = '69f7da7f1dc08c01ca9deb554f0275072c82e2666615
 # historic bindings used canonical-checkout path labels even when the new
 # renderer is run from a frozen checkout elsewhere.
 LEGACY_SEARCH_RENDERER_SHA256 = 'b054133ae53e7d86a9202ad84e60cabed1f79a26d18aa588e3890c2c21249917'
+# The exact renderer immediately before the reviewed 2026-10-17 resource-only
+# fix. The fix closes SQLite before temporary-directory cleanup and bounds
+# future submission; it does not alter selected rows, rendering, or outputs.
+SEARCH_RESOURCE_ONLY_PARENT_RENDERER_SHA256 = '6b59b92914a93139215d7a22f0129d59ade36b533a28126cd5e927dbc23fbc5b'
 from natlang_neuralese.common.paths import DEFAULTS as MACHINE_PATH_DEFAULTS  # noqa: E402
 
 _LEGACY_REPO = Path(MACHINE_PATH_DEFAULTS['repo'])
@@ -1308,6 +1312,21 @@ def _render_code_binding():
     return binding
 
 
+def _resource_parent_code_binding(parent_renderer_sha256):
+    if parent_renderer_sha256 != SEARCH_RESOURCE_ONLY_PARENT_RENDERER_SHA256:
+        raise ValueError('renderer parent SHA lacks the exact reviewed resource-only continuation')
+    binding = _render_code_binding()
+    binding[str(Path(__file__).resolve())] = parent_renderer_sha256
+    return binding
+
+
+def _render_job_binding_from_job(job, source_digest, code_binding):
+    return _render_job_binding(source_digest, job[2], job[3], job[4], job[5], job[6],
+                               job[11] if len(job) > 11 else set(), job[7], job[8], job[9],
+                               bool(job[10]) if len(job) > 10 else False, code_binding,
+                               job[13] if len(job) > 13 else None)
+
+
 def _legacy_render_job_binding(job, source_sha, renderer_sha):
     if renderer_sha != LEGACY_SEARCH_RENDERER_SHA256:
         raise ValueError('legacy renderer SHA is not an approved historical migration witness')
@@ -1327,21 +1346,18 @@ def _legacy_render_job_binding(job, source_sha, renderer_sha):
                                LEGACY_SEARCH_CODE_BINDING)
 
 
-def _verify_trajectory_receipts(job, done_result, allowed_renderer_shas):
+def _verify_trajectory_receipts(job, done_result, allowed_renderer_shas, expected_job_binding=None):
     shard_path, out_dir, tok_name = Path(job[0]), Path(job[1]), job[2]
     stem = shard_path.name.removesuffix('.zst').removesuffix('.jsonl')
     source_digest = file_sha(shard_path)
     current_code_binding = _render_code_binding()
     current_renderer_sha = current_code_binding[str(Path(__file__).resolve())]
-    expected_job_binding = _render_job_binding(
-        source_digest, tok_name, job[3], job[4], job[5], job[6],
-        job[11] if len(job) > 11 else set(), job[7], job[8], job[9],
-        bool(job[10]) if len(job) > 10 else False, current_code_binding,
-        job[13] if len(job) > 13 else None)
+    expected_job_binding = (expected_job_binding if expected_job_binding is not None else
+                            _render_job_binding_from_job(job, source_digest, current_code_binding))
     if done_result.get('render_job_binding') != expected_job_binding:
         raise ValueError(f'done marker does not match current render job policy: {stem}/{tok_name}')
-    if done_result.get('renderer_code_sha256') != current_renderer_sha:
-        raise ValueError(f'done marker renderer identity differs from current renderer: {stem}/{tok_name}')
+    if done_result.get('renderer_code_sha256') not in allowed_renderer_shas:
+        raise ValueError(f'done marker renderer identity is not explicitly allowed: {stem}/{tok_name}')
     expected_aggregate = {}
     for mode in job[9]:
         suffix = '.jsonl.zst' if bool(job[10]) else '.jsonl'
@@ -1518,9 +1534,14 @@ def render_shard(job):
                                       target_exclude, header_as_full, full_programs, renderings,
                                       compress_text, code_binding, input_binding)
     legacy_renderer_sha = storage_options[2] if len(storage_options) > 2 else None
+    resource_parent_sha = storage_options[5] if len(storage_options) > 5 else None
     legacy_job_binding = None
     if legacy_renderer_sha:
         legacy_job_binding = _legacy_render_job_binding(job, source_file_sha, legacy_renderer_sha)
+    resource_parent_job_binding = None
+    if resource_parent_sha:
+        resource_parent_job_binding = _render_job_binding_from_job(
+            job, source_file_sha, _resource_parent_code_binding(resource_parent_sha))
 
     # The SQLite row index is wholly rebuildable from the selected shard. Keep
     # it on a caller-selected fast local scratch volume when supplied; durable
@@ -1651,6 +1672,12 @@ def render_shard(job):
                     receipt_renderer_sha = expected_receipt.get('renderer_code_sha256', legacy_renderer_sha)
                     if receipt_renderer_sha != legacy_renderer_sha:
                         raise ValueError(f'legacy trajectory receipt renderer identity changed: {trajectory}')
+                elif (resource_parent_job_binding is not None
+                      and receipt_binding == _trajectory_render_binding(
+                          resource_parent_job_binding, trajectory, source_ids, source_record_hashes)):
+                    receipt_renderer_sha = expected_receipt.get('renderer_code_sha256', resource_parent_sha)
+                    if receipt_renderer_sha != resource_parent_sha:
+                        raise ValueError(f'resource-parent trajectory renderer identity changed: {trajectory}')
                 else:
                     raise ValueError(f'committed trajectory binding changed: {trajectory}')
                 _verify_group_receipt(
@@ -2020,6 +2047,9 @@ def main(argv=None):
     p.add_argument('--legacy-renderer-sha256',
                    help='explicit prior renderer identity whose exact trajectory receipts may be reused on resume; '
                         'the final receipt preserves it separately from this renderer')
+    p.add_argument('--resource-only-renderer-parent-sha256',
+                   help='exact pre-2026-10-17 renderer SHA whose output receipts may continue across the reviewed '
+                        'SQLite cleanup/fail-fast resource change')
     a = p.parse_args(argv)
     if a.render_only != (a.render_shards is not None):
         p.error('--render-only and --render-shards must be supplied together')
@@ -2029,6 +2059,9 @@ def main(argv=None):
         p.error('--finalize-only cannot be combined with --render-only')
     if a.legacy_renderer_sha256 is not None and not re.fullmatch(r'[0-9a-f]{64}', a.legacy_renderer_sha256):
         p.error('--legacy-renderer-sha256 must be a lowercase SHA-256 digest')
+    if (a.resource_only_renderer_parent_sha256 is not None
+            and a.resource_only_renderer_parent_sha256 != SEARCH_RESOURCE_ONLY_PARENT_RENDERER_SHA256):
+        p.error('--resource-only-renderer-parent-sha256 must match the exact reviewed Search renderer parent')
     if a.verify_admission_only:
         verified = registered_candidate_selection_admission(a.corpus_id, a.source)
         if verified is None:
@@ -2105,7 +2138,8 @@ def main(argv=None):
         input_binding = _render_input_binding(tokenizers, pieces)
         all_jobs = [(str(shard_paths[s]), str(out / 'work'), name, blocked, a.corpus_id, held_groups, decision_exclude,
                      a.program_header_as_full, full_set, tuple(a.renderings), a.compress_text, target_exclude,
-                     a.legacy_renderer_sha256, input_binding, str(a.sqlite_temp_root) if a.sqlite_temp_root else None)
+                     a.legacy_renderer_sha256, input_binding, str(a.sqlite_temp_root) if a.sqlite_temp_root else None,
+                     a.resource_only_renderer_parent_sha256)
                 for s in shards for name in tokenizers]
         if a.render_shards is not None:
             if len(a.render_shards) != len(set(a.render_shards)):
@@ -2137,15 +2171,25 @@ def main(argv=None):
                     continue
                 else:
                     current_renderer_sha = file_sha(Path(__file__).resolve())
+                    parent_sha = a.resource_only_renderer_parent_sha256
+                    parent_binding = None
                     if result['renderer_code_sha256'] != current_renderer_sha:
-                        raise ValueError(f'completed shard renderer identity is neither current nor explicitly legacy: {done}')
+                        if parent_sha is None or result['renderer_code_sha256'] != parent_sha:
+                            raise ValueError(f'completed shard renderer identity is neither current nor explicitly continued: {done}')
+                        parent_binding = _render_job_binding_from_job(
+                            job, source_digest, _resource_parent_code_binding(parent_sha))
+                        if result.get('render_job_binding') != parent_binding:
+                            raise ValueError(f'completed shard resource-parent job binding mismatch: {done}')
                     if result.get('source_sha256') is None:
                         raise ValueError(f'completed shard lacks its source identity: {done}')
                     allowed_renderer_shas = {current_renderer_sha}
+                    if parent_sha is not None:
+                        allowed_renderer_shas.add(parent_sha)
                     if a.legacy_renderer_sha256 is not None:
                         _legacy_render_job_binding(job, source_digest, a.legacy_renderer_sha256)
                         allowed_renderer_shas.add(a.legacy_renderer_sha256)
-                    _verify_trajectory_receipts(job, result, allowed_renderer_shas)
+                    _verify_trajectory_receipts(job, result, allowed_renderer_shas,
+                                                 expected_job_binding=parent_binding)
                 result.setdefault('source_sha256', source_digest)
                 results.append(result)
             else:
