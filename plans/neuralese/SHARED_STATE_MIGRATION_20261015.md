@@ -230,3 +230,22 @@ recipes, including all admitted usable sources and every remaining stage.
 Record actual exposure and stage progress. Remove discarded legacy mechanisms
 and artifacts only after live consumers and required diagnostic parents are
 accounted for. Do not discard reusable source or protected evaluation data.
+
+October 17 qualification correction: ordinary and joint publication now share
+the complete communication-gradient verifier (`58ebd220f`), independently
+reviewed and tested. Historical adapter-only checks remain useful channel
+evidence, but cannot certify backbone or learned-row derivatives. The new check
+binds the actual optimizer inventory, connected input, producer/consumer case,
+arithmetic and live backend; it preserves optimizer, gradients, RNG and exposure.
+Missing or failed proof prevents readiness without discarding useful training.
+
+The actual trained LFM step-9478 checkpoint was checked on the DGX: forward and
+incremental differences were below 2e-6, but 100 of 151 derivative comparisons
+failed the unchanged elementwise gates. An explicit diagnostic IEEE run also
+failed, so the accelerated GEMM alone is not an established cause. Controlling
+the readout input removed the loss difference and reduced failing derivatives
+to 37; that controlled diagnostic cannot qualify the production path. Full
+reports are `lfm9478-*-diagnostic-root*-20261017.json` under the DGX operations
+directory. Continue localization and repair before claiming complete-gradient
+qualification or cross-model readiness; do not widen gates or infer task
+regression from this diagnostic. Both models still owe complete recipe exposure.
