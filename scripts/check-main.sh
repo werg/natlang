@@ -108,11 +108,13 @@ if [ $python = 1 ]; then
       tests/test_duplicate_helpers_ratchet.py tests/test_check_spec_links.py tests/neuralese/test_line_parity.py
   else
     # Two processes: one pytest over everything grows past 18 GB.
-    step python-tests env HF_HOME="$HF_EMPTY" "$PY" -m pytest -q -p no:cacheprovider tests --ignore=tests/neuralese
+    # Name the active test and dump stacks on a long wait; faulthandler does not
+    # terminate a test or change its outcome. See FULL_CHECK_PROGRESS_DECOMPOSITION_20261017.md.
+    step python-tests env HF_HOME="$HF_EMPTY" "$PY" -m pytest -v -o faulthandler_timeout=300 -p no:cacheprovider tests --ignore=tests/neuralese
     # The gpu_heavy tests (several GB of CUDA memory each) in a process of their own after the rest, so the suite's peak
     # is the larger of the two rather than their sum (2026-10-12: 13.5 GB in one process).
-    step python-neuralese env HF_HOME="$HF_EMPTY" "$PY" -m pytest -q -p no:cacheprovider -m 'not gpu_heavy' tests/neuralese
-    step python-neuralese-gpu env HF_HOME="$HF_EMPTY" "$PY" -m pytest -q -p no:cacheprovider -m gpu_heavy tests/neuralese
+    step python-neuralese env HF_HOME="$HF_EMPTY" "$PY" -m pytest -v -o faulthandler_timeout=300 -p no:cacheprovider -m 'not gpu_heavy' tests/neuralese
+    step python-neuralese-gpu env HF_HOME="$HF_EMPTY" "$PY" -m pytest -v -o faulthandler_timeout=300 -p no:cacheprovider -m gpu_heavy tests/neuralese
   fi
 fi
 if [ $ts = 1 ]; then
