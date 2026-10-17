@@ -23,7 +23,7 @@ def gradient_metrics(actual,expected,*,atol,rtol):
         'actual_l2':float(an),'mismatched_elements':bad,'elements':a.numel(),'atol':atol,'rtol':rtol}
 
 
-def compare_complete_gradients(flat_loss,cached_loss,named,flat_inputs,cached_inputs,*,atol,rtol,cached_factory=None):
+def compare_complete_gradients(flat_loss,cached_loss,named,flat_inputs,cached_inputs,*,atol,rtol,cached_factory=None,gradient_observer=None):
     """Release each flat derivative as its complete cached counterpart arrives.
 
     autograd.grad never accumulates parameter.grad or invokes post-accumulate
@@ -38,6 +38,8 @@ def compare_complete_gradients(flat_loss,cached_loss,named,flat_inputs,cached_in
             or any(not isinstance(name,str)or not name for name,_ in named)
             or any(not value.requires_grad for value in parameters)):
         raise ValueError('complete gradient inventory needs unique trainable names and parameters')
+    if gradient_observer is not None and callable(getattr(gradient_observer,'begin_vjp_observation',None)):
+        gradient_observer.begin_vjp_observation()
     old_grads={id(p):(p.grad,None if p.grad is None else p.grad._version)for p in parameters}
     flat_values=(flat_inputs,*parameters)
     flat=torch.autograd.grad(flat_loss,flat_values,allow_unused=True)
@@ -50,6 +52,7 @@ def compare_complete_gradients(flat_loss,cached_loss,named,flat_inputs,cached_in
         def compare(value):
             nonlocal remaining,max_pair
             previous=waiting.pop(name)
+            if gradient_observer is not None:gradient_observer(name,previous,value)
             if previous is None:comparisons[name]={'passed':False,'reason':'cached-only derivative'}
             else:
                 count=previous.numel()*previous.element_size();remaining-=count
@@ -63,12 +66,19 @@ def compare_complete_gradients(flat_loss,cached_loss,named,flat_inputs,cached_in
         for name,value in zip(names,current):
             if name in waiting:
                 previous=waiting.pop(name)
+                if gradient_observer is not None:gradient_observer(name,previous,value)
                 comparisons[name]=({'passed':True,'unused':True}if previous is None and value is None else
                     {'passed':False,'reason':'flat-only or missing cached derivative'})
         del current
+    except BaseException:
+        if gradient_observer is not None and callable(getattr(gradient_observer,'abort',None)):
+            gradient_observer.abort()
+        raise
     finally:
         for item in hooks:item.remove()
         waiting.clear()
+    if gradient_observer is not None and callable(getattr(gradient_observer,'finish',None)):
+        gradient_observer.finish()
     preserved=all(p.grad is old_grads[id(p)][0]and(p.grad is None or p.grad._version==old_grads[id(p)][1])for p in parameters)
     inventory=[{'name':name,'shape':list(value.shape),'dtype':str(value.dtype)}for name,value in named]
     return {'schema':SCHEMA,'passed':preserved and all(row['passed']for row in comparisons.values()),

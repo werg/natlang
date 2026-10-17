@@ -107,7 +107,7 @@ def validate_task_execution_receipt(receipt, identity):
 
 def qualify_existing(model, tokenizer, roles, config, *, checkpoint_sha256, forward_atol, gradient_atol,
                      task_execution_receipt=None, backbone_optimizer_updates=0,
-                     gradient_parameters=None, gradient_rtol=1e-4,before_graph=None):
+                     gradient_parameters=None, gradient_rtol=1e-4,before_graph=None,gradient_observer=None):
     """Verify the live trained instance without reloading a second backbone or changing training state.
 
     The check compares graph execution with the explicit cached reference, compares
@@ -193,7 +193,7 @@ def qualify_existing(model, tokenizer, roles, config, *, checkpoint_sha256, forw
                 reference_loss=objective(reference)
                 return reference_loss,reference_inputs
             complete=compare_complete_gradients(flat_loss,None,named,flat_inputs,None,
-                atol=gradient_atol,rtol=gradient_rtol,cached_factory=cached_forward)
+                atol=gradient_atol,rtol=gradient_rtol,cached_factory=cached_forward,gradient_observer=gradient_observer)
             case={'invocations':[invocation_dict(node)for node in plan.invocations],
                 'positions':positions.tolist(),'labels':labels.tolist(),'loss':'consumer-cross-entropy/mean'}
             complete.update(native_identity=identity,roles=gradient_roles,case=case,
