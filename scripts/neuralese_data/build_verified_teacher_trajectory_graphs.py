@@ -259,6 +259,34 @@ def collection_provenance(collection, transferred, *, seen=()):
     return proofs
 
 
+def restore_transfer_row_ids(transfer, additions):
+    """Add missing transport identities without replacing existing facts."""
+    identities={}
+    row_ids=set()
+    for item in additions:
+        row_id=item.get('row_id')
+        identity=tuple(item.get(key) for key in ('path','source','sha256','bytes'))
+        if not isinstance(row_id,str) or not row_id or row_id in row_ids or identity in identities:
+            raise ValueError('teacher response row-binding continuation has duplicate or invalid identities')
+        row_ids.add(row_id);identities[identity]=row_id
+    patched=[];used=set()
+    for item in transfer.get('files',[]):
+        identity=tuple(item.get(key) for key in ('path','source','sha256','bytes'))
+        if identity not in identities:
+            patched.append(item);continue
+        row_id=identities[identity]
+        if identity in used or (item.get('row_id') is not None and item['row_id']!=row_id):
+            raise ValueError('teacher response row-binding continuation changes an existing identity')
+        used.add(identity);patched.append({**item,'row_id':row_id})
+    if used!=set(identities):
+        raise ValueError('teacher response row-binding continuation contains an unbound source file')
+    result={**transfer,'files':patched}
+    mapped=[item['row_id'] for item in patched if isinstance(item.get('row_id'),str)]
+    if len(mapped)!=len(set(mapped)):
+        raise ValueError('teacher response transfer repeats a row identity')
+    return result
+
+
 def source_binding(args):
     if getattr(args, 'scaffold_harvest', None) is not None:
         return scaffold_source_binding(args)
@@ -277,6 +305,19 @@ def source_binding(args):
             or transfer.get('combined', {}).get('bytes') != args.source.stat().st_size
             or transfer.get('training_admission') is not False):
         raise ValueError('transfer receipt does not bind the exact raw teacher trajectory source')
+    # A few early private transfers omitted row_id on their per-response file
+    # records. Keep that historical receipt immutable and accept only an
+    # explicit, byte-bound continuation which restores the missing mapping.
+    row_bindings_path = root / 'source-row-bindings.json'
+    if row_bindings_path.exists():
+        row_bindings = json.loads(row_bindings_path.read_text())
+        if (row_bindings.get('schema') != 'natlang.teacher-transfer-row-bindings/1'
+                or row_bindings.get('parent_transfer_receipt_sha256') != sha256_file(proof_paths['transfer'])
+                or row_bindings.get('combined_source_sha256') != actual_source_sha
+                or not isinstance(row_bindings.get('files'), list)):
+            raise ValueError('teacher response row-binding continuation does not match its exact parent receipt/source')
+        transfer = restore_transfer_row_ids(transfer, row_bindings['files'])
+        proof_paths['source_row_bindings'] = row_bindings_path
     if teacher is not None and teacher.get('teacher_role') != 'independent stronger open teacher; not either student/onpolicy':
         raise ValueError('teacher provenance does not identify an independent teacher')
     packets = {}

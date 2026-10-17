@@ -18,6 +18,28 @@ def _row():
         'trajectory': [{'phase': 'action', 'assistant': {'content': 'correct'}}]}
 
 
+def test_row_id_recovery_preserves_existing_receipt_and_exact_file_identity():
+    item={'path':'/local/result','source':'/remote/result','sha256':'a'*64,'bytes':7}
+    receipt={'files':[item]}
+    result=converter.restore_transfer_row_ids(receipt,[{**item,'row_id':'actual-row'}])
+    assert result['files']==[{**item,'row_id':'actual-row'}]
+    assert receipt=={'files':[item]} and 'row_id' not in item
+    for field,value in [('path','/other'),('source','/other'),('sha256','b'*64),('bytes',8)]:
+        with pytest.raises(ValueError,match='unbound source file'):
+            converter.restore_transfer_row_ids(receipt,[{**item,field:value,'row_id':'actual-row'}])
+
+
+def test_row_id_recovery_cannot_replace_a_recorded_row_or_alias_another_file():
+    first={'path':'/local/first','source':'/remote/first','sha256':'a'*64,'bytes':7,'row_id':'first'}
+    second={'path':'/local/second','source':'/remote/second','sha256':'b'*64,'bytes':8}
+    with pytest.raises(ValueError,match='existing identity'):
+        converter.restore_transfer_row_ids({'files':[first]},[{**first,'row_id':'replacement'}])
+    with pytest.raises(ValueError,match='repeats a row identity'):
+        converter.restore_transfer_row_ids({'files':[first,second]},[{**second,'row_id':'first'}])
+    with pytest.raises(ValueError,match='duplicate or invalid'):
+        converter.restore_transfer_row_ids({'files':[second]},[{**second,'row_id':'second'}]*2)
+
+
 def test_teacher_action_identity_is_bound_to_exact_source_trajectory():
     # The same upstream program/action may appear in separate accepted teacher
     # trajectories. Preserve both while keeping each tokenizer rendering tied
@@ -381,6 +403,33 @@ def test_each_teacher_batch_uses_its_own_exact_program_packet(tmp_path, monkeypa
     assert binding['teacher'] == teacher
     for row in rows:
         assert converter.validate_teacher_row(row, binding)[0] == row['task']['program_ir']
+    # Historical transfers may omit row_id. Restore that fact in a separate
+    # continuation instead of rewriting the immutable transfer receipt.
+    transfer_path = tmp_path/'transfer-receipt.json'
+    original_transfer = json.loads(transfer_path.read_text())
+    row_files = [item for item in original_transfer['files'] if 'row_id' in item]
+    row_bindings = [{'row_id': item['row_id'], **{key: item[key] for key in
+        ('path', 'source', 'sha256', 'bytes')}} for item in row_files]
+    original_transfer['files'] = [{key: value for key, value in item.items() if key != 'row_id'}
+                                  for item in original_transfer['files']]
+    put('transfer-receipt.json', original_transfer)
+    parent_sha = converter.sha256_file(transfer_path)
+    continuation = {'schema': 'natlang.teacher-transfer-row-bindings/1',
+        'parent_transfer_receipt_sha256': parent_sha,
+        'combined_source_sha256': original_transfer['combined']['sha256'],
+        'files': row_bindings}
+    put('source-row-bindings.json', continuation)
+    continued = converter.source_binding(args)
+    assert {row['id'] for row in rows} <= set(continued['source_files'])
+    for row in rows:
+        assert converter.validate_teacher_row(row, continued)[0] == row['task']['program_ir']
+    continuation['parent_transfer_receipt_sha256'] = '0' * 64
+    put('source-row-bindings.json', continuation)
+    with pytest.raises(ValueError, match='row-binding continuation'):
+        converter.source_binding(args)
+    (tmp_path/'source-row-bindings.json').unlink()
+    put('transfer-receipt.json', {**original_transfer, 'files': files})
+    binding = converter.source_binding(args)
     # Global membership in another admitted packet cannot retarget a response.
     swapped = copy.deepcopy(rows[0])
     swapped['task']['program_ir'] = rows[1]['task']['program_ir']
