@@ -225,3 +225,22 @@ the original parent, all module names and per-parameter buffer inventories.
 The ledgered run took152.1 seconds, allocated at most8.40GB CUDA and completed
 without an exception. Existing active student training and readiness thresholds
 were unchanged.
+
+Cheaper IEEE/fused-norm combination (2026-10-17, 21:24 UTC)
+---------------------------------------------------------
+
+Using IEEE native projections/attention and the existing fused RMSNorm with
+global float32 matmul set to highest and TF32 disabled still fails98/151 full
+gradient comparisons. Forward maximum difference is1.788e-6, incremental
+difference8.94e-7 and consumer CE difference1.526e-5. The recorded global
+settings were already highest/TF32-off before the intervention. Thus a missing
+global precision flag or this inexpensive combination does not explain the
+remaining discrepancy; no production arithmetic or tolerance was changed.
+
+Receipt `lfm9478-all-ieee-fusednorm-gradient-diagnostic-root-v2-20261017.json`
+binds the unchanged original parent and source RNG. The ledgered run completed
+in104.8seconds with6.5GB peak host memory and3.85GB CUDA. The preceding attempt
+failed its initial CUDA model allocation before any comparison and remains an
+infrastructure failure, not numerical evidence; the explicit retry required
+12GiB free driver memory before loading. Further work should localize the
+remaining kernel/adjoint discrepancy rather than repeat this combination.
