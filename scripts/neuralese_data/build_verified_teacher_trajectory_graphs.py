@@ -190,9 +190,44 @@ def packet_binding(root, references):
         validate_authored_packet(paths, selection, packet_sha, ordered_programs, packet_groups)
     if train_groups & held_groups:
         raise ValueError('selection proof train/held source groups overlap')
+    execution = prepared_execution_packet(paths, packet_sha, ordered_programs)
+    if execution is not None:
+        programs = {row['id']: canonical_json_sha256_hex(row) for row in execution['programs']}
+        train_groups = {group for row in execution['programs'] for group in row.get('source_groups', [])}
     return {'selection': selection, 'packet_sha256': packet_sha, 'protection': protection, 'selected_ids': set(programs),
             'program_sha256': programs, 'train_groups': train_groups, 'held_groups': held_groups,
+            **({'execution_preparation': execution['preparation']} if execution is not None else {}),
             'proofs': {name: {'path': str(path), 'sha256': sha256_file(path)} for name, path in paths.items()}}
+
+
+def prepared_execution_packet(paths, source_sha256, source_programs):
+    """Authenticate the existing rollout preparer's exact execution view."""
+    names={'execution_packet','execution_preparation'}
+    present=names & paths.keys()
+    if not present:
+        return None
+    if present!=names:
+        raise ValueError('prepared teacher execution requires both packet and preparation witnesses')
+    preparation=json.loads(paths['execution_preparation'].read_text())
+    if (preparation.get('schema')!='natlang.task-rollout-preparation/1'
+            or preparation.get('source_sha256')!=source_sha256
+            or preparation.get('packet_sha256')!=sha256_file(paths['execution_packet'])
+            or preparation.get('root_mode') not in ('student','authored')
+            or not isinstance(preparation.get('source_cases'),str)
+            or not Path(preparation['source_cases']).is_absolute()):
+        raise ValueError('teacher execution preparation differs from its original source or packet')
+    from natlang_neuralese.rl.task_rollouts import student_root_row, authored_root_row
+    transform=student_root_row if preparation['root_mode']=='student' else authored_root_row
+    originals={row['id']:(index,row) for index,row in enumerate(source_programs)}
+    executed=[];positions=[]
+    for _,row in file_rows(paths['execution_packet']):
+        selected=originals.get(row.get('id'))
+        if selected is None or canonical_json_sha256_hex(row)!=canonical_json_sha256_hex(transform(selected[1])):
+            raise ValueError('teacher execution packet differs from its declared root-mode transformation')
+        positions.append(selected[0]);executed.append(row)
+    if not positions or positions!=list(range(positions[0],positions[0]+len(positions))):
+        raise ValueError('teacher execution packet must be an exact contiguous source slice')
+    return {'programs':executed,'preparation':preparation}
 
 
 def collection_provenance(collection, transferred, *, seen=()):
@@ -332,7 +367,8 @@ def source_binding(args):
                 raise ValueError('teacher snapshot repeats a batch source binding')
             packets[source] = packet_binding(root, {key: batch[key] for key in (
                 'selection', 'selected_cases', 'global_protection_join',
-                'reference_qualification', 'reference_summary', 'selection_protection') if key in batch})
+                'reference_qualification', 'reference_summary', 'selection_protection',
+                'execution_packet', 'execution_preparation') if key in batch})
         fallback = None
     else:
         fallback_refs = {name: {'path': str(root / filename), 'sha256': sha256_file(root / filename)}
@@ -371,6 +407,10 @@ def source_binding(args):
                 or canonical_json_sha256_hex(collection.get('protected_selection')) != canonical_json_sha256_hex(packet['selection'])
                 or canonical_json_sha256_hex(collection.get('teacher')) != canonical_json_sha256_hex(teacher)):
             raise ValueError('collection receipt differs from selected tasks or actual stronger teacher')
+        prepared=packet.get('execution_preparation')
+        if prepared is not None and (prepared['root_mode']!=collection.get('root_mode')
+                or prepared['source_cases']!=collection.get('source_cases')):
+            raise ValueError('collection receipt differs from its executed root mode or original source path')
         packets[item['source']] = packet
         collections[item['source']] = {'path': str(local), 'sha256': item['sha256'],
                                       'packet_proofs': packet['proofs'],

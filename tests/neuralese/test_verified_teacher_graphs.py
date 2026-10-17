@@ -40,6 +40,62 @@ def test_row_id_recovery_cannot_replace_a_recorded_row_or_alias_another_file():
         converter.restore_transfer_row_ids({'files':[second]},[{**second,'row_id':'second'}]*2)
 
 
+def prepared_packet_fixture(tmp_path, mode='student'):
+    program={'version':'natlang.program/2','id':'private','split':'train',
+        'source_groups':['private-train'],'curriculum':{
+            'reference':{'root':[['eval',{'code':'return 7;'}]]},
+            'trajectory_contract':{'version':'natlang.trajectory_contract/1',
+                'authored_root_eval':True,'authored_root_sha256':'original',
+                'min_child_invocations':0,'min_state_edges_from_children':0,'min_iteration_steps':0}}}
+    originals=[{**program,'id':'before'},program,{**program,'id':'after'}]
+    actual=copy.deepcopy(program)
+    if mode=='student':
+        actual['curriculum']['trajectory_contract'].pop('authored_root_eval')
+        actual['curriculum']['trajectory_contract'].pop('authored_root_sha256')
+    else:
+        import hashlib
+        actual['curriculum']['trajectory_contract']['authored_root_sha256']=hashlib.sha256(b'return 7;').hexdigest()
+    packet=tmp_path/'packet.jsonl';packet.write_text(json.dumps(actual)+'\n')
+    preparation=tmp_path/'preparation.json'
+    declaration={'schema':'natlang.task-rollout-preparation/1','root_mode':mode,
+        'source_cases':'/remote/original-cases.jsonl','source_sha256':'a'*64,
+        'packet_sha256':converter.sha256_file(packet)}
+    preparation.write_text(json.dumps(declaration))
+    return originals,actual,{'execution_packet':packet,'execution_preparation':preparation},declaration
+
+
+@pytest.mark.parametrize('mode',['student','authored'])
+def test_prepared_packet_preserves_original_program_and_authenticates_actual_root_view(tmp_path,mode):
+    originals,actual,paths,preparation=prepared_packet_fixture(tmp_path,mode)
+    before=copy.deepcopy(originals)
+    result=converter.prepared_execution_packet(paths,'a'*64,originals)
+    assert result=={'programs':[actual],'preparation':preparation}
+    assert originals==before
+    assert converter.prepared_execution_packet({},'a'*64,originals) is None
+    with pytest.raises(ValueError,match='both packet and preparation'):
+        converter.prepared_execution_packet({'execution_packet':paths['execution_packet']},'a'*64,originals)
+
+
+@pytest.mark.parametrize('mutation',['source_sha','packet_sha','mode','relative_source','modified_program','duplicate','empty'])
+def test_prepared_packet_cannot_relabel_or_change_the_execution_inputs(tmp_path,mutation):
+    originals,actual,paths,preparation=prepared_packet_fixture(tmp_path)
+    if mutation=='source_sha':preparation['source_sha256']='b'*64
+    elif mutation=='packet_sha':preparation['packet_sha256']='b'*64
+    elif mutation=='mode':preparation['root_mode']='guessed'
+    elif mutation=='relative_source':preparation['source_cases']='unbound-cases.jsonl'
+    else:
+        if mutation=='modified_program':
+            actual['curriculum']['reference']['root'][0][1]['code']='return 999;'
+            raw=json.dumps(actual)+'\n'
+        elif mutation=='duplicate':raw=(json.dumps(actual)+'\n')*2
+        else:raw=''
+        paths['execution_packet'].write_text(raw)
+        preparation['packet_sha256']=converter.sha256_file(paths['execution_packet'])
+    paths['execution_preparation'].write_text(json.dumps(preparation))
+    with pytest.raises(ValueError):
+        converter.prepared_execution_packet(paths,'a'*64,originals)
+
+
 def test_teacher_action_identity_is_bound_to_exact_source_trajectory():
     # The same upstream program/action may appear in separate accepted teacher
     # trajectories. Preserve both while keeping each tokenizer rendering tied
@@ -331,7 +387,8 @@ def test_authenticated_text_emulation_preserves_renderer_omitted_null_type():
 
 @pytest.mark.parametrize('code_selection', [False, 'list', 'count'])
 @pytest.mark.parametrize('explicit_collection', [False, True])
-def test_each_teacher_batch_uses_its_own_exact_program_packet(tmp_path, monkeypatch, code_selection, explicit_collection):
+@pytest.mark.parametrize('prepared_execution', [False, True])
+def test_each_teacher_batch_uses_its_own_exact_program_packet(tmp_path, monkeypatch, code_selection, explicit_collection, prepared_execution):
     from types import SimpleNamespace
     monkeypatch.setattr(converter, 'current_protection', lambda _: {
         'held': set(), 'quality': set(), 'pending': set(), 'proof': {}})
@@ -352,7 +409,14 @@ def test_each_teacher_batch_uses_its_own_exact_program_packet(tmp_path, monkeypa
         program.update(id=f'program-{index}', source_groups=[f'train-{index}'])
         rows.append(row)
         base = f'batches/{index}'
-        cases = put(base+'/selected-cases.jsonl', program)
+        original=copy.deepcopy(program)
+        if prepared_execution:
+            original['curriculum']={'trajectory_contract':{
+                'version':'natlang.trajectory_contract/1','authored_root_eval':True,
+                'authored_root_sha256':'original','min_child_invocations':0}}
+            from natlang_neuralese.rl.task_rollouts import student_root_row
+            program.clear();program.update(student_root_row(original))
+        cases = put(base+'/selected-cases.jsonl', original)
         selection = {'schema': 'natlang.native-teacher-task-selection/1', 'status': 'passed',
             'output_sha256': converter.sha256_file(cases), 'selected_ids': [program['id']],
             'train_groups': program['source_groups'], 'held_groups': []}
@@ -368,9 +432,11 @@ def test_each_teacher_batch_uses_its_own_exact_program_packet(tmp_path, monkeypa
             'selected_packet_sha256': packet_sha,
             'held_group_intersections': [], 'quality_group_intersections': []})
         collection_source = f'/work/generation/batch-{index:04d}/teacher-source.json'
+        original_source=f'/work/generation/batch-{index:04d}/source-cases.jsonl'
         collection = put(base+'/teacher-source.json', {
             'schema': 'natlang.sandbox-strong-teacher-collection/1',
             'source_cases_sha256': packet_sha, 'protected_selection': selection,
+            **({'root_mode':'student','source_cases':original_source} if prepared_execution else {}),
             'teacher': teacher})
         files.append({'path': str(collection), 'source': collection_source,
             'bytes': collection.stat().st_size, 'sha256': converter.sha256_file(collection)})
@@ -387,6 +453,14 @@ def test_each_teacher_batch_uses_its_own_exact_program_packet(tmp_path, monkeypa
             'path': str(path.relative_to(tmp_path)), 'sha256': converter.sha256_file(path)}
             for name, path in [('selection', selected), ('selected_cases', cases),
                                ('global_protection_join', protection)]}})
+        if prepared_execution:
+            actual=put(base+'/execution-packet.jsonl',program)
+            prep=put(base+'/preparation.json',{'schema':'natlang.task-rollout-preparation/1',
+                'root_mode':'student','source_cases':original_source,'source_sha256':packet_sha,
+                'packet_sha256':converter.sha256_file(actual)})
+            batches[-1].update({name:{'path':str(path.relative_to(tmp_path)),
+                'sha256':converter.sha256_file(path)} for name,path in
+                [('execution_packet',actual),('execution_preparation',prep)]})
     source = tmp_path/'native-trajectories.jsonl'
     source.write_text(''.join(json.dumps(row)+'\n' for row in rows))
     put('transfer-receipt.json', {'schema': 'natlang.verified-teacher-trajectory-transfer/1',
