@@ -65,3 +65,22 @@ test('forged aliases cannot authenticate themselves when no source aliases are d
   assert.equal('argument_aliases'in withSourceArgumentAliases(forged),false);
   assert.deepEqual(await checkAuthoring(files,forged),{ok:false,problems:['Source argument oracle aliases differ from the original declared runs.'],results:[]});
 });
+
+test('nl.with satisfies the real construct requirement and legacy false-negative stays reproducible',async()=>{
+  const {checkAuthoringLegacyRequirements}=await import('../dist/teacher/authoring.js');
+  const typed={...files,'app.ts':files['app.ts'].replace('  const flags',
+    '  const classify: Neuralese<(ticket: Ticket) => Promise<boolean>> = nl.with<boolean>({})`Does ticket report an outage?`;\n  const flags')
+    .replace('nl`Does ticket report an outage?`(ticket)','classify(ticket)')};
+  assert.deepEqual(await checkAuthoring(typed,spec),{ok:true,problems:[],results:[['a']]});
+  assert.deepEqual(await checkAuthoringLegacyRequirements(typed,spec),{ok:false,problems:['app.ts creates no nl function'],results:[['a']]});
+  assert.deepEqual((await checkAuthoring(typed,{...spec,requires:{noNl:true}})).problems,
+    ['app.ts creates an nl function where an existing one fits']);
+});
+
+test('comments and string contents cannot impersonate an authored nl function',async()=>{
+  for(const suffix of ['// nl`pretend child`','const unused = "nl`pretend child`";']){
+    const crisp={'app.ts':'export async function urgent(tickets: {id:string,text:string}[]): Promise<string[]> { return tickets.filter(t=>t.id==="a").map(t=>t.id); }\n'+suffix};
+    assert.deepEqual((await checkAuthoring(crisp,spec)).problems,['app.ts creates no nl function']);
+    assert.equal((await checkAuthoring(crisp,{...spec,requires:{noNl:true}})).ok,true);
+  }
+});

@@ -90,3 +90,40 @@ def test_alias_repair_requires_complete_original_contract_and_legacy_reproductio
     elif fault=='missing_runs':row['task']['program_ir']['semantics']['authoring']['runs']=[]
     else:row['outcome']['authoring']['problems']=['unrelated failure']
     with pytest.raises(ValueError):quality.continue_authoring_alias_quality(row,{'path':'original','sha256':'a'*64})
+
+
+def captured_construct():
+    row=captured();spec={'module':'app.ts','export':'urgent','requires':{'nl':True},
+        'runs':[{'args':[[{'id':'a','text':'site down'},{'id':'b','text':'feature request'}]],'expected':['a']}],
+        'oracle':[{'match':['"a"'],'value':True},{'match':['"b"'],'value':False}]}
+    row['task']['program_ir']['semantics']['authoring']=spec
+    row['outcome']['files']={'app.ts':'type Ticket={id:string,text:string}; export async function urgent(tickets: Ticket[]): Promise<string[]> { const classify: Neuralese<(ticket: Ticket)=>Promise<boolean>>=nl.with<boolean>({})`Does ticket report a live outage?`; const flags=await Promise.all(tickets.map(ticket=>classify(ticket))); return tickets.filter((t,i)=>flags[i]).map(t=>t.id); }'}
+    checked,_=quality.authoring_verdict(row,construct_requirements=True)
+    assert checked['legacy']=={'ok':False,'problems':['app.ts creates no nl function'],'results':[['a']]}
+    row['outcome'].update(accepted=False,authoring=checked['legacy'],rejection_reasons=['files'])
+    row['outcome']['checks']['files']=False
+    return row
+
+
+def test_actual_construct_false_negative_reproduces_old_and_all_current_runs(tmp_path):
+    from scripts.neuralese_data.build_verified_teacher_trajectory_graphs import verify_original_row
+    row=captured_construct();original=copy.deepcopy(row);p=tmp_path/'original.jsonl';p.write_text(json.dumps(row)+'\n')
+    ref={'path':str(p),'sha256':quality.sha256_file_hex(p)}
+    view=quality.continue_authoring_requirement_quality(row,ref)
+    assert row==original and view['task']==row['task'] and view['trajectory']==row['trajectory']
+    assert view['outcome']['authoring']=={'ok':True,'problems':[],'results':[['a']]}
+    assert verify_original_row(view,ref)==p
+    view['outcome']['value']='changed captured reply'
+    with pytest.raises(ValueError,match='differs'):verify_original_row(view,ref)
+
+
+@pytest.mark.parametrize('fault',['other_check','wrong_expected','wrong_captured','runtime_failure','held','no_required_nl'])
+def test_construct_repair_never_waives_other_debt_or_runtime_failures(fault):
+    row=captured_construct()
+    if fault=='other_check':row['outcome']['checks']['world']=False
+    elif fault=='wrong_expected':row['task']['program_ir']['semantics']['authoring']['runs'][0]['expected']=['b']
+    elif fault=='wrong_captured':row['outcome']['authoring']['results']=[['invented']]
+    elif fault=='runtime_failure':row['outcome']['files']['app.ts']=row['outcome']['files']['app.ts'].replace('flags[i]','!flags[i]')
+    elif fault=='held':row['task']['program_ir']['split']='test'
+    else:row['task']['program_ir']['semantics']['authoring']['requires']['nl']=False
+    with pytest.raises(ValueError):quality.continue_authoring_requirement_quality(row,{'path':'raw','sha256':'a'*64})

@@ -5,6 +5,8 @@
  * wording is not known in advance; an unmatched child fails, which fails the check.
  */
 import { isDeepStrictEqual } from 'node:util';
+import ts from 'typescript';
+import { withCallOf } from '../compiler/inline.js';
 import { createNatlangRuntime } from '../runtime/node.js';
 import { loadVirtualNatlang } from '../runtime/virtual-project.js';
 import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
@@ -57,16 +59,38 @@ export function withSourceArgumentAliases(spec: AuthoringSpec): AuthoringSpec {
 
 const HARNESS = 'authoring_check';
 
+function createsNl(source: string): boolean {
+  const parsed = ts.createSourceFile('authoring.ts', source, ts.ScriptTarget.Latest, true);
+  let found = false;
+  function visit(node: ts.Node): void {
+    if (ts.isTaggedTemplateExpression(node) &&
+        ((ts.isIdentifier(node.tag) && node.tag.text === 'nl') || withCallOf(undefined, node.tag))) found = true;
+    ts.forEachChild(node, visit);
+  }
+  visit(parsed);
+  return found;
+}
+
+/** Historical requirement accounting only; current admission re-runs checkAuthoring. */
+export async function checkAuthoringLegacyRequirements(files: Record<string, string>, spec: AuthoringSpec): Promise<AuthoringResult> {
+  return runAuthoring(files, spec, true);
+}
+
 /** Run the authored export on every test input. */
 export async function checkAuthoring(files: Record<string, string>, spec: AuthoringSpec): Promise<AuthoringResult> {
+  return runAuthoring(files, spec, false);
+}
+
+async function runAuthoring(files: Record<string, string>, spec: AuthoringSpec, legacyRequirements: boolean): Promise<AuthoringResult> {
   const problems: string[] = [];
   if (spec.argument_aliases && !isDeepStrictEqual(spec.argument_aliases, withSourceArgumentAliases(spec).argument_aliases))
     return { ok: false, problems: ['Source argument oracle aliases differ from the original declared runs.'], results: [] };
   const source = files[spec.module];
   if (source === undefined) return { ok: false, problems: [`${spec.module} does not exist`], results: [] };
-  if (spec.requires?.nl && !/\bnl\s*(?:<[^`]*>)?\s*`/.test(source)) problems.push(`${spec.module} creates no nl function`);
+  const hasNl = legacyRequirements ? /\bnl\s*(?:<[^`]*>)?\s*`/.test(source) : createsNl(source);
+  if (spec.requires?.nl && !hasNl) problems.push(`${spec.module} creates no nl function`);
   if (spec.requires?.iterateOn && !/\biterateOn\b/.test(source)) problems.push(`${spec.module} does not use iterateOn`);
-  if (spec.requires?.noNl && /\bnl\s*(?:<[^`]*>)?\s*`/.test(source)) problems.push(`${spec.module} creates an nl function where an existing one fits`);
+  if (spec.requires?.noNl && hasNl) problems.push(`${spec.module} creates an nl function where an existing one fits`);
   for (const name of spec.requires?.calls ?? []) if (!new RegExp(`\\b${name}\\s*\\(`).test(source)) problems.push(`${spec.module} does not call ${name}`);
   // The project's natlang and TypeScript files become the harness's callable folder.
   const mounted: Record<string, string> = {};

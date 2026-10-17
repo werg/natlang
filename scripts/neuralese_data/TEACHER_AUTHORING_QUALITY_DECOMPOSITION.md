@@ -11,3 +11,13 @@ The natural-language policy is to retain useful complete teacher trajectories wh
 ## Source-grounded child argument coverage
 
 A valid author can pass a ticket's complete text instead of its id-bearing record to a semantic child. The old id-only scripted oracle then has no answer. Derive aliases solely from unchanged original declared run arguments shaped exactly `{id,text}` and their exact original id-keyed oracle values. Full text and every conflicting original match must agree; no teacher result supplies a label. Preserve original spec, reproduce the original checker verdict, then execute every original run with the explicitly derived spec. A continuation may correct only the sole resulting authoring/files failure plus the known null-root accounting mismatch. Record both spec identities and keep all original outcomes, inputs and trajectories. Fresh constructors declare these aliases under new task identities; existing selected packets remain untouched.
+
+## Authoring construct presence
+
+Recognize declared `nl` use from actual TypeScript tagged-template nodes,
+including the compiler's existing `nl.with` form; strings and comments are not
+functions. This is an exact syntax verifier, not a new model-facing instruction.
+For an immutable historical false-negative, reproduce the old regex requirement
+verdict explicitly, then execute every unchanged original test with the current
+syntax verifier. A derived view may repair only that sole requirement/files
+failure and null-root accounting. Runtime/compiler failures remain rejected.

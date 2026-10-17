@@ -12,6 +12,7 @@ from scripts.neuralese_data.ground_teacher_continuations import OUTPUT_CONTRACT
 SCHEMA = 'natlang.teacher-json-file-quality-continuation/1'
 AUTHORING_SCHEMA = 'natlang.teacher-executable-authoring-quality-continuation/1'
 AUTHORING_ALIAS_SCHEMA = 'natlang.teacher-source-grounded-authoring-quality-continuation/1'
+AUTHORING_REQUIREMENT_SCHEMA = 'natlang.teacher-authoring-construct-quality-continuation/1'
 
 
 def file_verdict(row):
@@ -94,7 +95,8 @@ def continue_quality(original, original_binding):
 
 def verify_quality_continuation(row, original, original_binding):
     schema = row.get('source_quality_continuation', {}).get('schema')
-    continuation = (continue_authoring_alias_quality if schema == AUTHORING_ALIAS_SCHEMA else
+    continuation = (continue_authoring_requirement_quality if schema == AUTHORING_REQUIREMENT_SCHEMA else
+                    continue_authoring_alias_quality if schema == AUTHORING_ALIAS_SCHEMA else
                     continue_authoring_quality if schema == AUTHORING_SCHEMA else continue_quality)
     expected = continuation(original, original_binding)
     # Historical runtime identity records custody, never admission authority.
@@ -110,7 +112,7 @@ def verify_quality_continuation(row, original, original_binding):
         raise ValueError('teacher quality continuation differs from exact original evaluation view')
 
 
-def authoring_verdict(row, *, source_aliases=False):
+def authoring_verdict(row, *, source_aliases=False, construct_requirements=False):
     """Run the actual existing executable contract; no model generation."""
     root = Path(__file__).resolve().parents[2]
     paths = [Path(__file__).resolve(), root / 'ts-host/src/teacher/authoring.ts',
@@ -123,11 +125,19 @@ def authoring_verdict(row, *, source_aliases=False):
             'console.log(JSON.stringify(await checkAuthoring(p.files,p.spec)));')
     if source_aliases:
         code = ('import {readFileSync} from "node:fs";'
-                'const {checkAuthoring,withSourceArgumentAliases}=await import(process.argv[1]);'
+                'const {checkAuthoring,checkAuthoringLegacyRequirements,withSourceArgumentAliases}=await import(process.argv[1]);'
                 'const p=JSON.parse(readFileSync(0,"utf8"));'
-                'const legacy=await checkAuthoring(p.files,p.spec);'
+                'const legacy=await checkAuthoringLegacyRequirements(p.files,p.spec);'
                 'const spec=withSourceArgumentAliases(p.spec);'
                 'console.log(JSON.stringify({legacy,spec,verdict:await checkAuthoring(p.files,spec)}));')
+    if construct_requirements:
+        if source_aliases:
+            raise ValueError('authoring continuations must independently bind their exact correction')
+        code = ('import {readFileSync} from "node:fs";'
+                'const {checkAuthoring,checkAuthoringLegacyRequirements}=await import(process.argv[1]);'
+                'const p=JSON.parse(readFileSync(0,"utf8"));'
+                'console.log(JSON.stringify({legacy:await checkAuthoringLegacyRequirements(p.files,p.spec),'
+                'verdict:await checkAuthoring(p.files,p.spec)}));')
     completed = subprocess.run(['node', '--input-type=module', '-e', code,
         (root / 'ts-host/dist/teacher/authoring.js').as_uri()],
         input=json.dumps(payload), capture_output=True, text=True, check=True)
@@ -170,6 +180,45 @@ def continue_authoring_quality(original, original_binding):
         'original': original_binding, 'original_row_sha256': canonical_json_sha256_hex(original),
         'verifier': verifier, 'comparator': {'kind': 'executable-authoring/1'},
         'claim': 'evaluation-only root oracle accounting correction; original authored files, tests and execution unchanged'}
+    return result
+
+
+def continue_authoring_requirement_quality(original, original_binding):
+    """Repair a reproduced syntax-presence false-negative, never executable failure."""
+    if 'source_quality_continuation' in original:
+        raise ValueError('construct continuation requires original captured execution')
+    program = original['task']['program_ir']; semantics = program['semantics']; outcome = original['outcome']
+    spec = semantics.get('authoring'); checks = outcome.get('checks'); captured = outcome.get('authoring')
+    required = {'seeded_failure_requirement','expected_status','honest_stop','effects','files','world','file_return_consistency','answer'}
+    if (program.get('split') != 'train' or not program.get('source_groups')
+        or 'expected' not in semantics or semantics['expected'] is not None
+        or not isinstance(spec, dict) or not isinstance(spec.get('runs'), list) or not spec['runs']
+        or (spec.get('requires') or {}).get('nl') is not True
+        or not isinstance(outcome.get('files'), dict) or not outcome['files']
+        or outcome.get('status') != 'done' or outcome.get('accepted') is not False
+        or outcome.get('oracle') != {'accepted': False, 'level': 'exact'}
+        or outcome.get('quality_pending', []) != [] or outcome.get('rejection_reasons') != ['files']
+        or not isinstance(checks, dict) or not required <= set(checks) or checks.get('files') is not False
+        or any(value is not True for key, value in checks.items() if key != 'files')
+        or not isinstance(captured, dict) or captured.get('ok') is not False
+        or captured.get('problems') != [str(spec.get('module')) + ' creates no nl function']):
+        raise ValueError('construct continuation requires only a captured nl-presence false-negative')
+    checked, verifier = authoring_verdict(original, construct_requirements=True)
+    verdict = checked['verdict']
+    if (canonical_json_sha256_hex(checked['legacy']) != canonical_json_sha256_hex(captured)
+        or verdict.get('ok') is not True or verdict.get('problems') != []
+        or len(verdict.get('results', [])) != len(spec['runs'])
+        or canonical_json_sha256_hex(verdict.get('results')) != canonical_json_sha256_hex(captured.get('results'))):
+        raise ValueError('fresh complete authoring construct verification failed')
+    result = copy.deepcopy(original)
+    result['outcome'].update(accepted=True, authoring=verdict, rejection_reasons=[],
+        oracle={'accepted': True, 'level': 'exact', 'verdict': 'executable-authoring-construct/1'})
+    result['outcome']['checks']['files'] = True
+    result['source_quality_continuation'] = {'schema': AUTHORING_REQUIREMENT_SCHEMA,
+        'original': original_binding, 'original_row_sha256': canonical_json_sha256_hex(original),
+        'verifier': verifier, 'comparator': {'kind': 'typescript-authoring-construct/1'},
+        'original_spec_sha256': canonical_json_sha256_hex(spec),
+        'claim': 'Syntax-presence evaluation correction only; original complete tests, files, targets and captured trajectory unchanged'}
     return result
 
 
