@@ -307,13 +307,15 @@ def owner_alive(owner):
         return False
 
 
-def retire(directory, checkpoint, terminal):
+def retire(directory, checkpoint, terminal, *, handoff=None, verified_handoff=None):
     """After the optimizer owner drains, allow an ordinary runtime handoff.
 
     A normal checkpoint must already contain this adoption. No special save is
     requested here; stale checkpoints cannot retire the recovery authority.
     """
     import torch
+    if (handoff is None) != (verified_handoff is None):
+        raise ValueError('resident retirement reuse requires its bound handoff and verified decode together')
     directory = Path(directory)
     with locked(directory):
         state = current(directory)
@@ -325,7 +327,19 @@ def retire(directory, checkpoint, terminal):
         exit_record = json.loads(bound(terminal).read_text())
         if exit_record.get('returncode') != 0 or exit_record.get('at', 0) < state['at']:
             raise ValueError('resident retirement requires the drained optimizer owner')
-        saved = torch.load(bound(checkpoint), map_location='cpu', weights_only=False, mmap=True)
+        if verified_handoff is None:
+            saved = torch.load(bound(checkpoint), map_location='cpu', weights_only=False, mmap=True)
+        else:
+            from ..rl.native_runtime_handoff import _loaded_handoff
+            record, saved = _loaded_handoff(handoff, verified_handoff)
+            adopted = record.get('resident') or {}
+            if (record['checkpoint'] != checkpoint
+                    or terminal not in (record.get('source_terminal'), record.get('terminal'))
+                    or Path(adopted.get('directory', '')).resolve() != directory.resolve()
+                    or not adopted.get('current') or not adopted.get('initial')
+                    or json.loads(bound(adopted['current']).read_text()) != state
+                    or json.loads(bound(adopted['initial']).read_text()) != initial):
+                raise ValueError('resident retirement reuse differs from its exact drain and resident snapshots')
         from ..model.native_model import CHECKPOINT_SCHEMA
         from .native_state_sft import TRAINING_SCHEMA
         training = saved.get('training') or {}

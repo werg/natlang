@@ -62,3 +62,15 @@ A crash resumes from the committed request plus its actual validation record.
 Default full preparation remains unchanged. Crisp code handles hashes, exact
 wrapper shape, counters, reader reuse and atomic generation CAS; no optimizer,
 RNG, exposure, priorities or model arithmetic is modified.
+
+## Reuse an already verified drain during retirement (2026-10-18)
+
+Retirement is exact durability plumbing. The supervisor can pass the same-process
+verified immutable handoff and decoded state instead of decoding the complete
+optimizer checkpoint again. Authenticate that handoff with the existing shared
+loader; require the exact checkpoint, original or snapshotted terminal, resident
+directory, current-generation snapshot and initial owner snapshot. Then perform
+all existing drained-owner, optimizer/RNG, adoption and pending-request checks.
+The ordinary API still loads its own checkpoint. No disk cache or serialized
+assertion substitutes for the decoded in-process object, and the retirement
+receipt format and earned exposure remain unchanged.
