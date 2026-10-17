@@ -272,6 +272,33 @@ class RecordingProxy:
         return Handler
 
 
+def run_queue(command, *, directory, env, require_first_capture=False):
+    """Measure the first actual draw before spending the rest of a live window."""
+    directory=Path(directory)
+    if require_first_capture:
+        queue=Path(command[2]);lines=queue.read_bytes().splitlines(keepends=True)
+        if not lines:raise ValueError('feedback queue is empty')
+        prefix=directory/'first-sample-queue.jsonl'
+        if prefix.exists():
+            if prefix.read_bytes()!=lines[0]:raise ValueError('feedback first queue entry changed')
+        else:
+            from natlang_neuralese.common.jsonio import write_bytes_durable
+            write_bytes_durable(prefix,lines[0])
+        first_command=[*command[:2],str(prefix),*command[3:]]
+        first=subprocess.run(first_command,env=env)
+        observations=[json.loads(path.read_text()) for path in sorted((directory/'observations').glob('[0-9]*.json'))]
+        sampled=sum(value['sampled_turns'] for value in observations)
+        observer_error=(directory/'observations/observer-error.json').exists()
+        passed=first.returncode==0 and sampled>0 and not observer_error
+        write_json_durable(directory/'first-capture-check.json',{
+            'schema':'natlang.native-feedback-first-capture/1','passed':passed,
+            'queue':binding(queue),'first_queue':binding(prefix),'command':first_command,
+            'returncode':first.returncode,'actual_sampled_turns':sampled,'observer_error':observer_error,
+            'first_draw_preserved':True,'diagnostic_only':True,'training_admitted':False})
+        if not passed:raise RuntimeError('feedback first case did not produce a valid actual sampled capture; remaining queue was not run')
+    return subprocess.run(command,env=env)
+
+
 def run(args):
     plan_path=Path(args.plan).resolve();plan=json.loads(plan_path.read_text());root=plan_path.parent
     if plan.get('schema')!='natlang.native-marker-feedback-window/1':raise ValueError('unsupported feedback plan')
@@ -318,7 +345,8 @@ def run(args):
             immutable(directory/'launch.json',{'plan':binding(plan_path),'actor_info':info,'entrypoint':binding(__file__),
                 'queue_runner':binding(command[1]),'command':command,'executor':executor,
                 'upstream':args.endpoint,'diagnostic_only':True,'training_admitted':False})
-            result=subprocess.run(command,env=env)
+            result=run_queue(command,directory=directory,env=env,
+                require_first_capture=getattr(args,'require_first_capture',False))
         finally:
             # shutdown waits for serve_forever: do not call it before that thread started.
             if 'endpoint' in locals():server.shutdown()
@@ -356,6 +384,7 @@ def main(argv=None):
     run_parser.add_argument('--variant',choices=('baseline','candidate'),required=True)
     run_parser.add_argument('--endpoint',required=True);run_parser.add_argument('--model-id',required=True)
     run_parser.add_argument('--node',type=Path,required=True)
+    run_parser.add_argument('--require-first-capture',action='store_true')
     inventory_parser=commands.add_parser('inventory')
     inventory_parser.add_argument('--baseline-runtime',type=Path,required=True)
     inventory_parser.add_argument('--out',type=Path,required=True)

@@ -60,3 +60,14 @@ An initial CPU run accidentally included those CUDA cases and exceeded its
 The current trained-actor feedback window and independent combined-source
 review are still required before live adoption. No production improvement,
 policy update, or deployment is claimed by these local checks.
+
+## Prevent empty feedback windows
+
+The first authored-root scaffold window contained literal reference returns and
+therefore made no model calls. It is not feedback qualification or training data.
+Use student roots for this twelve-task selection. Before the full queue, execute
+its exact first entry with the same proxy, actor, output paths and journal. Require
+at least one actual sampled capture, then resume the full queue; its completed
+first key is skipped. This changes diagnostic orchestration only, never prompts,
+samples, rewards or numerical training. A missing capture stops before wasting
+the other 47 cases; preserve the actual first draw without resampling it.

@@ -176,3 +176,37 @@ def test_preparation_seals_twelve_train_shapes_and_exact_four_seed_queues(tmp_pa
     assert queues[0]==queues[1]
     rows[-1]['split']='test';cases.write_text(''.join(json.dumps(row)+'\n' for row in rows))
     with pytest.raises(ValueError,match='protected/nontrain'):feedback.prepare(args)
+
+
+@pytest.mark.parametrize('sampled',[False,True])
+def test_first_capture_stops_host_only_windows_and_preserves_sampled_first_case(tmp_path,sampled):
+    import os
+    import sys
+    runner=tmp_path/'collector.py'
+    runner.write_text('''import sys,json,pathlib
+queue,journal,observations=map(pathlib.Path,sys.argv[1:])
+observations.mkdir(exist_ok=True)
+finished={json.loads(line)['key'] for line in journal.read_text().splitlines()} if journal.exists() else set()
+for line in queue.read_text().splitlines():
+ row=json.loads(line)
+ if row['key'] in finished:continue
+ with journal.open('a') as out:out.write(json.dumps({'key':row['key'],'event':'finish'})+'\\n')
+ if row['sampled']:(observations/(row['key']+'.json')).write_text(json.dumps({'sampled_turns':1}))
+''')
+    rows=[{'key':f'{i:06d}','sampled':sampled} for i in range(48)]
+    queue=tmp_path/'queue.jsonl';queue.write_text(''.join(json.dumps(row)+'\n' for row in rows))
+    journal=tmp_path/'journal.jsonl';observations=tmp_path/'observations'
+    command=[sys.executable,str(runner),str(queue),str(journal),str(observations)]
+    if not sampled:
+        with pytest.raises(RuntimeError,match='remaining queue was not run'):
+            feedback.run_queue(command,directory=tmp_path,env=os.environ,require_first_capture=True)
+        assert len(journal.read_text().splitlines())==1
+    else:
+        assert feedback.run_queue(command,directory=tmp_path,env=os.environ,require_first_capture=True).returncode==0
+        assert len(journal.read_text().splitlines())==48
+        assert len({json.loads(line)['key'] for line in journal.read_text().splitlines()})==48
+        # Restart uses the same completed key and journal; no first draw repeated.
+        assert feedback.run_queue(command,directory=tmp_path,env=os.environ,require_first_capture=True).returncode==0
+        assert len(journal.read_text().splitlines())==48
+    proof=json.loads((tmp_path/'first-capture-check.json').read_text())
+    assert proof['passed'] is sampled and proof['training_admitted'] is False
