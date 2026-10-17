@@ -1340,10 +1340,23 @@ def _legacy_render_job_binding(job, source_sha, renderer_sha):
             raise ValueError(f'legacy renderer dependency differs from its historical binding: {name}')
     (_shard_path, _out_dir, tok_name, blocked, corpus, held_groups, decision_exclude,
      header_as_full, full_programs, renderings, compress_text, target_exclude, *_rest) = job
-    return _render_job_binding(source_sha, tok_name, blocked, corpus, held_groups,
-                               decision_exclude, target_exclude, header_as_full,
-                               full_programs, renderings, compress_text,
-                               LEGACY_SEARCH_CODE_BINDING)
+    # The approved legacy renderer (content SHA b054133a; commit cd4140a5e5)
+    # did not include the later tokenizer/piece ``render_inputs`` binding
+    # field. Recreate its
+    # exact job-binding equation here; adding ``render_inputs: None`` would
+    # silently change every legacy binding and make its trajectory receipts
+    # impossible to authenticate. Per-trajectory source IDs and raw row hashes
+    # are still checked by _trajectory_render_binding before any old output is
+    # reused.
+    return sha(canonical({
+        'source_sha256': source_sha, 'tokenizer': tok_name, 'corpus': corpus,
+        'blocked': blocked, 'held_groups': sorted(held_groups),
+        'decision_exclude': sorted(decision_exclude), 'target_exclude': sorted(target_exclude),
+        'header_as_full': header_as_full,
+        'full_programs': None if full_programs is None else sorted(full_programs),
+        'renderings': list(renderings), 'compress_text': compress_text,
+        'code': LEGACY_SEARCH_CODE_BINDING,
+    }).encode())
 
 
 def _verify_trajectory_receipts(job, done_result, allowed_renderer_shas, expected_job_binding=None):
@@ -1407,14 +1420,18 @@ def _verify_trajectory_receipts(job, done_result, allowed_renderer_shas, expecte
         _verify_group_receipt(
             receipt, path.stem, group_dir, tok_name, job[9], bool(job[10]),
             expected_binding=trajectory_bindings[path.stem],
-            expected_renderer_sha=expected_renderer_sha)
+            expected_renderer_sha=expected_renderer_sha,
+            allow_legacy_done_output=(
+                'renderer_code_sha256' not in receipt
+                and expected_renderer_sha == LEGACY_SEARCH_RENDERER_SHA256))
     declared = done_result.get('group_renderer_code_sha256s')
     if declared is not None and sorted(actual_renderer_shas) != sorted(declared):
         raise ValueError(f'done marker renderer summary differs from trajectory receipts: {stem}/{tok_name}')
 
 
 def _verify_group_receipt(receipt, group_id, group_dir, tok_name, renderings, compress_text,
-                          expected_binding=None, expected_renderer_sha=None):
+                          expected_binding=None, expected_renderer_sha=None,
+                          allow_legacy_done_output=False):
     """Require every durable output of a trajectory group, with safe paths and exact hashes."""
     if not isinstance(receipt, dict) or receipt.get('schema') != 'natlang.native-turn-trajectory-render/1':
         raise ValueError(f'trajectory receipt schema mismatch: {group_id}')
@@ -1435,6 +1452,8 @@ def _verify_group_receipt(receipt, group_id, group_dir, tok_name, renderings, co
     suffix = '.jsonl.zst' if compress_text else '.jsonl'
     expected = {f'{mode}/{tok_name}/{group_id}{suffix}' for mode in renderings}
     expected.add(f'omissions/{tok_name}/{group_id}.jsonl')
+    if allow_legacy_done_output:
+        expected.add(f'done/{tok_name}/{group_id}.json')
     outputs = receipt.get('outputs')
     if not isinstance(outputs, dict) or set(outputs) != expected:
         raise ValueError(f'trajectory receipt output inventory mismatch: {group_id}')
@@ -1682,7 +1701,9 @@ def render_shard(job):
                     raise ValueError(f'committed trajectory binding changed: {trajectory}')
                 _verify_group_receipt(
                     expected_receipt, group_id, group_dir, tok_name, renderings, compress_text,
-                    expected_binding=receipt_binding, expected_renderer_sha=receipt_renderer_sha)
+                    expected_binding=receipt_binding, expected_renderer_sha=receipt_renderer_sha,
+                    allow_legacy_done_output=('renderer_code_sha256' not in expected_receipt
+                                              and receipt_renderer_sha == legacy_renderer_sha))
                 if expected_receipt.get('source_record_ids') != source_ids:
                     raise ValueError(f'committed trajectory source row inventory changed: {trajectory}')
             if expected_receipt is not None:

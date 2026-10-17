@@ -324,8 +324,7 @@ def test_streamed_resume_preserves_old_group_receipt_and_records_mixed_renderer_
     source_digest = renderer.file_sha(selected)
     old_renderer_sha = renderer.LEGACY_SEARCH_RENDERER_SHA256
     code_binding = renderer.LEGACY_SEARCH_CODE_BINDING
-    old_binding = renderer._render_job_binding(source_digest, 'lfm25', {}, 'fixture', set(), set(), set(),
-                                               False, None, renderings, False, code_binding)
+    old_binding = renderer._legacy_render_job_binding(job, source_digest, old_renderer_sha)
     assert set(code_binding) == set(renderer.LEGACY_SEARCH_CODE_BINDING)
     current_code_binding = renderer._render_code_binding()
     lease_path = str(renderer.ROOT / 'scripts/neuralese_data/conversion_output_lease.py')
@@ -354,6 +353,14 @@ def test_streamed_resume_preserves_old_group_receipt_and_records_mixed_renderer_
                                                            source_ids, source_hashes)
     old_receipt['binding'] = old_group_binding
     old_receipt.pop('renderer_code_sha256')
+    # The b054 output inventory includes its per-trajectory done sidecar.
+    done_relative = f'done/lfm25/{group_id}.json'
+    done_path = receipt_path.parent.parent / 'groups' / group_id / done_relative
+    done_path.parent.mkdir(parents=True, exist_ok=True)
+    done_bytes = renderer.canonical({'shard': group_id, 'tokenizer': 'lfm25',
+                                     'records': len(trajectory_rows)}).encode() + b'\n'
+    done_path.write_bytes(done_bytes)
+    old_receipt['outputs'][done_relative] = renderer.sha(done_bytes)
     receipt_path.write_text(json.dumps(old_receipt, sort_keys=True) + '\n')
 
     original_output = _read(out / 'whole-trajectory' / 'lfm25' / 'selected.jsonl')
@@ -368,6 +375,11 @@ def test_streamed_resume_preserves_old_group_receipt_and_records_mixed_renderer_
     assert result['group_renderer_code_sha256s'] == sorted({
         old_renderer_sha, current_renderer_sha})
     assert _read(out / 'whole-trajectory' / 'lfm25' / 'selected.jsonl') == original_output
+    done_original = done_path.read_bytes()
+    done_path.write_bytes(done_original + b'corrupt')
+    with __import__('pytest').raises(ValueError, match='trajectory output checksum mismatch'):
+        renderer._verify_trajectory_receipts(job, result, {old_renderer_sha, current_renderer_sha})
+    done_path.write_bytes(done_original)
 
 
 def test_legacy_done_marker_requires_exact_source_and_old_renderer_witness(tmp_path):
@@ -523,6 +535,43 @@ def test_resource_only_renderer_parent_continues_exact_trajectory_receipts(tmp_p
             job, renderer.file_sha(selected), renderer._render_code_binding()))
     with __import__('pytest').raises(ValueError, match='exact reviewed resource-only continuation'):
         renderer._resource_parent_code_binding('f' * 64)
+
+
+def test_legacy_search_binding_matches_historical_equation_without_null_render_inputs(tmp_path):
+    selected = tmp_path / 'selected.jsonl'
+    selected.write_text('{}\n')
+    source_sha = renderer.file_sha(selected)
+    job = (str(selected), str(tmp_path / 'out'), 'lfm25', {'blocked-chain': 2}, 'fixture',
+           {'held-group'}, {'excluded-decision'}, False, ['program-b', 'program-a'],
+           ('program-header', 'whole-trajectory'), True, {'excluded-target'},
+           renderer.LEGACY_SEARCH_RENDERER_SHA256, {'tokenizers': {}, 'pieces_sha256': None})
+
+    actual = renderer._legacy_render_job_binding(
+        job, source_sha, renderer.LEGACY_SEARCH_RENDERER_SHA256)
+    historical = renderer.sha(renderer.canonical({
+        'source_sha256': source_sha,
+        'tokenizer': 'lfm25',
+        'corpus': 'fixture',
+        'blocked': {'blocked-chain': 2},
+        'held_groups': ['held-group'],
+        'decision_exclude': ['excluded-decision'],
+        'target_exclude': ['excluded-target'],
+        'header_as_full': False,
+        'full_programs': ['program-a', 'program-b'],
+        'renderings': ['program-header', 'whole-trajectory'],
+        'compress_text': True,
+        'code': renderer.LEGACY_SEARCH_CODE_BINDING,
+    }).encode())
+    assert actual == historical
+
+    # ``render_inputs: None`` is not the historical equation: it was added by
+    # a later renderer and must not be confused with the key being absent.
+    current_equation = renderer._render_job_binding(
+        source_sha, 'lfm25', {'blocked-chain': 2}, 'fixture', {'held-group'},
+        {'excluded-decision'}, {'excluded-target'}, False,
+        ['program-b', 'program-a'], ('program-header', 'whole-trajectory'), True,
+        renderer.LEGACY_SEARCH_CODE_BINDING, None)
+    assert actual != current_equation
 
 
 def test_bounded_render_jobs_cancel_outstanding_and_do_not_queue_entire_corpus():
