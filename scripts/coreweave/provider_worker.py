@@ -74,28 +74,75 @@ class SDKIO:
             self.clients[sid] = cwctl.read_sandbox(sid, patience=60)
         return self.clients[sid]
 
-    def remote(self, sid, code, *, timeout=120):
-        sandbox = self.sandbox(sid)
-        temporary = None
-        if len(code.encode()) > 64 * 1024:
-            temporary = METADATA_ROOT + '/' + uuid.uuid4().hex + '.py'
-            # Large inventory literals otherwise exceed Linux MAX_ARG_STRLEN.
-            self.remote(sid, 'import pathlib;pathlib.Path('+repr(METADATA_ROOT)+').mkdir(parents=True,exist_ok=True)')
-            sandbox.write_file(temporary, code.encode()).result(timeout=120)
-            digest = hashlib.sha256(code.encode()).hexdigest()
-            command = ('import pathlib,hashlib;p=pathlib.Path('+repr(temporary)+');'
-                       'raw=p.read_bytes();assert hashlib.sha256(raw).hexdigest()=='+repr(digest)+';'
-                       'exec(compile(raw,str(p),"exec"))')
-        else:
-            command = code
+    def _metadata_environment(self, sid):
+        env = self.config['sandboxes'].get(sid, {}).get('env', {})
+        if (not isinstance(env, dict) or any(not isinstance(key, str) or not isinstance(value, str)
+                                             for key, value in env.items())):
+            raise ValueError('provider metadata environment must contain string names and values')
+        return 'import os;os.environ.update('+repr(env)+');' if env else ''
+
+    def _record_metadata_timing(self, timing):
         try:
-            result = sandbox.exec(['python', '-c', command], timeout_seconds=timeout).result(timeout=timeout+60)
+            import fcntl
+            with (self.root/'metadata-timings.jsonl').open('a') as stream:
+                fcntl.flock(stream, fcntl.LOCK_EX)
+                stream.write(json.dumps(timing, sort_keys=True)+'\n')
+        except Exception as error:
+            # Observability must not replace a useful result or its actual error.
+            print('provider metadata timing unavailable: '+type(error).__name__, file=sys.stderr)
+
+    def remote(self, sid, code, *, timeout=120):
+        started = time.monotonic()
+        timing = {'schema': 'natlang.provider-metadata-timing/1', 'at': time.time(),
+                  'sandbox_id': sid, 'operation': sys._getframe(1).f_code.co_name,
+                  'phase_seconds': {}, 'status': 'failed'}
+        try:
+            prefix = self._metadata_environment(sid)
+            if prefix and not code.startswith(prefix):code = prefix+code
+            timing['code_sha256'] = hashlib.sha256(code.encode()).hexdigest()
+            timing['code_bytes'] = len(code.encode())
+            result = self._remote(sid, code, timeout=timeout, timing=timing)
+            timing['status'] = 'completed'
+            return result
+        except BaseException as error:
+            timing['error_type'] = type(error).__name__
+            raise
+        finally:
+            timing['total_seconds'] = time.monotonic()-started
+            self._record_metadata_timing(timing)
+
+    def _remote(self, sid, code, *, timeout, timing):
+        started = time.monotonic()
+        try:sandbox = self.sandbox(sid)
+        finally:timing['phase_seconds']['sandbox_bind'] = time.monotonic()-started
+        temporary = None
+        try:
+            if len(code.encode()) > 64 * 1024:
+                temporary = METADATA_ROOT + '/' + uuid.uuid4().hex + '.py'
+                # Large inventory literals otherwise exceed Linux MAX_ARG_STRLEN.
+                started = time.monotonic()
+                try:
+                    self.remote(sid, 'import pathlib;pathlib.Path('+repr(METADATA_ROOT)+').mkdir(parents=True,exist_ok=True)')
+                    sandbox.write_file(temporary, code.encode()).result(timeout=120)
+                finally:timing['phase_seconds']['script_upload'] = time.monotonic()-started
+                digest = hashlib.sha256(code.encode()).hexdigest()
+                command = ('import pathlib,hashlib;p=pathlib.Path('+repr(temporary)+');'
+                           'raw=p.read_bytes();assert hashlib.sha256(raw).hexdigest()=='+repr(digest)+';'
+                           'exec(compile(raw,str(p),"exec"))')
+            else:
+                command = code
+            started = time.monotonic()
+            try:result = sandbox.exec(['python', '-c', command], timeout_seconds=timeout).result(timeout=timeout+60)
+            finally:timing['phase_seconds']['exec_rpc'] = time.monotonic()-started
+            timing['returncode'] = result.returncode
         finally:
             if temporary is not None:
+                started = time.monotonic()
                 try:
                     self.remote(sid, 'import pathlib;pathlib.Path('+repr(temporary)+').unlink(missing_ok=True)')
                 except Exception:
-                    pass  # Preserve the original SDK failure; no worker ownership is changed.
+                    timing['cleanup_failed'] = True  # Preserve the original SDK outcome.
+                finally:timing['phase_seconds']['cleanup'] = time.monotonic()-started
         if result.returncode:
             evidence = self.root / ('metadata-error-' + uuid.uuid4().hex + '.json')
             evidence.write_text(json.dumps({'sandbox_id': sid,
@@ -140,7 +187,7 @@ class SDKIO:
         configured = self.config['sandboxes'][sid]
         runtime = configured['runtime']
         source = Path(__file__).with_name('provider_dependencies.py').read_text()
-        code = 'import sys,json;sys.path.insert(0,'+repr(runtime+'/training/neuralese')+');'
+        code = self._metadata_environment(sid)+'import sys,json;sys.path.insert(0,'+repr(runtime+'/training/neuralese')+');'
         if configured.get('cpu_helpers') or configured.get('cpu_helper_loader'):
             if not configured.get('cpu_helpers') or not configured.get('cpu_helper_loader'):
                 raise ValueError('provider CPU composition needs both its loader and module manifest')
@@ -161,7 +208,7 @@ class SDKIO:
 
     def verify_assets(self, sid, assets):
         code = self.dependency_code(sid)+'verify_assets('+repr(assets)+');'
-        code += ('import subprocess,os;os.environ.update('+repr(self.config['sandboxes'][sid].get('env', {}))+');')
+        code += 'import subprocess;'
         code += '\nfor asset in '+repr(assets)+':\n'
         code += (' if asset["kind"]=="task-runtime":\n'
                  '  result=subprocess.run(["node",asset["path"]+"/dist/teacher/cli.js","--help"],capture_output=True,timeout=30)\n'

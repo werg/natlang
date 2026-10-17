@@ -281,3 +281,65 @@ def test_dependency_code_without_cpu_composition_keeps_existing_runtime(tmp_path
     assert client.dependency_code('worker')==('import sys,json;sys.path.insert(0,'+
         repr('/unchanged/runtime/training/neuralese')+');exec(compile('+repr(source)+
         ',"provider-dependencies","exec"));')
+
+
+def test_metadata_environment_precedes_dependency_import_and_cpu_loader(tmp_path,monkeypatch):
+    root='/work/native-production/metadata-env-test'
+    loader=tmp_path/'loader.py';loader.write_text('import os\nassert os.environ["PROVIDER_CACHE_TEST"]=="declared-cache"\ndef load(reference):\n assert os.environ["PROVIDER_CACHE_TEST"]=="declared-cache"\n')
+    modules=tmp_path/'modules.json';modules.write_text('{}')
+    def bound(path):return {'path':root+'/'+path.name,'bytes':path.stat().st_size,'sha256':worker.hashlib.sha256(path.read_bytes()).hexdigest()}
+    config={'runtime':'/same/runtime','env':{'PROVIDER_CACHE_TEST':'declared-cache'},
+        'cpu_helper_loader':bound(loader),'cpu_helpers':bound(modules)}
+    client=worker.SDKIO({'receipts':str(tmp_path/'receipts'),'sandboxes':{'worker':config}})
+    read_text=Path.read_text
+    monkeypatch.setattr(Path,'read_text',lambda path,*a,**kw:
+        'import os;assert os.environ["PROVIDER_CACHE_TEST"]=="declared-cache"' if path.name=='provider_dependencies.py'
+        else read_text(path,*a,**kw))
+    monkeypatch.delenv('PROVIDER_CACHE_TEST',raising=False)
+    code=client.dependency_code('worker').replace(root,str(tmp_path))
+    try:exec(code,{})
+    finally:os.environ.pop('PROVIDER_CACHE_TEST',None)
+
+
+@pytest.mark.parametrize('large',[False,True])
+def test_remote_uses_declared_env_before_import_and_records_only_phase_metadata(tmp_path,monkeypatch,large):
+    monkeypatch.setattr(worker,'METADATA_ROOT',str(tmp_path/'remote'))
+    class Sandbox:
+        def write_file(self,path,raw):
+            Path(path).write_bytes(raw);return SimpleNamespace(result=lambda **kw:None)
+        def exec(self,argv,**kwargs):
+            return SimpleNamespace(result=lambda **kw:subprocess.run([sys.executable,*argv[1:]],capture_output=True,text=True))
+    secret='private-environment-value-not-for-timing-logs'
+    client=worker.SDKIO({'receipts':str(tmp_path/'receipts'),'sandboxes':{
+        'worker':{'env':{'PROVIDER_CACHE_TEST':secret},'runtime':'unused'}}})
+    client.sandbox=lambda sid:Sandbox()
+    module=tmp_path/'early_import.py';module.write_text('import os\nassert os.environ["PROVIDER_CACHE_TEST"]=='+repr(secret)+'\n')
+    code=('import sys;sys.path.insert(0,'+repr(str(tmp_path))+');import early_import;print("{\\\"passed\\\":true}")')
+    if large:code='# padding inventory\n'*6000+code
+    assert client.remote('worker',code)=={'passed':True}
+    records=[json.loads(line) for line in (client.root/'metadata-timings.jsonl').read_text().splitlines()]
+    record=next(row for row in records if row['code_bytes']>65536) if large else records[0]
+    assert record['status']=='completed' and record['returncode']==0
+    assert record['phase_seconds']['sandbox_bind']>=0 and record['phase_seconds']['exec_rpc']>=0
+    if large:assert record['phase_seconds']['script_upload']>=0 and record['phase_seconds']['cleanup']>=0
+    assert record['total_seconds']>=sum(record['phase_seconds'].values())
+    assert secret not in (client.root/'metadata-timings.jsonl').read_text()
+    assert 'PROVIDER_CACHE_TEST' not in os.environ
+    assert not list((tmp_path/'remote').glob('*.py'))
+
+
+def test_metadata_timing_failure_preserves_original_remote_error(tmp_path,monkeypatch,capsys):
+    client=worker.SDKIO({'receipts':str(tmp_path),'sandboxes':{}})
+    client.sandbox=lambda sid:(_ for _ in ()).throw(RuntimeError('original SDK failure'))
+    original=Path.open
+    def denied(path,*a,**kw):
+        if path.name=='metadata-timings.jsonl':raise OSError('timing disk unavailable')
+        return original(path,*a,**kw)
+    monkeypatch.setattr(Path,'open',denied)
+    with pytest.raises(RuntimeError,match='original SDK failure'):client.remote('fixture','print("{}")')
+    assert 'timing unavailable: OSError' in capsys.readouterr().err
+
+
+def test_metadata_environment_rejects_nonstring_configuration(tmp_path):
+    client=worker.SDKIO({'receipts':str(tmp_path),'sandboxes':{'worker':{'runtime':'unused','env':{'NATLANG_HASH_CACHE':False}}}})
+    with pytest.raises(ValueError,match='string names and values'):client.dependency_code('worker')
