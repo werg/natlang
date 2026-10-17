@@ -330,6 +330,9 @@ def verify_model_source_parity(model_views):
     models = list(model_views)
     if len(models) < 2:
         raise ValueError('acquired session admission needs both model views')
+    for view in model_views.values():
+        if set(view['accepted']) & set(view['pending']):
+            raise ValueError('one model source occurrence is both accepted and render-pending')
     all_keys = set().union(*(set(view['accepted']) | set(view['pending']) for view in model_views.values()))
     for key in all_keys:
         states = {name: ('pending' if key in view['pending'] else
@@ -561,9 +564,11 @@ def main(argv=None):
                 raise ValueError('native cohort model selector differs from its exact tokenizer base inventory')
             whole = {}
             for proof in proofs:
+                if proof['view'] != 'whole-trajectory':
+                    continue
                 key = (proof['normalized_session_sha256'], proof['source_row'])
                 whole.setdefault(key, set()).add((proof['id'], proof['normalized_session_sha256'],
-                    proof['split'], proof['view']))
+                    proof['split'], 'whole-trajectory'))
             pending = set()
             for omission in sessions(directory / 'omissions.jsonl'):
                 if omission.get('reason') == 'source-render-pending:tool-arguments':

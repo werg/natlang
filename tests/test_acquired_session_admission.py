@@ -206,8 +206,14 @@ def test_paired_admission_keeps_mellum_scalar_while_lfm2_records_exact_pending_o
     key=('source-sha','source.parquet:17')
     accepted={('source-session:source-occurrence:x','source-sha','train','whole-trajectory')}
     verify_model_source_parity({
-        'lfm25':{'backbone':'lfm2','accepted':{},'pending':{key}},
-        'mellum21':{'backbone':'mellum','accepted':{key:accepted},'pending':set()}})
+        'lfm25':{'backbone':'lfm2','accepted':{},'pending':{key},
+            'auxiliary':{'view':'per-model-diagnostic','proofs':{'lfm-only'}}},
+        'mellum21':{'backbone':'mellum','accepted':{key:accepted},'pending':set(),
+            'auxiliary':{'view':'per-model-diagnostic','proofs':{'mellum-only'}}}})
+    with pytest.raises(ValueError,match='both accepted and render-pending'):
+        verify_model_source_parity({
+            'lfm25':{'backbone':'lfm2','accepted':{key:accepted},'pending':{key}},
+            'mellum21':{'backbone':'mellum','accepted':{key:accepted},'pending':set()}})
     with pytest.raises(ValueError,match='cross-model source outcome'):
         verify_model_source_parity({
             'lfm25':{'backbone':'lfm2','accepted':{key:accepted},'pending':set()},
