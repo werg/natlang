@@ -31,10 +31,13 @@ def _exact(value):
 class Tranche:
     batch: int
     number: int
+    attempt: int | None = None
 
     def __post_init__(self):
         if type(self.batch) is not int or self.batch < 21 or type(self.number) is not int or self.number < 0:
             raise ValueError('teacher tranche needs actual batch and nonnegative tranche numbers')
+        if self.attempt is not None and (type(self.attempt) is not int or self.attempt < 1):
+            raise ValueError('teacher repair attempt must be an explicit positive integer')
 
     @property
     def batch_name(self):
@@ -50,11 +53,20 @@ class Tranche:
 
     @property
     def corpus_id(self):
-        suffix = '' if self.batch == 21 else f'batch{self.batch:04d}-'
+        suffix = (f'batch{self.batch:04d}-repair{self.attempt:04d}-' if self.attempt is not None
+                  else '' if self.batch == 21 else f'batch{self.batch:04d}-')
         return f'qwen-verified-positive-native-graphs-20261017-recovery7853-{suffix}tranche{self.number:04d}'
+
+    def exports(self, spool):
+        root = Path(spool)
+        if self.attempt is not None:
+            return root / 'repair-exports' / f'{self.batch_name}-attempt-{self.attempt:04d}'
+        return root / self.batch_name
 
     def admission(self, spool, *, recovery=False):
         root = Path(spool) / ('admission-recovery' if recovery else 'admission')
+        if self.attempt is not None:
+            return root / 'repair-attempts' / self.batch_name / f'attempt-{self.attempt:04d}' / self.name
         if self.batch != 21:
             root /= self.batch_name
         return root / self.name
@@ -162,7 +174,7 @@ def preceding_tranches(root, spool, tranche):
     identities = {row['id'] for row in admitted}
     rejected = []
     for number in range(tranche.number):
-        earlier = Tranche(tranche.batch, number)
+        earlier = Tranche(tranche.batch, number, tranche.attempt)
         if earlier.corpus_id in identities:
             continue
         directory = earlier.admission(spool)

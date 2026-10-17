@@ -29,3 +29,10 @@ export nor reference qualification grants training admission or exposure.
    debt; partial missing trajectories fail closed. Keep useful independently
    verified graphs from other rows without claiming the held rows were admitted.
    This is an exact partition verifier, not an approval waiver.
+
+6. Treat a retried collector attempt as a separate exact namespace. Its original
+   batch/task/seed/source proof remains authoritative, while private frontiers,
+   admission outputs and corpus IDs include the actual positive attempt number.
+   Earlier-tranche accounting stays within that attempt; all registered corpora
+   still participate in deduplication. This is custody plumbing only: a retry
+   never grants source qualification or weakens current protection/quality.

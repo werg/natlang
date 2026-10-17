@@ -208,3 +208,29 @@ def test_deduplicated_action_is_counted_once_without_a_second_graph():
     raw, omitted = partition_fixture()
     proof = materialization_partition(raw, [('good', 0), ('good', 1)], omitted, [], [('good', 0)])
     assert proof['emitted_actions'] == 0 and proof['deduplicated_actions'] == 1
+
+
+def test_repair_attempt_preserves_archive_keys_but_separates_all_mutable_custody(tmp_path):
+    ordinary, repair, later = Tranche(21, 0), Tranche(21, 0, 1), Tranche(21, 0, 2)
+    assert ordinary.archive_name == repair.archive_name == later.archive_name
+    assert len({x.corpus_id for x in (ordinary, repair, later)}) == 3
+    assert repair.corpus_id.endswith('batch0021-repair0001-tranche0000')
+    assert repair.exports(tmp_path) == tmp_path / 'repair-exports/batch-0021-attempt-0001'
+    assert ordinary.exports(tmp_path) == tmp_path / 'batch-0021'
+    for recovery in (False, True):
+        assert len({x.admission(tmp_path, recovery=recovery) for x in (ordinary, repair, later)}) == 3
+    assert repair.admission(tmp_path) == tmp_path / 'admission/repair-attempts/batch-0021/attempt-0001/tranche-0000'
+
+
+@pytest.mark.parametrize('attempt', [0, -1, True, 1.0, '1'])
+def test_repair_attempt_is_typed_positive_integer(attempt):
+    with pytest.raises(ValueError, match='repair attempt'):
+        Tranche(21, 0, attempt)
+
+
+def test_original_admitted_tranche_cannot_discharge_repair_attempt_predecessor(tmp_path):
+    ordinary = corpus(tmp_path, 21, 0)
+    put(tmp_path / 'training/neuralese_corpora.json', {'corpora': [ordinary]})
+    with pytest.raises(FileNotFoundError):
+        preceding_tranches(tmp_path, tmp_path / 'spool', Tranche(21, 1, 1))
+    assert admitted_predecessors(tmp_path, Tranche(21, 0, 1).corpus_id)[0]['id'] == ordinary['id']
