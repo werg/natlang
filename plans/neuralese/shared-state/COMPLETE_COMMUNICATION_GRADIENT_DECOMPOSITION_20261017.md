@@ -101,3 +101,40 @@ Durable owner-host receipts in `/home/werg/data/dgxops/` are
 `lfm9478-norm-reduction-divergence-root-20261017.json`, and
 `lfm9478-existing-fusednorm-gradient-diagnostic-root-20261017.json`.
 The restored parent remains assigned to this unresolved investigation.
+
+Full inherited update localization (2026-10-17, 15:29 UTC)
+-------------------------------------------------------
+
+The actual saved optimizer restored exactly by parameter name: 270 tensors,
+575,404,264 bytes and all 150 parameter/group bindings. Serialized slot order
+may differ after construction; raw slot indices are not parameter identities.
+Private shadow updates preserve the source RNG and perform zero source updates.
+With ordinary production arithmetic, 136/150 stored-update comparisons fail
+the diagnostic zero-absolute/1e-4-relative gates; 94 parameters have moment
+differences. The largest Muon stored-delta relative L2 difference is 0.01418.
+Every actual parameter has a nonzero update; no lost-update case was found.
+These diagnostic update gates are not additional production qualification rules.
+
+Two bounded full-graph diagnostics then use the existing explicit reference
+arithmetic (float64 native projection products and visible attention, original
+activation storage). This reduces strict gradient failures from 100 to 35/151
+and the largest Muon delta difference to 0.00943. Applying the original source
+norm independently per token row within that reference reduces gradient
+failures to 29/151, but leaves 127 stored-update diagnostic failures and a
+0.00931 maximum Muon delta difference. Neither change is a complete repair or
+a production optimization. Both preserve source optimizer/RNG state.
+
+This rules out shape-dependent normalization or native GEMM/attention alone
+as a sufficient explanation. Continue localization of the remaining arithmetic
+and accumulation differences and their amplification through the actual BF16
+Muon moments/Newton-Schulz recurrence. Do not relax readiness gates, deploy
+serial norms, attribute task failures to these discrepancies without evidence,
+or repeat isolated first-layer checks as if they establish full equivalence.
+Useful production SGD continues with its real exposure and optimizer history.
+
+Exact reports are `lfm9478-stored-updates-diagnostic-root-v2-20261017.json`,
+`lfm9478-reference-arithmetic-updates-root-20261017.json`,
+`lfm9478-rowwise-norm-reference-updates-root-20261017.json`, and their compact
+`lfm9478-reference-arithmetic-summary-root-20261017.json` in the same operations
+directory. The full inherited runs used at most 7.0 GB host memory and 4.93 GB
+CUDA allocation; these are local DGX diagnostic measurements, not cloud proofs.
