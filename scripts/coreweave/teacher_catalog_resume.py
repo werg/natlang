@@ -27,6 +27,11 @@ _STATIC = ('scripts/source_review.py', 'scripts/neuralese_data/decision_holds.py
            'training/neuralese/natlang_neuralese/common/jsonio.py')
 
 
+def selection_binding():
+    return dict(module=binding(Path(eligible_program_sql.__code__.co_filename)),
+                sql=eligible_program_sql())
+
+
 def load_policy(reference):
     read_bytes = Path(reference['path']).read_bytes()
     import hashlib
@@ -94,7 +99,7 @@ def store_row(db, policy, path, line, row, protection, holds):
     if previous and previous != (row_sha, sha):
         raise ValueError('committed source row identity changed')
     family = (program.get('curriculum') or {}).get('family') or program.get('family')
-    if not previous:
+    if not previous and not db.execute('SELECT 1 FROM programs WHERE sha=?', (sha,)).fetchone():
         db.execute('INSERT OR IGNORE INTO programs VALUES(?,?,?,?)',
                    (sha, program.get('id'), encode_body(policy.encode(program)), family))
     groups = sorted(set(row.get('source_groups') or []) | set(program.get('source_groups') or []))
@@ -103,7 +108,7 @@ def store_row(db, policy, path, line, row, protection, holds):
     db.execute('DELETE FROM omissions WHERE file=? AND line=?', (path, line))
 
 
-def scan_file(db, policy, entry, protection, holds, *, audit_cursor=None, audit_save=None):
+def scan_file(db, policy, entry, protection, holds, *, audit_cursor=None, audit_save=None, storage_root=None):
     path = Path(entry['path']); key = str(path)
     before = binding(path)
     expected = entry.get('expected_sha256')
@@ -129,7 +134,7 @@ def scan_file(db, policy, entry, protection, holds, *, audit_cursor=None, audit_
         last = line
         store_row(db, policy, key, line, row, protection, holds)
         if line % 1000 == 0:
-            policy.floor(path.parent)
+            policy.floor(storage_root or path.parent)
             if not auditing:
                 db.execute('UPDATE files SET cursor=? WHERE path=?', (line, key))
             db.commit()
@@ -195,6 +200,7 @@ def resume(out, parent_inputs, parent_inventory, protection_path, *, legacy_stat
                        or parent['source_reviews_sha256'] != current['source_reviews_sha256'])
     groups = {k: protection[k] for k in ('held', 'quality', 'pending')}
     authority = dict(current=current, static_guards=static,
+                     selection_mechanism=selection_binding(),
                      decision_holds=current['decision_holds'], groups={k: sorted(v) for k,v in groups.items()},
                      source_population_sha256=digest(dict(files=current_files, corpora=corpora)),
                      scanner=binding(Path(__file__)), parent_inputs=binding(Path(parent_inputs)),
@@ -237,12 +243,12 @@ def resume(out, parent_inputs, parent_inventory, protection_path, *, legacy_stat
                 def saved(cursor, path=path):
                     audit[path] = cursor; write_json_durable(audit_file, audit)
                 scan_file(db, policy, by_path[path], protection, holds,
-                          audit_cursor=audit.get(path, 0), audit_save=saved)
+                          audit_cursor=audit.get(path, 0), audit_save=saved, storage_root=out)
             for entry in current_files:
                 policy.floor(out)
                 if not Path(entry['path']).is_file():
                     continue  # Explicit omission recorded below, never complete.
-                scan_file(db, policy, entry, protection, holds)
+                scan_file(db, policy, entry, protection, holds, storage_root=out)
                 write_json_durable(out / 'adaptive-scan-progress.json', dict(last_file=entry['path'], authority=authority_ref))
             # A registry append during scanning does not discard any source
             # cursor. The next invocation discovers its new files.
@@ -274,7 +280,8 @@ def export_candidates(out, state_reference):
     policy.PROTECTION = Path(authority['current']['protection']['path'])
     def current_authority():
         return (policy.inputs()[2] == authority['current']
-                and [binding(policy.REPO / p) for p in _STATIC] == authority['static_guards'])
+                and [binding(policy.REPO / p) for p in _STATIC] == authority['static_guards']
+                and selection_binding() == authority['selection_mechanism'])
     if not current_authority():
         raise ValueError('candidate publication authority changed; continue the existing catalog')
     key = state['authority']['sha256']
@@ -308,11 +315,14 @@ def export_candidates(out, state_reference):
                 proof = read(binding(proof_path))
                 if binding(Path(proof['cases_binding']['path'])) != proof['cases_binding']:
                     raise ValueError('published candidate artifact changed')
+                if not current_authority():
+                    raise ValueError('cached candidate authority changed during source verification')
                 return binding(proof_path)
             # Only current sources grant eligibility/provenance. Historical
             # protected occurrences and identity conflicts remain barriers:
             # withdrawing a source does not turn its held content into training.
-            query = 'SELECT p.sha,p.body FROM programs p WHERE ' + eligible_program_sql() + ' ORDER BY p.rowid'
+            query = ('SELECT p.sha,p.body FROM programs p WHERE '
+                     + authority['selection_mechanism']['sql'] + ' ORDER BY p.rowid')
             count = 0
             with write_jsonl_text(partial) as stream:
                 for sha, body in db.execute(query):

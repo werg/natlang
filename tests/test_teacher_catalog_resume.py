@@ -232,3 +232,36 @@ def test_policy_audit_reuses_exact_original_program_storage(tmp_path,monkeypatch
     scan_file(db,p,entry,dict(held={'g'}),set(),audit_cursor=0,audit_save=lambda _:None)
     assert db.execute('SELECT sha,body FROM programs').fetchall()==before
     assert db.execute('SELECT reason FROM occurrences').fetchone()==('held_group',)
+
+
+def test_cached_publication_rechecks_authority_after_source_verification(live_catalog,monkeypatch):
+    c=live_catalog;source=c.add();c.current.write_text(json.dumps(dict(held=[],quality=[],pending=[])))
+    c.run();reference=binding(c.root/'adaptive-catalog-state.json')
+    mechanism.export_candidates(c.root,reference)
+    original=mechanism.binding
+    def changed(path):
+        result=original(path)
+        if Path(path)==source:c.current.write_text(json.dumps(dict(held=['g'],quality=[],pending=[])))
+        return result
+    monkeypatch.setattr(mechanism,'binding',changed)
+    with pytest.raises(ValueError,match='cached candidate authority changed'):
+        mechanism.export_candidates(c.root,reference)
+
+
+def test_publication_binds_shared_selection_rule(live_catalog,monkeypatch):
+    c=live_catalog;c.add();c.run();reference=binding(c.root/'adaptive-catalog-state.json')
+    monkeypatch.setattr(mechanism,'eligible_program_sql',lambda:'1')
+    with pytest.raises(ValueError,match='publication authority changed'):
+        mechanism.export_candidates(c.root,reference)
+
+
+def test_repeated_program_is_encoded_once_and_write_reserve_uses_catalog_disk(tmp_path,monkeypatch):
+    db=catalog();entry=write(tmp_path/'source.jsonl',[row() for _ in range(1001)]);p=policy()
+    encoded=[];original=mechanism.encode_body
+    monkeypatch.setattr(mechanism,'encode_body',lambda body:(encoded.append(body),original(body))[1])
+    floors=[];p.floor=floors.append
+    destination=tmp_path/'catalog'
+    scan_file(db,p,entry,dict(held=set()),set(),storage_root=destination)
+    assert len(encoded)==1
+    assert floors==[destination]
+    assert db.execute('SELECT count(*) FROM occurrences').fetchone()==(1001,)
