@@ -804,3 +804,48 @@ def test_prepared_packet_manifest_must_bind_executed_not_original_bytes(tmp_path
     outputs[entries[0]['key']]=payload,json.dumps(manifest).encode()
     with pytest.raises(ValueError,match='completed source range'):
         seal_tranche(batch=19,number=0,entries=completed_entries(queue,journal),context=context,outputs=outputs,directory=tmp_path)
+
+
+def test_multiple_held_jobs_preserve_every_selected_rows_distinct_sidecar(tmp_path):
+    entries, queue, journal, context, outputs, _ = _fixture()
+    events = [json.loads(line) for line in journal.split(b'\n') if line]
+    remote = {'/batch/queue.jsonl': queue,
+              '/batch/teacher-source.json': context['teacher-source.json'],
+              '/batch/source-cases.jsonl': context['source-cases.jsonl']}
+    for entry in entries:
+        key, index = entry['key'], entry['index']
+        payload = b''
+        manifest = json.loads(outputs[key][1])
+        manifest.update(completed=0, missing=[index], output_sha256=hashlib.sha256(payload).hexdigest())
+        remote[entry['output']] = payload
+        remote[entry['output']+'.manifest.json'] = json.dumps(manifest).encode()
+        remote[f"{entry['jobs']}/{index:06d}.error.json"] = json.dumps({
+            'index': index, 'program_id': entry['task_id'],
+            'generation_hold': f'bound distinct hold {index}'}).encode()
+        for event in events:
+            if event.get('key') == key and event['event'] == 'finish':
+                event['output_accounting'].update(exact_result_rows=0,
+                    output_sha256=hashlib.sha256(payload).hexdigest(),
+                    job_states=[{'state': 'generation_held', 'index': index, 'program_id': entry['task_id']}])
+    remote['/batch/journal.jsonl'] = b''.join(json.dumps(e).encode()+b'\n' for e in events)
+    seen = []
+    def export(tranche, receipt_path):
+        for row in tranche['outputs']:
+            held = row['held_payloads']
+            assert len(held) == 1
+            ref = next(iter(held.values()))
+            raw = (Path(tranche['archive_receipt']['source']) / ref['path']).read_bytes()
+            value = json.loads(raw)
+            assert value['program_id'] == entries[row['index']]['task_id']
+            assert value['generation_hold'] == f"bound distinct hold {row['index']}"
+            seen.append(value['index'])
+        identity = {'bytes': tranche['archive_receipt']['archive_bytes'],
+                    'sha256': tranche['archive_receipt']['archive_sha256']}
+        return {**tranche, 'private_export': {'identity': identity}}
+    result = export_finished_tranches(batch=19, queue_path='/batch/queue.jsonl',
+        journal_path='/batch/journal.jsonl', context_paths={
+            'teacher-source.json': '/batch/teacher-source.json',
+            'source-cases.jsonl': '/batch/source-cases.jsonl'}, directory=tmp_path/'exports',
+        read_file=remote.__getitem__, export_file=export, chunk_size=2)
+    assert seen == [0, 1]
+    assert result['durable_completed_keys'] == 2

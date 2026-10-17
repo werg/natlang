@@ -617,13 +617,13 @@ def export_finished_tranches(*, batch: int, queue_path: str, journal_path: str,
             outputs = {}
             for row in selected:
                 outputs[row['key']] = (read_file(row['output']), read_file(row['output'] + '.manifest.json'))
-            held = {}
-            for job in row['finish_event']['output_accounting']['job_states']:
-                if job.get('state') == 'generation_held':
-                    path = f"{row['jobs'].rstrip('/')}/{job['index']:06d}.error.json"
-                    held[f"held-errors/{job['index']:06d}.error.json"] = read_file(path)
-            if held:
-                outputs[row['key']] = (*outputs[row['key']], held)
+                held = {}
+                for job in row['finish_event']['output_accounting']['job_states']:
+                    if job.get('state') == 'generation_held':
+                        path = f"{row['jobs'].rstrip('/')}/{job['index']:06d}.error.json"
+                        held[f"held-errors/{job['index']:06d}.error.json"] = read_file(path)
+                if held:
+                    outputs[row['key']] = (*outputs[row['key']], held)
             tranche = seal_tranche(batch=batch, number=number, entries=selected,
                 context=context, outputs=outputs, directory=tranche_dir)
             receipt_path = directory / 'private-receipts' / f'tranche-{number:04d}.json'
