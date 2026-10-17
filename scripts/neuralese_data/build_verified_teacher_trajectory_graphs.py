@@ -682,7 +682,12 @@ def verify_original_row(row, original):
     if not path.is_file() or sha256_file(path) != original.get('sha256'):
         raise ValueError('original accepted response artifact changed: ' + str(path))
     originals = [value for _, value in file_rows(path) if value.get('id') == row['id']]
-    if len(originals) != 1 or canonical_json_sha256_hex(originals[0]) != canonical_json_sha256_hex(row):
+    if len(originals) != 1:
+        raise ValueError('combined teacher trajectory differs from its original response: ' + row['id'])
+    if row.get('source_quality_continuation'):
+        from scripts.neuralese_data.teacher_file_quality import verify_quality_continuation
+        verify_quality_continuation(row, originals[0], original)
+    elif canonical_json_sha256_hex(originals[0]) != canonical_json_sha256_hex(row):
         raise ValueError('combined teacher trajectory differs from its original response: ' + row['id'])
     return path
 
