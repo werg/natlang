@@ -232,3 +232,14 @@ acknowledgement gate. Optional actor-view work gets a longer asynchronous RPC
 window; this change adds no tensor/model mutation or alternate reader.
 
 Checkpoint observation views (2026-10-17): an explicit diagnostic setting may name overlapping cohorts, while each individual cohort remains unique and every repeated row must retain the same authenticated binding. These are separate views of saved credits, never additive exposure. The default remains disjoint. A second optional exact observation enumerates current saved optimizer routes, declared parameter dtypes and actual buffer dtypes/shapes from the already-loaded state; it neither infers missing buffers nor loads/executes a model. Crisp code implements these exact identity and metadata checks.
+### Terminal model-budget export custody (2026-10-17)
+
+Generation keeps progressing after an authenticated terminal model-request-budget
+failure. Such a failure remains control evidence and earns no positive training
+admission. The final export partitions the original queue into durable outputs,
+repairs, unstarted work and exact terminal budget failures. The exporter retains
+the original error and output manifest, and invokes the existing shared
+`teacher_batch_completion.batch_completion` verifier against a temporary mirror
+of the exact sealed source bytes. Hashing, path containment, immutable archive
+construction and original queue identity are crisp mechanisms; the continuation
+policy is the existing supervisor instruction, not another success classifier.
