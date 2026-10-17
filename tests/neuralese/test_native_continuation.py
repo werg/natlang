@@ -20,6 +20,58 @@ def progress():
         'rng':{'actual':'current stream'},'fp8':{'actual':'current scale'}}
 
 
+def test_borrowed_metadata_matches_owned_pending_merge_without_mutating_checkpoint():
+    old=progress()
+    old['source_row_bindings']={'old':'binding0'}
+    old['source_row_order']=['old']
+    old['options']['_pending_native_source_declarations']=[{
+        'binding':{'path':'pending.json','sha256':'a'*64},
+        'rows':{'new':{'binding':'binding1','required_visits':2}}}]
+    prior=collect_sft_progress(old)
+    current=progress()
+    current['sft_progress']=prior
+    current['exposure_counts']={'old':1}
+    current['options']['_objective_required_visits']={'new':3}
+    before=copy.deepcopy(current)
+    borrowed=collect_sft_progress(current,borrow_frames=True)
+    owned=collect_sft_progress(current)
+    assert borrowed==owned
+    assert borrowed['full']['required_visits']['new']==3
+    assert borrowed['full']['exposure_counts']['new']==0
+    assert current==before
+    assert borrowed['full']['source_row_bindings'] is current['source_row_bindings']
+    assert owned['full']['source_row_bindings'] is not current['source_row_bindings']
+    # Historical objective frames are only read, never duplicated by discovery.
+    policy={'sft_progress':prior,'identity':{'objective':'policy'}}
+    assert collect_sft_progress(policy,borrow_frames=True)['full'] is prior['full']
+
+
+@pytest.mark.parametrize('epochs',[0.5,1,1.5,2])
+@pytest.mark.parametrize('counts',[{}, {'old':1}, {'old':9,'new':2}])
+def test_metadata_completion_matches_full_exposure_report(epochs,counts):
+    from natlang_neuralese.train.native_continuation import sft_frame_complete
+    current=progress();current['options']['epochs']=epochs;current['exposure_counts']=counts
+    frame=collect_sft_progress(current)['full']
+    assert sft_frame_complete(frame)==progress_obligations({'full':frame})['stages']['full']['complete']
+    frame.pop('required_visits')
+    assert sft_frame_complete(frame)==progress_obligations({'full':frame})['stages']['full']['complete']
+
+
+def test_metadata_completion_still_checks_bad_counters_after_a_deficit():
+    from natlang_neuralese.train.native_continuation import sft_frame_complete
+    with pytest.raises(ValueError):
+        sft_frame_complete({'required_visits':{'missing':1,'bad':1},'exposure_counts':{'bad':'invalid'}})
+
+
+def test_metadata_completion_rejects_missing_historical_objective_like_full_report():
+    from natlang_neuralese.train.native_continuation import sft_frame_complete
+    frame={'required_visits':{},'identity':{'objective_kind':'native-offline-pairwise'}}
+    with pytest.raises(KeyError,match='objective'):
+        sft_frame_complete(frame)
+    with pytest.raises(KeyError,match='objective'):
+        progress_obligations({'complete-historical':frame})
+
+
 def test_stage_frames_keep_deficits_and_current_optimizer_rng_after_objective_switch():
     old=progress();frames=collect_sft_progress(old)
     assert not {'optimizer','rng','fp8','sft_progress'} & frames['full'].keys()

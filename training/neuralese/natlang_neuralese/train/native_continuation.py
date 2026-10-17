@@ -148,17 +148,47 @@ def _retain_pending_sources(frame,previous):
     return frame
 
 
-def collect_sft_progress(training):
-    """Capture an actual CE schedule, retaining older mandatory stages unchanged."""
-    result=copy.deepcopy(training.get('sft_progress') or {})
+def collect_sft_progress(training, *, borrow_frames=False):
+    """Capture a CE schedule; metadata-only readers may borrow nested values.
+
+    Borrowed results must not be mutated by the caller. Pending-source merging
+    still owns its counters and declarations, so discovery never alters the
+    decoded checkpoint. Training callers retain fully independent deep copies.
+    """
+    historical=training.get('sft_progress') or {}
+    result=dict(historical) if borrow_frames else copy.deepcopy(historical)
     if training.get('schema')==TRAINING_SCHEMA and ((training.get('identity') or {}).get('objective') is None
             or (training.get('identity') or {}).get('objective_kind')=='native-offline-pairwise'):
-        frame={key:copy.deepcopy(value) for key,value in training.items() if key not in _TRANSIENT}
+        frame={key:value if borrow_frames else copy.deepcopy(value)
+               for key,value in training.items() if key not in _TRANSIENT}
+        if borrow_frames:
+            # _retain_pending_sources updates only these existing nested values;
+            # quotas and pending declarations are allocated by that helper.
+            frame['exposure_counts']=dict(training.get('exposure_counts') or {})
         key=stage_key(training)
         _retain_pending_sources(frame,result.get(key) or {})
         frame.setdefault('completed_foundations',(result.get(key) or {}).get('completed_foundations',[]))
         result[key]=frame
     return result
+
+
+def sft_frame_complete(frame):
+    """Exact completion without allocating the reporting-only deficit map."""
+    quotas=frame.get('required_visits')
+    if quotas is None:
+        quotas=required_visits(frame.get('source_row_order') or list(frame.get('source_row_bindings') or {}),
+            float((frame.get('options') or {}).get('epochs',1)))
+    counts=frame.get('exposure_counts') or {}
+    complete=True
+    for key,required in quotas.items():
+        # Visit every counter, including malformed counters after a deficit.
+        if int(counts.get(key,0))<required:
+            complete=False
+    if (frame.get('identity') or {}).get('objective_kind'):
+        # The full report validates this field even for completed old stages.
+        # Dependency discovery must retain that malformed-state rejection.
+        frame['identity']['objective']
+    return complete
 
 
 def restore_sft_progress(current,stage):

@@ -47,11 +47,10 @@ def dependency_closure(request, *, namespace='/work/native-production'):
         policy_sources(training.get('policy_source_history', []))
         if not training.get('sft_progress') and training.get('schema') != 'natlang.neuralese-native-sft-training/1':
             return
-        from natlang_neuralese.train.native_continuation import collect_sft_progress, progress_obligations
-        progress = collect_sft_progress(training)
-        obligations = progress_obligations(progress)['stages']
+        from natlang_neuralese.train.native_continuation import collect_sft_progress, sft_frame_complete
+        progress = collect_sft_progress(training, borrow_frames=True)
         for name, frame in progress.items():
-            if obligations[name]['complete']:
+            if sft_frame_complete(frame):
                 continue  # Completed historical source files are not read by mandatory SFT.
             identity = frame.get('identity') or {}
             if identity.get('objective_kind') == 'native-offline-pairwise':
