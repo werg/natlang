@@ -1032,3 +1032,31 @@ Python argument rendering must make the same distinction. No prompt or error
 wording is added. Runtime recovery behavior is model-facing; live measurement
 of approximately48 executor samples per variant is pending in the next teacher
 window and recorded as debt, not as a reason to stall useful training.
+
+## 2026-10-17 — Recorded-continuation teacher task repair (48 useful trajectories pending)
+
+The broad source catalog's 2,393 `port_record_calls` tasks asked for an exact
+recorded next assistant message without supplying that message as evidence.
+Successful scripted references did not establish a fair independent target.
+Those original task variants are blocked from new teacher selection; their
+source data and historical results remain intact. An evaluation-only JSON
+format correction separately recovered one genuinely correct existing result
+(tranche15), preserving its independent expected answer and full capture.
+
+The existing `recorded-extraction-v2` derivative makes the recorded output
+explicit evidence, changes the task identity, and declares zero independent
+world-success credit. Only 24 such cases, repeated twice, are queued as a useful
+48-trajectory harness/format measurement. **Measurement: 0/48 completed at
+handoff; no broader adoption claim.** Even successful copying does not qualify
+the remaining 2,369 for automatic generation. They remain blocked while useful
+coding/natlang tasks with independent executable correctness are prepared.
+
+The supervisor-only handoff at16:58:45UTC preserved the same actual engine,
+feeder, live workers and sealed batch21. The next sequence keeps 8,339 unaffected
+reference-qualified cases flowing, places the24-case measurement after its
+first unaffected packet, and excludes the blocked remainder from ready entries.
+Actual source/deployment/hold proofs are under
+`/home/werg/data/dgxops/teacher-grounded-future-sequence-20261017` and
+`/home/werg/data/dgxops/teacher-grounded-future-sequence-deployment-20261017`.
+Teacher generations remain stronger self-hosted base-model data, not student
+on-policy samples, and admit no student exposure without actual training receipts.
