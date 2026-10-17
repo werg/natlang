@@ -1060,3 +1060,32 @@ Actual source/deployment/hold proofs are under
 `/home/werg/data/dgxops/teacher-grounded-future-sequence-deployment-20261017`.
 Teacher generations remain stronger self-hosted base-model data, not student
 on-policy samples, and admit no student exposure without actual training receipts.
+
+## 2026-10-17 — Independent authored-code teacher tasks (0/240 trajectories measured)
+
+The future teacher queue now contains 24 varied cases in each of five existing
+executable authoring families: semantic ticket filtering with inline `nl`,
+shortest-path iteration, reuse of a named callable helper, structured receipt
+extraction, and captured policy computation. The teacher edits a project; the
+existing authoring acceptance mechanism invokes its actual callable export on
+multiple independently checked inputs. Private reference implementations remain
+reference evidence, rather than visible answer targets. These are newly generated
+TRAIN task identities with project-source/runtime provenance, not reconstructed
+historical world successes.
+
+All 120 cases passed both the existing curriculum builder's executable checks
+and the current runtime/reference/protection qualifier. Each family is queued
+for two useful teacher repeats, giving 48 full trajectories per family (240
+in total). **Actual live measurement: 0/240 completed at queue adoption.**
+Generated results still require full capture, oracle/protection validation,
+conversion and admission; queue availability is neither success nor exposure.
+
+The reviewed guardian-only handoff completed at17:20:09UTC. The actual engine,
+feeder, all20 previously live workers and batch21 sealed source/queue/header
+were preserved. The five new packets follow the first unaffected packet; all
+8,339 unaffected obligations and the small24-case grounded format pilot remain
+in the queue. The remaining2,369 copying derivatives stay blocked from automatic
+generation. Exact source/reference evidence is under
+`/home/werg/data/dgxops/teacher-independent-authoring120-20261017`; actual queue,
+staging and handoff receipts are under
+`/home/werg/data/dgxops/teacher-authoring120-future-sequence-deployment-20261017`.
