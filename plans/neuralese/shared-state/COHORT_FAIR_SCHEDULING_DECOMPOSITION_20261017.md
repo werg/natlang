@@ -49,3 +49,11 @@ helper as scheduling metadata. The existing verifier still requires the exact
 reviewed old/new inventories, unchanged execution identity and actual latest
 saved parent. Numerical model and optimizer modules remain outside that policy;
 adding the helper does not create a new memory measurement.
+
+The same reviewed metadata policy also permits the existing
+`train/native_operation_report.py` helper. Bounded canonical C-JSON batching
+changes only report hashing throughput, preserving the exact canonical digest
+and checkpoint-backed detail contract. A prepared continuation may combine it
+with already-collected progress reuse before an actual safe boundary; no extra
+model restore, numerical change, or new measured capacity is implied. Nearby
+loss, optimizer, model and leaf-parser edits remain rejected.

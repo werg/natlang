@@ -34,7 +34,7 @@ POLICY = 'native-ordinary-to-adamw-new-history-v1'
 METADATA_POLICY = 'native-scheduling-pending-obligations-v1'
 METADATA_CHANGES = {
     'train/native_state_sft.py', 'train/recipe.py', 'train/native_source_streams.py',
-    'train/native_cohort_schedule.py',
+    'train/native_cohort_schedule.py', 'train/native_operation_report.py',
     'train/native_pending_sources.py', 'train/native_continuation.py',
     'train/native_readiness.py', 'train/native_resident.py',
     'train/native_source_preparation.py', 'data/native_source_tree.py',
