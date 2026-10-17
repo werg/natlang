@@ -167,13 +167,19 @@ def test_native_stage_real_shared_parent_update_and_exact_noop_resume(tmp_path,s
         '--continue-from', str(parent), *(['--native-participant', 'lfm'] if shared_parent else []), '--held-native-graphs', str(held),
         '--out', str(tmp_path/'learner'), '--device', 'cpu', '--epochs', '1', '--rank', '4',
         '--learning-rate', '1e-3', '--weight-decay', '0', '--eval-every', '1',
-        '--communication-foundation', '--foundation-native-graphs', str(tmp_path/'parent-only-source')]
+        '--communication-foundation', '--foundation-native-graphs', str(tmp_path/'parent-only-source'),
+        '--foundation-communication-batches','4',
+        '--resident-data-directory',str(tmp_path/'parent-only-resident'),
+        '--resident-geometry-qualification',str(tmp_path/'parent-only-capacity.json')]
     assert main(argv) == 0
     slot = tmp_path/'learner/checkpoint.pt'
     state = torch.load(slot, map_location='cpu', weights_only=False)
     assert state['training']['step'] == 1 and state['training']['global_step'] == 2
     assert state['training']['options']['continuation']['checkpoint_sha256'] == sha256_file_hex(parent)
     assert state['training']['optimizer']
+    assert state['training']['options']['resident_data_directory'] is None
+    assert state['training']['options']['foundation_communication_batches'] is None
+    assert state['training']['options']['resident_geometry_qualification'] is None
     if not shared_parent:
         from natlang_neuralese.train.native_continuation import progress_obligations, restore_sft_progress
         frame=state['training']['sft_progress']['full']

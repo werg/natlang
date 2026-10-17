@@ -31,3 +31,9 @@ sealed collection SHA remain unchanged. It imports no later model/RMS/kernel or
 source-policy changes. Both-port actual policy backwards preserve all optimizer,
 parameter and CPU/CUDA RNG values before the same loaded model performs SGD;
 Mellum additionally executes both supported expert FP8 input-gradient recipes.
+
+The native policy CLI consumes the parent's communication-foundation, foundation
+scheduling and resident-directory/capacity arguments instead of forwarding them
+to the sampled-policy trainer. They still belong to seed and mandatory SFT. A
+policy stage uses its own admitted episodes and fresh objective-capacity gate;
+it cannot borrow authority to adopt the parent's supervised source manifest.

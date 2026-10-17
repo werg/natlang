@@ -94,6 +94,9 @@ def main(argv=None):
     # Mandatory CE/foundation credits remain in its carried continuation frame.
     parser.add_argument('--communication-foundation', action='store_true')
     parser.add_argument('--foundation-native-graphs', type=Path)
+    parser.add_argument('--foundation-communication-batches', type=int)
+    parser.add_argument('--resident-data-directory', type=Path)
+    parser.add_argument('--resident-geometry-qualification', type=Path)
     args, trainer = parser.parse_known_args(argv)
     from contextlib import nullcontext
     from .native_output_lease import coefficient_output_lease
