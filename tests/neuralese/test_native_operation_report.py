@@ -163,3 +163,15 @@ def test_actual_trainer_proofs_resolve_without_changing_optimizer_or_source_cred
     assert report.resolve_detail(value['train_source']['by_source_group_detail'])==state['training']['source_receipts'][0]['by_source_group']
     assert report.resolve_detail(ready['exposure']['by_source_group_detail'])=={
         'train':{'graph_visits':1,'supervised_token_visits':2}}
+
+
+@pytest.mark.parametrize('value', [
+    {}, [], (), None, True, 1.25, '雪\\n',
+    {3: {'z': [False, None, -0.0, 1e-20], 'a': 'é'}, -2: {}},
+    [[], {}, {'b': 2, 'a': 1}, ('nested', 3)],
+    [{'id': i, 'label': '雪'} for i in range(2051)],
+    {'source-'+str(i): {'examples': i, 'supervised_weight': i / 7,
+                       'supervised_tokens': 4*i} for i in range(2000)},
+])
+def test_inventory_hash_preserves_existing_canonical_json_contract(value):
+    assert report._digest(value)==canonical_json_sha256_hex(value)

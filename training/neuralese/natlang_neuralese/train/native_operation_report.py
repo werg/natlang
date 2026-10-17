@@ -11,10 +11,29 @@ DETAIL_SCHEMA='natlang.native-operation-detail/1'
 
 
 def _digest(value):
-    # The usual canonical JSON contract, streamed without another giant string.
+    # Stream the inventory, while letting the native encoder handle each
+    # bounded batch of records. iterencode's Python scalar generator dominated final reports on
+    # million-row recipes; encoding the whole inventory would duplicate it.
     digest=hashlib.sha256()
     encoder=json.JSONEncoder(ensure_ascii=False,sort_keys=True,separators=(',',':'))
-    for text in encoder.iterencode(value):digest.update(text.encode('utf-8'))
+    if isinstance(value,dict):
+        digest.update(b'{')
+        keys=sorted(value)
+        for start in range(0,len(keys),1024):
+            if start:digest.update(b',')
+            # Retain JSON's exact non-string key conversion as well.
+            text=encoder.encode({key:value[key] for key in keys[start:start+1024]})
+            digest.update(text[1:-1].encode('utf-8'))
+        digest.update(b'}')
+    elif isinstance(value,(list,tuple)):
+        digest.update(b'[')
+        for start in range(0,len(value),1024):
+            if start:digest.update(b',')
+            text=encoder.encode(value[start:start+1024])
+            digest.update(text[1:-1].encode('utf-8'))
+        digest.update(b']')
+    else:
+        digest.update(encoder.encode(value).encode('utf-8'))
     return digest.hexdigest()
 
 
