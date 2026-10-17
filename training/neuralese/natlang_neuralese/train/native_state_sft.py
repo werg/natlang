@@ -620,7 +620,7 @@ def qualify_precision_transition(model, tokenizer, roles, config, *, previous_pr
         raise ValueError('native arithmetic transition requires declared forward and gradient tolerances')
     from ..eval.native_state import qualify_existing
     saved_rng = capture_training_rng_state(device)
-    attention_report=None
+    attention_report=None;attention_only_equivalent=False
     try:
         if attention_changed:
             if optimizer is None:
@@ -631,7 +631,9 @@ def qualify_precision_transition(model, tokenizer, roles, config, *, previous_pr
                 checkpoint_sha256=checkpoint_sha256,forward_atol=forward_atol,gradient_atol=gradient_atol,
                 backend=backend)
             report=attention_report['candidate_cached_reference']
-            if not attention_report['passed']:
+            attention_only_equivalent=(not linear_changed and not norm_changed
+                and(attention_report.get('transition_equivalence')or{}).get('passed')is True)
+            if not attention_report['passed']and not attention_only_equivalent:
                 raise ValueError('native attention transition failed unchanged cached-reference and complete cross-mode checks: '+
                     json.dumps(attention_report,sort_keys=True))
         else:
@@ -640,7 +642,7 @@ def qualify_precision_transition(model, tokenizer, roles, config, *, previous_pr
                     checkpoint_sha256=checkpoint_sha256,forward_atol=forward_atol,gradient_atol=gradient_atol)
     finally:
         restore_training_rng_state(saved_rng,device)
-    if not report['passed']:
+    if not report['passed']and not attention_only_equivalent:
         raise ValueError('native arithmetic transition failed the unchanged cached-reference checks: ' +
                          json.dumps(report, sort_keys=True))
     result = {'schema': 'natlang.native-arithmetic-transition-check/1',
@@ -650,6 +652,8 @@ def qualify_precision_transition(model, tokenizer, roles, config, *, previous_pr
         result['attention'] = {'from': previous_attention_precision,
                                'to': config['native_attention_precision']}
         result['attention_complete_comparison']=attention_report
+        result['attention_transition_equivalence']=attention_report['transition_equivalence']
+        result['inherited_cached_reference_debt']=not report['passed']
     if norm_changed:
         result['norm_execution'] = {'from':previous_norm_execution,'to':model.native_norm_execution}
     return result
