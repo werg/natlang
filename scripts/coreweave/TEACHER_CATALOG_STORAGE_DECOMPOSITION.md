@@ -24,3 +24,12 @@ These numbered decisions are supervisor policy in natural language. The crisp
 helper implements exact byte encoding, SQLite transactions, row/hash comparison
 and durable receipts. It never stops processes, switches pointers or deletes
 the source. Storage floors and operation scheduling remain with supervision.
+
+The actual first copy independently restored all 43,059 programs and 490,325
+source occurrences: 10,104,705,024 bytes became 2,826,858,496 bytes. The live
+writer is bound to a byte-identical frozen decoder so later mechanism maintenance does
+not invalidate its historical copy authority. The public copier publishes its
+closed immutable temporary file without clobbering a competing destination and
+removes the temporary link before permitting mutable database use. The shared
+artifact-binding helper streams hashes; it does not allocate an entire catalog
+in anonymous memory merely to record its identity.

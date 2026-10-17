@@ -29,7 +29,9 @@ def write(path, value):
 
 def binding(path):
     path = Path(path)
-    return {'path': str(path), 'sha256': hashlib.sha256(path.read_bytes()).hexdigest(), 'bytes': path.stat().st_size}
+    with path.open('rb') as stream:
+        digest = hashlib.file_digest(stream, 'sha256').hexdigest()
+    return {'path': str(path), 'sha256': digest, 'bytes': path.stat().st_size}
 
 def process(pid):
     try:

@@ -98,3 +98,39 @@ def test_disk_floor_stops_before_allocating_a_partial_catalog(tmp_path):
     with pytest.raises(RuntimeError, match='reserve'):
         copy_catalog(source, target, tmp_path / 'proof.json', minimum_free_bytes=2**100)
     assert not target.exists() and not target.with_name(target.name + '.incomplete').exists()
+
+
+def test_competing_destination_is_never_clobbered_after_copy(tmp_path, monkeypatch):
+    import os
+    source, target, proof = (tmp_path / n for n in ('old.sqlite', 'new.sqlite', 'proof.json'))
+    make_catalog(source)
+    real = os.link
+    def competing(a, b):
+        target.write_bytes(b'another owner created this destination')
+        return real(a, b)
+    monkeypatch.setattr(os, 'link', competing)
+    with pytest.raises(FileExistsError):
+        copy_catalog(source, target, proof, minimum_free_bytes=0)
+    assert target.read_bytes() == b'another owner created this destination'
+    assert not proof.exists()
+
+
+def test_successful_publication_has_no_mutable_database_hardlink(tmp_path):
+    source, target, proof = (tmp_path / n for n in ('old.sqlite', 'new.sqlite', 'proof.json'))
+    make_catalog(source)
+    copy_catalog(source, target, proof, minimum_free_bytes=0)
+    assert target.stat().st_nlink == 1
+    assert not target.with_name(target.name + '.incomplete').exists()
+
+
+def test_shared_binding_streams_large_artifacts_without_read_bytes(tmp_path, monkeypatch):
+    from pathlib import Path
+    from scripts.coreweave.teacher_generation_guardian import binding
+    path = tmp_path / 'artifact'
+    raw = b'bounded hash input' * 10000
+    path.write_bytes(raw)
+    def forbidden(*args, **kwargs):
+        raise AssertionError('artifact identity must not allocate the entire file')
+    monkeypatch.setattr(Path, 'read_bytes', forbidden)
+    assert binding(path) == {'path': str(path), 'bytes': len(raw),
+                            'sha256': hashlib.sha256(raw).hexdigest()}

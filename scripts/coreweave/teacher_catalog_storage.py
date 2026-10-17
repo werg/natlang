@@ -86,6 +86,7 @@ def _logical(db, table):
 
 def copy_catalog(source: Path, target: Path, proof: Path, *, minimum_free_bytes=20 * 1024**3):
     """Copy a quiescent catalog; never publish pointers or delete source data."""
+    mechanism = binding(Path(__file__))
     source, target, proof = map(Path, (source, target, proof))
     if not source.is_file() or os.path.lexists(target) or os.path.lexists(proof):
         raise ValueError("source must exist and target/proof must be new")
@@ -152,7 +153,11 @@ def copy_catalog(source: Path, target: Path, proof: Path, *, minimum_free_bytes=
         finally:
             readback.close()
         floor()
-        os.rename(partial, target)
+        # Publish the closed, fsynced immutable file without overwriting a
+        # destination created during the copy. Remove the temporary link before
+        # any receipt can authorize opening the target as a mutable database.
+        os.link(partial, target)
+        partial.unlink()
         fd = os.open(target.parent, os.O_RDONLY | os.O_DIRECTORY)
         try:
             os.fsync(fd)
@@ -162,7 +167,7 @@ def copy_catalog(source: Path, target: Path, proof: Path, *, minimum_free_bytes=
                   "source_path": str(source), "target": binding(target),
                   "tables": original, "schema_sha256": hashlib.sha256(
                       json.dumps(schema, separators=(",", ":")).encode()).hexdigest(),
-                  "mechanism": binding(Path(__file__)),
+                  "mechanism": mechanism,
                   "independent_target_readback": True,
                   "training_admission": False,
                   "scope": "lossless storage only; no pointer switch or source deletion"}
