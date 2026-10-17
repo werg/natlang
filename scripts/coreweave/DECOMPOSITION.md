@@ -216,3 +216,7 @@ Artifact identity, queue/request custody, strict name matching and deletion are
 crisp durability/external-service mechanisms. No model policy or prompt changes.
 An invalid dependency fails the run closed; absent optional view state prunes
 no inference objects. Existing full-checkpoint retention remains the default.
+
+## Cohort exposure during existing checkpoint custody (2026-10-17)
+
+The owner declares immutable source cohorts. During the cursor exporter's existing safe full checkpoint decode, a read-only observer joins those exact row bindings against the matching ordinary stage's saved credits and quotas. It distinguishes unadmitted rows from admitted rows with zero visits, and records completed/required/remaining visits without constructing a model or decoding the checkpoint again. Source loading reuses the qualified runtime's unchanged graph/index verifier; only the small declared cohorts are loaded. Observation failures retain the full backup and an assigned diagnostic failure. This is exact reporting plumbing, not training/readiness policy.

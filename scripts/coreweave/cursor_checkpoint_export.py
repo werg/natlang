@@ -89,6 +89,8 @@ def run_once(directory, role, *, observe, export):
         result['actor_view'] = chosen['actor_view']
     if chosen.get('actor_view_error') is not None:
         result['actor_view_error'] = chosen['actor_view_error']
+    if chosen.get('training_summary') is not None:
+        result['training_summary'] = chosen['training_summary']
     save(paths['state'], result)
     paths['pending'].unlink()
     fd = os.open(paths['pending'].parent, os.O_DIRECTORY)
@@ -99,7 +101,8 @@ def run_once(directory, role, *, observe, export):
 
 def remote_code(*, role, root, known, last, extra, pin_directory, minimum_available_bytes,
                 actor_view_directory=None, actor_view_runtime=None,
-                actor_view_sidecar=None, actor_view_sidecar_sha256=None):
+                actor_view_sidecar=None, actor_view_sidecar_sha256=None,
+                training_summary_spec=None, training_summary_runtime=None):
     source = REMOTE_SOURCE
     if bool(actor_view_directory) != bool(actor_view_runtime):
         raise ValueError('actor view export requires its directory and explicit runtime package')
@@ -140,7 +143,45 @@ def remote_code(*, role, root, known, last, extra, pin_directory, minimum_availa
                                 '  del value,training;gc.collect()\n  temp.unlink()\n finally:')
         source = source.replace('    temp.unlink()\n   else:',
             '    actual_stat=target.stat();decoded_source_stat=(actual_stat.st_dev,actual_stat.st_ino,actual_stat.st_size,actual_stat.st_mtime_ns)\n    temp.unlink()\n   else:')
-    return ('import pathlib,json,hashlib,re\n'+inspect.getsource(bound_output_checkpoint)+'\n'
+    summary_prelude=''
+    if bool(training_summary_spec) != bool(training_summary_runtime):
+        raise ValueError('training summary needs its bound specification and qualified runtime')
+    if training_summary_spec:
+        try:from .checkpoint_exposure_summary import summarize_cohorts
+        except ImportError:from checkpoint_exposure_summary import summarize_cohorts
+        summary_prelude=inspect.getsource(summarize_cohorts)+'\n'
+        summary_prelude+='SUMMARY_SPEC='+repr(training_summary_spec)+'\nSUMMARY_RUNTIME='+repr(str(training_summary_runtime))+'\n'
+        summary_prelude+='''def capture_training_summary(value):
+ try:
+  import sys
+  spec_path=pathlib.Path(SUMMARY_SPEC['path']);raw=spec_path.read_bytes()
+  if hashlib.sha256(raw).hexdigest()!=SUMMARY_SPEC['sha256']:raise ValueError('training summary specification changed')
+  spec=json.loads(raw);sys.path.insert(0,SUMMARY_RUNTIME)
+  os.environ['NATLANG_ROW_INDEX_CACHE']=spec['row_index_cache']
+  os.environ['NATLANG_HASH_CACHE']=spec['hash_cache']
+  from natlang_neuralese.data.native_sources import NativeGraphSource
+  import natlang_neuralese.data.native_sources as sources_module
+  if pathlib.Path(sources_module.__file__).resolve()!=pathlib.Path(SUMMARY_RUNTIME,'natlang_neuralese/data/native_sources.py').resolve():raise ValueError('training summary source verifier origin differs')
+  from natlang_neuralese.train.native_resident import _check_indexes
+  _check_indexes(spec['indexes'])
+  def load_source(reference):
+   from natlang_neuralese.common.hashing import sha256_file_hex_cached
+   path=pathlib.Path(reference['path'])
+   if sha256_file_hex_cached(path)!=reference['sha256']:raise ValueError('training summary cohort source changed')
+   return NativeGraphSource(path,spec['tokenizer_fingerprint'],required_split='train',role_ids=spec['role_ids'])
+  import contextlib
+  with contextlib.redirect_stdout(sys.stderr):result=summarize_cohorts(value,spec,load_source)
+  result['specification']=SUMMARY_SPEC
+  return result
+ except Exception as error:return {'error_type':type(error).__name__,'assigned_repair':True,'full_backup_retained':True}
+'''
+        marker='step=int(value[\'step\']);'
+        assert source.count(marker)==1
+        source=source.replace(marker,marker+'training_summary=capture_training_summary(value)if step>LAST else None;')
+        marker="'bytes':target.stat().st_size}"
+        assert source.count(marker)==1
+        source=source.replace(marker,"'bytes':target.stat().st_size,'training_summary':training_summary}")
+    return ('import pathlib,json,hashlib,re\n'+inspect.getsource(bound_output_checkpoint)+'\n'+summary_prelude
             +'ROLE='+repr(role)+'\nROOT='+repr(str(root))+'\nKNOWN='+repr(known)
             +'\nLAST='+repr(last)+'\nEXTRA='+repr(extra)+'\nPIN_DIRECTORY='+repr(str(pin_directory))
             +'\nMIN_AVAILABLE_BYTES='+repr(minimum_available_bytes)+'\n'+source)
@@ -161,6 +202,8 @@ def main(argv=None):
                         help='explicit qualified training/neuralese package for optional view extraction')
     parser.add_argument('--actor-view-sidecar', type=pathlib.Path, help='optional immutable native_bundle.py writer using the explicit existing runtime dependencies')
     parser.add_argument('--actor-view-sidecar-sha256', help='exact SHA256 of the optional writer sidecar')
+    parser.add_argument('--training-summary-spec', help='JSON immutable binding of declared cohort sources')
+    parser.add_argument('--training-summary-runtime', type=pathlib.Path, help='qualified runtime training/neuralese directory')
     parser.add_argument('--interval', type=float, default=120)
     parser.add_argument('--once', action='store_true')
     args = parser.parse_args(argv)
@@ -168,6 +211,9 @@ def main(argv=None):
         parser.error('actor view export needs directory and explicit runtime together')
     if bool(args.actor_view_sidecar) != bool(args.actor_view_sidecar_sha256) or (args.actor_view_sidecar and (not args.actor_view_directory or not re.fullmatch(r'[0-9a-f]{64}',args.actor_view_sidecar_sha256))):
         parser.error('optional actor view sidecar requires directory/runtime and its exact lowercase SHA256')
+    if bool(args.training_summary_spec) != bool(args.training_summary_runtime):
+        parser.error('training summary needs its specification and qualified runtime together')
+    summary=json.loads(args.training_summary_spec) if args.training_summary_spec else None
     command = json.loads(args.export_command)
     if not isinstance(command, list) or not command or any(not isinstance(x, str) for x in command):
         parser.error('export command must be an explicit nonempty JSON argv')
@@ -185,7 +231,8 @@ def main(argv=None):
         code = remote_code(role=args.role, root=args.root, extra=extra,
                            pin_directory=args.pin_directory, minimum_available_bytes=args.minimum_available_bytes,
                            actor_view_directory=args.actor_view_directory,actor_view_runtime=args.actor_view_runtime,
-                           actor_view_sidecar=args.actor_view_sidecar,actor_view_sidecar_sha256=args.actor_view_sidecar_sha256,**kwargs)
+                           actor_view_sidecar=args.actor_view_sidecar,actor_view_sidecar_sha256=args.actor_view_sidecar_sha256,
+                           training_summary_spec=summary,training_summary_runtime=args.training_summary_runtime,**kwargs)
         result = cwctl.read_sandbox(args.sandbox_id, patience=60).exec(
             ['python', '-c', code], timeout_seconds=600).result(timeout=690)
         if result.returncode: raise RuntimeError('owned remote checkpoint observation failed: '+str(result.stderr)[-3000:])
