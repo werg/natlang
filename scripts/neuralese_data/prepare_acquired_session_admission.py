@@ -30,10 +30,11 @@ def bound(path, binding):
     return path
 
 
-def _closure_artifact(path, binding):
+def _closure_artifact(path, binding, *, use_cache=True):
     """Content-hash a closure input through the race-checked shared cache."""
     path = Path(path).resolve(strict=True)
-    digest = sha256_file_hex_cached(path, trust_archive_receipt=False)
+    digest = (sha256_file_hex_cached(path, trust_archive_receipt=False)
+              if use_cache else sha256_file_hex(path))
     size = path.stat().st_size
     if digest != binding['sha256'] or ('bytes' in binding and size != binding['bytes']):
         raise ValueError('immutable acquired closure artifact changed: ' + str(path))
@@ -50,7 +51,7 @@ def source_occurrence(value):
         [value['source_file']['sha256'], value['source_row']])
 
 
-def acquired_source_closure(path, protection):
+def acquired_source_closure(path, protection, *, use_cache=True):
     """Reconstruct all source components, including not-yet-converted siblings."""
     manifest = json.loads(Path(path).read_text()); bindings = manifest.get('normalized_export_bindings')
     if not isinstance(bindings, list) or not bindings:
@@ -59,8 +60,8 @@ def acquired_source_closure(path, protection):
     inherited = manifest.get('inherited_source_components')
     if inherited:
         parent = Path(path).parent
-        component_path, _, _ = _closure_artifact(parent / inherited['components']['path'], inherited['components'])
-        projection_path, _, _ = _closure_artifact(parent / inherited['projection']['path'], inherited['projection'])
+        component_path, _, _ = _closure_artifact(parent / inherited['components']['path'], inherited['components'], use_cache=use_cache)
+        projection_path, _, _ = _closure_artifact(parent / inherited['projection']['path'], inherited['projection'], use_cache=use_cache)
         projection = json.loads(projection_path.read_text())
         proof = projection.get('acquired_source_group_closure') or {}
         original = next((item for item in projection['files']
@@ -73,11 +74,11 @@ def acquired_source_closure(path, protection):
             raise ValueError('inherited acquired components differ from their qualified parent projection')
         group_rows.extend(inherited_rows)
     for binding in bindings:
-        export_path, _, _ = _closure_artifact(binding['path'], binding)
+        export_path, _, _ = _closure_artifact(binding['path'], binding, use_cache=use_cache)
         if export_path in seen: raise ValueError('global source closure repeats an export receipt')
         seen.add(export_path); export = json.loads(export_path.read_text())
         source, _, _ = _closure_artifact(export_path.parent / 'full-trajectories.jsonl.zst',
-            {'sha256': binding['source_sha256']})
+            {'sha256': binding['source_sha256']}, use_cache=use_cache)
         if export['outputs'][source.name] != binding['source_sha256']:
             raise ValueError('global source export and closure disagree on immutable session bytes')
         rows = 0
@@ -89,7 +90,7 @@ def acquired_source_closure(path, protection):
             group_rows.append(trajectory['split_groups'])
         # Reject a source mutation that raced the streaming parse, even when it
         # left the number of decoded sessions unchanged.
-        _closure_artifact(source, {'sha256': binding['source_sha256']})
+        _closure_artifact(source, {'sha256': binding['source_sha256']}, use_cache=use_cache)
         if rows != export['complete_sessions']: raise ValueError('global source closure lost session accounting')
         counts[export_path.parent.parent.name] += rows
     declared = set()
@@ -136,14 +137,15 @@ def _source_closure_implementation_bindings():
                    'bytes': path.stat().st_size} for name, path in sorted(paths.items())}
 
 
-def _source_closure_artifacts(path, manifest):
+def _source_closure_artifacts(path, manifest, *, use_cache=True):
     """Return the complete exact input closure, including per-directory inventories."""
     path = Path(path).resolve(strict=True)
     artifacts = {}
 
     def checked_cached(candidate, binding=None):
         candidate = Path(candidate).resolve(strict=True)
-        digest = sha256_file_hex_cached(candidate, trust_archive_receipt=False)
+        digest = (sha256_file_hex_cached(candidate, trust_archive_receipt=False)
+                  if use_cache else sha256_file_hex(candidate))
         size = candidate.stat().st_size
         if binding is not None and (digest != binding['sha256']
                                     or ('bytes' in binding and size != binding['bytes'])):
@@ -244,7 +246,8 @@ def verify_global_source_closure(path, protection, *, receipt_path=None, write_r
                 or sum(accounting['by_source'].values()) != accounting['normalized_sessions']):
             raise ValueError('durable acquired-source closure accounting is incomplete')
         return accounting
-    accounting, closed, components = acquired_source_closure(path, protection)
+    accounting, closed, components = acquired_source_closure(
+        path, protection, use_cache=not force_full_validation)
     if any(closed[key] != protection[key] for key in closed):
         raise ValueError('global acquired source protection lacks complete connected-group closure')
     if manifest.get('source_group_components'):
@@ -252,13 +255,16 @@ def verify_global_source_closure(path, protection, *, receipt_path=None, write_r
         if stored != components:
             raise ValueError('protected source component inventory differs from complete normalized sources')
     if write_receipt_path is not None:
+        if Path(write_receipt_path).exists():
+            raise ValueError('source-closure receipts are immutable; choose a new output path')
         protection_binding = {key: sorted(protection[key]) for key in ('held', 'quality', 'pending')}
         receipt = {'schema': SOURCE_CLOSURE_RECEIPT_SCHEMA,
             'manifest': {'path': str(manifest_path), 'sha256': sha256_file_hex(manifest_path),
                          'bytes': manifest_path.stat().st_size},
             'protection': protection_binding,
             'protection_sha256': canonical_json_sha256_hex(protection_binding),
-            'input_artifacts': _source_closure_artifacts(manifest_path, manifest),
+            'input_artifacts': _source_closure_artifacts(
+                manifest_path, manifest, use_cache=not force_full_validation),
             'implementation_files': _source_closure_implementation_bindings(),
             'accounting': accounting, 'verifier_sha256': sha256_file_hex(__file__),
             'training_admission': False}

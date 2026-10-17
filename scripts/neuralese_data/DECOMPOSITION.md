@@ -287,8 +287,9 @@ decision.
    a mismatch rejects reuse.
 3. The member-specific admission still performs its existing full source,
    export, native-graph, tokenizer, split and decision checks.
-   `--force-full-source-closure` bypasses the receipt and reruns the global streaming closure
-   for explicit fresh validation.
+   `--force-full-source-closure` bypasses the receipt and reruns the global
+   streaming closure with uncached content hashes. It does not rewrite an
+   existing receipt; writing a fresh receipt requires a new output path.
 
 The hash cache is a performance aid after an actual byte hash, not authority by
 itself. Its current threat model covers ordinary filesystem mutation and races;

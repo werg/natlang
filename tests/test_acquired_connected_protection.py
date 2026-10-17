@@ -12,6 +12,7 @@ from scripts.neuralese_data import build_verified_teacher_trajectory_graphs as t
 from scripts.neuralese_data.close_acquired_source_protection import project
 from scripts.neuralese_data import prepare_acquired_session_admission as admission
 from scripts.neuralese_data.prepare_acquired_session_admission import verify_global_source_closure
+from scripts.neuralese_data.continue_acquired_protection import verify_protection_transition
 from scripts.neuralese_data.splits import close_group_sets
 
 
@@ -106,6 +107,7 @@ def test_durable_source_closure_receipt_reuses_only_exact_current_inputs(tmp_pat
     assert receipt.exists()
     monkeypatch.setattr(admission,'sessions',lambda *_:pytest.fail('receipt hit must not reparse global sessions'))
     assert verify_global_source_closure(first,protected,receipt_path=receipt)==expected
+    assert verify_protection_transition(first,first,closure_receipt_path=receipt)[2]==expected
     source=tmp_path/'sources'/'D16'/'one'/'full-trajectories.jsonl.zst'
     with source.open('ab') as stream:stream.write(b'changed')
     with pytest.raises(ValueError,match='immutable|input inventory|acquired closure artifact changed'):
@@ -120,8 +122,12 @@ def test_force_full_closure_validation_ignores_cached_receipt(tmp_path,monkeypat
     expected=verify_global_source_closure(first,protected,write_receipt_path=receipt)
     value=json.loads(receipt.read_text());value['accounting']['normalized_sessions']=999
     receipt.write_text(json.dumps(value))
+    monkeypatch.setattr(admission,'sha256_file_hex_cached',lambda *_args,**_kwargs:pytest.fail('forced validation must not consult hash cache'))
     assert verify_global_source_closure(first,protected,receipt_path=receipt,
         force_full_validation=True)==expected
+    with pytest.raises(ValueError,match='receipts are immutable'):
+        verify_global_source_closure(first,protected,write_receipt_path=receipt,
+            force_full_validation=True)
 
 
 def test_cached_closure_receipt_rejects_same_size_source_rewrite_with_restored_mtime(tmp_path,monkeypatch):
