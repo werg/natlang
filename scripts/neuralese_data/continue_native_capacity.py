@@ -61,6 +61,37 @@ ORDINARY_WRITER_COMPOSITION = {
 }
 
 
+WHOLE_HEAD_SOURCE_POLICY = 'native-whole-head-source-profile-ordinary-sft-v1'
+WHOLE_HEAD_SOURCE_PROOF_SHA256 = '7ac5641ff170ed75b67d4416d57e29631a3d9889c89d4a32baa2ba380080a9fc'
+WHOLE_HEAD_SOURCE_INVENTORIES = ('42cbc4cce6df3a36d244767e3aae023c872daf0ee437ff6c05390e4670d31210', 'd885adc940a356d3f8cd012b0aa35a0a8357ead83a598d73626cfe5b5a979fe0')
+WHOLE_HEAD_SOURCE_CHANGES = frozenset(['data/native_source_tree.py', 'data/native_sources.py', 'eval/native_memory.py', 'eval/task_cadence.py', 'maple/model.py', 'model/native_bundle.py', 'model/native_composite.py', 'model/native_model.py', 'model/native_parameter_precision.py', 'model/native_precision.py', 'model/native_shared_checkpoint.py', 'model/shared_state.py', 'rl/native_bootstrap_metadata.py', 'rl/native_raw_handoff.py', 'rl/native_raw_policy.py', 'rl/native_raw_rounds.py', 'rl/native_refresh.py', 'rl/native_replay.py', 'rl/native_rounds.py', 'rl/native_runtime_handoff.py', 'rl/native_stage.py', 'rl/native_supervised.py', 'rl/production.py', 'rl/task_source.py', 'serve/engine.py', 'serve/http.py', 'serve/native_protocol.py', 'serve/native_recorded_objective.py', 'train/fp8_backend.py', 'train/native_operation_report.py', 'train/native_plan_recovery.py', 'train/native_readiness.py', 'train/native_resident_geometry_refresh.py', 'train/native_semantic.py', 'train/native_semantic_stage.py', 'train/native_source_preparation.py', 'train/native_state_sft.py', 'train/recipe.py'])
+
+
+def _whole_head_source_contract(review):
+    if review['optimizer_policy'] != WHOLE_HEAD_SOURCE_POLICY:
+        return
+    identity = review.get('identity') or {}
+    config = identity.get('model_config') or {}
+    if (identity.get('objective') is not None
+            or review.get('fresh_policy_capacity_required') is not True
+            or config.get('native_norm_execution', 'source-v1') != 'source-v1'
+            or config.get('native_attention_precision', 'ieee') != 'ieee'
+            or config.get('native_ordinary_precision') is not None):
+        raise ValueError('whole HEAD continuation preserves ordinary source-v1/IEEE/storage; new profiles and policy require actual capacity')
+    if tuple(digest(review[key]) for key in ('old_code','new_code')) != WHOLE_HEAD_SOURCE_INVENTORIES:
+        raise ValueError('whole HEAD continuation differs from the exact independently reviewed full inventories')
+    reference = review.get('whole_head_arithmetic_proof') or {}
+    if reference.get('sha256') != WHOLE_HEAD_SOURCE_PROOF_SHA256:
+        raise ValueError('whole HEAD continuation lacks the exact arithmetic and source-parser witness')
+    proof = json.loads(bound(reference).read_text())
+    if (proof.get('schema') != 'natlang.whole-main-source-arithmetic-proof/1'
+            or proof.get('inventories', {}).get('source') != review['old_code']
+            or proof.get('inventories', {}).get('target') != review['new_code']
+            or proof.get('remaining_unconditional_normal_arithmetic_changes') != []
+            or proof.get('capacity_qualified') is not False):
+        raise ValueError('whole HEAD source witness differs from the reviewed arithmetic scope')
+
+
 def _ordinary_writer_contract(review):
     if review['optimizer_policy'] != ORDINARY_WRITER_POLICY:
         return
@@ -109,6 +140,7 @@ def allowed_changes(policy):
             LINEAGE_METADATA_POLICY: {LINEAGE_METADATA_FILE},
             POLICY_GATE_SFT_POLICY: set(POLICY_GATE_SFT_COMPOSITION),
             ORDINARY_WRITER_POLICY: set(ORDINARY_WRITER_COMPOSITION),
+            WHOLE_HEAD_SOURCE_POLICY: set(WHOLE_HEAD_SOURCE_CHANGES),
             ATTENTION_INDEX_POLICY: {'model/shared_state.py'}}.get(policy, set())
 
 
@@ -198,7 +230,7 @@ def _memory_allowance(review):
         if (parameter.get('dtype') != 'torch.float32' or not parameter.get('shape')
                 or any(type(n) is not int or n < 1 for n in parameter['shape'])):
             raise ValueError('capacity continuation requires the unchanged FP32 ordinary layout')
-    if review['optimizer_policy'] in {METADATA_POLICY, LOADER_IO_POLICY, ATTENTION_INDEX_POLICY, LINEAGE_METADATA_POLICY, POLICY_GATE_SFT_POLICY, ORDINARY_WRITER_POLICY}:
+    if review['optimizer_policy'] in {METADATA_POLICY, LOADER_IO_POLICY, ATTENTION_INDEX_POLICY, LINEAGE_METADATA_POLICY, POLICY_GATE_SFT_POLICY, ORDINARY_WRITER_POLICY, WHOLE_HEAD_SOURCE_POLICY}:
         extra = review.get('metadata_extra_bytes')
         if (review.get('optimizer_state_unchanged') is not True
                 or type(extra) is not int or extra < (64 << 20)):
@@ -253,6 +285,7 @@ def _proof_cases(reference, *, identity, code_sha, parent, seen=()):
         _lineage_metadata_contract(review)
         _policy_gate_sft_contract(review)
         _ordinary_writer_contract(review)
+        _whole_head_source_contract(review)
         extra = value.get('extra_bytes_per_memory_domain')
         if type(extra) is not int or extra != _memory_allowance(review):
             raise ValueError('inherited capacity lost its additional memory allowance')
@@ -286,7 +319,7 @@ def continue_capacity(review_binding, *, old_package, new_package, out):
     if (review.get('schema') != 'natlang.native-capacity-continuation-review/1'
             or review.get('approved') is not True
             or review.get('parameter_layout_unchanged') is not True
-            or review.get('optimizer_policy') not in {POLICY, METADATA_POLICY, LOADER_IO_POLICY, ATTENTION_INDEX_POLICY, LINEAGE_METADATA_POLICY, POLICY_GATE_SFT_POLICY, ORDINARY_WRITER_POLICY}):
+            or review.get('optimizer_policy') not in {POLICY, METADATA_POLICY, LOADER_IO_POLICY, ATTENTION_INDEX_POLICY, LINEAGE_METADATA_POLICY, POLICY_GATE_SFT_POLICY, ORDINARY_WRITER_POLICY, WHOLE_HEAD_SOURCE_POLICY}):
         raise ValueError('capacity continuation requires an approved exact optimizer review')
     old, new = code_inventory(old_package), code_inventory(new_package)
     if old != review.get('old_code') or new != review.get('new_code'):
@@ -312,6 +345,7 @@ def continue_capacity(review_binding, *, old_package, new_package, out):
     _lineage_metadata_contract(review)
     _policy_gate_sft_contract(review)
     _ordinary_writer_contract(review)
+    _whole_head_source_contract(review)
     # Adam first/second moments, retained old buffers, telemetry snapshots and
     # per-parameter update intermediates. No backbone-sized copy is authorized.
     extra = _memory_allowance(review)
@@ -363,6 +397,7 @@ def continue_capacity(review_binding, *, old_package, new_package, out):
              'exact frozen saved-recipe-metadata-only' if policy == LINEAGE_METADATA_POLICY else
              'exact frozen policy-gate ordinary-SFT-only (fresh policy measurement required)' if policy == POLICY_GATE_SFT_POLICY else
              'exact frozen ordinary-SFT report-writer-only (fresh policy measurement required)' if policy == ORDINARY_WRITER_POLICY else
+             'whole shared HEAD source-v1 ordinary-SFT-only (fresh policy measurement required)' if policy == WHOLE_HEAD_SOURCE_POLICY else
              'CPU scheduling/pending-obligation-only') +
             ' continuation; new parent not measured'})
     return certificate
