@@ -978,7 +978,9 @@ def main(argv=None):
     if mandatory_objective:
         training_identity['objective_kind']=objective.kind
     appended_ids = set()
-    restored_frame = (restore_sft_progress(shared_resume or resume or {}, args.stage_id)
+    continuation_training = shared_resume or resume or {}
+    restored_frame = (restore_sft_progress(continuation_training, args.stage_id,
+                        collected_progress=carried_progress if continuation_training is saved_training else None)
                       if parent_continuation and (objective is None or mandatory_objective) else None)
     if restored_frame is not None:
         resume = restored_frame

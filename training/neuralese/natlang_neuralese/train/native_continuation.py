@@ -191,9 +191,13 @@ def sft_frame_complete(frame):
     return complete
 
 
-def restore_sft_progress(current,stage):
-    """Restore credits with the current participant optimizer/RNG, not old state."""
-    progress=collect_sft_progress(current)
+def restore_sft_progress(current,stage,*,collected_progress=None):
+    """Restore credits/current state; optional progress is read-only, from current.
+
+    The trainer already owns an independent collection of this history. Reuse
+    it without another full copy; the selected active frame remains isolated.
+    """
+    progress=collect_sft_progress(current)if collected_progress is None else collected_progress
     frame=progress.get(stage or 'native-graph-ce')
     if frame is None:return None
     result=copy.deepcopy(frame)

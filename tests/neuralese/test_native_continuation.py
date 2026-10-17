@@ -86,6 +86,26 @@ def test_stage_frames_keep_deficits_and_current_optimizer_rng_after_objective_sw
     assert set(collect_sft_progress(next_stage))=={'full','next'}
 
 
+@pytest.mark.parametrize('stage',['full','not-yet-started'])
+def test_restore_reuses_owned_history_without_recollecting_or_mutating_it(monkeypatch,stage):
+    import natlang_neuralese.train.native_continuation as continuation
+    current=progress()
+    current.update(global_step=17,optimizer={'current':'moments'},rng={'current':'RNG'},fp8={'current':'scale'})
+    frames=collect_sft_progress(current)
+    before=copy.deepcopy(frames)
+    expected=restore_sft_progress(current,stage)
+    def unexpected(*args,**kwargs):
+        raise AssertionError('already collected history was copied again')
+    monkeypatch.setattr(continuation,'collect_sft_progress',unexpected)
+    restored=restore_sft_progress(current,stage,collected_progress=frames)
+    assert restored==expected and frames==before
+    if restored is not None:
+        assert restored['sft_progress']is frames
+        for key in ('optimizer','rng','fp8'):assert restored[key]is current[key]
+        restored['exposure_counts'].clear()
+        assert frames==before and current['exposure_counts']==before['full']['exposure_counts']
+
+
 def test_foundation_uses_entire_current_admitted_cohort_but_ordinary_append_does_not_delay_it(tmp_path):
     ordinary=[dict(graph('ordinary'),tokenizer_fingerprint='1'*64)]
     path=source_manifest(tmp_path,ordinary,[authenticated_pair('a'),authenticated_pair('b')])
