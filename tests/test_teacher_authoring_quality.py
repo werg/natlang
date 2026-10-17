@@ -58,3 +58,35 @@ def test_historical_verifier_is_provenance_but_current_execution_required(monkey
         verdict,identity=rebuilt(row);return {**verdict,'ok':False},identity
     monkeypatch.setattr(quality,'authoring_verdict',rejects)
     with pytest.raises(ValueError,match='fresh executable'):quality.verify_quality_continuation(view,row,ref)
+
+
+def captured_text_only():
+    row=captured();s=row['task']['program_ir']['semantics'];s['authoring']={'module':'app.ts','export':'urgent','requires':{'nl':True},
+        'runs':[{'args':[[{'id':'a','text':'site down'},{'id':'b','text':'feature request'}]],'expected':['a']}],
+        'oracle':[{'match':['"a"'],'value':True},{'match':['"b"'],'value':False}]}
+    row['outcome']['files']={'app.ts':'export async function urgent(tickets: {id:string,text:string}[]): Promise<string[]> { const flags=await Promise.all(tickets.map(ticket => nl<boolean>`Is text a live problem?`(ticket.text))); return tickets.filter((t,i)=>flags[i]).map(t=>t.id); }'}
+    legacy,_=quality.authoring_verdict(row);assert legacy['ok']is False
+    row['outcome'].update(accepted=False,authoring=legacy,rejection_reasons=['files']);row['outcome']['checks']['files']=False
+    return row
+
+
+def test_real_grounded_alias_revalidation_preserves_spec_and_legacy_outcome(tmp_path):
+    from scripts.neuralese_data.build_verified_teacher_trajectory_graphs import verify_original_row
+    row=captured_text_only();original=copy.deepcopy(row);p=tmp_path/'raw.jsonl';p.write_text(json.dumps(row)+'\n');ref={'path':str(p),'sha256':quality.sha256_file_hex(p)}
+    view=quality.continue_authoring_alias_quality(row,ref)
+    assert row==original and view['task']==row['task'] and view['trajectory']==row['trajectory']
+    assert view['outcome']['authoring']=={'ok':True,'problems':[],'results':[['a']]}
+    assert verify_original_row(view,ref)==p
+    view['source_quality_continuation']['argument_aliases'][0]['value']=False
+    with pytest.raises(ValueError,match='differs'):verify_original_row(view,ref)
+
+
+@pytest.mark.parametrize('fault',['other_check','changed_expected','wrong_captured_legacy','missing_runs','other_failure'])
+def test_alias_repair_requires_complete_original_contract_and_legacy_reproduction(fault):
+    row=captured_text_only()
+    if fault=='other_check':row['outcome']['checks']['world']=False
+    elif fault=='changed_expected':row['task']['program_ir']['semantics']['authoring']['runs'][0]['expected']=['b']
+    elif fault=='wrong_captured_legacy':row['outcome']['authoring']['results']=['invented']
+    elif fault=='missing_runs':row['task']['program_ir']['semantics']['authoring']['runs']=[]
+    else:row['outcome']['authoring']['problems']=['unrelated failure']
+    with pytest.raises(ValueError):quality.continue_authoring_alias_quality(row,{'path':'original','sha256':'a'*64})

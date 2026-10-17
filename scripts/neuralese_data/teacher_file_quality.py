@@ -11,6 +11,7 @@ from scripts.neuralese_data.ground_teacher_continuations import OUTPUT_CONTRACT
 
 SCHEMA = 'natlang.teacher-json-file-quality-continuation/1'
 AUTHORING_SCHEMA = 'natlang.teacher-executable-authoring-quality-continuation/1'
+AUTHORING_ALIAS_SCHEMA = 'natlang.teacher-source-grounded-authoring-quality-continuation/1'
 
 
 def file_verdict(row):
@@ -92,7 +93,9 @@ def continue_quality(original, original_binding):
 
 
 def verify_quality_continuation(row, original, original_binding):
-    continuation = (continue_authoring_quality if row.get('source_quality_continuation', {}).get('schema') == AUTHORING_SCHEMA else continue_quality)
+    schema = row.get('source_quality_continuation', {}).get('schema')
+    continuation = (continue_authoring_alias_quality if schema == AUTHORING_ALIAS_SCHEMA else
+                    continue_authoring_quality if schema == AUTHORING_SCHEMA else continue_quality)
     expected = continuation(original, original_binding)
     # Historical runtime identity records custody, never admission authority.
     # A current canonical comparator must independently reproduce the outcome.
@@ -107,7 +110,7 @@ def verify_quality_continuation(row, original, original_binding):
         raise ValueError('teacher quality continuation differs from exact original evaluation view')
 
 
-def authoring_verdict(row):
+def authoring_verdict(row, *, source_aliases=False):
     """Run the actual existing executable contract; no model generation."""
     root = Path(__file__).resolve().parents[2]
     paths = [Path(__file__).resolve(), root / 'ts-host/src/teacher/authoring.ts',
@@ -118,6 +121,13 @@ def authoring_verdict(row):
             'const {checkAuthoring}=await import(process.argv[1]);'
             'const p=JSON.parse(readFileSync(0,"utf8"));'
             'console.log(JSON.stringify(await checkAuthoring(p.files,p.spec)));')
+    if source_aliases:
+        code = ('import {readFileSync} from "node:fs";'
+                'const {checkAuthoring,withSourceArgumentAliases}=await import(process.argv[1]);'
+                'const p=JSON.parse(readFileSync(0,"utf8"));'
+                'const legacy=await checkAuthoring(p.files,p.spec);'
+                'const spec=withSourceArgumentAliases(p.spec);'
+                'console.log(JSON.stringify({legacy,spec,verdict:await checkAuthoring(p.files,spec)}));')
     completed = subprocess.run(['node', '--input-type=module', '-e', code,
         (root / 'ts-host/dist/teacher/authoring.js').as_uri()],
         input=json.dumps(payload), capture_output=True, text=True, check=True)
@@ -160,4 +170,45 @@ def continue_authoring_quality(original, original_binding):
         'original': original_binding, 'original_row_sha256': canonical_json_sha256_hex(original),
         'verifier': verifier, 'comparator': {'kind': 'executable-authoring/1'},
         'claim': 'evaluation-only root oracle accounting correction; original authored files, tests and execution unchanged'}
+    return result
+
+
+def continue_authoring_alias_quality(original, original_binding):
+    if 'source_quality_continuation' in original:
+        raise ValueError('argument oracle continuation requires original captured execution')
+    program=original['task']['program_ir']; semantics=program['semantics']; outcome=original['outcome']
+    spec=semantics.get('authoring'); checks=outcome.get('checks'); captured=outcome.get('authoring')
+    required={'seeded_failure_requirement','expected_status','honest_stop','effects','files','world','file_return_consistency','answer'}
+    if (program.get('split')!='train' or not program.get('source_groups')
+        or 'expected'not in semantics or semantics['expected']is not None
+        or not isinstance(spec,dict) or 'argument_aliases'in spec
+        or not isinstance(spec.get('runs'),list) or not spec['runs']
+        or not isinstance(outcome.get('files'),dict) or not outcome['files']
+        or outcome.get('status')!='done' or outcome.get('accepted')is not False
+        or outcome.get('oracle')!={'accepted':False,'level':'exact'}
+        or outcome.get('quality_pending',[])!=[] or outcome.get('rejection_reasons')!=['files']
+        or not isinstance(checks,dict) or not required<=set(checks) or checks.get('files')is not False
+        or any(value is not True for key,value in checks.items()if key!='files')
+        or not isinstance(captured,dict) or captured.get('ok')is not False
+        or not captured.get('problems') or any(not isinstance(item,str)or'The authoring oracle has no answer for this call.'not in item for item in captured['problems'])):
+        raise ValueError('argument oracle continuation requires only captured child-oracle coverage failure')
+    checked,verifier=authoring_verdict(original,source_aliases=True)
+    if canonical_json_sha256_hex(checked['legacy'])!=canonical_json_sha256_hex(captured):
+        raise ValueError('original executable authoring verdict was not reproduced')
+    derived_spec=checked['spec'];verdict=checked['verdict']
+    without_aliases={key:value for key,value in derived_spec.items()if key!='argument_aliases'}
+    if (canonical_json_sha256_hex(without_aliases)!=canonical_json_sha256_hex(spec)
+        or not derived_spec.get('argument_aliases') or verdict.get('ok')is not True
+        or verdict.get('problems')!=[] or len(verdict.get('results',[]))!=len(spec['runs'])):
+        raise ValueError('source-grounded executable authoring verification failed')
+    result=copy.deepcopy(original);result['outcome'].update(accepted=True,authoring=verdict,rejection_reasons=[],
+        oracle={'accepted':True,'level':'exact','verdict':'source-grounded-executable-authoring/1'})
+    result['outcome']['checks']['files']=True
+    result['source_quality_continuation']={'schema':AUTHORING_ALIAS_SCHEMA,'original':original_binding,
+        'original_row_sha256':canonical_json_sha256_hex(original),'verifier':verifier,
+        'comparator':{'kind':'source-run-argument-authoring/1'},
+        'original_spec_sha256':canonical_json_sha256_hex(spec),
+        'derived_spec_sha256':canonical_json_sha256_hex(derived_spec),
+        'argument_aliases':derived_spec['argument_aliases'],
+        'claim':'Source-derived child-oracle coverage and null-root accounting correction; original tests, expected results, files and captured trajectory unchanged'}
     return result

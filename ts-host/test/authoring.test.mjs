@@ -20,3 +20,48 @@ test('authored code is judged by running it with an oracle for its nl children',
   const regex = await checkAuthoring({ ...files, 'app.ts': 'export async function urgent(tickets: { id: string, text: string }[]): Promise<string[]> {\n  return tickets.filter(t => /down/.test(t.text)).map(t => t.id);\n}\n' }, spec);
   assert.deepEqual(regex.problems, ['app.ts creates no nl function']);
 });
+
+test('source-derived oracle aliases cover full ticket text without id and preserve original tests',async()=>{
+  const {withSourceArgumentAliases}=await import('../dist/teacher/authoring.js');
+  const textOnly={...files,'app.ts':files['app.ts'].replace('`(ticket)','`(ticket.text)')};
+  const legacy=await checkAuthoring(textOnly,spec);assert.equal(legacy.ok,false);
+  const grounded=withSourceArgumentAliases(spec);
+  assert.equal('argument_aliases'in spec,false);
+  assert.deepEqual(grounded.runs,spec.runs);assert.deepEqual(grounded.oracle,spec.oracle);
+  assert.deepEqual(await checkAuthoring(textOnly,grounded),{ok:true,problems:[],results:[['a']]});
+  const forged=structuredClone(grounded);forged.argument_aliases[0].value=false;
+  assert.equal((await checkAuthoring(textOnly,forged)).ok,false);
+  assert.equal((await checkAuthoring({...textOnly,'app.ts':textOnly['app.ts'].replace('flags[i]','!flags[i]')},grounded)).ok,false);
+});
+
+test('source alias derivation rejects conflicting fulltext and existing matching oracles',async()=>{
+  const {withSourceArgumentAliases}=await import('../dist/teacher/authoring.js');
+  const duplicate=structuredClone(spec);duplicate.runs[0].args[0][1].text='site down';
+  assert.throws(()=>withSourceArgumentAliases(duplicate),/Conflicting/);
+  const oldMatch=structuredClone(spec);oldMatch.oracle.push({match:[JSON.stringify('site down')],value:false});
+  assert.throws(()=>withSourceArgumentAliases(oldMatch),/Conflicting/);
+  const partial=structuredClone(spec);partial.runs[0].args[0][0].extra='context';
+  assert.equal(withSourceArgumentAliases(partial).argument_aliases.some(item=>item.source_id==='a'),false);
+});
+
+test('fresh authoring constructor declares grounded aliases under a new task identity',async()=>{
+  const {authoringInlineReview}=await import('../scripts/inline-curriculum/authoring.mjs');
+  const [program]=authoringInlineReview(180017,2);
+  assert.match(program.id,/:source-argument-oracle-v1$/);
+  assert.equal(program.generation.authoring_oracle,'source-run-arguments/1');
+  assert.equal(program.semantics.authoring.argument_aliases.length>0,true);
+  const source=program.curriculum.reference.root.find(call=>call[0]==='write_file')[1];
+  const actual={...program.semantics.folder_files,[source.path]:source.content};
+  assert.equal((await checkAuthoring(actual,program.semantics.authoring)).ok,true);
+  actual[source.path]=source.content.replace('`(ticket)','`(ticket.text)');
+  assert.equal((await checkAuthoring(actual,program.semantics.authoring)).ok,true);
+});
+
+
+test('forged aliases cannot authenticate themselves when no source aliases are derivable',async()=>{
+  const {withSourceArgumentAliases}=await import('../dist/teacher/authoring.js');
+  const forged={...structuredClone(spec),runs:[{args:[['no source Ticket']],expected:[]}],
+    argument_aliases:[{match:['invented'],value:true,source_id:'invented',source_text:'invented'}]};
+  assert.equal('argument_aliases'in withSourceArgumentAliases(forged),false);
+  assert.deepEqual(await checkAuthoring(files,forged),{ok:false,problems:['Source argument oracle aliases differ from the original declared runs.'],results:[]});
+});
