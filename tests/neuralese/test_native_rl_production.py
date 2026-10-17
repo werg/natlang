@@ -272,7 +272,10 @@ def test_native_factory_retains_full_recipe_budget_and_uses_headless_actor(tmp_p
     monkeypatch.setattr(recipe,'checkpoint_recipe_binding',lambda *a,**kw:reference)
     adapter = tmp_path/'semantic-adapter.json'
     adapter.write_text(json.dumps({'schema': 'natlang.native-semantic-adapter/1',
-        'checkpoint': {'sha256': sha256_file_hex(parent)}, 'models': {'lfm': {'recipe_binding':reference}}}))
+        'checkpoint': {'path':str(parent),'sha256': sha256_file_hex(parent)},
+        'models': {'lfm': {'recipe_binding':reference,
+            'native_identity':{'architecture':'lfm2','checkpoint_sha256':sha256_file_hex(parent)},
+            'checkpoint':{'participant':'lfm','sha256':sha256_file_hex(parent)}}}}))
     monkeypatch.setattr(recipe, 'resolve_recipe_data', lambda path: {'stages': [
         {'id': 'native_full', 'kind': 'native_state_sft', 'parameters': {
             'epochs': 3, 'dtype': 'float32', 'batch_tokens': 8192,'communication_foundation':foundation,
@@ -297,6 +300,11 @@ def test_native_factory_retains_full_recipe_budget_and_uses_headless_actor(tmp_p
     handler = recipe.HANDLERS['native_state_rl']
     assert handler['required_inputs'].isdisjoint(handler['optional_inputs'])
     assert 'rl_block_bundle' in handler['optional_inputs']
+    # Fixture custody is real; a wrong participant identity remains rejected.
+    exported=json.loads(adapter.read_text());exported['models']['lfm']['native_identity']['checkpoint_sha256']='0'*64
+    adapter.write_text(json.dumps(exported))
+    with pytest.raises(ValueError,match='participant differ'):
+        production.expected_native_actor(adapter,'lfm',sha256_file_hex(parent))
 
 
 def test_bootstrap_binds_actual_export_and_train_files_then_preserves_hot_configs(tmp_path, monkeypatch):
@@ -309,7 +317,8 @@ def test_bootstrap_binds_actual_export_and_train_files_then_preserves_hot_config
     curriculum = artifact('curriculum.json', {})
     adapter = artifact('adapter.json', {'schema': 'natlang.native-semantic-adapter/1',
         'checkpoint': {'path': str(parent), 'sha256': sha256_file_hex(parent)},
-        'models': {name: {'native_identity': {'architecture': architecture}}
+        'models': {name: {'native_identity': {'architecture': architecture,'checkpoint_sha256':sha256_file_hex(parent)},
+                          'checkpoint':{'participant':name,'sha256':sha256_file_hex(parent)}}
                    for name, architecture in [('actual-lfm-id', 'lfm2'), ('actual-mellum-id', 'mellum')]}})
     proof = {'adapter': adapter, 'curriculum': curriculum}
     completion = tmp_path/'shared-stage-completion.json'; completion.write_text(json.dumps(proof))
