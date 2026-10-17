@@ -482,3 +482,59 @@ def test_disabling_context_deferral_policy_does_not_drop_historical_proof_checks
     proof=Path(receipt['context_exclusions']['path']);proof.write_bytes(proof.read_bytes()+b' ')
     with pytest.raises(ValueError,match='binding changed'):
         sequence.prepare_source_sequence(folder,state,config,22)
+
+
+def requalify_with_current_protection(entry, protection, holds):
+    prepared_path=Path(entry['qualified_packet']['path']);prepared=json.loads(prepared_path.read_bytes())
+    qual_path=Path(prepared['qualification']['path']);qual=json.loads(qual_path.read_bytes())
+    inputs_path=Path(qual['inputs']['path']);inputs=json.loads(inputs_path.read_bytes())
+    inputs['authority'].update(protection=protection,decision_holds=holds)
+    qual['inputs']=put(inputs_path,inputs);prepared['qualification']=put(qual_path,qual)
+    selection_path=Path(prepared['references']['selection']['path']);selection=json.loads(selection_path.read_bytes())
+    selection.update(protection=protection,decision_hold_bindings=holds,reference_qualification=prepared['qualification'])
+    prepared['references']['selection']=put(selection_path,selection)
+    join_path=Path(prepared['references']['global_protection_join']['path']);join=json.loads(join_path.read_bytes())
+    join.update(current_protection=protection,decision_hold_bindings=holds)
+    prepared['references']['global_protection_join']=put(join_path,join)
+    entry['qualified_packet']=put(prepared_path,prepared)
+
+
+def test_fresh_protection_is_exact_candidate_bound_and_preserves_historical_packet(tmp_path):
+    folder,state,config=setup(tmp_path);decl=config['source_sequence'];manifest_path=Path(decl['ready_manifest']);manifest=json.loads(manifest_path.read_bytes());entry=manifest['entries'][0]
+    original_second=copy.deepcopy(manifest['entries'][1]);second_bytes=Path(original_second['qualified_packet']['path']).read_bytes()
+    protection={**decl['authority']['protection'],'path':'current/protection.json','sha256':'d'*64}
+    holds=[{'path':'current/decision-hold.jsonl','sha256':'e'*64,'bytes':9}]
+    requalify_with_current_protection(entry,protection,holds)
+    with pytest.raises(ValueError,match='authority differs'):sequence._packet(entry,decl)
+    exact={'protection':protection,'decision_hold_bindings':holds}
+    decl['authority']['reference_protection_by_candidate']={entry['candidate_packet']['sha256']:exact}
+    assert sequence._packet(entry,decl)['rows']==1
+    assert sequence._packet(original_second,decl)['rows']==1
+    assert Path(original_second['qualified_packet']['path']).read_bytes()==second_bytes
+    put(manifest_path,manifest);sequence.prepare_source_sequence(folder,state,config,22)
+    assert state['source_sequence']['pending']['ordinal']==0
+    decl['authority']['reference_protection_by_candidate']={'f'*64:exact}
+    with pytest.raises(ValueError,match='authority differs'):sequence._packet(entry,decl)
+
+
+@pytest.mark.parametrize('tamper',['selection','protection_join','inputs'])
+def test_candidate_current_authority_requires_every_independent_proof(tmp_path,tamper):
+    _,_,config=setup(tmp_path);decl=config['source_sequence'];manifest=json.loads(Path(decl['ready_manifest']).read_bytes());entry=manifest['entries'][0]
+    protection={**decl['authority']['protection'],'sha256':'d'*64};holds=decl['authority']['decision_hold_bindings']
+    requalify_with_current_protection(entry,protection,holds)
+    decl['authority']['reference_protection_by_candidate']={entry['candidate_packet']['sha256']:{'protection':protection,'decision_hold_bindings':holds}}
+    pp=Path(entry['qualified_packet']['path']);prepared=json.loads(pp.read_bytes())
+    if tamper=='inputs':
+        qp=Path(prepared['qualification']['path']);qual=json.loads(qp.read_bytes());ip=Path(qual['inputs']['path']);inputs=json.loads(ip.read_bytes());inputs['authority']['protection']={'sha256':'f'*64};qual['inputs']=put(ip,inputs);prepared['qualification']=put(qp,qual)
+        sp=Path(prepared['references']['selection']['path']);selection=json.loads(sp.read_bytes());selection['reference_qualification']=prepared['qualification'];prepared['references']['selection']=put(sp,selection)
+    else:
+        role='selection'if tamper=='selection'else'global_protection_join';path=Path(prepared['references'][role]['path']);value=json.loads(path.read_bytes());value['protection'if role=='selection'else'current_protection']={'sha256':'f'*64};prepared['references'][role]=put(path,value)
+    entry['qualified_packet']=put(pp,prepared)
+    with pytest.raises(ValueError,match='authority differs|protection proof differs'):sequence._packet(entry,decl)
+
+
+@pytest.mark.parametrize('value',[[],{'bad':{}},{'a'*64:{}},{'a'*64:{'protection':{'path':'x','sha256':'d'*64},'decision_hold_bindings':[{'path':'h','sha256':'e'*64,'bytes':True}]}},{'a'*64:{'protection':{'path':'x','sha256':'d'*64},'decision_hold_bindings':[],'unknown':True}}])
+def test_candidate_protection_mapping_rejects_malformed_authority(tmp_path,value):
+    _,_,config=setup(tmp_path);decl=config['source_sequence'];entry=json.loads(Path(decl['ready_manifest']).read_bytes())['entries'][0]
+    decl['authority']['reference_protection_by_candidate']=value
+    with pytest.raises(ValueError,match='malformed'):sequence._packet(entry,decl)

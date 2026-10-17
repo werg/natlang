@@ -126,16 +126,31 @@ def _packet(entry, declaration, *, allow_empty=False):
     if not isinstance(runtimes,dict)or any(not valid_sha(k)or not valid_sha(v)for k,v in runtimes.items()):
         raise ValueError('sequence reference runtime bindings are malformed')
     expected_runtime=runtimes.get(entry['candidate_packet']['sha256'],authority['reference_runtime_sha256'])
+    protections=authority.get('reference_protection_by_candidate',{})
+    if not isinstance(protections,dict):
+        raise ValueError('sequence candidate protection bindings are malformed')
+    for key,value in protections.items():
+        if (not valid_sha(key)or not isinstance(value,dict)
+                or set(value)!={'protection','decision_hold_bindings'}
+                or not isinstance(value['protection'],dict)
+                or not isinstance(value['protection'].get('path'),str)
+                or not valid_sha(value['protection'].get('sha256'))
+                or not isinstance(value['decision_hold_bindings'],list)
+                or any(not isinstance(ref,dict)or not isinstance(ref.get('path'),str)
+                       or not valid_sha(ref.get('sha256'))or type(ref.get('bytes'))is not int
+                       or ref['bytes']<0 for ref in value['decision_hold_bindings'])):
+            raise ValueError('sequence candidate protection bindings are malformed')
+    expected_authority=protections.get(entry['candidate_packet']['sha256'],authority)
     if (qualification.get('schema')!='natlang.existing-native-reference-qualification/1'
             or qualification.get('passed')is not True or qualification.get('model_calls')!=0
             or qualification.get('training_admission')is not False
             or qualification.get('reference_traces_are_teacher_generations')is not False
             or qualification.get('runtime_inventory_sha256')!=expected_runtime
             or runtime_digest!=expected_runtime
-            or inputs['authority']['protection']!=authority['protection']
-            or inputs['authority']['decision_holds']!=authority['decision_hold_bindings']
-            or selection.get('protection')!=authority['protection']
-            or selection.get('decision_hold_bindings')!=authority['decision_hold_bindings']):
+            or inputs['authority']['protection']!=expected_authority['protection']
+            or inputs['authority']['decision_holds']!=expected_authority['decision_hold_bindings']
+            or selection.get('protection')!=expected_authority['protection']
+            or selection.get('decision_hold_bindings')!=expected_authority['decision_hold_bindings']):
         raise ValueError('sequence reference/protection authority differs')
     if (selection.get('schema')!='natlang.strong-teacher-code-source-selection/1'
             or selection.get('training_admission')is not False
@@ -145,8 +160,8 @@ def _packet(entry, declaration, *, allow_empty=False):
             or protection.get('schema')!='natlang.native-teacher-global-protection-join/1'
             or protection.get('status')!='passed'
             or protection.get('selected_packet_sha256')!=refs['selected_cases']['sha256']
-            or protection.get('current_protection')!=authority['protection']
-            or protection.get('decision_hold_bindings')!=authority['decision_hold_bindings']
+            or protection.get('current_protection')!=expected_authority['protection']
+            or protection.get('decision_hold_bindings')!=expected_authority['decision_hold_bindings']
             or any(protection.get(key) for key in ('held_group_intersections','quality_group_intersections','pending_group_intersections'))):
         raise ValueError('sequence packet selection/protection proof differs')
     _,candidate_raw=_read(candidate['cases_binding'],declaration)

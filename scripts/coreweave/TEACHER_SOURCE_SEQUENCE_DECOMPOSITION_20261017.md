@@ -63,3 +63,14 @@ IDs/hashes and conserved case counts. It may advance only over a declared packet
 with neither a pending selection nor a real started receipt. Each skipped ordinal
 gets an immutable pending-debt receipt before durable cursor advancement. It is
 not a completed batch, generation admission, training exposure or a family ban.
+
+## Per-candidate current split authority
+
+A supervisor may append freshly reference-qualified unchanged tasks under the
+current protection projection while retaining older selected tasks and exact
+historical proofs. Bind each new candidate proof SHA to its declared protection
+and decision-hold bindings; keep the separately declared runtime law. Never
+infer or copy an authority from a verdict. The crisp verifier authenticates that
+same declared authority in reference inputs, selection and complete protection
+join, and rejects malformed or mismatched bindings. This is custody plumbing,
+not generation or training admission; the task-choice policy remains above.
