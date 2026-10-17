@@ -22,18 +22,27 @@ def raw_out(config):
     return Path(config.get('raw_rl_out',str(Path(config.get('rl_out',Path(config['out'])/'rl')).parent/'native_raw_rl'))).resolve()
 
 
-def _inputs(declaration):
+def _task_cases(declaration):
+    """Check admission and selector metadata before any checkpoint allocation."""
     from ..common.jsonio import iter_jsonl_rows
-    inputs={name:_bound(declaration[name]) for name in ('cases','production_recipe','seed_native_graphs','held_native_graphs')}
-    cases=[row for _,row in iter_jsonl_rows(inputs['cases'])]
+    path=_bound(declaration['cases'])
+    cases=[row for _,row in iter_jsonl_rows(path)]
     if not cases or any(row.get('split')!='train' for row in cases):
         raise ValueError('raw bootstrap requires nonempty exact admitted TRAIN tasks')
+    from .curriculum import task_descriptors
+    task_descriptors(cases)
     if declaration.get('task_source'):
         from .task_source import resolve_task_source
         declared=declaration['task_source'];actual=resolve_task_source(declared['manifest'])
         if (any(actual[key]!=declared[key] for key in ('manifest_sha256','cases_sha256','rows','audit_sha256','selection_proof_sha256'))
-                or actual['cases']!=inputs['cases']):
+                or actual['cases']!=path):
             raise ValueError('raw bootstrap task-source admission binding changed')
+    return path
+
+
+def _inputs(declaration):
+    inputs={name:_bound(declaration[name]) for name in ('production_recipe','seed_native_graphs','held_native_graphs')}
+    inputs['cases']=_task_cases(declaration)
     return inputs
 
 
@@ -87,6 +96,7 @@ def configure_model(plan_path,declaration,handoff,out):
     for key in ('rows_per_round','supervised_quantum_updates'):
         if key in declaration and (type(declaration[key]) is not int or declaration[key]<=0):
             raise ValueError(key+' must be a positive integer')
+    _task_cases(declaration)
     plan_path=Path(plan_path);out=Path(out);out.mkdir(parents=True,exist_ok=True)
     path=out/'config.json';verification=out/'bootstrap-verification.json'
     from .native_bootstrap_metadata import unchanged,save
