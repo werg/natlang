@@ -1,0 +1,243 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "acquired-d13-member-4c789d44-native-20261017-v1",
+  "owner": "dgx",
+  "path": "runs/acquired-connected-native-graphs-20261017-v1/D13",
+  "files": [
+    {
+      "path": "4c789d44309dda8d61395938e082783d9f3a62fb7e873260991a040b34994ead/lfm25/omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "4c789d44309dda8d61395938e082783d9f3a62fb7e873260991a040b34994ead/lfm25/receipt.json",
+      "bytes": 7923,
+      "sha256": "dd7920171dfdb11b4fb4c776617d45d89b570d982808ba3f1e4f000c19e8b309"
+    },
+    {
+      "path": "4c789d44309dda8d61395938e082783d9f3a62fb7e873260991a040b34994ead/lfm25/resume-state.json",
+      "bytes": 6227,
+      "sha256": "fc0cce3008cd85dc521853549f6c0794313f7f63cbcbe315dddb537e04af0356"
+    },
+    {
+      "path": "4c789d44309dda8d61395938e082783d9f3a62fb7e873260991a040b34994ead/lfm25/test/native-graphs.jsonl.zst",
+      "bytes": 13,
+      "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+    },
+    {
+      "path": "4c789d44309dda8d61395938e082783d9f3a62fb7e873260991a040b34994ead/lfm25/train/native-graphs.jsonl.zst",
+      "bytes": 222903,
+      "sha256": "8da63dbc4069ca42368d2bed80c0659221a16fb5f8ea1193de779ae5f46fa7cb"
+    },
+    {
+      "path": "4c789d44309dda8d61395938e082783d9f3a62fb7e873260991a040b34994ead/mellum21/omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "4c789d44309dda8d61395938e082783d9f3a62fb7e873260991a040b34994ead/mellum21/receipt.json",
+      "bytes": 8051,
+      "sha256": "1fd63e5f07232a355633c4dfa2b65868589ae4854af7b22802be3ddef59e5e76"
+    },
+    {
+      "path": "4c789d44309dda8d61395938e082783d9f3a62fb7e873260991a040b34994ead/mellum21/resume-state.json",
+      "bytes": 6349,
+      "sha256": "c56c810f0cfc5010aac24b7a2aeb9ec1bc523c619080b8f81303e2ff059ee9bb"
+    },
+    {
+      "path": "4c789d44309dda8d61395938e082783d9f3a62fb7e873260991a040b34994ead/mellum21/test/native-graphs.jsonl.zst",
+      "bytes": 13,
+      "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+    },
+    {
+      "path": "4c789d44309dda8d61395938e082783d9f3a62fb7e873260991a040b34994ead/mellum21/train/native-graphs.jsonl.zst",
+      "bytes": 238111,
+      "sha256": "f9601ed43a55ebe0569ff40ee1b3ef8f677867af5a89af67d6817f0b59ed8892"
+    },
+    {
+      "path": "admission-acquired-d13-member-4c789d44-native-20261017-v1/audit.json",
+      "bytes": 5525471,
+      "sha256": "13371d39c59c3dc4a38fa8b9057d9def0b9cf0925b0ecdb7ec64b16db0224b94"
+    },
+    {
+      "path": "admission-acquired-d13-member-4c789d44-native-20261017-v1/lfm25-train-sources.json",
+      "bytes": 355,
+      "sha256": "6c790c7ea36fd81e2f276e99e8f0a627a1f43ba14eb9518bd9eb8836d401584f"
+    },
+    {
+      "path": "admission-acquired-d13-member-4c789d44-native-20261017-v1/mellum21-train-sources.json",
+      "bytes": 358,
+      "sha256": "17cde2da8eb897c55f956a6c2328ade638a211fce9417b97cfe46f1fc84807af"
+    },
+    {
+      "path": "admission-acquired-d13-member-4c789d44-native-20261017-v1/protection-continuation-evidence/1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704/decision-holds/native-non-success-20261015-v1.jsonl",
+      "bytes": 2569,
+      "sha256": "56d841c7223daddad9768ff271b83bd22e803d486603a70139e2395892990177",
+      "lines": 7
+    },
+    {
+      "path": "admission-acquired-d13-member-4c789d44-native-20261017-v1/protection-continuation-evidence/1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704/decision-holds/semantic-ticket-crisp-bypass-20261015-v3.jsonl",
+      "bytes": 2047232,
+      "sha256": "cdbe9673c9d702eb63eea54c4465a7089d996cc4eb7b79c2a8e8942d5c0410c9",
+      "lines": 4589
+    },
+    {
+      "path": "admission-acquired-d13-member-4c789d44-native-20261017-v1/protection-continuation-evidence/1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704/held-union/acquired-connected-source-groups.jsonl",
+      "bytes": 914296,
+      "sha256": "1fea2eb0b4b30008d014025542aaef68d24be36af4804008133a29a9849eec34",
+      "lines": 1
+    },
+    {
+      "path": "admission-acquired-d13-member-4c789d44-native-20261017-v1/protection-continuation-evidence/1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704/held-union/acquired-remaining-complete-source/source-groups.jsonl",
+      "bytes": 16694,
+      "sha256": "913d2335bcd3f158fe3059c80232313209ae639ad93384092abb33f9afe52c4b",
+      "lines": 1
+    },
+    {
+      "path": "admission-acquired-d13-member-4c789d44-native-20261017-v1/protection-continuation-evidence/1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704/held-union/full/source-groups/text-data.jsonl",
+      "bytes": 866188,
+      "sha256": "84330b32a180aa8166e805a6bed434276c6e21f37cca779b42eef479701fb8ac",
+      "lines": 1
+    },
+    {
+      "path": "admission-acquired-d13-member-4c789d44-native-20261017-v1/protection-continuation-evidence/1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704/held-union/program-header/source-groups/text-data.jsonl",
+      "bytes": 866188,
+      "sha256": "84330b32a180aa8166e805a6bed434276c6e21f37cca779b42eef479701fb8ac",
+      "lines": 1
+    },
+    {
+      "path": "admission-acquired-d13-member-4c789d44-native-20261017-v1/protection-continuation-evidence/1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704/held-union/whole-trajectory/source-groups/text-data.jsonl",
+      "bytes": 866188,
+      "sha256": "84330b32a180aa8166e805a6bed434276c6e21f37cca779b42eef479701fb8ac",
+      "lines": 1
+    },
+    {
+      "path": "admission-acquired-d13-member-4c789d44-native-20261017-v1/protection-continuation-evidence/1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704/protection-manifest.json",
+      "bytes": 364774,
+      "sha256": "1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704"
+    },
+    {
+      "path": "admission-acquired-d13-member-4c789d44-native-20261017-v1/protection-continuation-evidence/1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704/quality-groups.jsonl",
+      "bytes": 3613577,
+      "sha256": "1fe15465ccae78e771e0e898e71745aaa5cd5fbae6cef16616ed6dc550de8ca9",
+      "lines": 1
+    },
+    {
+      "path": "admission-acquired-d13-member-4c789d44-native-20261017-v1/protection-continuation-evidence/1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704/source-group-components.jsonl",
+      "bytes": 1068933,
+      "sha256": "02656380514f5b46c8237f0c3e32f651a1adf6eae9163e167749b2215040d0fe",
+      "lines": 1804
+    },
+    {
+      "path": "admission-acquired-d13-member-4c789d44-native-20261017-v1/protection-continuation-evidence/1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704/source-reviews/datasets.json",
+      "bytes": 435,
+      "sha256": "b597f17436c7848ac693070d72d080036f57187cd764185e13738dd7783a901a"
+    },
+    {
+      "path": "admission-acquired-d13-member-4c789d44-native-20261017-v1/protection-continuation-evidence/1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704/source-reviews/family-holds.json",
+      "bytes": 2106,
+      "sha256": "ae38254aa59a9422f7d5793427d44c1898adfc2268bfd9652865d8d653cfc8f0"
+    },
+    {
+      "path": "admission-acquired-d13-member-4c789d44-native-20261017-v1/protection-continuation-evidence/1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704/source-reviews/holds.jsonl",
+      "bytes": 167126,
+      "sha256": "27b31f38b8d3b6108ea25eebb1cf1f614e204707a36b28b660b5484d9c2d9593",
+      "lines": 279
+    },
+    {
+      "path": "admission-acquired-d13-member-4c789d44-native-20261017-v1/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/decision-holds/native-non-success-20261015-v1.jsonl",
+      "bytes": 2569,
+      "sha256": "56d841c7223daddad9768ff271b83bd22e803d486603a70139e2395892990177",
+      "lines": 7
+    },
+    {
+      "path": "admission-acquired-d13-member-4c789d44-native-20261017-v1/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/decision-holds/semantic-ticket-crisp-bypass-20261015-v3.jsonl",
+      "bytes": 2047232,
+      "sha256": "cdbe9673c9d702eb63eea54c4465a7089d996cc4eb7b79c2a8e8942d5c0410c9",
+      "lines": 4589
+    },
+    {
+      "path": "admission-acquired-d13-member-4c789d44-native-20261017-v1/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/held-union/acquired-connected-source-groups.jsonl",
+      "bytes": 914296,
+      "sha256": "1fea2eb0b4b30008d014025542aaef68d24be36af4804008133a29a9849eec34",
+      "lines": 1
+    },
+    {
+      "path": "admission-acquired-d13-member-4c789d44-native-20261017-v1/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/held-union/acquired-remaining-complete-source/source-groups.jsonl",
+      "bytes": 16694,
+      "sha256": "913d2335bcd3f158fe3059c80232313209ae639ad93384092abb33f9afe52c4b",
+      "lines": 1
+    },
+    {
+      "path": "admission-acquired-d13-member-4c789d44-native-20261017-v1/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/held-union/full/source-groups/text-data.jsonl",
+      "bytes": 866188,
+      "sha256": "84330b32a180aa8166e805a6bed434276c6e21f37cca779b42eef479701fb8ac",
+      "lines": 1
+    },
+    {
+      "path": "admission-acquired-d13-member-4c789d44-native-20261017-v1/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/held-union/program-header/source-groups/text-data.jsonl",
+      "bytes": 866188,
+      "sha256": "84330b32a180aa8166e805a6bed434276c6e21f37cca779b42eef479701fb8ac",
+      "lines": 1
+    },
+    {
+      "path": "admission-acquired-d13-member-4c789d44-native-20261017-v1/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/held-union/whole-trajectory/source-groups/text-data.jsonl",
+      "bytes": 866188,
+      "sha256": "84330b32a180aa8166e805a6bed434276c6e21f37cca779b42eef479701fb8ac",
+      "lines": 1
+    },
+    {
+      "path": "admission-acquired-d13-member-4c789d44-native-20261017-v1/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/inherited-components.jsonl",
+      "bytes": 1387914,
+      "sha256": "e47985665088e83424aa3b21c3daba8e46fe610e682b02d6f6bfd3e1d0b532e2",
+      "lines": 1760
+    },
+    {
+      "path": "admission-acquired-d13-member-4c789d44-native-20261017-v1/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/inherited-projection.json",
+      "bytes": 4559106,
+      "sha256": "1f96c76a023a56a06e1aac0a6131e555762659be3c99731fd9fc97a3f44a9fbc"
+    },
+    {
+      "path": "admission-acquired-d13-member-4c789d44-native-20261017-v1/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/protection-manifest.json",
+      "bytes": 5469555,
+      "sha256": "f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349"
+    },
+    {
+      "path": "admission-acquired-d13-member-4c789d44-native-20261017-v1/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/quality-groups.jsonl",
+      "bytes": 3613577,
+      "sha256": "1fe15465ccae78e771e0e898e71745aaa5cd5fbae6cef16616ed6dc550de8ca9",
+      "lines": 1
+    },
+    {
+      "path": "admission-acquired-d13-member-4c789d44-native-20261017-v1/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/source-group-components.jsonl",
+      "bytes": 1893062,
+      "sha256": "e657566ba165ce610e84b01cf46774d6caac0cd476f39be468eeda375c041377",
+      "lines": 7861
+    },
+    {
+      "path": "admission-acquired-d13-member-4c789d44-native-20261017-v1/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/source-reviews/datasets.json",
+      "bytes": 435,
+      "sha256": "b597f17436c7848ac693070d72d080036f57187cd764185e13738dd7783a901a"
+    },
+    {
+      "path": "admission-acquired-d13-member-4c789d44-native-20261017-v1/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/source-reviews/family-holds.json",
+      "bytes": 2106,
+      "sha256": "ae38254aa59a9422f7d5793427d44c1898adfc2268bfd9652865d8d653cfc8f0"
+    },
+    {
+      "path": "admission-acquired-d13-member-4c789d44-native-20261017-v1/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/source-reviews/holds.jsonl",
+      "bytes": 167126,
+      "sha256": "27b31f38b8d3b6108ea25eebb1cf1f614e204707a36b28b660b5484d9c2d9593",
+      "lines": 279
+    },
+    {
+      "path": "admission-acquired-d13-member-4c789d44-native-20261017-v1/row-proof.jsonl",
+      "bytes": 17462659,
+      "sha256": "7f6aa2f0054d332f920d3dc017b50a0b1265528a1302768ad4b4ec8c8160b959",
+      "lines": 414
+    }
+  ],
+  "bytes": 56946975
+}
