@@ -75,11 +75,15 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--endpoint', required=True)
     parser.add_argument('--checkpoint-sha256', required=True)
+    parser.add_argument('--only-checkpoint-sha256', help='explicit one-policy monitoring window; other actors continue without an evaluation claim')
     parser.add_argument('--spec', required=True, type=Path)
     parser.add_argument('--spec-sha256', required=True)
     parser.add_argument('--out', required=True, type=Path)
     parser.add_argument('--step', required=True, type=int)
     args = parser.parse_args(argv)
+    if args.only_checkpoint_sha256 is not None and args.checkpoint_sha256 != args.only_checkpoint_sha256:
+        print(json.dumps({'status': 'outside-declared-monitoring-checkpoint', 'checkpoint_sha256': args.checkpoint_sha256, 'only_checkpoint_sha256': args.only_checkpoint_sha256, 'quality_measured': False}))
+        return 0
     print(json.dumps(evaluate(endpoint=args.endpoint, checkpoint_sha256=args.checkpoint_sha256,
                               spec_path=args.spec, spec_sha256=args.spec_sha256,
                               out=args.out, step=args.step)))

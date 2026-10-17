@@ -67,3 +67,11 @@ def test_external_task_execution_reuses_same_queues_without_engine_lifecycle(tmp
     entry=json.loads((run/'worker-00/queue.jsonl').read_text())
     assert(entry['case_seconds'],entry['max_model_requests'],entry['max_turns'])==(7200,128,160)
     assert '--neuralese-server'in argv and argv[argv.index('--identical-turn-limit')+1]=='3'
+
+
+
+def test_declared_one_policy_hook_never_evaluates_or_claims_later_checkpoint(tmp_path,monkeypatch,capsys):
+    monkeypatch.setattr(monitor,'evaluate',lambda **kw:(_ for _ in ()).throw(AssertionError('outside declared actor window')))
+    assert monitor.main(['--endpoint','http://same','--checkpoint-sha256','later','--only-checkpoint-sha256','initial',
+        '--spec','unused','--spec-sha256','bound','--out',str(tmp_path),'--step','123'])==0
+    result=json.loads(capsys.readouterr().out);assert result['quality_measured']is False and result['checkpoint_sha256']=='later'

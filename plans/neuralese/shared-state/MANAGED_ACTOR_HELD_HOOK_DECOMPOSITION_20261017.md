@@ -30,3 +30,8 @@ interrupted external evaluations preserve existing queues/journals and resume
 finished keys. Default trainer-owned engine lifecycle stays unchanged. Collector
 failures are recorded as ineligible monitoring, never invented task successes or
 TRAIN rows. The managed actor remains alive throughout this synchronous command.
+
+An optional only-checkpoint-sha256 restricts the hook to one explicitly declared
+current policy. Later actors continue with an explicit unmeasured disposition,
+without reusing the first actor's global step or claiming a new quality score.
+Regular trainer task cadence remains separately active.
