@@ -54,12 +54,17 @@ def _packet(entry, declaration, *, allow_empty=False):
         raise ValueError('sequence qualified packet cases disagree')
     authority=declaration['authority']
     runtime_digest=hashlib.sha256(json.dumps(inputs['runtime'],ensure_ascii=False,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+    runtimes=authority.get('reference_runtime_by_candidate',{})
+    valid_sha=lambda value:isinstance(value,str)and len(value)==64 and all(c in '0123456789abcdef'for c in value)
+    if not isinstance(runtimes,dict)or any(not valid_sha(k)or not valid_sha(v)for k,v in runtimes.items()):
+        raise ValueError('sequence reference runtime bindings are malformed')
+    expected_runtime=runtimes.get(entry['candidate_packet']['sha256'],authority['reference_runtime_sha256'])
     if (qualification.get('schema')!='natlang.existing-native-reference-qualification/1'
             or qualification.get('passed')is not True or qualification.get('model_calls')!=0
             or qualification.get('training_admission')is not False
             or qualification.get('reference_traces_are_teacher_generations')is not False
-            or qualification.get('runtime_inventory_sha256')!=authority['reference_runtime_sha256']
-            or runtime_digest!=authority['reference_runtime_sha256']
+            or qualification.get('runtime_inventory_sha256')!=expected_runtime
+            or runtime_digest!=expected_runtime
             or inputs['authority']['protection']!=authority['protection']
             or inputs['authority']['decision_holds']!=authority['decision_hold_bindings']
             or selection.get('protection')!=authority['protection']

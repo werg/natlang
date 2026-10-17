@@ -230,3 +230,40 @@ def test_supervisor_candidate_inventory_is_not_replaced_by_a_ready_pointer(tmp_p
     value['candidate_inventory']=put(tmp_path/'undeclared-candidates.json',{'packets':[]});put(pointer,value)
     with pytest.raises(ValueError,match='supervisor declaration'):
         sequence.prepare_source_sequence(folder,state,config,22)
+
+
+def test_reference_runtime_continuation_is_candidate_bound_and_legacy_packet_stays_exact(tmp_path):
+    folder,state,config=setup(tmp_path)
+    declaration=config['source_sequence'];manifest_path=Path(declaration['ready_manifest'])
+    manifest=json.loads(manifest_path.read_text());entry=manifest['entries'][0]
+    prepared_path=Path(entry['qualified_packet']['path']);prepared=json.loads(prepared_path.read_text())
+    qual_path=Path(prepared['qualification']['path']);qual=json.loads(qual_path.read_text())
+    inputs_path=Path(qual['inputs']['path']);inputs=json.loads(inputs_path.read_text())
+    inputs['runtime']={'new-exact-reference-helper.js':{'sha256':'c'*64,'bytes':12,'path':'new-exact-reference-helper.js'}}
+    runtime_sha=hashlib.sha256(json.dumps(inputs['runtime'],ensure_ascii=False,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+    qual['inputs']=put(inputs_path,inputs);qual['runtime_inventory_sha256']=runtime_sha
+    prepared['qualification']=put(qual_path,qual)
+    selection_path=Path(prepared['references']['selection']['path']);selection=json.loads(selection_path.read_text())
+    selection['reference_qualification']=prepared['qualification']
+    prepared['references']['selection']=put(selection_path,selection)
+    entry['qualified_packet']=put(prepared_path,prepared);put(manifest_path,manifest)
+    with pytest.raises(ValueError,match='authority differs'):
+        sequence._packet(entry,declaration)
+    declaration['authority']['reference_runtime_by_candidate']={entry['candidate_packet']['sha256']:runtime_sha}
+    assert sequence._packet(entry,declaration)['cases_sha256']
+    # The unrelated original packet remains valid under its old exact runtime.
+    assert sequence._packet(manifest['entries'][1],declaration)['cases_sha256']
+    sequence.prepare_source_sequence(folder,state,config,22)
+    assert state['source_sequence']['pending']['ordinal']==0
+    declaration['authority']['reference_runtime_by_candidate']={'d'*64:runtime_sha}
+    with pytest.raises(ValueError,match='authority differs'):
+        sequence._packet(entry,declaration)
+
+
+@pytest.mark.parametrize('binding',[[],{'not-a-candidate-sha':'a'*64},{'a'*64:True},{'a'*64:'B'*64}])
+def test_reference_runtime_continuation_rejects_malformed_authority(tmp_path,binding):
+    _,_,config=setup(tmp_path);declaration=config['source_sequence']
+    manifest=json.loads(Path(declaration['ready_manifest']).read_text())
+    declaration['authority']['reference_runtime_by_candidate']=binding
+    with pytest.raises(ValueError,match='malformed'):
+        sequence._packet(manifest['entries'][0],declaration)

@@ -30,3 +30,13 @@ This changes task scheduling metadata, not prompts, actor/runtime, external
 teacher allocation, sample admission or model arithmetic. Production adoption
 requires independent review. Tests use real temporary files, publication
 interruption and sealed/boundary receipts; no teacher/model calls are made.
+
+## Per-candidate reference runtime continuation
+
+A supervisor may bind a newly requalified candidate's exact proof SHA to its
+actual reference-runtime inventory SHA. Older packets keep their original
+runtime binding and proof bytes. The task-serving runtime remains separately
+bound. This is exact verifier plumbing, not a choice of task or admission:
+current protection, original program bytes, complete scripted verdicts and
+ordered lifecycle checks remain mandatory. Unknown or malformed runtime
+bindings fail closed. Existing declarations retain their single runtime law.
