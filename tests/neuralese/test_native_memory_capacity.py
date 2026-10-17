@@ -386,3 +386,47 @@ def test_capacity_identity_binds_exact_causal_prefix_packing_mode(monkeypatch):
     shared=memory.capacity_identity({},args,None)
     assert shared['share_causal_prefixes'] is True and shared!=legacy
     assert {k:v for k,v in shared.items() if k!='share_causal_prefixes'}=={k:v for k,v in legacy.items() if k!='share_causal_prefixes'}
+
+
+
+@pytest.mark.parametrize('retained_smaller',[False,True])
+def test_actual_sft_needs_capacity_but_keeps_smaller_pass_after_larger_failure(tmp_path,monkeypatch,retained_smaller):
+    import json
+    from test_native_model import tiny_source
+    from test_native_state_sft import graph
+    from natlang_neuralese.model.native_model import load_native_model
+    from natlang_neuralese.train import native_state_sft as trainer
+    from natlang_neuralese.eval import native_memory as memory
+    base=tmp_path/'base';tiny_source(base)
+    _,_,_,config=load_native_model(base,dtype=torch.float32,rank=4)
+    train=tmp_path/'train.jsonl';held=tmp_path/'held.jsonl';fp=config['tokenizer_fingerprint']
+    train.write_text(json.dumps(dict(graph('train'),tokenizer_fingerprint=fp))+'\n')
+    held.write_text(json.dumps(dict(graph('held'),split='test',tokenizer_fingerprint=fp))+'\n')
+    updates=[];observed={};original=trainer.native_training_update
+    def update(*args,**kwargs):
+        updates.append(True);return original(*args,**kwargs)
+    def failed_frontier(model,optimizer,source,roles,config,args,**kwargs):
+        observed['model']=model;observed['weights']=copy.deepcopy(model.state_dict())
+        observed['optimizer']=optimizer;observed['moments']=copy.deepcopy(optimizer.state_dict())
+        report={'passed':False,'request':json.loads(args.memory_qualification),
+            'parent_checkpoint_sha256':'a'*64,'checks':[{'passed':retained_smaller},{'passed':False}]}
+        (args.out/'memory-qualification.json').write_text(json.dumps(report))
+        if retained_smaller:
+            certificate=tmp_path/'qualified-smaller.json';certificate.write_text(json.dumps({'passed':True,'scope':'injected retained capacity result; caller regression only'}))
+            args.resident_geometry_qualification=certificate
+        return report
+    monkeypatch.setattr(memory,'run_prepared',failed_frontier)
+    monkeypatch.setattr(trainer,'native_training_update',update)
+    out=tmp_path/'out';args=['--base',str(base),'--dtype','float32','--rank','4','--device','cpu',
+        '--native-graphs',str(train),'--held-native-graphs',str(held),'--epochs','1',
+        '--eval-every','100','--out',str(out),'--memory-qualification',json.dumps({'path':'injected-frontiers','sha256':'b'*64})]
+    if retained_smaller:
+        assert trainer.main(args)==0 and len(updates)==1
+        report=json.loads((out/'report.json').read_text())
+        assert report['metrics'] and (out/'checkpoint.pt').is_file()
+    else:
+        with pytest.raises(ValueError,match='no usable physical capacity'):
+            trainer.main(args)
+        assert updates==[] and (out/'memory-qualification.json').is_file()
+        assert_exact(observed['weights'],observed['model'].state_dict())
+        assert_exact(observed['moments'],observed['optimizer'].state_dict())

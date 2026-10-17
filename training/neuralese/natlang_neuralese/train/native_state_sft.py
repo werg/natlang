@@ -1263,6 +1263,8 @@ def main(argv=None):
         memory_check = run_prepared(model,optimizer,train,roles,config,args,backend=backend,objective=objective,
             checkpoint_sha256=sha256_file_hex_cached(args.continue_from if parent_continuation else policy.slot)
                 if parent_continuation or policy.slot.exists() else config['base_inventory_sha256'])
+        if not args.resident_geometry_qualification:
+            raise ValueError('explicit memory qualification produced no usable physical capacity certificate')
         checkpoint_options['memory_qualification'] = {'passed':memory_check['passed'],
             'request':memory_check['request'],'parent_checkpoint_sha256':memory_check['parent_checkpoint_sha256']}
         checkpoint_options['checkpoint_input_offload'] = args.checkpoint_input_offload

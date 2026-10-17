@@ -33,3 +33,14 @@ Standalone CLI bootstrap includes both the repository root and its Neuralese
 package directory. Subprocesses cannot inherit pytest's in-process import path.
 This is execution plumbing; importing ordinary saved-parent helpers remains
 independent of the optional prefix-packing runtime.
+
+
+Explicit prepared capacity requests (2026-10-17): before SGD, the shared SFT
+caller requires a usable resident geometry certificate. An unsuccessful larger
+frontier must retain a smaller passing certificate and allow useful training.
+If every request failed and no capacity certificate exists, retain the failure
+reports and stop before an optimizer update; the supervisor can resume the
+previous qualified arithmetic path. Overall multi-frontier passed=false is not
+itself a training barrier when a usable certificate was retained. This is exact
+caller plumbing, not a new numerical threshold or a communication-readiness
+waiver; both model families share the same guard.
