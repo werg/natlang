@@ -374,3 +374,95 @@ def materialization_partition(raw_rows, decision_keys, omissions, emitted_keys, 
             'deduplicated_actions': len(deduplicated),
             'other_omitted_actions': len(omitted - held_keys),
             'training_admission': False}
+
+
+def teacher_conversion_profile(receipt):
+    """Read explicit ID authority separately from an effective backbone default."""
+    if 'explicit_history_reasoning_policy' not in receipt:
+        return None
+    profile = receipt['explicit_history_reasoning_policy']
+    if (profile not in ('keep', 'last_turn_only')
+            or (receipt.get('tokenizer', {}).get('history_reasoning') or {}).get('policy') != profile):
+        raise ValueError('teacher conversion explicit profile differs from its tokenizer authority')
+    return profile
+
+
+def verify_teacher_model_actions(graphs, receipt, *, raw_rows, raw_row_shas,
+                                 source_sha256, decision_keys, hold_ids):
+    """Shared original-action verifier used by the operational final admission."""
+    from scripts.neuralese_data.build_verified_teacher_trajectory_graphs import teacher_action_graph_id
+    profile = teacher_conversion_profile(receipt)
+    if set(raw_rows) != set(raw_row_shas):
+        raise ValueError('teacher graph source SHA inventory differs from its source rows')
+    ids, targets, source_ids, emitted_keys = set(), set(), set(), []
+    source_actions = sum(len(row['trajectory']) for row in raw_rows.values())
+    for row in graphs:
+        identifier = row['id']
+        teacher = row['conversion']['teacher_source']
+        source_id, turn = teacher['source_row_id'], teacher['teacher_turn_index']
+        if (source_id not in raw_rows or type(turn) is not int
+                or not 0 <= turn < len(raw_rows[source_id]['trajectory'])):
+            raise ValueError('graph source/turn missing')
+        target = teacher['decision_admission']['materialized_decision_id']
+        if target != f'{source_id}:decision:{turn:04d}' or identifier in ids:
+            raise ValueError('decision identity mismatch or duplicate graph')
+        source_row, row_sha = raw_rows[source_id], raw_row_shas[source_id]
+        expected = 'text:' + teacher_action_graph_id(source_id, row_sha, turn, profile)
+        if (teacher['source_artifact_sha256'] != source_sha256
+                or teacher['source_row_sha256'] != row_sha or identifier != expected):
+            raise ValueError('graph source SHA or source-bound profile identity mismatch')
+        groups = sorted(set(source_row['task']['program_ir']['source_groups']))
+        if row['source_groups'] != groups or teacher['source_groups'] != groups or row['split'] != 'train':
+            raise ValueError('graph train/source groups differ from exact verified program')
+        profile_ids = {'text:' + teacher_action_graph_id(source_id, row_sha, turn, candidate)
+                       for candidate in (None, 'keep', 'last_turn_only')}
+        if ({identifier, target, source_id} | profile_ids) & hold_ids:
+            raise ValueError('graph intersects current held decisions')
+        ids.add(identifier); targets.add(target); source_ids.add(source_id)
+        emitted_keys.append((source_id, turn))
+    count = len(ids)
+    if (count != receipt['outputs']['train']['rows']
+            or count != receipt['deduplication']['emitted_rows']
+            or count + receipt['deduplication']['omitted_rows'] != receipt['turns']
+            or receipt['turns'] + len(receipt['action_omissions']) != source_actions):
+        raise ValueError('teacher graph receipt lost complete action accounting')
+    inverse = {'text:' + teacher_action_graph_id(source_id, raw_row_shas[source_id], turn, profile):
+               (source_id, turn) for source_id, row in raw_rows.items()
+               for turn in range(len(row['trajectory']))}
+    deduplicated = []
+    for omission in receipt['deduplication']['omissions']:
+        if omission['id'] not in inverse:
+            raise ValueError('teacher deduplication identity differs from its source/profile')
+        deduplicated.append(inverse[omission['id']])
+    if len(deduplicated) != receipt['deduplication']['omitted_rows']:
+        raise ValueError('teacher deduplication count differs from its exact action identities')
+    partition = materialization_partition(raw_rows, decision_keys,
+        receipt['action_omissions'], emitted_keys, deduplicated)
+    # Preserve full raw-row identity in the cross-model join, even when IDs and
+    # graph content legitimately differ between declared rendering profiles.
+    eligible = {(source_id, raw_row_shas[source_id], turn)
+                for source_id, turn in [*emitted_keys, *deduplicated]}
+    omitted = {(entry['source_row_id'], raw_row_shas[entry['source_row_id']], entry['teacher_turn_index'])
+               for entry in receipt['action_omissions']}
+    return {'graph_ids': ids, 'eligible_actions': eligible, 'omitted_actions': omitted,
+            'target_decisions': targets, 'source_ids': source_ids, 'partition': partition,
+            'explicit_history_reasoning_policy': profile}
+
+
+def verify_paired_teacher_actions(models):
+    """Match exact original obligations while retaining each rendering's counts."""
+    if len(models) < 2:
+        raise ValueError('paired teacher admission requires at least two model views')
+    first = next(iter(models.values()))
+    ignored_counts = {'emitted_actions', 'deduplicated_actions'}
+    authority = {k: v for k, v in first['partition'].items() if k not in ignored_counts}
+    for model in models.values():
+        current = {k: v for k, v in model['partition'].items() if k not in ignored_counts}
+        if (current != authority or model['eligible_actions'] != first['eligible_actions']
+                or model['omitted_actions'] != first['omitted_actions']):
+            raise ValueError('paired teacher views differ in exact original source/action obligations')
+    return {'paired_model_graph_ids_equal': all(
+                value['graph_ids'] == first['graph_ids'] for value in models.values()),
+            'paired_model_source_actions_equal': True,
+            'eligible_actions': len(first['eligible_actions']),
+            'omitted_actions': len(first['omitted_actions'])}

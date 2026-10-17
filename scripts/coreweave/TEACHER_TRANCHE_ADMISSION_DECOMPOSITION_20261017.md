@@ -52,3 +52,27 @@ The converter and final admission verifier always run again with their current
 source/oracle and global protection checks. A missing or changed completion
 receipt cannot skip reconstruction. Exact hashing and before/after file-state
 checks are crisp mechanisms; the existing quality policy is unchanged.
+
+## Explicit per-model rendering profiles
+
+The source task and exact captured action remain the training obligation. A
+student rendering profile changes graph bytes and their IDs, not the original
+source-row SHA, source ID or captured turn. This is an exact custody verifier,
+not a new quality or source-selection policy.
+
+1. Authenticate each model's conditional explicit profile against its effective
+   tokenizer receipt. An omitted profile retains the historical graph-ID law;
+   the effective Mellum KEEP default alone does not imply an explicit override.
+2. Verify every emitted and deduplicated graph ID using that model's profile,
+   retaining exact raw source-row SHA, original source ID and captured turn.
+   Source groups, train split, decision holds and complete action partitioning
+   keep their existing checks.
+3. Compare the original eligible and omitted action identities across models.
+   A different rendering can change which action is already represented by an
+   exact predecessor, so retain each model's emitted/deduplicated counts rather
+   than requiring equal graph IDs. Every original action still belongs to one
+   and only one emitted, duplicate or omission partition.
+4. The existing operational final validator calls this shared verifier. Its
+   private-export, current protection/closure, original source/oracle, output
+   bytes and registration checks remain authoritative and unchanged. Defaults
+   retain their old graph IDs and exact pairing behavior.
