@@ -522,17 +522,20 @@ def _external_frozen_package(record, package, old_plan, snapshots=None):
     return references
 
 
-def prepare_drained_recipe_handoff(handoff, recipe, out, *, package=None, external_package=None):
+def prepare_drained_recipe_handoff(handoff, recipe, out, *, package=None, external_package=None, verified_handoff=None):
     """Persist an existing verified lineage handoff, never a resident rewrite."""
     from ..train import native_resident as resident
     from ..train.recipe import lineage_handoff
-    record,saved=verify_handoff(handoff)
+    from .native_runtime_handoff import _loaded_handoff
+    record,saved=(verify_handoff(handoff) if verified_handoff is None else
+                  _loaded_handoff(handoff,verified_handoff))
+    loaded=(record,saved)
     state,old_plan,stage_id=_drained_plan_authority(record,saved);del saved
     directory=Path(record['resident']['directory'])
     package=Path(package or Path(__file__).resolve().parents[1]).resolve()
     out=Path(out);out.parent.mkdir(parents=True,exist_ok=True)
     if out.exists():
-        reference=binding(out);value=verify_drained_recipe_handoff(reference,handoff=handoff)
+        reference=binding(out);value=verify_drained_recipe_handoff(reference,handoff=handoff,verified_handoff=loaded)
         if binding(recipe)!=value['recipe']:raise ValueError('drained recipe handoff recipe changed')
         if (bool(value.get('external_runtime')) != bool(external_package)
                 or external_package and Path(external_package).resolve()!=Path(value['old_package']).resolve()):
@@ -607,7 +610,7 @@ def prepare_drained_recipe_handoff(handoff, recipe, out, *, package=None, extern
             'new_package':str(package),'old_code':resident.code_inventory(old_package),
             'new_code':resident.code_inventory(package),**({'external_runtime':external} if external else {})}
         write_json_durable(out,value)
-    verify_drained_recipe_handoff(binding(out),handoff=handoff)
+    verify_drained_recipe_handoff(binding(out),handoff=handoff,verified_handoff=loaded)
     return binding(out)
 
 

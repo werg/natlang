@@ -14,7 +14,8 @@ from natlang_neuralese.common.jsonio import write_json_durable as write
 
 
 @pytest.mark.parametrize('interrupt',[False,True])
-def test_drained_resident_selects_new_priority_plan_and_preserves_exact_parent(actual_drain,tmp_path,monkeypatch,interrupt):
+@pytest.mark.parametrize('reuse_decode',[False,True])
+def test_drained_resident_selects_new_priority_plan_and_preserves_exact_parent(actual_drain,tmp_path,monkeypatch,interrupt,reuse_decode):
     monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE',str(tmp_path/'cache'))
     root=tmp_path/'source';root.mkdir()
     paths,directory,manager,new_recipe=setup(root,manifest_train=True)
@@ -55,7 +56,26 @@ def test_drained_resident_selects_new_priority_plan_and_preserves_exact_parent(a
             patch.setattr(handoff,'write_json_durable',fail_receipt)
             with pytest.raises(OSError,match='receipt interruption'):
                 handoff.prepare_drained_recipe_handoff(original,next_recipe,tmp_path/'transition.json',package=package)
-    proof=handoff.prepare_drained_recipe_handoff(original,next_recipe,tmp_path/'transition.json',package=package)
+    loaded=handoff.verify_handoff(original) if reuse_decode else None
+    calls=[];original_verify=handoff.verify_handoff
+    def observe_decode(*args,**kwargs):
+        calls.append(args[0]);return original_verify(*args,**kwargs)
+    with monkeypatch.context() as patch:
+        patch.setattr(handoff,'verify_handoff',observe_decode)
+        if reuse_decode:
+            try:
+                pin.write_bytes(parentbytes[:-1]+bytes([parentbytes[-1]^1]))
+                with pytest.raises(ValueError,match='reused handoff decode'):
+                    handoff.prepare_drained_recipe_handoff(original,next_recipe,tmp_path/'transition.json',package=package,
+                        verified_handoff=loaded)
+            finally:pin.write_bytes(parentbytes)
+            wrong=copy.deepcopy(loaded[0]);wrong['checkpoint']={**wrong['checkpoint'],'sha256':'0'*64}
+            with pytest.raises(ValueError,match='reused handoff decode'):
+                handoff.prepare_drained_recipe_handoff(original,next_recipe,tmp_path/'transition.json',package=package,
+                    verified_handoff=(wrong,loaded[1]))
+        proof=handoff.prepare_drained_recipe_handoff(original,next_recipe,tmp_path/'transition.json',package=package,
+            verified_handoff=loaded)
+    assert len(calls)==(0 if reuse_decode else 1)
     checked=handoff.verify_drained_recipe_handoff(proof,handoff=original)
     newplan=json.loads(Path(checked['new_plan']['path']).read_text())
     changes=newplan['handoffs'][-1]['stage_input_changes']
