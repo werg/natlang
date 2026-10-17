@@ -215,6 +215,8 @@ def dependency_closure(request, *, namespace='/work/native-production', readonly
                 relocations.setdefault(name,declaration['base'])
         policy_sources((value.get('policy_training') or {}).get('sources', []))
         # Exact fields consumed by production.run/native semantic refresh.
+        for reference in value.get('operational_inputs', []):
+            bound(reference)
         if value.get('pending_native_sources'):
             from natlang_neuralese.train.native_pending_sources import pending_source_dependencies
             reference = value['pending_native_sources']

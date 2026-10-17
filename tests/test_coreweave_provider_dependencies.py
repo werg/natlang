@@ -448,3 +448,14 @@ def test_checkpoint_dependency_cannot_use_readonly_input_escape(tmp_path):
         'base_checkpoint':{**external,'path':str(alias)}})
     with pytest.raises(ValueError,match='checkpoint dependency escaped'):
         deps.dependency_closure({'parent_checkpoint':parent},namespace=str(namespace),readonly_input_roots=[str(readonly)])
+
+
+
+def test_separately_bound_operational_inputs_are_in_actual_file_closure(tmp_path):
+    script=write(tmp_path/'control/profile.py','exact read-only update observer')
+    config=write(tmp_path/'config.json',{'operational_inputs':[script]})
+    closure=deps.dependency_closure({'config':config},namespace=str(tmp_path))
+    assert {row['path']for row in closure['files']}=={script['path'],config['path']}
+    Path(script['path']).write_text('changed observer')
+    with pytest.raises(ValueError,match='dependency hash changed'):
+        deps.dependency_closure({'config':config},namespace=str(tmp_path))

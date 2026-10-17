@@ -62,3 +62,11 @@ exact transport plumbing; source selection, scheduling, model arithmetic and
 sealed request/cursor history are unchanged. Reuse recursive input enumeration
 and existing asset verification; test actual carried DPO plus undeclared roots,
 missing targets, hash/size mismatches and symlink escape.
+
+## Explicit operational file inputs (2026-10-17)
+
+A declared profiler or held-monitor command may execute a separately bound
+operational file outside the numerical package. The config records those exact
+bindings in operational_inputs. Enumerate them through the same bound-file
+verifier before launch; no command parsing heuristic or numerical inventory
+inheritance. Existing namespace, hashes and size checks apply unchanged.
