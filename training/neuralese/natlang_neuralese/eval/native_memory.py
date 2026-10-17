@@ -520,8 +520,13 @@ def _resolve_memory_qualification(reference, *, model, optimizer, train, roles, 
     package = Path(__file__).resolve().parents[1]
     runtime_code_sha = canonical_json_sha256_hex(code_inventory(package))
     identity = capacity_identity(config, args, backend)
+    request_key = canonical_json_sha256_hex({
+        'descriptor_sha256': binding(descriptor_path)['sha256'],
+        'identity': identity,
+        'runtime_code_sha256': runtime_code_sha,
+    })
     request_path = (Path(args.out) / 'memory-qualification-requests' /
-                    descriptor_path.stem / 'request.json')
+                    descriptor_path.stem / request_key / 'request.json')
     return _materialize_preference_capacity_request(train, objective, descriptor,
         identity=identity, runtime_code_sha256=runtime_code_sha, request_path=request_path)
 
