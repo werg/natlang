@@ -28,3 +28,14 @@ These are supervisor instructions in natural language. The wrapper is crisp
 CLI/instrumentation plumbing over the existing shared profiler. It adds no model
 facing text. Local equivalence checks compare actual parameters, optimizer
 history and RNG with observation disabled and enabled before cloud adoption.
+
+## Passive startup phase observations (2026-10-17)
+
+Policy is unchanged: use the existing real training entry and continue its useful
+updates. The crisp observer records begin/end/error timestamps for checkpoint
+loading, model construction, carried-progress preparation, source construction,
+optimizer construction/state restore, and checkpoint saving. It forwards the
+same arguments, returns the identical objects, preserves exceptions, and never
+loads a second checkpoint or samples RNG. Startup hooks are removed at the first
+real update; the save timer lasts through the declared invocation. Timing I/O
+failures remain diagnostic. The existing finite GPU profiler is unchanged.

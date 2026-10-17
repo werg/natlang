@@ -12,7 +12,104 @@ from pathlib import Path
 
 
 @contextlib.contextmanager
-def profile_native_updates(out, *, first=2, last=5, profiler_factory=None):
+def observe_native_phases(out):
+    """Time existing calls, preserving their arguments, returned objects and errors."""
+    import os
+    out = Path(out)
+    undo = []
+    startup_undo = []
+    errors = []
+    sequence = 0
+
+    def event(phase, status, **fields):
+        nonlocal sequence
+        sequence += 1
+        row = {'schema': 'natlang.native-training-phase/1', 'sequence': sequence,
+               'phase': phase, 'status': status, 'at': time.time(),
+               'monotonic': time.monotonic(), **fields}
+        try:
+            out.mkdir(parents=True, exist_ok=True)
+            with (out / 'native-startup-phases.jsonl').open('a') as stream:
+                stream.write(json.dumps(row) + '\n')
+                stream.flush()
+                os.fsync(stream.fileno())
+        except Exception as error:
+            errors.append(type(error).__name__)
+
+    def timed(original, phase, after=None):
+        @functools.wraps(original)
+        def call(*args, **kwargs):
+            started = time.monotonic()
+            event(phase, 'begin')
+            try:
+                result = original(*args, **kwargs)
+            except BaseException as error:
+                event(phase, 'error', seconds=time.monotonic()-started,
+                      error_type=type(error).__name__)
+                raise
+            event(phase, 'end', seconds=time.monotonic()-started)
+            if after is not None:
+                try:
+                    after(result)
+                except Exception as error:
+                    errors.append(type(error).__name__)
+                    event(phase, 'diagnostic-error', error_type=type(error).__name__)
+            return result
+        return call
+
+    def patch(owner, name, phase, *, startup=True, after=None, static=False):
+        original_attribute = vars(owner)[name]
+        original = getattr(owner, name)
+        replacement = timed(original, phase, after)
+        setattr(owner, name, staticmethod(replacement) if static else replacement)
+        (startup_undo if startup else undo).append(
+            lambda: setattr(owner, name, original_attribute))
+
+    def restored_optimizer(result):
+        optimizer, _named = result
+        # Observe this instance's already-required load, never its update method.
+        old = vars(optimizer).get('load_state_dict')
+        had = 'load_state_dict' in vars(optimizer)
+        original = optimizer.load_state_dict
+        optimizer.load_state_dict = timed(original, 'restore/optimizer-state')
+        def restore():
+            if had:
+                optimizer.load_state_dict = old
+            else:
+                del optimizer.load_state_dict
+        startup_undo.append(restore)
+
+    def end_startup():
+        while startup_undo:
+            startup_undo.pop()()
+        event('startup', 'end')
+
+    event('control-imports', 'begin')
+    try:
+        from natlang_neuralese.train import native_state_sft as native
+        from natlang_neuralese.model import native_model
+        event('control-imports', 'end')
+        patch(native.CheckpointPolicy, 'load', 'restore/checkpoint-decode', static=True)
+        patch(native, 'load_native_checkpoint', 'restore/load-native-checkpoint')
+        patch(native, 'load_native_model', 'restore/load-native-model')
+        patch(native_model, 'load_native_model', 'restore/model-construction')
+        patch(native, 'collect_sft_progress', 'restore/collect-progress')
+        patch(native, 'restore_sft_progress', 'restore/restore-progress')
+        patch(native.NativeGraphSource, '__init__', 'restore/source-construction')
+        patch(native, 'make_native_optimizer', 'restore/optimizer-construction',
+              after=restored_optimizer)
+        patch(native, '_save', 'checkpoint/save', startup=False)
+        yield {'diagnostic_errors': errors, 'finish_startup': end_startup}
+    finally:
+        while startup_undo:
+            startup_undo.pop()()
+        while undo:
+            undo.pop()()
+        event('observer', 'restored', diagnostic_errors=errors)
+
+
+@contextlib.contextmanager
+def profile_native_updates(out, *, first=2, last=5, profiler_factory=None, first_update_observer=None):
     import torch
     from natlang_neuralese.common import profiling
     from natlang_neuralese.train import native_state_sft as native
@@ -67,6 +164,8 @@ def profile_native_updates(out, *, first=2, last=5, profiler_factory=None):
     def update(*args, **kwargs):
         state['attempted_updates'] += 1
         number = state['attempted_updates']
+        if number == 1 and first_update_observer is not None:
+            diagnostic(first_update_observer)
         observing = diagnostic(lambda: profiler.begin(number))
         started = time.monotonic()
         result = original_update(*args, **kwargs)
@@ -127,8 +226,11 @@ def main(argv=None):
         arguments = arguments[1:]
     if not arguments:
         parser.error('pass the original trainer arguments after --')
-    with profile_native_updates(args.profile_out, first=args.first_update, last=args.last_update) as state:
+    with observe_native_phases(args.profile_out) as phases, profile_native_updates(
+            args.profile_out, first=args.first_update, last=args.last_update,
+            first_update_observer=phases['finish_startup']) as state:
         state['observer_source'] = source_binding
+        state['phase_diagnostic_errors'] = phases['diagnostic_errors']
         state['trainer_module'] = args.module
         return importlib.import_module(args.module).main(arguments)
 

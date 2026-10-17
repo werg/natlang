@@ -123,3 +123,99 @@ def test_wrong_bound_observer_cannot_start_training(tmp_path, monkeypatch):
     with pytest.raises(SystemExit):
         main(['--profile-out', str(tmp_path / 'profile'), '--expected-observer-sha256',
               '0' * 64, '--', '--out', str(tmp_path / 'training')])
+
+
+def test_startup_phase_hooks_preserve_real_updates_and_profile_window(task, tmp_path):
+    from contextlib import contextmanager
+    from scripts.neuralese_data.profile_native_training import observe_native_phases
+    @contextmanager
+    def observed():
+        with observe_native_phases(tmp_path) as phases, profile_native_updates(
+                tmp_path, first_update_observer=phases['finish_startup']) as state:
+            yield state
+    baseline = task()
+    measured = task(observed())
+    assert_tree_equal(baseline, measured)
+    phases = [json.loads(line) for line in (tmp_path/'native-startup-phases.jsonl').read_text().splitlines()]
+    assert sum(row['phase']=='startup' and row['status']=='end' for row in phases)==1
+    receipt = json.loads((tmp_path/'native-profile-observer.json').read_text())
+    assert receipt['completed_updates']==5
+    assert (tmp_path/'profile-2-5.json').exists()
+
+
+def test_checkpoint_phase_reads_once_returns_same_object_and_restores_descriptor(monkeypatch, tmp_path):
+    from scripts.neuralese_data.profile_native_training import observe_native_phases
+    payload = {'optimizer': object(), 'training': object()}
+    calls = []
+    def load(path, **kwargs):
+        calls.append((path, kwargs))
+        if path=='bad':
+            raise ValueError('actual checkpoint failure')
+        return payload
+    monkeypatch.setattr(native.CheckpointPolicy, 'load', staticmethod(load))
+    descriptor = vars(native.CheckpointPolicy)['load']
+    with observe_native_phases(tmp_path):
+        assert native.CheckpointPolicy.load('parent', expand_shared=False) is payload
+        with pytest.raises(ValueError, match='actual checkpoint failure'):
+            native.CheckpointPolicy.load('bad')
+    assert calls==[('parent', {'expand_shared': False}), ('bad', {})]
+    assert vars(native.CheckpointPolicy)['load'] is descriptor
+    events = [json.loads(line) for line in (tmp_path/'native-startup-phases.jsonl').read_text().splitlines()]
+    assert any(e['phase']=='restore/checkpoint-decode' and e['status']=='error' for e in events)
+
+
+def test_phase_output_failure_does_not_change_checkpoint_call(monkeypatch, tmp_path):
+    from scripts.neuralese_data.profile_native_training import observe_native_phases
+    out = tmp_path/'a-file'
+    out.write_text('occupied')
+    payload = object()
+    monkeypatch.setattr(native.CheckpointPolicy, 'load', staticmethod(lambda *a, **k: payload))
+    with observe_native_phases(out) as state:
+        assert native.CheckpointPolicy.load('parent') is payload
+    assert state['diagnostic_errors']
+
+
+@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+@pytest.mark.parametrize('preference_entry', [False, True])
+def test_real_native_factory_tuple_and_preference_alias_load_phase(monkeypatch, tmp_path, family, preference_entry):
+    from test_shared_state import tiny
+    from natlang_neuralese.model.shared_state import SharedStateModel
+    from natlang_neuralese.data.native_graph import parse_graph, SCHEMA
+    from natlang_neuralese.train import native_preference
+    from scripts.neuralese_data.profile_native_training import observe_native_phases
+    port = tiny(family)
+    if family == 'mellum':
+        port.to(dtype=torch.bfloat16)
+        port.hf.natlang_precision = 'bf16'
+    model = SharedStateModel(port, (58, 59, 60, 61), rank=4)
+    example = parse_graph({'schema': SCHEMA, 'id': 'phase-update', 'split': 'train',
+        'tokenizer_fingerprint': 'fixture', 'source_groups': ['phase-update'],
+        'nodes': [{'name': 'answer', 'token_ids': [1, 58, 54, 59, 60, 55, 61, 2],
+                   'target_weights': [0, 1, 1, 1, 1, 1, 1, 1]}]}, tokenizer_fingerprint='fixture')
+    factory = native.make_native_optimizer
+    returned = []
+    def record_factory(*args, **kwargs):
+        result = factory(*args, **kwargs)
+        returned.append(result)
+        return result
+    monkeypatch.setattr(native, 'make_native_optimizer', record_factory)
+    with observe_native_phases(tmp_path) as phases:
+        def trainer(arguments):
+            result = native.make_native_optimizer(model, lr=1e-3, in_backward=True)
+            assert result is returned[-1]
+            optimizer, named = result
+            assert isinstance(optimizer, PortMuonAdamW) and named
+            optimizer.load_state_dict(copy.deepcopy(optimizer.state_dict()))
+            assert 'load_state_dict' in vars(optimizer)
+            with profile_native_updates(tmp_path, first_update_observer=phases['finish_startup']):
+                native.native_training_update(model, optimizer, [example], chunk_tokens=3)
+            assert 'load_state_dict' not in vars(optimizer)
+            return 0
+        if preference_entry:
+            monkeypatch.setattr(native, 'main', trainer)
+            assert native_preference.main(['--help']) == 0
+        else:
+            assert trainer([]) == 0
+    events = [json.loads(line) for line in (tmp_path/'native-startup-phases.jsonl').read_text().splitlines()]
+    assert any(e['phase']=='restore/optimizer-state' and e['status']=='end' for e in events)
+    assert not phases['diagnostic_errors']
