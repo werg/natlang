@@ -522,6 +522,8 @@ def prune_verified_local_tranche(tranche: dict) -> dict:
 def export_private_tranche(tranche: dict, *, exporter: Path, role: str,
                            receipt_path: Path) -> dict:
     """Use the existing owner-host private exporter and require its full GET proof."""
+    receipt_path = Path(receipt_path)
+    receipt_path.parent.mkdir(parents=True, exist_ok=True)
     archive = tranche['archive_receipt']
     env = {**os.environ, 'CW_EXPORT_LOCAL': '1',
            'CW_EXPORT_EXPECTED_SHA256': archive['archive_sha256'],
@@ -659,6 +661,7 @@ def seal_boundary(*, batch: int, queue_raw: bytes, exported_keys: list[str],
         raise ValueError('final boundary is missing canonical source, accounting or repair control')
     if files['queue.jsonl'] != queue_raw:
         raise ValueError('final boundary queue bytes differ from original queue binding')
+    _execution_source(files, queue)
     completion = _json(files['completion.json'], 'completion')
     _teacher_source_binding(files['teacher-source.json'], batch=batch,
                             source_sha256=_sha(files['source-cases.jsonl']))
@@ -730,6 +733,8 @@ def seal_boundary(*, batch: int, queue_raw: bytes, exported_keys: list[str],
     repair_payloads = _repair_payload_bindings(completion)
     base_files = {'teacher-source.json', 'source-cases.jsonl', 'queue.jsonl', 'journal.jsonl',
                   'score.json', 'rewards.jsonl', 'completion.json', 'repair-queue.jsonl'}
+    if 'packet.jsonl' in files:
+        base_files.update({'packet.jsonl', 'preparation.json'})
     if set(files) - base_files != set(repair_payloads):
         raise ValueError('final boundary must retain every exact terminal-error payload needed for repairs')
     for name, binding in repair_payloads.items():

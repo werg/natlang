@@ -849,3 +849,75 @@ def test_multiple_held_jobs_preserve_every_selected_rows_distinct_sidecar(tmp_pa
         read_file=remote.__getitem__, export_file=export, chunk_size=2)
     assert seen == [0, 1]
     assert result['durable_completed_keys'] == 2
+
+
+@pytest.mark.parametrize('tamper', [None, 'packet', 'preparation', 'unpaired', 'extra'])
+def test_prepared_closed_export_authenticates_packet_and_roundtrips(tmp_path, monkeypatch, tamper):
+    import scripts.coreweave.teacher_incremental_export as module
+    from scripts.coreweave.teacher_generation_guardian import assess
+    entries, queue, journal, context, _ = _prepared_packet_fixture()
+    score = {'schema': 'natlang.s7-task-rollout-score/1', 'rollouts': 2,
+             'outcome_counts': {'task_success': 2}}
+    completion = assess(entries, [json.loads(line) for line in journal.split(b'\n')
+        if line and json.loads(line).get('event') == 'finish'], [0], score)
+    files = {**context, 'journal.jsonl': journal, 'score.json': json.dumps(score).encode(),
+             'rewards.jsonl': b'{}\n', 'repair-queue.jsonl': b''}
+    completion.update(batch=19, bindings={name: {'bytes': len(files[name]),
+        'sha256': hashlib.sha256(files[name]).hexdigest()} for name in (
+            'queue.jsonl', 'journal.jsonl', 'score.json', 'teacher-source.json')})
+    files['completion.json'] = json.dumps(completion).encode()
+    if tamper == 'packet':
+        rows = [json.loads(line) for line in files['packet.jsonl'].split(b'\n') if line]
+        rows[0]['n'] = 1.0
+        files['packet.jsonl'] = b''.join(json.dumps(row).encode()+b'\n' for row in rows)
+        prep = json.loads(files['preparation.json'])
+        prep['packet_sha256'] = hashlib.sha256(files['packet.jsonl']).hexdigest()
+        files['preparation.json'] = json.dumps(prep).encode()
+    elif tamper == 'preparation':
+        prep = json.loads(files['preparation.json']); prep['source_sha256'] = 'f'*64
+        files['preparation.json'] = json.dumps(prep).encode()
+    elif tamper == 'unpaired':
+        del files['preparation.json']
+    elif tamper == 'extra':
+        files['unverified.json'] = b'{}'
+    calls = []
+    def private(sealed, **kwargs):
+        calls.append(sealed)
+        assert sealed['archive_proof']['status'] == 'passed'
+        restored = tmp_path/'independently-restored'
+        name = 'teacher-batch-0019-final-boundary'
+        source_archive.restore(Path(sealed['archive_receipt']['archive']).parent, name, restored)
+        for name in ('packet.jsonl', 'preparation.json', 'source-cases.jsonl'):
+            assert (restored/name).read_bytes() == files[name]
+        return sealed
+    monkeypatch.setattr(module, 'export_private_tranche', private)
+    kwargs = dict(batch=19, queue_path='queue.jsonl', exported_keys=[e['key'] for e in entries],
+        repair_keys=[], unstarted_keys=[], file_paths={name:name for name in files},
+        read_file=files.__getitem__, directory=tmp_path/'closed', exporter=Path('/unused'), role='teacher')
+    if tamper:
+        with pytest.raises(ValueError): module.export_final_boundary(**kwargs)
+        assert not calls
+    else:
+        result = module.export_final_boundary(**kwargs)
+        assert len(calls) == 1
+        assert result['boundary']['files']['packet.jsonl']['sha256'] != result['boundary']['files']['source-cases.jsonl']['sha256']
+        assert result['boundary']['training_admission'] is False
+
+
+def test_real_exporter_child_can_write_phase_before_receipt(tmp_path):
+    from scripts.coreweave.teacher_incremental_export import export_private_tranche
+    entries, queue, journal, context, outputs, _ = _fixture()
+    tranche = seal_tranche(batch=19, number=0, entries=completed_entries(queue, journal),
+        context=context, outputs=outputs, directory=tmp_path/'tranche')
+    exporter = tmp_path/'actual-child-exporter.py'
+    exporter.write_text("""import os,json,pathlib
+identity={'bytes':int(os.environ['CW_EXPORT_EXPECTED_BYTES']),'sha256':os.environ['CW_EXPORT_EXPECTED_SHA256']}
+pathlib.Path(os.environ['CW_EXPORT_UPLOAD_PHASE_FILE']).write_text(json.dumps({'phase':'uploaded'}))
+pathlib.Path(os.environ['CW_EXPORT_RECEIPT_FILE']).write_text(json.dumps({'private':True,'run':'werg/natlang/test','name':'archive','identity':identity,'independent_verification':identity,'verified_at':123.0}))
+""")
+    receipt = tmp_path/'not-created/private-receipts/tranche.json'
+    result = export_private_tranche(tranche, exporter=exporter, role='teacher', receipt_path=receipt)
+    assert result['private_export']['identity'] == {
+        'bytes':tranche['archive_receipt']['archive_bytes'],
+        'sha256':tranche['archive_receipt']['archive_sha256']}
+    assert receipt.with_suffix('.phase.json').is_file()
