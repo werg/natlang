@@ -1623,6 +1623,10 @@ def main(argv=None):
                                       'sha256': sha256_file_hex_cached(runtime_path),
                                       'passed': runtime_report.get('passed') is True},
               'base_kl': {'status': 'telemetry-only', 'measured': False}}
+    from .native_operation_report import compact_training_report,compact_exposure
+    checkpoint_detail={'path':str(policy.slot.resolve()),'sha256':checkpoint_sha,'bytes':policy.slot.stat().st_size}
+    report=compact_training_report(report,checkpoint_detail)
+    mandatory_sft=report['mandatory_sft']
     write_json(args.out / 'report.json', report)
     write_json(args.out / 'native-training-receipt.json', {
         'schema': 'natlang.native-training-readiness/1',
@@ -1651,7 +1655,7 @@ def main(argv=None):
                                     if task_receipt_path else None),
         'training_receipt': {'path': str((args.out / 'report.json').resolve()),
                                                       'sha256': sha256_file_hex_cached(args.out / 'report.json')},
-        'exposure': {'train_rows': len(train), 'held_rows': len(held),
+        'exposure': compact_exposure({'train_rows': len(train), 'held_rows': len(held),
                      'supervised_tokens': sum(entry['supervised_tokens'] for entry in train.entries),
                      'graph_visits': sum(exposure_counts.values()),
                      'supervised_token_visits': sum(exposure_counts[entry['id']] *
@@ -1659,7 +1663,7 @@ def main(argv=None):
                      'row_update_counts_sha256': exposure_counts_sha256,
                      'by_source_group': exposure_by_source_group,
                      'consumed_rows': min(target_rows, sum(exposure_counts.values())),
-                     'consumed_updates': step, 'completed_epochs': epoch}})
+                     'consumed_updates': step, 'completed_epochs': epoch},checkpoint_detail)})
     return 0
 
 

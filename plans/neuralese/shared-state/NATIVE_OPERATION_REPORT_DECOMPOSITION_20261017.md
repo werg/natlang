@@ -31,3 +31,9 @@ The first component applies only to controller records and current-progress
 reuse. Existing trainer report/readiness bytes remain unchanged. The shared
 checkpoint-detail functions are ready for the separately reviewed trainer
 serialization followup; that followup is required to shrink worker reports too.
+
+The trainer followup now applies the same shared detail contract at report and
+readiness serialization. Source-group catalogues and deficits remain exact in
+the existing full checkpoint; reporting their hashes does not remove row data.
+Per-group exposure is verified against actual bound source entries and saved
+visits on demand. Foundation/raw communication row consumers remain unchanged.

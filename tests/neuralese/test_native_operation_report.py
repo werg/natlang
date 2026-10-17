@@ -148,3 +148,18 @@ def _real_report(tmp_path):
         '--native-graphs',str(paths['train']),'--held-native-graphs',str(paths['test']),
         '--epochs','2','--checkpoint-every','1','--eval-every','1','--refresh-at-checkpoint',
         '--out',str(tmp_path/'run')])==0
+
+def test_actual_trainer_proofs_resolve_without_changing_optimizer_or_source_credits(tmp_path,monkeypatch):
+    _real_report(tmp_path)
+    out=tmp_path/'run'
+    value=json.loads((out/'report.json').read_text())
+    ready=json.loads((out/'native-training-receipt.json').read_text())
+    state=torch.load(out/'checkpoint.pt',weights_only=False)
+    assert state['training']['optimizer'] and state['training']['rng']
+    assert state['training']['exposure_counts']=={'train':1}
+    assert ready['mandatory_sft']==value['mandatory_sft']
+    proof=value['mandatory_sft']['stages']['native-graph-ce']['missing_rows_detail']
+    assert report.resolve_detail(proof)=={'train':1}
+    assert report.resolve_detail(value['train_source']['by_source_group_detail'])==state['training']['source_receipts'][0]['by_source_group']
+    assert report.resolve_detail(ready['exposure']['by_source_group_detail'])=={
+        'train':{'graph_visits':1,'supervised_token_visits':2}}
