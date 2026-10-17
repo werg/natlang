@@ -3,12 +3,15 @@ import pytest
 import torch
 from test_shared_state import tiny,graph
 from natlang_neuralese.model.shared_state import forward_graph
+from natlang_neuralese.model.native_parameter_precision import configure_norm_execution
+from types import SimpleNamespace
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(),reason='CUDA unavailable')
 def test_native_checkpoint_survives_compiled_norm_fallback(monkeypatch):
     from natlang_neuralese.maple import model as maple
     port=tiny('mellum').cuda();port.checkpoint_layers=True
+    configure_norm_execution(SimpleNamespace(port=port),'stable-v1')
     plan=graph();inputs=torch.randn(1,plan.token_count,port.embedding_weight.shape[1],device='cuda',requires_grad=True)
     compiled=torch.compile(maple._rms_norm,dynamic=True)
     fallback=False
@@ -27,6 +30,7 @@ def test_checkpoint_stable_norm_exact_outputs_all_adjoints_and_fused_dispatch(mo
     from natlang_neuralese.maple import model as maple
     from natlang_neuralese.maple import norm_kernels
     port=tiny(family).to(device='cuda',dtype=dtype);plan=graph()
+    configure_norm_execution(SimpleNamespace(port=port),'stable-v1')
     inputs=torch.randn(1,plan.token_count,port.embedding_weight.shape[1],device='cuda',dtype=dtype,requires_grad=True)
     upstream=torch.randn_like(inputs);parameters=(inputs,*(p for p in port.parameters() if p.requires_grad))
     calls=[];original=norm_kernels.fused_rms_norm
@@ -72,7 +76,7 @@ def test_native_norm_rule_matches_graph_and_real_incremental_serving(monkeypatch
     from natlang_neuralese.model.shared_state import SharedStateModel,native_step,Invocation,compile_graph
     from natlang_neuralese.model.native_precision import set_native_linear_precision
     torch.manual_seed(93)
-    model=SharedStateModel(tiny('mellum').to(device='cuda',dtype=dtype),(60,61,62,63),rank=4).cuda()
+    model=SharedStateModel(tiny('mellum').to(device='cuda',dtype=dtype),(60,61,62,63),rank=4,native_norm_execution='stable-v1').cuda()
     set_native_linear_precision(model,mode)
     monkeypatch.setattr(maple,'_rms_norm_compiled',lambda *args:pytest.fail('native path used dynamic norm compilation'))
     plan=compile_graph([Invocation('task',(2,3,4,5))])

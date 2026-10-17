@@ -45,8 +45,9 @@ def prepare_raw_policy(checkpoint, *, base, tokenizer_out, require_optimizer=Tru
     # weights. Reuse serving's exact identity law, including activation casts.
     attention_mode=interface.get('native_attention_precision','ieee')
     proxy = SimpleNamespace(port=SimpleNamespace(embedding_weight=state['backbone_state'][embedding_keys[0]].to(dtype),
-        native_attention_precision=attention_mode),
+        native_attention_precision=attention_mode, native_norm_execution=interface.get('native_norm_execution','source-v1')),
         native_attention_precision=attention_mode,
+        native_norm_execution=interface.get('native_norm_execution','source-v1'),
         native_ordinary_precision=config.get('native_ordinary_precision'),
         _native_norm_parameter_dtypes=tuple(value.dtype for name,value in state['backbone_state'].items()
             if name.startswith('model.layers.') and name.endswith('norm.weight') and value.ndim == 1),

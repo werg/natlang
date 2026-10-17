@@ -184,6 +184,8 @@ def write_native_composite_checkpoint(base_checkpoint, output_dir, model, model_
         manifest['model_config']['native_ordinary_precision'] = model_config['native_ordinary_precision']
         manifest['ordinary_precision_upgrade'] = getattr(model, '_native_ordinary_precision_upgrade', None)
     manifest['model_config']['native_linear_precision'] = model_config.get('native_linear_precision','ieee')
+    if 'native_norm_execution' in model_config:
+        manifest['model_config']['native_norm_execution'] = model_config['native_norm_execution']
     if 'native_attention_precision' in model_config:
         manifest['model_config']['native_attention_precision'] = model_config['native_attention_precision']
     if 'sparse_row_dtype' in model_config:
@@ -308,6 +310,12 @@ def _apply_native_composite_checkpoint(path, restored):
         raise ValueError('native composite patch artifact binding or kind is invalid')
     if artifact.native_identity != parent_identity:
         raise ValueError('native composite patch belongs to another exact parent model')
+    from .native_parameter_precision import configure_norm_execution
+    configure_norm_execution(model, manifest['model_config'].get('native_norm_execution'))
+    if 'native_norm_execution' in manifest['model_config']:
+        config['native_norm_execution'] = manifest['model_config']['native_norm_execution']
+    else:
+        config.pop('native_norm_execution', None)
     profile = manifest['model_config'].get('native_ordinary_precision')
     if profile != config.get('native_ordinary_precision'):
         from .native_parameter_precision import upgrade_norm_precision

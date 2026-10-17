@@ -74,7 +74,7 @@ def test_fixed_linear_modes_preserve_row_batching_and_master_gradient(mode):
 @pytest.mark.parametrize('mode', ['tf32', 'bf16', 'bf16x6'])
 def test_both_ports_flat_cached_consumer_gradients_under_selected_math(family, mode):
     from test_shared_state import tiny, graph
-    model = SharedStateModel(tiny(family), (60, 61, 62, 63), rank=4).cuda()
+    model = SharedStateModel(tiny(family), (60, 61, 62, 63), rank=4, native_norm_execution='stable-v1').cuda()
     set_native_linear_precision(model, mode)
     model.port.checkpoint_layers = True
     torch.manual_seed(93)

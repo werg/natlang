@@ -587,6 +587,9 @@ def test_native_attention_cached_adjoint_uses_fixed_delta(heads):
 def test_attention_physical_index_reused_through_checkpoint_with_bitwise_adjoints(monkeypatch, family):
     from natlang_neuralese.model import shared_state
     port = tiny(family).to('cuda')
+    from natlang_neuralese.model.native_parameter_precision import configure_norm_execution
+    from types import SimpleNamespace
+    configure_norm_execution(SimpleNamespace(port=port), 'stable-v1')
     port.checkpoint_layers = True
     plan = graph()
     inputs = torch.randn(1, plan.token_count, port.embedding_weight.shape[1], device='cuda', requires_grad=True)

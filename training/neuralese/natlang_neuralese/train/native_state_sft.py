@@ -594,12 +594,15 @@ def _save(policy, model, optimizer, *, config, identity, step, epoch, cursor, so
 
 def qualify_precision_transition(model, tokenizer, roles, config, *, previous_precision,
                                  checkpoint_sha256, forward_atol, gradient_atol, device, backend=None,
-                                 previous_attention_precision=None):
+                                 previous_attention_precision=None, previous_norm_execution=None):
     """Check changed production arithmetic on the restored live weights, once."""
     linear_changed = config.get('native_linear_precision', 'ieee') == 'bf16x6' and previous_precision != 'bf16x6'
     attention_changed = (previous_attention_precision is not None
         and config.get('native_attention_precision', 'ieee') != previous_attention_precision)
-    if not linear_changed and not attention_changed:
+    from ..model.native_parameter_precision import norm_execution_changes_arithmetic
+    norm_changed = (previous_norm_execution is not None
+        and norm_execution_changes_arithmetic(model, previous_norm_execution))
+    if not linear_changed and not attention_changed and not norm_changed:
         return None
     if forward_atol is None or gradient_atol is None:
         raise ValueError('native arithmetic transition requires declared forward and gradient tolerances')
@@ -620,6 +623,8 @@ def qualify_precision_transition(model, tokenizer, roles, config, *, previous_pr
     if attention_changed:
         result['attention'] = {'from': previous_attention_precision,
                                'to': config['native_attention_precision']}
+    if norm_changed:
+        result['norm_execution'] = {'from':previous_norm_execution,'to':model.native_norm_execution}
     return result
 
 
@@ -702,6 +707,7 @@ def build_parser():
     parser.add_argument('--native-attention-precision', choices=NATIVE_ATTENTION_PRECISIONS, default=None,
         help='explicit per-model attention arithmetic; restores optimizer, RNG and row exposure before qualification')
     from .native_optimizer_migration import POLICY as NATIVE_OPTIMIZER_MIGRATION
+    parser.add_argument('--native-norm-execution', choices=('source-v1','stable-v1'))
     parser.add_argument('--native-ordinary-precision', choices=('fp32-norms-v1',))
     parser.add_argument('--native-optimizer-migration',choices=(NATIVE_OPTIMIZER_MIGRATION,),default=None,
         help='explicit new AdamW history for formerly misrouted ordinary parameters; preserves original Muon buffers and all unaffected state')
@@ -809,7 +815,14 @@ def main(argv=None):
         if args.dtype is None:
             raise ValueError('fresh native SFT requires explicit --dtype (QAD LFM float32; Mellum bfloat16)')
         model, tokenizer, roles, config = load_native_model(args.base, rank=args.rank,
-            device=args.device, dtype=getattr(torch, args.dtype))
+            device=args.device, dtype=getattr(torch, args.dtype),
+            native_norm_execution=args.native_norm_execution or 'stable-v1')
+    previous_norm_declaration = config.get('native_norm_execution')
+    previous_norm_execution = config.get('native_norm_execution', 'source-v1')
+    if args.native_norm_execution is not None:
+        from ..model.native_parameter_precision import configure_norm_execution
+        configure_norm_execution(model, args.native_norm_execution)
+        config['native_norm_execution'] = args.native_norm_execution
     norm_upgrade = None
     if args.native_ordinary_precision is not None:
         from ..model.native_parameter_precision import upgrade_norm_precision
@@ -853,6 +866,12 @@ def main(argv=None):
     if norm_upgrade and norm_upgrade['previous_profile'] != norm_upgrade['profile']:
         norm_history.append({**norm_upgrade, 'at_global_step':int(saved_training.get('global_step',saved_training.get('step',0)))})
     checkpoint_options['ordinary_precision_history'] = norm_history
+    execution_history = list((saved_training.get('options') or {}).get('native_norm_execution_history') or [])
+    if config.get('native_norm_execution', 'source-v1') != previous_norm_execution:
+        execution_history.append({'from':previous_norm_execution,'to':config['native_norm_execution'],
+            'at_global_step':int(saved_training.get('global_step',saved_training.get('step',0))),
+            'weights_optimizer_rng_exposure':'preserved'})
+    checkpoint_options['native_norm_execution_history'] = execution_history
     carried_progress = collect_sft_progress(saved_training)
     restored_progress = False
     precision_history = list((saved_training.get('options') or {}).get('native_precision_history') or [])
@@ -1017,6 +1036,8 @@ def main(argv=None):
             previous_config = {**previous_config, 'sparse_row_dtype':config['sparse_row_dtype']}
         if norm_upgrade:
             previous_config = {**previous_config, 'native_ordinary_precision':config['native_ordinary_precision']}
+        if args.native_norm_execution is not None:
+            previous_config = {**previous_config, 'native_norm_execution':config['native_norm_execution']}
         if not same_source_precision_identity(previous_config, config):
             raise ValueError('native SFT continuation changes model identity beyond declared GEMM arithmetic')
         if previous.get('schedule') not in {'source-order-stream/1', 'row-visit-deficit/2'}:
@@ -1175,6 +1196,7 @@ def main(argv=None):
     transition_check = qualify_precision_transition(model, tokenizer, roles, config,
         previous_precision=previous_precision,
         previous_attention_precision=previous_attention_precision,
+        previous_norm_execution=previous_norm_execution,
         checkpoint_sha256=sha256_file_hex_cached(args.continue_from if parent_continuation else policy.slot)
             if parent_continuation or policy.slot.exists() else config['base_inventory_sha256'],
         forward_atol=args.forward_atol, gradient_atol=args.gradient_atol,
@@ -1184,6 +1206,8 @@ def main(argv=None):
         write_json(args.out / 'precision-transition.json', transition_check)
         if 'attention' in transition_check:
             checkpoint_options['native_attention_precision_history'][-1]['reference_check'] = transition_check['runtime_reference']
+        if 'norm_execution' in transition_check:
+            checkpoint_options['native_norm_execution_history'][-1]['reference_check'] = transition_check['runtime_reference']
     if args.qualify_training_backend:
         from ..eval.native_backend import qualify_training_backend
         backend_check = qualify_training_backend(model, tokenizer, roles, config, backend=backend,
@@ -1273,6 +1297,8 @@ def main(argv=None):
     if admission_record is not None:
         checkpoint_options['_pending_source_admission'] = admission_record
     metadata_dirty = (last_saved_step < 0 or args.native_optimizer_migration is not None
+        or args.native_norm_execution is not None and args.native_norm_execution != previous_norm_declaration
+        or config.get('native_norm_execution', 'source-v1') != previous_norm_execution
         or norm_upgrade is not None and norm_upgrade['previous_profile'] != norm_upgrade['profile']
         or pending_frame.get('pending_source_declarations') !=
         (carried_progress.get(args.stage_id or 'native-graph-ce') or {}).get('pending_source_declarations'))

@@ -219,12 +219,13 @@ def forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None =
         if checkpointed:
             # Dynamic torch.compile fallback must not change saved tensors
             # between forward and recompute. Preserve stable fused norm kernels.
-            function=run_layer
-            def stable_norm_layer(*args, function=function):
-                from ..maple.model import eager_rms_norm
-                with eager_rms_norm(compiled_only=True):
-                    return function(*args)
-            run_layer=stable_norm_layer
+            if getattr(port, 'native_norm_execution', 'source-v1') == 'stable-v1':
+                function=run_layer
+                def stable_norm_layer(*args, function=function):
+                    from ..maple.model import eager_rms_norm
+                    with eager_rms_norm(compiled_only=True):
+                        return function(*args)
+                run_layer=stable_norm_layer
             from .native_adapters import capture_native_execution
             from ..common.native_higher_order import capture_reference_execution
             run_layer = capture_reference_execution(capture_native_execution(run_layer))
@@ -445,19 +446,15 @@ class SharedStateModel(nn.Module):
     marker overrides are bypassed even when their reserved rows are reused.
     """
     def __init__(self, port, marker_ids, rank=8, token_override_ids=(), token_override_dtype=torch.float32,
-                 sparse_row_dtype=torch.float32):
+                 sparse_row_dtype=torch.float32, native_norm_execution=None):
         super().__init__()
         if len(marker_ids) != 4 or len(set(marker_ids)) != 4:
             raise ValueError('shared-state Neuralese requires four distinct marker IDs')
         if min(marker_ids) < 0 or max(marker_ids) >= port.embedding_weight.shape[0]:
             raise ValueError('role markers must have actual input and output vocabulary rows')
         self.port = port
-        # One native arithmetic rule for graph, reference and real cached
-        # execution. Checkpoint-only compile bypass changes FP32 rounding.
-        from ..maple.model import RMSNorm
-        for module in port.modules():
-            if isinstance(module, RMSNorm):
-                module.native_stable_norm = True
+        from .native_parameter_precision import configure_norm_execution
+        configure_norm_execution(self, native_norm_execution)
         for name in ('control_rows', 'control_head_rows'):
             if hasattr(port, name):
                 getattr(port, name).requires_grad_(False)
@@ -894,6 +891,9 @@ def channel_checkpoint(model):
             token_override_dtype=str(model.extra_input_rows.dtype),
             extra_input_rows=model.extra_input_rows.detach().clone(),
             extra_output_rows=None if model.tied else model.extra_output_rows.detach().clone())
+    execution = getattr(model, 'native_norm_execution', 'source-v1')
+    if execution != 'source-v1':
+        result['native_norm_execution'] = execution
     attention_mode = getattr(model, 'native_attention_precision', 'ieee')
     if attention_mode != 'ieee':
         result['native_attention_precision'] = attention_mode
@@ -911,6 +911,8 @@ def restore_channel_checkpoint(model, state):
             raise ValueError(f'native channel checkpoint {key} differs from this model')
     if state.get('native_linear_precision', 'ieee') != expected['native_linear_precision']:
         raise ValueError('native channel checkpoint native_linear_precision differs from this model')
+    if state.get('native_norm_execution', 'source-v1') != expected.get('native_norm_execution', 'source-v1'):
+        raise ValueError('native channel checkpoint native_norm_execution differs from this model')
     if state.get('native_attention_precision', 'ieee') != expected.get('native_attention_precision', 'ieee'):
         raise ValueError('native channel checkpoint native_attention_precision differs from this model')
     if tuple(state.get('token_override_ids', ())) != model.token_override_ids:

@@ -5,6 +5,49 @@ import torch
 
 PROFILE = 'fp32-norms-v1'
 _NORMS = {'RMSNorm', 'Lfm2RMSNorm', 'Qwen2RMSNorm', 'Qwen3RMSNorm'}
+NORM_EXECUTIONS = ('source-v1', 'stable-v1')
+
+
+def configure_norm_execution(model, profile=None):
+    """Absent legacy declarations retain source constructor/recompute dispatch."""
+    selected = 'source-v1' if profile is None else profile
+    if selected not in NORM_EXECUTIONS:
+        raise ValueError('unsupported native norm execution profile: ' + str(profile))
+    from ..maple.model import RMSNorm
+    for module in model.port.modules():
+        if isinstance(module, RMSNorm):
+            module.native_stable_norm = selected == 'stable-v1'
+    model.native_norm_execution = selected
+    model.port.native_norm_execution = selected
+    return selected
+
+
+def validate_norm_execution(model, config):
+    selected = config.get('native_norm_execution', 'source-v1')
+    if (selected not in NORM_EXECUTIONS
+            or getattr(model, 'native_norm_execution', 'source-v1') != selected
+            or getattr(model.port, 'native_norm_execution', 'source-v1') != selected):
+        raise ValueError('native norm execution differs from declared profile')
+    from ..maple.model import RMSNorm
+    if hasattr(model.port, 'modules'):
+        for module in model.port.modules():
+            if isinstance(module, RMSNorm) and bool(getattr(module, 'native_stable_norm', False)) != (selected == 'stable-v1'):
+                raise ValueError('native norm module dispatch differs from declared profile')
+
+
+def norm_execution_changes_arithmetic(model, previous):
+    """Only the existing CUDA compiled Maple fallback differs between profiles."""
+    if previous == model.native_norm_execution:
+        return False
+    import os
+    from ..maple.model import RMSNorm
+    weight = model.port.embedding_weight
+    if not weight.is_cuda or os.environ.get('NATLANG_MAPLE_COMPILE', '1') == '0':
+        return False
+    if (weight.dtype in (torch.bfloat16, torch.float16)
+            and os.environ.get('NATLANG_MAPLE_FUSED_NORM', '1') != '0'):
+        return False
+    return any(isinstance(module, RMSNorm) for module in model.port.modules())
 
 
 def _activation_dtype(module, arguments, output):
