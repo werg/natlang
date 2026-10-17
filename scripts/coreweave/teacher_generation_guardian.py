@@ -19,8 +19,9 @@ TOKEN = 'NATLANG_TEACHER_GENERATION_TOKEN'
 def write(path, value):
     path = Path(path); path.parent.mkdir(parents=True, exist_ok=True)
     pending = path.with_name(path.name + '.pending')
-    with pending.open('w') as stream:
-        json.dump(value, stream, indent=2); stream.write('\n'); stream.flush(); os.fsync(stream.fileno())
+    raw=value if isinstance(value,bytes) else (json.dumps(value,indent=2)+'\n').encode()
+    with pending.open('wb') as stream:
+        stream.write(raw); stream.flush(); os.fsync(stream.fileno())
     os.replace(pending, path)
     fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
     try: os.fsync(fd)
@@ -245,6 +246,14 @@ def prepare_retry(folder, decision, entries):
         os.replace(pending, path)
     return rows
 
+def _source_sequence_helpers():
+    try:
+        from . import teacher_source_sequence
+    except ImportError:
+        import teacher_source_sequence
+    return teacher_source_sequence
+
+
 def launch_feeder(folder, state, config, batch):
     target = folder/'state.json'
     launch = state.get('prepared_launch')
@@ -262,6 +271,8 @@ def launch_feeder(folder, state, config, batch):
     else:
         if (Path(config['root'])/'evidence-collections-v2'/f'batch-{batch:04d}').exists():
             raise ValueError('next batch already exists without this prepared launch')
+        if config.get('source_sequence'):
+            _source_sequence_helpers().prepare_source_sequence(folder,state,config,batch)
         launch = {'batch': batch, 'token': uuid.uuid4().hex}; state['prepared_launch'] = launch; write(target, state)
     for root in Path('/proc').iterdir():
         if not root.name.isdigit(): continue
@@ -271,6 +282,8 @@ def launch_feeder(folder, state, config, batch):
     env = {**os.environ, TOKEN: launch['token'], 'NATLANG_TEACHER_START_BATCH': str(batch),
            'NATLANG_TEACHER_SINGLE_BATCH': '1', 'NATLANG_TEACHER_TASK_RUNTIME': config['task_runtime'],
            'NATLANG_TEACHER_IDENTITY':config['teacher_identity']['path']}
+    if config.get('source_sequence'):
+        _source_sequence_helpers().verify_prepared_source(state,config,batch)
     log = (folder/'feeder.log').open('ab')
     child = subprocess.Popen(['nice', '-n', '10', 'python', '-u', config['feeder']],
         env=env, stdout=log, stderr=log, start_new_session=True)
@@ -380,7 +393,7 @@ def config_revision(folder, state, path, *, publish=True):
     raw=Path(path).read_bytes();config=json.loads(raw);current=binding(path)
     if state.get('config')==current: return config
     previous=state.get('config_value')
-    allowed={'task_runtime','server','model_id','feeder','queue_worker','node_bin','drain_file','teacher_identity'}
+    allowed={'task_runtime','server','model_id','feeder','queue_worker','node_bin','drain_file','teacher_identity','source_sequence'}
     changes={key for key in set(previous or {})|set(config) if (previous or {}).get(key)!=config.get(key)}
     if previous is not None and changes-allowed: raise ValueError('guardian root/ownership configuration changed; preserve and explicitly migrate this state')
     snapshot=folder/'config-history'/(current['sha256']+'.json');snapshot.parent.mkdir(parents=True,exist_ok=True)
@@ -427,6 +440,8 @@ def run(config_path, *, external_transition=None, external_reconciliation=None, 
     config=config_revision(folder,state,config_path)
     while True:
         config=config_revision(folder,state,config_path)
+        if config.get('source_sequence'):
+            _source_sequence_helpers().observe_source_sequence(folder,state,config)
         if alive(state.get('owner')):
             if not Path(config['drain_file']).exists(): launch_repair(folder,state,config)
             write(folder/'phase.json', {'at': time.time(), 'phase': 'waiting_natural_feeder_exit', 'owner': state['owner'], 'drain_requested': Path(config['drain_file']).exists()})
