@@ -121424,6 +121424,198 @@
       "snapshot_manifest": "training/corpus-manifests/decision-rich-train-20261017-v3-scaffold.json",
       "license_provenance": "The 128 original task rows retain their source license facts. The 12 authored curriculum tasks are project-generated; Qwen qualification source uses the separately registered teacher-data corpus provenance.",
       "notes": "Scheduling metadata is inherited from exact task definitions. The 48 accepted teacher trajectories qualify the 12 tasks but are not used as RL targets; the 44 older accepted teacher trajectories remain separately converted. Registration does not claim task execution or model exposure."
+    },
+    {
+      "id": "qwen-scaffold-accepted-native-graphs-20261016-v2",
+      "owner": "dgx",
+      "path": "runs/qwen-scaffold-sourcebound-v2-20261017/accepted44",
+      "include": [
+        "sourcebound-bundle-binding.json",
+        "sourcebound-successor-render-receipt.json",
+        "graphs/lfm25/receipt.json",
+        "graphs/lfm25/train/native-graphs.jsonl.zst",
+        "graphs/lfm25/test/native-graphs.jsonl.zst",
+        "graphs/mellum21/receipt.json",
+        "graphs/mellum21/train/native-graphs.jsonl.zst",
+        "graphs/mellum21/test/native-graphs.jsonl.zst"
+      ],
+      "source_class": "self-hosted-Qwen3.8-Flash-Next-verified-full-trajectory-scaffold-TRAIN",
+      "split": "TRAIN only; 44 accepted full trajectories, 48 captured action turns, 47 unique native graphs per model after exact content deduplication within the source. No test/held examples are emitted.",
+      "admission": "Immutable source-bound successor rendering of the already admitted self-hosted teacher trajectories. The original raw source, accepted-case evidence, teacher actor/execution, and quality decisions are inherited unchanged from the exact derived-from corpus. The renderer now binds each action graph identity to its exact raw trajectory-row SHA and action index, preventing different teacher executions of a reused program/action ID from colliding. Both model-specific full-context renderings pass; the independently bound graph IDs are identical across tokenizers and disjoint from the companion batch. Current connected source protection is bound by SHA-256. This is an identity-corrected successor package, not a new teacher generation.",
+      "training_admission": true,
+      "training_admission_reason": "The source trajectories were already admitted and validated; this successor corrects only graph identity and preserves their exact complete-context source content/targets. Both tokenizer renderings and current-protection bindings were verified. Registration claims no training visits or exposure.",
+      "derived_from": [
+        "qwen-scaffold-accepted-native-graphs-20261016-v1"
+      ],
+      "license_provenance": "Project-collected trajectories from the pinned RadixArk/Qwen3.8-Flash-Next-NVFP4 self-hosted teacher; license provenance is retained as a source fact.",
+      "source_binding": {
+        "source_corpus_id": "qwen-scaffold-accepted-native-graphs-20261016-v1",
+        "source_corpus_manifest_sha256": "6ef132fe56d4b79789a7b59189be26b7cb60775cca3c9abfadc871e40aba5125",
+        "accepted_trajectories_sha256": "1c4688e632235facbffdbc02e8a870cf1dc1807ab55326fffc4bf04c360b018b",
+        "accepted_trajectories_rows": 44,
+        "harvest_archive_sha256": "a10a110766e797fb9118fef8f3a34205ce0be5e65a3877b0ba8743bdec7d3e85",
+        "harvest_archive_bytes": 1694377,
+        "teacher": "RadixArk/Qwen3.8-Flash-Next-FP4-Local",
+        "teacher_execution_identity_sha256": null,
+        "converter_sha256": "3fb37111289488398719342553a968c4787e18b2923070974f03d30c39bd5d70",
+        "current_protection_manifest_sha256": "1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704",
+        "successor_binding_sha256": "0dd306f3f2da95bc5c52022d41c0d08a1910146d20875d67b7aa5241809ab12b",
+        "render_summary_sha256": "989d289ae12eca21fa9f68a9ae5e7cd779dd6da111e95fe17168101265c98689"
+      },
+      "conversion": {
+        "lfm25": {
+          "model_id": "lfm2:f40d7a5bf651a03618ae8c06bda24a180e22fa79de964e55862c2c4984249da6",
+          "train_sha256": "83382a60cf26dba6924f2b55177e16cce54b8fcaf47c5a4a2ce037f5d4d338d9",
+          "rows": 47,
+          "empty_test_sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c",
+          "source_rows": 44,
+          "source_sha256": "1c4688e632235facbffdbc02e8a870cf1dc1807ab55326fffc4bf04c360b018b"
+        },
+        "mellum21": {
+          "model_id": "mellum:bc700045baee1c7ea1869675c38efedd59d9db09975ea0b38cff8db152d6148f",
+          "train_sha256": "451add4d1421fe9c01a1ffa9e792765d28f9ad2e07f34fd543f2b592e5106990",
+          "rows": 47,
+          "empty_test_sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c",
+          "source_rows": 44,
+          "source_sha256": "1c4688e632235facbffdbc02e8a870cf1dc1807ab55326fffc4bf04c360b018b"
+        }
+      },
+      "deduplication": {
+        "lfm25": {
+          "inputs": [],
+          "omissions": [
+            {
+              "id": "text:teacher-program:6cb4d30470d7aac3ef51:source-row:806e47c6cf761fcdd3f2f0538fd43868f94d021bf0fb245bbc9316dff0625300:action:0000",
+              "content_sha256": "1a8ccde7241ae769d718ae69c6a8b948c5638dd5895f766d2c2e8955b64e7c9a",
+              "reason": "exact token IDs and target weights already represented",
+              "represented_by": {
+                "path": "/home/werg/data/dgxops/qwen-scaffold-sourcebound-render-v2-20261017/accepted44/graphs/lfm25/train/native-graphs.jsonl.zst",
+                "id": "text:teacher-program:f0415e8be707be97af0d:source-row:e556ee4f2c1255fae3a0ab2b63dc47c899fa4e81f2fb0d6f47c369edcd21d575:action:0000"
+              }
+            }
+          ],
+          "omitted_rows": 1,
+          "emitted_rows": 47
+        },
+        "mellum21": {
+          "inputs": [],
+          "omissions": [
+            {
+              "id": "text:teacher-program:6cb4d30470d7aac3ef51:source-row:806e47c6cf761fcdd3f2f0538fd43868f94d021bf0fb245bbc9316dff0625300:action:0000",
+              "content_sha256": "1a4c3485b98446063335591517f7939b9438fcc678cf7a9c4a50e3b5a815e704",
+              "reason": "exact token IDs and target weights already represented",
+              "represented_by": {
+                "path": "/home/werg/data/dgxops/qwen-scaffold-sourcebound-render-v2-20261017/accepted44/graphs/mellum21/train/native-graphs.jsonl.zst",
+                "id": "text:teacher-program:f0415e8be707be97af0d:source-row:e556ee4f2c1255fae3a0ab2b63dc47c899fa4e81f2fb0d6f47c369edcd21d575:action:0000"
+              }
+            }
+          ],
+          "omitted_rows": 1,
+          "emitted_rows": 47
+        }
+      }
+    },
+    {
+      "id": "qwen-public-return-repair48-native-graphs-20261017-v2",
+      "owner": "dgx",
+      "path": "runs/qwen-scaffold-sourcebound-v2-20261017/corrected48",
+      "include": [
+        "sourcebound-bundle-binding.json",
+        "sourcebound-successor-render-receipt.json",
+        "graphs/lfm25/receipt.json",
+        "graphs/lfm25/train/native-graphs.jsonl.zst",
+        "graphs/lfm25/test/native-graphs.jsonl.zst",
+        "graphs/mellum21/receipt.json",
+        "graphs/mellum21/train/native-graphs.jsonl.zst",
+        "graphs/mellum21/test/native-graphs.jsonl.zst"
+      ],
+      "source_class": "self-hosted-Qwen3.8-Flash-Next-verified-full-trajectory-scaffold-TRAIN",
+      "split": "TRAIN only; 48 accepted full trajectories, 47 captured action turns, 46 unique native graphs per model after one exact rendered content/target duplicate represented by the accepted44 predecessor. No test/held examples are emitted.",
+      "admission": "Immutable source-bound successor rendering of the already admitted self-hosted teacher trajectories. The original raw source, accepted-case evidence, teacher actor/execution, and quality decisions are inherited unchanged from the exact derived-from corpus. The renderer now binds each action graph identity to its exact raw trajectory-row SHA and action index, preventing different teacher executions of a reused program/action ID from colliding. Both model-specific full-context renderings pass; the independently bound graph IDs are identical across tokenizers and disjoint from the companion batch. Current connected source protection is bound by SHA-256. This is an identity-corrected successor package, not a new teacher generation.",
+      "training_admission": true,
+      "training_admission_reason": "The source trajectories were already admitted and validated; this successor corrects only graph identity and preserves their exact complete-context source content/targets. Both tokenizer renderings and current-protection bindings were verified. Registration claims no training visits or exposure.",
+      "derived_from": [
+        "qwen-public-return-repair48-native-graphs-20261017-v1"
+      ],
+      "license_provenance": "Project-collected trajectories from the pinned self-hosted RadixArk/Qwen3.8-Flash-Next teacher; license provenance is retained as a source fact.",
+      "source_binding": {
+        "source_corpus_id": "qwen-public-return-repair48-native-graphs-20261017-v1",
+        "source_corpus_manifest_sha256": "6ea6891bdec1c30b5f17ecbd270ab116d7dbaffcaca7322208003849e84de288",
+        "accepted_trajectories_sha256": "15132ef18944d39e41a60c0a07f7e736878cb171d82d5039df47c0b3ad483ca8",
+        "accepted_trajectories_rows": 48,
+        "harvest_archive_sha256": "3fe2ee76b9c18fcc06bd8342e8994fdd41b9e12c36ba4f3a67624161c560600f",
+        "harvest_archive_bytes": 1726119,
+        "teacher": "RadixArk/Qwen3.8-Flash-Next-FP4-Local",
+        "teacher_execution_identity_sha256": "92ea5ba665b6e927f285838f773f828cc508a1b1085af9e1fb0a5cce4c4f71c2",
+        "converter_sha256": "3fb37111289488398719342553a968c4787e18b2923070974f03d30c39bd5d70",
+        "current_protection_manifest_sha256": "1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704",
+        "successor_binding_sha256": "39f778fb585779c3458616ffb114f392263058f0d692b9e17acec308e55a0254",
+        "render_summary_sha256": "989d289ae12eca21fa9f68a9ae5e7cd779dd6da111e95fe17168101265c98689"
+      },
+      "conversion": {
+        "lfm25": {
+          "model_id": "lfm2:f40d7a5bf651a03618ae8c06bda24a180e22fa79de964e55862c2c4984249da6",
+          "train_sha256": "663d9e041adaf4d81c882cd8b64bac4eab1b46858223afa83ee2b0469a38a86d",
+          "rows": 46,
+          "empty_test_sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c",
+          "source_rows": 48,
+          "source_sha256": "15132ef18944d39e41a60c0a07f7e736878cb171d82d5039df47c0b3ad483ca8"
+        },
+        "mellum21": {
+          "model_id": "mellum:bc700045baee1c7ea1869675c38efedd59d9db09975ea0b38cff8db152d6148f",
+          "train_sha256": "004dc2057c3dcf4219e9e704ef4ff3d821deff1e478a0d0a8eefc094231fc71a",
+          "rows": 46,
+          "empty_test_sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c",
+          "source_rows": 48,
+          "source_sha256": "15132ef18944d39e41a60c0a07f7e736878cb171d82d5039df47c0b3ad483ca8"
+        }
+      },
+      "deduplication": {
+        "lfm25": {
+          "inputs": [
+            {
+              "path": "/home/werg/data/dgxops/qwen-scaffold-sourcebound-render-v2-20261017/accepted44/graphs/lfm25/train/native-graphs.jsonl.zst",
+              "sha256": "83382a60cf26dba6924f2b55177e16cce54b8fcaf47c5a4a2ce037f5d4d338d9",
+              "rows": 47
+            }
+          ],
+          "omissions": [
+            {
+              "id": "text:teacher-program:c70ae406b1d342195af2:source-row:40b83cfc52c9f9dc1ddb095bea715883013994da5ed25d1844b52a58b2ddf666:action:0000",
+              "content_sha256": "9ad70a33542beaccc3f63faaae421865b3101f5dda184fc1fc803202f06944c5",
+              "reason": "exact token IDs and target weights already represented",
+              "represented_by": {
+                "path": "/home/werg/data/dgxops/qwen-scaffold-sourcebound-render-v2-20261017/accepted44/graphs/lfm25/train/native-graphs.jsonl.zst",
+                "id": "text:teacher-program:c70ae406b1d342195af2:source-row:94887b3ecac9ced33b032ea3bac63197a22344b054afbe6be64ba0507539dbc8:action:0000"
+              }
+            }
+          ],
+          "omitted_rows": 1,
+          "emitted_rows": 46
+        },
+        "mellum21": {
+          "inputs": [
+            {
+              "path": "/home/werg/data/dgxops/qwen-scaffold-sourcebound-render-v2-20261017/accepted44/graphs/mellum21/train/native-graphs.jsonl.zst",
+              "sha256": "451add4d1421fe9c01a1ffa9e792765d28f9ad2e07f34fd543f2b592e5106990",
+              "rows": 47
+            }
+          ],
+          "omissions": [
+            {
+              "id": "text:teacher-program:c70ae406b1d342195af2:source-row:40b83cfc52c9f9dc1ddb095bea715883013994da5ed25d1844b52a58b2ddf666:action:0000",
+              "content_sha256": "812a697eb3569f9a2ac5c1a67ef407500751c4486287e4e0d2fa82100d3b80fd",
+              "reason": "exact token IDs and target weights already represented",
+              "represented_by": {
+                "path": "/home/werg/data/dgxops/qwen-scaffold-sourcebound-render-v2-20261017/accepted44/graphs/mellum21/train/native-graphs.jsonl.zst",
+                "id": "text:teacher-program:c70ae406b1d342195af2:source-row:94887b3ecac9ced33b032ea3bac63197a22344b054afbe6be64ba0507539dbc8:action:0000"
+              }
+            }
+          ],
+          "omitted_rows": 1,
+          "emitted_rows": 46
+        }
+      }
     }
   ],
   "coverage_backlog": [
