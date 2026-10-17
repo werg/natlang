@@ -22,12 +22,30 @@ def ready(tmp_path, name):
     recipe = artifact('recipe', {'native_stages': ['full', 'graph']})
     prior = artifact('prior-exposure', {'completed': True})
     communication = {'graphs': 4, 'required_graph_visits': 4, 'graph_visits': 4, 'complete': True}
+    from natlang_neuralese.common.hashing import canonical_json_sha256_hex
+    from natlang_neuralese.eval.native_gradients import SCHEMA
+    roles={role:[role+'.weight']for role in('backbone','adapter','learned_input','learned_output')}
+    inventory=[{'name':names[0],'shape':[1],'dtype':'torch.float32'}for names in roles.values()]
+    comparison={'passed':True,'finite':True,'max_abs':0.,'relative_l2':0.,'cosine':1.,
+        'reference_l2':1.,'actual_l2':1.,'mismatched_elements':0,'elements':1,
+        'shape':[1],'dtype':'torch.float32','atol':1e-5,'rtol':1e-4}
+    case={'fixture':'exact artifact checks; not a model qualification'}
+    model_config={'architecture':name}
+    profile={'model_config_sha256':canonical_json_sha256_hex(model_config),'fp8':{'kind':'off'}}
     report = artifact('report', {'completed': True, 'checkpoint_sha256': checkpoint['sha256'],
-                                 'communication_exposure': communication})
+                                 'communication_exposure': communication,'qualification_profile':profile})
+    complete={'schema':SCHEMA,'passed':True,'native_identity':identity,'inventory':inventory,
+        'inventory_sha256':canonical_json_sha256_hex(inventory),'parameter_grads_preserved':True,
+        'optimizer_updates':0,'atol':1e-5,'rtol':1e-4,'roles':roles,'case':case,
+        'case_sha256':canonical_json_sha256_hex(case),
+        'model_config':model_config,'model_config_sha256':profile['model_config_sha256'],
+        'training_backend_execution':{'configuration':{'enabled':False},'passed':True},
+        'comparisons':{name:dict(comparison)for name in('input_embeddings',*(row['name']for row in inventory))}}
     runtime = artifact('runtime', {'schema': 'natlang.native-runtime-certificate/1', 'passed': True,
         'native_identity': identity, 'backbone_optimizer_tested': True, 'backbone_optimizer_updates': 20,
         'forward_atol': 1e-4, 'gradient_atol': 1e-5,
-        'forward_max_abs': 0., 'incremental_max_abs': 0., 'consumer_ce_abs': 0., 'consumer_gradient_max_abs': 1e-6})
+        'forward_max_abs': 0., 'incremental_max_abs': 0., 'consumer_ce_abs': 0., 'consumer_gradient_max_abs': 1e-6,
+        'complete_gradient_qualification':complete,'qualification_profile':profile})
     task = artifact('tasks', {'schema': 'natlang.native-task-execution-receipt/1', 'passed': True,
         'native_identity': identity, 'complete': True, 'eligible': True, 'task_successes': 0})
     receipt = {'schema': 'natlang.native-training-readiness/1', 'model_id': name,
@@ -40,6 +58,27 @@ def ready(tmp_path, name):
     requirement = {'model_id': name, 'readiness': str(path), 'recipe_sha256': recipe['sha256'],
                    'stage_ids': ['full', 'graph'], 'forward_atol': 1e-4, 'gradient_atol': 1e-5}
     return path, receipt, requirement
+
+
+@pytest.mark.parametrize('corrupt',['missing','backbone','profile','gates','zero-backbone','fp8-unused'])
+def test_channel_only_or_incomplete_derivatives_cannot_certify_readiness(tmp_path,corrupt):
+    path,receipt,requirement=ready(tmp_path,'lfm')
+    runtime_path=Path(receipt['runtime_certificate']['path'])
+    runtime=json.loads(runtime_path.read_text());proof=runtime['complete_gradient_qualification']
+    if corrupt=='missing':runtime.pop('complete_gradient_qualification')
+    elif corrupt=='backbone':proof['comparisons'].pop('backbone.weight')
+    elif corrupt=='profile':proof['model_config']['architecture']='different'
+    elif corrupt=='gates':proof['comparisons']['backbone.weight']['rtol']=.01
+    elif corrupt=='zero-backbone':proof['comparisons']['backbone.weight'].update(reference_l2=0.,actual_l2=0.)
+    else:
+        profile=runtime['qualification_profile'];profile['fp8']={'kind':'triton-experts','recipe':'current-bf16-dx'}
+        report_path=Path(receipt['training_receipt']['path']);report=json.loads(report_path.read_text())
+        report['qualification_profile']=profile;report_path.write_text(json.dumps(report))
+        receipt['training_receipt']['sha256']=sha256_file_hex(report_path)
+    runtime_path.write_text(json.dumps(runtime));receipt['runtime_certificate']['sha256']=sha256_file_hex(runtime_path)
+    path.write_text(json.dumps(receipt))
+    with pytest.raises(ValueError,match='complete|communication|FP8'):
+        validate_ready(path,requirement)
 
 
 @pytest.mark.parametrize('communication', [None,

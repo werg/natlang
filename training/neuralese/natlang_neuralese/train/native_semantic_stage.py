@@ -819,24 +819,32 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
     tasks = {}
     semantic_certificate=None
     if complete or refresh_reached:
-        from ..eval.native_state import qualify_existing
+        from ..eval.native_backend import qualify_complete_runtime
         from ..model.shared_state import RoleTokens
         tasks = measure_tasks(participants, export, config, out, training['step'], device, vae=vae)
         rng = capture_training_rng_state(device)
         try:
-            with _native_modules(participants):
-                for name, participant in participants.items():
-                    certificate = qualify_existing(participant.model, participant.tokenizer,
+            for name, participant in participants.items():
+                declaration=config.get('models',{}).get(name,{})
+                fp8={'kind':declaration.get('fp8_training','triton-experts'if participant.config['architecture']in{'mellum','maple'}else'off'),
+                    'recipe':declaration.get('fp8_recipe','delayed'),'amax_history_len':declaration.get('fp8_amax_history_len',16)}
+                try:
+                    certificate = qualify_complete_runtime(participant.model, participant.tokenizer,
                         RoleTokens(*participant.model.marker_ids), participant.config,
+                        optimizer=participant.optimizer,backend=participant.backend,fp8_profile=fp8,device=device,
                         checkpoint_sha256=export['checkpoint']['sha256'],
                         forward_atol=config.get('forward_atol', 1e-4),
                         gradient_atol=config.get('gradient_atol', 1e-5),
                         task_execution_receipt=tasks.get(name, {}).get('path'),
                         backbone_optimizer_updates=training.get('model_updates', {}).get(name, 0))
-                    path = out/('runtime-' + canonical_json_sha256_hex(name) + '.json')
-                    write_json_durable(path, certificate)
-                    certificates[name] = {'path': str(path.resolve()), 'sha256': sha256_file_hex_cached(path),
-                                          'passed': certificate['passed']}
+                except Exception as error:
+                    certificate={'schema':'natlang.native-runtime-certificate/1','passed':False,
+                        'native_identity':native_identity(participant.model,participant.config,checkpoint_sha256=export['checkpoint']['sha256']),
+                        'error':f'{type(error).__name__}: {error}'}
+                path = out/('runtime-' + canonical_json_sha256_hex(name) + '.json')
+                write_json_durable(path, certificate)
+                certificates[name] = {'path': str(path.resolve()), 'sha256': sha256_file_hex_cached(path),
+                                      'passed': certificate['passed']}
         finally:
             restore_training_rng_state(rng, device)
         if set(export['tokenizers'])==set(participants):

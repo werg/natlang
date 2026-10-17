@@ -106,7 +106,8 @@ def validate_task_execution_receipt(receipt, identity):
 
 
 def qualify_existing(model, tokenizer, roles, config, *, checkpoint_sha256, forward_atol, gradient_atol,
-                     task_execution_receipt=None, backbone_optimizer_updates=0):
+                     task_execution_receipt=None, backbone_optimizer_updates=0,
+                     gradient_parameters=None, gradient_rtol=1e-4,before_graph=None):
     """Verify the live trained instance without reloading a second backbone or changing training state.
 
     The check compares graph execution with the explicit cached reference, compares
@@ -151,29 +152,80 @@ def qualify_existing(model, tokenizer, roles, config, *, checkpoint_sha256, forw
     positions = torch.arange(len(source) + import_at, plan.token_count - 1, device=model.input_rows.device)
     labels = torch.tensor(target[import_at+1:], device=model.input_rows.device)
     previous_mode, previous_checkpointing = model.training, model.port.checkpoint_layers
+    complete=None
     adapter = model.adapter.up.weight
     try:
         model.eval()
         model.port.checkpoint_layers = True
-        flat = model(plan)
-        reference = model(plan, reference=True)
+        if gradient_parameters is not None:
+            from .native_gradients import production_inventory
+            named,gradient_roles=production_inventory(model,gradient_parameters)
+            ids=plan.tensor([token for node in plan.invocations for token in node.token_ids],model.input_rows.device)
+            from ..train.loop import capture_training_rng_state
+            graph_rng=capture_training_rng_state(model.input_rows.device)
+            flat_inputs=model.embed(ids[None])
+            if before_graph is not None:before_graph()
+            flat=model(plan,embeddings=flat_inputs)
+            reference=None
+        else:
+            flat = model(plan)
+            reference = model(plan, reference=True)
 
         def objective(result):
             logits = model.logits(result['h_final'][:, positions]).float()
             return F.cross_entropy(logits.flatten(0, 1), labels)
 
-        flat_loss, reference_loss = objective(flat), objective(reference)
-        flat_gradient = torch.autograd.grad(flat_loss, adapter, retain_graph=False)[0]
-        reference_gradient = torch.autograd.grad(reference_loss, adapter, retain_graph=False)[0]
+        flat_loss = objective(flat)
+        reference_loss = None if reference is None else objective(reference)
+        if gradient_parameters is not None:
+            from .native_gradients import compare_complete_gradients,validate_complete_proof
+            from ..common.hashing import canonical_json_sha256_hex
+            from ..model.native_graph_plan import invocation_dict
+            from ..train.loop import restore_training_rng_state
+            # The cached forward must not mutate backend state retained by flat VJP.
+            # Construct it only after the flat derivatives have been collected.
+            def cached_forward():
+                nonlocal reference,reference_loss
+                if before_graph is not None:before_graph()
+                restore_training_rng_state(graph_rng,model.input_rows.device)
+                reference_inputs=model.embed(ids[None])
+                reference=model(plan,embeddings=reference_inputs,reference=True)
+                reference_loss=objective(reference)
+                return reference_loss,reference_inputs
+            complete=compare_complete_gradients(flat_loss,None,named,flat_inputs,None,
+                atol=gradient_atol,rtol=gradient_rtol,cached_factory=cached_forward)
+            case={'invocations':[invocation_dict(node)for node in plan.invocations],
+                'positions':positions.tolist(),'labels':labels.tolist(),'loss':'consumer-cross-entropy/mean'}
+            complete.update(native_identity=identity,roles=gradient_roles,case=case,
+                case_sha256=canonical_json_sha256_hex(case),model_config=config,
+                model_config_sha256=canonical_json_sha256_hex(config),
+                training_backend_execution={'configuration':{'enabled':False},'executed_projections':{},'passed':True},
+                frozen_vocabulary_io={'embedding_requires_grad':model.port.embedding_weight.requires_grad,
+                    'readout_requires_grad':model.port.output_weight.requires_grad})
+            if complete['passed']:
+                try:validate_complete_proof(complete,identity,gradient_atol=gradient_atol)
+                except ValueError as error:complete.update(passed=False,error=str(error))
+            adapter_name=next(name for name,value in named if value is adapter)
+            adapter_comparison=complete['comparisons'][adapter_name]
+            gradient_error=adapter_comparison.get('max_abs',float('inf'))
+            gradient_nonzero=adapter_comparison.get('actual_l2',0)>0
+            gradient_finite=adapter_comparison.get('finite')is True
+        else:
+            flat_gradient = torch.autograd.grad(flat_loss, adapter, retain_graph=False)[0]
+            reference_gradient = torch.autograd.grad(reference_loss, adapter, retain_graph=False)[0]
+            gradient_error = float((flat_gradient - reference_gradient).abs().max())
+            gradient_nonzero=bool(flat_gradient.abs().sum()>0)
+            gradient_finite=bool(torch.isfinite(flat_gradient).all())
         forward_error = float((flat['h_final'] - reference['h_final']).detach().abs().max())
-        gradient_error = float((flat_gradient - reference_gradient).abs().max())
         ce_error = abs(float(flat_loss.detach()) - float(reference_loss.detach()))
         del flat, reference, flat_loss, reference_loss
 
         with torch.no_grad():
+            if before_graph is not None:before_graph()
             result = model(plan)
             block = capture_block(result, 'source', lo, hi,
                 text=tokenizer.decode(source[lo:hi], skip_special_tokens=False), **identity)
+            if before_graph is not None:before_graph()
             prefix = native_step(model, torch.tensor([target[:import_at]], device=model.input_rows.device))
             cache = splice_block(model, prefix['cache'], block,
                 **{key: value for key, value in identity.items() if key != 'architecture'})
@@ -190,13 +242,15 @@ def qualify_existing(model, tokenizer, roles, config, *, checkpoint_sha256, forw
         model.train(previous_mode)
     passed = (forward_error <= forward_atol and incremental_error <= forward_atol and
               ce_error <= forward_atol and gradient_error <= gradient_atol and
-              bool(torch.isfinite(flat_gradient).all()) and bool(flat_gradient.abs().sum() > 0) and restore_exact)
+              gradient_finite and gradient_nonzero and restore_exact and (complete is None or complete['passed']))
     return {'schema': 'natlang.native-runtime-certificate/1', 'passed': passed,
             'checkpoint_sha256': checkpoint_sha256, 'native_identity': identity,
             'forward_max_abs': forward_error, 'consumer_ce_abs': ce_error,
             'consumer_gradient_max_abs': gradient_error, 'incremental_max_abs': incremental_error,
             'channel_restore_exact': restore_exact, 'forward_atol': forward_atol,
             'gradient_atol': gradient_atol, 'task_execution_receipt': task_execution_receipt,
+            'gradient_scope':'adapter-channel-only'if complete is None else'complete-production-trainables',
+            'complete_gradient_qualification':complete,
             'task_successes_are_qualification_barrier': False,
             'backbone_optimizer_tested': backbone_optimizer_updates > 0,
             'backbone_optimizer_updates': int(backbone_optimizer_updates),

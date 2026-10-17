@@ -64,3 +64,24 @@ def test_recipe_exposes_backend_qualification_as_an_operational_check():
     from natlang_neuralese.train.recipe import HANDLERS, OPERATIONAL_STAGE_PARAMETERS
     assert 'qualify_training_backend' in HANDLERS['native_state_sft']['parameters']
     assert 'qualify_training_backend' in OPERATIONAL_STAGE_PARAMETERS
+
+
+def test_complete_backend_failure_remains_structured_and_restores_owned_state(monkeypatch):
+    backend=Backend();rng=torch.get_rng_state().clone()
+    def failed(*args,**kwargs):
+        assert kwargs['gradient_parameters']==[('actual',None)]
+        backend.state['scale'][0]=91
+        kwargs['before_graph']()
+        assert backend.state=={'scale':[3]}
+        backend.state['scale'][0]=92
+        backend.row_counts.update(calls=8,rows=23)
+        torch.rand(3)
+        return {'passed':False,'complete_gradient_qualification':{'passed':False}}
+    monkeypatch.setattr(native_backend,'qualify_existing',failed)
+    report=native_backend.qualify_training_backend(None,None,None,{},backend=backend,
+        checkpoint_sha256='a'*64,forward_atol=1e-4,gradient_atol=1e-5,device='cpu',
+        gradient_parameters=[('actual',None)],raise_on_failed=False)
+    assert report['passed']is False and report['executed_projections']=={'calls':1,'rows':2}
+    assert report['runtime_reference']['complete_gradient_qualification']['passed']is False
+    assert backend.state=={'scale':[3]}and backend.row_counts=={'calls':7,'rows':21}
+    assert torch.equal(torch.get_rng_state(),rng)and backend.has_executed and not backend.active

@@ -30,7 +30,9 @@ def _fixture(tmp_path, monkeypatch):
     held = copy.deepcopy(row); held['id'] = 'held:payload'; held['split'] = 'test'; held['source_groups'] = ['held:one']
     for name, view in held['models'].items():
         view['graph'].update(id=name + ':held', split='test', source_groups=['held:one'])
-    config = {'schema': stage.CONFIG_SCHEMA, 'pairs': artifact('train.jsonl', row),
+    config = {'schema': stage.CONFIG_SCHEMA,
+        'models': {name: {'fp8_training': 'off'} for name in participants},
+        'pairs': artifact('train.jsonl', row),
         'held_pairs': artifact('held.jsonl', held), 'backbone_lr': 1e-4, 'vae_lr': 1e-3,
         'latent_width': 6, 'hidden_width': 12, 'checkpoint_every': 1, 'eval_every': 1,
         'phases': [{'id': kind, 'kind': kind, 'epochs': 1} for kind in ('vae', 'joint', 'distill')]}

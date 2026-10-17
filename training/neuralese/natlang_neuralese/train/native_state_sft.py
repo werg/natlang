@@ -21,7 +21,7 @@ from pathlib import Path
 
 import torch
 
-from ..common.hashing import sha256_file_hex_cached
+from ..common.hashing import sha256_file_hex_cached,canonical_json_sha256_hex
 from ..common.jsonio import write_json_durable as write_json
 from ..model.native_model import (CHECKPOINT_SCHEMA, load_native_checkpoint, load_native_model, model_state,
                                   native_identity)
@@ -1605,24 +1605,19 @@ def main(argv=None):
         try:
             if args.forward_atol is None or args.gradient_atol is None:
                 raise ValueError('runtime qualification requires recipe-bound forward and gradient tolerances')
-            from ..eval.native_state import qualify_existing
-            if backend is not None:
-                with backend.native_modules():
-                    runtime_report = qualify_existing(model, tokenizer, roles, config,
-                        checkpoint_sha256=checkpoint_sha, forward_atol=args.forward_atol,
-                        gradient_atol=args.gradient_atol,
-                        task_execution_receipt=(str(task_receipt_path.resolve()) if task_receipt_path else None),
-                        backbone_optimizer_updates=step)
-            else:
-                runtime_report = qualify_existing(model, tokenizer, roles, config,
-                    checkpoint_sha256=checkpoint_sha, forward_atol=args.forward_atol,
-                    gradient_atol=args.gradient_atol,
-                    task_execution_receipt=(str(task_receipt_path.resolve()) if task_receipt_path else None),
-                    backbone_optimizer_updates=step)
+            from ..eval.native_backend import qualify_complete_runtime
+            runtime_report=qualify_complete_runtime(model,tokenizer,roles,config,
+                optimizer=optimizer,backend=backend,fp8_profile=training_identity['fp8'],
+                checkpoint_sha256=checkpoint_sha,forward_atol=args.forward_atol,
+                gradient_atol=args.gradient_atol,device=args.device,
+                task_execution_receipt=(str(task_receipt_path.resolve())if task_receipt_path else None),
+                backbone_optimizer_updates=step)
         except Exception as error:  # record a real failed check without discarding the trained checkpoint
             runtime_report = {'schema': 'natlang.native-runtime-certificate/1', 'passed': False,
                               'checkpoint_sha256': checkpoint_sha, 'native_identity': model_identity,
                               'error': f'{type(error).__name__}: {error}'}
+    qualification_profile={'model_config_sha256':canonical_json_sha256_hex(config),'fp8':training_identity['fp8']}
+    runtime_report['qualification_profile']=qualification_profile
     write_json(runtime_path, runtime_report)
     task_receipt_ok = bool(task_receipt_path and json.loads(task_receipt_path.read_text()).get('passed'))
     recipe_binding = json.loads(args.recipe_binding) if args.recipe_binding else None
@@ -1649,6 +1644,7 @@ def main(argv=None):
     resident_receipt = ({'generation': resident.generation, 'directory': str(resident.directory.resolve()),
                          'history': resident.state['history']} if resident and resident.state else None)
     report = {'schema': 'natlang.neuralese-native-sft-report/1',
+              'qualification_profile':qualification_profile,
               'resident_adoption': resident_receipt,
               'communication_exposure': communication, 'completed': completed,
               'completion_scope':'policy-operation' if policy_operation else 'supervised-exposure',

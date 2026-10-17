@@ -148,6 +148,11 @@ def validate_ready(path, requirement):
             or runtime.get('native_identity') != identity or runtime.get('backbone_optimizer_tested') is not True
             or runtime.get('backbone_optimizer_updates', 0) <= 0):
         raise ValueError('native readiness runtime proof does not match the trained model')
+    from ..eval.native_gradients import validate_complete_proof
+    if runtime.get('qualification_profile')!=report.get('qualification_profile')or not isinstance(report.get('qualification_profile'),dict):
+        raise ValueError('native readiness lacks its exact communication execution profile')
+    validate_complete_proof(runtime.get('complete_gradient_qualification'),identity,
+        gradient_atol=requirement['gradient_atol'],execution_profile=report['qualification_profile'])
     for name, tolerance_name in [('forward_max_abs', 'forward_atol'), ('incremental_max_abs', 'forward_atol'),
                                  ('consumer_ce_abs', 'forward_atol'), ('consumer_gradient_max_abs', 'gradient_atol')]:
         value, tolerance = runtime.get(name), runtime.get(tolerance_name)
@@ -245,6 +250,11 @@ def validate_completion(path, published):
         if (certificate.get('passed') is not True or certificate.get('native_identity') != identity
                 or certificate.get('backbone_optimizer_updates', 0) <= 0):
             raise ValueError('shared final model lacks exact trained-state runtime qualification')
+        from ..eval.native_gradients import validate_complete_proof
+        if not isinstance(certificate.get('qualification_profile'),dict):
+            raise ValueError('shared final model lacks its complete communication execution profile')
+        validate_complete_proof(certificate.get('complete_gradient_qualification'),identity,
+            gradient_atol=curriculum.get('gradient_atol',1e-5),execution_profile=certificate['qualification_profile'])
         task = json.loads(_bound(proof['task_execution_receipts'][name]).read_text())
         from ..eval.native_state import validate_task_execution_receipt
         if (not validate_task_execution_receipt(task, identity)
