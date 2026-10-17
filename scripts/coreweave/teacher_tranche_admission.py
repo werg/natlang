@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import hashlib
 import json
+import re
 from pathlib import Path
 
 
@@ -32,12 +33,16 @@ class Tranche:
     batch: int
     number: int
     attempt: int | None = None
+    quality_view: str | None = None
 
     def __post_init__(self):
         if type(self.batch) is not int or self.batch < 21 or type(self.number) is not int or self.number < 0:
             raise ValueError('teacher tranche needs actual batch and nonnegative tranche numbers')
         if self.attempt is not None and (type(self.attempt) is not int or self.attempt < 1):
             raise ValueError('teacher repair attempt must be an explicit positive integer')
+        if self.quality_view is not None and (type(self.quality_view)is not str or
+                re.fullmatch(r'[a-z][a-z0-9]*(?:-[a-z0-9]+)*',self.quality_view)is None):
+            raise ValueError('teacher quality view needs an explicit safe name')
 
     @property
     def batch_name(self):
@@ -55,7 +60,8 @@ class Tranche:
     def corpus_id(self):
         suffix = (f'batch{self.batch:04d}-repair{self.attempt:04d}-' if self.attempt is not None
                   else '' if self.batch == 21 else f'batch{self.batch:04d}-')
-        return f'qwen-verified-positive-native-graphs-20261017-recovery7853-{suffix}tranche{self.number:04d}'
+        ident=f'qwen-verified-positive-native-graphs-20261017-recovery7853-{suffix}tranche{self.number:04d}'
+        return ident+(('-quality-'+self.quality_view)if self.quality_view else'')
 
     def exports(self, spool):
         root = Path(spool)
@@ -66,10 +72,12 @@ class Tranche:
     def admission(self, spool, *, recovery=False):
         root = Path(spool) / ('admission-recovery' if recovery else 'admission')
         if self.attempt is not None:
-            return root / 'repair-attempts' / self.batch_name / f'attempt-{self.attempt:04d}' / self.name
-        if self.batch != 21:
-            root /= self.batch_name
-        return root / self.name
+            result=root / 'repair-attempts' / self.batch_name / f'attempt-{self.attempt:04d}' / self.name
+        else:
+            result=(root / self.batch_name if self.batch != 21 else root)/self.name
+        if self.quality_view and not recovery:
+            return Path(spool)/'admission-quality-views'/self.quality_view/result.relative_to(root)
+        return result
 
 
 def packet_references(ready_reference, collection):

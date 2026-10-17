@@ -234,3 +234,20 @@ def test_original_admitted_tranche_cannot_discharge_repair_attempt_predecessor(t
     with pytest.raises(FileNotFoundError):
         preceding_tranches(tmp_path, tmp_path / 'spool', Tranche(21, 1, 1))
     assert admitted_predecessors(tmp_path, Tranche(21, 0, 1).corpus_id)[0]['id'] == ordinary['id']
+
+
+@pytest.mark.parametrize('attempt',[None,1])
+def test_quality_view_preserves_actual_source_exports_recovery_and_attempt(tmp_path,attempt):
+    original=Tranche(23,0,attempt);view=Tranche(23,0,attempt,'source-argument-oracle-v1')
+    assert view.exports(tmp_path)==original.exports(tmp_path)
+    assert view.archive_name==original.archive_name
+    assert view.admission(tmp_path,recovery=True)==original.admission(tmp_path,recovery=True)
+    assert view.admission(tmp_path)!=original.admission(tmp_path)
+    assert view.admission(tmp_path).is_relative_to(tmp_path/'admission-quality-views/source-argument-oracle-v1')
+    assert view.corpus_id==original.corpus_id+'-quality-source-argument-oracle-v1'
+    assert view.attempt==original.attempt
+
+
+@pytest.mark.parametrize('name',['','../bad','a/b','..','.','A','a--b',True,1,[]])
+def test_quality_view_name_cannot_escape_or_fake_typed_identity(name):
+    with pytest.raises(ValueError,match='quality view'):Tranche(23,0,quality_view=name)

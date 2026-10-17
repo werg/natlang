@@ -36,3 +36,7 @@ export nor reference qualification grants training admission or exposure.
    Earlier-tranche accounting stays within that attempt; all registered corpora
    still participate in deduplication. This is custody plumbing only: a retry
    never grants source qualification or weakens current protection/quality.
+
+## Evaluation-only quality views
+
+An explicit quality-view name separates a verified evaluation continuation from a new generation attempt. Keep the actual batch, tranche, repair attempt (if any), export archive and recovered raw files unchanged. Only derived admission files and the corpus identity receive the named view suffix. The existing source-quality verifier must reconstruct the view from its original captures; naming grants no admission. All registered predecessor corpora, including the original view, remain in the exact deduplication closure. Original earlier-tranche obligations are retained; a quality view creates no fictional generation attempts.
