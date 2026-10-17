@@ -519,7 +519,7 @@ def main(argv=None):
                   {'ordinary_capacity':binding(args.ordinary_capacity)})} if args.bare_recipe else None)
         owned=None;verified=None
         if args.owned_operations:
-            if not bare or operation:parser.error('owned operations require a bare current owner and no bridge substitute')
+            if operation:parser.error('owned operations cannot substitute another bridge operation')
             manifest_path=_bound(binding(args.owned_operations));manifest=json.loads(manifest_path.read_text())
             if manifest.get('schema')!='natlang.native-owned-training-operations/1':
                 parser.error('owned operations require an explicit completed operation-chain manifest')
@@ -532,9 +532,10 @@ def main(argv=None):
                 _bound(item['handoff']);_bound(item['receipt'])
             verified=verify_handoff(binding(args.handoff))
             from .native_raw_rounds import reconcile_owned_operations
-            owned=reconcile_owned_operations(args.config,manifest['operations'],bare['recipe'],
+            recipe_reference=bare['recipe'] if bare else _read(binding(args.recipe_handoff))['recipe']
+            owned=reconcile_owned_operations(args.config,manifest['operations'],recipe_reference,
                 args.out.with_name(args.out.stem+'-owned-reconciliation.json'),
-                bare_direct_owner=bare,verified_handoff=verified)
+                bare_direct_owner=bare,recipe_handoff=binding(args.recipe_handoff) if args.recipe_handoff else None,verified_handoff=verified)
         reference=prepare_runtime_handoff(bootstrap,binding(args.handoff),binding(args.recipe_handoff) if args.recipe_handoff else None,
             args.config,args.out,operation=operation,bare_direct_owner=bare,
             owned_operations=owned,verified_handoff=verified)

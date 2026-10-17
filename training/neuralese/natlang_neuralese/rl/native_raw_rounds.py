@@ -278,6 +278,53 @@ def _owned_training_invocation(argv,parent,*,parent_bytes=None):
                     'parent':restored,'runtime':argv[8],'observations':argv[10]}
 
 
+def _owned_recipe_invocation(argv, child, record, actual_recipe, stage_id, lineage):
+    """A resident launch keeps its original argv while genuine adoption advances sources."""
+    from .native_raw_handoff import same_process, _recipe_plan
+    from ..train import native_resident as resident
+    from ..train.recipe import native_recipe_binding
+    def argument(flag):
+        return argv[argv.index(flag)+1] if argv.count(flag)==1 and argv.index(flag)+1<len(argv) else None
+    declared=json.loads(argument('--recipe-binding'))
+    evidence=record.get('resident') or {}
+    if not evidence.get('current'):
+        return declared==actual_recipe
+    initial=json.loads(_bound(evidence['initial']).read_text())
+    if not same_process(initial.get('owner') or {},child):return False
+    state=json.loads(_bound(evidence['current']).read_text());payload=state.get('payload') or {}
+    directory=argument('--resident-data-directory')
+    history=state.get('history') or []
+    if (not directory or Path(directory).resolve()!=Path(evidence['directory']).resolve()
+            or state.get('schema')!=resident.SCHEMA or resident.digest(payload)!=state.get('generation')
+            or state.get('generation')!=evidence.get('generation') or not history
+            or payload.get('stage_id')!=stage_id or payload.get('recipe')!=actual_recipe
+            or initial.get('recipe')!=declared or payload.get('prior_recipe')!=declared
+            or history[-1].get('generation')!=state['generation']):
+        raise ValueError('owned resident invocation lost its initial/current source authority')
+    plan=payload['plan'];previous=_recipe_plan(_bound({'path':declared['path'],
+        'sha256':declared.get('file_sha256',declared['sha256'])}),plan['device'])
+    previous['code']=plan['code'];last_step=-1
+    if native_recipe_binding(Path(declared['path']),lineage)!=declared:
+        raise ValueError('owned resident initial recipe lineage changed')
+    for entry in history:
+        reference=entry['recipe'];path=_bound({'path':reference['path'],
+            'sha256':reference.get('file_sha256',reference['sha256'])})
+        step=entry.get('at_global_step')
+        if (type(step)is not int or step<last_step
+                or native_recipe_binding(path,lineage)!=reference):
+            raise ValueError('owned resident adoption history changed its order/recipe lineage')
+        proposed=_recipe_plan(path,plan['device']);proposed['code']=plan['code']
+        resident._contract(previous,proposed,stage_id)
+        if (entry.get('train')!={k:proposed['stage_inputs'][stage_id]['native_graphs'][k]for k in('path','sha256')}
+                or entry.get('held')!={k:proposed['stage_inputs'][stage_id]['held_native_graphs'][k]for k in('path','sha256')}):
+            raise ValueError('owned resident history changed its exact admitted source bindings')
+        previous=proposed;last_step=step
+    if (history[-1]['recipe']!=actual_recipe or previous['recipe']!=plan['recipe']
+            or previous['stage_inputs']!=plan['stage_inputs']):
+        raise ValueError('owned resident current plan lost its complete initial-to-adopted history')
+    return True
+
+
 def _owned_operation_chain(operations,published,model_id,lineage):
     """Authenticate completed finite work without decoding historical optimizers."""
     from .native_raw_handoff import verify_handoff_controls
@@ -315,7 +362,7 @@ def _owned_operation_chain(operations,published,model_id,lineage):
             out=argument('--out');binding_arg=argument('--recipe-binding')
             if (out and Path(out).resolve()==Path(operation['receipt']['path']).resolve().parent
                     and argument('--stage-id')==stage_id and binding_arg
-                    and json.loads(binding_arg)==actual_recipe):matching.append({'child':child,'restore_observer':observer})
+                    and _owned_recipe_invocation(argv,child,record,actual_recipe,stage_id,lineage)):matching.append({'child':child,'restore_observer':observer})
         if len(matching)!=1:
             raise ValueError('owned operation receipt lacks its exact captured trainer invocation')
         result.append({'handoff':operation['handoff'],'receipt':operation['receipt'],
@@ -340,17 +387,20 @@ def _acknowledged_owned_stage_ids(chain,stages):
     return ids
 
 
-def reconcile_owned_operations(config_path,operations,recipe_reference,out,*,bare_direct_owner,verified_handoff=None):
+def reconcile_owned_operations(config_path,operations,recipe_reference,out,*,bare_direct_owner=None,recipe_handoff=None,verified_handoff=None):
     """Leased, durable acknowledgement of earned work, never stage completion."""
     import contextlib
     from ..common.hashing import canonical_json_sha256_hex as digest
     from ..train.recipe import resolve_recipe_data
-    from .native_runtime_handoff import _bare_authority,_loaded_handoff
+    from .native_runtime_handoff import _authority,_loaded_handoff
     config_path=Path(config_path).resolve();out=Path(out).resolve()
     config=json.loads(config_path.read_text());root=config_path.parent
     if Path(config['out']).resolve().parent!=root:raise ValueError('owned reconciliation lost its controller namespace')
     paths={'config':config_path,'cursor':root/'cycle.json','state':Path(config['out'])/'state.json'}
-    request={'config':str(config_path),'operations':operations,'recipe':recipe_reference,'authority':bare_direct_owner}
+    if bool(bare_direct_owner)==bool(recipe_handoff):
+        raise ValueError('owned reconciliation requires exactly one genuine bare or resident authority')
+    requested_authority=bare_direct_owner if bare_direct_owner is not None else {'recipe_handoff':recipe_handoff}
+    request={'config':str(config_path),'operations':operations,'recipe':recipe_reference,'authority':requested_authority}
     directory=out.parent/(out.stem+'-control');intent_path=directory/'intent.json'
     with contextlib.ExitStack()as stack:
         for path in sorted({root.parent/'controller.lock',Path(config['out'])/'controller.lock'}):
@@ -391,10 +441,14 @@ def reconcile_owned_operations(config_path,operations,recipe_reference,out,*,bar
             chain=_owned_operation_chain(operations,published,config['raw_model_id'],config['recipe_lineage_sha256'])
             record,saved=_loaded_handoff(operations[-1]['handoff'],verified_handoff)
             from ..train.native_resident import code_inventory
-            authority={**bare_direct_owner,'code':code_inventory(Path(bare_direct_owner['package'])),
-                       'model_config_sha256':digest(saved['model_config'])}
-            if authority['recipe']!=recipe_reference:raise ValueError('owned reconciliation recipe differs from actual latest owner')
-            _bare_authority(authority,record,saved,config)
+            authority={'recipe_handoff':recipe_handoff}
+            if bare_direct_owner is not None:
+                authority['bare_direct_owner']={**bare_direct_owner,
+                    'code':code_inventory(Path(bare_direct_owner['package'])),
+                    'model_config_sha256':digest(saved['model_config'])}
+            transition=_authority(authority,operations[-1]['handoff'],record,saved,config)
+            if transition['recipe']!=recipe_reference:
+                raise ValueError('owned reconciliation recipe differs from actual latest owner')
             _acknowledged_owned_stage_ids(chain,stages)
             from ..train.native_continuation import collect_sft_progress
             from ..train.recipe import native_recipe_binding

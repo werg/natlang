@@ -312,6 +312,7 @@ def verify_handoff(reference, *, requirement=None):
 
 RECIPE_HANDOFF='natlang.native-raw-drained-recipe-handoff/2'
 LEGACY_RECIPE_HANDOFF='natlang.native-raw-drained-recipe-handoff/1'
+EXTERNAL_RECIPE_HANDOFF='natlang.native-raw-drained-recipe-handoff/3'
 
 
 def _recipe_plan(recipe_path, device):
@@ -362,7 +363,22 @@ def _drained_plan_authority(record, saved):
     return None,plan,stage
 
 
-def prepare_drained_recipe_handoff(handoff, recipe, out, *, package=None):
+def _external_frozen_package(record, package, old_plan, snapshots=None):
+    """An external immutable runtime must be the actual captured launch runtime."""
+    from .native_runtime_handoff import _owned_launch_chain, _read
+    from ..train.native_resident import code_inventory
+    _, _, references = _owned_launch_chain(record, snapshots)
+    intent = _read((snapshots or references)['intent'])
+    paths = (intent.get('env') or {}).get('PYTHONPATH', '').split(':')
+    selected = next((Path(path)/'natlang_neuralese' for path in paths
+                     if path and (Path(path)/'natlang_neuralese').is_dir()), None)
+    if (selected is None or selected.resolve() != Path(package).resolve()
+            or code_inventory(package) != old_plan['code']):
+        raise ValueError('external resident runtime differs from its actual captured import path/code')
+    return references
+
+
+def prepare_drained_recipe_handoff(handoff, recipe, out, *, package=None, external_package=None):
     """Persist an existing verified lineage handoff, never a resident rewrite."""
     from ..train import native_resident as resident
     from ..train.recipe import lineage_handoff
@@ -374,6 +390,9 @@ def prepare_drained_recipe_handoff(handoff, recipe, out, *, package=None):
     if out.exists():
         reference=binding(out);value=verify_drained_recipe_handoff(reference,handoff=handoff)
         if binding(recipe)!=value['recipe']:raise ValueError('drained recipe handoff recipe changed')
+        if (bool(value.get('external_runtime')) != bool(external_package)
+                or external_package and Path(external_package).resolve()!=Path(value['old_package']).resolve()):
+            raise ValueError('drained recipe handoff changed its external runtime layout')
         if resident.code_inventory(package)!=value['new_code']:
             raise ValueError('drained recipe handoff requested runtime changed')
         return reference
@@ -398,7 +417,15 @@ def prepare_drained_recipe_handoff(handoff, recipe, out, *, package=None):
             raise ValueError('drained recipe handoff lost the actual started-stage boundary')
         plan_path=directory.parent/'recipe-plan.json'
         proposed=_recipe_plan(_bound(binding(recipe)),old_plan['device'])
-        frozen=directory.parent/'runtime/natlang_neuralese'
+        frozen=(Path(external_package).resolve() if external_package else
+                directory.parent/'runtime/natlang_neuralese')
+        external = None
+        if external_package:
+            refs = _external_frozen_package(record, frozen, old_plan)
+            from .native_runtime_handoff import _snap
+            snapshots = out.parent/(out.stem+'-external-launch'); snapshots.mkdir(exist_ok=True)
+            external = {'package': str(frozen), 'launch_control': {
+                name: _snap(ref, snapshots, name+'.json') for name,ref in refs.items()}}
         # Validate first; the existing implementation owns runtime archival and
         # the durable plan commit, including priority/source continuation rules.
         old_copy=out.with_name(out.stem+'-old-plan.json')
@@ -406,28 +433,35 @@ def prepare_drained_recipe_handoff(handoff, recipe, out, *, package=None):
         if installed==old_plan:
             lineage_handoff(old_plan,proposed,frozen,package,plan_path,directory.parent,dry_run=True)
             write_json_durable(old_copy,old_plan)
-            updated=lineage_handoff(old_plan,proposed,frozen,package,plan_path,directory.parent)
+            if external_package:
+                # Validate through the same policy, then publish only its plan.
+                # The actual qualified external package is never moved or copied.
+                updated=lineage_handoff(old_plan,proposed,frozen,package,plan_path,directory.parent,dry_run=True)
+                updated['handoffs'][-1]['superseded_runtime']=None
+                write_json_durable(plan_path,updated)
+            else:
+                updated=lineage_handoff(old_plan,proposed,frozen,package,plan_path,directory.parent)
         else:
             # Recover the exact already committed handoff after interruption
             # between the existing plan commit and this receipt publication.
             if not old_copy.exists() or json.loads(old_copy.read_text())!=old_plan:
                 raise ValueError('drained recipe handoff requires the final adopted original plan')
             previous=installed.get('handoffs',[{}])[-1].get('superseded_runtime')
-            old_runtime=directory.parent/previous/'natlang_neuralese' if previous else frozen
+            old_runtime=frozen if external_package else directory.parent/previous/'natlang_neuralese' if previous else frozen
             expected=lineage_handoff(old_plan,proposed,old_runtime,package,plan_path,directory.parent,dry_run=True)
             if _stable_handoff_plan(expected)!=_stable_handoff_plan(installed):
                 raise ValueError('drained recipe handoff found another installed plan')
             updated=installed
         new_copy=out.with_name(out.stem+'-new-plan.json');write_json_durable(new_copy,updated)
         previous=updated['handoffs'][-1].get('superseded_runtime')
-        old_package=(directory.parent/previous/'natlang_neuralese') if previous else package
+        old_package=frozen if external_package else (directory.parent/previous/'natlang_neuralese') if previous else package
         if resident.code_inventory(old_package)!=old_plan['code']:
             raise ValueError('drained recipe handoff lost immutable original runtime code')
-        value={'schema':RECIPE_HANDOFF,'handoff':handoff,'checkpoint':record['checkpoint'],
+        value={'schema':EXTERNAL_RECIPE_HANDOFF if external_package else RECIPE_HANDOFF,'handoff':handoff,'checkpoint':record['checkpoint'],
             'retirement':binding(retired) if retired else None,'old_plan':binding(old_copy),'recipe':binding(recipe),
             'new_plan':binding(new_copy),'old_package':str(old_package.resolve()),
             'new_package':str(package),'old_code':resident.code_inventory(old_package),
-            'new_code':resident.code_inventory(package)}
+            'new_code':resident.code_inventory(package),**({'external_runtime':external} if external else {})}
         write_json_durable(out,value)
     verify_drained_recipe_handoff(binding(out),handoff=handoff)
     return binding(out)
@@ -438,7 +472,7 @@ def verify_drained_recipe_handoff(reference, *, handoff, verified_handoff=None):
     from ..train import native_resident as resident
     from ..train.recipe import lineage_handoff
     value=json.loads(_bound(reference).read_text())
-    if value.get('schema') not in (RECIPE_HANDOFF,LEGACY_RECIPE_HANDOFF) or value.get('handoff')!=handoff:
+    if value.get('schema') not in (RECIPE_HANDOFF,LEGACY_RECIPE_HANDOFF,EXTERNAL_RECIPE_HANDOFF) or value.get('handoff')!=handoff:
         raise ValueError('drained recipe handoff belongs to another original owner')
     record,saved=(verify_handoff(handoff) if verified_handoff is None else verified_handoff)
     if record!=json.loads(_bound(handoff).read_text()):
@@ -452,12 +486,19 @@ def verify_drained_recipe_handoff(reference, *, handoff, verified_handoff=None):
                 or retirement.get('checkpoint')!=record['checkpoint']
                 or retirement.get('terminal',{}).get('sha256')!=record['terminal']['sha256']):
             raise ValueError('drained recipe handoff retirement changed')
-    elif value.get('schema')!=RECIPE_HANDOFF or value.get('retirement') is not None:
+    elif value.get('schema')not in(RECIPE_HANDOFF,EXTERNAL_RECIPE_HANDOFF) or value.get('retirement') is not None:
         raise ValueError('initial-only recipe transition requires explicit version2 proof')
     prior=json.loads(_bound(value['old_plan']).read_text())
     if prior!=original_plan:
         raise ValueError('drained recipe handoff lost its final original plan')
     old_package,new_package=Path(value['old_package']),Path(value['new_package'])
+    external=value.get('external_runtime')
+    if bool(external)!=(value.get('schema')==EXTERNAL_RECIPE_HANDOFF):
+        raise ValueError('external resident runtime layout needs its explicit authority schema')
+    if external:
+        if external.get('package')!=str(old_package.resolve()):
+            raise ValueError('external resident package binding changed')
+        _external_frozen_package(record,old_package,prior,external.get('launch_control'))
     if (resident.code_inventory(old_package)!=value['old_code'] or value['old_code']!=prior['code']
             or resident.code_inventory(new_package)!=value['new_code']):
         raise ValueError('drained recipe handoff runtime changed')
@@ -478,8 +519,9 @@ def main(argv=None):
     parser.add_argument('--recipe',type=Path,required=True)
     parser.add_argument('--output',type=Path,required=True)
     parser.add_argument('--package',type=Path)
+    parser.add_argument('--external-package',type=Path,help='Exact captured external immutable old package; never installed or moved')
     args=parser.parse_args(argv)
-    print(json.dumps(prepare_drained_recipe_handoff(json.loads(args.handoff),args.recipe,args.output,package=args.package)))
+    print(json.dumps(prepare_drained_recipe_handoff(json.loads(args.handoff),args.recipe,args.output,package=args.package,external_package=args.external_package)))
 
 
 if __name__=='__main__':main()
