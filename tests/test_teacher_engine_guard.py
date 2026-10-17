@@ -1,8 +1,28 @@
 import json
+import functools
+import inspect
+import subprocess
 import sys
 from pathlib import Path
 import pytest
 from scripts.coreweave import teacher_engine_guard as guard
+
+
+def isolated_guard_owner(test):
+    """Give the production subreaper a dedicated process, not pytest's children."""
+    @functools.wraps(test)
+    def execute(*args, **kwargs):
+        arguments = dict(inspect.signature(test).bind(*args, **kwargs).arguments)
+        arguments['tmp_path'] = str(arguments['tmp_path'])
+        code = ('import runpy,pathlib,json,sys; namespace=runpy.run_path(sys.argv[1]); '
+                'arguments=json.loads(sys.argv[3]); '
+                "arguments['tmp_path']=pathlib.Path(arguments['tmp_path']); "
+                'namespace[sys.argv[2]].__wrapped__(**arguments)')
+        result = subprocess.run([sys.executable, '-c', code, str(Path(__file__).resolve()),
+                                 test.__name__, json.dumps(arguments)],
+                                cwd=Path(__file__).resolve().parents[1], capture_output=True, text=True)
+        assert result.returncode == 0, result.stdout + result.stderr
+    return execute
 
 
 def sample(current=95,anon=12,file=80):
@@ -28,6 +48,7 @@ def test_actual_cgroup_accounting_keeps_nonreclaimable_and_cache_distinct(tmp_pa
 
 
 @pytest.mark.parametrize('code',[0,7])
+@isolated_guard_owner
 def test_actual_child_terminal_custody_and_duplicate_launch_rejected(tmp_path,code):
     spec={'schema':'natlang.teacher-engine-process-guard/1','argv':[sys.executable,'-c',f'raise SystemExit({code})'],
         'cwd':str(tmp_path),'assets':[],'ram_reserve_bytes':16}
@@ -47,6 +68,7 @@ def test_low_memory_rejects_before_launch_or_intent(tmp_path):
     assert not(tmp_path/'out').exists()
 
 
+@isolated_guard_owner
 def test_leader_exit_still_drains_real_signal_ignoring_detached_grandchild(tmp_path):
     pidfile=tmp_path/'grandchild.pid'
     grandchild="import os,signal,time,pathlib;os.setsid();signal.signal(signal.SIGTERM,signal.SIG_IGN);pathlib.Path("+repr(str(pidfile))+").write_text(str(os.getpid()));time.sleep(60)"
@@ -59,6 +81,7 @@ def test_leader_exit_still_drains_real_signal_ignoring_detached_grandchild(tmp_p
     assert not Path('/proc',pidfile.read_text()).exists()
 
 
+@isolated_guard_owner
 def test_observer_exception_cleans_real_child_before_rethrow(tmp_path):
     path=tmp_path/'spec.json';path.write_text(json.dumps({'schema':'natlang.teacher-engine-process-guard/1',
         'argv':[sys.executable,'-c','import time;time.sleep(60)'],'cwd':str(tmp_path),'assets':[],
@@ -71,6 +94,16 @@ def test_observer_exception_cleans_real_child_before_rethrow(tmp_path):
     with pytest.raises(RuntimeError,match='actual observer failure'):guard.run(path,tmp_path/'out',sample=observe)
     receipt=json.loads((tmp_path/'out/terminal.json').read_text());assert receipt['reason']=='guard_error'
     assert receipt['custody']['group_gone']and not Path('/proc',str(receipt['identity']['pid'])).exists()
+
+
+def test_isolated_guard_does_not_claim_or_stop_the_test_hosts_other_child(tmp_path):
+    unrelated = subprocess.Popen([sys.executable, '-c', 'import time;time.sleep(60)'])
+    try:
+        test_actual_child_terminal_custody_and_duplicate_launch_rejected(tmp_path, 0)
+        assert unrelated.poll() is None
+    finally:
+        unrelated.terminate()
+        unrelated.wait(timeout=5)
 
 
 def test_real_guard_sigterm_forwards_and_reaps_signal_ignoring_child(tmp_path):
