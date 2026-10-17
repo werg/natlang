@@ -5,8 +5,11 @@ from __future__ import annotations
 import argparse
 import ast
 import json
+import os
 from pathlib import Path
+import pickle
 import sys
+import tempfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'training/neuralese'))
 from natlang_neuralese.common import row_index
@@ -229,6 +232,33 @@ def prove_extension(old_package, new_package):
             'new_policy_sha256': digest(inventories[1])}
 
 
+def _publish_index_without_replacement(target, value):
+    """Retain a concurrent trainer's destination, accepting only exact equality."""
+    if target.exists():
+        if row_index.load(target) != value:
+            raise ValueError('existing destination index conflicts')
+        return
+    target.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary = tempfile.mkstemp(prefix=target.name + '.', suffix='.tmp', dir=target.parent)
+    try:
+        with os.fdopen(descriptor, 'wb') as handle:
+            pickle.dump({**value, 'schema': 'natlang.row-index/1'}, handle, protocol=pickle.HIGHEST_PROTOCOL)
+            handle.flush()
+            os.fsync(handle.fileno())
+        try:
+            os.link(temporary, target)
+        except FileExistsError:
+            if row_index.load(target) != value:
+                raise ValueError('existing destination index conflicts')
+        directory = os.open(target.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    finally:
+        os.unlink(temporary)
+
+
 def continue_indexes(proof, source_hashes):
     wanted = set(source_hashes)
     if not wanted or any(len(value) != 64 or any(c not in '0123456789abcdef' for c in value) for value in wanted):
@@ -251,11 +281,7 @@ def continue_indexes(proof, source_hashes):
         new_key = {**key, 'policy_sha256': proof['new_policy_sha256']}
         target = row_index.entry_path('native-graphs', digest(new_key))
         new_value = {**value, 'key': new_key}
-        if target.exists():
-            if row_index.load(target) != new_value:
-                raise ValueError('existing destination index conflicts')
-        else:
-            row_index.save(target, new_value)
+        _publish_index_without_replacement(target, new_value)
         if row_index.load(target) != new_value:
             raise ValueError('index continuation write failed')
         results.append({'source_sha256': key['source_sha256'], 'split': key['split'],

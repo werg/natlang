@@ -117,6 +117,52 @@ def test_invalid_hash_rejected(packages):
     with pytest.raises(ValueError): subject.continue_indexes(subject.prove_extension(*packages), ['not-a-source'])
 
 
+@pytest.mark.parametrize('conflicting', [False, True])
+def test_racing_live_writer_is_never_replaced(packages, tmp_path, monkeypatch, conflicting):
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE', str(tmp_path / 'cache'))
+    proof = subject.prove_extension(*packages)
+    _, old = make_index(proof)
+    new_key = {**old['key'], 'policy_sha256': proof['new_policy_sha256']}
+    target = row_index.entry_path('native-graphs', digest(new_key))
+    winner = copy.deepcopy({**old, 'key': new_key})
+    if conflicting:
+        winner['entries'][0]['binding'] = 'concurrent-different-value'
+        winner['metadata_sha256'] = digest(winner['entries'])
+    real_link = subject.os.link
+    observed = {}
+    def publish_winner_then_link(source, destination):
+        assert destination == target
+        row_index.save(target, winner)
+        observed.update(inode=target.stat().st_ino, raw=target.read_bytes())
+        return real_link(source, destination)
+    monkeypatch.setattr(subject.os, 'link', publish_winner_then_link)
+    if conflicting:
+        with pytest.raises(ValueError, match='existing destination index conflicts'):
+            subject.continue_indexes(proof, ['a'*64])
+    else:
+        receipt = subject.continue_indexes(proof, ['a'*64])
+        assert len(receipt['indexes']) == 1
+    assert target.stat().st_ino == observed['inode']
+    assert target.read_bytes() == observed['raw']
+    assert row_index.load(target) == winner
+    assert not list(target.parent.glob('*.tmp'))
+
+
+def test_failed_no_clobber_publication_cleans_private_file(packages, tmp_path, monkeypatch):
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE', str(tmp_path / 'cache'))
+    proof = subject.prove_extension(*packages)
+    _, old = make_index(proof)
+    new_key = {**old['key'], 'policy_sha256': proof['new_policy_sha256']}
+    target = row_index.entry_path('native-graphs', digest(new_key))
+    def denied(*args):
+        raise OSError('publication denied')
+    monkeypatch.setattr(subject.os, 'link', denied)
+    with pytest.raises(OSError, match='publication denied'):
+        subject.continue_indexes(proof, ['a'*64])
+    assert not target.exists()
+    assert not list(target.parent.glob('*.tmp'))
+
+
 def test_new_loader_hits_continued_index_without_parsing(packages, tmp_path, monkeypatch):
     import importlib
     import json
