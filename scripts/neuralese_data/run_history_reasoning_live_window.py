@@ -16,6 +16,10 @@ import time
 
 
 SCHEMA = "natlang.history-reasoning-live-window/1"
+SAMPLED_OUTPUT_FAILURE_CODES = frozenset({
+    "neuralese-native-state-open", "neuralese-native-state-close",
+    "neuralese-native-state-consume-marker", "neuralese-native-state-nested",
+})
 
 
 def _sha256(path: Path) -> str:
@@ -64,6 +68,132 @@ def _load_jsonl(path: Path) -> list[dict]:
                 raise ValueError(f"{path}:{line_number} is not an object")
             rows.append(value)
     return rows
+
+
+def validate_baseline_prefix(*, prefix_run_path: Path, prefix_results_path: Path,
+                             prefix_cases_path: Path, cases: list[dict],
+                             checkpoint_sha256: str, baseline_profile: str,
+                             current_protection_sha256: str) -> tuple[list[dict], dict]:
+    """Verify an immutable baseline prefix before reusing it in a successor run."""
+    prefix_run_path = prefix_run_path.resolve(strict=True)
+    prefix_results_path = prefix_results_path.resolve(strict=True)
+    prefix_cases_path = prefix_cases_path.resolve(strict=True)
+    run_bytes = prefix_run_path.read_bytes()
+    run = json.loads(run_bytes)
+    if run.get("schema") != SCHEMA or run.get("checkpoint_sha256") != checkpoint_sha256:
+        raise ValueError("baseline prefix belongs to a different checkpoint or run schema")
+    if run.get("baseline_profile") != baseline_profile or run.get("candidate_profile") != "keep":
+        raise ValueError("baseline prefix run profile binding is incompatible")
+    if run.get("weights_mutated") is not False or run.get("training_admission") is not False:
+        raise ValueError("baseline prefix was not a read-only evaluation")
+    run_cases = run.get("cases") or {}
+    if run_cases.get("current_protection_sha256") != current_protection_sha256:
+        raise ValueError("baseline prefix uses a different current source protection")
+    if run_cases.get("case_packet_path") != str(prefix_cases_path):
+        raise ValueError("baseline prefix run does not name the supplied case packet")
+    if run_cases.get("case_packet_sha256") != _sha256(prefix_cases_path):
+        raise ValueError("baseline prefix case packet changed")
+    prefix_cases = _load_jsonl(prefix_cases_path)
+    if len(prefix_cases) != 48 or len(cases) != 48:
+        raise ValueError("baseline prefix and successor must each bind the complete 48-case window")
+    prefix_lines = prefix_results_path.read_text(encoding="utf-8").splitlines()
+    if not prefix_lines or any(not line.strip() for line in prefix_lines):
+        raise ValueError("baseline prefix results contain no rows or blank records")
+    all_records = [json.loads(line) for line in prefix_lines]
+    if any(record.get("profile") not in (baseline_profile, "keep") for record in all_records):
+        raise ValueError("baseline prefix contains a row from an unbound profile")
+    prefix_records = [record for record in all_records if record.get("profile") == baseline_profile]
+    if not prefix_records:
+        raise ValueError("baseline prefix contains no baseline-profile rows")
+    if len(prefix_records) > len(cases):
+        raise ValueError("baseline prefix is longer than the successor case packet")
+    required_case_keys = {"case_id", "task_id", "program_id", "source_row_id",
+        "source_row_sha256", "trajectory_index", "raw_response_sha256",
+        "validation_proof_path", "validation_proof_sha256"}
+    for index, record in enumerate(prefix_records):
+        old_case = prefix_cases[index]
+        new_case = cases[index]
+        if (set(old_case) != required_case_keys or
+                any(new_case.get(key) != value for key, value in old_case.items())):
+            raise ValueError(f"successor changed baseline-prefix case at index {index}")
+        if (record.get("profile") != baseline_profile or
+                record.get("case_id") != old_case.get("case_id") or
+                record.get("task_id") != old_case.get("task_id") or
+                record.get("source_row_id") != old_case.get("source_row_id") or
+                record.get("source_row_sha256") != old_case.get("source_row_sha256") or
+                not isinstance(record.get("generation"), dict) or
+                not isinstance(record.get("likelihood"), dict)):
+            raise ValueError(f"baseline prefix result {index} does not bind its exact admitted case")
+    binding = {"run_path": str(prefix_run_path), "run_sha256": hashlib.sha256(run_bytes).hexdigest(),
+        "results_path": str(prefix_results_path), "results_sha256": _sha256(prefix_results_path),
+        "case_packet_path": str(prefix_cases_path), "case_packet_sha256": _sha256(prefix_cases_path),
+        "rows": len(prefix_records), "profile": baseline_profile}
+    return prefix_records, binding
+
+
+def validate_candidate_prefix(*, prefix_run_path: Path, prefix_results_path: Path,
+                              prefix_cases_path: Path, cases: list[dict],
+                              checkpoint_sha256: str, candidate_profile: str,
+                              current_protection_sha256: str) -> tuple[list[dict], dict]:
+    """Verify a durable candidate-profile prefix before resuming its remaining cases."""
+    prefix_run_path = prefix_run_path.resolve(strict=True)
+    prefix_results_path = prefix_results_path.resolve(strict=True)
+    prefix_cases_path = prefix_cases_path.resolve(strict=True)
+    run_bytes = prefix_run_path.read_bytes()
+    run = json.loads(run_bytes)
+    if (run.get("schema") != SCHEMA or run.get("checkpoint_sha256") != checkpoint_sha256
+            or run.get("candidate_profile") != candidate_profile):
+        raise ValueError("candidate prefix belongs to a different checkpoint, profile, or run schema")
+    if run.get("weights_mutated") is not False or run.get("training_admission") is not False:
+        raise ValueError("candidate prefix was not a read-only evaluation")
+    run_cases = run.get("cases") or {}
+    if run_cases.get("current_protection_sha256") != current_protection_sha256:
+        raise ValueError("candidate prefix uses a different current source protection")
+    if run_cases.get("case_packet_path") != str(prefix_cases_path):
+        raise ValueError("candidate prefix run does not name the supplied case packet")
+    packet_sha = _sha256(prefix_cases_path)
+    if run_cases.get("case_packet_sha256") != packet_sha:
+        raise ValueError("candidate prefix case packet changed")
+    prefix_cases = _load_jsonl(prefix_cases_path)
+    if len(prefix_cases) != 48 or len(cases) != 48:
+        raise ValueError("candidate prefix and successor must bind the complete 48-case window")
+    lines = prefix_results_path.read_text(encoding="utf-8").splitlines()
+    if not lines or any(not line.strip() for line in lines):
+        raise ValueError("candidate prefix results are empty, malformed, or longer than the packet")
+    all_records = [json.loads(line) for line in lines]
+    if any(record.get("profile") not in ("last_turn_only", candidate_profile) for record in all_records):
+        raise ValueError("candidate prefix contains a row from an unbound profile")
+    records = [record for record in all_records if record.get("profile") == candidate_profile]
+    if not records:
+        raise ValueError("candidate prefix contains no candidate-profile rows")
+    if len(records) > len(cases):
+        raise ValueError("candidate prefix is longer than the successor case packet")
+    required_case_keys = {"case_id", "task_id", "program_id", "source_row_id",
+        "source_row_sha256", "trajectory_index", "raw_response_sha256",
+        "validation_proof_path", "validation_proof_sha256"}
+    for index, record in enumerate(records):
+        old_case, new_case = prefix_cases[index], cases[index]
+        if (set(old_case) != required_case_keys
+                or any(new_case.get(key) != value for key, value in old_case.items())):
+            raise ValueError(f"successor changed candidate-prefix case at index {index}")
+        valid_generation = isinstance(record.get("generation"), dict) and not record.get("generation_error")
+        valid_failure = (record.get("generation") is None
+                         and isinstance(record.get("generation_error"), dict)
+                         and isinstance(record["generation_error"].get("code"), str)
+                         and isinstance(record["generation_error"].get("message"), str))
+        if (record.get("profile") != candidate_profile
+                or record.get("case_id") != old_case.get("case_id")
+                or record.get("task_id") != old_case.get("task_id")
+                or record.get("source_row_id") != old_case.get("source_row_id")
+                or record.get("source_row_sha256") != old_case.get("source_row_sha256")
+                or not (valid_generation or valid_failure)
+                or not isinstance(record.get("likelihood"), dict)):
+            raise ValueError(f"candidate prefix result {index} does not bind its exact admitted case")
+    binding = {"run_path": str(prefix_run_path), "run_sha256": hashlib.sha256(run_bytes).hexdigest(),
+        "results_path": str(prefix_results_path), "results_sha256": _sha256(prefix_results_path),
+        "case_packet_path": str(prefix_cases_path), "case_packet_sha256": packet_sha,
+        "rows": len(records), "profile": candidate_profile}
+    return records, binding
 
 
 def prepare_case_packet(proof_paths: list[Path], exclusion_path: Path, output_path: Path, *,
@@ -375,14 +505,17 @@ def target_log_likelihood(engine, messages, target: dict, tools=None) -> dict:
     import torch
     import torch.nn.functional as F
 
-    prompt_render = engine.render_request(messages, tools)
-    prompt_ids = _tokenize_rendered(engine, prompt_render)
-    full_messages = [*messages, {"role": "assistant", **target}]
-    complete_render = _render_messages(engine, full_messages, tools, add_generation_prompt=False)
-    full_ids = _tokenize_rendered(engine, complete_render)
-    if not prompt_ids or full_ids[:len(prompt_ids)] != prompt_ids:
-        raise ValueError("generation prompt token IDs are not an exact prefix of the teacher-forced target")
-    target_ids = full_ids[len(prompt_ids):]
+    # Use the same packet boundary and assistant-reply renderer as native gold
+    # supervision.  Independently rendering the complete transcript and
+    # requiring its tokenization to start with a separately rendered prompt is
+    # wrong for templates that continue a thinking prefix into a tool call or
+    # otherwise tokenize the reply boundary specially.
+    from natlang_neuralese.data.text_corpus import native_gold_packet
+    _text, full_ids, boundary = native_gold_packet(
+        engine.tokenizer, messages, {"role": "assistant", **target}, tools,
+        prompt_rendering=engine.prompt_rendering)
+    prompt_ids = full_ids[:boundary]
+    target_ids = full_ids[boundary:]
     if not target_ids:
         raise ValueError("target renders to no scored tokens")
     if len(full_ids) > engine.context:
@@ -423,10 +556,18 @@ def _atomic_json(path: Path, value: dict):
         os.close(fd)
 
 
+def record_request_error(error: Exception) -> dict:
+    """Serialize a model-emitted native-state marker failure without a fake reply."""
+    code = getattr(error, "code", None)
+    if code not in SAMPLED_OUTPUT_FAILURE_CODES:
+        raise ValueError("only a sampled-output marker failure is a generation result")
+    return {"type": type(error).__name__, "code": code, "message": str(error)}
+
+
 def run(args) -> dict:
     import torch
     from natlang_neuralese.serve import load_native_engine
-    from natlang_neuralese.serve.chat import bind_history_reasoning
+    from natlang_neuralese.serve.chat import RequestError, bind_history_reasoning
     from natlang_neuralese.serve.engine import GenerationRequest
 
     cases, source_binding = validate_case_packet(Path(args.cases), Path(args.exclusion_proof),
@@ -435,6 +576,35 @@ def run(args) -> dict:
     checkpoint = Path(args.checkpoint).resolve(strict=True)
     checkpoint_sha = _sha256(checkpoint)
     output = Path(args.output).resolve()
+    prefix_args = (args.baseline_prefix_run, args.baseline_prefix_results,
+                   args.baseline_prefix_cases)
+    if any(prefix_args) and not all(prefix_args):
+        raise ValueError("baseline prefix reuse requires run, results, and case-packet bindings")
+    prefix_records = []
+    prefix_binding = None
+    if all(prefix_args):
+        prefix_records, prefix_binding = validate_baseline_prefix(
+            prefix_run_path=Path(args.baseline_prefix_run),
+            prefix_results_path=Path(args.baseline_prefix_results),
+            prefix_cases_path=Path(args.baseline_prefix_cases), cases=cases,
+            checkpoint_sha256=checkpoint_sha, baseline_profile="last_turn_only",
+            current_protection_sha256=args.current_protection_sha256)
+        if len(prefix_records) >= len(cases):
+            raise ValueError("baseline prefix must leave at least one baseline case to execute")
+    candidate_prefix_args = (getattr(args, "candidate_prefix_run", None),
+                             getattr(args, "candidate_prefix_results", None),
+                             getattr(args, "candidate_prefix_cases", None))
+    if any(candidate_prefix_args) and not all(candidate_prefix_args):
+        raise ValueError("candidate prefix reuse requires run, results, and case-packet bindings")
+    candidate_prefix_records = []
+    candidate_prefix_binding = None
+    if all(candidate_prefix_args):
+        candidate_prefix_records, candidate_prefix_binding = validate_candidate_prefix(
+            prefix_run_path=Path(candidate_prefix_args[0]),
+            prefix_results_path=Path(candidate_prefix_args[1]),
+            prefix_cases_path=Path(candidate_prefix_args[2]), cases=cases,
+            checkpoint_sha256=checkpoint_sha, candidate_profile="keep",
+            current_protection_sha256=args.current_protection_sha256)
     engine = load_native_engine(str(checkpoint), base=args.base, device=args.device,
                                 prompt_rendering=args.prompt_rendering)
     baseline = engine.tokenizer.natlang_history_reasoning["policy"]
@@ -454,30 +624,74 @@ def run(args) -> dict:
     metadata = {"schema": SCHEMA, "checkpoint_path": str(checkpoint), "checkpoint_sha256": checkpoint_sha,
                 "native_identity": engine.native_identity, "baseline_profile": baseline,
                 "candidate_profile": "keep", "cases": source_binding,
+                "runner_code_sha256": _sha256(Path(__file__).resolve()),
                 "prompt_rendering": args.prompt_rendering, "device": args.device,
                 "max_tokens": args.max_tokens, "temperature": 0.0,
-                "weights_mutated": False, "training_admission": False}
+                "weights_mutated": False, "training_admission": False,
+                "reused_baseline_prefix": ({**prefix_binding,
+                    "generation_rows_reused": len(prefix_records),
+                    "likelihood_rows_recomputed": len(prefix_records)} if prefix_binding else None),
+                "reused_candidate_prefix": ({**candidate_prefix_binding,
+                    "generation_rows_reused": len(candidate_prefix_records),
+                    "likelihood_rows_recomputed": len(candidate_prefix_records)}
+                    if candidate_prefix_binding else None)}
     _atomic_json(output / "run.json", metadata)
     rows_path = output / "results.jsonl"
     with rows_path.open("x", encoding="utf-8") as results:
+        bind_history_reasoning(engine.tokenizer, policy=baseline, allow_transition=True)
+        for index, prior_record in enumerate(prefix_records):
+            # Reuse the exact prior generation, but recompute likelihood under
+            # this runner's serving-aligned target boundary for paired metrics.
+            record = dict(prior_record)
+            record["likelihood"] = target_log_likelihood(
+                engine, cases[index]["messages"], cases[index]["target"], cases[index].get("tools"))
+            results.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
+            results.flush()
+            os.fsync(results.fileno())
+        result_counts = {baseline: len(prefix_records), "keep": len(candidate_prefix_records)}
+        generation_errors = {baseline: 0, "keep": 0}
+        for index, prior_record in enumerate(candidate_prefix_records):
+            record = dict(prior_record)
+            record["likelihood"] = target_log_likelihood(
+                engine, cases[index]["messages"], cases[index]["target"], cases[index].get("tools"))
+            results.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
+            results.flush()
+            os.fsync(results.fileno())
+            if record.get("generation_error"):
+                generation_errors["keep"] += 1
         for profile in profiles:
             bind_history_reasoning(engine.tokenizer, policy=profile, allow_transition=True)
-            for row in cases:
+            already_done = (len(prefix_records) if profile == baseline else
+                            len(candidate_prefix_records))
+            for row in cases[already_done:]:
                 context = row["messages"]
                 target = row["target"]
                 likelihood = target_log_likelihood(engine, context, target, row.get("tools"))
-                completion = engine.generate(GenerationRequest(messages=context, tools=row.get("tools"),
-                    max_tokens=args.max_tokens, temperature=0.0, seed=args.seed))
-                message = completion["choices"][0]["message"]
-                record = {"case_id": row["case_id"], "task_id": row["task_id"], "profile": profile,
-                          "source_row_id": row["source_row_id"], "source_row_sha256": row["source_row_sha256"],
-                          "generation": message, "finish_reason": completion["choices"][0]["finish_reason"],
-                          "usage": completion.get("usage"), "likelihood": likelihood}
+                try:
+                    completion = engine.generate(GenerationRequest(messages=context, tools=row.get("tools"),
+                        max_tokens=args.max_tokens, temperature=0.0, seed=args.seed))
+                    message = completion["choices"][0]["message"]
+                    record = {"case_id": row["case_id"], "task_id": row["task_id"], "profile": profile,
+                              "source_row_id": row["source_row_id"], "source_row_sha256": row["source_row_sha256"],
+                              "generation": message, "finish_reason": completion["choices"][0]["finish_reason"],
+                              "usage": completion.get("usage"), "likelihood": likelihood}
+                except RequestError as error:
+                    if error.code not in SAMPLED_OUTPUT_FAILURE_CODES:
+                        raise
+                    record = {"case_id": row["case_id"], "task_id": row["task_id"], "profile": profile,
+                              "source_row_id": row["source_row_id"], "source_row_sha256": row["source_row_sha256"],
+                              "generation": None,
+                              "generation_error": record_request_error(error),
+                              "likelihood": likelihood}
+                    generation_errors[profile] += 1
                 results.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
                 results.flush()
                 os.fsync(results.fileno())
+                result_counts[profile] += 1
     summary = {**metadata, "results_path": str(rows_path), "results_sha256": _sha256(rows_path),
-               "result_rows": len(cases) * len(profiles), "profiles": list(profiles),
+               "result_rows": sum(result_counts.values()), "result_counts": result_counts,
+               "generation_errors": generation_errors,
+               "profiles": list(profiles),
                "completed_at_unix": time.time(), "weights_mutated": False,
                "training_admission": False}
     _atomic_json(output / "summary.json", summary)
@@ -511,6 +725,12 @@ def build_parser():
     compare.add_argument("--device", default="cuda")
     compare.add_argument("--prompt-rendering", choices=("full", "program-header"), default="full")
     compare.add_argument("--baseline", choices=("keep", "last_turn_only"))
+    compare.add_argument("--baseline-prefix-run", help="prior run.json binding an immutable baseline prefix")
+    compare.add_argument("--baseline-prefix-results", help="prior baseline results.jsonl")
+    compare.add_argument("--baseline-prefix-cases", help="prior source-bound 48-case packet")
+    compare.add_argument("--candidate-prefix-run", help="prior run.json binding an immutable candidate prefix")
+    compare.add_argument("--candidate-prefix-results", help="prior candidate results.jsonl")
+    compare.add_argument("--candidate-prefix-cases", help="prior source-bound candidate case packet")
     compare.add_argument("--cases-per-variant", type=int, default=48)
     compare.add_argument("--max-tokens", type=int, default=256)
     compare.add_argument("--seed", type=int, default=0)
