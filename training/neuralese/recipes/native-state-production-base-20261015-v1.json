@@ -24,6 +24,7 @@
       "parameters": {
         "rank": 8,
         "epochs": 1.0,
+        "urgent_cohort_fairness": true,
         "dtype": "float32",
         "batch_tokens": 8192,
         "batch_graphs": 1,

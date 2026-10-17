@@ -6,7 +6,7 @@ def scheduling_rank(entry):
     return (not bool(entry.get('communication')), -entry.get('training_priority', 0))
 
 
-def stream_pending_batches(source, pending_batches, *, priority_ids=None):
+def stream_pending_batches(source, pending_batches, *, priority_ids=None, cohort_ids=None):
     """Keep exact batch order without rescanning sources at every rank switch.
 
     Each rank/visit is already monotone in the production scheduler. Separate
@@ -14,8 +14,17 @@ def stream_pending_batches(source, pending_batches, *, priority_ids=None):
     parser and row-binding checks rather than caching parsed graph tensors.
     """
     priority_ids = set(priority_ids or ())
+    if cohort_ids is not None and len(cohort_ids) != len(source.entries):
+        raise ValueError('native source cohorts do not cover indexed rows')
     def stream_key(visit, rank, indices):
-        return (visit, rank, bool(priority_ids) and any(source.entries[index]['id'] in priority_ids for index in indices))
+        foundation = bool(priority_ids) and any(source.entries[index]['id'] in priority_ids for index in indices)
+        cohort = None
+        if cohort_ids is not None and not foundation and source.entries[indices[0]].get('training_priority', 0) > 0:
+            selected = {cohort_ids[index] for index in indices}
+            if len(selected) != 1:
+                raise ValueError('native pending batch mixes source cohorts')
+            cohort = next(iter(selected))
+        return (visit, rank, foundation, cohort)
     requests = {}
     for visit, indices, _ in pending_batches:
         if not indices:

@@ -79,7 +79,7 @@ def batch_boundaries(entries, *, batch_graphs=1, batch_tokens=0):
 
 def pending_exposure_batches(entries, exposure_counts, *, epochs, batch_graphs=1, batch_tokens=0,
                              foundation_ids=None, foundation_communication_batches=1, minimum_visits=None,
-                             schedule_offset=0):
+                             schedule_offset=0, cohort_ids=None):
     """Schedule only missing row visits, including rows appended after completion.
 
     Communication starts first and alternates with explicitly prioritized
@@ -96,6 +96,9 @@ def pending_exposure_batches(entries, exposure_counts, *, epochs, batch_graphs=1
     if type(schedule_offset) is not int or schedule_offset < 0:
         raise ValueError('native schedule offset must be a nonnegative optimizer step')
     foundation_ids = set(foundation_ids or ())
+    if cohort_ids is not None and (len(cohort_ids) != len(entries)
+            or any(not isinstance(key, str) or not key for key in cohort_ids)):
+        raise ValueError('cohort scheduling requires one stable identity per source row')
     if any(entry['id'] in foundation_ids and not entry.get('communication') for entry in entries):
         raise ValueError('fixed foundation priority requires genuine communication rows')
     if foundation_ids - {entry['id'] for entry in entries}:
@@ -115,11 +118,16 @@ def pending_exposure_batches(entries, exposure_counts, *, epochs, batch_graphs=1
     for rank in sorted({scheduling_rank(entry) for entry in entries}):
         for visit, remaining in pending.items():
             indices = [index for index in remaining if scheduling_rank(entries[index]) == rank]
-            selected = [entries[index] for index in indices]
-            boundaries = batch_boundaries(selected, batch_graphs=batch_graphs, batch_tokens=batch_tokens)
-            for left, right in boundaries:
-                last = right == len(indices) and all(scheduling_rank(entries[index]) <= rank for index in remaining)
-                batches.append((visit, indices[left:right], last))
+            cohorts = {}
+            for index in indices:
+                urgent = entries[index].get('training_priority', 0) > 0 and entries[index]['id'] not in foundation_ids
+                key = cohort_ids[index] if cohort_ids is not None and urgent else None
+                cohorts.setdefault(key, []).append(index)
+            for selected_indices in cohorts.values():
+                selected = [entries[index] for index in selected_indices]
+                boundaries = batch_boundaries(selected, batch_graphs=batch_graphs, batch_tokens=batch_tokens)
+                for left, right in boundaries:
+                    batches.append((visit, selected_indices[left:right], False))
     # A positive source priority must take effect while a large communication
     # cohort is still pending, rather than waiting for its entire completion.
     # Only reorder already packed batches: quotas and authenticated credits do
@@ -135,6 +143,10 @@ def pending_exposure_batches(entries, exposure_counts, *, epochs, batch_graphs=1
         else:
             destination = ordinary
         destination.append(batch)
+    if cohort_ids is not None:
+        from .native_cohort_schedule import balance_urgent_batches
+        urgent = balance_urgent_batches(entries, urgent, exposure_counts, cohort_ids,
+                                       foundation_ids=foundation_ids)
     def foundational(batch):
         return bool(foundation_ids) and any(entries[index]['id'] in foundation_ids for index in batch[1])
     communication.sort(key=lambda batch: not foundational(batch))
@@ -679,6 +691,8 @@ def build_parser():
                         help='explicitly add learned existing reasoning token rows to an old parent')
     parser.add_argument('--foundation-communication-batches', type=int,
         help='while the exact declared foundation is pending, communication batches per priority ordinary batch')
+    parser.add_argument('--urgent-cohort-fairness', action=argparse.BooleanOptionalAction, default=False,
+        help='balance positive-priority source cohorts using actual completed indexed graph token exposure')
     parser.add_argument('--communication-foundation', action=argparse.BooleanOptionalAction, default=False,
         help='pause at the complete admitted communication cohort with mandatory ordinary credits retained')
     parser.add_argument('--held-native-graphs', type=Path, required=True)
@@ -1251,11 +1265,14 @@ def main(argv=None):
         'source_row_bindings': source_row_bindings, 'source_row_order': source_order,
         'exposure_counts': dict(exposure_counts), 'options': checkpoint_options},
         carried_progress.get(args.stage_id or 'native-graph-ce') or {})
+    from .native_cohort_schedule import source_cohort_ids
+    urgent_cohort_ids = source_cohort_ids(train) if args.urgent_cohort_fairness else None
     required_visits, pending_batches = pending_exposure_batches(train.entries, exposure_counts,
         epochs=args.epochs, batch_graphs=args.batch_graphs, batch_tokens=args.batch_tokens,
         foundation_ids=foundation_priority_ids,
         foundation_communication_batches=args.foundation_communication_batches or 1,
-        minimum_visits=pending_frame.get('required_visits'), schedule_offset=global_step)
+        minimum_visits=pending_frame.get('required_visits'), schedule_offset=global_step,
+        cohort_ids=urgent_cohort_ids)
     if objective is not None and not mandatory_objective:
         from ..eval.native_memory import qualify_policy_objective
         checkpoint_options['policy_capacity']=qualify_policy_objective(model,optimizer,train,objective,args,config,
@@ -1270,7 +1287,8 @@ def main(argv=None):
     refresh_boundary = False
     if args.refresh_at_checkpoint and not (args.checkpoint_every or args.checkpoint_seconds):
         raise ValueError('semantic refresh needs a declared checkpoint step/time cadence')
-    schedule = stream_pending_batches(train, pending_batches, priority_ids=foundation_priority_ids)
+    schedule = stream_pending_batches(train, pending_batches, priority_ids=foundation_priority_ids,
+                                      cohort_ids=urgent_cohort_ids)
     resident = None
     if args.resident_data_directory is not None:
         from .native_resident import ResidentAdoption
@@ -1358,14 +1376,17 @@ def main(argv=None):
                     pending_frame = _retain_pending_sources({
                         'source_row_bindings': source_row_bindings, 'source_row_order': source_order,
                         'exposure_counts': dict(exposure_counts), 'options': checkpoint_options}, pending_frame)
+                    urgent_cohort_ids = source_cohort_ids(train) if args.urgent_cohort_fairness else None
                     required_visits, pending_batches = pending_exposure_batches(train.entries, exposure_counts,
                         epochs=args.epochs, batch_graphs=args.batch_graphs, batch_tokens=args.batch_tokens,
                         foundation_ids=foundation_priority_ids,
                         foundation_communication_batches=args.foundation_communication_batches or 1,
-                        minimum_visits=pending_frame.get('required_visits'), schedule_offset=global_step)
+                        minimum_visits=pending_frame.get('required_visits'), schedule_offset=global_step,
+                        cohort_ids=urgent_cohort_ids)
                     total_end = step + len(pending_batches)
                     target_rows = sum(required_visits.values())
-                    schedule = stream_pending_batches(train, pending_batches, priority_ids=foundation_priority_ids)
+                    schedule = stream_pending_batches(train, pending_batches, priority_ids=foundation_priority_ids,
+                                                      cohort_ids=urgent_cohort_ids)
             if policy.signaled or step >= total_end:
                 break
             update_started = time.monotonic()
