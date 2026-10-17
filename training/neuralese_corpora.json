@@ -121860,6 +121860,60 @@
       },
       "admission_proof": "admission-proof.json",
       "notes": "Incremental completed shard only; remaining source shards and actual training exposure are separate obligations."
+    },
+    {
+      "id": "external-expansion-search-owl-native-graphs-20261016-v3-shard0083",
+      "owner": "dgx",
+      "path": "runs/search-owl-native-render-20261016-v3/shard0083-native-graphs",
+      "include": [
+        "source-text/program-header/lfm25/0083.jsonl.zst",
+        "program-header/lfm25/receipt.json",
+        "program-header/lfm25/train/native-graphs.jsonl.zst",
+        "program-header/lfm25/test/native-graphs.jsonl.zst",
+        "source-text/whole-trajectory/lfm25/0083.jsonl.zst",
+        "lfm25/receipt.json",
+        "lfm25/train/native-graphs.jsonl.zst",
+        "lfm25/test/native-graphs.jsonl.zst",
+        "renderer-receipts/lfm25-0083.json",
+        "source-text/program-header/mellum21/0083.jsonl.zst",
+        "program-header/mellum21/receipt.json",
+        "program-header/mellum21/train/native-graphs.jsonl.zst",
+        "program-header/mellum21/test/native-graphs.jsonl.zst",
+        "source-text/whole-trajectory/mellum21/0083.jsonl.zst",
+        "mellum21/receipt.json",
+        "mellum21/train/native-graphs.jsonl.zst",
+        "mellum21/test/native-graphs.jsonl.zst",
+        "renderer-receipts/mellum21-0083.json",
+        "selection-state.json",
+        "launch-binding.json",
+        "selected-shard-0083.jsonl.zst",
+        "admission-proof.json"
+      ],
+      "source_class": "static-role-aware-native-graph-conversion-of-approved-search-owl-shard",
+      "training_admission": true,
+      "training_admission_reason": "Current renderer full trajectory/aggregate verification, exact native counts and current connected protection/decision holds passed for both student views.",
+      "derived_from": [
+        "external-expansion-search-owl-native-20261015-v1"
+      ],
+      "license": "Inherited MIT SearchSwarm and Apache-2.0 OWL provenance; owner accepts all licenses.",
+      "native_graph_views": {
+        "lfm25": {
+          "model_id": "lfm2:f40d7a5bf651a03618ae8c06bda24a180e22fa79de964e55862c2c4984249da6",
+          "views": {
+            "program-header": 5221,
+            "whole-trajectory": 1722
+          }
+        },
+        "mellum21": {
+          "model_id": "mellum:bc700045baee1c7ea1869675c38efedd59d9db09975ea0b38cff8db152d6148f",
+          "views": {
+            "program-header": 5221,
+            "whole-trajectory": 1722
+          }
+        }
+      },
+      "admission_proof": "admission-proof.json",
+      "notes": "Incremental completed shard only; remaining source shards and actual training exposure are separate obligations."
     }
   ],
   "coverage_backlog": [
