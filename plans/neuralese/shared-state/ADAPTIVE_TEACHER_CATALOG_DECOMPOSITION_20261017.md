@@ -38,3 +38,27 @@ transactions, source hashes, immutable authority records, exact prefix
 validation, discovery plumbing and the existing extraction predicate. There
 is one scanner and one extraction policy, shared by both students. Neither
 student training nor the running teacher is restarted for catalog maintenance.
+
+## Committed audit reuse and exact hold lookup (2026-10-18)
+
+1. The historical extraction policy remains the policy. An independent reviewer may
+   authorize reuse of a specific interrupted audit through a SHA-bound witness
+   binding its exact authority, intent, audit sidecar, current scanner and static
+   dependencies. This is a verifier of an explicit review, not a policy exception.
+2. Reuse requires exact held/quality/pending sets, decision holds, source-review
+   identity and historical extraction mechanism. Registry/population changes do
+   not grant source membership; current discovery still controls positive source
+   provenance. Withdrawn-path audit debt remains durable. Real decision changes
+   invalidate reuse. Subsequent registry/population-only changes carry committed
+   audits automatically only when scanner, every static dependency, hold lookup
+   and all decision authority remain byte-identical. The catalog lease authenticates the old namespace before
+   copying committed cursors; extraction cursors and SQLite rows are never reset.
+3. A completed audit prefix needs only a fresh complete source SHA/size check.
+   It does not need to decode the same JSON rows again. Cursor bounds remain strict.
+4. The repeated exact held-program set comprehension may be hoisted only when the
+   authenticated historical reason_for AST has that precise assignment. All other
+   function AST remains unchanged, and the optimized function is bound to one
+   immutable holds object for the invocation. This is exact execution plumbing;
+   it cannot alter eligibility policy.
+5. Candidate extraction, reference qualification, teacher generation, admission and
+   training exposure remain separate. No witness grants admission or readiness.

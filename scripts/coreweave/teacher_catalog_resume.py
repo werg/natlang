@@ -6,6 +6,9 @@ its discovery and extraction functions remain the sole policy implementation.
 from __future__ import annotations
 
 import argparse
+import ast
+import inspect
+import textwrap
 import fcntl
 import importlib.util
 import json
@@ -42,6 +45,128 @@ def load_policy(reference):
     # Compile the bytes just verified, avoiding a second mutable source read.
     exec(compile(read_bytes, reference['path'], 'exec'), module.__dict__)
     return module
+
+
+def optimize_hold_lookup(policy, holds):
+    """Hoist only the historical exact comprehension, with one frozen argument."""
+    original = policy.reason_for
+    source = textwrap.dedent(inspect.getsource(original))
+    tree = ast.parse(source)
+    function = tree.body[0]
+    if (not isinstance(function, ast.FunctionDef) or original.__closure__
+            or function.args.defaults or any(function.args.kw_defaults)
+            or function.args.vararg or function.args.kwarg
+            or [a.arg for a in function.args.args] != ['row','program','protection','holds']):
+        return None
+    expected = ast.parse("held_programs = {key.split(':decision:', 1)[0] for key in holds}").body[0]
+    assignments = [node for node in ast.walk(function) if isinstance(node, ast.Name)
+                   and node.id == 'held_programs' and isinstance(node.ctx, ast.Store)]
+    matches = [node for node in function.body
+               if ast.dump(node, include_attributes=False) == ast.dump(expected, include_attributes=False)]
+    if len(matches) != 1 or len(assignments) != 1 or function.decorator_list:
+        return None  # Other historical policies execute unchanged.
+    if not isinstance(holds, frozenset):
+        raise ValueError('optimized decision holds must be frozen')
+    name = '_catalog_exact_held_programs'
+    if any(isinstance(n, ast.Name) and n.id == name for n in ast.walk(function)):
+        raise ValueError('historical hold lookup private name collision')
+    before = digest(ast.dump(tree, include_attributes=False))
+    matches[0].value = ast.Name(id=name, ctx=ast.Load())
+    ast.fix_missing_locations(tree)
+    namespace = dict(original.__globals__)
+    namespace[name] = frozenset(key.split(':decision:', 1)[0] for key in holds)
+    exec(compile(tree, original.__code__.co_filename, 'exec'), namespace)
+    optimized = namespace[original.__name__]
+    def exact(row, program, protection, supplied_holds):
+        if supplied_holds is not holds:
+            raise ValueError('optimized decision holds snapshot changed')
+        return optimized(row, program, protection, supplied_holds)
+    policy.reason_for = exact
+    return dict(original_ast_sha256=before,
+                optimized_ast_sha256=digest(ast.dump(tree, include_attributes=False)),
+                holds_sha256=digest(sorted(holds)), held_programs=len(namespace[name]))
+
+
+def audit_reuse_basis(prior, current, *, old_intent, old_audit):
+    """Exact review surface; population/registry changes retain current discovery."""
+    keys = ('decision_holds', 'source_reviews_sha256', 'mechanism')
+    if (prior['groups'] != current['groups']
+            or any(prior['current'][k] != current['current'][k] for k in keys)
+            or prior['parent_inputs'] != current['parent_inputs']
+            or prior['parent_inventory'] != current['parent_inventory']):
+        raise ValueError('raw extraction decision authority changed')
+    return dict(previous_authority=old_intent['authority'],
+                previous_intent=old_intent, previous_audit=old_audit,
+                current_scanner=current['scanner'],
+                current_static_guards=current['static_guards'],
+                previous_static_guards=prior['static_guards'],
+                previous_scanner=prior['scanner'],
+                previous_hold_lookup=prior.get('hold_lookup'), current_hold_lookup=current.get('hold_lookup'),
+                decision_holds=current['current']['decision_holds'],
+                source_reviews_sha256=current['current']['source_reviews_sha256'],
+                mechanism=current['current']['mechanism'], groups=current['groups'],
+                parent_inputs=current['parent_inputs'], parent_inventory=current['parent_inventory'])
+
+
+def identical_raw_policy(prior, current):
+    try:
+        audit_reuse_basis(prior, current, old_intent={'authority': None}, old_audit=None)
+    except ValueError:
+        return False
+    return all(prior.get(k) == current.get(k)
+               for k in ('scanner', 'static_guards', 'hold_lookup'))
+
+
+def committed_audit_cursors(old_intent, old_audit):
+    audit = read(old_audit) if old_audit is not None else {}
+    if not isinstance(audit, dict) or any(not isinstance(p, str) or type(n) is not int or n < 0
+                                          for p, n in audit.items()):
+        raise ValueError('invalid committed audit cursor sidecar')
+    # A completed population may retain only withdrawn-path debt in its intent.
+    # Its immutable audit namespace still contains finished active paths; those
+    # entries grant no cursor credit outside the remaining declared debt.
+    return {p:n for p,n in audit.items() if p in set(old_intent['affected_files'])}
+
+
+def reviewed_audit_cursors(reference, prior, current, old_intent, old_audit):
+    review = read(reference)
+    basis = audit_reuse_basis(prior, current, old_intent=old_intent, old_audit=old_audit)
+    if (review.get('schema') != 'natlang.teacher-catalog-audit-continuation/1'
+            or review.get('reviewed') is not True
+            or not isinstance(review.get('reviewer'), str) or not review['reviewer'].strip()
+            or review.get('basis') != basis):
+        raise ValueError('audit continuation requires exact independent review evidence')
+    evidence = review.get('evidence')
+    if not isinstance(evidence, list) or not evidence:
+        raise ValueError('audit continuation needs bound static/scanner equivalence evidence')
+    documents = [read(item) for item in evidence]
+    old_static = prior['static_guards']; new_static = current['static_guards']
+    if len(old_static) != len(new_static):
+        raise ValueError('static policy dependency inventory changed')
+    converter = 'scripts/neuralese_data/build_verified_teacher_trajectory_graphs.py'
+    for old, new in zip(old_static, new_static):
+        if old == new:
+            continue
+        if not old['path'].endswith(converter) or old['path'] != new['path']:
+            raise ValueError('unreviewed static extraction dependency changed')
+        # Reuse the already independently reviewed closure transition, but only
+        # for its exact converter bytes and protected function ASTs. The review
+        # above still binds the complete scanner/static dependency surfaces.
+        def matching_transition(document):
+            transition = document.get('scoped_dependency_transition', {})
+            same = lambda a,b: all(a.get(k) == b[k] for k in ('sha256','bytes'))
+            functions = transition.get('unchanged_protection_functions', {})
+            return (document.get('schema') == 'natlang.acquired-source-closure-code-transition/3'
+                    and same(transition.get('parent_file',{}), old)
+                    and same(transition.get('current_file',{}), new)
+                    and set(functions) == {'current_protection', 'file_rows'}
+                    and all(type(x.get('parent_ast_sha256')) is str
+                            and len(x['parent_ast_sha256']) == 64
+                            and x['parent_ast_sha256'] == x.get('current_ast_sha256')
+                            for x in functions.values()))
+        if not any(matching_transition(document) for document in documents):
+            raise ValueError('converter policy continuation lacks exact protected AST evidence')
+    return committed_audit_cursors(old_intent, old_audit)
 
 
 def discover_sources(repo, registry, initial):
@@ -122,6 +247,12 @@ def scan_file(db, policy, entry, protection, holds, *, audit_cursor=None, audit_
         return
     limit = previous[2] if auditing and previous else None
     cursor = audit_cursor if auditing else (previous[2] if previous else 0)
+    if auditing:
+        if type(cursor) is not int or limit is None or not 0 <= cursor <= limit:
+            raise ValueError('audit cursor outside committed source prefix')
+        if cursor == limit:
+            # binding() just authenticated the entire source, including unread suffix.
+            return
     if not auditing:
         db.execute('INSERT OR REPLACE INTO files VALUES(?,?,?,?,?,?)',
                    (key, before['sha256'], before['bytes'], cursor, 0, None)); db.commit()
@@ -156,7 +287,7 @@ def scan_file(db, policy, entry, protection, holds, *, audit_cursor=None, audit_
 
 
 def resume(out, parent_inputs, parent_inventory, protection_path, *, legacy_static_baseline=None,
-           bootstrap_review=None):
+           bootstrap_review=None, audit_continuation=None):
     out = Path(out)
     parent = read(binding(Path(parent_inputs)))
     population = read(binding(Path(parent_inventory)))
@@ -165,6 +296,8 @@ def resume(out, parent_inputs, parent_inventory, protection_path, *, legacy_stat
     policy = load_policy(parent['mechanism'])
     policy.PROTECTION = Path(protection_path)
     protection, holds, current = policy.inputs()
+    holds = frozenset(holds)
+    hold_lookup = optimize_hold_lookup(policy, holds)
     registry = read(current['registry'])
     current_files, corpora = discover_sources(policy.REPO, registry, read(current['initial_selection']))
     static = [binding(policy.REPO / p) for p in _STATIC]
@@ -203,7 +336,7 @@ def resume(out, parent_inputs, parent_inventory, protection_path, *, legacy_stat
                      selection_mechanism=selection_binding(),
                      decision_holds=current['decision_holds'], groups={k: sorted(v) for k,v in groups.items()},
                      source_population_sha256=digest(dict(files=current_files, corpora=corpora)),
-                     scanner=binding(Path(__file__)), parent_inputs=binding(Path(parent_inputs)),
+                     scanner=binding(Path(__file__)), hold_lookup=hold_lookup, parent_inputs=binding(Path(parent_inputs)),
                      parent_inventory=binding(Path(parent_inventory)), legacy_static_baseline=legacy_static_baseline,
                      bootstrap_review=binding(Path(bootstrap_review)) if bootstrap_review else None)
     key = digest(authority)
@@ -228,10 +361,29 @@ def resume(out, parent_inputs, parent_inventory, protection_path, *, legacy_stat
             if previous_intent:
                 affected.update(previous_intent['affected_files'])
                 if previous_intent['authority'] != authority_ref:
-                    # A→B interrupted→A must audit every prefix B may have
-                    # rewritten, even though the last completed authority is A.
-                    for path in previous_intent['affected_files']:
-                        audit.pop(path, None)
+                    prior_inflight = read(previous_intent['authority'])
+                    exact_policy = identical_raw_policy(prior_inflight, authority)
+                    if exact_policy or audit_continuation is not None:
+                        old_key = digest(prior_inflight)
+                        old_path = out / ('adaptive-audit-' + old_key + '.json')
+                        old_audit = binding(old_path) if old_path.exists() else None
+                        if exact_policy:
+                            carried = committed_audit_cursors(previous_intent, old_audit)
+                            review = None
+                        else:
+                            review = binding(Path(audit_continuation))
+                            carried = reviewed_audit_cursors(review, prior_inflight, authority,
+                                                             previous_intent, old_audit)
+                        audit.update(carried)
+                        immutable(out / ('adaptive-audit-continuation-' + key + '.json'),
+                                  dict(review=review, exact_raw_policy=exact_policy,
+                                       previous_authority=previous_intent['authority'],
+                                       old_audit=old_audit, authority=authority_ref))
+                        write_json_durable(audit_file, audit)
+                    else:
+                        # A→B interrupted→A must audit every possibly rewritten prefix.
+                        for path in previous_intent['affected_files']:
+                            audit.pop(path, None)
             new_or_incomplete = {p for p in by_path if not db.execute(
                 'SELECT 1 FROM files WHERE path=? AND complete=1', (p,)).fetchone()}
             touched = affected | new_or_incomplete
@@ -368,10 +520,12 @@ def main():
     parser.add_argument('--protection', type=Path, required=True)
     parser.add_argument('--legacy-static-baseline')
     parser.add_argument('--bootstrap-review', type=Path)
+    parser.add_argument('--audit-continuation', type=Path)
     parser.add_argument('--export', action='store_true')
     args = parser.parse_args()
     result = resume(args.out, args.parent_inputs, args.parent_inventory, args.protection,
-                    legacy_static_baseline=args.legacy_static_baseline, bootstrap_review=args.bootstrap_review)
+                    legacy_static_baseline=args.legacy_static_baseline, bootstrap_review=args.bootstrap_review,
+                    audit_continuation=args.audit_continuation)
     if args.export:
         result['candidates'] = export_candidates(args.out, binding(args.out / 'adaptive-catalog-state.json'))
     print(json.dumps(result))

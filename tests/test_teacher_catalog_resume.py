@@ -265,3 +265,158 @@ def test_repeated_program_is_encoded_once_and_write_reserve_uses_catalog_disk(tm
     assert len(encoded)==1
     assert floors==[destination]
     assert db.execute('SELECT count(*) FROM occurrences').fetchone()==(1001,)
+
+
+def test_completed_audit_authenticates_full_source_without_decoding(tmp_path, monkeypatch):
+    db=catalog();p=policy();entry=write(tmp_path/'one.jsonl',[row()])
+    scan_file(db,p,entry,dict(held=set()),set())
+    monkeypatch.setattr(mechanism,'iter_jsonl_rows',lambda _:pytest.fail('completed audit decoded again'))
+    scan_file(db,p,entry,dict(held=set()),set(),audit_cursor=1,audit_save=lambda _:None)
+    for invalid in (-1,2,True):
+        with pytest.raises(ValueError,match='audit cursor'):
+            scan_file(db,p,entry,dict(held=set()),set(),audit_cursor=invalid,audit_save=lambda _:None)
+    write(tmp_path/'one.jsonl',[row('changed')])
+    with pytest.raises(ValueError,match='committed source identity'):
+        scan_file(db,p,entry,dict(held=set()),set(),audit_cursor=1,audit_save=lambda _:None)
+
+
+def historical_reason(row,program,protection,holds):
+    held_programs={key.split(':decision:',1)[0] for key in holds}
+    if row['split']!='train':return 'nontrain'
+    if set(program['source_groups'])&protection['held']:return 'held_group'
+    if program['id'] in holds or program['id'] in held_programs:return 'held_program'
+    return program.get('other_reason')
+
+
+def test_exact_hold_hoist_preserves_all_results_and_rejects_other_snapshot():
+    p=SimpleNamespace(reason_for=historical_reason);holds=frozenset({'p:decision:3','exact'})
+    proof=mechanism.optimize_hold_lookup(p,holds)
+    assert proof['held_programs']==2
+    for split in ('train','test'):
+        for identifier in ('p','exact','unheld'):
+            for group in ('g','protected'):
+                for reason in (None,'family_pending'):
+                    r=dict(split=split);program=dict(id=identifier,source_groups=[group],other_reason=reason)
+                    protection=dict(held={'protected'})
+                    assert p.reason_for(r,program,protection,holds)==historical_reason(r,program,protection,holds)
+    with pytest.raises(ValueError,match='snapshot changed'):
+        p.reason_for(dict(split='train'),dict(id='p',source_groups=[]),dict(held=set()),set(holds))
+
+
+def test_nonmatching_policy_is_never_optimized():
+    p=policy();original=p.reason_for
+    assert mechanism.optimize_hold_lookup(p,frozenset()) is None
+    assert p.reason_for is original
+
+
+def audit_review(c, *, mutate=None):
+    intent=json.loads((c.root/'adaptive-policy-inflight.json').read_text())
+    prior=mechanism.read(intent['authority']);current=json.loads(json.dumps(prior))
+    current['current']['registry']=binding(c.registry)
+    old_audit=binding(c.root/('adaptive-audit-'+digest(prior)+'.json'))
+    evidence=c.root/'review-evidence.json';evidence.write_text('{"scope":"exact reviewed scanner and static policy transition"}')
+    review=dict(schema='natlang.teacher-catalog-audit-continuation/1',reviewed=True,reviewer='independent-test-reviewer',
+        evidence=[binding(evidence)],basis=mechanism.audit_reuse_basis(prior,current,old_intent=intent,old_audit=old_audit))
+    if mutate:mutate(review)
+    target=c.root/'review.json';target.write_text(json.dumps(review));return target
+
+
+def interrupted_audited_catalog(c,monkeypatch):
+    first=c.add();c.run()
+    c.current.write_text(json.dumps(dict(held=[],quality=[],pending=[])))
+    second=c.add('new')
+    original=mechanism.scan_file
+    def stop_new(db,p,entry,*args,**kwargs):
+        if entry['path']==str(second) and kwargs.get('audit_cursor') is None:
+            raise RuntimeError('new source deferred')
+        return original(db,p,entry,*args,**kwargs)
+    monkeypatch.setattr(mechanism,'scan_file',stop_new)
+    with pytest.raises(RuntimeError,match='new source deferred'):c.run()
+    monkeypatch.setattr(mechanism,'scan_file',original)
+    registry=json.loads(c.registry.read_text());registry['new_bookkeeping']='append'
+    c.registry.write_text(json.dumps(registry))
+    return first,second
+
+
+def test_reviewed_inflight_audit_survives_registry_change_without_replaying(live_catalog,monkeypatch):
+    c=live_catalog;first,second=interrupted_audited_catalog(c,monkeypatch)
+    review=audit_review(c)
+    monkeypatch.setattr(mechanism,'identical_raw_policy',lambda *_:False)
+    original=mechanism.store_row
+    def count(db,p,path,*args):
+        if path==str(first):pytest.fail('committed reviewed audit replayed')
+        return original(db,p,path,*args)
+    monkeypatch.setattr(mechanism,'store_row',count)
+    mechanism.resume(c.root,c.root/'parent.json',c.root/'parent-population.json',c.current,audit_continuation=review)
+    assert c.reason()==[(None,),(None,)]
+    assert not(c.root/'adaptive-policy-inflight.json').exists()
+
+
+@pytest.mark.parametrize('change',['groups','reviewer','scanner','audit','evidence'])
+def test_audit_reuse_rejects_changed_decisions_or_custody(live_catalog,monkeypatch,change):
+    c=live_catalog;interrupted_audited_catalog(c,monkeypatch)
+    review=audit_review(c)
+    monkeypatch.setattr(mechanism,'identical_raw_policy',lambda *_:False)
+    if change=='groups':c.current.write_text(json.dumps(dict(held=['changed'],quality=[],pending=[])))
+    else:
+        value=json.loads(review.read_text())
+        if change=='reviewer':value['reviewer']=''
+        if change=='scanner':value['basis']['current_scanner']['sha256']='0'*64
+        if change=='audit':Path(value['basis']['previous_audit']['path']).write_text('{}')
+        if change=='evidence':Path(value['evidence'][0]['path']).write_text('{}')
+        review.write_text(json.dumps(value))
+    with pytest.raises(ValueError):
+        mechanism.resume(c.root,c.root/'parent.json',c.root/'parent-population.json',c.current,audit_continuation=review)
+
+
+def test_static_continuation_requires_exact_v4_protected_function_evidence(live_catalog,monkeypatch):
+    c=live_catalog;interrupted_audited_catalog(c,monkeypatch)
+    intent=json.loads((c.root/'adaptive-policy-inflight.json').read_text());prior=mechanism.read(intent['authority'])
+    current=json.loads(json.dumps(prior));current['current']['registry']=binding(c.registry)
+    path='/repo/scripts/neuralese_data/build_verified_teacher_trajectory_graphs.py'
+    old=dict(path=path,sha256='a'*64,bytes=10);new=dict(path=path,sha256='b'*64,bytes=11)
+    prior['static_guards']=[old];current['static_guards']=[new]
+    audit=binding(c.root/('adaptive-audit-'+digest(mechanism.read(intent['authority']))+'.json'))
+    transition=dict(schema='natlang.acquired-source-closure-code-transition/3',scoped_dependency_transition=dict(
+        parent_file=old,current_file=new,unchanged_protection_functions={name:dict(parent_ast_sha256='c'*64,current_ast_sha256='c'*64)
+            for name in ('current_protection','file_rows')}))
+    evidence=c.root/'transition.json';evidence.write_text(json.dumps(transition))
+    review=dict(schema='natlang.teacher-catalog-audit-continuation/1',reviewed=True,reviewer='independent',evidence=[binding(evidence)],
+        basis=mechanism.audit_reuse_basis(prior,current,old_intent=intent,old_audit=audit))
+    target=c.root/'reuse.json';target.write_text(json.dumps(review))
+    assert mechanism.reviewed_audit_cursors(binding(target),prior,current,intent,audit)
+    transition['scoped_dependency_transition']['unchanged_protection_functions']['file_rows']['current_ast_sha256']='d'*64
+    evidence.write_text(json.dumps(transition));review['evidence']=[binding(evidence)];target.write_text(json.dumps(review))
+    with pytest.raises(ValueError,match='protected AST evidence'):
+        mechanism.reviewed_audit_cursors(binding(target),prior,current,intent,audit)
+    current['static_guards']=[{**new,'path':'/repo/scripts/source_review.py'}]
+    review['basis']=mechanism.audit_reuse_basis(prior,current,old_intent=intent,old_audit=audit);target.write_text(json.dumps(review))
+    with pytest.raises(ValueError,match='static extraction dependency'):
+        mechanism.reviewed_audit_cursors(binding(target),prior,current,intent,audit)
+
+
+def test_exact_raw_policy_registry_append_carries_without_review(live_catalog,monkeypatch):
+    c=live_catalog;first,second=interrupted_audited_catalog(c,monkeypatch)
+    original=mechanism.store_row
+    def count(db,p,path,*args):
+        if path==str(first):pytest.fail('registry-only change replayed committed audit')
+        return original(db,p,path,*args)
+    monkeypatch.setattr(mechanism,'store_row',count)
+    c.run()
+    assert c.reason()==[(None,),(None,)]
+    assert not(c.root/'adaptive-policy-inflight.json').exists()
+
+
+def test_exact_raw_policy_never_ignores_scanner_or_hold_lookup_change(live_catalog,monkeypatch):
+    c=live_catalog;interrupted_audited_catalog(c,monkeypatch)
+    intent=json.loads((c.root/'adaptive-policy-inflight.json').read_text());a=mechanism.read(intent['authority'])
+    assert mechanism.identical_raw_policy(a,a)
+    for key in ('scanner','static_guards','hold_lookup'):
+        b=json.loads(json.dumps(a));b[key]='changed'
+        assert not mechanism.identical_raw_policy(a,b)
+
+
+def test_remaining_withdrawn_debt_ignores_finished_audit_entries(tmp_path):
+    path=tmp_path/'audit.json';path.write_text(json.dumps({'finished':12,'withdrawn':7}))
+    assert mechanism.committed_audit_cursors({'affected_files':['withdrawn']},binding(path))=={'withdrawn':7}
+    assert mechanism.committed_audit_cursors({'affected_files':['withdrawn']},None)=={}
