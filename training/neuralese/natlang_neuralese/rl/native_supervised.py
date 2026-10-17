@@ -24,6 +24,48 @@ def objective_contract(sources,parameters):
         margin=parameters.get('preference_margin')).binding()
 
 
+SOURCE_ARGUMENTS = {
+    'native_graphs': ('--native-graphs', 'seed_native_graphs'),
+    'held_native_graphs': ('--held-native-graphs', 'held_native_graphs'),
+    **{role: ('--'+role.replace('_','-'), role) for role in
+       ('foundation_native_graphs', 'pending_native_sources', 'continued_native_graphs',
+        'continued_held_native_graphs', 'withdrawn_native_graphs')},
+}
+
+
+def _without_source_argument(command, flag):
+    result=[];index=0
+    while index<len(command):
+        value=command[index]
+        if value==flag:
+            if index+1==len(command) or command[index+1].startswith('--'):
+                raise ValueError('native source argument lacks a value: '+flag)
+            index+=2
+        elif value.startswith(flag+'='):
+            if not value[len(flag)+1:]:raise ValueError('native source argument lacks a value: '+flag)
+            index+=1
+        else:
+            result.append(value);index+=1
+    return result
+
+
+def bind_seed_sources(config, sources):
+    """Serialize actual resolved stage roles, including adopted predecessor inputs."""
+    command=list(config['seed_command'])
+    native=any(value in {'natlang_neuralese.train.native_state_sft',
+        'natlang_neuralese.train.native_preference'} for value in command)
+    for role,(flag,key) in SOURCE_ARGUMENTS.items():
+        present=any(value==flag or value.startswith(flag+'=') for value in command)
+        command=_without_source_argument(command,flag)
+        config.pop(key,None)
+        if role in sources:
+            config[key]=sources[role]['path']
+            if native or present or role not in ('native_graphs','held_native_graphs'):
+                command += [flag,'{'+key+'}']
+    config['seed_command']=command
+    return config
+
+
 def bind_seed_objective(config,kind,sources):
     """The same seed command invokes the implemented objective, never CE by omission."""
     command=list(config['seed_command'])
@@ -108,15 +150,7 @@ def continuation_config(config,stage,*,checkpoint,adapter,out):
         'seed_native_graphs':sources['native_graphs']['path'],
         'held_native_graphs':sources['held_native_graphs']['path']}
     if adapter is None:result.pop('semantic_adapter',None)
-    result['seed_command']=list(result['seed_command'])
-    for role in ('pending_native_sources','continued_native_graphs','continued_held_native_graphs'):
-        flag='--'+role.replace('_','-')
-        while flag in result['seed_command']:
-            index=result['seed_command'].index(flag);del result['seed_command'][index:index+2]
-        result.pop(role,None)
-        if role in sources:
-            result[role]=sources[role]['path']
-            result['seed_command'] += [flag,'{'+role+'}']
+    bind_seed_sources(result,sources)
     bind_seed_objective(result,stage['kind'],sources)
     return result,sources
 

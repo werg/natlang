@@ -24,7 +24,7 @@ def equal_tree(left, right):
         assert left == right
 
 
-def actual_shared(tmp_path):
+def actual_shared(tmp_path, *, history_policy=None):
     from test_native_semantic_runtime import fixture
     from natlang_neuralese.train.native_state_sft import make_native_optimizer
     from natlang_neuralese.train.native_semantic import SemanticParticipant
@@ -33,6 +33,13 @@ def actual_shared(tmp_path):
     participants, channel = fixture(tmp_path)
     trained = {}
     for name, entry in participants.items():
+        if history_policy is not None:
+            from natlang_neuralese.serve.chat import bind_history_reasoning
+            if name == 'mellum':
+                # Mellum declares KEEP by default in this fixture; assert and
+                # transport its profile without changing the source identity.
+                bind_history_reasoning(entry.tokenizer, policy=history_policy, require_declared=True)
+                entry.config['history_reasoning_policy'] = history_policy
         optimizer, _ = make_native_optimizer(entry.model, lr=.001, in_backward=False)
         roles = entry.model.marker_ids
         plan = compile_graph([Invocation('answer', (4, roles[0], 5, roles[1], 6), producing=((2, 3),))])
@@ -120,6 +127,49 @@ def test_provider_stages_only_selected_shared_participant_and_semantic_payloads(
     assert manifest['participants']['lfm']['path'] in files
     assert manifest['participants']['mellum']['path'] not in files
     assert manifest['semantic']['path'] in files and manifest['training']['path'] in files
+
+
+def test_portable_semantic_bundle_carries_checkpoint_history_sidecar(tmp_path):
+    from natlang_neuralese.model.native_bundle import export_bundle, verify_bundle
+    from natlang_neuralese.model.semantic_channel import SemanticChannel
+    from natlang_neuralese.train.native_semantic_stage import save_shared
+    policy, participants, channel, vae_optimizer, _ = actual_shared(tmp_path, history_policy='keep')
+    adapter = policy.out/'semantic-adapter.json'
+    checkpoint_a = tmp_path/'checkpoint-a.pt'
+    shutil.copy2(policy.slot, checkpoint_a)
+    adapter_a = policy.out/'semantic-adapter-a.json'
+    adapter_value = json.loads(adapter.read_text())
+    adapter_value['checkpoint']['path'] = str(checkpoint_a)
+    for model in adapter_value['models'].values():
+        model['checkpoint']['path'] = str(checkpoint_a)
+    adapter_a.write_text(json.dumps(adapter_value)+'\n')
+    portable = export_bundle(checkpoint_a, tmp_path/'portable-keep', semantic_adapter=adapter_a)
+    receipt = json.loads((tmp_path/'portable-keep'/'semantic-adapter.json').read_text())
+    for name, binding in receipt['tokenizers'].items():
+        sidecar = binding['history_reasoning_binding']
+        assert sidecar['path'] in binding['files']
+        assert sidecar['sha256'] == binding['files'][sidecar['path']]
+        assert any(entry['path'].endswith('/'+sidecar['path']) for entry in portable['semantic_files'])
+    restored = SemanticChannel.load(portable['semantic_adapter']['resolved'])
+    assert restored.tokenizers['mellum'].natlang_history_reasoning['policy'] == 'keep'
+    keep_binding = receipt['tokenizers']['mellum']['history_reasoning_binding']
+    sidecar_a = policy.out/receipt['tokenizers']['mellum']['path']/keep_binding['path']
+    sidecar_a_sha = sha256_file_hex_cached(sidecar_a)
+    # A later checkpoint save writes a new named sidecar; it must leave the
+    # first adapter's file and portable dependency closure valid.
+    save_shared(policy, participants, channel.vae, vae_optimizer,
+        training={'step':3,'exposure':{'actual-pair':3},'config_history':[]}, device='cpu')
+    assert sha256_file_hex_cached(sidecar_a) == sidecar_a_sha
+    verify_bundle(tmp_path/'portable-keep')
+    # A same-checkpoint profile substitution cannot pass merely because the
+    # tokenizer's ordinary HF files and the four-field native identity match.
+    name = next(iter(receipt['tokenizers']))
+    path = tmp_path/'portable-keep'/receipt['tokenizers'][name]['path']/receipt['tokenizers'][name]['history_reasoning_binding']['path']
+    sidecar = json.loads(path.read_text())
+    sidecar['history_reasoning']['policy'] = 'last_turn_only'
+    path.write_text(json.dumps(sidecar)+'\n')
+    with pytest.raises(ValueError, match='inventory|sidecar|profile'):
+        verify_bundle(tmp_path/'portable-keep')
 
 
 def test_changed_selected_payload_and_wrong_participant_fail_closed(tmp_path):

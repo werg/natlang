@@ -1574,7 +1574,7 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
     const worldOk = (!worldScore || worldScore.score >= 100) && hostCertificateOk;
     const answerExpected = actualFiles && record.semantics.files_oracle?.return_count === 'changed' ?
       fileReturnValue(actualFiles, folderFiles!, record.semantics.files_oracle) : record.semantics.expected;
-    const oracle = record.semantics.trusted_exact_verifier ?
+    const oracle = authoring ? { accepted: authoring.ok, level: 'exact' as const, verdict: 'executable-authoring/1' } : record.semantics.trusted_exact_verifier ?
       await checkTrustedExactVerifier(record.semantics.trusted_exact_verifier,
         { value: actual, oracle: record.semantics.trusted_exact_verifier.oracle,
           inputs: record.semantics.inputs, fixture: folderFiles ?? {} }) :

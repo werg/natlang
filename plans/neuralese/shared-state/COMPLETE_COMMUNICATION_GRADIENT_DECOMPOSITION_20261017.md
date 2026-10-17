@@ -194,3 +194,53 @@ Receipt `lfm9478-only-stock-ffn-reference-root-20261017.json` records the
 unchanged original parent and this exact intervention. The ledgered execution
 took 131.86 seconds and used 6.1 GB peak host memory. No production arithmetic,
 readiness threshold, optimizer history or source checkpoint was changed.
+
+Fused-norm combined reference and actual optimizer dtypes (2026-10-17, 20:58 UTC)
+-------------------------------------------------------------------------------
+
+Replacing the serial source-norm diagnostic with the existing shared Triton
+fused RMSNorm, while retaining the explicit double reference projections,
+visible attention and stock feed-forward products, passes all 151 complete
+gradient comparisons. Forward, incremental and consumer-loss differences are
+zero. This demonstrates that serial token execution is unnecessary for that
+combined diagnostic result; it does not qualify production arithmetic or make
+the expensive double products a production proposal.
+
+The same run restores and verifies the actual step9478 optimizer by parameter
+name before observing its tensor dtypes. All 92 matrix momentum buffers belong
+to **MuonSR** and are BF16; the 58 AdamW parameters have FP32 first/second moments
+and step buffers. This resolves the previous unmeasured route/dtype question
+for this exact checkpoint. It must not be generalized to a different saved
+optimizer or used to silently convert moments during a resume.
+
+Under the unchanged strict diagnostic stored-update gates, 101/150 comparisons
+still fail. Source RNG is preserved, all inherited tensors are checked exactly,
+and no source optimizer update occurs. Thus passing complete derivatives under
+reference arithmetic does not establish identical shadow updates. Further
+localization should use these actual MuonSR BF16 momentum and recurrence
+semantics rather than assuming stock torch Muon.
+
+Receipt `lfm9478-fusednorm-combined-reference-updates-root-20261017.json` binds
+the original parent, all module names and per-parameter buffer inventories.
+The ledgered run took152.1 seconds, allocated at most8.40GB CUDA and completed
+without an exception. Existing active student training and readiness thresholds
+were unchanged.
+
+Cheaper IEEE/fused-norm combination (2026-10-17, 21:24 UTC)
+---------------------------------------------------------
+
+Using IEEE native projections/attention and the existing fused RMSNorm with
+global float32 matmul set to highest and TF32 disabled still fails98/151 full
+gradient comparisons. Forward maximum difference is1.788e-6, incremental
+difference8.94e-7 and consumer CE difference1.526e-5. The recorded global
+settings were already highest/TF32-off before the intervention. Thus a missing
+global precision flag or this inexpensive combination does not explain the
+remaining discrepancy; no production arithmetic or tolerance was changed.
+
+Receipt `lfm9478-all-ieee-fusednorm-gradient-diagnostic-root-v2-20261017.json`
+binds the unchanged original parent and source RNG. The ledgered run completed
+in104.8seconds with6.5GB peak host memory and3.85GB CUDA. The preceding attempt
+failed its initial CUDA model allocation before any comparison and remains an
+infrastructure failure, not numerical evidence; the explicit retry required
+12GiB free driver memory before loading. Further work should localize the
+remaining kernel/adjoint discrepancy rather than repeat this combination.

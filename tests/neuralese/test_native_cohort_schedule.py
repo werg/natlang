@@ -119,3 +119,44 @@ def test_existing_unfinished_recipe_accepts_explicit_fairness_tuning(tmp_path):
     changes,old_identity,new_identity=direct_windowing_handoffs(before,after,tmp_path)
     assert changes=={'sft':{'urgent_cohort_fairness':[None,True]}}
     assert old_identity==new_identity
+
+
+@pytest.mark.parametrize('outer_priority', [3, 4])
+def test_positive_nested_bundle_services_teacher_leaf_and_resumes_exact_readers(tmp_path, monkeypatch, outer_priority):
+    source = real_source(tmp_path)
+    leaf_ids = source_cohort_ids(source)
+    outer = tmp_path / 'positive-bundle.json'
+    outer.write_text(json.dumps(dict(schema='natlang.native-graph-sources/1', sources=[
+        dict(kind='native-graphs', path=source.path.name, sha256=source.file_sha256,
+             training_priority=outer_priority)])))
+    wrapped = NativeGraphSource(outer, '1'*64, required_split='train', role_ids=(58,59,60,61))
+    cohorts = source_cohort_ids(wrapped)
+    assert cohorts == leaf_ids
+    assert len(set(cohorts)) == 2
+    entries = copy.deepcopy(wrapped.entries)
+    credits = {'old-0': 1, 'old-1': 1}
+    saved = copy.deepcopy(credits)
+    quotas, batches = pending_exposure_batches(wrapped.entries, credits, epochs=2,
+        batch_graphs=2, cohort_ids=cohorts)
+    assert names(wrapped.entries, batches)[0] == 'new-0'
+    counts, active = count_readers(monkeypatch)
+    actual = list(stream_pending_batches(wrapped, batches, cohort_ids=cohorts))
+    assert [e.id for _,_,_,batch in actual for e in batch] == names(wrapped.entries, batches)
+    assert set(counts.values()) == {2} and not active
+    assert Counter(names(wrapped.entries, batches)) == {
+        e['id']: quotas[e['id']] - saved.get(e['id'], 0) for e in entries}
+    assert credits == saved and wrapped.entries == entries
+    # A real saved prefix of this schedule resumes from those exact row credits.
+    for _, indices, _ in batches[:3]:
+        for index in indices:
+            row_id = entries[index]['id']
+            credits[row_id] = credits.get(row_id, 0) + 1
+    _, remaining = pending_exposure_batches(wrapped.entries, credits, epochs=2,
+        batch_graphs=2, cohort_ids=source_cohort_ids(wrapped))
+    assert Counter(names(entries, remaining)) == {
+        e['id']: quotas[e['id']] - credits.get(e['id'], 0)
+        for e in entries if quotas[e['id']] > credits.get(e['id'], 0)}
+    # Positive wrappers must still authenticate the interior manifest itself.
+    source.path.write_text(source.path.read_text() + ' ')
+    with pytest.raises(ValueError, match='changed'):
+        source_cohort_ids(wrapped)

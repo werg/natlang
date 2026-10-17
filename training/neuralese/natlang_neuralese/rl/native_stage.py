@@ -13,7 +13,8 @@ from ..common.hashing import sha256_file_hex_cached
 
 
 def prepare(rollouts, *, checkpoint, tokenizer, bundle=None, mode='grpo', coefficient_policy=None,
-            expected_history_reasoning_policy=None, expected_history_binding_sha256=None):
+            expected_history_reasoning_policy=None, expected_history_binding_sha256=None,
+            expected_history_binding_path=None):
     from transformers import AutoTokenizer
     from ..model.shared_state import RoleTokens, ROLE_MARKERS
     from ..data.text_corpus import tokenizer_fingerprint
@@ -27,7 +28,8 @@ def prepare(rollouts, *, checkpoint, tokenizer, bundle=None, mode='grpo', coeffi
         return bind_saved_history_reasoning(tokenizer, tokenizer_path=tokenizer_path,
             checkpoint_sha256=identity['checkpoint_sha256'], tokenizer_fingerprint=fingerprint,
             expected_history_reasoning_policy=expected_history_reasoning_policy,
-            expected_binding_sha256=expected_history_binding_sha256)
+            expected_binding_sha256=expected_history_binding_sha256,
+            expected_binding_path=expected_history_binding_path)
 
     if coefficient_policy is not None:
         from ..model.native_coefficient_policy import policy_core
@@ -101,6 +103,7 @@ def main(argv=None):
     parser.add_argument('--coefficient-policy',type=Path)
     parser.add_argument('--history-reasoning-policy', choices=('keep', 'last_turn_only'))
     parser.add_argument('--history-reasoning-binding-sha256')
+    parser.add_argument('--history-reasoning-binding-path', type=Path)
     parser.add_argument('--continue-from', type=Path, required=True)
     parser.add_argument('--held-native-graphs', type=Path, required=True)
     parser.add_argument('--out', type=Path, required=True)
@@ -124,7 +127,8 @@ def _admit_and_train(args,trainer):
     graphs, objective = prepare(rows, checkpoint=args.continue_from, tokenizer=args.rl_tokenizer,
         bundle=args.rl_block_bundle, mode=args.rl_mode,coefficient_policy=args.coefficient_policy,
         expected_history_reasoning_policy=args.history_reasoning_policy,
-        expected_history_binding_sha256=args.history_reasoning_binding_sha256)
+        expected_history_binding_sha256=args.history_reasoning_binding_sha256,
+        expected_history_binding_path=args.history_reasoning_binding_path)
     if not graphs:
         raise ValueError('no useful native policy episodes: route flat failures to verified graph SFT seeding')
     args.out.mkdir(parents=True, exist_ok=True)

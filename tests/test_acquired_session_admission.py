@@ -138,8 +138,9 @@ def test_source_failure_and_current_protections_cannot_become_positive_train(adm
         held_sources=held_sources,fingerprint=fp)
 
 
-@pytest.mark.parametrize('base',BASES,ids=['lfm','mellum'])
-def test_actual_completed_durable_conversion_rejoins_all_positive_and_failed_sources(base,tmp_path,monkeypatch):
+@pytest.mark.parametrize(('base','history_profile'),[
+    (BASES[0],None),(BASES[1],None),(BASES[0],'keep')],ids=['lfm-default','mellum-default','lfm-keep'])
+def test_actual_completed_durable_conversion_rejoins_all_positive_and_failed_sources(base,history_profile,tmp_path,monkeypatch):
     import json
     from pathlib import Path
     from test_prepared_acquired_tokenizers import export
@@ -162,6 +163,8 @@ def test_actual_completed_durable_conversion_rejoins_all_positive_and_failed_sou
     ids,bindings=load_decision_holds(holds);output=tmp_path/'graphs'
     argv=['--export-receipt',str(receipt),'--base-tokenizer',str(base),'--protection','fixture','--output',str(output),
           '--chunk-sessions','1']
+    if history_profile is not None:
+        argv += ['--history-reasoning-policy', history_profile]
     for hold in holds:argv+=['--decision-hold',str(hold)]
     builder.main(argv)
     checkpoint_root=tmp_path/'admission-checkpoints'; context={'model':'lfm25' if 'lfm' in str(base) else 'mellum21',
@@ -169,6 +172,7 @@ def test_actual_completed_durable_conversion_rejoins_all_positive_and_failed_sou
     checked,outputs,proofs,groups=verify_conversion(output,receipt,protection=protection,
         held_sources=ids|{v.split(':decision:',1)[0] for v in ids},decision_bindings=bindings,source_rows=rows,
         shard_checkpoint_root=checkpoint_root,checkpoint_context=context)
+    assert checked.get('explicit_history_reasoning_policy') == history_profile
     assert checked['counts']['positive_sessions']==1 and checked['counts']['source-reported-non-positive']==1
     assert all(p['source_outcome']['label']!='failed' for p in proofs)
     assert len(proofs)==sum(item['rows'] for item in outputs) and not groups['test']

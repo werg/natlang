@@ -22,7 +22,7 @@ def value():
     return {'schema':'natlang.normalized-agent-trajectory/1','whole_trajectory':True,'windowed':False,
         'positive_candidate':True,'source_row':'source.parquet:17',
         'source_file':{'path':'source.parquet','sha256':'a'*64},
-        'source_revision':'revision','trajectory':{'id':'source-session','split_groups':['source-task'],
+        'source_revision':'revision','trajectory':{'id':'source-session','split':'train','split_groups':['source-task'],
         'messages':messages,'tools':[{'type':'function','function':{'name':'inspect','description':'inspect',
         'parameters':{'type':'object','properties':{}}}}],
         'outcome':{'label':'teacher'},'lineage':{'teacher':'upstream'},'license':{'name':'upstream'}}}
@@ -86,6 +86,19 @@ def test_explicit_keep_uses_distinct_ids_without_relabeling_default_rows():
     assert keep_graphs[0]['id']==default_graphs[0]['id']+':history-reasoning:keep'
     assert default_graphs[0]['conversion']['acquired_session']['original_source_file']==keep_graphs[0]['conversion']['acquired_session']['original_source_file']
     assert default_graphs[0]['conversion']['acquired_session']['original_target_ids']==keep_graphs[0]['conversion']['acquired_session']['original_target_ids']
+    from scripts.neuralese_data.prepare_acquired_session_admission import verify_graph_source
+    for graph in keep_graphs:
+        verify_graph_source(graph, value_keep, protection={'held':set(),'quality':set(),'pending':set()}, held_sources=set(),
+            fingerprint=keep_expanded_fp, explicit_history_reasoning_policy='keep')
+
+
+def test_prepared_keep_profile_cannot_fall_back_to_legacy_ids_when_cli_omits_override():
+    from types import SimpleNamespace
+    from scripts.neuralese_data.build_acquired_full_session_graphs import resolve_explicit_history_profile
+    prepared=SimpleNamespace(explicit_history_reasoning_policy='keep')
+    assert resolve_explicit_history_profile(None,prepared)=='keep'
+    with pytest.raises(ValueError,match='prepared tokenizer binding'):
+        resolve_explicit_history_profile('last_turn_only',prepared)
 
 
 def test_invalid_original_tool_arguments_are_rejected_before_any_graph_can_be_yielded():

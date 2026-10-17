@@ -25,9 +25,8 @@ const AGREEMENT = 0.9;
 function pickRows(rng, dataset, split, perFileNl = false) {
   const rows = labeledRows(dataset, split), fields = LABELED_FIELDS[dataset];
   const labels = fields.labels ?? rng.sample([...new Set(rows.map(row => row.label))].sort(), rng.int(3, 5));
-  // SST-2's training rows include phrase fragments labeled by the sentences around them ("utter authority":
-  // negative); whole sentences only.
-  const pool = rows.filter(row => labels.includes(row.label) && (dataset !== 'sst2' || row.text.length >= 80));
+  // SST2 records already carry exact original full-sentence membership from labeledRows.
+  const pool = rows.filter(row => labels.includes(row.label));
   const count = Math.min(pool.length, perFileNl ? rng.int(8, 24) : rng.next() < 0.5 ? rng.int(20, 45) : rng.int(140, 200));
   if (count < (perFileNl ? 8 : 20)) throw new Error(`${dataset}/${split} has too few suitable records: ${count}`);
   return { labels, rows: rng.sample(pool, count).map(row => ({ ...row, fileId: row.id.slice(0, 16) })) };
@@ -106,6 +105,7 @@ function caseFor(seed, index, split, kind, chosenDataset, perFileNl = false) {
   record.gold_sources = [`${dataset}-labels`];
   record.dataset = dataset;
   record.dataset_records = rows.map(row => row.id);
+  if (dataset === 'sst2') record.generation.source_context = rows.map(row => row.source_context);
   record.generation.layout = { id: 'id', path: 'inbox/{id}.md', body: 'body', format: 'frontmatter' };
   return [record];
 }

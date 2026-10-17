@@ -360,6 +360,14 @@ def test_streamed_resume_preserves_old_group_receipt_and_records_mixed_renderer_
                                                            source_ids, source_hashes)
     old_receipt['binding'] = old_group_binding
     old_receipt.pop('renderer_code_sha256')
+    # The b054 output inventory includes its per-trajectory done sidecar.
+    done_relative = f'done/lfm25/{group_id}.json'
+    done_path = receipt_path.parent.parent / 'groups' / group_id / done_relative
+    done_path.parent.mkdir(parents=True, exist_ok=True)
+    done_bytes = renderer.canonical({'shard': group_id, 'tokenizer': 'lfm25',
+                                     'records': len(trajectory_rows)}).encode() + b'\n'
+    done_path.write_bytes(done_bytes)
+    old_receipt['outputs'][done_relative] = renderer.sha(done_bytes)
     receipt_path.write_text(json.dumps(old_receipt, sort_keys=True) + '\n')
 
     original_output = _read(out / 'whole-trajectory' / 'lfm25' / 'selected.jsonl')
@@ -374,6 +382,11 @@ def test_streamed_resume_preserves_old_group_receipt_and_records_mixed_renderer_
     assert result['group_renderer_code_sha256s'] == sorted({
         old_renderer_sha, current_renderer_sha})
     assert _read(out / 'whole-trajectory' / 'lfm25' / 'selected.jsonl') == original_output
+    done_original = done_path.read_bytes()
+    done_path.write_bytes(done_original + b'corrupt')
+    with __import__('pytest').raises(ValueError, match='trajectory output checksum mismatch'):
+        renderer._verify_trajectory_receipts(job, result, {old_renderer_sha, current_renderer_sha})
+    done_path.write_bytes(done_original)
 
 
 def test_legacy_done_marker_requires_exact_source_and_old_renderer_witness(tmp_path):
@@ -520,6 +533,99 @@ def test_done_receipts_verify_output_checksums_without_rewriting_them(tmp_path):
             renderer.file_sha(Path(renderer.__file__).resolve()), old_sha})
 
 
+def test_resource_only_renderer_parent_continues_exact_trajectory_receipts(tmp_path, monkeypatch):
+    from scripts.neuralese_data.strip_generic_system_prompt import strip_row
+    renderer._G.clear()
+    renderer._G.update({'tok': {'lfm25': _CharacterChatTokenizer()}, 'pieces': {},
+                        'tokenizer_paths': {'lfm25': tmp_path}, 'strip_row': strip_row,
+                        'cross_trajectory_writer_sources': {}})
+    selected = tmp_path / 'selected.jsonl'
+    rows = _trajectory_rows()
+    with write_jsonl_text(selected) as stream:
+        for row in rows:
+            stream.write(renderer.canonical(row) + '\n')
+    out = tmp_path / 'work'
+    input_binding = renderer._render_input_binding({'lfm25': tmp_path}, {})
+    parent_sha = renderer.SEARCH_RESOURCE_ONLY_PARENT_RENDERER_SHA256
+    job = (str(selected), str(out), 'lfm25', {}, 'fixture', set(), set(), False,
+           None, ('whole-trajectory',), False, set(), None, input_binding, None, parent_sha)
+    parent_code = renderer._resource_parent_code_binding(parent_sha)
+    source_digest = renderer.file_sha(selected)
+    parent_job_binding = renderer._render_job_binding_from_job(job, source_digest, parent_code)
+    rows_by_trajectory = {}
+    for row in rows:
+        rows_by_trajectory.setdefault(renderer._trajectory_key(row), []).append(row)
+    renderer.render_shard(job)
+    receipts_root = out / 'trajectory-stream' / 'lfm25' / 'selected' / 'receipts'
+    for path in receipts_root.glob('*.json'):
+        receipt = json.loads(path.read_text())
+        trajectory = next(key for key in rows_by_trajectory
+                          if renderer.sha(key.encode('utf-8')) == path.stem)
+        source_hashes = [renderer.sha(renderer.canonical(row).encode('utf-8'))
+                         for row in rows_by_trajectory[trajectory]]
+        source_ids = [row['id'] for row in rows_by_trajectory[trajectory]]
+        receipt['binding'] = renderer._trajectory_render_binding(
+            parent_job_binding, trajectory, source_ids, source_hashes)
+        receipt['renderer_code_sha256'] = parent_sha
+        path.write_text(json.dumps(receipt, sort_keys=True) + '\n')
+
+    # The real resume path validates every old output, then writes a current
+    # shard marker that retains the old per-trajectory renderer identity.
+    calls = []
+    original = renderer._render_shard_materialized
+    def traced(job_to_render):
+        calls.append(job_to_render)
+        return original(job_to_render)
+    monkeypatch.setattr(renderer, '_render_shard_materialized', traced)
+    resumed = renderer.render_shard(job)
+    assert calls == []
+    assert resumed['renderer_code_sha256'] == renderer.file_sha(Path(renderer.__file__).resolve())
+    assert set(resumed['trajectory_renderers'].values()) == {parent_sha}
+    renderer._verify_trajectory_receipts(job, resumed, {
+        renderer.file_sha(Path(renderer.__file__).resolve()), parent_sha},
+        expected_job_binding=renderer._render_job_binding_from_job(
+            job, renderer.file_sha(selected), renderer._render_code_binding()))
+    with __import__('pytest').raises(ValueError, match='exact reviewed resource-only continuation'):
+        renderer._resource_parent_code_binding('f' * 64)
+
+
+def test_legacy_search_binding_matches_historical_equation_without_null_render_inputs(tmp_path):
+    selected = tmp_path / 'selected.jsonl'
+    selected.write_text('{}\n')
+    source_sha = renderer.file_sha(selected)
+    job = (str(selected), str(tmp_path / 'out'), 'lfm25', {'blocked-chain': 2}, 'fixture',
+           {'held-group'}, {'excluded-decision'}, False, ['program-b', 'program-a'],
+           ('program-header', 'whole-trajectory'), True, {'excluded-target'},
+           renderer.LEGACY_SEARCH_RENDERER_SHA256, {'tokenizers': {}, 'pieces_sha256': None})
+
+    actual = renderer._legacy_render_job_binding(
+        job, source_sha, renderer.LEGACY_SEARCH_RENDERER_SHA256)
+    historical = renderer.sha(renderer.canonical({
+        'source_sha256': source_sha,
+        'tokenizer': 'lfm25',
+        'corpus': 'fixture',
+        'blocked': {'blocked-chain': 2},
+        'held_groups': ['held-group'],
+        'decision_exclude': ['excluded-decision'],
+        'target_exclude': ['excluded-target'],
+        'header_as_full': False,
+        'full_programs': ['program-a', 'program-b'],
+        'renderings': ['program-header', 'whole-trajectory'],
+        'compress_text': True,
+        'code': renderer.LEGACY_SEARCH_CODE_BINDING,
+    }).encode())
+    assert actual == historical
+
+    # ``render_inputs: None`` is not the historical equation: it was added by
+    # a later renderer and must not be confused with the key being absent.
+    current_equation = renderer._render_job_binding(
+        source_sha, 'lfm25', {'blocked-chain': 2}, 'fixture', {'held-group'},
+        {'excluded-decision'}, {'excluded-target'}, False,
+        ['program-b', 'program-a'], ('program-header', 'whole-trajectory'), True,
+        renderer.LEGACY_SEARCH_CODE_BINDING, None)
+    assert actual != current_equation
+
+
 def test_bounded_render_jobs_cancel_outstanding_and_do_not_queue_entire_corpus():
     from concurrent.futures import Future
     import pytest
@@ -542,3 +648,21 @@ def test_bounded_render_jobs_cancel_outstanding_and_do_not_queue_entire_corpus()
         renderer._run_bounded_render_jobs(pool, list(range(1000)), 4, lambda *_: None)
     assert pool.submitted_jobs == [0, 1, 2, 3]
     assert all(future.cancelled() for future in pool.futures[1:])
+
+
+def test_explicit_keep_native_turn_ids_are_distinct_and_preserve_source_identity():
+    row = {'id': 'text:task-1', 'source_record_ids': ['task-1'], 'text': 'changed KEEP bytes'}
+    default = dict(row)
+    renderer.apply_explicit_history_profile_ids([default], None)
+    keep = dict(row)
+    renderer.apply_explicit_history_profile_ids([keep], 'keep')
+    assert default == row
+    assert keep['id'] == 'text:task-1:history-reasoning:keep'
+    assert keep['source_row_id'] == row['id']
+    assert keep['source_record_ids'] == row['source_record_ids']
+    assert keep['history_reasoning_policy'] == 'keep'
+
+
+def test_actual_render_input_profile_map_covers_all_configured_tokenizers():
+    assert renderer._history_profiles_for_tokenizers({'lfm': 'a', 'mellum': 'b'}, {'lfm': 'keep'}) == {
+        'lfm': 'keep', 'mellum': 'backbone-default'}

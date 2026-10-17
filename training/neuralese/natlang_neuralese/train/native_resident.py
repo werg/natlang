@@ -180,10 +180,22 @@ def validate_source_obligations(plan, stage_id, train, declarations, withdrawal_
     return _retain_pending_sources(frame, {})
 
 
+def same_geometry_identity(previous, current):
+    """An omitted attention mode means IEEE; all other identity fields stay exact."""
+    def explicit(value):
+        if not isinstance(value,dict):return value
+        result=dict(value)
+        if isinstance(value.get('model_config'),dict):
+            result['model_config']=dict(value['model_config'])
+            result['model_config'].setdefault('native_attention_precision','ieee')
+        return result
+    return explicit(previous)==explicit(current)
+
+
 def geometry_capacity(value, *, identity, code):
     certificate = json.loads(bound(value).read_text())
     if (certificate.get('schema') != 'natlang.native-resident-geometry-qualification/1'
-            or certificate.get('passed') is not True or certificate.get('identity') != identity
+            or certificate.get('passed') is not True or not same_geometry_identity(certificate.get('identity'), identity)
             or certificate.get('runtime_code_sha256') != digest(code)):
         raise ValueError('resident geometry qualification differs from actual model/runtime/packing')
     bound(certificate['evidence'])
@@ -219,6 +231,8 @@ def geometry_from_evidence(source, first, evidence, *, package, source_preparati
         source_binding, prior_binding = payload[field], payload[prior]
         witnesses, maximum = payload['indexes'], payload['geometry']
         expected_rows = payload['rows' if split == 'train' else 'held_rows']
+        if payload.get('delta_validation') is not None:
+            raise ValueError('delta preparation is not a full-source geometry evidence receipt')
         expected_entries = payload['entries_sha256' if split == 'train' else 'held_entries_sha256']
         start = None
     else:
@@ -332,8 +346,57 @@ def retire(directory, checkpoint, terminal):
         finally: os.close(descriptor)
 
 
+def _delta_payload(directory, previous, plan, proposed, stage_id, recipe_path,
+                   tokenizer_fingerprint, role_ids, package, delta_sources):
+    """Validate only explicit new leaves; the learner validates the full union."""
+    from .recipe import native_recipe_binding
+    if not isinstance(delta_sources, dict) or set(delta_sources) != {'train'}:
+        raise ValueError('resident delta preparation requires an explicit train delta')
+    prior = plan['stage_inputs'][stage_id]
+    actual = proposed['stage_inputs'][stage_id]
+    if actual['held_native_graphs'] != prior['held_native_graphs']:
+        raise ValueError('resident delta preparation requires unchanged held source')
+    train_ref = binding(bound(actual['native_graphs']))
+    prior_ref = binding(bound(prior['native_graphs']))
+    held_ref = binding(bound(prior['held_native_graphs']))
+    delta_ref = binding(bound(delta_sources['train']))
+    wrapper = json.loads(bound(train_ref).read_text())
+    expected = [{'kind': 'native-graphs', **prior_ref}, {'kind': 'native-graphs', **delta_ref}]
+    if wrapper != {'schema': 'natlang.native-graph-sources/1', 'sources': expected}:
+        raise ValueError('resident delta source must be exact prior source followed by declared delta')
+    initial = json.loads((directory/'initial.json').read_text())
+    prior_counts = previous['payload'] if previous else initial
+    rows, held_rows = prior_counts.get('rows'), prior_counts.get('held_rows')
+    if type(rows) is not int or rows < 1 or type(held_rows) is not int or held_rows < 1:
+        raise ValueError('resident delta preparation lacks authenticated prior row counts')
+    from .native_source_preparation import NativeSourcePreparation
+    preparation = NativeSourcePreparation(tokenizer_fingerprint, role_ids)
+    delta = preparation.load(delta_ref, split='train')
+    capacity = initial.get('geometry_qualification')
+    if not capacity:
+        raise ValueError('resident delta append needs explicit geometry qualification')
+    limits = geometry_capacity(capacity, identity=initial['geometry_identity'], code=plan['code'])
+    geometry = new_geometry(delta, 0)
+    if any(geometry[key] > limits[key] for key in limits):
+        raise ValueError('resident delta exceeds qualified whole-graph geometry')
+    pending_declarations(proposed, stage_id, tokenizer_fingerprint)
+    return {'predecessor': previous['generation'] if previous else digest(plan),
+        'stage_id': stage_id, 'plan': proposed,
+        'recipe': native_recipe_binding(recipe_path, plan['recipe_sha256']),
+        'train': train_ref, 'prior_train': prior_ref, 'held': held_ref, 'prior_held': held_ref,
+        'prior_recipe': previous['payload']['prior_recipe'] if previous else initial['recipe'],
+        'tokenizer_fingerprint': tokenizer_fingerprint, 'role_ids': list(role_ids),
+        'indexes': _source_witness(delta, package), 'rows': rows + len(delta), 'held_rows': held_rows,
+        'geometry_qualification': capacity, 'geometry_identity': initial['geometry_identity'],
+        'geometry': geometry,
+        'delta_validation': {'schema': 'natlang.native-resident-delta-validation/1',
+            'source': delta_ref, 'rows': len(delta), 'entries_sha256': digest(
+                [{**entry, 'training_priority':entry.get('training_priority',0)} for entry in delta.entries]),
+            'prior_rows': rows, 'prior_held_rows': held_rows, 'prior_plan_sha256': digest(plan)}}
+
+
 def prepare(directory, recipe_path, stage_id, *, tokenizer_fingerprint, role_ids,
-            runtime_package=None, geometry_evidence=None, publish=True):
+            runtime_package=None, geometry_evidence=None, publish=True, delta_sources=None):
     """CPU preparation; callers decide admission and provide an immutable recipe."""
     if type(publish) is not bool:
         raise ValueError('resident preparation publish must be an explicit boolean')
@@ -364,59 +427,65 @@ def prepare(directory, recipe_path, stage_id, *, tokenizer_fingerprint, role_ids
     old_paths = {dep['path'] for roles in plan['stage_inputs'].values() for value in roles.values()
                  for dep in _binding_files(value)}
     proposed['inputs'] = {**{p: h for p, h in plan['inputs'].items() if p not in old_paths}, **inputs}
-    from .native_source_preparation import NativeSourcePreparation
-    source_preparation = NativeSourcePreparation(tokenizer_fingerprint, role_ids)
-    # New manifests expose already validated old subtrees; load those roots once.
-    train = source_preparation.load(proposed['stage_inputs'][stage_id]['native_graphs'], split='train')
-    held = source_preparation.load(proposed['stage_inputs'][stage_id]['held_native_graphs'], split='test')
-    old = source_preparation.load(plan['stage_inputs'][stage_id]['native_graphs'], split='train')
-    old_held = source_preparation.load(plan['stage_inputs'][stage_id]['held_native_graphs'], split='test')
-    append_only_rows(old.bindings, train.bindings, label='resident training-source')
-    append_only_rows(old_held.bindings, held.bindings, label='resident held-source')
-    if (train.entries[:len(old.entries)] != old.entries or held.entries[:len(old_held.entries)] != old_held.entries
-            or len(train) < len(old) or len(held) < len(old_held)
-            or (len(train) == len(old) and len(held) == len(old_held)
-                and plan['stage_inputs'][stage_id].get('pending_native_sources') ==
-                    proposed['stage_inputs'][stage_id].get('pending_native_sources'))):
-        raise ValueError('resident append must preserve every prior row, order and scheduling priority')
-    if train.groups & held.groups:
-        raise ValueError('resident train/held groups overlap')
-    declarations = pending_declarations(proposed, stage_id, tokenizer_fingerprint)
-    # Reject conflicts before publishing, with no earned visits or model action.
-    initial = json.loads((directory/'initial.json').read_text())
-    validate_source_obligations(proposed, stage_id, train, declarations,
-        initial.get('withdrawal_history') or ())
-    capacity_binding = initial.get('geometry_qualification')
-    if not capacity_binding:
-        raise ValueError('resident append needs an explicit current geometry qualification')
-    limits = geometry_capacity(capacity_binding, identity=initial['geometry_identity'], code=plan['code'])
-    geometry_evidence = geometry_evidence or {}
-    if set(geometry_evidence) - {'train', 'test'}:
-        raise ValueError('geometry evidence must declare train/test scope explicitly')
-    def measured(source, first):
-        if len(source) == first:
-            return {'forward_tokens': 0, 'kv_slots': 0}
-        evidence = geometry_evidence.get(source.required_split)
-        return (geometry_from_evidence(source, first, evidence, package=package, source_preparation=source_preparation) if evidence
-                else new_geometry(source, first))
-    train_geometry = measured(train, len(old))
-    held_geometry = measured(held, len(old_held))
-    geometry = {key: max(train_geometry[key], held_geometry[key]) for key in train_geometry}
-    if any(geometry[key] > limits[key] for key in limits):
-        raise ValueError('resident append exceeds qualified whole-graph geometry; retain pending until memory handling is qualified')
-    payload = {'predecessor': predecessor, 'stage_id': stage_id, 'plan': proposed,
-        'recipe': native_recipe_binding(recipe_path, plan['recipe_sha256']),
-        'train': binding(train.path), 'prior_train': binding(old.path),
-        'held': binding(held.path), 'prior_held': binding(old_held.path),
-        'prior_recipe': (previous['payload']['prior_recipe'] if previous else
-            json.loads((directory/'initial.json').read_text())['recipe']),
-        'tokenizer_fingerprint': tokenizer_fingerprint, 'role_ids': list(role_ids),
-        'indexes': _source_witness(train, package) + _source_witness(held, package), 'rows': len(train),
-        'held_rows': len(held), 'held_entries_sha256': digest(held.entries),
-        'entries_sha256': digest(train.entries), 'geometry_qualification': capacity_binding,
-        'geometry': geometry, 'geometry_identity': initial['geometry_identity']}
-    if geometry_evidence:
-        payload['geometry_evidence'] = geometry_evidence
+    if delta_sources is not None:
+        if geometry_evidence:
+            raise ValueError('resident delta preparation compiles new geometry directly, not full-source evidence')
+        payload = _delta_payload(directory, previous, plan, proposed, stage_id, recipe_path,
+            tokenizer_fingerprint, role_ids, package, delta_sources)
+    else:
+        from .native_source_preparation import NativeSourcePreparation
+        source_preparation = NativeSourcePreparation(tokenizer_fingerprint, role_ids)
+        # New manifests expose already validated old subtrees; load those roots once.
+        train = source_preparation.load(proposed['stage_inputs'][stage_id]['native_graphs'], split='train')
+        held = source_preparation.load(proposed['stage_inputs'][stage_id]['held_native_graphs'], split='test')
+        old = source_preparation.load(plan['stage_inputs'][stage_id]['native_graphs'], split='train')
+        old_held = source_preparation.load(plan['stage_inputs'][stage_id]['held_native_graphs'], split='test')
+        append_only_rows(old.bindings, train.bindings, label='resident training-source')
+        append_only_rows(old_held.bindings, held.bindings, label='resident held-source')
+        if (train.entries[:len(old.entries)] != old.entries or held.entries[:len(old_held.entries)] != old_held.entries
+                or len(train) < len(old) or len(held) < len(old_held)
+                or (len(train) == len(old) and len(held) == len(old_held)
+                    and plan['stage_inputs'][stage_id].get('pending_native_sources') ==
+                        proposed['stage_inputs'][stage_id].get('pending_native_sources'))):
+            raise ValueError('resident append must preserve every prior row, order and scheduling priority')
+        if train.groups & held.groups:
+            raise ValueError('resident train/held groups overlap')
+        declarations = pending_declarations(proposed, stage_id, tokenizer_fingerprint)
+        # Reject conflicts before publishing, with no earned visits or model action.
+        initial = json.loads((directory/'initial.json').read_text())
+        validate_source_obligations(proposed, stage_id, train, declarations,
+            initial.get('withdrawal_history') or ())
+        capacity_binding = initial.get('geometry_qualification')
+        if not capacity_binding:
+            raise ValueError('resident append needs an explicit current geometry qualification')
+        limits = geometry_capacity(capacity_binding, identity=initial['geometry_identity'], code=plan['code'])
+        geometry_evidence = geometry_evidence or {}
+        if set(geometry_evidence) - {'train', 'test'}:
+            raise ValueError('geometry evidence must declare train/test scope explicitly')
+        def measured(source, first):
+            if len(source) == first:
+                return {'forward_tokens': 0, 'kv_slots': 0}
+            evidence = geometry_evidence.get(source.required_split)
+            return (geometry_from_evidence(source, first, evidence, package=package, source_preparation=source_preparation) if evidence
+                    else new_geometry(source, first))
+        train_geometry = measured(train, len(old))
+        held_geometry = measured(held, len(old_held))
+        geometry = {key: max(train_geometry[key], held_geometry[key]) for key in train_geometry}
+        if any(geometry[key] > limits[key] for key in limits):
+            raise ValueError('resident append exceeds qualified whole-graph geometry; retain pending until memory handling is qualified')
+        payload = {'predecessor': predecessor, 'stage_id': stage_id, 'plan': proposed,
+            'recipe': native_recipe_binding(recipe_path, plan['recipe_sha256']),
+            'train': binding(train.path), 'prior_train': binding(old.path),
+            'held': binding(held.path), 'prior_held': binding(old_held.path),
+            'prior_recipe': (previous['payload']['prior_recipe'] if previous else
+                json.loads((directory/'initial.json').read_text())['recipe']),
+            'tokenizer_fingerprint': tokenizer_fingerprint, 'role_ids': list(role_ids),
+            'indexes': _source_witness(train, package) + _source_witness(held, package), 'rows': len(train),
+            'held_rows': len(held), 'held_entries_sha256': digest(held.entries),
+            'entries_sha256': digest(train.entries), 'geometry_qualification': capacity_binding,
+            'geometry': geometry, 'geometry_identity': initial['geometry_identity']}
+        if geometry_evidence:
+            payload['geometry_evidence'] = geometry_evidence
     proposed.setdefault('resident_adoptions', []).append({'predecessor': predecessor,
         'recipe': payload['recipe'], 'train': payload['train'], 'held': payload['held'], 'stage_id': stage_id})
     request_id = digest(payload)
@@ -457,7 +526,8 @@ class ResidentAdoption:
                 write_json(initial, {'recipe': recipe_binding, 'stage_id': stage_id,
                     'geometry_qualification': binding(geometry_qualification) if geometry_qualification else None,
                     'geometry_identity': geometry_identity, 'plan_sha256': digest(self.plan),
-                    'owner': process_owner(), 'withdrawal_history':self.withdrawal_history})
+                    'owner': process_owner(), 'withdrawal_history':self.withdrawal_history,
+                    'rows':len(train), 'held_rows':len(held)})
             else:
                 if any(item not in self.withdrawal_history for item in prior.get('withdrawal_history') or []):
                     raise ValueError('resident restart lost actual carried withdrawal history')
@@ -529,8 +599,23 @@ class ResidentAdoption:
             source_preparation.retain(self.held)
             train = source_preparation.load(payload['train'], split='train')
             held = source_preparation.load(payload['held'], split='test')
+            full_validation = {'entries_sha256': digest(train.entries),
+                'held_entries_sha256': digest(held.entries)}
+            delta = payload.get('delta_validation')
+            if delta is not None:
+                if (delta.get('schema') != 'natlang.native-resident-delta-validation/1'
+                        or delta['prior_plan_sha256'] != digest(self.plan)
+                        or delta['prior_rows'] != len(self.train)
+                        or delta['prior_held_rows'] != len(self.held)
+                        or payload['held'] != payload['prior_held']):
+                    raise ValueError('resident delta predecessor contract changed')
+                suffix = source_preparation.load(delta['source'], split='train')
+                suffix_entries = [{**entry, 'training_priority':entry.get('training_priority',0)} for entry in suffix.entries]
+                if (len(suffix) != delta['rows'] or digest(suffix_entries) != delta['entries_sha256']
+                        or train.entries[len(self.train):] != suffix_entries):
+                    raise ValueError('resident delta suffix differs from prepared metadata')
             if (held.entries[:len(self.held.entries)] != self.held.entries or len(held) < len(self.held)
-                    or len(held) != payload['held_rows'] or digest(held.entries) != payload['held_entries_sha256']):
+                    or len(held) != payload['held_rows'] or (delta is None and full_validation['held_entries_sha256'] != payload['held_entries_sha256'])):
                 raise ValueError('resident held rows are not an exact class-preserving append')
             if (train.tokenizer_fingerprint != self.train.tokenizer_fingerprint
                     or train.role_ids != self.train.role_ids
@@ -539,7 +624,7 @@ class ResidentAdoption:
                     or (len(train) == len(self.train) and len(held) == len(self.held)
                         and self.plan['stage_inputs'][self.stage_id].get('pending_native_sources') ==
                             payload['plan']['stage_inputs'][self.stage_id].get('pending_native_sources'))
-                    or len(train) != payload['rows'] or digest(train.entries) != payload['entries_sha256']):
+                    or len(train) != payload['rows'] or (delta is None and full_validation['entries_sha256'] != payload['entries_sha256'])):
                 raise ValueError('resident rows are not an exact protected append')
             declarations = pending_declarations(payload['plan'], self.stage_id, train.tokenizer_fingerprint)
             validate_source_obligations(payload['plan'], self.stage_id, train, declarations,
@@ -551,6 +636,7 @@ class ResidentAdoption:
                 if generation != self.generation:
                     raise ValueError('resident generation changed concurrently')
                 committed = {**value, 'at_global_step': global_step, 'at': time.time(),
+                    'validation': full_validation,
                     'history': [*((actual or {}).get('history') or []),
                                 {'generation': value['generation'], 'at_global_step': global_step,
                                  'recipe': recipe, 'train': payload['train'], 'held': payload['held']} ]}
@@ -585,6 +671,8 @@ def main(argv=None):
     parser.add_argument('--stage-id')
     parser.add_argument('--tokenizer-fingerprint')
     parser.add_argument('--role-ids', nargs=4, type=int)
+    parser.add_argument('--delta-train-source', type=Path,
+                        help='validate only this exact appended source; learner verifies complete prefix and union')
     parser.add_argument('--no-publish', action='store_true',
                         help='validate and write an immutable request without publishing it to the learner')
     args = parser.parse_args(argv)
@@ -597,7 +685,8 @@ def main(argv=None):
         parser.error('preparation requires recipe, stage, tokenizer fingerprint and four role IDs')
     print(json.dumps(prepare(args.directory, args.recipe, args.stage_id,
                             tokenizer_fingerprint=args.tokenizer_fingerprint, role_ids=args.role_ids,
-                            publish=not args.no_publish)))
+                            publish=not args.no_publish,
+                            delta_sources={'train':binding(args.delta_train_source)} if args.delta_train_source else None)))
 
 
 if __name__ == '__main__':

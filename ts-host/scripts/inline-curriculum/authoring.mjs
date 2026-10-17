@@ -2,6 +2,7 @@
 // with nl, a named callable function, or iterateOn. Acceptance runs what was written (semantics.authoring):
 // the export is called on test inputs and its natural-language children are answered by an oracle keyed by
 // argument values. Rows carry curriculum.track "authoring" and stay out of interpreter shards by default.
+import { withSourceArgumentAliases } from '../../dist/teacher/authoring.js';
 import { capitalize, curriculumCase, literal, nlFile, nonceWords, Random, returnCall } from './lib.mjs';
 
 const writeFile = (path, content) => ['write_file', { path, content }];
@@ -16,7 +17,14 @@ function authoringCase({ family, shape, variant, instructions, files, module, sp
     root: { name: 'implement', kind: 'directory-reducer', args: {}, returns: 'string', instructions },
     folderFiles: files, inputs: {}, expected: null });
   record.curriculum.track = 'authoring';
-  record.semantics.authoring = spec;
+  const grounded = withSourceArgumentAliases(spec);
+  record.semantics.authoring = grounded;
+  if (grounded.argument_aliases?.length) {
+    const original = record.id;
+    record.id += ':source-argument-oracle-v1';
+    record.source_ids = [record.id];
+    record.generation = { ...record.generation, original_program_id: original, authoring_oracle: 'source-run-arguments/1' };
+  }
   return record;
 }
 

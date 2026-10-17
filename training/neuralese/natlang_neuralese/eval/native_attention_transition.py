@@ -2,6 +2,7 @@
 from __future__ import annotations
 import contextlib
 import copy
+import math
 import time
 
 import torch
@@ -12,9 +13,120 @@ from ..model.native_precision import set_native_attention_precision
 from ..model.native_graph_plan import Invocation, ImportSpan, compile_graph
 from ..train.loop import capture_training_rng_state, restore_training_rng_state
 from ..train.optim_restore import _children
-from .native_gradients import production_inventory, compare_complete_gradients
+from .native_gradients import production_inventory, compare_complete_gradients,validate_complete_proof
 from .native_memory import _optimizer_versions, CapacityStateChangedError
 from .native_state import qualify_existing
+
+
+def transition_equivalence(report):
+    """Judge arithmetic continuation separately from unchanged readiness debt.
+
+    Cross-mode derivatives must pass the existing complete proof verifier.
+    Existing cached errors may persist, but no named failure can be added or
+    worsen beyond the same declared absolute/relative numerical gates.
+    """
+    failures=[]
+    def require(condition,reason):
+        if not condition:failures.append(reason)
+    def finite(value):return type(value)in(int,float)and math.isfinite(value)
+    def finite_config(value):
+        if isinstance(value,dict):return all(finite_config(v)for v in value.values())
+        if isinstance(value,(list,tuple)):return all(finite_config(v)for v in value)
+        return math.isfinite(value)if type(value)in(int,float)else True
+    baseline=report.get('baseline_cached_reference')or{};candidate=report.get('candidate_cached_reference')or{}
+    old=baseline.get('complete_gradient_qualification')or{};new=candidate.get('complete_gradient_qualification')or{}
+    atol=report.get('gradient_atol');rtol=report.get('gradient_rtol');forward_atol=report.get('forward_atol')
+    require(all(finite(v)and v>0 for v in(atol,rtol,forward_atol)),'invalid declared transition gates')
+    if failures:return {'passed':False,'failures':failures,'readiness_qualified':False}
+    require(report.get('source_state_preserved')is True,'source state was not preserved')
+    require(report.get('cross_mode_passed')is True,'complete cross-mode comparison failed')
+    require(report.get('optimizer_updates')==0,'transition performed optimizer updates')
+    expected_case=report.get('case_sha256')
+    require(expected_case==canonical_json_sha256_hex(report.get('case')),'transition case digest differs')
+    require(old.get('case_sha256')==new.get('case_sha256')==expected_case,'cached case differs')
+    require(old.get('inventory')==new.get('inventory')and bool(old.get('inventory')),'cached trainable inventory differs')
+    require(old.get('roles')==new.get('roles')==report.get('roles'),'cached gradient roles differ')
+    unused={name for name,row in(old.get('comparisons')or{}).items()if row.get('unused')is True}
+    require(unused=={name for name,row in(new.get('comparisons')or{}).items()if row.get('unused')is True},
+            'cached unused derivative set changed')
+    for execution in('graph','cached'):
+        cross=(report.get('cross_mode')or{}).get(execution)or{}
+        require(cross.get('inventory')==old.get('inventory'),'cross-mode inventory differs: '+execution)
+        require(all((cross.get('backend_execution')or{}).get(mode,{}).get('passed')is True
+                    for mode in('old','candidate')),'cross-mode backend did not execute: '+execution)
+        require(all(finite(cross.get(key))and 0<=cross[key]<=forward_atol
+                    for key in('forward_max_abs','consumer_ce_abs')),'cross-mode forward/loss failed: '+execution)
+        require(unused=={name for name,row in(cross.get('comparisons')or{}).items()if row.get('unused')is True},
+                'cross-mode unused derivative set changed: '+execution)
+        backend=cross.get('backend_execution')or{}
+        settings=[(backend.get(mode)or{}).get('configuration')for mode in('old','candidate')]
+        require(settings[0]==settings[1]and all(isinstance(cfg,dict)and finite_config(cfg)for cfg in settings),
+                'cross-mode backend configuration changed: '+execution)
+        try:
+            # The cached baseline supplies identity/case/role annotations only;
+            # actual cross-mode metrics, inventory and preservation flags win.
+            validate_complete_proof({**old,**cross},old.get('native_identity'),gradient_atol=atol)
+        except (ValueError,TypeError,KeyError):failures.append('complete cross-mode derivatives failed: '+execution)
+    for label,value in(('baseline',baseline),('candidate',candidate)):
+        complete=value.get('complete_gradient_qualification')or{}
+        cfg=complete.get('model_config')or{}
+        expected_mode=report.get('previous_mode'if label=='baseline'else'candidate_mode')
+        require(cfg.get('native_attention_precision','ieee')==expected_mode,'cached arithmetic identity differs: '+label)
+        require(complete.get('model_config_sha256')==canonical_json_sha256_hex(cfg),'cached model profile digest differs: '+label)
+        require(complete.get('inventory_sha256')==canonical_json_sha256_hex(complete.get('inventory')),
+                'cached inventory digest differs: '+label)
+        require(value.get('checkpoint_sha256')==report.get('parent_checkpoint_sha256')
+                and(complete.get('native_identity')or{}).get('checkpoint_sha256')==report.get('parent_checkpoint_sha256'),
+                'cached parent identity differs: '+label)
+        require(value.get('channel_restore_exact')is True,'cached channel restore failed: '+label)
+        require(complete.get('parameter_grads_preserved')is True and complete.get('optimizer_updates')==0,
+                'cached derivative state was not preserved: '+label)
+        require((complete.get('training_backend_execution')or{}).get('passed')is True,
+                'cached backend did not execute: '+label)
+        if 'training_backend_execution'in value:
+            require(value['training_backend_execution'].get('passed')is True,'runtime backend did not execute: '+label)
+    configs=[dict(value.get('model_config')or{})for value in(old,new)]
+    for cfg in configs:cfg.pop('native_attention_precision',None)
+    require(configs[0]==configs[1],'transition changed another model setting')
+    require(baseline.get('passed')is not True or candidate.get('passed')is True,'new failed cached runtime proof')
+    require(old.get('passed')is not True or new.get('passed')is True,'new failed complete cached proof')
+    require(old.get('error')==new.get('error'),'new cached proof validation error')
+    backend_configs=[(proof.get('training_backend_execution')or{}).get('configuration')for proof in(old,new)]
+    require(backend_configs[0]==backend_configs[1]
+            and all(isinstance(cfg,dict)and finite_config(cfg)for cfg in backend_configs),
+            'cached backend configuration changed')
+    expected={'input_embeddings',*(row['name']for row in old.get('inventory',[]))}
+    before=old.get('comparisons')or{};after=new.get('comparisons')or{}
+    require(set(before)==set(after)==expected,'cached named derivative coverage differs')
+    for name in sorted(expected):
+        a=before.get(name)or{};b=after.get(name)or{}
+        if a.get('unused')is True or b.get('unused')is True:
+            require(a.get('unused')is True and b.get('unused')is True
+                    and a.get('passed')is True and b.get('passed')is True,
+                    'cached derivative became missing/unused: '+name)
+            continue
+        numbers=('max_abs','relative_l2','cosine','reference_l2','actual_l2','atol','rtol')
+        valid=(all(finite(row.get(key))for row in(a,b)for key in numbers)
+               and all(row.get('finite')is True and 0<=row['atol']<=atol and 0<row['rtol']<=rtol
+                       and min(row['max_abs'],row['reference_l2'],row['actual_l2'])>=0 for row in(a,b)))
+        require(valid,'nonfinite or invalid cached derivative metrics: '+name)
+        if not valid:continue
+        require(all(a.get(key)==b.get(key)for key in('shape','dtype','elements')),'cached derivative geometry differs: '+name)
+        require(a.get('passed')is not True or b.get('passed')is True,'new failed cached derivative: '+name)
+        require(b['max_abs']<=a['max_abs']+atol+rtol*abs(a['max_abs'])
+                and b['relative_l2']<=a['relative_l2']+rtol and b['cosine']>=a['cosine']-rtol,
+                'worse cached derivative error: '+name)
+        require(type(a.get('mismatched_elements'))is int and type(b.get('mismatched_elements'))is int
+                and 0<=b['mismatched_elements']<=a['mismatched_elements'],'more failed cached coordinates: '+name)
+    for key,gate in(('forward_max_abs',forward_atol),('incremental_max_abs',forward_atol),
+                     ('consumer_ce_abs',forward_atol),('consumer_gradient_max_abs',atol)):
+        a=baseline.get(key);b=candidate.get(key)
+        require(finite(a)and finite(b)and min(a,b)>=0,'nonfinite cached runtime metric: '+key)
+        if finite(a)and finite(b):
+            require((a>gate or b<=gate)and b<=a+gate,'new/worse cached runtime failure: '+key)
+    return {'schema':'natlang.native-attention-transition-equivalence/1','passed':not failures,
+            'failures':failures,'inherited_cached_reference_debt':not report.get('cached_reference_passed'),
+            'readiness_qualified':False,'optimizer_updates':0}
 
 
 @contextlib.contextmanager
@@ -177,4 +289,5 @@ def qualify_attention_transition(model, tokenizer, roles, config, *, optimizer,
                 or _optimizer_versions(optimizer) != optimizer_versions):
             raise CapacityStateChangedError('attention comparison changed parameters, gradients or optimizer history')
     result['source_state_preserved'] = True
+    result['transition_equivalence']=transition_equivalence(result)
     return result

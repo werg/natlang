@@ -1001,3 +1001,93 @@ def test_partial_idle_tracks_completed_outputs_not_worker_activity(tmp_path, mon
     else:
         module.run_incremental_service(path,poll_seconds=0,max_polls=2,allowed_spool_root=tmp_path)
     assert flush == [False, not new_completion]
+
+
+def _terminal_budget_boundary_fixture():
+    entries, queue, journal, context, outputs, finish = _fixture()
+    key = entries[0]['key']; path = entries[0]['jobs'] + '/000000.error.json'
+    source_sha = hashlib.sha256(context['source-cases.jsonl']).hexdigest()
+    error = {'code': 'NATLANG_MODEL_REQUEST_BUDGET', 'index': 0,
+             'program_id': entries[0]['task_id'], 'program_ir_sha256': '1'*64,
+             'source_sha256': source_sha, 'error': 'whole-case model request budget exceeded'}
+    raw = json.dumps(error).encode(); digest = hashlib.sha256(raw).hexdigest()
+    failed = {'event': 'finish', 'key': key, 'resource_limit_reason': 'model_request_budget',
+        'output_accounting': {'version': 'natlang.supervisor_output_accounting/2',
+            'complete': False, 'manifest_valid': True, 'manifest_errors': [], 'expected_jobs': 1,
+            'job_states': [{'index': 0, 'program_id': entries[0]['task_id'], 'digest': '1'*64,
+                'state': 'failed', 'resource_limit_reason': 'model_request_budget',
+                'terminal_error': {'path': path, 'sha256': digest}}]}}
+    events = [json.loads(line) for line in journal.splitlines()]
+    events = [failed if row.get('event') == 'finish' and row['key'] == key else row for row in events]
+    journal = b''.join(json.dumps(row).encode()+b'\n' for row in events)
+    finishes = {row['key']: row for row in events if row['event'] == 'finish'}
+    score = {'schema': 'natlang.s7-task-rollout-score/1', 'rollouts': 2,
+             'outcome_counts': {'task_success': 1, 'budget_exhaustion': 1}}
+    verified = {'schema': 'natlang.strong-teacher-batch-completion/1', 'can_advance': True,
+        'exact_completed_queue_keys': 1, 'worker_returncodes': [0, 2], 'repair_required': [],
+        'model_budget_failures': [{'key': key, 'errors': [{'path': path, 'sha256': digest,
+            'program_id': entries[0]['task_id'], 'index': 0, 'per_error_source_digests_present': True}],
+            'training_admission': False}]}
+    completion = {'schema': 'natlang.teacher-generation-boundary/1', 'batch': 19,
+        'completion': verified, 'individual_outcomes': [dict(row, finish=finishes[row['key']]) for row in entries]}
+    files = {**context, 'journal.jsonl': journal, 'score.json': json.dumps(score).encode(),
+        'rewards.jsonl': b'{}\n', f'budget-payloads/{key}/000000.error.json': raw,
+        f'budget-payloads/{key}/output-manifest.json': json.dumps({
+            'version': 'natlang.teacher_batch.native/1', 'source': entries[0]['source'],
+            'source_sha256': source_sha, 'range': {'start': 0, 'count': 1}, 'missing': [0]}).encode()}
+    completion['bindings'] = {name: {'bytes': len(files[name]),
+        'sha256': hashlib.sha256(files[name]).hexdigest()} for name in
+        ('queue.jsonl', 'journal.jsonl', 'score.json', 'teacher-source.json')}
+    files['completion.json'] = json.dumps(completion).encode()
+    return entries, queue, files
+
+
+def test_terminal_budget_boundary_is_durable_control_without_success_or_repair_relabel(tmp_path):
+    entries, queue, files = _terminal_budget_boundary_fixture()
+    kwargs = dict(batch=19, queue_raw=queue, exported_keys=[entries[1]['key']],
+                  repair_keys=[], unstarted_keys=[], files=files, directory=tmp_path/'boundary')
+    first = seal_boundary(**kwargs)
+    assert first['boundary']['queue_count'] == 2
+    assert first['boundary']['exported_keys'] == [entries[1]['key']]
+    assert first['boundary']['model_budget_failure_keys'] == [entries[0]['key']]
+    assert first['boundary']['repair_keys'] == []
+    assert first['boundary']['batch_can_advance'] is True
+    assert first['boundary']['training_admission'] is False
+    assert seal_boundary(**kwargs)['archive_receipt']['archive_sha256'] == first['archive_receipt']['archive_sha256']
+
+
+@pytest.mark.parametrize('mutation', ['missing_manifest', 'manifest_source', 'manifest_range',
+                                    'error_bytes', 'fake_budget', 'success_overlap'])
+def test_terminal_budget_boundary_rejects_missing_or_reclassified_evidence(tmp_path, mutation):
+    entries, queue, files = _terminal_budget_boundary_fixture()
+    key = entries[0]['key']; manifest_name = f'budget-payloads/{key}/output-manifest.json'
+    exported = [entries[1]['key']]
+    if mutation == 'missing_manifest':
+        del files[manifest_name]
+    elif mutation.startswith('manifest_'):
+        manifest = json.loads(files[manifest_name])
+        if mutation == 'manifest_source': manifest['source_sha256'] = '0'*64
+        else: manifest['range']['start'] = 1
+        files[manifest_name] = json.dumps(manifest).encode()
+    elif mutation == 'error_bytes':
+        files[f'budget-payloads/{key}/000000.error.json'] += b' '
+    elif mutation == 'fake_budget':
+        value = json.loads(files['completion.json'])
+        value['completion']['model_budget_failures'][0]['key'] = 'foreign-key'
+        files['completion.json'] = json.dumps(value).encode()
+    else:
+        exported.append(key)
+    with pytest.raises(ValueError):
+        seal_boundary(batch=19, queue_raw=queue, exported_keys=exported, repair_keys=[],
+                      unstarted_keys=[], files=files, directory=tmp_path/'invalid')
+
+
+@pytest.mark.parametrize('key', ['.', '..'])
+def test_budget_payload_queue_key_cannot_be_a_path_component(key):
+    from scripts.coreweave.teacher_incremental_export import _budget_payload_bindings
+    entries, _, files = _terminal_budget_boundary_fixture()
+    completion = json.loads(files['completion.json'])
+    entries[0]['key'] = key
+    completion['completion']['model_budget_failures'][0]['key'] = key
+    with pytest.raises(ValueError, match='terminal budget queue identity'):
+        _budget_payload_bindings(completion, entries)

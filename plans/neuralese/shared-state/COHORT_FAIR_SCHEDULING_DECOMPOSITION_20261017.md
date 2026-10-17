@@ -10,9 +10,12 @@ The declared `urgent_cohort_fairness` setting selects the policy below. Its
 default is false for historical runtimes; production continuations enable it
 explicitly in their recipe and checkpoint options.
 
-1. Identify cohorts from immutable source declarations. An explicit positive
-   priority declaration groups its child source; otherwise descend through the
-   existing source tree. Keep graph bytes, bindings and physical order intact.
+1. Identify cohorts from immutable graph-file leaves, descending through every
+   source manifest even when a parent has positive priority. A packaging bundle
+   must not hide its later teacher leaves behind earlier Search leaves. Keep
+   all inherited row priorities, graph bytes, bindings and physical order intact.
+   Leaf SHA identities are scheduling metadata; saved row visits remain the sole
+   source of completed service, so this repair neither adds nor resets credits.
 2. Pack whole graphs within each cohort. Keep the existing communication
    foundation ratio and priority-zero debt lane.
 3. Among pending positive-priority cohorts, select the one with least completed

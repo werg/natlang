@@ -238,3 +238,59 @@ def test_explicit_preference_capacity_survives_emitted_command_and_prepared_requ
         assert prepared[0]['identity']=={'restored':'same-parent'}
     else:assert prepared==[]
     assert parent.read_bytes()==b'unchanged full optimizer fixture'
+
+
+@pytest.mark.parametrize('module',['natlang_neuralese.train.native_state_sft','natlang_neuralese.train.native_preference'])
+def test_actual_resident_append_then_cold_resume_uses_current_source_roles(tmp_path,monkeypatch,module):
+    from test_native_resident import setup
+    from natlang_neuralese.train import native_resident as resident
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE',str(tmp_path/'cache'))
+    paths,directory,manager,recipe=setup(tmp_path,manifest_train=True)
+    extra=tmp_path/'append-only-row.jsonl'
+    extra.write_text(paths['new'].read_text().splitlines()[-1]+'\n')
+    manifest=tmp_path/'actual-appended-sources.json'
+    manifest.write_text(json.dumps({'schema':'natlang.native-graph-sources/1','sources':[
+        {'kind':'native-graphs',**resident.binding(paths['old'])},
+        {'kind':'native-graphs',**resident.binding(extra)}]}))
+    value=json.loads(recipe.read_text());value['input_bindings']['train']=resident.binding(manifest)
+    recipe.write_text(json.dumps(value))
+    resident.prepare(directory,recipe,'sft',tokenizer_fingerprint='tokenizer-sha',role_ids=())
+    assert manager.poll(7) is not None
+    actual=resident.current(directory)
+    stage=actual['payload']['plan']['recipe']['stages'][0]
+    old_command=['python','-m',module,'--native-graphs',str(paths['old']),
+        '--held-native-graphs=obsolete-held','--continued-native-graphs=obsolete-predecessor',
+        '--continued-native-graphs','duplicate-obsolete-predecessor',
+        '--pending-native-sources','obsolete-pending','--foundation-native-graphs','obsolete-foundation',
+        '--withdrawn-native-graphs=obsolete-withdrawal','--task-eval','']
+    config={'production_recipe':str(recipe),'recipe_lineage_sha256':'a'*64,'seed_command':old_command}
+    continued,sources=supervised.continuation_config(config,stage,checkpoint='same-full-parent',adapter=None,out=tmp_path/'cold')
+    command=continued['seed_command']
+    for role in ('native_graphs','held_native_graphs','continued_native_graphs'):
+        flag,key=supervised.SOURCE_ARGUMENTS[role]
+        assert command.count(flag)==1
+        assert command[command.index(flag)+1]=='{'+key+'}'
+        assert continued[key]==sources[role]['path']
+    assert continued['seed_native_graphs']==actual['payload']['train']['path']
+    assert continued['continued_native_graphs']==str(paths['old'])
+    for flag in ('--pending-native-sources','--foundation-native-graphs','--withdrawn-native-graphs'):
+        assert not any(value==flag or value.startswith(flag+'=')for value in command)
+    assert command[-2:]==['--continued-native-graphs','{continued_native_graphs}']
+    assert command[command.index('--task-eval')+1]==''
+    assert config['seed_command']==old_command
+    assert resident.current(directory)==actual
+
+
+@pytest.mark.parametrize('tail',[['--continued-native-graphs'],['--continued-native-graphs','--task-eval'],['--continued-native-graphs=']])
+def test_source_normalizer_rejects_incomplete_arguments(tail):
+    with pytest.raises(ValueError,match='lacks a value'):
+        supervised.bind_seed_sources({'seed_command':['python','-m','natlang_neuralese.train.native_state_sft',*tail]}, {})
+
+
+def test_custom_seed_contract_retains_implicit_core_sources_and_current_optional_roles():
+    config={'seed_command':['custom-launcher','{trainer_args}'],'foundation_native_graphs':'stale'}
+    supervised.bind_seed_sources(config,{'native_graphs':{'path':'current'},'held_native_graphs':{'path':'held'},
+        'continued_native_graphs':{'path':'current-predecessor'}})
+    assert config['seed_command']==['custom-launcher','{trainer_args}','--continued-native-graphs','{continued_native_graphs}']
+    assert config['seed_native_graphs']=='current'and config['continued_native_graphs']=='current-predecessor'
+    assert 'foundation_native_graphs'not in config

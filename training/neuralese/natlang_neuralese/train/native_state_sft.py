@@ -608,6 +608,7 @@ def qualify_precision_transition(model, tokenizer, roles, config, *, previous_pr
                                  checkpoint_sha256, forward_atol, gradient_atol, device, backend=None,
                                  previous_attention_precision=None, previous_norm_execution=None, optimizer=None):
     """Check changed production arithmetic on the restored live weights, once."""
+    any_linear_changed = config.get('native_linear_precision', 'ieee') != previous_precision
     linear_changed = config.get('native_linear_precision', 'ieee') == 'bf16x6' and previous_precision != 'bf16x6'
     attention_changed = (previous_attention_precision is not None
         and config.get('native_attention_precision', 'ieee') != previous_attention_precision)
@@ -620,7 +621,7 @@ def qualify_precision_transition(model, tokenizer, roles, config, *, previous_pr
         raise ValueError('native arithmetic transition requires declared forward and gradient tolerances')
     from ..eval.native_state import qualify_existing
     saved_rng = capture_training_rng_state(device)
-    attention_report=None
+    attention_report=None;attention_only_equivalent=False
     try:
         if attention_changed:
             if optimizer is None:
@@ -631,7 +632,9 @@ def qualify_precision_transition(model, tokenizer, roles, config, *, previous_pr
                 checkpoint_sha256=checkpoint_sha256,forward_atol=forward_atol,gradient_atol=gradient_atol,
                 backend=backend)
             report=attention_report['candidate_cached_reference']
-            if not attention_report['passed']:
+            attention_only_equivalent=(not any_linear_changed and not norm_changed
+                and(attention_report.get('transition_equivalence')or{}).get('passed')is True)
+            if not attention_report['passed']and not attention_only_equivalent:
                 raise ValueError('native attention transition failed unchanged cached-reference and complete cross-mode checks: '+
                     json.dumps(attention_report,sort_keys=True))
         else:
@@ -640,7 +643,7 @@ def qualify_precision_transition(model, tokenizer, roles, config, *, previous_pr
                     checkpoint_sha256=checkpoint_sha256,forward_atol=forward_atol,gradient_atol=gradient_atol)
     finally:
         restore_training_rng_state(saved_rng,device)
-    if not report['passed']:
+    if not report['passed']and not attention_only_equivalent:
         raise ValueError('native arithmetic transition failed the unchanged cached-reference checks: ' +
                          json.dumps(report, sort_keys=True))
     result = {'schema': 'natlang.native-arithmetic-transition-check/1',
@@ -650,6 +653,8 @@ def qualify_precision_transition(model, tokenizer, roles, config, *, previous_pr
         result['attention'] = {'from': previous_attention_precision,
                                'to': config['native_attention_precision']}
         result['attention_complete_comparison']=attention_report
+        result['attention_transition_equivalence']=attention_report['transition_equivalence']
+        result['inherited_cached_reference_debt']=not report['passed']
     if norm_changed:
         result['norm_execution'] = {'from':previous_norm_execution,'to':model.native_norm_execution}
     return result
@@ -787,6 +792,7 @@ def build_parser():
 
 def main(argv=None):
     args = build_parser().parse_args(argv)
+    history_reasoning_transition = None
     if args.foundation_communication_batches is not None and args.foundation_communication_batches < 1:
         raise ValueError('foundation communication batches must be a positive integer')
     resident_state = None
@@ -853,7 +859,7 @@ def main(argv=None):
         previous_history_policy = config.get('history_reasoning_policy')
         if previous_history_policy != args.history_reasoning_policy:
             config['history_reasoning_policy'] = args.history_reasoning_policy
-            checkpoint_options['history_reasoning_policy_transition'] = {
+            history_reasoning_transition = {
                 'from': previous_history_policy or 'backbone-default',
                 'to': args.history_reasoning_policy,
                 'model_weights_optimizer_rng_exposure': 'preserved',
@@ -918,6 +924,11 @@ def main(argv=None):
             'at_global_step':int(saved_training.get('global_step',saved_training.get('step',0))),
             'weights_optimizer_rng_exposure':'preserved'})
     checkpoint_options['native_norm_execution_history'] = execution_history
+    history_profile_history = list((saved_training.get('options') or {}).get('history_reasoning_policy_history') or [])
+    if history_reasoning_transition is not None:
+        history_profile_history.append({**history_reasoning_transition,
+            'at_global_step':int(saved_training.get('global_step',saved_training.get('step',0)))})
+    checkpoint_options['history_reasoning_policy_history'] = history_profile_history
     carried_progress = collect_sft_progress(saved_training)
     restored_progress = False
     precision_history = list((saved_training.get('options') or {}).get('native_precision_history') or [])
@@ -1279,6 +1290,8 @@ def main(argv=None):
         memory_check = run_prepared(model,optimizer,train,roles,config,args,backend=backend,objective=objective,
             checkpoint_sha256=sha256_file_hex_cached(args.continue_from if parent_continuation else policy.slot)
                 if parent_continuation or policy.slot.exists() else config['base_inventory_sha256'])
+        if not args.resident_geometry_qualification:
+            raise ValueError('explicit memory qualification produced no usable physical capacity certificate')
         checkpoint_options['memory_qualification'] = {'passed':memory_check['passed'],
             'request':memory_check['request'],'parent_checkpoint_sha256':memory_check['parent_checkpoint_sha256']}
         checkpoint_options['checkpoint_input_offload'] = args.checkpoint_input_offload

@@ -74,6 +74,10 @@ LEGACY_SELECTOR_SEMANTICS_SHA256 = '69f7da7f1dc08c01ca9deb554f0275072c82e2666615
 # historic bindings used canonical-checkout path labels even when the new
 # renderer is run from a frozen checkout elsewhere.
 LEGACY_SEARCH_RENDERER_SHA256 = 'b054133ae53e7d86a9202ad84e60cabed1f79a26d18aa588e3890c2c21249917'
+# The exact renderer immediately before the reviewed 2026-10-17 resource-only
+# fix. The fix closes SQLite before temporary-directory cleanup and bounds
+# future submission; it does not alter selected rows, rendering, or outputs.
+SEARCH_RESOURCE_ONLY_PARENT_RENDERER_SHA256 = '6b59b92914a93139215d7a22f0129d59ade36b533a28126cd5e927dbc23fbc5b'
 from natlang_neuralese.common.paths import DEFAULTS as MACHINE_PATH_DEFAULTS  # noqa: E402
 
 _LEGACY_REPO = Path(MACHINE_PATH_DEFAULTS['repo'])
@@ -873,6 +877,11 @@ def _render_input_binding(tokenizers, pieces, history_policies=None):
     return result
 
 
+def _history_profiles_for_tokenizers(tokenizer_paths, history_policies):
+    return {name: history_policies.get(name, 'backbone-default')
+            for name in sorted(tokenizer_paths)}
+
+
 def _parse_history_reasoning_policies(values, tokenizer_names):
     parsed = {}
     for item in values:
@@ -1118,6 +1127,25 @@ def qualified_whole_trajectory_row(row):
     return {**row, 'source_row_id': legacy_id, 'id': legacy_id + ':source-sha256:' + digest}
 
 
+def apply_explicit_history_profile_ids(rows, profile):
+    """Give a changed explicit rendering its own IDs while retaining source IDs."""
+    if profile in (None, 'last_turn_only'):
+        return rows
+    if profile != 'keep':
+        raise ValueError('unsupported explicit history-reasoning ID profile')
+    for row in rows:
+        original_id = row['id']
+        expected = original_id + ':history-reasoning:keep'
+        if row.get('history_reasoning_policy') not in (None, 'keep'):
+            raise ValueError('rendered row profile conflicts with the tokenizer profile')
+        if original_id.endswith(':history-reasoning:keep'):
+            raise ValueError('rendered row already has a history-reasoning profile ID')
+        row.setdefault('source_row_id', original_id)
+        row['id'] = expected
+        row['history_reasoning_policy'] = 'keep'
+    return rows
+
+
 def _render_shard_materialized(job):
     (shard_path, out_dir, tok_name, blocked, corpus, held_groups, decision_exclude, header_as_full, full_programs,
      renderings, *storage_options) = job
@@ -1286,6 +1314,10 @@ def _render_shard_materialized(job):
     rows['whole-trajectory'] = wt
     for mode in [m for m in rows if m not in renderings]:  # rendered only for the parity check
         del rows[mode]
+    explicit_profile = (_G.get('history_policies') or {}).get(tok_name)
+    if explicit_profile is not None:
+        for rs in rows.values():
+            apply_explicit_history_profile_ids(rs, explicit_profile)
     for mode, rs in rows.items():
         path = Path(out_dir) / mode / tok_name / (f'{stem}.jsonl.zst' if compress_text else f'{stem}.jsonl')
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -1344,6 +1376,21 @@ def _render_code_binding():
     return binding
 
 
+def _resource_parent_code_binding(parent_renderer_sha256):
+    if parent_renderer_sha256 != SEARCH_RESOURCE_ONLY_PARENT_RENDERER_SHA256:
+        raise ValueError('renderer parent SHA lacks the exact reviewed resource-only continuation')
+    binding = _render_code_binding()
+    binding[str(Path(__file__).resolve())] = parent_renderer_sha256
+    return binding
+
+
+def _render_job_binding_from_job(job, source_digest, code_binding):
+    return _render_job_binding(source_digest, job[2], job[3], job[4], job[5], job[6],
+                               job[11] if len(job) > 11 else set(), job[7], job[8], job[9],
+                               bool(job[10]) if len(job) > 10 else False, code_binding,
+                               job[13] if len(job) > 13 else None)
+
+
 def _legacy_render_job_binding(job, source_sha, renderer_sha):
     if renderer_sha != LEGACY_SEARCH_RENDERER_SHA256:
         raise ValueError('legacy renderer SHA is not an approved historical migration witness')
@@ -1370,27 +1417,37 @@ def _legacy_render_job_binding(job, source_sha, renderer_sha):
             raise ValueError(f'legacy renderer dependency differs from its historical binding: {name}')
     (_shard_path, _out_dir, tok_name, blocked, corpus, held_groups, decision_exclude,
      header_as_full, full_programs, renderings, compress_text, target_exclude, *_rest) = job
-    return _render_job_binding(source_sha, tok_name, blocked, corpus, held_groups,
-                               decision_exclude, target_exclude, header_as_full,
-                               full_programs, renderings, compress_text,
-                               LEGACY_SEARCH_CODE_BINDING)
+    # The approved legacy renderer (content SHA b054133a; commit cd4140a5e5)
+    # did not include the later tokenizer/piece ``render_inputs`` binding
+    # field. Recreate its
+    # exact job-binding equation here; adding ``render_inputs: None`` would
+    # silently change every legacy binding and make its trajectory receipts
+    # impossible to authenticate. Per-trajectory source IDs and raw row hashes
+    # are still checked by _trajectory_render_binding before any old output is
+    # reused.
+    return sha(canonical({
+        'source_sha256': source_sha, 'tokenizer': tok_name, 'corpus': corpus,
+        'blocked': blocked, 'held_groups': sorted(held_groups),
+        'decision_exclude': sorted(decision_exclude), 'target_exclude': sorted(target_exclude),
+        'header_as_full': header_as_full,
+        'full_programs': None if full_programs is None else sorted(full_programs),
+        'renderings': list(renderings), 'compress_text': compress_text,
+        'code': LEGACY_SEARCH_CODE_BINDING,
+    }).encode())
 
 
-def _verify_trajectory_receipts(job, done_result, allowed_renderer_shas):
+def _verify_trajectory_receipts(job, done_result, allowed_renderer_shas, expected_job_binding=None):
     shard_path, out_dir, tok_name = Path(job[0]), Path(job[1]), job[2]
     stem = shard_path.name.removesuffix('.zst').removesuffix('.jsonl')
     source_digest = file_sha(shard_path)
     current_code_binding = _render_code_binding()
     current_renderer_sha = current_code_binding[str(Path(__file__).resolve())]
-    expected_job_binding = _render_job_binding(
-        source_digest, tok_name, job[3], job[4], job[5], job[6],
-        job[11] if len(job) > 11 else set(), job[7], job[8], job[9],
-        bool(job[10]) if len(job) > 10 else False, current_code_binding,
-        job[13] if len(job) > 13 else None)
+    expected_job_binding = (expected_job_binding if expected_job_binding is not None else
+                            _render_job_binding_from_job(job, source_digest, current_code_binding))
     if done_result.get('render_job_binding') != expected_job_binding:
         raise ValueError(f'done marker does not match current render job policy: {stem}/{tok_name}')
-    if done_result.get('renderer_code_sha256') != current_renderer_sha:
-        raise ValueError(f'done marker renderer identity differs from current renderer: {stem}/{tok_name}')
+    if done_result.get('renderer_code_sha256') not in allowed_renderer_shas:
+        raise ValueError(f'done marker renderer identity is not explicitly allowed: {stem}/{tok_name}')
     expected_aggregate = {}
     for mode in job[9]:
         suffix = '.jsonl.zst' if bool(job[10]) else '.jsonl'
@@ -1440,14 +1497,18 @@ def _verify_trajectory_receipts(job, done_result, allowed_renderer_shas):
         _verify_group_receipt(
             receipt, path.stem, group_dir, tok_name, job[9], bool(job[10]),
             expected_binding=trajectory_bindings[path.stem],
-            expected_renderer_sha=expected_renderer_sha)
+            expected_renderer_sha=expected_renderer_sha,
+            allow_legacy_done_output=(
+                'renderer_code_sha256' not in receipt
+                and expected_renderer_sha == LEGACY_SEARCH_RENDERER_SHA256))
     declared = done_result.get('group_renderer_code_sha256s')
     if declared is not None and sorted(actual_renderer_shas) != sorted(declared):
         raise ValueError(f'done marker renderer summary differs from trajectory receipts: {stem}/{tok_name}')
 
 
 def _verify_group_receipt(receipt, group_id, group_dir, tok_name, renderings, compress_text,
-                          expected_binding=None, expected_renderer_sha=None):
+                          expected_binding=None, expected_renderer_sha=None,
+                          allow_legacy_done_output=False):
     """Require every durable output of a trajectory group, with safe paths and exact hashes."""
     if not isinstance(receipt, dict) or receipt.get('schema') != 'natlang.native-turn-trajectory-render/1':
         raise ValueError(f'trajectory receipt schema mismatch: {group_id}')
@@ -1468,6 +1529,8 @@ def _verify_group_receipt(receipt, group_id, group_dir, tok_name, renderings, co
     suffix = '.jsonl.zst' if compress_text else '.jsonl'
     expected = {f'{mode}/{tok_name}/{group_id}{suffix}' for mode in renderings}
     expected.add(f'omissions/{tok_name}/{group_id}.jsonl')
+    if allow_legacy_done_output:
+        expected.add(f'done/{tok_name}/{group_id}.json')
     outputs = receipt.get('outputs')
     if not isinstance(outputs, dict) or set(outputs) != expected:
         raise ValueError(f'trajectory receipt output inventory mismatch: {group_id}')
@@ -1557,9 +1620,8 @@ def render_shard(job):
             if _G.get('pieces') else None,
         }
         if _G.get('history_policies'):
-            actual_input_binding['history_reasoning_policies'] = {
-                name: _G['history_policies'].get(name, 'backbone-default')
-                for name in sorted(_G['tokenizer_paths'])}
+            actual_input_binding['history_reasoning_policies'] = _history_profiles_for_tokenizers(
+                _G['tokenizer_paths'], _G['history_policies'])
         expected_model_binding = input_binding.get('tokenizers', {}).get(tok_name)
         if (not isinstance(expected_model_binding, dict)
                 or expected_model_binding != actual_input_binding['tokenizers'][tok_name]
@@ -1573,9 +1635,14 @@ def render_shard(job):
                                       target_exclude, header_as_full, full_programs, renderings,
                                       compress_text, code_binding, input_binding)
     legacy_renderer_sha = storage_options[2] if len(storage_options) > 2 else None
+    resource_parent_sha = storage_options[5] if len(storage_options) > 5 else None
     legacy_job_binding = None
     if legacy_renderer_sha:
         legacy_job_binding = _legacy_render_job_binding(job, source_file_sha, legacy_renderer_sha)
+    resource_parent_job_binding = None
+    if resource_parent_sha:
+        resource_parent_job_binding = _render_job_binding_from_job(
+            job, source_file_sha, _resource_parent_code_binding(resource_parent_sha))
 
     # The SQLite row index is wholly rebuildable from the selected shard. Keep
     # it on a caller-selected fast local scratch volume when supplied; durable
@@ -1708,11 +1775,19 @@ def render_shard(job):
                     receipt_renderer_sha = expected_receipt.get('renderer_code_sha256', legacy_renderer_sha)
                     if receipt_renderer_sha != legacy_renderer_sha:
                         raise ValueError(f'legacy trajectory receipt renderer identity changed: {trajectory}')
+                elif (resource_parent_job_binding is not None
+                      and receipt_binding == _trajectory_render_binding(
+                          resource_parent_job_binding, trajectory, source_ids, source_record_hashes)):
+                    receipt_renderer_sha = expected_receipt.get('renderer_code_sha256', resource_parent_sha)
+                    if receipt_renderer_sha != resource_parent_sha:
+                        raise ValueError(f'resource-parent trajectory renderer identity changed: {trajectory}')
                 else:
                     raise ValueError(f'committed trajectory binding changed: {trajectory}')
                 _verify_group_receipt(
                     expected_receipt, group_id, group_dir, tok_name, renderings, compress_text,
-                    expected_binding=receipt_binding, expected_renderer_sha=receipt_renderer_sha)
+                    expected_binding=receipt_binding, expected_renderer_sha=receipt_renderer_sha,
+                    allow_legacy_done_output=('renderer_code_sha256' not in expected_receipt
+                                              and receipt_renderer_sha == legacy_renderer_sha))
                 if expected_receipt.get('source_record_ids') != source_ids:
                     raise ValueError(f'committed trajectory source row inventory changed: {trajectory}')
             if expected_receipt is not None:
@@ -2079,6 +2154,9 @@ def main(argv=None):
     p.add_argument('--legacy-renderer-sha256',
                    help='explicit prior renderer identity whose exact trajectory receipts may be reused on resume; '
                         'the final receipt preserves it separately from this renderer')
+    p.add_argument('--resource-only-renderer-parent-sha256',
+                   help='exact pre-2026-10-17 renderer SHA whose output receipts may continue across the reviewed '
+                        'SQLite cleanup/fail-fast resource change')
     a = p.parse_args(argv)
     if a.render_only != (a.render_shards is not None):
         p.error('--render-only and --render-shards must be supplied together')
@@ -2088,6 +2166,9 @@ def main(argv=None):
         p.error('--finalize-only cannot be combined with --render-only')
     if a.legacy_renderer_sha256 is not None and not re.fullmatch(r'[0-9a-f]{64}', a.legacy_renderer_sha256):
         p.error('--legacy-renderer-sha256 must be a lowercase SHA-256 digest')
+    if (a.resource_only_renderer_parent_sha256 is not None
+            and a.resource_only_renderer_parent_sha256 != SEARCH_RESOURCE_ONLY_PARENT_RENDERER_SHA256):
+        p.error('--resource-only-renderer-parent-sha256 must match the exact reviewed Search renderer parent')
     if a.verify_admission_only:
         verified = registered_candidate_selection_admission(a.corpus_id, a.source)
         if verified is None:
@@ -2168,7 +2249,8 @@ def main(argv=None):
         input_binding = _render_input_binding(tokenizers, pieces, history_policies)
         all_jobs = [(str(shard_paths[s]), str(out / 'work'), name, blocked, a.corpus_id, held_groups, decision_exclude,
                      a.program_header_as_full, full_set, tuple(a.renderings), a.compress_text, target_exclude,
-                     a.legacy_renderer_sha256, input_binding, str(a.sqlite_temp_root) if a.sqlite_temp_root else None)
+                     a.legacy_renderer_sha256, input_binding, str(a.sqlite_temp_root) if a.sqlite_temp_root else None,
+                     a.resource_only_renderer_parent_sha256)
                 for s in shards for name in tokenizers]
         if a.render_shards is not None:
             if len(a.render_shards) != len(set(a.render_shards)):
@@ -2200,15 +2282,25 @@ def main(argv=None):
                     continue
                 else:
                     current_renderer_sha = file_sha(Path(__file__).resolve())
+                    parent_sha = a.resource_only_renderer_parent_sha256
+                    parent_binding = None
                     if result['renderer_code_sha256'] != current_renderer_sha:
-                        raise ValueError(f'completed shard renderer identity is neither current nor explicitly legacy: {done}')
+                        if parent_sha is None or result['renderer_code_sha256'] != parent_sha:
+                            raise ValueError(f'completed shard renderer identity is neither current nor explicitly continued: {done}')
+                        parent_binding = _render_job_binding_from_job(
+                            job, source_digest, _resource_parent_code_binding(parent_sha))
+                        if result.get('render_job_binding') != parent_binding:
+                            raise ValueError(f'completed shard resource-parent job binding mismatch: {done}')
                     if result.get('source_sha256') is None:
                         raise ValueError(f'completed shard lacks its source identity: {done}')
                     allowed_renderer_shas = {current_renderer_sha}
+                    if parent_sha is not None:
+                        allowed_renderer_shas.add(parent_sha)
                     if a.legacy_renderer_sha256 is not None:
                         _legacy_render_job_binding(job, source_digest, a.legacy_renderer_sha256)
                         allowed_renderer_shas.add(a.legacy_renderer_sha256)
-                    _verify_trajectory_receipts(job, result, allowed_renderer_shas)
+                    _verify_trajectory_receipts(job, result, allowed_renderer_shas,
+                                                 expected_job_binding=parent_binding)
                 result.setdefault('source_sha256', source_digest)
                 results.append(result)
             else:

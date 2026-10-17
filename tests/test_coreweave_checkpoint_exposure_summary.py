@@ -35,7 +35,8 @@ def test_conflicting_or_duplicated_row_custody_is_rejected(damage):
     with pytest.raises(ValueError):summarize_cohorts(state,{'stage_id':'ordinary','cohorts':cohorts},lambda _:SimpleNamespace(entries=rows))
 
 
-def test_cursor_captures_summary_from_one_existing_safe_decode_and_suppresses_loader_stdout(tmp_path):
+@pytest.mark.parametrize('inventory',[False,True])
+def test_cursor_captures_summary_from_one_existing_safe_decode_and_suppresses_loader_stdout(tmp_path,inventory):
     import hashlib,json,subprocess,sys,torch
     from scripts.coreweave.cursor_checkpoint_export import remote_code
     runtime=tmp_path/'runtime';package=runtime/'natlang_neuralese'
@@ -46,9 +47,12 @@ def test_cursor_captures_summary_from_one_existing_safe_decode_and_suppresses_lo
     (package/'train/native_resident.py').write_text('def _check_indexes(witnesses):\n assert witnesses==[\"bound-test-index\"]\n')
     cohort=tmp_path/'cohort.json';cohort.write_text('immutable source')
     specification={'stage_id':'ordinary','cohorts':{'new':{'path':str(cohort),'sha256':hashlib.sha256(cohort.read_bytes()).hexdigest()}},'tokenizer_fingerprint':'test','role_ids':[1,2,3,4],'row_index_cache':str(tmp_path/'cache'),'hash_cache':str(tmp_path/'hashes'),'indexes':['bound-test-index']}
+    specification['optimizer_state_inventory']=inventory
     sp=tmp_path/'spec.json';sp.write_text(json.dumps(specification));ref={'path':str(sp),'sha256':hashlib.sha256(sp.read_bytes()).hexdigest()}
     root=tmp_path/'root';slot=root/'rounds/lfm/production/round-1/learner/checkpoint.pt';slot.parent.mkdir(parents=True);pins=tmp_path/'pins';pins.mkdir()
-    state={'step':42,'training':{'options':{'stage_id':'ordinary'},'optimizer':{'moment':torch.tensor([1.])},'rng':{'cpu':torch.get_rng_state()},'source_receipts':[{}],'source_row_bindings':{'a':'aa'},'exposure_counts':{'a':1}}};torch.save(state,slot)
+    optimizer={'param_names':{'latent':['backbone.matrix']},'schema':[{'name':'backbone.matrix','dtype':'torch.float32','shape':[2,2]}],
+        'latent':{'param_groups':[{'params':[0]}],'state':{0:{'momentum':torch.zeros(2,2,dtype=torch.bfloat16)}}}}
+    state={'step':42,'training':{'options':{'stage_id':'ordinary'},'optimizer':optimizer,'rng':{'cpu':torch.get_rng_state()},'source_receipts':[{}],'source_row_bindings':{'a':'aa'},'exposure_counts':{'a':1}}};torch.save(state,slot)
     code=remote_code(role='lfm',root=root,known={},last=0,extra=None,pin_directory=pins,minimum_available_bytes=0,training_summary_spec=ref,training_summary_runtime=runtime)
     # The same original mmap decode serves both full-state custody and reporting.
     assert code.count('torch.load(')==1
@@ -56,6 +60,10 @@ def test_cursor_captures_summary_from_one_existing_safe_decode_and_suppresses_lo
     assert completed.returncode==0,completed.stderr
     output=json.loads(completed.stdout);summary=output['chosen']['training_summary']
     assert summary['global_step']==42 and summary['cohorts']['new']['completed_rows']==1
+    if inventory:
+        row=summary['current_optimizer_inventory']['parameters'][0]
+        assert row['name']=='backbone.matrix' and row['buffers']['momentum']=={'dtype':'torch.bfloat16','shape':[2,2]}
+    else:assert 'current_optimizer_inventory' not in summary
     assert 'cache diagnostic'in completed.stderr and 'cache diagnostic'not in completed.stdout
     # A rejected optional report cannot prevent the genuine full checkpoint pin.
     sp.write_text('changed spec');other=pins/'lfm-native-checkpoint-step-42.pt';other.unlink()
@@ -63,3 +71,48 @@ def test_cursor_captures_summary_from_one_existing_safe_decode_and_suppresses_lo
     assert completed.returncode==0,completed.stderr
     assert json.loads(completed.stdout)['chosen']['training_summary']['assigned_repair']is True
     assert other.is_file()
+
+
+def test_explicit_overlap_views_preserve_exact_credits_without_additive_total():
+    frame={'options':{'stage_id':'ordinary'},'source_row_bindings':{'a':'aa'},'exposure_counts':{'a':2}}
+    state={'step':3,'training':frame};before=copy.deepcopy(state)
+    spec={'stage_id':'ordinary','allow_overlapping_cohorts':True,'cohorts':{'aggregate':{},'teacher':{}}}
+    result=summarize_cohorts(state,spec,lambda _:SimpleNamespace(entries=[{'id':'a','binding':'aa'}]))
+    assert result['cohorts']['aggregate']['actual_visits']==result['cohorts']['teacher']['actual_visits']==2
+    assert 'never sum'in result['overlap_policy']and 'actual_visits'not in result
+    assert state==before
+    with pytest.raises(ValueError,match='repeats'):
+        summarize_cohorts(state,spec,lambda _:SimpleNamespace(entries=[{'id':'a','binding':'aa'}]*2))
+    calls=iter(['aa','different'])
+    with pytest.raises(ValueError,match='binding'):
+        summarize_cohorts(state,spec,lambda _:SimpleNamespace(entries=[{'id':'a','binding':next(calls)}]))
+    with pytest.raises(ValueError,match='boolean'):
+        summarize_cohorts(state,{**spec,'allow_overlapping_cohorts':'true'},lambda _:None)
+
+
+def test_actual_named_optimizer_buffer_inventory_is_current_and_readonly(monkeypatch):
+    from pathlib import Path
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1]/"training"/"neuralese"))
+    import torch
+    from natlang_neuralese.train.optim import PortMuonAdamW
+    ordinary=torch.nn.Parameter(torch.ones(3));latent=torch.nn.Parameter(torch.ones(2,2))
+    optimizer=PortMuonAdamW([('interface.rows',ordinary)],lr=.001,vocab_size=100,
+        latent=[('backbone.layers.0.self_attn.q_proj.weight',latent,.001,1.)],
+        latent_optimizer='muonsr',latent_options={'ns':'quintic'})
+    optimizer.auxiliary.state[ordinary]['exp_avg']=torch.zeros_like(ordinary)
+    optimizer.latent.state[latent]['momentum']=torch.zeros_like(latent,dtype=torch.bfloat16)
+    saved=optimizer.state_dict();before=copy.deepcopy(saved);rng=torch.get_rng_state().clone()
+    frame={'step':1,'source_row_bindings':{'a':'aa'},'exposure_counts':{'a':1}}
+    state={'step':2,'training':{'options':{'stage_id':'dpo'},'optimizer':saved,'sft_progress':{'ordinary':frame}}}
+    spec={'stage_id':'ordinary','optimizer_state_inventory':True,'cohorts':{'teacher':{}}}
+    result=summarize_cohorts(state,spec,lambda _:SimpleNamespace(entries=[{'id':'a','binding':'aa'}]))
+    rows={r['name']:r for r in result['current_optimizer_inventory']['parameters']}
+    assert rows['interface.rows']['route']=='adamw'
+    row=rows['backbone.layers.0.self_attn.q_proj.weight'];assert row['route']=='muonsr'and row['parameter_dtype']=='torch.float32'
+    assert row['buffers']['momentum']['dtype']=='torch.bfloat16'
+    assert result['current_optimizer_stage_id']=='dpo'and result['stage_id']=='ordinary'
+    assert torch.equal(rng,torch.get_rng_state())
+    for route,child in before.items():
+        if isinstance(child,dict)and 'state'in child:
+            for key,values in child['state'].items():
+                for name,value in values.items():assert torch.equal(value,saved[route]['state'][key][name])

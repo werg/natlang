@@ -163,11 +163,13 @@ def test_bare_native_factory_keeps_actual_recipe_and_omits_shared_artifact_requi
     assert result['history_reasoning_policy']=='last_turn_only'
     assert result['history_reasoning_binding_sha256']==sha256_file_hex(
         Path(result['rl_tokenizer'])/'natlang-history-reasoning.json')
-    assert result['learner_command'][-4:] == ['--history-reasoning-policy','{history_reasoning_policy}',
-        '--history-reasoning-binding-sha256','{history_reasoning_binding_sha256}']
+    assert result['learner_command'][-6:] == ['--history-reasoning-policy','{history_reasoning_policy}',
+        '--history-reasoning-binding-sha256','{history_reasoning_binding_sha256}',
+        '--history-reasoning-binding-path','{history_reasoning_binding_path}']
     bound=prepare_raw_policy(checkpoint,base=base,tokenizer_out=tmp_path/'second-tokenizer')
     receipt={'schema':'natlang.rl-policy-binding/2','communication':'native-state',
-        'checkpoint_sha256':bound['native_identity']['checkpoint_sha256'],'native_identity':bound['native_identity']}
+        'checkpoint_sha256':bound['native_identity']['checkpoint_sha256'],'native_identity':bound['native_identity'],
+        'history_reasoning':bound['history_reasoning']}
     production.validate_actor_receipts({'local':receipt},policy_id=sha256_file_hex(checkpoint),
         neuralese_server=True,expected_native=bound)
     forged={**receipt,'native_identity':{**receipt['native_identity'],'embedding_weight_sha256':'f'*64}}

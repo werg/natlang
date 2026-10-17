@@ -181,6 +181,7 @@ def load_native_engine(checkpoint: str, *, base: str | None = None, device: str 
     engine.rl_policy_binding = {'schema': 'natlang.rl-policy-binding/2',
         'checkpoint_sha256': checkpoint_sha256, 'communication': 'native-state',
         'native_identity': dict(identity),
+        'history_reasoning': dict(tokenizer.natlang_history_reasoning),
         **({'native_participant': participant} if participant is not None else {})}
     if _state.get('inference_source') is not None:
         engine.rl_policy_binding['inference_source'] = dict(_state['inference_source'])
@@ -203,5 +204,6 @@ def bind_native_semantic_channel(engine,channel,participant):
     engine.rl_policy_binding={'schema':'natlang.rl-policy-binding/2',
         'checkpoint_sha256':engine.native_identity['checkpoint_sha256'],'communication':'native-state',
         'native_identity':dict(engine.native_identity),'native_participant':participant,
+        'history_reasoning':dict(engine.tokenizer.natlang_history_reasoning),
         'semantic_adapter_sha256':channel.adapter_sha256}
     return engine

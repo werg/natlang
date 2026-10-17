@@ -48,6 +48,32 @@ through the projected-value implementation.
 
 ## Current status
 
+October17 operational position: both replacement trainers are making actual
+updates (LFM12049, Mellum18799 at21:49UTC). Their foundation obligations are
+18619/26312 and17533/26312 respectively; neither the entire production recipe
+nor complete communication exposure is finished. Mellum has adopted the new
+764-graph teacher addition and executed15 actual graph visits across all four
+new leaves. LFM's append exposed an omitted-versus-explicit IEEE capacity
+identity mismatch; the shared semantic-default repair preserves the original
+certificate and is being bundled with current-source argument normalization,
+the764 graphs, another458 verified authored graphs and the Source04 complete
+fit/pending partition at an exact saved-state continuation. Healthy training
+continues during preparation. Loading or staging these sources is not exposure.
+
+Task quality remains a real impediment: the same protected16-task packet yields
+LFM11134=0/16, LFM11502=0/16 and Mellum16364=9/16. The latest LF result has no
+infrastructure or unresolved cases and is dominated by repetition. These are
+historical actor measurements, not claims about current cloud weights. Generic
+recovery training, source exposure and the paired history-policy investigation
+are being checked without reusing held inputs or targets for training.
+Complete-gradient arithmetic qualification also remains unresolved; current
+reference-only results do not qualify production arithmetic or cross-model
+readiness. Shared-space VAE training must still wait for genuine completed
+producer/consumer graph training on both participants and its required evidence.
+
+The dated October16 deployment and qualification history below records the
+earlier transitions; its counters are not the current live counters.
+
 Raw native-state production training is deployed on BOTH sandboxes through
 shared `native_state_sft` jobs under `/work/native-production`. On October16,
 LFM reached8451 and Mellum11368 before the current controlled handoff. LFM's

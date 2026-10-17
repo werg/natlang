@@ -440,3 +440,134 @@ def test_resident_readiness_accepts_original_or_restarted_launch_but_not_unrelat
     requirement['trainer_launch']=resident.binding(launch)
     with pytest.raises(ValueError,match='different trainer launch'):
         validate_ready(path,requirement)
+
+
+
+def delta_fixture(tmp_path, monkeypatch, *, duplicate=False):
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE', str(tmp_path/'cache'))
+    paths, directory, manager, recipe = setup(tmp_path, manifest_train=True)
+    delta = tmp_path/'delta.jsonl'
+    delta.write_text(paths['new'].read_text().splitlines()[0 if duplicate else -1]+'\n')
+    wrapper = tmp_path/'delta-wrapper.json'
+    write_json(wrapper, {'schema':'natlang.native-graph-sources/1','sources':[
+        {'kind':'native-graphs', **resident.binding(paths['old'])},
+        {'kind':'native-graphs', **resident.binding(delta)}]})
+    value = json.loads(recipe.read_text());value['input_bindings']['train']=resident.binding(wrapper)
+    write_json(recipe,value)
+    return paths,directory,manager,recipe,delta,wrapper
+
+
+def test_delta_prepare_loads_only_new_graphs_then_retained_learner_validates_and_resumes(tmp_path, monkeypatch):
+    paths,directory,manager,recipe,delta,wrapper=delta_fixture(tmp_path,monkeypatch)
+    old_train, old_held = manager.train, manager.held
+    original=NativeGraphSource.__init__;opened=[]
+    def track(self,path,*args,**kwargs):
+        opened.append(Path(path).resolve())
+        assert Path(path).resolve() not in {old_train.path.resolve(), old_held.path.resolve(),
+            old_train.children[0].path.resolve()}
+        return original(self,path,*args,**kwargs)
+    monkeypatch.setattr(NativeGraphSource,'__init__',track)
+    request=resident.prepare(directory,recipe,'sft',tokenizer_fingerprint='tokenizer-sha',
+        role_ids=(),delta_sources={'train':resident.binding(delta)})
+    payload=json.loads(resident.bound(request).read_text())['payload']
+    assert 'entries_sha256' not in payload and 'held_entries_sha256' not in payload
+    assert payload['delta_validation']['prior_rows']==2 and payload['rows']==3
+    assert set(opened)=={delta.resolve()}
+    with pytest.raises(ValueError,match='not a full-source'):
+        resident.geometry_from_evidence(manager.train,0,request,package=manager.package)
+    train,held=manager.poll(9)
+    assert train.children[0] is old_train and held is old_held
+    assert [row['id']for row in train.entries]==['a','b','c']
+    committed=resident.current(directory)
+    assert committed['validation']=={'entries_sha256':resident.digest(train.entries),
+        'held_entries_sha256':resident.digest(held.entries)}
+    assert 'exposure_counts'not in committed
+    resumed=resident.ResidentAdoption(directory,stage_id='sft',recipe_binding=committed['payload']['recipe'],
+        train=train,held=held)
+    assert resumed.poll(10)is None
+    assert resident.recover(directory)['generation']==committed['generation']
+
+
+def test_delta_duplicate_old_identity_is_rejected_by_actual_union_without_credit(tmp_path,monkeypatch):
+    _,directory,manager,recipe,delta,_=delta_fixture(tmp_path,monkeypatch,duplicate=True)
+    resident.prepare(directory,recipe,'sft',tokenizer_fingerprint='tokenizer-sha',role_ids=(),
+        delta_sources={'train':resident.binding(delta)})
+    assert manager.poll(9)is None
+    assert resident.current(directory)is None
+    assert [row['id']for row in manager.train.entries]==['a','b']
+    assert list((directory/'rejections').glob('*.json'))
+
+
+@pytest.mark.parametrize('change',['priority','held','suffix','source'])
+def test_delta_preparation_or_adoption_rejects_contract_drift(tmp_path,monkeypatch,change):
+    paths,directory,manager,recipe,delta,wrapper=delta_fixture(tmp_path,monkeypatch)
+    if change=='priority':
+        value=json.loads(wrapper.read_text());value['sources'][0]['training_priority']=4;write_json(wrapper,value)
+        value=json.loads(recipe.read_text());value['input_bindings']['train']=resident.binding(wrapper);write_json(recipe,value)
+    elif change=='held':
+        value=json.loads(recipe.read_text());value['input_bindings']['held']=resident.binding(delta);write_json(recipe,value)
+    if change in ('priority','held'):
+        with pytest.raises(ValueError,match='resident'):
+            resident.prepare(directory,recipe,'sft',tokenizer_fingerprint='tokenizer-sha',role_ids=(),
+                delta_sources={'train':resident.binding(delta)})
+    else:
+        request=resident.prepare(directory,recipe,'sft',tokenizer_fingerprint='tokenizer-sha',role_ids=(),
+            delta_sources={'train':resident.binding(delta)})
+        if change=='source':delta.write_text(delta.read_text()+' ')
+        else:
+            value=json.loads(resident.bound(request).read_text());value['payload']['delta_validation']['entries_sha256']='0'*64
+            value['generation']=resident.digest(value['payload']);forged=directory/'forged.json';write_json(forged,value)
+            write_json(directory/'pending.json',resident.binding(forged))
+        assert manager.poll(9)is None and resident.current(directory)is None
+
+
+
+def test_delta_geometry_limit_and_lost_prior_index_fail_closed(tmp_path,monkeypatch):
+    paths,directory,manager,recipe,delta,wrapper=delta_fixture(tmp_path,monkeypatch)
+    initial=json.loads((directory/'initial.json').read_text())
+    capacity=json.loads(resident.bound(initial['geometry_qualification']).read_text())
+    capacity['limits']={'forward_tokens':1,'kv_slots':1}
+    low=tmp_path/'too-small-capacity.json';write_json(low,capacity)
+    initial['geometry_qualification']=resident.binding(low);write_json(directory/'initial.json',initial)
+    with pytest.raises(ValueError,match='whole-graph geometry'):
+        resident.prepare(directory,recipe,'sft',tokenizer_fingerprint='tokenizer-sha',role_ids=(),
+            delta_sources={'train':resident.binding(delta)})
+    assert not(directory/'pending.json').exists()
+
+
+
+def test_delta_helper_defers_full_held_separation_to_actual_resident(tmp_path,monkeypatch):
+    paths,directory,manager,recipe,delta,wrapper=delta_fixture(tmp_path,monkeypatch)
+    row=json.loads(delta.read_text());row['source_groups']=['source-held'];delta.write_text(json.dumps(row)+'\n')
+    value=json.loads(wrapper.read_text());value['sources'][1]={'kind':'native-graphs',**resident.binding(delta)};write_json(wrapper,value)
+    value=json.loads(recipe.read_text());value['input_bindings']['train']=resident.binding(wrapper);write_json(recipe,value)
+    resident.prepare(directory,recipe,'sft',tokenizer_fingerprint='tokenizer-sha',role_ids=(),
+        delta_sources={'train':resident.binding(delta)})
+    assert manager.poll(9)is None and resident.current(directory)is None
+    errors=[json.loads(p.read_text())['error']for p in(directory/'rejections').glob('*.json')]
+    assert errors and 'protected append'in errors[0]
+
+
+@pytest.mark.parametrize('explicit_side',['certificate','actual'])
+def test_geometry_identity_accepts_only_implicit_ieee_default(tmp_path,explicit_side):
+    import copy
+    identity={'model_config':{'architecture':'lfm2','native_linear_precision':'bf16x6'},
+              'batch_tokens':65536,'runtime':{'device':'cuda'}}
+    explicit=copy.deepcopy(identity);explicit['model_config']['native_attention_precision']='ieee'
+    evidence=tmp_path/'proof.json';write_json(evidence,{'passed':True})
+    certificate=tmp_path/'capacity.json'
+    value={'schema':'natlang.native-resident-geometry-qualification/1','passed':True,
+        'identity':explicit if explicit_side=='certificate'else identity,
+        'runtime_code_sha256':resident.digest({'module':'bound'}),
+        'limits':{'forward_tokens':94236,'kv_slots':157075},'evidence':resident.binding(evidence)}
+    write_json(certificate,value);original=certificate.read_bytes()
+    actual=identity if explicit_side=='certificate'else explicit
+    assert resident.geometry_capacity(resident.binding(certificate),identity=actual,code={'module':'bound'})==value['limits']
+    assert certificate.read_bytes()==original
+    for mode in ('tf32x3',None,'invalid'):
+        wrong=copy.deepcopy(actual);wrong['model_config']['native_attention_precision']=mode
+        with pytest.raises(ValueError,match='differs'):
+            resident.geometry_capacity(resident.binding(certificate),identity=wrong,code={'module':'bound'})
+    wrong=copy.deepcopy(actual);wrong['batch_tokens']+=1
+    with pytest.raises(ValueError,match='differs'):
+        resident.geometry_capacity(resident.binding(certificate),identity=wrong,code={'module':'bound'})

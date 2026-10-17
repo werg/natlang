@@ -16,15 +16,16 @@ from test_native_source_index_continuation import subject
 ROOT = Path(__file__).resolve().parents[1]
 PARENTS = ('14ca1758cacf99a4dc8f237fea7b8005d2123c40',
            'b50e8823aaa1f92d2d3be853afc1955948a8fd1f')
+GUARD_EXTENSION = 'f8fe2e0ac37c'
 
 
 @pytest.fixture(scope='module')
 def frozen_packages(tmp_path_factory):
     root = tmp_path_factory.mktemp('runtime-validators')
-    for ref in (*PARENTS, '64ec316e5'):
+    for ref in (*PARENTS, '64ec316e5', GUARD_EXTENSION):
         package = root / ref
         names = (*subject.POLICY_FILES, 'common/paths.py')
-        if ref == '64ec316e5':
+        if ref in ('64ec316e5', GUARD_EXTENSION):
             names += ('data/native_source_tree.py',)
         for name in names:
             path = package / name
@@ -161,7 +162,7 @@ def test_metadata_revalidation_keeps_actual_old_cache_and_fresh_stream_validatio
     monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE',str(tmp_path/'indexes'))
     monkeypatch.setenv('NATLANG_HASH_CACHE',str(tmp_path/'digests.jsonl'))
     reference=frozen_packages/'64ec316e5'
-    new=ROOT/'training/neuralese/natlang_neuralese'
+    new=frozen_packages/GUARD_EXTENSION
     old=load_source(frozen_packages/parent,monkeypatch)
     current=load_source(new,monkeypatch)
     path=tmp_path/'graphs.jsonl';path.write_text(json.dumps(graph('actual'))+'\n')
@@ -182,9 +183,12 @@ def test_metadata_revalidation_keeps_actual_old_cache_and_fresh_stream_validatio
 @pytest.mark.parametrize('tamper',['helper','parser','manifest','dependency','post-location'])
 def test_metadata_continuation_rejects_any_non_guard_policy_change(frozen_packages,tmp_path,tamper):
     reference=frozen_packages/'64ec316e5';new=tmp_path/'new'
-    package=ROOT/'training/neuralese/natlang_neuralese'
+    package=frozen_packages/GUARD_EXTENSION
     for name in (*subject.POLICY_FILES,'data/native_source_tree.py'):
         target=new/name;target.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(package/name,target)
+    # Prove the unchanged baseline first so an unrelated dependency change
+    # cannot mask whether each intended mutation is actually rejected.
+    subject.prove_metadata_revalidation_extension(frozen_packages/PARENTS[0],new,reference)
     if tamper=='manifest':path=new/'data/native_source_tree.py';needle="kind not in {'native-graphs', 'semantic-pairs'}";change='False'
     elif tamper=='dependency':path=new/'data/native_pair_schema.py';needle='';change='\n# changed parser dependency\n'
     else:

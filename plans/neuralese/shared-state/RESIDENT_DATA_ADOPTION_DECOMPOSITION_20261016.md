@@ -46,3 +46,19 @@ can name the old root as their first child to expose this sharing. All existing
 prefix, scheduling, held separation, source-obligation and geometry checks still
 run against the resulting objects. This avoids duplicate million-row metadata
 constructions while preserving the admission decision.
+
+
+Delta preparation (2026-10-17): a tiny admitted append must not require a second
+million-row metadata allocation beside the live learner. The explicit delta
+policy authenticates the current generation, old plan and source bindings;
+accepts only a canonical prior-source-plus-delta wrapper with unchanged held
+source; validates only new whole graphs, completed indexes and qualified
+geometry outside the learner. It does not claim the full resulting metadata
+digest was prevalidated. The existing resident learner retains old immutable
+source objects, authenticates the new suffix and performs complete prefix,
+conflict, held separation and pending-obligation checks. It records full
+metadata digests only after that validation, alongside the immutable request.
+A crash resumes from the committed request plus its actual validation record.
+Default full preparation remains unchanged. Crisp code handles hashes, exact
+wrapper shape, counters, reader reuse and atomic generation CAS; no optimizer,
+RNG, exposure, priorities or model arithmetic is modified.

@@ -208,3 +208,145 @@ def test_deduplicated_action_is_counted_once_without_a_second_graph():
     raw, omitted = partition_fixture()
     proof = materialization_partition(raw, [('good', 0), ('good', 1)], omitted, [], [('good', 0)])
     assert proof['emitted_actions'] == 0 and proof['deduplicated_actions'] == 1
+
+
+def test_repair_attempt_preserves_archive_keys_but_separates_all_mutable_custody(tmp_path):
+    ordinary, repair, later = Tranche(21, 0), Tranche(21, 0, 1), Tranche(21, 0, 2)
+    assert ordinary.archive_name == repair.archive_name == later.archive_name
+    assert len({x.corpus_id for x in (ordinary, repair, later)}) == 3
+    assert repair.corpus_id.endswith('batch0021-repair0001-tranche0000')
+    assert repair.exports(tmp_path) == tmp_path / 'repair-exports/batch-0021-attempt-0001'
+    assert ordinary.exports(tmp_path) == tmp_path / 'batch-0021'
+    for recovery in (False, True):
+        assert len({x.admission(tmp_path, recovery=recovery) for x in (ordinary, repair, later)}) == 3
+    assert repair.admission(tmp_path) == tmp_path / 'admission/repair-attempts/batch-0021/attempt-0001/tranche-0000'
+
+
+@pytest.mark.parametrize('attempt', [0, -1, True, 1.0, '1'])
+def test_repair_attempt_is_typed_positive_integer(attempt):
+    with pytest.raises(ValueError, match='repair attempt'):
+        Tranche(21, 0, attempt)
+
+
+def test_original_admitted_tranche_cannot_discharge_repair_attempt_predecessor(tmp_path):
+    ordinary = corpus(tmp_path, 21, 0)
+    put(tmp_path / 'training/neuralese_corpora.json', {'corpora': [ordinary]})
+    with pytest.raises(FileNotFoundError):
+        preceding_tranches(tmp_path, tmp_path / 'spool', Tranche(21, 1, 1))
+    assert admitted_predecessors(tmp_path, Tranche(21, 0, 1).corpus_id)[0]['id'] == ordinary['id']
+
+
+@pytest.mark.parametrize('attempt',[None,1])
+def test_quality_view_preserves_actual_source_exports_recovery_and_attempt(tmp_path,attempt):
+    original=Tranche(23,0,attempt);view=Tranche(23,0,attempt,'source-argument-oracle-v1')
+    assert view.exports(tmp_path)==original.exports(tmp_path)
+    assert view.archive_name==original.archive_name
+    assert view.admission(tmp_path,recovery=True)==original.admission(tmp_path,recovery=True)
+    assert view.admission(tmp_path)!=original.admission(tmp_path)
+    assert view.admission(tmp_path).is_relative_to(tmp_path/'admission-quality-views/source-argument-oracle-v1')
+    assert view.corpus_id==original.corpus_id+'-quality-source-argument-oracle-v1'
+    assert view.attempt==original.attempt
+
+
+@pytest.mark.parametrize('name',['','../bad','a/b','..','.','A','a--b',True,1,[]])
+def test_quality_view_name_cannot_escape_or_fake_typed_identity(name):
+    with pytest.raises(ValueError,match='quality view'):Tranche(23,0,quality_view=name)
+
+
+def source_phase_fixture(tmp_path):
+    from scripts.coreweave.teacher_tranche_admission import completed_source_phase
+    source_dir = tmp_path / 'positive'
+    source_dir.mkdir()
+    source = source_dir / 'native-trajectories.jsonl'
+    source.write_text(json.dumps({'id': 'row', 'outcome': {'status': 'done', 'accepted': True,
+        'oracle': {'accepted': True}, 'checks': {'files': True}}}) + '\n')
+    source_ref = file_binding(source)
+    raw = put(tmp_path / 'restored/raw.json', {'original': 'unchanged'})
+    manifest = put(tmp_path / 'restored/raw.manifest.json', {'completed': 1})
+    context = put(tmp_path / 'restored/context/packet.json', {'source': 'train'})
+    put(tmp_path / 'restored/tranche-manifest.json', {
+        'context': {'packet.json': context}, 'outputs': [{'output': 'raw.json',
+            'output_sha256': raw['sha256'], 'output_bytes': raw['bytes'],
+            'output_manifest': 'raw.manifest.json', 'manifest_sha256': manifest['sha256'],
+            'manifest_bytes': manifest['bytes']}],
+    })
+    private = put(tmp_path / 'private.json', {'identity': {'sha256': 'archive-sha', 'bytes': 123},
+        'independent_verification': {'sha256': 'archive-sha', 'bytes': 123}})
+    recovery = put(tmp_path / 'recovery.json', {'restoration': {'status': 'passed'},
+        'archive_identity': {'sha256': 'archive-sha', 'bytes': 123}, 'private_receipt': private['path'],
+        'restored': str(tmp_path / 'restored')})
+    operator = put(tmp_path / 'frozen-operator.json', {'mechanism': 'historical'})
+    inventory = put(tmp_path / 'operators.json', {'helper': operator, 'operators': [operator]})
+    execution = put(tmp_path / 'execution.json', {'inventory': inventory, 'pipeline': operator})
+    put(source_dir / 'canonical-source-verification.json', {
+        'schema': 'natlang.teacher-live-tranche-canonical-source-verification/1',
+        'status': 'passed', 'training_admission': False, 'rows': 1, 'selected_outputs': 1,
+        'source': source_ref})
+    put(source_dir / 'transfer-receipt.json', {
+        'schema': 'natlang.verified-teacher-trajectory-transfer/1', 'training_admission': False,
+        'combined': {**source_ref, 'rows': 1}, 'files': [raw],
+        'private_export': {'archive_sha256': 'archive-sha'}})
+    put(source_dir / 'batch-source-bindings.json', {'batches': ['original-packet']})
+    receipt = put(tmp_path / 'completed-source.json',
+                  completed_source_phase(source_dir, recovery, execution))
+    return source_dir, receipt
+
+
+def test_completed_source_resumes_without_rewriting_historical_runtime_metadata(tmp_path):
+    from scripts.coreweave.teacher_tranche_admission import verify_completed_source_phase
+    directory, reference = source_phase_fixture(tmp_path)
+    before = (directory / 'native-trajectories.jsonl').read_bytes()
+    # A current runtime outside the frozen source phase changes independently.
+    put(tmp_path / 'current-runtime.json', {'version': 'new-checker'})
+    proof = verify_completed_source_phase(reference, directory)
+    assert proof['source_rows'] == 1 and proof['training_admission'] is False
+    assert proof['requires_fresh_conversion_and_admission'] is True
+    assert (directory / 'native-trajectories.jsonl').read_bytes() == before
+
+
+@pytest.mark.parametrize('relative', [
+    'positive/native-trajectories.jsonl', 'positive/transfer-receipt.json',
+    'positive/batch-source-bindings.json', 'positive/canonical-source-verification.json',
+    'restored/raw.json', 'restored/raw.manifest.json', 'restored/context/packet.json',
+    'restored/tranche-manifest.json', 'frozen-operator.json', 'operators.json',
+    'execution.json', 'private.json', 'recovery.json'])
+def test_completed_source_rejects_any_changed_original_custody(tmp_path, relative):
+    from scripts.coreweave.teacher_tranche_admission import verify_completed_source_phase
+    directory, reference = source_phase_fixture(tmp_path)
+    path = tmp_path / relative
+    path.write_bytes(path.read_bytes() + b' ')
+    with pytest.raises(ValueError):
+        verify_completed_source_phase(reference, directory)
+
+
+def test_completed_source_needs_exact_receipt_and_directory(tmp_path):
+    from scripts.coreweave.teacher_tranche_admission import verify_completed_source_phase
+    directory, reference = source_phase_fixture(tmp_path)
+    receipt = json.loads(Path(reference['path']).read_bytes())
+    receipt['requires_fresh_conversion_and_admission'] = False
+    tampered = put(tmp_path / 'bad-completion.json', receipt)
+    with pytest.raises(ValueError, match='receipt differs'):
+        verify_completed_source_phase(tampered, directory)
+    with pytest.raises(FileNotFoundError):
+        verify_completed_source_phase(reference, tmp_path / 'another-source')
+
+
+def test_completed_source_detects_same_size_mtime_restored_mid_verification(tmp_path, monkeypatch):
+    import os
+    import scripts.coreweave.teacher_tranche_admission as module
+    directory, reference = source_phase_fixture(tmp_path)
+    original = module.file_binding
+    target = directory / 'native-trajectories.jsonl'
+    changed = False
+    def binding(path):
+        nonlocal changed
+        result = original(path)
+        if Path(path).name == 'frozen-operator.json' and not changed:
+            changed = True
+            st = target.stat()
+            target.write_bytes(target.read_bytes().replace(b'row', b'bad'))
+            os.utime(target, ns=(st.st_atime_ns, st.st_mtime_ns))
+        return result
+    monkeypatch.setattr(module, 'file_binding', binding)
+    with pytest.raises(ValueError, match='changed during verification'):
+        module.verify_completed_source_phase(reference, directory)

@@ -326,7 +326,8 @@ def incremental_member_source_kind(export):
     return None
 
 
-def verify_graph_source(graph, value, *, protection, held_sources, fingerprint):
+def verify_graph_source(graph, value, *, protection, held_sources, fingerprint,
+                        explicit_history_reasoning_policy=None):
     """Authenticate an actual graph against its original complete source occurrence."""
     if value.get('positive_candidate') is not True or session_exclusion(value, protection, held_sources):
         raise ValueError('native graph targets an excluded or nonpositive source session')
@@ -341,6 +342,12 @@ def verify_graph_source(graph, value, *, protection, held_sources, fingerprint):
         'native_execution_verified': False, 'observed_actor_state_exchange': False, 'truncated': False}
     if any(provenance.get(key) != item for key, item in expected.items()):
         raise ValueError('native graph lost its exact original session/target provenance')
+    if explicit_history_reasoning_policy is not None:
+        profile = explicit_history_reasoning_policy
+        provenance_profile = (provenance.get('history_reasoning_policy')
+            or provenance.get('history_reasoning', {}).get('policy'))
+        if profile not in ('keep', 'last_turn_only') or provenance_profile != profile:
+            raise ValueError('native graph history rendering profile differs from its conversion receipt')
     if graph.get('source_groups') != sorted(set(trajectory['split_groups'])):
         raise ValueError('native graph changed original source groups')
     groups = set(trajectory['split_groups'])
@@ -348,7 +355,10 @@ def verify_graph_source(graph, value, *, protection, held_sources, fingerprint):
     if trajectory['split'] not in {'train', 'test', 'validation'} or (
             trajectory['split'] != 'train' and split != 'test') or graph.get('split') != split:
         raise ValueError('native graph violates global source-declared held closure')
-    base = source_occurrence(value); view = provenance.get('view')
+    base = source_occurrence(value)
+    if explicit_history_reasoning_policy is not None:
+        base += ':history-reasoning:' + explicit_history_reasoning_policy
+    view = provenance.get('view')
     auxiliary = provenance.get('auxiliary_reasoning_assistant_ordinals')
     assistants = [m for m in trajectory['messages'] if m['role'] == 'assistant']
     coverage = provenance.get('reasoning_coverage', {})
@@ -518,7 +528,8 @@ def _model_resume_identity(*, export_path, source_path, original, rows, model, b
 
 
 def _verify_conversion_shard(directory, shard, source_slice, *, expected_sources,
-                            expected_omissions, expected_counts, protection, held_sources, fingerprint):
+                            expected_omissions, expected_counts, protection, held_sources, fingerprint,
+                            explicit_history_reasoning_policy=None):
     """Fully verify one durable source shard, including its complete graph views."""
     shard_path = Path(shard['path']).parent
     receipt = json.loads((shard_path / 'receipt.json').read_text())
@@ -549,7 +560,8 @@ def _verify_conversion_shard(directory, shard, source_slice, *, expected_sources
             if value is None:
                 raise ValueError('native shard graph has no exact eligible source from its bound range')
             expected, width, actual_split = verify_graph_source(
-                graph, value, protection=protection, held_sources=held_sources, fingerprint=fingerprint)
+                graph, value, protection=protection, held_sources=held_sources, fingerprint=fingerprint,
+                explicit_history_reasoning_policy=explicit_history_reasoning_policy)
             if actual_split != split or graph['id'] in graph_ids:
                 raise ValueError('native shard duplicated a graph or stored it under the wrong split')
             graph_ids.add(graph['id']); owed.update(expected)
@@ -746,7 +758,8 @@ def verify_conversion(directory, export_path, *, protection, held_sources, decis
                 directory, shard, source_slice, expected_sources=positive,
                 expected_omissions=slice_omissions, expected_counts=expected_shard_counts,
                 protection=protection, held_sources=held_sources,
-                fingerprint=receipt['expanded_tokenizer_fingerprint'])
+                fingerprint=receipt['expanded_tokenizer_fingerprint'],
+                explicit_history_reasoning_policy=receipt.get('explicit_history_reasoning_policy'))
         if shard_checkpoint_root is None:
             result = validate_shard()
         else:

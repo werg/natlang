@@ -14,7 +14,7 @@ from pathlib import Path
 
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex as digest
 from natlang_neuralese.common.jsonio import write_json_durable
-from natlang_neuralese.train.native_resident import binding, bound as _resident_bound, code_inventory
+from natlang_neuralese.train.native_resident import binding, bound as _resident_bound, code_inventory, same_geometry_identity
 
 _DEPENDENCY_SINK=ContextVar('native_capacity_dependencies',default=None)
 
@@ -205,7 +205,7 @@ def _attention_index_contract(review, limits):
     paired = json.loads(bound(basis.get('normal_batch_paired')).read_text())
     normal = paired.get('batch') or {}
     if (paired.get('schema') != 'natlang.attention-index-production-paired/1'
-            or paired.get('passed') is not True or paired.get('identity') != review['identity']
+            or paired.get('passed') is not True or not same_geometry_identity(paired.get('identity'), review['identity'])
             or paired.get('old_runtime_code_sha256') != digest(review['old_code'])
             or paired.get('new_runtime_code_sha256') != digest(review['new_code'])
             or paired.get('parent_checkpoint_sha256') != basis.get('normal_probe_parent_checkpoint_sha256')
@@ -272,7 +272,7 @@ def _proof_cases(reference, *, identity, code_sha, parent, seen=()):
             if review['old_code'].get(name) != review['new_code'].get(name)}
         policy = review.get('optimizer_policy')
         allowed = allowed_changes(policy)
-        if (value.get('passed') is not True or value.get('identity') != identity
+        if (value.get('passed') is not True or not same_geometry_identity(value.get('identity'), identity)
                 or value.get('runtime_code_sha256') != code_sha or value.get('optimizer_updates') != 0
                 or value.get('new_parent_measured') is not False
                 or value.get('continued_parent_checkpoint_sha256') != parent
@@ -282,11 +282,11 @@ def _proof_cases(reference, *, identity, code_sha, parent, seen=()):
                 or not changes or set(changes) - allowed or changes != review.get('changes')
                 or digest(review['new_code']) != code_sha
                 or digest(review['old_code']) != value.get('old_runtime_code_sha256')
-                or review.get('identity') != identity
+                or not same_geometry_identity(review.get('identity'), identity)
                 or review.get('source_certificate') != value['source_certificate']
                 or review.get('new_parent_checkpoint_sha256') != parent
                 or review.get('old_parent_checkpoint_sha256') != value.get('source_parent_checkpoint_sha256', value.get('measured_parent_checkpoint_sha256'))
-                or certificate.get('passed') is not True or certificate.get('identity') != identity
+                or certificate.get('passed') is not True or not same_geometry_identity(certificate.get('identity'), identity)
                 or certificate.get('schema') != 'natlang.native-resident-geometry-qualification/1'
                 or certificate.get('runtime_code_sha256') != value['old_runtime_code_sha256']
                 or certificate.get('evidence') != value.get('source_evidence')
@@ -310,7 +310,7 @@ def _proof_cases(reference, *, identity, code_sha, parent, seen=()):
         if type(extra) is not int or extra != _memory_allowance(review):
             raise ValueError('inherited capacity lost its additional memory allowance')
         return [{**case, 'inherited_extra_bytes': case.get('inherited_extra_bytes', 0) + extra} for case in cases]
-    if (value.get('passed') is not True or value.get('identity') != identity
+    if (value.get('passed') is not True or not same_geometry_identity(value.get('identity'), identity)
             or value.get('runtime_code_sha256') != code_sha
             or value.get('parent_checkpoint_sha256') != parent
             or value.get('optimizer_updates') != 0):
@@ -373,7 +373,7 @@ def continue_capacity(review_binding, *, old_package, new_package, out):
     identity = review['identity']
     source = json.loads(bound(review['source_certificate']).read_text())
     if (source.get('schema') != 'natlang.native-resident-geometry-qualification/1'
-            or source.get('passed') is not True or source.get('identity') != identity
+            or source.get('passed') is not True or not same_geometry_identity(source.get('identity'), identity)
             or source.get('runtime_code_sha256') != digest(old)):
         raise ValueError('capacity identity changed: model/packing/offload/backend must match')
     cases = _proof_cases(source['evidence'], identity=identity, code_sha=digest(old),

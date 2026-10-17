@@ -29,9 +29,12 @@ class Backend:
         finally:self.active=previous
 
 
-def fixture(family,device="cpu"):
+def fixture(family,device="cpu",inactive=False):
     model=SharedStateModel(tiny(family).to(device),(58,59,60,61),rank=4);model.port.checkpoint_layers=False
     if family=='mellum':model.port.hf.natlang_precision='bf16'
+    if inactive:
+        expert=torch.nn.Module();expert.self_attn=torch.nn.Module();expert.self_attn.q_proj=torch.nn.Linear(3,3,bias=False,device=device)
+        model.port.layers[0].add_module('inactive_expert',expert)
     with torch.no_grad():model.adapter.up.weight.normal_(std=.03)
     optimizer,named=make_native_optimizer(model,lr=3e-6,in_backward=False)
     for _,p in named:p.grad=torch.randn_like(p)*.001
@@ -218,3 +221,87 @@ def test_backend_relative_gate_is_forwarded_with_or_without_complete_inventory(m
         checkpoint_sha256='a'*64,forward_atol=1e-4,gradient_atol=1e-5,gradient_rtol=2e-5,
         gradient_parameters=named,device='cpu')
     assert result['passed']
+
+
+def inherited_cached_gap(model):
+    # A real graph/cached discrepancy shared by both arithmetic modes. It does
+    # not alter parameters or numeric gates and is retained in both reports.
+    def alter(module,args,kwargs,output):
+        if kwargs.get('reference'):
+            return {**output,'h_final':output['h_final']*1.01}
+    return model.register_forward_hook(alter,with_kwargs=True)
+
+
+@pytest.mark.parametrize('family',['lfm','mellum'])
+def test_real_inherited_cached_gap_does_not_hide_cross_mode_equivalence(family):
+    model,opt,named,roles,config=fixture(family);hook=inherited_cached_gap(model)
+    try:report=call(model,opt,roles,config)
+    finally:hook.remove()
+    assert not report['passed']and not report['cached_reference_passed']and not report['readiness_qualified']
+    assert not report['baseline_cached_reference']['passed']and not report['candidate_cached_reference']['passed']
+    assert report['cross_mode_passed']and report['source_state_preserved']
+    assert report['transition_equivalence']['passed']and report['transition_equivalence']['inherited_cached_reference_debt']
+    assert not report['transition_equivalence']['readiness_qualified']
+
+
+@pytest.mark.parametrize('change',['new-failure','worse-error','nonfinite','missing','cross-missing'])
+def test_equivalence_denies_new_or_worse_named_cached_failures(change):
+    model,opt,named,roles,config=fixture('lfm');hook=inherited_cached_gap(model)
+    try:report=call(model,opt,roles,config)
+    finally:hook.remove()
+    assert report['transition_equivalence']['passed']
+    new=report['candidate_cached_reference']['complete_gradient_qualification']['comparisons']
+    before=report['baseline_cached_reference']['complete_gradient_qualification']['comparisons']
+    name=next(k for k,v in new.items()if v.get('finite')is True)
+    if change=='new-failure':before[name]['passed']=True;new[name]['passed']=False
+    elif change=='worse-error':new[name]['max_abs']=before[name]['max_abs']+report['gradient_atol']*100
+    elif change=='nonfinite':new[name]['relative_l2']=float('nan')
+    elif change=='missing':new.pop(name)
+    else:report['cross_mode']['cached']['comparisons'].pop(name)
+    assert not transition.transition_equivalence(report)['passed']
+
+
+def test_attention_only_resume_keeps_failed_runtime_readiness_proof():
+    from natlang_neuralese.train.native_state_sft import qualify_precision_transition
+    from natlang_neuralese.model.native_precision import set_native_attention_precision
+    model,opt,named,roles,config=fixture('lfm');set_native_attention_precision(model,'tf32x3');config.update(native_attention_precision='tf32x3',native_linear_precision='ieee')
+    hook=inherited_cached_gap(model)
+    try:
+        result=qualify_precision_transition(model,Tokenizer(),roles,config,previous_precision='ieee',
+            previous_attention_precision='ieee',checkpoint_sha256='a'*64,forward_atol=1e-4,gradient_atol=1e-5,device='cpu',optimizer=opt)
+    finally:hook.remove()
+    assert result['attention_transition_equivalence']['passed']and result['inherited_cached_reference_debt']
+    assert not result['runtime_reference']['passed']and not result['attention_complete_comparison']['passed']
+
+
+@pytest.mark.parametrize('other_change',['linear','linear-backout','linear-tf32-backout','norm'])
+def test_simultaneous_other_change_retains_strict_cached_gate(monkeypatch,other_change):
+    from natlang_neuralese.train.native_state_sft import qualify_precision_transition
+    from natlang_neuralese.model.native_precision import set_native_attention_precision
+    from natlang_neuralese.model import native_parameter_precision
+    model,opt,named,roles,config=fixture('lfm');hook=inherited_cached_gap(model)
+    try:report=call(model,opt,roles,config)
+    finally:hook.remove()
+    assert report['transition_equivalence']['passed']and not report['passed']
+    # Exercise the combination-control guard with a genuine computed report;
+    # CPU fixtures do not claim CUDA-only bf16x6 arithmetic qualification.
+    set_native_attention_precision(model,'tf32x3');config.update(native_attention_precision='tf32x3',native_linear_precision='bf16x6'if other_change=='linear'else'ieee')
+    monkeypatch.setattr(transition,'qualify_attention_transition',lambda *a,**kw:report)
+    if other_change=='norm':monkeypatch.setattr(native_parameter_precision,'norm_execution_changes_arithmetic',lambda *a:True)
+    with pytest.raises(ValueError,match='cached-reference'):
+        qualify_precision_transition(model,Tokenizer(),roles,config,previous_precision='bf16x6'if other_change=='linear-backout'else'tf32x3'if other_change=='linear-tf32-backout'else'ieee',previous_attention_precision='ieee',previous_norm_execution='stock'if other_change=='norm'else None,checkpoint_sha256='a'*64,forward_atol=1e-4,gradient_atol=1e-5,device='cpu',optimizer=opt)
+
+
+@pytest.mark.parametrize('family',['lfm','mellum'])
+def test_real_inactive_expert_derivative_remains_covered_and_equivalent(family):
+    model,opt,named,roles,config=fixture(family,inactive=True);state=copy.deepcopy(opt.state_dict());hook=inherited_cached_gap(model)
+    try:report=call(model,opt,roles,config)
+    finally:hook.remove()
+    inactive=next(name for name,p in named if 'inactive_expert'in name)
+    for proof in[report['baseline_cached_reference']['complete_gradient_qualification'],report['candidate_cached_reference']['complete_gradient_qualification'],*report['cross_mode'].values()]:
+        assert inactive in {r['name']for r in proof['inventory']}
+        assert proof['comparisons'][inactive]=={'passed':True,'unused':True}
+    assert report['transition_equivalence']['passed']and not report['passed']
+    equal(opt.state_dict(),state)
+    report['candidate_cached_reference']['complete_gradient_qualification']['comparisons'][inactive]={'passed':False,'reason':'flat-only or missing cached derivative'}
+    assert not transition.transition_equivalence(report)['passed']

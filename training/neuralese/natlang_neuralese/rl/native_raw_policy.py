@@ -13,10 +13,12 @@ HISTORY_BINDING_SCHEMA = 'natlang.raw-native-tokenizer-history/1'
 def bind_saved_history_reasoning(tokenizer, *, tokenizer_path, checkpoint_sha256,
                                  tokenizer_fingerprint,
                                  expected_history_reasoning_policy=None,
-                                 expected_binding_sha256=None):
+                                 expected_binding_sha256=None,
+                                 expected_binding_path=None):
     """Restore and verify the exact chat-history profile beside an RL tokenizer."""
     from ..serve.chat import bind_history_reasoning
-    binding_path = Path(tokenizer_path) / 'natlang-history-reasoning.json'
+    binding_path = (Path(expected_binding_path) if expected_binding_path is not None else
+                    Path(tokenizer_path) / 'natlang-history-reasoning.json')
     if not binding_path.is_file():
         if expected_history_reasoning_policy is not None or expected_binding_sha256 is not None:
             raise ValueError('explicit checkpoint history profile requires its saved tokenizer sidecar')

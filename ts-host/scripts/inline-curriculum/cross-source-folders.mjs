@@ -18,7 +18,7 @@ export function crossSourceFolders(seed,index,split='train') {
   const operation = recipes[new Random(seed,`operation:${index}`).int(0,recipes.length-1)];
   const spec = criteria[new Random(seed,`criterion:${index}`).int(0,criteria.length-1)];
   const rng = new Random(seed,`source-data:${index}`);
-  const pool = labeledRows(spec.dataset,split).filter(row => spec.dataset !== 'sst2' || row.text.length>=80);
+  const pool = labeledRows(spec.dataset,split);
   const positives = pool.filter(row=>spec.labels.includes(row.label));
   const negatives = pool.filter(row=>!spec.labels.includes(row.label));
   const n = rng.int(8,18);
@@ -65,6 +65,7 @@ export function crossSourceFolders(seed,index,split='train') {
     minimumSequence:['read the selected operation and criterion','judge actual document contents in inline lambdas','apply exact operation and verify resulting files'],
     reference:{root:[evalCall(code),returnCall(expected)],children:[{match:'An iterative process',value:{verdict:'continue',reason:'The cursor advances by one toward the document count, retaining earlier selections.'}},...rows.map(row=>({match:row.id.slice(0,16),calls:[['read_file',{path:row.id.slice(0,16)+'.md'}],returnCall(spec.labels.includes(row.label))]}))]}});
   record.dataset=spec.dataset;record.dataset_records=rows.map(row=>row.id);
+  if(spec.dataset==='sst2')record.generation.source_context=rows.map(row=>row.source_context);
   record.source_ids=[...rows.map(row=>row.id),`operation:${operation.id}@${recipeRevision}`];
   record.source_groups=rows.map(row=>`${spec.dataset}:${row.id}`);
   record.source_revisions=[SOURCES[spec.dataset].revision,`semantic-folder-operations:${recipeRevision}`];

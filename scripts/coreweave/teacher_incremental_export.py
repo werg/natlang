@@ -16,6 +16,7 @@ import re
 import subprocess
 import sys
 import time
+import tempfile
 from typing import Callable
 
 try:
@@ -283,6 +284,67 @@ def _repair_payload_bindings(completion: dict) -> dict[str, dict]:
                     raise ValueError('repair output repeats a payload path')
                 result[name] = {'source_path': path, 'sha256': digest}
     return result
+
+
+def _budget_payload_bindings(completion, queue):
+    """Retain failed budget outcomes as control evidence, never positive rows."""
+    queued = {row['key']: row for row in queue}
+    result = {}; seen = set()
+    for failure in (completion.get('completion') or {}).get('model_budget_failures', []):
+        key = failure.get('key')
+        if (key not in queued or key in ('.', '..') or key in seen or failure.get('training_admission') is not False
+                or not re.fullmatch(r'[A-Za-z0-9._:-]+', key)):
+            raise ValueError('invalid or repeated terminal budget queue identity')
+        seen.add(key)
+        result[f'budget-payloads/{key}/output-manifest.json'] = {
+            'source_path': queued[key]['output'] + '.manifest.json'}
+        errors = failure.get('errors')
+        if not isinstance(errors, list) or not errors:
+            raise ValueError('terminal budget outcome lacks exact error evidence')
+        for error in errors:
+            path, digest = error.get('path'), error.get('sha256')
+            if not isinstance(path, str) or not re.fullmatch(r'[0-9a-f]{64}', str(digest)):
+                raise ValueError('terminal budget error lacks path and SHA binding')
+            name = f'budget-payloads/{key}/{Path(path).name}'
+            if name in result:
+                raise ValueError('terminal budget outcome repeats a payload')
+            result[name] = {'source_path': path, 'sha256': digest}
+    return result
+
+
+def _verify_budget_outcomes(completion, queue, files, payloads):
+    """Reuse the shared classifier against an exact local mirror of sealed bytes."""
+    try:
+        from .teacher_batch_completion import batch_completion
+    except ImportError:
+        from teacher_batch_completion import batch_completion
+    with tempfile.TemporaryDirectory(prefix='teacher-budget-boundary-') as temporary:
+        root = Path(temporary)
+        def resolve(path):
+            value = Path(path)
+            if '..' in value.parts or not value.is_absolute():
+                raise ValueError('budget evidence path must be an exact absolute source path')
+            return root / str(value).lstrip('/')
+        def put(path, raw):
+            target = resolve(path); target.parent.mkdir(parents=True, exist_ok=True)
+            if target.exists() and target.read_bytes() != raw:
+                raise ValueError('budget evidence source aliases conflicting bytes')
+            target.write_bytes(raw)
+        for entry in queue:
+            source_name = 'packet.jsonl' if 'packet.jsonl' in files else 'source-cases.jsonl'
+            put(entry['source'], files[source_name])
+        for name, binding in payloads.items():
+            put(binding['source_path'], files[name])
+        verified = completion['completion']
+        actual = batch_completion(queue, _jsonl_rows(files['journal.jsonl'], 'budget boundary journal'),
+            verified['worker_returncodes'], _json(files['score.json'], 'budget boundary score'),
+            resolve_path=resolve)
+        budgets = actual['model_budget_failures']
+        for failure in budgets:
+            for error in failure['errors']:
+                error['path'] = '/' + str(Path(error['path']).relative_to(root))
+        if budgets != verified.get('model_budget_failures', []):
+            raise ValueError('terminal budget disposition differs from exact source/error/manifest verification')
 
 
 def seal_tranche(*, batch: int, number: int, entries: list[dict], context: dict[str, bytes],
@@ -659,10 +721,6 @@ def seal_boundary(*, batch: int, queue_raw: bytes, exported_keys: list[str],
     keys = [row.get('key') for row in queue]
     if not keys or any(not isinstance(key, str) for key in keys) or len(set(keys)) != len(keys):
         raise ValueError('final boundary queue keys must be distinct')
-    groups = [exported_keys, repair_keys, unstarted_keys]
-    flat = [key for group in groups for key in group]
-    if len(flat) != len(set(flat)) or set(flat) != set(keys):
-        raise ValueError('durable, repair and unstarted keys do not partition the original queue')
     if not {'teacher-source.json', 'source-cases.jsonl', 'queue.jsonl', 'journal.jsonl', 'score.json',
             'rewards.jsonl', 'completion.json', 'repair-queue.jsonl'} <= set(files):
         raise ValueError('final boundary is missing canonical source, accounting or repair control')
@@ -677,6 +735,12 @@ def seal_boundary(*, batch: int, queue_raw: bytes, exported_keys: list[str],
     verified = completion.get('completion') or {}
     if verified.get('schema') != 'natlang.strong-teacher-batch-completion/1':
         raise ValueError('final boundary lacks the shared batch-completion proof')
+    budget_payloads = _budget_payload_bindings(completion, queue)
+    budget_keys = [row['key'] for row in verified.get('model_budget_failures', [])]
+    groups = [exported_keys, repair_keys, unstarted_keys, budget_keys]
+    flat = [key for group in groups for key in group]
+    if len(flat) != len(set(flat)) or set(flat) != set(keys):
+        raise ValueError('durable, repair, unstarted and terminal-budget keys do not partition the original queue')
     outcomes = completion.get('individual_outcomes') or []
     outcome_by_key = {row.get('key'): row for row in outcomes if isinstance(row, dict)}
     if len(outcome_by_key) != len(outcomes) or set(outcome_by_key) != set(keys):
@@ -710,7 +774,7 @@ def seal_boundary(*, batch: int, queue_raw: bytes, exported_keys: list[str],
                 and not accounting.get('manifest_errors') and states
                 and all(state.get('state') in ('result', 'generation_held') for state in states)):
             complete_keys.add(key)
-        else:
+        elif key not in budget_keys:
             repair_actual.add(key)
     repair_rows = verified.get('repair_required') or []
     journal = _jsonl_rows(files['journal.jsonl'], 'teacher boundary journal')
@@ -738,19 +802,23 @@ def seal_boundary(*, batch: int, queue_raw: bytes, exported_keys: list[str],
             or repair_actual != required_repairs or set(unstarted_keys) != unstarted_expected):
         raise ValueError('final boundary key partitions differ from actual per-key batch accounting')
     repair_payloads = _repair_payload_bindings(completion)
+    terminal_payloads = {**repair_payloads, **budget_payloads}
     base_files = {'teacher-source.json', 'source-cases.jsonl', 'queue.jsonl', 'journal.jsonl',
                   'score.json', 'rewards.jsonl', 'completion.json', 'repair-queue.jsonl'}
     if 'packet.jsonl' in files:
         base_files.update({'packet.jsonl', 'preparation.json'})
-    if set(files) - base_files != set(repair_payloads):
+    if set(files) - base_files != set(terminal_payloads):
         raise ValueError('final boundary must retain every exact terminal-error payload needed for repairs')
-    for name, binding in repair_payloads.items():
-        if _sha(files[name]) != binding['sha256']:
+    for name, binding in terminal_payloads.items():
+        if 'sha256' in binding and _sha(files[name]) != binding['sha256']:
             raise ValueError('final boundary repair payload bytes differ from collector binding')
+    if budget_keys:
+        _verify_budget_outcomes(completion, queue, files, budget_payloads)
     folder = Path(directory); folder.mkdir(parents=True, exist_ok=True)
     manifest = {'schema': 'natlang.teacher-incremental-export-boundary/1', 'batch': batch,
         'queue_sha256': _sha(queue_raw), 'queue_count': len(keys), 'exported_keys': exported_keys,
         'repair_keys': repair_keys, 'unstarted_keys': unstarted_keys,
+        **({'model_budget_failure_keys': budget_keys} if budget_keys else {}),
         'files': {name: {'bytes': len(raw), 'sha256': _sha(raw)} for name, raw in sorted(files.items())},
         'batch_can_advance': bool(verified.get('can_advance')),
         'unbound_global_repairs': [row for row in verified.get('repair_required', [])
@@ -1201,6 +1269,8 @@ def export_guardian_closed_boundary(publisher: dict, active: dict, *, sandbox,
         'rewards.jsonl': rewards_path, 'completion.json': reference['path'],
         'repair-queue.jsonl': repair_queue_path, **execution_paths}
     for name, binding in _repair_payload_bindings(boundary).items():
+        files[name] = binding['source_path']
+    for name, binding in _budget_payload_bindings(boundary, queue_rows).items():
         files[name] = binding['source_path']
     # Keep the no-repair empty snapshot local to this call; read_file remains
     # the scoped remote reader for all source-bound payloads.

@@ -286,6 +286,7 @@ def test_remaining_exposure_covers_partial_and_fractional_append_without_replay(
 
 
 def test_tiny_native_sft_update_checkpoint_and_exact_resume(tmp_path):
+    import copy
     import json
     import torch
     from tokenizers import Tokenizer
@@ -307,7 +308,9 @@ def test_tiny_native_sft_update_checkpoint_and_exact_resume(tmp_path):
     tokenizer_object.pre_tokenizer = WhitespaceSplit()
     tokenizer = PreTrainedTokenizerFast(tokenizer_object=tokenizer_object, unk_token='t0', bos_token='t1', eos_token='t2')
     tokenizer.add_special_tokens({'additional_special_tokens': list(ROLE_MARKERS)})
-    tokenizer.chat_template = "{% for message in messages %}{{ message['content'] }}{% endfor %}assistant:"
+    tokenizer.chat_template = ("{% for message in messages %}"
+        "{{ message.get('reasoning_content', '') if (preserve_thinking or loop.last) else '' }}"
+        "{{ message['content'] }}{% endfor %}assistant:")
     tokenizer.save_pretrained(base)
     fingerprint = tokenizer_fingerprint(tokenizer)
     row_train = graph('tiny-train', [0, 0, 1])
@@ -321,7 +324,8 @@ def test_tiny_native_sft_update_checkpoint_and_exact_resume(tmp_path):
     train_path.write_text(json.dumps(row_train) + '\n')
     held_path.write_text(json.dumps(row_held) + '\n')
 
-    def run(out, epochs, continue_from=None, batch_tokens=0, weight_decay=0, latent_ns='quintic'):
+    def run(out, epochs, continue_from=None, batch_tokens=0, weight_decay=0, latent_ns='quintic',
+            history_reasoning_policy=None):
         argv = ['--native-graphs', str(train_path), '--held-native-graphs', str(held_path),
             '--out', str(out), '--base', str(base), '--device', 'cpu', '--rank', '2',
             '--epochs', str(epochs), '--eval-every', '1', '--batch-graphs', '1',
@@ -329,6 +333,8 @@ def test_tiny_native_sft_update_checkpoint_and_exact_resume(tmp_path):
             '--gradient-atol', '1e-5', '--seed', '23', '--latent-ns', latent_ns]
         if continue_from is not None:
             argv += ['--continue-from', str(continue_from)]
+        if history_reasoning_policy is not None:
+            argv += ['--history-reasoning-policy', history_reasoning_policy]
         assert main(argv) == 0
 
     split_out, continuous_out = tmp_path / 'split', tmp_path / 'continuous'
@@ -366,6 +372,31 @@ def test_tiny_native_sft_update_checkpoint_and_exact_resume(tmp_path):
     assert adapted['training']['identity']['optimizer_options']['latent_ns'] == 'cubic5'
     assert any(group.get('weight_decay') == .001 for section in adapted['training']['optimizer'].values()
                if isinstance(section, dict) for group in section.get('param_groups', []))
+
+    # The explicit rendering transition is saved once, then survives a later
+    # same-profile continuation alongside the ordinary optimizer/RNG/exposure
+    # progression. This records a configuration change without resetting it.
+    run(split_out, 4, slot, history_reasoning_policy='keep')
+    transitioned = torch.load(slot, map_location='cpu', weights_only=False)['training']
+    history = transitioned['options']['history_reasoning_policy_history']
+    assert len(history) == 1
+    assert history[0]['from'] == 'backbone-default' and history[0]['to'] == 'keep'
+    transition_step = transitioned['global_step']
+    transition_exposure = dict(transitioned['exposure_counts'])
+    transition_rng = copy.deepcopy(transitioned['rng'])
+    transition_optimizer = copy.deepcopy(transitioned['optimizer'])
+    run(split_out, 5, slot, history_reasoning_policy='keep')
+    continued = torch.load(slot, map_location='cpu', weights_only=False)['training']
+    assert continued['options']['history_reasoning_policy_history'] == history
+    assert continued['global_step'] == transition_step + 1
+    assert continued['exposure_counts'] != transition_exposure
+    assert torch.equal(continued['rng']['torch_rng'], transition_rng['torch_rng'])
+    assert continued['rng']['python_rng'] == transition_rng['python_rng']
+    optimizer_step_values = [float(state['step']) for section in continued['optimizer'].values()
+        if isinstance(section, dict) for state in section.get('state', {}).values() if 'step' in state]
+    previous_optimizer_steps = [float(state['step']) for section in transition_optimizer.values()
+        if isinstance(section, dict) for state in section.get('state', {}).values() if 'step' in state]
+    assert optimizer_step_values and min(optimizer_step_values) > min(previous_optimizer_steps)
 
 
 def test_token_volume_batches_preserve_every_graph_and_long_graph():

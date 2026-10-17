@@ -8,7 +8,7 @@ import json
 
 
 def source_cohort_ids(source):
-    """Stable source identities outside authenticated row metadata."""
+    """Stable graph-file leaf identities outside authenticated row metadata."""
     def walk(current):
         if current.kind != 'manifest':
             return [current.file_sha256] * len(current)
@@ -23,10 +23,7 @@ def source_cohort_ids(source):
         for binding, child in zip(declarations, current.children):
             if binding.get('sha256') != child.file_sha256:
                 raise ValueError('cohort source declaration changed after validation')
-            if binding.get('training_priority', 0) > 0:
-                result.extend([child.file_sha256] * len(child))
-            else:
-                result.extend(walk(child))
+            result.extend(walk(child))
         return result
     result = walk(source)
     if len(result) != len(source.entries):

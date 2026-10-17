@@ -126,16 +126,31 @@ def _packet(entry, declaration, *, allow_empty=False):
     if not isinstance(runtimes,dict)or any(not valid_sha(k)or not valid_sha(v)for k,v in runtimes.items()):
         raise ValueError('sequence reference runtime bindings are malformed')
     expected_runtime=runtimes.get(entry['candidate_packet']['sha256'],authority['reference_runtime_sha256'])
+    protections=authority.get('reference_protection_by_candidate',{})
+    if not isinstance(protections,dict):
+        raise ValueError('sequence candidate protection bindings are malformed')
+    for key,value in protections.items():
+        if (not valid_sha(key)or not isinstance(value,dict)
+                or set(value)!={'protection','decision_hold_bindings'}
+                or not isinstance(value['protection'],dict)
+                or not isinstance(value['protection'].get('path'),str)
+                or not valid_sha(value['protection'].get('sha256'))
+                or not isinstance(value['decision_hold_bindings'],list)
+                or any(not isinstance(ref,dict)or not isinstance(ref.get('path'),str)
+                       or not valid_sha(ref.get('sha256'))or type(ref.get('bytes'))is not int
+                       or ref['bytes']<0 for ref in value['decision_hold_bindings'])):
+            raise ValueError('sequence candidate protection bindings are malformed')
+    expected_authority=protections.get(entry['candidate_packet']['sha256'],authority)
     if (qualification.get('schema')!='natlang.existing-native-reference-qualification/1'
             or qualification.get('passed')is not True or qualification.get('model_calls')!=0
             or qualification.get('training_admission')is not False
             or qualification.get('reference_traces_are_teacher_generations')is not False
             or qualification.get('runtime_inventory_sha256')!=expected_runtime
             or runtime_digest!=expected_runtime
-            or inputs['authority']['protection']!=authority['protection']
-            or inputs['authority']['decision_holds']!=authority['decision_hold_bindings']
-            or selection.get('protection')!=authority['protection']
-            or selection.get('decision_hold_bindings')!=authority['decision_hold_bindings']):
+            or inputs['authority']['protection']!=expected_authority['protection']
+            or inputs['authority']['decision_holds']!=expected_authority['decision_hold_bindings']
+            or selection.get('protection')!=expected_authority['protection']
+            or selection.get('decision_hold_bindings')!=expected_authority['decision_hold_bindings']):
         raise ValueError('sequence reference/protection authority differs')
     if (selection.get('schema')!='natlang.strong-teacher-code-source-selection/1'
             or selection.get('training_admission')is not False
@@ -145,8 +160,8 @@ def _packet(entry, declaration, *, allow_empty=False):
             or protection.get('schema')!='natlang.native-teacher-global-protection-join/1'
             or protection.get('status')!='passed'
             or protection.get('selected_packet_sha256')!=refs['selected_cases']['sha256']
-            or protection.get('current_protection')!=authority['protection']
-            or protection.get('decision_hold_bindings')!=authority['decision_hold_bindings']
+            or protection.get('current_protection')!=expected_authority['protection']
+            or protection.get('decision_hold_bindings')!=expected_authority['decision_hold_bindings']
             or any(protection.get(key) for key in ('held_group_intersections','quality_group_intersections','pending_group_intersections'))):
         raise ValueError('sequence packet selection/protection proof differs')
     _,candidate_raw=_read(candidate['cases_binding'],declaration)
@@ -231,8 +246,145 @@ def observe_source_sequence(folder, state, config):
         'boundary':boundary, **({'drained_with_repair_debt':closure} if closure else {}),
         'claim':'existing guardian closure; individual outcomes/admission unchanged'})
     sequence.setdefault('closed',{})[key]=binding(receipt)
-    sequence['next_ordinal']=pending['ordinal']+1;sequence.pop('pending')
+    priority=intent.get('priority')
+    if priority is not None:
+        if (type(priority.get('resume_ordinal'))is not int
+                or not 0<=priority['resume_ordinal']<pending['ordinal']):
+            raise ValueError('priority packet lost its original ordinary cursor')
+        sequence['next_ordinal']=priority['resume_ordinal']
+        sequence['priority_streak']=sequence.get('priority_streak',0)+1
+    else:
+        sequence['next_ordinal']=pending['ordinal']+1
+        if 'priority_streak'in sequence:sequence['priority_streak']=0
+    sequence.pop('pending')
     write(Path(folder)/'state.json',state)
+
+
+def _source_context_deferrals(declaration, entries, sequence):
+    # Debt survives changes to the current supervisor declaration. Authenticate
+    # every stored immutable receipt and its original proof even after its
+    # ordinal has passed; removing a current deferral cannot erase that history.
+    for key,stored in sequence.get('context_deferred',{}).items():
+        receipt=_json(stored,declaration)
+        if (not isinstance(key,str)or not key.isdecimal()or str(int(key))!=key
+                or type(receipt.get('ordinal'))is not int or receipt['ordinal']!=int(key)
+                or receipt['ordinal']>=sequence['next_ordinal']
+                or receipt.get('training_admission')is not False
+                or receipt.get('generation_admission')is not False):
+            raise ValueError('stored context deferral debt changed')
+        _json(receipt['context_exclusions'],declaration)
+    reference=declaration.get('context_deferrals')
+    if reference is None:return None,{},{}
+    proof=_json(reference,declaration)
+    if (proof.get('schema')!='natlang.teacher-source-context-exclusions/1'
+            or proof.get('training_admission')is not False or type(proof.get('model_calls'))is not int
+            or proof['model_calls']!=0):
+        raise ValueError('unknown teacher context deferral authority')
+    original=_json(proof['original_ready'],declaration)
+    exact=lambda value:json.dumps(value,ensure_ascii=False,sort_keys=True,separators=(',',':'))
+    if len(entries)<len(original['entries'])or exact(original['entries'])!=exact(entries[:len(original['entries'])]):
+        raise ValueError('context deferrals differ from exact observed ready entries')
+    for name in ('source_context_audit','primary_source_audit','original_context_source'):
+        _json(proof[name],declaration)
+    programs={}
+    for item in proof['excluded_programs']:
+        ident=item.get('program_id');digest=item.get('program_sha256')
+        if (not isinstance(ident,str)or not ident or ident in programs or not isinstance(digest,str)
+                or len(digest)!=64 or any(c not in '0123456789abcdef'for c in digest)):
+            raise ValueError('invalid exact context exclusion program')
+        programs[ident]=item
+    deferred={}
+    started={_json(ref,declaration)['ordinal']for ref in sequence.get('started',{}).values()}
+    pending=sequence.get('pending')
+    for item in proof['deferred_packets']:
+        ordinal=item.get('ordinal')
+        if (type(ordinal)is not int or ordinal<0 or ordinal>=len(original['entries'])or ordinal in deferred
+                or ordinal in started or(pending and pending['ordinal']==ordinal)):
+            raise ValueError('context deferral must name unique unstarted packets only')
+        entry=entries[ordinal]
+        if any(exact(item[name])!=exact(entry[name])for name in ('candidate_packet','qualified_packet')):
+            raise ValueError('context deferral packet binding differs')
+        if ordinal<sequence['next_ordinal']and str(ordinal)not in sequence.get('context_deferred',{}):
+            raise ValueError('context deferral cannot reclassify past work')
+        deferred[ordinal]=item
+    return reference,deferred,programs
+
+
+def _defer_context_packet(folder,state,declaration,entry,item,reference,programs):
+    prepared=_json(entry['qualified_packet'],declaration)
+    if item['cases']!=prepared['cases']:raise ValueError('context deferral cases binding differs')
+    raw=_read(item['cases'],declaration)[1]
+    rows=[json.loads(line)for line in raw.splitlines()if line.strip()]
+    identifiers=[row['id']for row in rows]
+    excluded=item['excluded_program_ids']
+    if (not isinstance(excluded,list)or not excluded or len(set(excluded))!=len(excluded)
+            or any(ident not in identifiers or ident not in programs for ident in excluded)
+            or len(set(identifiers))!=len(identifiers)):
+        raise ValueError('context deferral excludes unknown or repeated task identities')
+    for row in rows:
+        if row['id']not in excluded:continue
+        digest=hashlib.sha256(json.dumps(row,ensure_ascii=False,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+        if digest!=programs[row['id']]['program_sha256']:
+            raise ValueError('context deferral original program changed')
+    counts={'source_cases':len(rows),'excluded_cases':len(excluded),'retained_cases':len(rows)-len(excluded)}
+    if any(type(item.get(key))is not int or item[key]!=value for key,value in counts.items()):
+        raise ValueError('context deferral loses unaffected sibling obligations')
+    receipt=Path(folder)/'source-sequence/context-deferred'/f"ordinal-{entry['ordinal']:04d}.json"
+    _immutable(receipt,{'ordinal':entry['ordinal'],'candidate_packet':entry['candidate_packet'],
+        'qualified_packet':entry['qualified_packet'],'cases':item['cases'],'context_exclusions':reference,
+        'excluded_program_ids':excluded,**counts,'generation_admission':False,'training_admission':False,
+        'debt':'Unaffected sibling cases require fresh reference qualification and a new appended packet identity; original task context targets remain excluded.'})
+    sequence=state['source_sequence'];stored=sequence.setdefault('context_deferred',{});key=str(entry['ordinal'])
+    actual=binding(receipt)
+    if key in stored and stored[key]!=actual:raise ValueError('context deferral receipt changed')
+    stored[key]=actual;sequence['next_ordinal']=entry['ordinal']+1
+    write(Path(folder)/'state.json',state)
+
+
+def _priority_policy(reference,declaration,entries):
+    proof=_json(reference,declaration)
+    original=_json(proof['original_ready'],declaration)
+    exact=lambda value:json.dumps(value,ensure_ascii=False,sort_keys=True,separators=(',',':'))
+    if (proof.get('schema')!='natlang.teacher-priority-packet-continuation/1'
+            or proof.get('training_admission')is not False
+            or type(proof.get('minimum_original_ordinal'))is not int
+            or not 0<=proof['minimum_original_ordinal']<=len(original['entries'])
+            or type(proof.get('max_consecutive'))is not int or proof['max_consecutive']<1
+            or exact(entries[:len(original['entries'])])!=exact(original['entries'])):
+        raise ValueError('priority packet authority differs from retained original work')
+    selected={}
+    for item in proof['entries']:
+        ordinal=item.get('ordinal')
+        if (type(ordinal)is not int or ordinal<len(original['entries'])or ordinal>=len(entries)
+                or ordinal in selected
+                or any(item.get(k)!=entries[ordinal].get(k)for k in('candidate_packet','qualified_packet'))):
+            raise ValueError('priority packet must be an exact newly appended entry')
+        selected[ordinal]=item
+    return proof,selected
+
+
+def _closed_packet_ordinals(folder,sequence,declaration,entries):
+    result={}
+    for key,reference in sequence.get('closed',{}).items():
+        closed=_json(reference,declaration);ordinal=closed['ordinal'];batch=closed['batch']
+        if (key!=str(batch)or type(batch)is not int or type(ordinal)is not int
+                or not 0<=ordinal<len(entries)or ordinal in result
+                or Path(reference['path']).resolve()!=(Path(folder)/'source-sequence/closed'/f'batch-{batch:04d}.json').resolve()):
+            raise ValueError('closed packet cursor authority changed')
+        started=_json(closed['started'],declaration);intent=_json(started['selection_intent'],declaration)
+        if (started.get('batch')!=batch or intent.get('batch')!=batch
+                or started.get('ordinal')!=ordinal or intent.get('ordinal')!=ordinal
+                or any(intent.get(k)!=entries[ordinal].get(k)for k in('candidate_packet','qualified_packet'))):
+            raise ValueError('closed packet differs from its actual selected entry')
+        priority=intent.get('priority')
+        if priority is not None:
+            proof,selected=_priority_policy(priority['policy'],declaration,entries)
+            resume=priority.get('resume_ordinal')
+            if (ordinal not in selected or type(resume)is not int
+                    or not proof['minimum_original_ordinal']<=resume<ordinal):
+                raise ValueError('closed priority packet lost its original cursor/policy')
+        result[ordinal]=dict(reference=reference,intent=intent)
+    return result
 
 
 def prepare_source_sequence(folder, state, config, batch):
@@ -267,8 +419,37 @@ def prepare_source_sequence(folder, state, config, batch):
     for index,entry in enumerate(entries):
         if entry.get('ordinal')!=index or entry['candidate_packet']!=inventory['packets'][index]:
             raise ValueError('ready sequence is not the declared candidate order')
-    sequence['observed_entries']=entries
     ordinal=sequence['next_ordinal']
+    deferral_reference,deferrals,excluded_programs=_source_context_deferrals(declaration,entries,sequence)
+    closed_ordinals=_closed_packet_ordinals(folder,sequence,declaration,entries)
+    actual_streak=0
+    for item in sorted(closed_ordinals.values(),key=lambda item:item['intent']['batch'],reverse=True):
+        if item['intent'].get('priority')is None:break
+        actual_streak+=1
+    if type(sequence.get('priority_streak',0))is not int or sequence.get('priority_streak',0)!=actual_streak:
+        raise ValueError('priority service differs from actual closed packet history')
+    priority_reference=declaration.get('priority_packets')
+    priority_proof,priority_entries=(_priority_policy(priority_reference,declaration,entries)if priority_reference else(None,{}))
+    policies=sequence.setdefault('priority_policies',{})
+    original_bindings=[]
+    for digest,reference in policies.items():
+        if digest!=reference['sha256']:raise ValueError('priority policy history changed')
+        historical,_=_priority_policy(reference,declaration,entries)
+        original_bindings.append(historical['original_ready'])
+    for item in closed_ordinals.values():
+        past=item['intent'].get('priority')
+        if past is not None and policies.get(past['policy']['sha256'])!=past['policy']:
+            raise ValueError('closed priority packet lost its observed-prefix history')
+    if priority_reference and priority_reference['sha256']not in policies:
+        original=_json(priority_proof['original_ready'],declaration)['entries']
+        exact=lambda value:json.dumps(value,ensure_ascii=False,sort_keys=True,separators=(',',':'))
+        if (priority_proof['original_ready']not in original_bindings
+                and exact(original)!=exact(previous)):
+            raise ValueError('priority original ready differs from actual observed prefix')
+        policies[priority_reference['sha256']]=priority_reference
+    elif priority_reference and policies[priority_reference['sha256']]!=priority_reference:
+        raise ValueError('priority policy history reference changed')
+    sequence['observed_entries']=entries
     lock=(Path(config['root'])/'next-source-selection.lock').open('a')
     with lock:
         fcntl.flock(lock,fcntl.LOCK_EX)
@@ -282,6 +463,27 @@ def prepare_source_sequence(folder, state, config, batch):
             _reconcile_publication(pending,declaration)
             sequence['configuration']=binding(declaration['source_configuration'])
             write(Path(folder)/'state.json',state);return
+        while ordinal in deferrals or ordinal in closed_ordinals:
+            if ordinal in deferrals:
+                _defer_context_packet(folder,state,declaration,entries[ordinal],deferrals[ordinal],deferral_reference,excluded_programs)
+            else:
+                if closed_ordinals[ordinal]['intent'].get('priority')is None:
+                    raise ValueError('ordinary cursor cannot silently skip a non-priority closed packet')
+                sequence['next_ordinal']=ordinal+1;write(Path(folder)/'state.json',state)
+            ordinal=sequence['next_ordinal']
+        priority_selection=None
+        if priority_proof and ordinal>=priority_proof['minimum_original_ordinal']:
+            streak=sequence.get('priority_streak',0)
+            if type(streak)is not int or streak<0:raise ValueError('priority service counter changed')
+            if streak<priority_proof['max_consecutive']:
+                started_ordinals={_json(ref,declaration)['ordinal']for ref in sequence.get('started',{}).values()}
+                for candidate in priority_entries:
+                    if candidate in closed_ordinals:continue
+                    if candidate<ordinal or candidate in started_ordinals or candidate in deferrals:
+                        raise ValueError('priority declaration cannot reclassify started, past or deferred work')
+                    if candidate==ordinal:break
+                    priority_selection=dict(policy=priority_reference,resume_ordinal=ordinal)
+                    ordinal=candidate;break
         if ordinal>=len(entries):
             if declaration.get('on_unready')!='retain-current':raise ValueError('next declared packet is not ready')
             write(Path(folder)/'state.json',state);return
@@ -302,7 +504,8 @@ def prepare_source_sequence(folder, state, config, batch):
         _immutable(intent,{'batch':batch,'ordinal':ordinal,'old_configuration':actual,
             'old_snapshot':binding(snapshot),'new_configuration':binding(candidate),
             'manifest':binding(manifest_snapshot),'candidate_packet':entries[ordinal]['candidate_packet'],
-            'qualified_packet':entries[ordinal]['qualified_packet']})
+            'qualified_packet':entries[ordinal]['qualified_packet'],
+            **({'priority':priority_selection}if priority_selection is not None else{})})
         pending={'batch':batch,'ordinal':ordinal,'intent':binding(intent),'cases_sha256':value['cases_sha256']}
         sequence['pending']=pending;write(Path(folder)/'state.json',state)
         _reconcile_publication(pending,declaration)

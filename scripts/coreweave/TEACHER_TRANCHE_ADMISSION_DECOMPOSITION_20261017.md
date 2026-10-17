@@ -29,3 +29,26 @@ export nor reference qualification grants training admission or exposure.
    debt; partial missing trajectories fail closed. Keep useful independently
    verified graphs from other rows without claiming the held rows were admitted.
    This is an exact partition verifier, not an approval waiver.
+
+6. Treat a retried collector attempt as a separate exact namespace. Its original
+   batch/task/seed/source proof remains authoritative, while private frontiers,
+   admission outputs and corpus IDs include the actual positive attempt number.
+   Earlier-tranche accounting stays within that attempt; all registered corpora
+   still participate in deduplication. This is custody plumbing only: a retry
+   never grants source qualification or weakens current protection/quality.
+
+## Evaluation-only quality views
+
+An explicit quality-view name separates a verified evaluation continuation from a new generation attempt. Keep the actual batch, tranche, repair attempt (if any), export archive and recovered raw files unchanged. Only derived admission files and the corpus identity receive the named view suffix. The existing source-quality verifier must reconstruct the view from its original captures; naming grants no admission. All registered predecessor corpora, including the original view, remain in the exact deduplication closure. Original earlier-tranche obligations are retained; a quality view creates no fictional generation attempts.
+
+## Completed source phase custody
+
+A restart resumes a completed source phase by authenticating its exact original
+source, transfer, packet, recovered raw captures and executed operator closure.
+The supervisor records a durable completion receipt only after the source phase
+succeeds. The receipt preserves historical quality-verifier metadata, which a
+later runtime rebuild must not rewrite. It is custody, not an admission grant.
+The converter and final admission verifier always run again with their current
+source/oracle and global protection checks. A missing or changed completion
+receipt cannot skip reconstruction. Exact hashing and before/after file-state
+checks are crisp mechanisms; the existing quality policy is unchanged.

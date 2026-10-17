@@ -48,3 +48,49 @@ bound. This is exact verifier plumbing, not a choice of task or admission:
 current protection, original program bytes, complete scripted verdicts and
 ordered lifecycle checks remain mandatory. Unknown or malformed runtime
 bindings fail closed. Existing declarations retain their single runtime law.
+
+## Exact future task-context deferral
+
+The supervisor may defer explicitly audited invalid-context future task packets.
+Keep the original observed entries and ordinals, current/started work, successful
+trajectories and original task facts unchanged. Preserve all unaffected sibling
+cases as queued, freshly reference-qualified subsets; append those new packet
+identities through the existing ready-sequence continuation when qualified.
+
+The crisp seam checks a SHA-bound supervisor exclusion proof against the exact
+observed ready declaration, candidate/prepared/cases bindings, canonical program
+IDs/hashes and conserved case counts. It may advance only over a declared packet
+with neither a pending selection nor a real started receipt. Each skipped ordinal
+gets an immutable pending-debt receipt before durable cursor advancement. It is
+not a completed batch, generation admission, training exposure or a family ban.
+
+## Per-candidate current split authority
+
+A supervisor may append freshly reference-qualified unchanged tasks under the
+current protection projection while retaining older selected tasks and exact
+historical proofs. Bind each new candidate proof SHA to its declared protection
+and decision-hold bindings; keep the separately declared runtime law. Never
+infer or copy an authority from a verdict. The crisp verifier authenticates that
+same declared authority in reference inputs, selection and complete protection
+join, and rejects malformed or mismatched bindings. This is custody plumbing,
+not generation or training admission; the task-choice policy remains above.
+
+## Bounded priority for newly appended qualified packets
+
+The supervisor may explicitly schedule useful new packets ahead of unstarted
+ordinary debt, after a declared original-cursor threshold. Preserve every
+observed entry and current packet. At most the declared number of priority
+packets may close before an ordinary packet genuinely closes. Initial use waits
+for the five existing authored families and allows one priority packet per
+ordinary packet; new arrivals cannot permanently starve the original breadth.
+
+Reuse the existing pending intent, real started batch and real closed receipt.
+A priority intent records its original resume cursor and exact policy binding.
+Only real closure restores that cursor and increments priority service. Later
+ordinary traversal skips a priority ordinal only by reauthenticating its actual
+closed/started/intent/policy chain. Closed packets are never generated twice;
+failed outcomes retain their ordinary repair debts. Crisp code verifies these
+bindings and cursor transitions; it neither invents completion nor chooses task
+content, alters model prompts, creates another feeder, or grants admission.
+
+The first priority policy must bind the exact actually observed ready prefix. Persist and re-authenticate every accepted policy; later observation growth cannot reinterpret the original prefix, and closed priority receipts require that retained history. A supervisor may extend the same explicitly bound original policy basis without shortening previously observed work.

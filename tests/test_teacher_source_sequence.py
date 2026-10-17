@@ -351,3 +351,308 @@ def test_unassigned_global_accounting_error_cannot_be_called_drained_with_repair
     state['last_boundary']=put(folder/'boundaries/batch-0021.json',decision)
     with pytest.raises(ValueError,match='accounting changed'):
         sequence.prepare_source_sequence(folder,state,config,22)
+
+
+def context_deferrals(folder,state,config,ordinals):
+    declaration=config['source_sequence'];ready_path=Path(declaration['ready_manifest']);ready=json.loads(ready_path.read_text())
+    packets=[];programs=[]
+    for ordinal in ordinals:
+        entry=ready['entries'][ordinal];p=json.loads(Path(entry['qualified_packet']['path']).read_text())
+        rows=[json.loads(line)for line in Path(p['cases']['path']).read_bytes().splitlines()]
+        row=rows[0];digest=hashlib.sha256(json.dumps(row,ensure_ascii=False,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+        programs.append(dict(program_id=row['id'],program_sha256=digest))
+        packets.append(dict(ordinal=ordinal,candidate_packet=entry['candidate_packet'],qualified_packet=entry['qualified_packet'],cases=p['cases'],excluded_program_ids=[row['id']],source_cases=len(rows),excluded_cases=1,retained_cases=len(rows)-1))
+    audit=put(folder/'context-audit.json',{'training_admission':False})
+    proof=dict(schema='natlang.teacher-source-context-exclusions/1',original_ready=guardian.binding(ready_path),source_context_audit=audit,primary_source_audit=audit,original_context_source=audit,excluded_programs=programs,deferred_packets=packets,training_admission=False,model_calls=0)
+    declaration['context_deferrals']=put(folder/'context-deferrals.json',proof)
+    return proof
+
+
+def test_exact_future_deferral_preserves_observed_prefix_and_records_debt(tmp_path):
+    folder,state,config=setup(tmp_path)
+    original=json.loads(Path(config['source_sequence']['ready_manifest']).read_text())['entries']
+    context_deferrals(folder,state,config,[0])
+    sequence.prepare_source_sequence(folder,state,config,22)
+    actual=state['source_sequence'];assert actual['observed_entries']==original
+    assert actual['pending']['ordinal']==1 and actual['next_ordinal']==1
+    assert not actual.get('closed') and not actual.get('started')
+    debt=json.loads(Path(actual['context_deferred']['0']['path']).read_text())
+    assert debt['excluded_program_ids']==['train-task-0']
+    assert debt['training_admission']is False and debt['generation_admission']is False
+    assert debt['source_cases']==debt['excluded_cases']+debt['retained_cases']==1
+    current=json.loads(Path(config['source_sequence']['source_configuration']).read_text())
+    assert json.loads(Path(current['cases']).read_text())['id']=='train-task-1'
+    # Repeated reconciliation does not consume another packet or invent closure.
+    before=copy.deepcopy(actual);sequence.prepare_source_sequence(folder,state,config,22)
+    assert state['source_sequence']==before
+
+
+def test_context_deferral_cannot_skip_pending_current_packet(tmp_path):
+    folder,state,config=setup(tmp_path)
+    sequence.prepare_source_sequence(folder,state,config,22)
+    current=Path(config['source_sequence']['source_configuration']);before=current.read_bytes()
+    context_deferrals(folder,state,config,[0])
+    with pytest.raises(ValueError,match='unstarted'):
+        sequence.prepare_source_sequence(folder,state,config,22)
+    assert current.read_bytes()==before and state['source_sequence']['pending']['ordinal']==0
+    assert not state['source_sequence'].get('context_deferred')
+
+
+@pytest.mark.parametrize('mutation',["unknown_id","wrong_program","lost_sibling","repeated_packet"])
+def test_invalid_context_deferral_cannot_advance_or_publish(tmp_path,mutation):
+    folder,state,config=setup(tmp_path);proof=context_deferrals(folder,state,config,[0])
+    if mutation=='unknown_id':proof['deferred_packets'][0]['excluded_program_ids']=['unknown']
+    elif mutation=='wrong_program':proof['excluded_programs'][0]['program_sha256']='0'*64
+    elif mutation=='lost_sibling':proof['deferred_packets'][0]['retained_cases']=1
+    else:proof['deferred_packets'].append(copy.deepcopy(proof['deferred_packets'][0]))
+    config['source_sequence']['context_deferrals']=put(folder/'context-deferrals.json',proof)
+    current=Path(config['source_sequence']['source_configuration']);before=current.read_bytes()
+    with pytest.raises(ValueError):sequence.prepare_source_sequence(folder,state,config,22)
+    assert current.read_bytes()==before and not state['source_sequence'].get('pending')
+    assert not state['source_sequence'].get('context_deferred')
+
+
+def test_context_debt_allows_fresh_qualified_packet_append_after_real_closure(tmp_path):
+    folder,state,config=setup(tmp_path,packet_count=3);decl=config['source_sequence']
+    ready_path=Path(decl['ready_manifest']);full=json.loads(ready_path.read_text());fresh=full['entries'][-1]
+    initial={**full,'entries':full['entries'][:2]};put(ready_path,initial)
+    context_deferrals(folder,state,config,[0]);sequence.prepare_source_sequence(folder,state,config,22)
+    sealed=seal(folder,state,config,22)
+    state['last_boundary']=put(folder/'boundary22.json',{'batch':22,'batch_complete':True,'bindings':{key:sealed[key]for key in('queue.jsonl','teacher-source.json')}})
+    sequence.observe_source_sequence(folder,state,config)
+    assert state['source_sequence']['next_ordinal']==2 and '22'in state['source_sequence']['closed']
+    appended=put(folder/'ready-appended.json',{**initial,'entries':[*initial['entries'],fresh]})
+    decl['ready_manifest']=appended['path'];sequence.prepare_source_sequence(folder,state,config,23)
+    assert state['source_sequence']['pending']['ordinal']==2
+    assert '0'in state['source_sequence']['context_deferred']
+    current=json.loads(Path(decl['source_configuration']).read_text())
+    assert json.loads(Path(current['cases']).read_text())['id']=='train-task-2'
+
+
+def test_context_deferral_cannot_reclassify_genuinely_started_closed_work(tmp_path):
+    folder,state,config=setup(tmp_path)
+    sequence.prepare_source_sequence(folder,state,config,22);sealed=seal(folder,state,config,22)
+    state['last_boundary']=put(folder/'boundary22.json',{'batch':22,'batch_complete':True,'bindings':{key:sealed[key]for key in('queue.jsonl','teacher-source.json')}})
+    sequence.observe_source_sequence(folder,state,config)
+    before=copy.deepcopy(state);context_deferrals(folder,state,config,[0])
+    with pytest.raises(ValueError,match='unstarted'):
+        sequence.prepare_source_sequence(folder,state,config,23)
+    assert state==before
+
+
+def test_context_deferral_reuses_durable_debt_after_cursor_write_interruption(tmp_path,monkeypatch):
+    folder,state,config=setup(tmp_path);context_deferrals(folder,state,config,[0])
+    original=sequence.write
+    def fail_state(path,value):
+        if Path(path)==folder/'state.json':raise OSError('assigned cursor interruption')
+        return original(path,value)
+    monkeypatch.setattr(sequence,'write',fail_state)
+    with pytest.raises(OSError,match='cursor interruption'):
+        sequence.prepare_source_sequence(folder,state,config,22)
+    debt=folder/'source-sequence/context-deferred/ordinal-0000.json'
+    before=debt.read_bytes();state=json.loads((folder/'state.json').read_text())
+    monkeypatch.setattr(sequence,'write',original)
+    sequence.prepare_source_sequence(folder,state,config,22)
+    assert debt.read_bytes()==before
+    assert state['source_sequence']['pending']['ordinal']==1
+    assert len(state['source_sequence']['context_deferred'])==1
+
+
+def test_past_context_debt_is_reauthenticated_and_cannot_be_silently_removed(tmp_path):
+    folder,state,config=setup(tmp_path);proof=context_deferrals(folder,state,config,[0])
+    sequence.prepare_source_sequence(folder,state,config,22)
+    stored=state['source_sequence']['context_deferred']['0'];path=Path(stored['path']);original=path.read_bytes()
+    # A new proof may stop deferring future packets; historical debt is retained
+    # and its exact original proof stays bound, rather than overwritten.
+    config['source_sequence']['context_deferrals']=put(folder/'deferrals-successor.json',{**proof,'deferred_packets':[]})
+    sequence.prepare_source_sequence(folder,state,config,22)
+    assert state['source_sequence']['context_deferred']['0']==stored
+    assert path.read_bytes()==original
+    path.write_bytes(original+b' ')
+    with pytest.raises(ValueError,match='binding changed'):
+        sequence.prepare_source_sequence(folder,state,config,22)
+
+
+def test_disabling_context_deferral_policy_does_not_drop_historical_proof_checks(tmp_path):
+    folder,state,config=setup(tmp_path);context_deferrals(folder,state,config,[0])
+    sequence.prepare_source_sequence(folder,state,config,22)
+    stored=state['source_sequence']['context_deferred']['0'];receipt=json.loads(Path(stored['path']).read_text())
+    config['source_sequence'].pop('context_deferrals')
+    sequence.prepare_source_sequence(folder,state,config,22)
+    proof=Path(receipt['context_exclusions']['path']);proof.write_bytes(proof.read_bytes()+b' ')
+    with pytest.raises(ValueError,match='binding changed'):
+        sequence.prepare_source_sequence(folder,state,config,22)
+
+
+def requalify_with_current_protection(entry, protection, holds):
+    prepared_path=Path(entry['qualified_packet']['path']);prepared=json.loads(prepared_path.read_bytes())
+    qual_path=Path(prepared['qualification']['path']);qual=json.loads(qual_path.read_bytes())
+    inputs_path=Path(qual['inputs']['path']);inputs=json.loads(inputs_path.read_bytes())
+    inputs['authority'].update(protection=protection,decision_holds=holds)
+    qual['inputs']=put(inputs_path,inputs);prepared['qualification']=put(qual_path,qual)
+    selection_path=Path(prepared['references']['selection']['path']);selection=json.loads(selection_path.read_bytes())
+    selection.update(protection=protection,decision_hold_bindings=holds,reference_qualification=prepared['qualification'])
+    prepared['references']['selection']=put(selection_path,selection)
+    join_path=Path(prepared['references']['global_protection_join']['path']);join=json.loads(join_path.read_bytes())
+    join.update(current_protection=protection,decision_hold_bindings=holds)
+    prepared['references']['global_protection_join']=put(join_path,join)
+    entry['qualified_packet']=put(prepared_path,prepared)
+
+
+def test_fresh_protection_is_exact_candidate_bound_and_preserves_historical_packet(tmp_path):
+    folder,state,config=setup(tmp_path);decl=config['source_sequence'];manifest_path=Path(decl['ready_manifest']);manifest=json.loads(manifest_path.read_bytes());entry=manifest['entries'][0]
+    original_second=copy.deepcopy(manifest['entries'][1]);second_bytes=Path(original_second['qualified_packet']['path']).read_bytes()
+    protection={**decl['authority']['protection'],'path':'current/protection.json','sha256':'d'*64}
+    holds=[{'path':'current/decision-hold.jsonl','sha256':'e'*64,'bytes':9}]
+    requalify_with_current_protection(entry,protection,holds)
+    with pytest.raises(ValueError,match='authority differs'):sequence._packet(entry,decl)
+    exact={'protection':protection,'decision_hold_bindings':holds}
+    decl['authority']['reference_protection_by_candidate']={entry['candidate_packet']['sha256']:exact}
+    assert sequence._packet(entry,decl)['rows']==1
+    assert sequence._packet(original_second,decl)['rows']==1
+    assert Path(original_second['qualified_packet']['path']).read_bytes()==second_bytes
+    put(manifest_path,manifest);sequence.prepare_source_sequence(folder,state,config,22)
+    assert state['source_sequence']['pending']['ordinal']==0
+    decl['authority']['reference_protection_by_candidate']={'f'*64:exact}
+    with pytest.raises(ValueError,match='authority differs'):sequence._packet(entry,decl)
+
+
+@pytest.mark.parametrize('tamper',['selection','protection_join','inputs'])
+def test_candidate_current_authority_requires_every_independent_proof(tmp_path,tamper):
+    _,_,config=setup(tmp_path);decl=config['source_sequence'];manifest=json.loads(Path(decl['ready_manifest']).read_bytes());entry=manifest['entries'][0]
+    protection={**decl['authority']['protection'],'sha256':'d'*64};holds=decl['authority']['decision_hold_bindings']
+    requalify_with_current_protection(entry,protection,holds)
+    decl['authority']['reference_protection_by_candidate']={entry['candidate_packet']['sha256']:{'protection':protection,'decision_hold_bindings':holds}}
+    pp=Path(entry['qualified_packet']['path']);prepared=json.loads(pp.read_bytes())
+    if tamper=='inputs':
+        qp=Path(prepared['qualification']['path']);qual=json.loads(qp.read_bytes());ip=Path(qual['inputs']['path']);inputs=json.loads(ip.read_bytes());inputs['authority']['protection']={'sha256':'f'*64};qual['inputs']=put(ip,inputs);prepared['qualification']=put(qp,qual)
+        sp=Path(prepared['references']['selection']['path']);selection=json.loads(sp.read_bytes());selection['reference_qualification']=prepared['qualification'];prepared['references']['selection']=put(sp,selection)
+    else:
+        role='selection'if tamper=='selection'else'global_protection_join';path=Path(prepared['references'][role]['path']);value=json.loads(path.read_bytes());value['protection'if role=='selection'else'current_protection']={'sha256':'f'*64};prepared['references'][role]=put(path,value)
+    entry['qualified_packet']=put(pp,prepared)
+    with pytest.raises(ValueError,match='authority differs|protection proof differs'):sequence._packet(entry,decl)
+
+
+@pytest.mark.parametrize('value',[[],{'bad':{}},{'a'*64:{}},{'a'*64:{'protection':{'path':'x','sha256':'d'*64},'decision_hold_bindings':[{'path':'h','sha256':'e'*64,'bytes':True}]}},{'a'*64:{'protection':{'path':'x','sha256':'d'*64},'decision_hold_bindings':[],'unknown':True}}])
+def test_candidate_protection_mapping_rejects_malformed_authority(tmp_path,value):
+    _,_,config=setup(tmp_path);decl=config['source_sequence'];entry=json.loads(Path(decl['ready_manifest']).read_bytes())['entries'][0]
+    decl['authority']['reference_protection_by_candidate']=value
+    with pytest.raises(ValueError,match='malformed'):sequence._packet(entry,decl)
+
+
+def priority_setup(tmp_path, *, minimum=0):
+    folder,state,config=setup(tmp_path,packet_count=5);decl=config['source_sequence'];mp=Path(decl['ready_manifest']);manifest=json.loads(mp.read_bytes())
+    original=put(tmp_path/'original-ready.json',{**manifest,'entries':manifest['entries'][:2]})
+    policy=put(tmp_path/'priority-policy.json',dict(schema='natlang.teacher-priority-packet-continuation/1',original_ready=original,entries=manifest['entries'][3:],minimum_original_ordinal=minimum,max_consecutive=1,training_admission=False))
+    decl['priority_packets']=policy
+    state['source_sequence']={'next_ordinal':0,'observed_entries':copy.deepcopy(manifest['entries'][:2])}
+    return folder,state,config
+
+
+def close_packet(folder,state,config,batch):
+    seal(folder,state,config,batch)
+    root=Path(config['root'])/'evidence-collections-v2'/f'batch-{batch:04d}'
+    entries=[dict(key='task-0',source=str(root/'source-cases.jsonl'),index=0,count=1,
+                  seed=7000+batch,jobs=str(root/'jobs'),output=str(root/'results.jsonl'))]
+    (root/'queue.jsonl').write_text(json.dumps(entries[0])+'\n')
+    finish=dict(event='finish',key='task-0',output_accounting=dict(
+        version='natlang.supervisor_output_accounting/2',manifest_valid=True,
+        manifest_errors=[],expected_jobs=1,complete=True,job_states=[dict(state='result')]))
+    decision=guardian.assess(entries,[finish],[0],dict(schema='natlang.s7-task-rollout-score/1',
+        rollouts=1,outcome_counts=dict(task_success=1)))
+    assert decision['batch_complete']is True
+    decision.update(batch=batch,bindings={name:guardian.binding(root/name)
+        for name in('queue.jsonl','teacher-source.json')})
+    state['last_boundary']=put(folder/'boundaries'/f'batch-{batch:04d}.json',decision)
+    sequence.observe_source_sequence(folder,state,config)
+
+
+def test_priority_real_closure_returns_cursor_and_cannot_starve_original_or_repeat(tmp_path):
+    folder,state,config=priority_setup(tmp_path)
+    sequence.prepare_source_sequence(folder,state,config,22)
+    assert state['source_sequence']['pending']['ordinal']==3
+    close_packet(folder,state,config,22)
+    assert state['source_sequence']['next_ordinal']==0 and state['source_sequence']['priority_streak']==1
+    sequence.prepare_source_sequence(folder,state,config,23)
+    assert state['source_sequence']['pending']['ordinal']==0
+    close_packet(folder,state,config,23)
+    assert state['source_sequence']['next_ordinal']==1 and state['source_sequence']['priority_streak']==0
+    sequence.prepare_source_sequence(folder,state,config,24)
+    assert state['source_sequence']['pending']['ordinal']==4
+    close_packet(folder,state,config,24)
+    assert state['source_sequence']['next_ordinal']==1
+    sequence.prepare_source_sequence(folder,state,config,25)
+    assert state['source_sequence']['pending']['ordinal']==1
+    close_packet(folder,state,config,25)
+    sequence.prepare_source_sequence(folder,state,config,26)
+    assert state['source_sequence']['pending']['ordinal']==2
+    close_packet(folder,state,config,26)
+    sequence.prepare_source_sequence(folder,state,config,27)
+    assert state['source_sequence']['next_ordinal']==5 and 'pending'not in state['source_sequence']
+    assert len(state['source_sequence']['closed'])==5
+
+
+def test_priority_waits_for_declared_existing_work_and_leaves_active_pending_exact(tmp_path):
+    folder,state,config=priority_setup(tmp_path,minimum=1)
+    sequence.prepare_source_sequence(folder,state,config,22)
+    before=copy.deepcopy(state['source_sequence']['pending']);assert before['ordinal']==0
+    sequence.prepare_source_sequence(folder,state,config,22)
+    assert state['source_sequence']['pending']==before
+    close_packet(folder,state,config,22)
+    sequence.prepare_source_sequence(folder,state,config,23)
+    assert state['source_sequence']['pending']['ordinal']==3
+
+
+def test_priority_resume_after_publication_interruption_preserves_exact_packet(tmp_path,monkeypatch):
+    folder,state,config=priority_setup(tmp_path);real=sequence._reconcile_publication
+    monkeypatch.setattr(sequence,'_reconcile_publication',lambda *_:(_ for _ in()).throw(RuntimeError('interrupt')))
+    with pytest.raises(RuntimeError,match='interrupt'):sequence.prepare_source_sequence(folder,state,config,22)
+    disk=json.loads((folder/'state.json').read_bytes());pending=copy.deepcopy(disk['source_sequence']['pending']);assert pending['ordinal']==3
+    monkeypatch.setattr(sequence,'_reconcile_publication',real)
+    sequence.prepare_source_sequence(folder,disk,config,22)
+    assert disk['source_sequence']['pending']==pending
+    close_packet(folder,disk,config,22)
+    assert disk['source_sequence']['next_ordinal']==0
+
+
+@pytest.mark.parametrize('tamper',['closed_receipt','past_policy','missing_counter','reset_counter'])
+def test_priority_past_custody_and_service_cannot_be_forgotten(tmp_path,tamper):
+    folder,state,config=priority_setup(tmp_path);sequence.prepare_source_sequence(folder,state,config,22);close_packet(folder,state,config,22)
+    if tamper=='closed_receipt':Path(state['source_sequence']['closed']['22']['path']).write_text('{}')
+    elif tamper=='past_policy':Path(config['source_sequence']['priority_packets']['path']).write_text('{}')
+    elif tamper=='missing_counter':state['source_sequence'].pop('priority_streak')
+    else:state['source_sequence']['priority_streak']=0
+    with pytest.raises(ValueError):sequence.prepare_source_sequence(folder,state,config,23)
+
+
+@pytest.mark.parametrize('tamper',['old_ordinal','duplicate','changed_binding','changed_prefix','boolean_limit'])
+def test_priority_policy_rejects_unknown_old_or_reinterpreted_work(tmp_path,tamper):
+    folder,state,config=priority_setup(tmp_path);decl=config['source_sequence'];path=Path(decl['priority_packets']['path']);proof=json.loads(path.read_bytes())
+    if tamper=='old_ordinal':proof['entries'][0]['ordinal']=0
+    elif tamper=='duplicate':proof['entries'].append(proof['entries'][0])
+    elif tamper=='changed_binding':proof['entries'][0]['candidate_packet']['sha256']='f'*64
+    elif tamper=='changed_prefix':
+        original=json.loads(Path(proof['original_ready']['path']).read_bytes());original['entries'][0]['qualified_packet']['sha256']='f'*64;proof['original_ready']=put(Path(proof['original_ready']['path']),original)
+    else:proof['max_consecutive']=True
+    decl['priority_packets']=put(path,proof)
+    with pytest.raises(ValueError,match='priority'):sequence.prepare_source_sequence(folder,state,config,22)
+
+
+def test_priority_cannot_shorten_actual_observed_prefix(tmp_path):
+    folder,state,config=priority_setup(tmp_path)
+    state['source_sequence']['observed_entries'].append(json.loads(Path(config['source_sequence']['ready_manifest']).read_bytes())['entries'][2])
+    with pytest.raises(ValueError,match='actual observed prefix'):
+        sequence.prepare_source_sequence(folder,state,config,22)
+
+
+def test_priority_policy_history_survives_observation_growth_and_removal(tmp_path):
+    folder,state,config=priority_setup(tmp_path)
+    sequence.prepare_source_sequence(folder,state,config,22)
+    close_packet(folder,state,config,22)
+    assert len(state['source_sequence']['observed_entries'])==5
+    sequence.prepare_source_sequence(folder,state,config,23)
+    close_packet(folder,state,config,23)
+    config['source_sequence'].pop('priority_packets')
+    state['source_sequence']['priority_policies'].clear()
+    with pytest.raises(ValueError,match='observed-prefix history'):
+        sequence.prepare_source_sequence(folder,state,config,24)

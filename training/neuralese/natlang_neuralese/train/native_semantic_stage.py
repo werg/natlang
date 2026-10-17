@@ -365,10 +365,25 @@ def save_shared(policy, participants, vae, optimizer, *, training, device):
                 'checkpoint_sha256': checkpoint_sha,
                 'tokenizer_fingerprint': tokenizer_fingerprint(entry.tokenizer),
                 'history_reasoning': dict(history_profile)}
-            write_json_durable(directory/'natlang-history-reasoning.json', history_binding)
+            history_path = directory / f'natlang-history-reasoning-{checkpoint_sha}.json'
+            if history_path.exists():
+                if json.loads(history_path.read_text(encoding='utf-8')) != history_binding:
+                    raise ValueError('immutable semantic tokenizer history binding changed')
+            else:
+                write_json_durable(history_path, history_binding)
+        selected_sidecar = (history_path.name if isinstance(history_profile, dict) else None)
         tokenizers[name] = {'path': str(directory.relative_to(policy.out)),
+            **({'history_reasoning_binding': {
+                'path': selected_sidecar,
+                'sha256': sha256_file_hex_cached(history_path)}} if selected_sidecar else {}),
+            # The selected checkpoint's profile is a normal immutable tokenizer
+            # dependency. Older checkpoint-named sidecars stay out of this
+            # export so a later save cannot mutate an earlier adapter closure.
             'files': {str(path.relative_to(directory)): sha256_file_hex_cached(path)
-                      for path in directory.rglob('*') if path.is_file()}}
+                      for path in directory.rglob('*') if path.is_file()
+                      and (not path.name.startswith('natlang-history-reasoning-')
+                           or path.name == selected_sidecar)
+                      and path.name != 'natlang-history-reasoning.json'}}
     from .native_continuation import progress_obligations, raw_communication_rows
     export = {'schema': 'natlang.native-semantic-adapter/1',
         'checkpoint': {'path': str(policy.slot.resolve()), 'sha256': checkpoint_sha},
