@@ -116,6 +116,35 @@ def test_receipt_file_shards_retain_exact_original_row_identity(tmp_path,monkeyp
         list(acquired.acquired_rows('D35'))
 
 
+def test_sharded_source_receipt_and_file_index_are_cached_but_stat_changes_revalidate(tmp_path,monkeypatch):
+    root=fixture(tmp_path,monkeypatch,'D35',[{'task':'t','conversations':messages()}])
+    monkeypatch.setattr(acquired,'ACQUIRED_FILES',frozenset({'sessions.parquet'}))
+    original=acquired.validate_acquisition;calls=[]
+    def counted(*args,**kwargs):
+        calls.append(args[0]);return original(*args,**kwargs)
+    monkeypatch.setattr(acquired,'validate_acquisition',counted)
+    assert len(list(acquired.acquired_rows('D35')))==1
+    assert len(list(acquired.acquired_rows('D35')))==1
+    assert calls==['D35']
+    receipt_path=root/'acquisition.json';value=json.loads(receipt_path.read_text());value['status']='partial'
+    receipt_path.write_text(json.dumps(value))
+    stat=receipt_path.stat()
+    import os
+    os.utime(receipt_path,ns=(stat.st_atime_ns,stat.st_mtime_ns+1_000_000))
+    with pytest.raises(Reject,match='not completely acquired'):
+        list(acquired.acquired_rows('D35'))
+    assert calls==['D35','D35']
+
+
+def test_cached_receipt_still_rehashes_each_selected_source_file(tmp_path,monkeypatch):
+    root=fixture(tmp_path,monkeypatch,'D35',[{'task':'t','conversations':messages()}])
+    monkeypatch.setattr(acquired,'ACQUIRED_FILES',frozenset({'sessions.parquet'}))
+    assert len(list(acquired.acquired_rows('D35')))==1
+    (root/'sessions.parquet').write_bytes(b'mutated after receipt cache population')
+    with pytest.raises(Reject,match='source file differs'):
+        list(acquired.acquired_rows('D35'))
+
+
 def test_conversion_records_row_rejection_then_keeps_following_trajectory(tmp_path,monkeypatch):
     from types import SimpleNamespace
     import neuralese_port_records as cli
@@ -201,13 +230,19 @@ def test_recovered_acquisition_requires_exact_archive_and_complete_inventory(tmp
     from neuralese_data.acquired_agents import validate_recovery_manifest
     root=tmp_path/'D13';root.mkdir()
     payload=root/'sessions.jsonl';payload.write_text('{"messages":[]}\n')
-    archive=tmp_path/'D13-pinned-source.tar'
-    with tarfile.open(archive,'w') as stream:
-        data=b'upstream archive bytes';info=tarfile.TarInfo('D13/example.txt');info.size=len(data)
-        stream.addfile(info,BytesIO(data))
     files=[{'path':payload.name,'bytes':payload.stat().st_size,
             'sha256':hashlib.sha256(payload.read_bytes()).hexdigest()}]
     inventory_sha=hashlib.sha256(json.dumps(files,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+    embedded={'schema':'natlang.pinned-public-source-archive/1','acquisition':{
+        'schema':'natlang.external-source-acquisition/1','ref':'D13','repo':'CooperBench/team-coop',
+        'revision':'7348f4baa12d53c2c2d537943e7846ff8587e411','files':files}}
+    embedded_bytes=json.dumps(embedded,separators=(',',':')).encode()
+    archive=tmp_path/'D13-pinned-source.tar'
+    with tarfile.open(archive,'w') as stream:
+        info=tarfile.TarInfo('D13/sessions.jsonl');info.size=payload.stat().st_size
+        stream.addfile(info,BytesIO(payload.read_bytes()))
+        info=tarfile.TarInfo('D13/durability-manifest.json');info.size=len(embedded_bytes)
+        stream.addfile(info,BytesIO(embedded_bytes))
     receipt={
         'schema':'natlang.external-source-recovery/1','ref':'D13','repo':'CooperBench/team-coop',
         'revision':'7348f4baa12d53c2c2d537943e7846ff8587e411','status':'recovered',
@@ -217,6 +252,8 @@ def test_recovered_acquisition_requires_exact_archive_and_complete_inventory(tmp
         'source_archive':{'verified':True,'private':True,'path':str(archive),'bytes':archive.stat().st_size,
             'sha256':hashlib.sha256(archive.read_bytes()).hexdigest(),'run':'werg/natlang/ywcj2mvb',
             'name':'mellum/example/D13-pinned-source.tar'},
+        'embedded_archive_manifest':{'path':'D13/durability-manifest.json','bytes':len(embedded_bytes),
+            'sha256':hashlib.sha256(embedded_bytes).hexdigest(),'schema':'natlang.pinned-public-source-archive/1'},
     }
     manifest=root/'recovery-manifest.json';manifest.write_text(json.dumps(receipt))
     assert validate_recovery_manifest('D13',receipt,manifest,root=root)==receipt
@@ -230,4 +267,8 @@ def test_recovered_acquisition_requires_exact_archive_and_complete_inventory(tmp
     payload.write_text('{"messages":[]}\n')
     receipt['source_archive']['sha256']='0'*64
     with pytest.raises(Reject,match='archive differs'):
+        validate_recovery_manifest('D13',receipt,manifest,root=root)
+    receipt['source_archive']['sha256']=hashlib.sha256(archive.read_bytes()).hexdigest()
+    receipt['files'][0]['bytes']+=1
+    with pytest.raises(Reject,match='not bound to its retained archive proof'):
         validate_recovery_manifest('D13',receipt,manifest,root=root)

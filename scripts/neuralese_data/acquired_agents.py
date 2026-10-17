@@ -10,6 +10,8 @@ from .records import group_key
 
 ACQUIRED_FILES = None  # Optional exact receipt-file shard, never an implicit row limit.
 ACQUIRED_RECEIPTS = {}  # Explicit immutable selected-file snapshots; never the mutable download journal.
+_ACQUISITION_CACHE = {}
+_ACQUISITION_FILE_INDEX = {}
 
 # A source ref is normalized through the existing shared Trajectory adapter.
 # Keep this lookup beside those adapters so export workers do not maintain a
@@ -160,8 +162,57 @@ def load_acquisition(ref):
     from . import agents
     root = agents.EXPANSION_ROOT/ref
     receipt_path = Path(ACQUIRED_RECEIPTS.get(ref, root/'acquisition.json'))
+    receipt_path = receipt_path.resolve(strict=True)
+    root_key = str(root.resolve())
+    stat = receipt_path.stat()
+    cache_key = (ref, root_key, str(receipt_path), stat.st_dev, stat.st_ino,
+                 stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
+    cached = _ACQUISITION_CACHE.get(cache_key)
+    if cached is not None:
+        archive_path, archive_stat = cached[1]
+        try:
+            current = archive_path.stat()
+        except FileNotFoundError:
+            current = None
+        if current is not None and _stat_identity(current) == archive_stat:
+            return cached[0]
+        _ACQUISITION_CACHE.pop(cache_key, None)
     receipt = json.loads(receipt_path.read_text())
-    return validate_acquisition(ref, receipt, receipt_path, root=root)
+    receipt = validate_acquisition(ref, receipt, receipt_path, root=root)
+    archive = receipt.get('source_archive') or {}
+    if archive.get('path'):
+        archive_path = Path(archive['path']).resolve(strict=True)
+        archive_stat = archive_path.stat()
+        archive_binding = (archive_path, _stat_identity(archive_stat))
+    else:
+        archive_binding = (receipt_path, _stat_identity(stat))
+    _ACQUISITION_CACHE[cache_key] = (receipt, archive_binding)
+    return receipt
+
+
+def _acquired_receipt_index(ref, receipt):
+    """Index immutable receipt entries once for per-file conversion shards."""
+    key = (ref, id(receipt))
+    cached = _ACQUISITION_FILE_INDEX.get(key)
+    if cached is not None and cached[0] is receipt:
+        return cached[1]
+    supported = []
+    by_path = {}
+    positions = {}
+    for position, entry in enumerate(receipt['files']):
+        name = entry['path']
+        if supported_acquired_file(name):
+            supported.append(entry)
+            by_path[name] = entry
+            positions[name] = position
+    result = (frozenset(by_path), by_path, positions, supported)
+    # Keep a strong reference: object ids may be reused after receipt eviction.
+    _ACQUISITION_FILE_INDEX[key] = (receipt, result)
+    return result
+
+
+def _stat_identity(stat):
+    return (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
 
 
 def validate_acquisition(ref, receipt, receipt_path, *, root):
@@ -222,6 +273,7 @@ def validate_recovery_manifest(ref, receipt, receipt_path, *, root):
     """
     from natlang_neuralese.common.hashing import sha256_file_hex_cached
     import hashlib
+    import tarfile
     root=Path(root).resolve();receipt_path=Path(receipt_path).resolve()
     if (receipt.get('ref') != ref or receipt.get('status') != 'recovered'
             or receipt.get('training_admission') is not False
@@ -249,6 +301,35 @@ def validate_recovery_manifest(ref, receipt, receipt_path, *, root):
         raise Reject('recovered source archive differs from its private-object binding')
     if receipt_path.parent.resolve() != root:
         raise Reject('recovery manifest is outside its bound source root')
+    embedded = receipt.get('embedded_archive_manifest') or {}
+    embedded_name = embedded.get('path')
+    if (not isinstance(embedded_name, str) or not embedded_name
+            or Path(embedded_name).is_absolute() or '..' in Path(embedded_name).parts
+            or type(embedded.get('bytes')) is not int or embedded['bytes'] <= 0
+            or not isinstance(embedded.get('sha256'), str)
+            or len(embedded['sha256']) != 64
+            or any(char not in '0123456789abcdef' for char in embedded['sha256'])):
+        raise Reject('recovery manifest lacks an exact embedded source-stage proof')
+    try:
+        with tarfile.open(archive_path, 'r:*') as stream:
+            member = stream.getmember(embedded_name)
+            if not member.isfile() or member.size != embedded['bytes']:
+                raise Reject('embedded source-stage proof differs from its archive binding')
+            proof_bytes = stream.extractfile(member).read()
+        if hashlib.sha256(proof_bytes).hexdigest() != embedded['sha256']:
+            raise Reject('embedded source-stage proof digest differs')
+        proof = json.loads(proof_bytes)
+    except (KeyError, OSError, tarfile.TarError, json.JSONDecodeError) as error:
+        raise Reject('recovered source archive lacks its bound source-stage proof') from error
+    source_receipt = proof.get('acquisition') or {}
+    if (proof.get('schema') != embedded.get('schema')
+            or proof.get('schema') != 'natlang.pinned-public-source-archive/1'
+            or source_receipt.get('schema') != 'natlang.external-source-acquisition/1'
+            or source_receipt.get('ref') != ref
+            or source_receipt.get('repo') != receipt.get('repo')
+            or source_receipt.get('revision') != receipt.get('revision')
+            or source_receipt.get('files') != receipt.get('files')):
+        raise Reject('recovered source inventory is not bound to its retained archive proof')
     files=receipt.get('files')
     if not isinstance(files,list) or not files:
         raise Reject('recovered source has no complete file inventory')
@@ -285,16 +366,16 @@ def acquired_rows(ref, limit=None, *, metadata_only_files=frozenset()):
     from . import agents
     root = agents.EXPANSION_ROOT / ref
     receipt = load_acquisition(ref)
-    known = {entry['path'] for entry in receipt['files'] if supported_acquired_file(entry['path'])}
+    known, by_path, positions, supported_entries = _acquired_receipt_index(ref, receipt)
     if ACQUIRED_FILES is not None and not ACQUIRED_FILES <= known:
         raise Reject('requested file is not a bound source in this receipt')
+    if ACQUIRED_FILES is None:
+        entries = supported_entries
+    else:
+        entries = sorted((by_path[name] for name in ACQUIRED_FILES), key=lambda entry: positions[entry['path']])
     index = 0
-    for entry in receipt['files']:
+    for entry in entries:
         relative = Path(entry['path'])
-        if not supported_acquired_file(relative):
-            continue
-        if ACQUIRED_FILES is not None and str(relative) not in ACQUIRED_FILES:
-            continue
         path=_bound_acquired_path(root,entry)
         metadata_only = str(relative) in metadata_only_files
         if metadata_only and path.suffix!='.parquet':
