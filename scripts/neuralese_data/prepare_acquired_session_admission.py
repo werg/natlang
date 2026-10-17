@@ -325,6 +325,36 @@ def _prevalidate_source_for_conversion(value, receipt):
         value, template_backbone=_prepared_template_backbone(receipt))
 
 
+def verify_model_source_parity(model_views):
+    """Require paired source coverage, allowing only the declared LFM2 scalar case."""
+    models = list(model_views)
+    if len(models) < 2:
+        raise ValueError('acquired session admission needs both model views')
+    all_keys = set().union(*(set(view['accepted']) | set(view['pending']) for view in model_views.values()))
+    for key in all_keys:
+        states = {name: ('pending' if key in view['pending'] else
+                         'accepted' if key in view['accepted'] else 'excluded')
+                  for name, view in model_views.items()}
+        state_set = set(states.values())
+        if state_set == {'excluded'}:
+            continue
+        if state_set == {'accepted'}:
+            identities = [view['accepted'][key] for view in model_views.values()]
+            if any(identity != identities[0] for identity in identities[1:]):
+                raise ValueError('model views differ in a jointly accepted complete source session')
+        elif state_set == {'pending'}:
+            continue
+        elif state_set == {'accepted', 'pending'}:
+            pending_models = [name for name, state in states.items() if state == 'pending']
+            accepted_models = [name for name, state in states.items() if state == 'accepted']
+            if (len(pending_models) != 1 or len(accepted_models) != 1
+                    or model_views[pending_models[0]]['backbone'] != 'lfm2'
+                    or model_views[accepted_models[0]]['backbone'] != 'mellum'):
+                raise ValueError('cross-model source outcome differs outside the LFM2 template-pending case')
+        else:
+            raise ValueError('cross-model source occurrence is missing from a complete or explicit pending view')
+
+
 def verify_conversion(directory, export_path, *, protection, held_sources, decision_bindings, source_rows, conversion_protection=None):
     directory = Path(directory).resolve(strict=True); receipt_path = directory / 'receipt.json'
     receipt = json.loads(receipt_path.read_text())
@@ -509,6 +539,7 @@ def main(argv=None):
     inventories = {name: tokenizer_inventory(base) for name, base in models.items()}
     manifests = {model: {'train': [], 'test': []} for model in models}
     by_model = {}; proof_rows = []; include = []; bindings = []; normalized_count = 0
+    model_source_views = {}
     all_groups = {'train': set(), 'test': set()}
     for export_path in paths:
         export = json.loads(export_path.read_text()); source = export_path.parent / 'full-trajectories.jsonl.zst'
@@ -520,7 +551,7 @@ def main(argv=None):
         for row in rows:
             if row['source_file'] != original or row['source_revision'] != export['contract']['revision']:
                 raise ValueError('normalized session changed its pinned original source identity')
-        twin = None
+        model_source_views = {}
         for model in models:
             directory = args.native_root / export_path.parent.name / model
             receipt, outputs, proofs, groups = verify_conversion(directory, export_path, protection=protection,
@@ -528,9 +559,17 @@ def main(argv=None):
                 conversion_protection=conversion_protection)
             if receipt['prepared_tokenizer']['base_files'] != inventories[model]:
                 raise ValueError('native cohort model selector differs from its exact tokenizer base inventory')
-            identities = {(p['id'], p['normalized_session_sha256'], p['split'], p['view']) for p in proofs if p['view'] == 'whole-trajectory'}
-            if twin is not None and identities != twin: raise ValueError('model views differ in complete source session membership')
-            twin = identities
+            whole = {}
+            for proof in proofs:
+                key = (proof['normalized_session_sha256'], proof['source_row'])
+                whole.setdefault(key, set()).add((proof['id'], proof['normalized_session_sha256'],
+                    proof['split'], proof['view']))
+            pending = set()
+            for omission in sessions(directory / 'omissions.jsonl'):
+                if omission.get('reason') == 'source-render-pending:tool-arguments':
+                    pending.add((omission['normalized_source_sha256'], omission['source_row']))
+            model_source_views[model] = {'backbone': _prepared_template_backbone(receipt),
+                'accepted': whole, 'pending': pending}
             summary = by_model.setdefault(model, Counter()); summary.update(receipt['counts'])
             for split in groups: all_groups[split].update(groups[split])
             for output in outputs:
@@ -547,6 +586,7 @@ def main(argv=None):
                 'sha256': sha256_file_hex(directory / 'receipt.json')}, 'outputs': outputs,
                 **({'conversion_protection': receipt['protection']} if conversion_protection is not None else {})})
             proof_rows.extend({**proof, 'model': model, 'original_source': original} for proof in proofs)
+        verify_model_source_parity(model_source_views)
     if all_groups['train'] & all_groups['test']: raise ValueError('cohort global train/held group intersection')
     if (conversion_protection is not None and current_protection(args.conversion_protection) != conversion_protection):
         raise ValueError('prior numeric conversion protection changed during cohort verification')

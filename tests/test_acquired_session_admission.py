@@ -199,3 +199,20 @@ def test_admission_prevalidation_is_bound_to_actual_template_and_conserves_scala
     assert canonical_json_sha256_hex(row)==source_sha
     assert [row['trajectory']['id']+':'+str(i) for i,m in enumerate(row['trajectory']['messages'])
         if m.get('role')=='assistant']==target_ids
+
+
+def test_paired_admission_keeps_mellum_scalar_while_lfm2_records_exact_pending_occurrence():
+    from scripts.neuralese_data.prepare_acquired_session_admission import verify_model_source_parity
+    key=('source-sha','source.parquet:17')
+    accepted={('source-session:source-occurrence:x','source-sha','train','whole-trajectory')}
+    verify_model_source_parity({
+        'lfm25':{'backbone':'lfm2','accepted':{},'pending':{key}},
+        'mellum21':{'backbone':'mellum','accepted':{key:accepted},'pending':set()}})
+    with pytest.raises(ValueError,match='cross-model source outcome'):
+        verify_model_source_parity({
+            'lfm25':{'backbone':'lfm2','accepted':{key:accepted},'pending':set()},
+            'mellum21':{'backbone':'mellum','accepted':{},'pending':{key}}})
+    with pytest.raises(ValueError,match='missing from a complete'):
+        verify_model_source_parity({
+            'lfm25':{'backbone':'lfm2','accepted':{},'pending':{key}},
+            'mellum21':{'backbone':'mellum','accepted':{},'pending':set()}})
