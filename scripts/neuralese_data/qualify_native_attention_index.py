@@ -40,6 +40,30 @@ def diagnostic_optimizer(model):
     return optimizer
 
 
+def gradient_name_aliases(model, optimizer):
+    """Join current optimizer names and legacy observer aliases exactly."""
+    canonical, owners = {}, {}
+    for name, parameter in optimizer._native_named_parameters:
+        if not parameter.requires_grad:
+            continue
+        identity = id(parameter)
+        if ((name in owners and owners[name] != identity)
+                or (identity in canonical and canonical[identity] != name)):
+            raise ValueError('ambiguous diagnostic optimizer inventory: ' + name)
+        owners[name], canonical[identity] = identity, name
+    names = {name: name for name in canonical.values()}
+    for name, parameter in model.named_parameters():
+        if not parameter.requires_grad:
+            continue
+        if id(parameter) not in canonical:
+            raise ValueError('diagnostic trainable absent from optimizer inventory: ' + name)
+        actual = canonical[id(parameter)]
+        if name in names and names[name] != actual:
+            raise ValueError('ambiguous diagnostic gradient parameter name: ' + name)
+        names[name] = actual
+    return names
+
+
 def tensor_digest(value):
     value = value.detach()
     if not value.is_contiguous():
@@ -78,9 +102,7 @@ def paired_case(model, optimizer, example, reference, *, backend=None, checkpoin
     candidate = shared_state.forward_graph
     trainable = {name: {'shape': list(parameter.shape), 'dtype': str(parameter.dtype)}
                  for name, parameter in optimizer._native_named_parameters if parameter.requires_grad}
-    production_names = {id(parameter): name for name, parameter in optimizer._native_named_parameters}
-    names = {name: production_names[id(parameter)] for name, parameter in model.named_parameters()
-             if parameter.requires_grad}
+    names = gradient_name_aliases(model, optimizer)
     if not any(name.startswith('backbone.') for name in trainable):
         raise ValueError('paired diagnostic needs production backbone gradients')
     values, hashes, outputs, geometries = {}, {}, {}, {}

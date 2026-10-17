@@ -5,11 +5,29 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from scripts.neuralese_data.qualify_native_attention_index import diagnostic_optimizer, paired_case, reference_module, tensor_digest
+from scripts.neuralese_data.qualify_native_attention_index import diagnostic_optimizer, paired_case, reference_module, tensor_digest, gradient_name_aliases
 from natlang_neuralese.model import shared_state
 from natlang_neuralese.train.native_state_sft import make_native_optimizer
 from test_shared_state import tiny
 from test_native_optimizer_checkpointing import examples, assert_exact
+
+
+def test_gradient_names_accept_optimizer_and_legacy_aliases_but_reject_ambiguity():
+    first, second = torch.nn.Parameter(torch.ones(1)), torch.nn.Parameter(torch.zeros(1))
+    optimizer = SimpleNamespace(_native_named_parameters=[('backbone.first', first), ('backbone.second', second)])
+    model = SimpleNamespace(named_parameters=lambda: [('port.first', first), ('port.second', second)])
+    assert gradient_name_aliases(model, optimizer) == {
+        'backbone.first': 'backbone.first', 'backbone.second': 'backbone.second',
+        'port.first': 'backbone.first', 'port.second': 'backbone.second'}
+    model.named_parameters = lambda: [('backbone.first', second)]
+    with pytest.raises(ValueError, match='ambiguous diagnostic gradient'):
+        gradient_name_aliases(model, optimizer)
+    for inventory in [[('same', first), ('same', second)], [('first', first), ('second', first)]]:
+        with pytest.raises(ValueError, match='ambiguous diagnostic optimizer inventory'):
+            gradient_name_aliases(model, SimpleNamespace(_native_named_parameters=inventory))
+    model.named_parameters = lambda: [('unknown', torch.nn.Parameter(torch.ones(1)))]
+    with pytest.raises(ValueError, match='absent from optimizer inventory'):
+        gradient_name_aliases(model, optimizer)
 
 
 @pytest.mark.parametrize('family', ['lfm', 'mellum'])

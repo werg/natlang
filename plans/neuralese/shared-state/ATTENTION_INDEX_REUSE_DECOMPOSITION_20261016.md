@@ -14,3 +14,8 @@ allocation plumbing, with no new natural-language policy or model-facing text.
 
 Verify actual outputs and adjoints against the original rebuilding path on both
 ports. Measure normal production batches before claiming throughput improvement.
+
+The diagnostic's gradient-name join is exact verifier plumbing: accept the
+optimizer's canonical parameter names and the older model-name aliases, joining
+both by parameter identity. Reject any ambiguous name rather than guessing.
+Both attention diagnostics share this join; no training behavior changes.

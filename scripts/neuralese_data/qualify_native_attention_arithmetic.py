@@ -15,7 +15,7 @@ import tempfile
 import torch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from scripts.neuralese_data.qualify_native_attention_index import diagnostic_optimizer, tensor_digest
+from scripts.neuralese_data.qualify_native_attention_index import diagnostic_optimizer, tensor_digest, gradient_name_aliases
 from scripts.neuralese_data.qualify_native_causal_prefixes import gradient_metrics, metrics
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex
 from natlang_neuralese.eval.native_memory import qualify_capacity
@@ -39,8 +39,7 @@ def paired_arithmetic_case(model, optimizer, example, *, candidate='tf32x3', ato
         raise ValueError('attention comparison requires finite positive declared tolerances')
     inventory={name:{'shape':list(value.shape),'dtype':str(value.dtype)}
                for name,value in optimizer._native_named_parameters if value.requires_grad}
-    aliases={id(value):name for name,value in optimizer._native_named_parameters}
-    names={name:aliases[id(value)] for name,value in model.named_parameters() if value.requires_grad}
+    names=gradient_name_aliases(model,optimizer)
     if not any(name.startswith('backbone.') for name in inventory):
         raise ValueError('attention arithmetic comparison requires actual production backbone trainables')
     comparisons={};reference={};seen=set();outputs={};geometries={};runs={}
