@@ -18,7 +18,7 @@ from natlang_neuralese.common.jsonio import write_json_durable as write
 
 
 @pytest.fixture
-def external(ordinary,tmp_path):
+def external(ordinary,tmp_path,request):
     x=ordinary;N=tmp_path/'external-resident';N.mkdir();(N/'sft').mkdir();out=N/'learner';out.mkdir()
     recipe=copy.deepcopy(json.loads(Path(x['bare']['recipe']['path']).read_text()));recipe_path=N/'initial-recipe.json';write(recipe_path,recipe)
     config=json.loads(x['config'].read_text());lineage=config['recipe_lineage_sha256'];rb=native_recipe_binding(recipe_path,lineage)
@@ -54,7 +54,7 @@ def external(ordinary,tmp_path):
         saved=copy.deepcopy(x['saved']);saved.update(step=22);saved['training'].update(step=22,global_step=22,
             source_receipts=[resident.binding(x['paths']['new']),resident.binding(x['paths']['held'])])
         saved['training']['options'].update(recipe_binding=state['payload']['recipe'],resident_data_directory=str(directory),
-            resident_adoption={'generation':state['generation'],'history':state['history']},continuation={'checkpoint_sha256':parent['sha256']})
+            stage_id='sft',resident_adoption={'generation':state['generation'],'history':state['history']},continuation={'checkpoint_sha256':parent['sha256']})
         from natlang_neuralese.train.native_continuation import _TRANSIENT
         saved['training']['sft_progress']['sft']={k:copy.deepcopy(v)for k,v in saved['training'].items()if k not in _TRANSIENT}
         slot=out/'checkpoint.pt';pin=N/'immutable-full.pt';torch.save(saved,slot);shutil.copyfile(slot,pin)
@@ -64,13 +64,18 @@ def external(ordinary,tmp_path):
     finally:
         if process.poll() is None:process.communicate()
     resident.retire(directory,resident.binding(pin),resident.binding(terminal))
-    transition=handoff.prepare_drained_recipe_handoff(drained,successor_path,N/'external-transition.json',
-        package=x['newpackage'],external_package=x['newpackage'])
     receipt=out/'native-training-receipt.json';write(receipt,{'schema':'natlang.native-training-readiness/1',
-        'model_id':config['raw_model_id'],'stage_id':'sft','recipe':state['payload']['recipe'],
+        'model_id':config['raw_model_id'],'stage_id':'sft','lineage':str(out),'recipe':state['payload']['recipe'],
         'checkpoint':resident.binding(slot),'native_identity':{'checkpoint_sha256':resident.binding(pin)['sha256']},
         'continuation':{'checkpoint_sha256':parent['sha256']},'continuation_boundary':{
             'new_optimizer_updates':3,'checkpoint_sha256':resident.binding(pin)['sha256']},'completed':False})
+    from natlang_neuralese.train.native_continuation import collect_sft_progress,progress_obligations
+    from natlang_neuralese.train.native_operation_report import compact_obligations
+    r=json.loads(receipt.read_text());r['mandatory_sft']=compact_obligations(progress_obligations(collect_sft_progress(saved['training'],borrow_frames=True)),{'path':str(slot.resolve()),'sha256':resident.binding(pin)['sha256'],'bytes':pin.stat().st_size});write(receipt,r)
+    if getattr(request,'param',None)=='owner-layout':(N/'sft').rmdir()
+
+    transition=handoff.prepare_drained_recipe_handoff(drained,successor_path,N/'external-transition.json',
+        package=x['newpackage'],external_package=x['newpackage'])
     central=json.loads((x['out']/'state.json').read_text());central.update(checkpoint=parent['path'],phase='collect');write(x['out']/'state.json',central)
     cursor=json.loads((x['root']/'cycle.json').read_text());cursor.update(phase='rl',next_stage=0,pending_rl_round=None);write(x['root']/'cycle.json',cursor)
     x.update(saved=saved,pin=pin,slot=slot,handoff=drained,directory=directory,transition=transition,

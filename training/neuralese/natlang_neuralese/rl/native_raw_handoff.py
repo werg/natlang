@@ -522,6 +522,48 @@ def _external_frozen_package(record, package, old_plan, snapshots=None):
     return references
 
 
+
+def _external_started_stage_layout(record, saved, old_plan, stage_id, *, snapshots=None, receipt_snapshot=None):
+    """Authenticate a real external owner's output without inventing recipe-runner markers."""
+    from .native_runtime_handoff import _owned_launch_chain
+    from ..train.native_continuation import collect_sft_progress, progress_obligations
+    from ..train.native_operation_report import compact_obligations
+    stages=[stage for stage in old_plan['recipe']['stages']if stage['id']==stage_id]
+    _,argv,_=_owned_launch_chain(record,snapshots)
+    def argument(flag):
+        if argv.count(flag)!=1 or argv.index(flag)+1>=len(argv):
+            raise ValueError('external started stage needs its exact captured '+flag)
+        return argv[argv.index(flag)+1]
+    root=Path(record['resident']['directory']).resolve().parent
+    output=Path(argument('--out')).resolve(strict=True)
+    training=saved['training'];options=training.get('options')or{}
+    if (len(stages)!=1 or stages[0]['kind']!='native_state_sft'
+            or argument('--stage-id')!=stage_id or options.get('stage_id')!=stage_id
+            or not output.is_dir()or output.parent!=root
+            or Path(record['checkpoint_pin']['original_slot']['path']).resolve()!=output/'checkpoint.pt'
+            or type(training.get('global_step'))is not int or training['global_step']<=0
+            or not any(value>0 for value in training.get('exposure_counts',{}).values())):
+        raise ValueError('external started-stage output differs from its real saved/captured work')
+    source=output/'native-training-receipt.json'
+    reference=receipt_snapshot or binding(source)
+    receipt=json.loads(_bound(reference).read_text());checkpoint=record['checkpoint']
+    actual_recipe=options.get('recipe_binding')
+    if isinstance(actual_recipe,str):actual_recipe=json.loads(actual_recipe)
+    mandatory=compact_obligations(progress_obligations(collect_sft_progress(training,borrow_frames=True)),
+        {'path':str(output/'checkpoint.pt'),'sha256':checkpoint['sha256'],
+         'bytes':record['checkpoint_pin']['bytes']})
+    model=saved['model_config'];model_id=model['architecture']+':'+model['base_inventory_sha256']
+    if (receipt.get('schema')!='natlang.native-training-readiness/1'
+            or receipt.get('stage_id')!=stage_id or receipt.get('lineage')!=str(output)
+            or receipt.get('model_id')!=model_id or receipt.get('recipe')!=actual_recipe
+            or receipt.get('checkpoint',{}).get('sha256')!=checkpoint['sha256']
+            or Path(receipt.get('checkpoint',{}).get('path','')).resolve()!=output/'checkpoint.pt'
+            or receipt.get('native_identity',{}).get('checkpoint_sha256')!=checkpoint['sha256']
+            or receipt.get('mandatory_sft')!=mandatory):
+        raise ValueError('external started-stage receipt differs from its actual checkpoint/stage/exposure')
+    return {'stage_id':stage_id,'output_directory':str(output),'receipt':reference,
+            'global_step':training['global_step'],'started_stage_ids':[stage_id]}
+
 def prepare_drained_recipe_handoff(handoff, recipe, out, *, package=None, external_package=None, verified_handoff=None):
     """Persist an existing verified lineage handoff, never a resident rewrite."""
     from ..train import native_resident as resident
@@ -560,8 +602,11 @@ def prepare_drained_recipe_handoff(handoff, recipe, out, *, package=None, extern
         elif initial!=json.loads(_bound(record['resident']['initial']).read_text()):
             raise ValueError('drained recipe handoff initial owner changed before transition')
         from ..train.recipe import stage_started
+        layout=None
         if not stage_started(directory.parent,stage_id):
-            raise ValueError('drained recipe handoff lost the actual started-stage boundary')
+            if not external_package:raise ValueError('drained recipe handoff lost the actual started-stage boundary')
+            layout=_external_started_stage_layout(record,loaded[1],old_plan,stage_id)
+        started=tuple(layout['started_stage_ids'])if layout else ()
         plan_path=directory.parent/'recipe-plan.json'
         proposed=_recipe_plan(_bound(binding(recipe)),old_plan['device'])
         frozen=(Path(external_package).resolve() if external_package else
@@ -573,21 +618,24 @@ def prepare_drained_recipe_handoff(handoff, recipe, out, *, package=None, extern
             snapshots = out.parent/(out.stem+'-external-launch'); snapshots.mkdir(exist_ok=True)
             external = {'package': str(frozen), 'launch_control': {
                 name: _snap(ref, snapshots, name+'.json') for name,ref in refs.items()}}
+            if layout:
+                layout['receipt']=_snap(layout['receipt'],snapshots,'started-stage-receipt.json')
+                external['started_stage_layout']=layout
         # Validate first; the existing implementation owns runtime archival and
         # the durable plan commit, including priority/source continuation rules.
         old_copy=out.with_name(out.stem+'-old-plan.json')
         installed=json.loads(plan_path.read_text())
         if installed==old_plan:
-            lineage_handoff(old_plan,proposed,frozen,package,plan_path,directory.parent,dry_run=True)
+            lineage_handoff(old_plan,proposed,frozen,package,plan_path,directory.parent,dry_run=True,started_stage_ids=started)
             write_json_durable(old_copy,old_plan)
             if external_package:
                 # Validate through the same policy, then publish only its plan.
                 # The actual qualified external package is never moved or copied.
-                updated=lineage_handoff(old_plan,proposed,frozen,package,plan_path,directory.parent,dry_run=True)
+                updated=lineage_handoff(old_plan,proposed,frozen,package,plan_path,directory.parent,dry_run=True,started_stage_ids=started)
                 updated['handoffs'][-1]['superseded_runtime']=None
                 write_json_durable(plan_path,updated)
             else:
-                updated=lineage_handoff(old_plan,proposed,frozen,package,plan_path,directory.parent)
+                updated=lineage_handoff(old_plan,proposed,frozen,package,plan_path,directory.parent,started_stage_ids=started)
         else:
             # Recover the exact already committed handoff after interruption
             # between the existing plan commit and this receipt publication.
@@ -595,7 +643,7 @@ def prepare_drained_recipe_handoff(handoff, recipe, out, *, package=None, extern
                 raise ValueError('drained recipe handoff requires the final adopted original plan')
             previous=installed.get('handoffs',[{}])[-1].get('superseded_runtime')
             old_runtime=frozen if external_package else directory.parent/previous/'natlang_neuralese' if previous else frozen
-            expected=lineage_handoff(old_plan,proposed,old_runtime,package,plan_path,directory.parent,dry_run=True)
+            expected=lineage_handoff(old_plan,proposed,old_runtime,package,plan_path,directory.parent,dry_run=True,started_stage_ids=started)
             if _stable_handoff_plan(expected)!=_stable_handoff_plan(installed):
                 raise ValueError('drained recipe handoff found another installed plan')
             updated=installed
@@ -624,7 +672,7 @@ def verify_drained_recipe_handoff(reference, *, handoff, verified_handoff=None):
     record,saved=(verify_handoff(handoff) if verified_handoff is None else verified_handoff)
     if record!=json.loads(_bound(handoff).read_text()):
         raise ValueError('reused handoff verification belongs to another exact receipt')
-    state,original_plan,_=_drained_plan_authority(record,saved);del saved
+    state,original_plan,actual_stage_id=_drained_plan_authority(record,saved)
     if value.get('checkpoint')!=record['checkpoint']:
         raise ValueError('drained recipe handoff changed its exact parent')
     if state is not None:
@@ -646,13 +694,20 @@ def verify_drained_recipe_handoff(reference, *, handoff, verified_handoff=None):
         if external.get('package')!=str(old_package.resolve()):
             raise ValueError('external resident package binding changed')
         _external_frozen_package(record,old_package,prior,external.get('launch_control'))
+    layout=(external or {}).get('started_stage_layout');started=()
+    if layout:
+        if layout.get('stage_id')!=actual_stage_id:raise ValueError('external started-stage identity changed')
+        actual=_external_started_stage_layout(record,saved,prior,layout['stage_id'],
+            snapshots=external.get('launch_control'),receipt_snapshot=layout['receipt'])
+        if actual!=layout:raise ValueError('external started-stage layout changed')
+        started=tuple(actual['started_stage_ids'])
     if (resident.code_inventory(old_package)!=value['old_code'] or value['old_code']!=prior['code']
             or resident.code_inventory(new_package)!=value['new_code']):
         raise ValueError('drained recipe handoff runtime changed')
     next_plan=json.loads(_bound(value['new_plan']).read_text())
     proposed=_recipe_plan(_bound(value['recipe']),prior['device'])
     out=Path(record['resident']['directory']).parent
-    expected=lineage_handoff(prior,proposed,old_package,new_package,out/'recipe-plan.json',out,dry_run=True)
+    expected=lineage_handoff(prior,proposed,old_package,new_package,out/'recipe-plan.json',out,dry_run=True,started_stage_ids=started)
     if (_stable_handoff_plan(expected)!=_stable_handoff_plan(next_plan)
             or next_plan['code']!=value['new_code']):
         raise ValueError('drained recipe handoff plan differs from verified continuation')
