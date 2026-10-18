@@ -44,7 +44,8 @@ def _layer_inputs(port, layer, h, attention):
     x = layer.input_layernorm(h) if hasattr(layer, 'input_layernorm') else layer.operator_norm(h)
     if not attention:
         b, c, xx = _linear(layer.conv.in_proj, x).chunk(3, dim=-1)
-        return (b * xx).float(), c
+        from .shared_execution import convolution_state_dtype
+        return (b * xx).float().to(convolution_state_dtype(port)), c
     attn = layer.self_attn
     batch, steps, _ = x.shape
     hd = attn.head_dim
@@ -108,7 +109,11 @@ def _convolve(layer, gated, c, plan, rows, *, index=None):
     elif plan.slot_stops:
         stop_mask=_convolution_stops(plan,kernel.weight.shape[-1],rows,gated.device)
     padded = torch.cat([gated, gated.new_zeros(1, 1, gated.shape[-1])], dim=1)
-    gathered = padded[:, index]  # B,Q,W,C; -1 selects the explicit zero row
+    if padded.dtype==torch.float64:
+        from .state_gather import gather_convolution_state
+        gathered=gather_convolution_state(padded,index)
+    else:
+        gathered = padded[:, index]  # B,Q,W,C; -1 selects the explicit zero row
     if stop_mask is not None:gathered=torch.where(stop_mask[None,:,:,None],gathered.detach(),gathered)
     return _finite_convolution(kernel, gathered, c)
 
@@ -306,7 +311,11 @@ def forward_reference(port, plan: GraphPlan, adapter=None, *, embeddings=None, e
                 parts = []
                 for local in range(count):
                     history = remap(plan.history(offset+local, width))
-                    data = source[:, plan.tensor(history, device)].transpose(1, 2)
+                    if source.dtype==torch.float64:
+                        from .state_gather import gather_convolution_state
+                        data=gather_convolution_state(source,plan.tensor(history,device)).transpose(1,2)
+                    else:
+                        data = source[:, plan.tensor(history, device)].transpose(1, 2)
                     if plan.slot_stops:
                         flags=plan.tensor(plan.history_stops(offset+local,width),device,torch.bool)[None,None]
                         data=torch.where(flags,data.detach(),data)
@@ -675,8 +684,9 @@ def native_step(model, ids, cache=None, *, producing=False):
                 shape = (0, attn.k_proj.out_features // attn.head_dim, attn.head_dim)
                 layers.append({'kind': 'attention', 'raw_k': raw.new_empty(shape, dtype=torch.float32), 'v': raw.new_empty(shape, dtype=torch.float32)})
             else:
+                from .shared_execution import convolution_state_dtype
                 layers.append({'kind': 'finite_convolution',
-                               'gated_inputs': raw.new_empty((0, layer.conv.conv.weight.shape[0]), dtype=torch.float32)})
+                               'gated_inputs': raw.new_empty((0, layer.conv.conv.weight.shape[0]), dtype=convolution_state_dtype(port))})
         return {'h_final': raw, 'cache': cache, 'token_ids': ids[0], 'embeddings': raw[0],
                 'positions': positions, 'layers': tuple(layers)}
     mask = torch.full(ids.shape, producing, device=ids.device, dtype=torch.bool) if isinstance(producing, bool) else producing
@@ -710,7 +720,13 @@ def native_step(model, ids, cache=None, *, producing=False):
             prefix = (gated_channels.new_zeros(1, gated_channels.shape[1], port.conv_window)
                       if previous is None else previous.window)
             full = torch.cat([prefix, gated_channels], dim=2)
-            histories = full.unfold(2, layer.conv.conv.weight.shape[-1], 1).permute(0, 2, 3, 1)
+            if full.dtype==torch.float64:
+                from .state_gather import gather_convolution_state
+                indices=(torch.arange(ids.shape[1],device=ids.device)[:,None]
+                    +torch.arange(layer.conv.conv.weight.shape[-1],device=ids.device)[None])
+                histories=gather_convolution_state(full.transpose(1,2),indices)
+            else:
+                histories = full.unfold(2, layer.conv.conv.weight.shape[-1], 1).permute(0, 2, 3, 1)
             out = _finite_convolution(layer.conv.conv, histories, c)
             state = ConvState(full[:, :, -port.conv_window:])
         states.append(state)
@@ -782,7 +798,8 @@ def splice_block(model, cache, block, *, checkpoint_sha256, tokenizer_fingerprin
         else:
             if payload['kind'] != 'finite_convolution':
                 raise ValueError('native state attention/convolution layout disagrees with the consumer')
-            gated = payload['gated_inputs'].to(device=positions.device, dtype=torch.float32).T[None]
+            from .shared_execution import convolution_state_dtype
+            gated = payload['gated_inputs'].to(device=positions.device, dtype=convolution_state_dtype(port)).T[None]
             channels = port.layers[i].conv.conv.weight.shape[0]
             if gated.shape[1] != channels:
                 raise ValueError('native state convolution channels disagree with the consumer')
@@ -858,7 +875,8 @@ def _external_layers(port, plan, external_blocks, external_identity):
                     raise ValueError('external state layer kind disagrees with the decoder')
                 if payload['gated_inputs'].shape[1] != port.layers[i].conv.conv.weight.shape[0]:
                     raise ValueError('external state convolution channels disagree with the target decoder')
-                layers.append((payload['gated_inputs'].to(device=port.embedding_weight.device, dtype=torch.float32)[None],))
+                from .shared_execution import convolution_state_dtype
+                layers.append((payload['gated_inputs'].to(device=port.embedding_weight.device, dtype=convolution_state_dtype(port))[None],))
         result.append(tuple(layers))
     return tuple(result)
 

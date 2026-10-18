@@ -46,7 +46,7 @@ def set_native_linear_precision(model, mode):
 
 def same_source_precision_identity(previous, current):
     """Only declared native arithmetic may change in an ordinary continuation."""
-    arithmetic = {'native_linear_precision', 'native_attention_precision'}
+    arithmetic = {'native_linear_precision', 'native_attention_precision', 'native_shared_execution'}
     return ({k: v for k, v in previous.items() if k not in arithmetic} ==
             {k: v for k, v in current.items() if k not in arithmetic})
 

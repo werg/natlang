@@ -289,12 +289,22 @@ def test_sparse_cuda_attention_matches_dense_forward_and_gradients():
 
 
 @pytest.mark.parametrize('family', ['lfm', 'mellum'])
-def test_external_native_state_has_exact_forward_and_joint_gradients(family):
+@pytest.mark.parametrize('execution', ['source-v1', 'stable-v1'])
+@pytest.mark.parametrize('device', ['cpu', 'cuda'])
+def test_external_native_state_has_exact_forward_and_joint_gradients(family, execution, device):
+    if device == 'cuda' and not torch.cuda.is_available():
+        pytest.skip('actual CUDA state transport required')
     from types import SimpleNamespace
     from natlang_neuralese.model.shared_state import SharedStateModel, capture_invocation_span
     port = tiny(family)
     vocab = port.embedding_weight.shape[0]
-    model = SharedStateModel(port, tuple(range(vocab-4, vocab)), rank=4)
+    model = SharedStateModel(port, tuple(range(vocab-4, vocab)), rank=4).to(device)
+    # Match native production's declared norm dispatch. The raw Maple constructor
+    # may compile donated-buffer backwards that intentionally forbid retain_graph.
+    from natlang_neuralese.model.native_parameter_precision import configure_norm_execution
+    configure_norm_execution(model, 'stable-v1')
+    from natlang_neuralese.model.shared_execution import configure_shared_execution
+    configure_shared_execution(model, execution)
     torch.nn.init.normal_(model.adapter.up.weight, std=0.03)
     source = Invocation('source', (2, 3, 4, 5), producing=((2, 4),))
     target = Invocation('target', (6, 7, 8), imports=(ImportSpan(1, 'source', 2, 4),))
@@ -312,12 +322,18 @@ def test_external_native_state_has_exact_forward_and_joint_gradients(family):
     torch.testing.assert_close(external['h_final'], complete['h_final'][:, -3:], atol=4e-6, rtol=3e-5)
     torch.testing.assert_close(external['h_final'], reference['h_final'], atol=4e-6, rtol=3e-5)
     weight = torch.randn_like(external['h_final'])
-    a = torch.autograd.grad((external['h_final']*weight).sum(), model.adapter.up.weight, retain_graph=True)[0]
-    b = torch.autograd.grad((complete['h_final'][:, -3:]*weight).sum(), model.adapter.up.weight)[0]
-    torch.testing.assert_close(a, b, atol=3e-5, rtol=3e-4)
+    parameters = tuple(parameter for parameter in model.parameters() if parameter.requires_grad)
+    a = torch.autograd.grad((external['h_final']*weight).sum(), parameters,
+                            retain_graph=True, allow_unused=True)
+    b = torch.autograd.grad((complete['h_final'][:, -3:]*weight).sum(), parameters,
+                            allow_unused=True)
+    for actual, expected in zip(a, b):
+        assert (actual is None) == (expected is None)
+        if actual is not None:
+            torch.testing.assert_close(actual, expected, atol=3e-5, rtol=3e-4)
     # Simulate a trainable semantic decoder. Its native state tensors retain
     # gradient paths into both decoder parameters and source-produced state.
-    delta = torch.nn.Parameter(torch.tensor(0.01))
+    delta = torch.nn.Parameter(torch.tensor(0.01, device=device))
     decoded_layers = tuple({key: value + delta if key != 'kind' else value
                             for key, value in layer.items()} for layer in fields['layers'])
     decoded = NativeStateBlock(text='shared', **{**fields, 'layers': decoded_layers}, **identity)

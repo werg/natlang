@@ -47,10 +47,15 @@ def test_reference_linear_uses_live_named_values_with_real_double_backward():
 
 @pytest.mark.parametrize('family',['lfm','mellum'])
 @pytest.mark.parametrize('checkpointed',[False,True])
-def test_both_native_ports_actual_all_parameter_second_backward_and_scope_restore(family,checkpointed):
+@pytest.mark.parametrize('execution',['source-v1','stable-v1'])
+@pytest.mark.parametrize('device',['cpu','cuda'])
+def test_both_native_ports_actual_all_parameter_second_backward_and_scope_restore(family,checkpointed,execution,device):
+    if device=='cuda' and not torch.cuda.is_available():
+        pytest.skip('actual CUDA higher-order execution required')
     torch.manual_seed(702)
-    device=os.environ.get('NATLANG_NATIVE_ADAPTER_TEST_DEVICE','cpu')
     model=SharedStateModel(tiny(family),(58,59,60,61),rank=4).to(device)
+    from natlang_neuralese.model.shared_execution import configure_shared_execution
+    configure_shared_execution(model,execution)
     if family=='mellum':model.port.hf.natlang_precision='bf16'
     make_native_optimizer(model,lr=1e-3,in_backward=False)
     with torch.no_grad():model.adapter.up.weight.normal_(std=.01)

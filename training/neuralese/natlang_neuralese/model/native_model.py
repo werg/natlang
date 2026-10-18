@@ -78,6 +78,8 @@ def native_identity(model, config, *, checkpoint_sha256):
     from .native_parameter_precision import validate_norm_precision, validate_norm_execution
     validate_norm_precision(model, config)
     validate_norm_execution(model, config)
+    from .shared_execution import validate_shared_execution
+    validate_shared_execution(model,config)
     digest = hashlib.sha256(b'natlang.native-embedding-path/1\0')
     mode = config.get('native_linear_precision', 'ieee')
     if mode != getattr(model, 'native_linear_precision', 'ieee'):
@@ -96,6 +98,8 @@ def native_identity(model, config, *, checkpoint_sha256):
         digest.update(canonical_json_bytes({'native_ordinary_precision': config['native_ordinary_precision']}))
     if config.get('native_norm_execution', 'source-v1') != 'source-v1':
         digest.update(canonical_json_bytes({'native_norm_execution': config['native_norm_execution']}))
+    if config.get('native_shared_execution','source-v1')!='source-v1':
+        digest.update(canonical_json_bytes({'native_shared_execution':config['native_shared_execution']}))
     if mode != 'ieee':
         digest.update(canonical_json_bytes({'native_linear_precision': mode}))
     if attention_mode != 'ieee':
@@ -141,7 +145,7 @@ def base_inventory(base):
     """Pin actual model/tokenizer inputs, reusing the shared verified file cache."""
     return _input_inventory(base, include_weights=True)
 
-def load_native_model(base, *, rank=8, device='cpu', dtype=torch.bfloat16, inventory=None, native_linear_precision="ieee", native_attention_precision=None, token_override_ids=None, token_override_dtype=torch.float32, sparse_row_dtype=torch.float32, native_ordinary_precision=None, native_norm_execution='stable-v1', history_reasoning_policy=None):
+def load_native_model(base, *, rank=8, device='cpu', dtype=torch.bfloat16, inventory=None, native_linear_precision="ieee", native_attention_precision=None, token_override_ids=None, token_override_dtype=torch.float32, sparse_row_dtype=torch.float32, native_ordinary_precision=None, native_norm_execution='stable-v1', history_reasoning_policy=None, native_shared_execution=None):
     """Return (SharedStateModel, tokenizer, RoleTokens, model_config).
 
     No PortHeads or projected communication module is created. Provision the
@@ -190,6 +194,8 @@ def load_native_model(base, *, rank=8, device='cpu', dtype=torch.bfloat16, inven
     from .native_precision import set_native_linear_precision, set_native_attention_precision
     set_native_linear_precision(model, native_linear_precision)
     set_native_attention_precision(model, native_attention_precision if native_attention_precision is not None else 'ieee')
+    from .shared_execution import configure_shared_execution
+    configure_shared_execution(model,'source-v1'if native_shared_execution is None else native_shared_execution)
     from ..data.text_corpus import tokenizer_fingerprint
     config = {'base': str(base), 'base_inventory': actual,
               'base_inventory_sha256': canonical_json_sha256_hex(actual),
@@ -199,6 +205,8 @@ def load_native_model(base, *, rank=8, device='cpu', dtype=torch.bfloat16, inven
               'tokenizer_fingerprint': tokenizer_fingerprint(tokenizer), 'dtype': str(dtype)}
     if history_reasoning_policy is not None:
         config['history_reasoning_policy'] = history_reasoning_policy
+    if native_shared_execution is not None:
+        config['native_shared_execution']=native_shared_execution
     config['sparse_row_dtype'] = str(model.input_rows.dtype)
     if native_norm_execution is not None:
         config['native_norm_execution'] = native_norm_execution
@@ -288,6 +296,9 @@ def load_native_checkpoint(path, *, base=None, device='cpu', dtype=None, partici
     from .native_parameter_precision import NORM_EXECUTIONS
     if 'native_norm_execution' in saved and saved['native_norm_execution'] not in NORM_EXECUTIONS:
         raise ValueError('native checkpoint has an invalid norm execution profile')
+    from .shared_execution import NATIVE_SHARED_EXECUTIONS
+    if 'native_shared_execution'in saved and saved['native_shared_execution']not in NATIVE_SHARED_EXECUTIONS:
+        raise ValueError('native checkpoint has an invalid shared execution profile')
     requested_dtype = dtype or {'torch.bfloat16': torch.bfloat16, 'torch.float32': torch.float32,
                                 'torch.float16': torch.float16}[saved['dtype']]
     model, tokenizer, roles, config = load_native_model(base or saved['base'], rank=saved['rank'],
@@ -301,6 +312,7 @@ def load_native_checkpoint(path, *, base=None, device='cpu', dtype=None, partici
             'torch.float16':torch.float16}[saved.get('sparse_row_dtype', saved['dtype'])],
         native_ordinary_precision=saved.get('native_ordinary_precision'),
         native_norm_execution=saved.get('native_norm_execution'),
+        native_shared_execution=saved.get('native_shared_execution'),
         history_reasoning_policy=saved.get('history_reasoning_policy'))
     if 'token_override_dtype' not in saved and str(requested_dtype) == saved['dtype']:
         config.pop('token_override_dtype', None)  # exact pre-master-row configuration contract
