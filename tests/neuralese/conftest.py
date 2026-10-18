@@ -6,6 +6,12 @@ import pytest
 
 os.environ.setdefault("HF_HUB_OFFLINE", "1")
 os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+# The long-lived suite has checkpoint threads before its first CUDA compile.
+# On DGX its default Inductor subprocess/fork pool stalled on inherited locks
+# (full 8b60f49b9e); the identical attention test compiled and passed in 6.44 s
+# with one worker. Keep this test-process setting explicit and overridable;
+# production trainers and their kernel/gradient arithmetic are unchanged.
+os.environ.setdefault("TORCHINDUCTOR_COMPILE_THREADS", "1")
 # Trainer tests never append to the machine's checkpoint-write log the memory guard reads.
 os.environ.setdefault("NATLANG_CHECKPOINT_WRITES", os.path.join(os.environ.get("TMPDIR", "/tmp"), "natlang-test-checkpoint-writes.jsonl"))
 # Trainer tests never mirror their checkpoints to the machine's external disk (tests of the offload enable it).
