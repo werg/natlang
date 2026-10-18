@@ -26,3 +26,9 @@ No resident owner or optimizer-drain receipt is manufactured. Full checkpoint
 validation occurs once for preparing a boundary; normal historical proof reuse
 retains immutable source/result/recipe bindings. Default runtime and numerical
 qualification gates remain unchanged.
+
+## Fresh resident setup after completed adaptation
+
+The existing adaptive continuation policy still decides the future recipe. A crisp setup helper installs only the exact verified `lineage_handoff` bytes beside the fresh resident directory before publishing its controller configuration. It reuses the existing immutable alias publisher, checks the owned stage's active seed and held inputs, and rejects a missing plan once resident history exists. A matching existing plan is reusable; an unrelated file is never replaced. The bootstrap cache path repeats this metadata check so a cached controller configuration cannot bypass required setup. Tests execute configuration followed by a real `ResidentAdoption` constructor and append, retaining earned cursor/state and the inherited lineage without decoding the checkpoint again.
+
+A committed resident append changes the plan projection and the controller's source configuration legitimately. Setup therefore shares the raw release's metadata-only resident-history verifier and the supervised publisher's existing config projection. It anchors the resident initial plan, runtime/device/handoff/adoption prefixes to the completed proof, checks the full committed source history and accounted cursor snapshot, then accepts only the exact resulting invocation. It leaves the adopted plan and configuration bytes untouched and refreshes the existing bootstrap verification receipt after real cache invalidation. Historical runtime qualification and readiness remain the release verifier's separate prerequisites; this setup path grants neither readiness nor exposure and never loads a historical model.

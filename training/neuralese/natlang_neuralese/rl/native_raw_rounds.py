@@ -134,6 +134,9 @@ def configure_model(plan_path,declaration,handoff,out):
             raise ValueError('raw continuation cannot discard its later runtime authority')
         owner={'plan_sha256':sha256_file_hex_cached(plan_path),'handoff':handoff}
         if prior.get('runtime_binding',prior.get('bootstrap_binding'))==owner and unchanged(verification,plan_path,declaration,handoff,prior):
+            if declaration.get('completed_supervised_adaptation'):
+                from .native_completed_supervised import install_resident_plan
+                install_resident_plan(declaration['completed_supervised_adaptation'],prior)
             return path
         if declaration.get('completed_supervised_adaptation'):
             from .native_completed_supervised import configure
@@ -701,21 +704,27 @@ def _publish_supervised_result(continuation,jobdir,config,cursor,result):
             cursor['resident_current']=binding(snapshot/'current.json')
             # Follow the already validated shared resident policy. No new rows
             # earn credit here, and pending.json remains with its existing owner.
-            config['production_recipe']=state['payload']['recipe']['path']
-            from .native_supervised import bind_recipe_lineage
-            bind_recipe_lineage(config,state['payload']['plan']['recipe_sha256'])
-            from ..train.recipe import resolve_recipe_data
-            recipe=resolve_recipe_data(config['production_recipe'])
-            stage=next(stage for stage in recipe['stages'] if stage['id']==config['production_stage'])
-            from .native_supervised import continuation_config
-            refreshed,_=continuation_config(config,stage,checkpoint=checkpoint['path'],adapter=None,out=config['out'])
-            for key in ('seed_command','seed_native_graphs','held_native_graphs','pending_native_sources',
-                        'continued_native_graphs','continued_held_native_graphs','objective_spec'):
-                if key in refreshed:config[key]=refreshed[key]
-                else:config.pop(key,None)
-            config['seed_trainer_parameters']={**refreshed['trainer_parameters'],
-                'resident_data_directory':str(source),'refresh_at_checkpoint':True}
+            _resident_configuration(config,state,source,checkpoint)
             write_json_durable(Path(config['out']).parent/'config.json',config)
+
+
+def _resident_configuration(config,state,source,checkpoint):
+    """Project an already authenticated resident generation into controller inputs."""
+    config['production_recipe']=state['payload']['recipe']['path']
+    from .native_supervised import bind_recipe_lineage
+    bind_recipe_lineage(config,state['payload']['plan']['recipe_sha256'])
+    from ..train.recipe import resolve_recipe_data
+    recipe=resolve_recipe_data(config['production_recipe'])
+    stage=next(stage for stage in recipe['stages'] if stage['id']==config['production_stage'])
+    from .native_supervised import continuation_config
+    refreshed,_=continuation_config(config,stage,checkpoint=checkpoint['path'],adapter=None,out=config['out'])
+    for key in ('seed_command','seed_native_graphs','held_native_graphs','pending_native_sources',
+                'continued_native_graphs','continued_held_native_graphs','objective_spec'):
+        if key in refreshed:config[key]=refreshed[key]
+        else:config.pop(key,None)
+    config['seed_trainer_parameters']={**refreshed['trainer_parameters'],
+        'resident_data_directory':str(source),'refresh_at_checkpoint':True}
+    return config
 
 
 def _release_requirement(declaration,value,*,verified_handoff=None):
@@ -754,6 +763,12 @@ def _release_requirement(declaration,value,*,verified_handoff=None):
     # A later handoff explicitly retired this exact historical generation.
     # Keep the cursor receipt, but never reinterpret it as the new live plan.
     if transition_handoff is not None and reference==retired_cursor:return requirement
+    return _resident_release_requirement(requirement,value,transition=transition)
+
+
+def _resident_release_requirement(requirement,value,*,transition=None):
+    """Metadata-only committed source history, after caller authenticates its root."""
+    reference=value.get('resident_current')
     if reference is None:return requirement
     from ..train.native_resident import current,_contract
     from ..train.recipe import resolve_recipe_data,resolve_stage_inputs,recipe_identity_sha256

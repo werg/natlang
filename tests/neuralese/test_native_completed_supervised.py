@@ -103,8 +103,11 @@ def test_bad_completed_authority_does_not_change_controls(tmp_path,mutation):
     assert before==[p.read_bytes()for p in (config,root/'cycle.json',root/'production/state.json')]
 
 
-def prepared(tmp_path,new_lr=1e-5,old_declaration_overrides=None,runtime_package=None):
+def prepared(tmp_path,new_lr=1e-5,old_declaration_overrides=None,runtime_package=None,bootstrap_handoff=None):
     root,config,request,result,controller,plan,recipe=fixture(tmp_path)
+    if bootstrap_handoff:
+        configured=json.loads(config.read_text());configured['bootstrap_binding']['handoff']=bootstrap_handoff
+        configured['runtime_binding']['handoff']=bootstrap_handoff;write(config,configured)
     if old_declaration_overrides:
         global_plan=json.loads(plan.read_text());global_plan['models'][0].update(old_declaration_overrides);write(plan,global_plan)
         old_config=json.loads(config.read_text());old_config['runtime_binding']['plan_sha256']=adapt.binding(plan)['sha256']
@@ -275,12 +278,36 @@ def test_release_follows_real_fresh_resident_append_after_completed_adaptation(t
     from natlang_neuralese.data.native_sources import NativeGraphSource
     from natlang_neuralese.train.recipe import native_recipe_binding
     monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE',str(tmp_path/'cache'))
-    _,_,_,proof=prepared(tmp_path,runtime_package=Path(adapt.__file__).parents[1]);declaration,value=release_declaration(proof)
-    installed=json.loads(Path(value['lineage_handoff']['path']).read_text())
-    directory=tmp_path/'fresh/resident-data';directory.parent.mkdir()
-    # The actual adapted namespace starts from the transitioned plan, whose
-    # preserved lineage differs from the future recipe's content identity.
-    write(directory.parent/'recipe-plan.json',installed)
+    runtime=tmp_path/'ts-host'
+    for name in ('dist/teacher/cli.js','prelude.js','package.json','../package.json','../package-lock.json',
+                 '../training/source-reviews/holds.jsonl','../training/source-reviews/family-holds.json','../training/source-reviews/datasets.json'):
+        path=runtime/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_text('{}')
+    cases=tmp_path/'cases.jsonl';cases.write_text('{"id":"owned-train-case","split":"train"}\n')
+    historical=tmp_path/'historical';historical.mkdir();refs={}
+    for name in ('launch','terminal','checkpoint'):
+        path=historical/name;path.write_bytes(b'historical fixture artifact');refs[name]=adapt.binding(path)
+    write(historical/'intent.json',{'launch':refs['launch']})
+    write(historical/'handoff.json',{'intent':adapt.binding(historical/'intent.json'),
+        'terminal':refs['terminal'],'checkpoint':refs['checkpoint']})
+    handoff=adapt.binding(historical/'handoff.json')
+    root,config,global_plan,proof=prepared(tmp_path,runtime_package=Path(adapt.__file__).parents[1],
+        old_declaration_overrides={'runtime':str(runtime),'cases':adapt.binding(cases)},bootstrap_handoff=handoff)
+    declaration,value=release_declaration(proof)
+    from natlang_neuralese.rl import native_bootstrap_metadata
+    from natlang_neuralese.rl import native_raw_handoff
+    # Only the historical full handoff proof is outside this serialized
+    # completed-operation fixture; the metadata evidence/cache remain real.
+    monkeypatch.setattr(native_raw_handoff,'verify_handoff_metadata',lambda *args,**kwargs:None)
+    write(global_plan,{'models':[declaration]})
+    old=json.loads(config.read_text());before=[p.read_bytes()for p in(root/'cycle.json',root/'production/state.json')]
+    def no_second_load(*args,**kwargs):raise AssertionError('resident setup must not decode the checkpoint')
+    monkeypatch.setattr(torch,'load',no_second_load)
+    adapt.configure(global_plan,declaration,old['bootstrap_binding']['handoff'],config)
+    assert (root/'bootstrap-verification.json').is_file()
+    actual_config=json.loads(config.read_text());directory=Path(actual_config['resident_data_directory'])
+    installed=json.loads((directory.parent/'recipe-plan.json').read_text())
+    assert adapt.binding(directory.parent/'recipe-plan.json')['sha256']==value['lineage_handoff']['sha256']
+    assert before==[p.read_bytes()for p in(root/'cycle.json',root/'production/state.json')]
     inputs=installed['stage_inputs']['full']
     train=NativeGraphSource(inputs['native_graphs']['path'],'tokenizer-sha',required_split='train')
     held=NativeGraphSource(inputs['held_native_graphs']['path'],'tokenizer-sha',required_split='test')
@@ -298,6 +325,68 @@ def test_release_follows_real_fresh_resident_append_after_completed_adaptation(t
     resident.prepare(directory,new_recipe,'full',tokenizer_fingerprint='tokenizer-sha',role_ids=(),runtime_package=value['package'])
     assert manager.poll(5)is not None
     state=resident.current(directory);assert state['payload']['plan']['recipe_sha256']==value['lineage']
+    # Use the actual supervised publisher and real cache invalidation, rather
+    # than manually pretending the original bootstrap receipt still matches.
+    job=tmp_path/'published-supervised';(job/'learner').mkdir(parents=True)
+    checkpoint=job/'learner/checkpoint.pt';checkpoint.write_bytes(Path(value['checkpoint']['path']).read_bytes())
+    write(checkpoint.parent/'native-training-receipt.json',{'checkpoint':adapt.binding(checkpoint),
+        'recipe':state['payload']['recipe'],'resident_adoption':{'directory':str(directory),'generation':state['generation']}})
+    cursor=json.loads((root/'cycle.json').read_text())
+    recipe_reference={'path':state['payload']['recipe']['path'],'sha256':state['payload']['recipe']['file_sha256']}
+    raw._publish_supervised_result(actual_config,job,actual_config,cursor,{
+        'pending_native_checkpoint':str(checkpoint),'resident_current':adapt.binding(directory/'current.json'),
+        'resident_recipe':{'source':recipe_reference,'copy':recipe_reference}})
+    write(root/'cycle.json',cursor)
+    current_config=json.loads(config.read_text())
+    assert not native_bootstrap_metadata.unchanged(root/'bootstrap-verification.json',global_plan,declaration,handoff,current_config)
+    preserved=[p.read_bytes()for p in(config,root/'cycle.json',directory.parent/'recipe-plan.json')]
+    assert raw.configure_model(global_plan,declaration,handoff,root)==config
+    assert native_bootstrap_metadata.unchanged(root/'bootstrap-verification.json',global_plan,declaration,handoff,current_config)
+    assert raw.configure_model(global_plan,declaration,handoff,root)==config
+    assert preserved==[p.read_bytes()for p in(config,root/'cycle.json',directory.parent/'recipe-plan.json')]
+    for bad in ('initial-anchor','projected-plan','current-source','invocation','cursor-snapshot'):
+        paths=(config,root/'cycle.json',directory/'initial.json',directory.parent/'recipe-plan.json')
+        previous={path:path.read_bytes()for path in paths}
+        if bad=='initial-anchor':
+            x=json.loads((directory/'initial.json').read_text());x['plan_sha256']='0'*64;write(directory/'initial.json',x)
+        elif bad=='projected-plan':
+            x=json.loads(paths[-1].read_text());x['code']={};write(paths[-1],x)
+        elif bad in ('current-source','invocation'):
+            x=json.loads(config.read_text())
+            if bad=='current-source':x['seed_native_graphs']=inputs['native_graphs']['path']
+            else:x['seed_command']=['unreviewed-command']
+            write(config,x)
+        else:
+            wrong=tmp_path/'other-resident-snapshot';wrong.mkdir(exist_ok=True)
+            other=copy.deepcopy(state);other['at_global_step']+=1;write(wrong/'current.json',other)
+            x=json.loads((root/'cycle.json').read_text());x['resident_current']=adapt.binding(wrong/'current.json');write(root/'cycle.json',x)
+        mutated={path:path.read_bytes()for path in paths}
+        with pytest.raises(ValueError):raw.configure_model(global_plan,declaration,handoff,root)
+        assert mutated=={path:path.read_bytes()for path in paths}
+        for path,data in previous.items():path.write_bytes(data)
+    second_train=tmp_path/'appended-again.jsonl';second_train.write_text(appended.read_text()+json.dumps(graph('new-again'))+'\n')
+    second_recipe=copy.deepcopy(recipe);second_recipe['input_bindings']['appended-again']=adapt.binding(second_train)
+    second_recipe['stages'][1]['inputs'].update(native_graphs='appended-again',continued_native_graphs='appended')
+    second_path=tmp_path/'append-again-recipe.json';write(second_path,second_recipe)
+    resident.prepare(directory,second_path,'full',tokenizer_fingerprint='tokenizer-sha',role_ids=(),runtime_package=value['package'])
+    assert manager.poll(6)is not None
+    state=resident.current(directory);assert len(state['history'])==2
+    second_job=tmp_path/'published-supervised-again';(second_job/'learner').mkdir(parents=True)
+    second_checkpoint=second_job/'learner/checkpoint.pt';second_checkpoint.write_bytes(checkpoint.read_bytes())
+    write(second_checkpoint.parent/'native-training-receipt.json',{'checkpoint':adapt.binding(second_checkpoint),
+        'recipe':state['payload']['recipe'],'resident_adoption':{'directory':str(directory),'generation':state['generation']}})
+    current_config=json.loads(config.read_text());cursor=json.loads((root/'cycle.json').read_text())
+    recipe_reference={'path':state['payload']['recipe']['path'],'sha256':state['payload']['recipe']['file_sha256']}
+    raw._publish_supervised_result(current_config,second_job,current_config,cursor,{
+        'pending_native_checkpoint':str(second_checkpoint),'resident_current':adapt.binding(directory/'current.json'),
+        'resident_recipe':{'source':recipe_reference,'copy':recipe_reference}})
+    write(root/'cycle.json',cursor)
+    assert not native_bootstrap_metadata.unchanged(root/'bootstrap-verification.json',global_plan,declaration,handoff,current_config)
+    preserved=[p.read_bytes()for p in(config,root/'cycle.json',directory.parent/'recipe-plan.json')]
+    assert raw.configure_model(global_plan,declaration,handoff,root)==config
+    assert native_bootstrap_metadata.unchanged(root/'bootstrap-verification.json',global_plan,declaration,handoff,current_config)
+    assert raw.configure_model(global_plan,declaration,handoff,root)==config
+    assert preserved==[p.read_bytes()for p in(config,root/'cycle.json',directory.parent/'recipe-plan.json')]
     actual={'resident_current':adapt.binding(directory/'current.json')}
     requirement=raw._release_requirement(declaration,actual)
     assert requirement['recipe_sha256']==state['payload']['recipe']['sha256']
@@ -306,3 +395,38 @@ def test_release_follows_real_fresh_resident_append_after_completed_adaptation(t
     bad_ready=tmp_path/'bad-readiness.json';write(bad_ready,{'resident_adoption':{'generation':'forged','history':state['history']}})
     with pytest.raises(ValueError,match='readiness omitted'):
         raw._release_requirement(declaration,{**actual,'readiness':adapt.binding(bad_ready)})
+
+
+@pytest.mark.parametrize('bad_target',['unrelated','raw-future-plan','missing-after-adoption'])
+def test_resident_setup_never_overwrites_unknown_plan_or_rebuilds_history(tmp_path,monkeypatch,bad_target):
+    _,config,global_plan,proof=prepared(tmp_path)
+    declaration,value=release_declaration(proof);write(global_plan,{'models':[declaration]})
+    future=json.loads(Path(value['future_config']['path']).read_text());directory=Path(future['resident_data_directory'])
+    target=directory.parent/'recipe-plan.json'
+    if bad_target=='unrelated':target.write_bytes(b'unknown owner bytes')
+    elif bad_target=='raw-future-plan':target.write_bytes(Path(value['future_plan']['path']).read_bytes())
+    else:directory.mkdir();write(directory/'initial.json',{'history':'already owned'})
+    prior_target=target.read_bytes()if target.exists()else None;before=config.read_bytes()
+    with pytest.raises(ValueError):adapt.configure(global_plan,declaration,json.loads(before)['bootstrap_binding']['handoff'],config)
+    assert config.read_bytes()==before
+    assert (target.read_bytes()if target.exists()else None)==prior_target
+
+
+def test_cached_configuration_repairs_missing_unstarted_plan_without_decode(tmp_path,monkeypatch):
+    from natlang_neuralese.rl import native_bootstrap_metadata,native_raw_rounds as raw
+    cases=tmp_path/'train-cases.jsonl';cases.write_text(json.dumps({'id':'admitted-train-case','split':'train'})+'\n')
+    _,config,global_plan,proof=prepared(tmp_path,old_declaration_overrides={'cases':adapt.binding(cases)})
+    declaration,value=release_declaration(proof);write(global_plan,{'models':[declaration]})
+    monkeypatch.setattr(native_bootstrap_metadata,'save',lambda *args:None)
+    bootstrap=json.loads(config.read_text())['bootstrap_binding']['handoff']
+    adapt.configure(global_plan,declaration,bootstrap,config)
+    before=config.read_bytes();future=json.loads(before);target=Path(future['resident_data_directory']).parent/'recipe-plan.json'
+    target.unlink()
+    monkeypatch.setattr(native_bootstrap_metadata,'unchanged',lambda *args:True)
+    def no_load(*args,**kwargs):raise AssertionError('cached resident setup cannot decode historical state')
+    monkeypatch.setattr(torch,'load',no_load)
+    assert raw.configure_model(global_plan,declaration,bootstrap,config.parent)==config
+    assert config.read_bytes()==before and adapt.binding(target)['sha256']==value['lineage_handoff']['sha256']
+    target.write_bytes(b'unknown successor')
+    with pytest.raises(ValueError):raw.configure_model(global_plan,declaration,bootstrap,config.parent)
+    assert target.read_bytes()==b'unknown successor'and config.read_bytes()==before
