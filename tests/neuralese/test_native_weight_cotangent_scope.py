@@ -111,13 +111,28 @@ def test_vjp_unused_low_precision_parameter_without_gradient_remains_allowed(tmp
 
 
 @pytest.mark.parametrize('mode', ['update', 'vjp'])
-def test_tied_bf16_embedding_and_readout_share_reference_cotangent(tmp_path, mode):
+def test_accumulated_contribution_without_anchor_backward_fails_closed(tmp_path, mode):
+    layer, _, _, _, _ = _case()
+    weight = layer.weight
+    with ParameterCotangentScope.for_model(layer, mode=mode, directory=tmp_path) as scope:
+        scratch = Path(scope.directory)
+        scope.add(weight, torch.ones_like(weight, dtype=torch.float32))
+        with pytest.raises(RuntimeError, match='anchor did not complete backward'):
+            scope.finish()
+    assert not scratch.exists()
+    assert not scope.entries and not scope._auxiliary_entries and not scope._effective_routes
+
+
+@pytest.mark.parametrize('mode', ['update', 'vjp'])
+@pytest.mark.parametrize('scale_by_freq', [False, True])
+def test_tied_bf16_embedding_and_readout_share_reference_cotangent(tmp_path, mode, scale_by_freq):
     from natlang_neuralese.common.native_higher_order import reference_arithmetic
 
     class TiedTable(nn.Module):
         def __init__(self):
             super().__init__()
-            self.embedding = nn.Embedding(9, 5, dtype=torch.bfloat16)
+            self.embedding = nn.Embedding(9, 5, dtype=torch.bfloat16,
+                                          scale_grad_by_freq=scale_by_freq)
             self.readout = nn.Linear(5, 9, bias=False, dtype=torch.bfloat16)
             self.readout.weight = self.embedding.weight
 
@@ -133,15 +148,18 @@ def test_tied_bf16_embedding_and_readout_share_reference_cotangent(tmp_path, mod
     # Independent oracle: both lookup and projection use one FP32 cast node,
     # then the accumulated derivative is cast to the stored BF16 parameter.
     oracle_weight = weight.detach().float().requires_grad_(True)
-    oracle_hidden = torch.nn.functional.embedding(ids, oracle_weight)
-    oracle_logits = torch.nn.functional.linear(oracle_hidden.double(), oracle_weight.double()).float()
-    oracle_loss = (oracle_logits * cotangent).sum()
+    oracle_hidden = torch.nn.functional.embedding(ids, oracle_weight,
+                                                  scale_grad_by_freq=scale_by_freq).to(weight.dtype)
+    oracle_logits = torch.nn.functional.linear(oracle_hidden.double(), oracle_weight.double()).to(oracle_hidden.dtype)
+    oracle_loss = (oracle_logits * cotangent.to(oracle_logits)).sum()
     expected, = torch.autograd.grad(oracle_loss, (oracle_weight,))
     expected = expected.to(weight.dtype)
 
     with ParameterCotangentScope.for_model(model, mode=mode, directory=tmp_path) as scope:
         with reference_arithmetic():
             logits = model(ids)
+            assert logits.dtype == weight.dtype
+            assert torch.equal(logits, oracle_logits)
             loss = (logits * cotangent.to(logits)).sum()
             if mode == 'update':
                 loss.backward()

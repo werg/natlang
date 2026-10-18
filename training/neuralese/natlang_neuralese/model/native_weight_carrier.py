@@ -584,7 +584,7 @@ class ParameterCotangentScope:
             raise RuntimeError('reference VJP mixed differentiable and file-backed cotangents: '
                                + ', '.join(mixed_reference[:8]))
         missing = [entry['name'] for entry in all_entries
-                   if entry['count'] and entry['anchor_backward'] == 0 and self.mode == 'vjp']
+                   if entry['count'] and entry['anchor_backward'] == 0]
         if missing:
             raise RuntimeError('cotangent carrier anchor did not complete backward: ' + ', '.join(missing[:8])
                                )
@@ -1099,8 +1099,10 @@ def stored_embedding(indices, weight, *, padding_idx=None, max_norm=None, norm_t
             raise RuntimeError('reference low-precision embedding does not support max_norm mutation')
         if sparse:
             raise RuntimeError('reference low-precision embedding requires the dense gradient contract')
+        output_dtype = weight.dtype
         weight = scope.reference_parameter(weight)
-        return F.embedding(indices, weight, padding_idx, None, norm_type, False, False)
+        return F.embedding(indices, weight, padding_idx, None, norm_type,
+                           scale_grad_by_freq, False).to(dtype=output_dtype)
     anchors = _scope_anchors(weight)
     if not anchors:
         return F.embedding(indices, weight, padding_idx, max_norm, norm_type,
