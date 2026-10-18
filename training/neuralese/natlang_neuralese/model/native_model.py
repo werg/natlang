@@ -343,5 +343,11 @@ def load_native_checkpoint(path, *, base=None, device='cpu', dtype=None, partici
     if config.get('native_attention_precision', 'ieee') != saved.get('native_attention_precision', 'ieee'):
         raise ValueError('native checkpoint native_attention_precision changed during restoration')
     restore_model_state(model, state)
+    training = state.get('training') or state.get('shared_training') or {}
+    options = training.get('options') or {}
+    accumulator_backend = options.get('cotangent_accumulator_backend', 'cpu_file')
+    if accumulator_backend not in ('cpu_file', 'device_fp32'):
+        raise ValueError('native checkpoint has an invalid cotangent accumulator backend')
+    model.native_cotangent_accumulator_backend = accumulator_backend
     _bind_backbone_revision(model, sha256_file_hex_cached(path))
     return model, tokenizer, roles, config, state

@@ -42,7 +42,7 @@ HANDLERS = {
                          'parameters': {'base', 'rank', 'dtype', 'native_linear_precision', 'native_attention_precision', 'epochs', 'batch_graphs', 'batch_tokens', 'learning_rate', 'weight_decay',
                              'latent_ns', 'eval_every', 'held_eval_tokens', 'held_eval_graphs', 'checkpoint_every', 'checkpoint_seconds', 'checkpoint_layers', 'checkpoint_input_offload', 'checkpoint_input_offload_directory', 'chunk_tokens', 'ffn_chunk_tokens',
                              'fp8_training', 'fp8_recipe', 'fp8_amax_history_len', 'learned_row_learning_rate', 'interface_row_learning_rate', 'native_optimizer_migration', 'native_ordinary_precision', 'native_norm_execution', 'native_shared_execution', 'history_reasoning_policy', 'seed', 'task_eval',
-                             'task_eval_every', 'forward_atol', 'gradient_atol', 'qualify_training_backend', 'resident_geometry_qualification', 'memory_qualification', 'communication_foundation', 'foundation_communication_batches', 'urgent_cohort_fairness', 'refresh_at_checkpoint', 'refresh_after_updates', 'learn_reasoning_boundaries', 'share_causal_prefixes'}, 'result': 'checkpoint.pt'},
+                             'task_eval_every', 'forward_atol', 'gradient_atol', 'qualify_training_backend', 'resident_geometry_qualification', 'memory_qualification', 'communication_foundation', 'foundation_communication_batches', 'urgent_cohort_fairness', 'refresh_at_checkpoint', 'refresh_after_updates', 'learn_reasoning_boundaries', 'share_causal_prefixes', 'cotangent_accumulator_backend'}, 'result': 'checkpoint.pt'},
     # Neuralese direct v1 (plans/neuralese/NEURALESE_DIRECT_V1.md): plain target SFT from a base model with the
     # NeuraleseProjection; the TokenChoiceProjection is declared per stage (off in v1).
     # Its data is either prepared text (text_data, the shared declared input of neuralese-direct-v2) or records and
@@ -238,6 +238,9 @@ def validate_stage_parameters(kind, parameters):
         if parameters['checkpoint_input_offload'] is not None and type(parameters['checkpoint_input_offload']) is not bool:
             raise ValueError('checkpoint_input_offload must be a boolean or omitted for inheritance')
     if kind in {'native_state_sft','native_state_rl','native_offline_preference'}:
+        cotangent_backend = parameters.get('cotangent_accumulator_backend')
+        if cotangent_backend is not None and cotangent_backend not in ('cpu_file', 'device_fp32'):
+            raise ValueError('cotangent_accumulator_backend must be cpu_file or device_fp32')
         ffn=parameters.get('ffn_chunk_tokens')
         if ffn is not None and(type(ffn)is not int or ffn<0):
             raise ValueError('ffn_chunk_tokens must be a nonnegative integer or omitted for inheritance')
@@ -1445,9 +1448,9 @@ DIRECT_WINDOWING_PARAMETERS = ('train_target_tokens', 'merge_prefix_rows', 'coho
 def direct_windowing_handoffs(old_recipe, new_recipe, out):
     """Declared trainer-supported tuning, preserving each trainer's resume checks."""
     tuning = {'neuralese_direct': DIRECT_WINDOWING_PARAMETERS,
-              'native_state_sft': ('epochs', 'batch_graphs', 'batch_tokens', 'chunk_tokens', 'learning_rate', 'learned_row_learning_rate', 'interface_row_learning_rate', 'native_optimizer_migration', 'native_ordinary_precision', 'native_norm_execution', 'native_shared_execution', 'history_reasoning_policy', 'weight_decay', 'latent_ns', 'held_eval_tokens', 'held_eval_graphs', 'communication_foundation', 'foundation_communication_batches', 'urgent_cohort_fairness', 'learn_reasoning_boundaries', 'native_linear_precision', 'native_attention_precision', 'share_causal_prefixes', 'fp8_recipe', 'resident_geometry_qualification', 'checkpoint_input_offload', 'checkpoint_input_offload_directory', 'ffn_chunk_tokens', 'memory_qualification'),
-              'native_offline_preference': ('preference_beta', 'preference_margin', 'epochs', 'batch_graphs', 'batch_tokens', 'chunk_tokens', 'learning_rate', 'learned_row_learning_rate', 'interface_row_learning_rate', 'native_optimizer_migration', 'native_ordinary_precision', 'native_norm_execution', 'native_shared_execution', 'history_reasoning_policy', 'weight_decay', 'latent_ns', 'held_eval_tokens', 'held_eval_graphs', 'communication_foundation', 'foundation_communication_batches', 'urgent_cohort_fairness', 'learn_reasoning_boundaries', 'native_linear_precision', 'native_attention_precision', 'share_causal_prefixes', 'fp8_recipe', 'resident_geometry_qualification', 'checkpoint_input_offload', 'checkpoint_input_offload_directory', 'ffn_chunk_tokens', 'memory_qualification'),
-              'native_state_rl': ('epochs', 'batch_graphs', 'batch_tokens', 'learning_rate', 'learned_row_learning_rate', 'interface_row_learning_rate', 'native_optimizer_migration', 'native_ordinary_precision', 'native_norm_execution', 'native_shared_execution', 'history_reasoning_policy', 'weight_decay', 'latent_ns', 'held_eval_tokens', 'held_eval_graphs', 'native_linear_precision', 'native_attention_precision', 'checkpoint_input_offload', 'checkpoint_input_offload_directory', 'ffn_chunk_tokens', 'memory_qualification')}
+              'native_state_sft': ('epochs', 'batch_graphs', 'batch_tokens', 'chunk_tokens', 'learning_rate', 'learned_row_learning_rate', 'interface_row_learning_rate', 'native_optimizer_migration', 'native_ordinary_precision', 'native_norm_execution', 'native_shared_execution', 'history_reasoning_policy', 'weight_decay', 'latent_ns', 'held_eval_tokens', 'held_eval_graphs', 'communication_foundation', 'foundation_communication_batches', 'urgent_cohort_fairness', 'learn_reasoning_boundaries', 'native_linear_precision', 'native_attention_precision', 'share_causal_prefixes', 'fp8_recipe', 'resident_geometry_qualification', 'checkpoint_input_offload', 'checkpoint_input_offload_directory', 'ffn_chunk_tokens', 'memory_qualification', 'cotangent_accumulator_backend'),
+              'native_offline_preference': ('preference_beta', 'preference_margin', 'epochs', 'batch_graphs', 'batch_tokens', 'chunk_tokens', 'learning_rate', 'learned_row_learning_rate', 'interface_row_learning_rate', 'native_optimizer_migration', 'native_ordinary_precision', 'native_norm_execution', 'native_shared_execution', 'history_reasoning_policy', 'weight_decay', 'latent_ns', 'held_eval_tokens', 'held_eval_graphs', 'communication_foundation', 'foundation_communication_batches', 'urgent_cohort_fairness', 'learn_reasoning_boundaries', 'native_linear_precision', 'native_attention_precision', 'share_causal_prefixes', 'fp8_recipe', 'resident_geometry_qualification', 'checkpoint_input_offload', 'checkpoint_input_offload_directory', 'ffn_chunk_tokens', 'memory_qualification', 'cotangent_accumulator_backend'),
+              'native_state_rl': ('epochs', 'batch_graphs', 'batch_tokens', 'learning_rate', 'learned_row_learning_rate', 'interface_row_learning_rate', 'native_optimizer_migration', 'native_ordinary_precision', 'native_norm_execution', 'native_shared_execution', 'history_reasoning_policy', 'weight_decay', 'latent_ns', 'held_eval_tokens', 'held_eval_graphs', 'native_linear_precision', 'native_attention_precision', 'checkpoint_input_offload', 'checkpoint_input_offload_directory', 'ffn_chunk_tokens', 'memory_qualification', 'cotangent_accumulator_backend')}
     def parameters(recipe, stage):
         merged = dict(recipe.get('stage_parameter_defaults', {}).get(stage.get('kind'), {}))
         merged.update(stage.get('parameters', {}))
@@ -1466,6 +1469,13 @@ def direct_windowing_handoffs(old_recipe, new_recipe, out):
                     or not after.get('memory_qualification')
                     or after.get('memory_qualification') == before.get('memory_qualification')):
                 raise ValueError('handoff refused: norm storage upgrade requires its explicit FP32 profile and fresh restored-model memory qualification')
+        old_cotangent_backend = before.get('cotangent_accumulator_backend') or 'cpu_file'
+        new_cotangent_backend = after.get('cotangent_accumulator_backend') or old_cotangent_backend
+        if kind in {'native_state_sft','native_state_rl','native_offline_preference'} and old_cotangent_backend != new_cotangent_backend:
+            if (new_cotangent_backend not in ('cpu_file', 'device_fp32')
+                    or not after.get('memory_qualification')
+                    or after.get('memory_qualification') == before.get('memory_qualification')):
+                raise ValueError('handoff refused: cotangent accumulator changes require a fresh exact-parent memory qualification')
         if kind in {'native_state_sft','native_offline_preference'} and before.get('fp8_recipe', 'delayed') != after.get('fp8_recipe', 'delayed'):
             from .fp8_backend import expert_precision_transition
             def backend_identity(values):
@@ -2170,6 +2180,8 @@ def stage_parameter_args(parameters):
     """Serialize a validated stage's typed options into CLI arguments."""
     command = []
     for key, value in parameters.items():
+        if key == 'cotangent_accumulator_backend' and value is None:
+            continue
         if key=='memory_qualification':
             if value is None:
                 continue

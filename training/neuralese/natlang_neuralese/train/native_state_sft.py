@@ -789,6 +789,8 @@ def build_parser():
         help='store nonreentrant layer-checkpoint inputs on host RAM or explicit file storage; omission inherits the saved mode')
     parser.add_argument('--checkpoint-input-offload-directory', default=None,
         help='private file-backed checkpoint inputs in this directory; omission inherits, empty string selects CPU')
+    parser.add_argument('--cotangent-accumulator-backend', choices=('cpu_file', 'device_fp32'),
+        default=None, help='explicit FP32 parameter-cotangent storage; default preserves historical cpu_file behavior')
     parser.add_argument('--checkpoint-layers', action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument('--chunk-tokens', type=int, default=128)
     parser.add_argument('--ffn-chunk-tokens', type=int, default=None,
@@ -973,6 +975,27 @@ def main(argv=None):
     if args.native_attention_precision is not None:
         config['native_attention_precision'] = attention_precision
     saved_training = resume or shared_resume or {}
+    saved_options = saved_training.get('options') or {}
+    previous_cotangent_backend = saved_options.get('cotangent_accumulator_backend', 'cpu_file')
+    args.cotangent_accumulator_backend = (previous_cotangent_backend
+        if args.cotangent_accumulator_backend is None else args.cotangent_accumulator_backend)
+    if args.cotangent_accumulator_backend not in ('cpu_file', 'device_fp32'):
+        raise ValueError('native checkpoint declares an unknown cotangent accumulator backend')
+    if saved_training and args.cotangent_accumulator_backend != previous_cotangent_backend:
+        if not args.memory_qualification:
+            raise ValueError('cotangent accumulator transition requires fresh exact-parent capacity qualification')
+        history = list(saved_options.get('cotangent_accumulator_history') or [])
+        history.append({'from': previous_cotangent_backend,
+            'to': args.cotangent_accumulator_backend,
+            'at_global_step': int(saved_training.get('global_step', saved_training.get('step', 0))),
+            'weights_optimizer_rng_exposure': 'preserved',
+            'capacity_request': args.memory_qualification})
+        checkpoint_options['cotangent_accumulator_history'] = history
+    else:
+        checkpoint_options['cotangent_accumulator_history'] = list(
+            saved_options.get('cotangent_accumulator_history') or [])
+    checkpoint_options['cotangent_accumulator_backend'] = args.cotangent_accumulator_backend
+    model.native_cotangent_accumulator_backend = args.cotangent_accumulator_backend
     previous_recipe=(saved_training.get('options') or {}).get('recipe_binding')
     if previous_recipe is not None:
         old_recipe=json.loads(previous_recipe) if isinstance(previous_recipe,str) else previous_recipe
@@ -1118,6 +1141,7 @@ def main(argv=None):
                 'optimizer_options': {'native_optimizer_migration':args.native_optimizer_migration,'lr': args.learning_rate, 'learned_row_lr':args.learned_row_learning_rate, 'interface_row_lr':args.interface_row_learning_rate, 'weight_decay': args.weight_decay,
                                       'latent_ns': args.latent_ns},
                 'batch_graphs': args.batch_graphs, 'batch_tokens': args.batch_tokens, 'seed': args.seed, 'rank': config['rank'],
+                'cotangent_accumulator_backend': args.cotangent_accumulator_backend,
                 'fp8': {'kind': args.fp8_training, 'recipe': args.fp8_recipe,
                         'amax_history_len': args.fp8_amax_history_len},
                 'objective': objective_binding}
@@ -1168,7 +1192,11 @@ def main(argv=None):
             {role: getattr(args, role) for role in ('continued_native_graphs', 'continued_held_native_graphs')},
             stage_id=args.stage_id or 'native-graph-ce')
         previous = resume.get('identity') or {}
-        stable = ('schema', 'optimizer', 'seed', 'rank', 'fp8', 'objective')
+        previous.setdefault('cotangent_accumulator_backend', 'cpu_file')
+        stable = ('schema', 'optimizer', 'seed', 'rank', 'fp8', 'objective',
+                  'cotangent_accumulator_backend')
+        if previous.get('cotangent_accumulator_backend') != args.cotangent_accumulator_backend:
+            stable = tuple(key for key in stable if key != 'cotangent_accumulator_backend')
         from .fp8_backend import expert_precision_transition
         backend_transition = expert_precision_transition(previous.get('fp8'), training_identity['fp8'])
         if backend_transition is not None:

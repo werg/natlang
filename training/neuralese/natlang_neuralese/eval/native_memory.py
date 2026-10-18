@@ -145,6 +145,7 @@ def qualify_capacity(model, optimizer, cases, *, backend=None, checkpoint_layers
                                 chunk_tokens=chunk_tokens,**packing)
                         loss.backward()
                         cotangents.finish()
+                        row['cotangent_accumulators'] = cotangents.allocation_report()
                         if device.type=='cuda':torch.cuda.synchronize(device)
                 if not observed or not math.isfinite(float(loss.detach())):
                     raise FloatingPointError('capacity check has no actual finite gradient/loss')
@@ -254,6 +255,11 @@ def memory_runtime(device):
 
 
 def capacity_identity(config,args,backend):
+    accumulator_backend = getattr(args, 'cotangent_accumulator_backend', None)
+    if accumulator_backend is None:
+        accumulator_backend = getattr(args, 'native_cotangent_accumulator_backend', 'cpu_file')
+    if accumulator_backend not in ('cpu_file', 'device_fp32'):
+        raise ValueError('capacity identity needs a declared cotangent accumulator backend')
     objective={}
     if getattr(args,'objective_spec',None):
         from ..train.native_preference import NativePreferenceObjective
@@ -273,6 +279,7 @@ def capacity_identity(config,args,backend):
         'checkpoint_input_offload':args.checkpoint_input_offload,
         **({'share_causal_prefixes':True} if getattr(args,'share_causal_prefixes',False) else {}),
         'runtime':memory_runtime(args.device),
+        'cotangent_accumulator_backend':accumulator_backend,
         'fp8':{'kind':args.fp8_training,'recipe':args.fp8_recipe,'amax_history_len':args.fp8_amax_history_len,
                'input_gradient_precision':getattr(backend,'input_gradient_precision',None)}}
 

@@ -318,7 +318,9 @@ def run_native(engine, callback, entries=None, *, leaves=None, gradient_precisio
             cotangent_scope = ParameterCotangentScope(scope_parameters, mode='vjp',
                 track_auxiliary=track_adapter_cotangents,
                 auxiliary_target_ids=adapter_cotangent_target_ids,
-                parameter_target_ids=cotangent_parameter_ids)
+                parameter_target_ids=cotangent_parameter_ids,
+                accumulator_backend=getattr(engine.shared_model,
+                    'native_cotangent_accumulator_backend', 'cpu_file'))
             cotangent_scope.model=engine.shared_model
             with cotangent_scope:
                 replacement, storage_dtypes = _effective_replacements(parameters, resolved, gradient_precision)

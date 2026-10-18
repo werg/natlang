@@ -116,15 +116,19 @@ def _lfm_causal_carrier_forward(scope, module, original_forward):
 class ParameterCotangentScope:
     """Collect low-precision parameter cotangents in FP32 outside autograd fan-in.
 
-    The per-parameter accumulator is a sparse, file-backed CPU tensor. CUDA
-    backward paths therefore retain only their current FP32 contribution; the
-    optimizer-facing gradient is materialized once, at finalization.
+    `cpu_file` stores a sparse file-backed CPU tensor; `device_fp32` stores a
+    lazy FP32 tensor beside its CUDA parameter. Both keep the same single-cast
+    autograd edge and optimizer-facing result.
     """
     def __init__(self, parameters, *, mode='update', directory=None, track_auxiliary=True,
-                 auxiliary_target_ids=None, parameter_target_ids=None):
+                 auxiliary_target_ids=None, parameter_target_ids=None,
+                 accumulator_backend='cpu_file'):
         if mode not in ('update', 'vjp'):
             raise ValueError("cotangent scope mode must be 'update' or 'vjp'")
+        if accumulator_backend not in ('cpu_file', 'device_fp32'):
+            raise ValueError("cotangent accumulator backend must be 'cpu_file' or 'device_fp32'")
         self.mode = mode
+        self.accumulator_backend = accumulator_backend
         self.track_auxiliary = bool(track_auxiliary)
         self.auxiliary_target_ids = (None if auxiliary_target_ids is None
                                      else frozenset(auxiliary_target_ids))
@@ -144,6 +148,8 @@ class ParameterCotangentScope:
         for name, parameter in unique.values():
             if not parameter.is_contiguous():
                 raise RuntimeError(f'non-contiguous low-precision optimizer parameter needs an explicit cotangent view binding: {name}')
+            if accumulator_backend == 'device_fp32' and parameter.device.type != 'cuda':
+                raise RuntimeError(f'device_fp32 cotangent accumulator requires CUDA parameter: {name}')
         self.entries = {}
         self._auxiliary_entries = {}
         self._effective_routes = {}
@@ -155,6 +161,8 @@ class ParameterCotangentScope:
         self._gradient_hooks = []
         self.model = None
         self._reference_parameters = {}
+        self._allocated_accumulator_bytes = 0
+        self._scratch_peak_bytes = 0
         for index, (name, parameter) in enumerate(unique.values()):
             initial_grad=parameter.grad if parameter.is_leaf else None
             self.entries[id(parameter)] = {'name': name, 'parameter': parameter,
@@ -238,7 +246,10 @@ class ParameterCotangentScope:
 
     @classmethod
     def for_model(cls, model, *, mode='update', directory=None, track_auxiliary=True,
-                  auxiliary_target_ids=None, parameter_target_ids=None):
+                  auxiliary_target_ids=None, parameter_target_ids=None,
+                  accumulator_backend=None):
+        if accumulator_backend is None:
+            accumulator_backend = getattr(model, 'native_cotangent_accumulator_backend', 'cpu_file')
         parameter_target_ids = (None if parameter_target_ids is None
                                 else frozenset(parameter_target_ids))
         selected, seen = [], set()
@@ -283,7 +294,8 @@ class ParameterCotangentScope:
             raise RuntimeError('trainable low-precision parameters lack a shared cotangent route: ' + names)
         scope = cls(selected, mode=mode, directory=directory, track_auxiliary=track_auxiliary,
                     auxiliary_target_ids=auxiliary_target_ids,
-                    parameter_target_ids=parameter_target_ids)
+                    parameter_target_ids=parameter_target_ids,
+                    accumulator_backend=accumulator_backend)
         scope.model = model
         return scope
 
@@ -302,6 +314,8 @@ class ParameterCotangentScope:
                 raise RuntimeError(f'cotangent auxiliary target does not require gradients: {name}')
             if not tensor.is_contiguous():
                 raise RuntimeError(f'non-contiguous cotangent auxiliary target is unsupported: {name}')
+            if self.accumulator_backend == 'device_fp32' and tensor.device.type != 'cuda':
+                raise RuntimeError(f'device_fp32 cotangent accumulator requires CUDA auxiliary: {name}')
             entry = self._make_entry(name, tensor, len(self.entries) + len(self._auxiliary_entries))
             self._auxiliary_entries[id(tensor)] = entry
             if self._token is not None and self.mode == 'vjp':
@@ -478,10 +492,7 @@ class ParameterCotangentScope:
         if contribution.dtype != torch.float32:
             contribution = contribution.float()
         if entry['accumulator'] is None:
-            # A sparse file starts zero-filled; mapping does not reserve a second
-            # full-model resident CPU allocation.
-            entry['accumulator'] = torch.from_file(entry['path'], shared=True,
-                size=entry['parameter'].numel(), dtype=torch.float32).reshape(entry['parameter'].shape)
+            entry['accumulator'] = self._allocate_accumulator(entry)
         target = entry['accumulator']
         if parameter is not entry['parameter']:
             offset = parameter.storage_offset() - entry['parameter'].storage_offset()
@@ -489,6 +500,10 @@ class ParameterCotangentScope:
             if offset < 0 or last >= entry['parameter'].numel():
                 raise RuntimeError(f"cotangent view escapes registered optimizer parameter {entry['name']}")
             target = target.as_strided(parameter.shape, parameter.stride(), offset)
+        if self.accumulator_backend == 'device_fp32':
+            target.add_(contribution.detach().to(device=target.device, dtype=torch.float32))
+            entry['count'] += 1
+            return
         # Avoid a second full-size CPU FP32 allocation while transferring a
         # device contribution into the file-backed accumulator. Chunk across
         # leading rows; native matrices and expert views keep each row bounded.
@@ -502,20 +517,41 @@ class ParameterCotangentScope:
 
     def add_embedding_rows(self, parameter, indices, contribution, *, padding_idx=None,
                            scale_grad_by_freq=False):
-        """Add indexed embedding dW rows directly to the file-backed accumulator."""
+        """Add indexed embedding dW rows directly to the selected accumulator."""
         entry = self._entry_for(parameter)
         if entry is None:
             raise RuntimeError('embedding cotangent has no registered parameter anchor')
         if parameter.ndim != 2 or contribution.shape[:-1] != indices.shape or contribution.shape[-1] != parameter.shape[1]:
             raise RuntimeError(f"embedding cotangent shape mismatch for {entry['name']}")
         if entry['accumulator'] is None:
-            entry['accumulator'] = torch.from_file(entry['path'], shared=True,
-                size=entry['parameter'].numel(), dtype=torch.float32).reshape(entry['parameter'].shape)
+            entry['accumulator'] = self._allocate_accumulator(entry)
         flat_indices = indices.detach().reshape(-1)
         flat_contribution = contribution.detach().reshape(-1, parameter.shape[1])
         row_bytes = max(4, parameter.shape[1] * 4)
         rows = max(1, _COTANGENT_TRANSFER_CHUNK_BYTES // row_bytes)
         target = entry['accumulator']
+        if self.accumulator_backend == 'device_fp32':
+            ids = flat_indices.to(device=target.device, dtype=torch.long)
+            values = flat_contribution.to(device=target.device, dtype=torch.float32)
+            if padding_idx is not None:
+                keep = ids != int(padding_idx)
+                ids, values = ids[keep], values[keep]
+            if scale_grad_by_freq and ids.numel():
+                unique, inverse, counts = torch.unique(ids, sorted=True, return_inverse=True,
+                                                       return_counts=True)
+                row_values = torch.zeros((unique.numel(), parameter.shape[1]),
+                                         device=target.device, dtype=torch.float32)
+                row_values.index_add_(0, inverse, values)
+                scratch = (row_values.numel() * row_values.element_size()
+                           + inverse.numel() * inverse.element_size()
+                           + unique.numel() * (unique.element_size() + counts.element_size()))
+                self._scratch_peak_bytes = max(self._scratch_peak_bytes, scratch)
+                row_values.div_(counts[:, None].to(dtype=torch.float32))
+                target.index_add_(0, unique, row_values)
+            elif ids.numel():
+                target.index_add_(0, ids, values)
+            entry['count'] += 1
+            return
         if scale_grad_by_freq:
             fd, temporary_path = tempfile.mkstemp(prefix='.embedding-frequency-', dir=self.directory)
             os.close(fd)
@@ -552,6 +588,25 @@ class ParameterCotangentScope:
                 if ids.numel():
                     target.index_add_(0, ids, values)
         entry['count'] += 1
+
+    def _allocate_accumulator(self, entry):
+        parameter = entry['parameter']
+        if self.accumulator_backend == 'device_fp32':
+            accumulator = torch.zeros(parameter.shape, device=parameter.device, dtype=torch.float32)
+        else:
+            # Sparse file mapping avoids a second full-model resident allocation.
+            accumulator = torch.from_file(entry['path'], shared=True,
+                size=parameter.numel(), dtype=torch.float32).reshape(parameter.shape)
+        self._allocated_accumulator_bytes += parameter.numel() * 4
+        return accumulator
+
+    def allocation_report(self):
+        """Report exact backend and persistent/scratch allocation accounting."""
+        entries = (*self.entries.values(), *self._auxiliary_entries.values())
+        return {'backend': self.accumulator_backend,
+                'allocated_accumulator_bytes': self._allocated_accumulator_bytes,
+                'scratch_peak_bytes': self._scratch_peak_bytes,
+                'allocated_entries': sum(entry['accumulator'] is not None for entry in entries)}
 
     def finish(self):
         if self._closed:
