@@ -216,7 +216,7 @@ def _closed_withdrawals(training,frames,old_plan):
 def prepare(config_path,plan_path,role,recipe_reference,consumption,verified_checkpoint,out,*,package):
     """Validate the future recipe using this invocation's sole verified saved object."""
     from .native_raw_handoff import _recipe_plan
-    from ..train.recipe import lineage_handoff,native_recipe_binding
+    from ..train.recipe import lineage_handoff,native_recipe_binding,native_recipe_provenance
     from ..train.native_continuation import collect_sft_progress
     from .native_supervised import continuation_config,bind_recipe_lineage
     from .native_raw_rounds import _supervised_quantum
@@ -227,7 +227,7 @@ def prepare(config_path,plan_path,role,recipe_reference,consumption,verified_che
         raise ValueError('future adaptation lost its exact consumed checkpoint/control pair')
     _no_owner(consumed['controller']);_no_active_operation(paths['config'].parent)
     training=saved['training'];options=training.get('options')or{};lineage=config['recipe_lineage_sha256']
-    if (options.get('recipe_binding')!=native_recipe_binding(Path(config['production_recipe']),lineage)
+    if (native_recipe_provenance(options.get('recipe_binding'))!=native_recipe_binding(Path(config['production_recipe']),lineage)
             or training.get('global_step')!=consumed['global_step']
             or saved['model_config']['architecture']+':'+saved['model_config']['base_inventory_sha256']!=config['raw_model_id']):
         raise ValueError('future adaptation saved recipe/model lineage changed')

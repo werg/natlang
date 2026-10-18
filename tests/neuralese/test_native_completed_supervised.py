@@ -40,7 +40,7 @@ def fixture(tmp_path):
     parameter=torch.nn.Parameter(torch.tensor([.3,.7]));optimizer=torch.optim.AdamW([parameter],lr=.01)
     for _ in range(2):optimizer.zero_grad();parameter.square().sum().backward();optimizer.step()
     training={'schema':TRAINING_SCHEMA,'global_step':4,'step':2,'optimizer':optimizer.state_dict(),
-        'rng':capture_training_rng_state('cpu'),'options':{'stage_id':'dpo','recipe_binding':rb,
+        'rng':capture_training_rng_state('cpu'),'options':{'stage_id':'dpo','recipe_binding':json.dumps(rb),
             'continuation':{'checkpoint_sha256':bridge.binding(parent)['sha256']}},
         'source_row_bindings':{'old':'exact-binding'},'source_row_order':['old'],'exposure_counts':{'old':2},
         'identity':{'objective':None},'sft_progress':{'full':{'options':{'stage_id':'full'},'exposure_counts':{'old':1}}}}
