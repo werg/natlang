@@ -2778,7 +2778,7 @@
       "owner": "pop",
       "path": "runs/luna-semantic-lambdas-refill-20261006-v17",
       "admission": "current-native-reference-verified-source-only; no-teacher-admission",
-      "notes": "80verifiedtrain/nohintvariants across40facts; newexplicitall24fixture31 replacesheld27.39facts reused, not80newfacts. Distinct activefacts30/31; held11/27 excluded; held6–9 unchanged."
+      "notes": "80verifiedtrain/nohintvariants across40facts; newexplicitall24fixture31 replacesheld27.39facts reused, not80newfacts. Distinct activefacts30/31; held11/27 excluded; held6\u20139 unchanged."
     },
     {
       "id": "luna-semantic-lambdas-source-v18-20261006",
@@ -5090,7 +5090,7 @@
         "**/*"
       ],
       "admission": "root-approved-generation-only-source-proof-no-teacher-or-training-admission",
-      "notes": "Root-approved V16 same-world library caption-role clarification with initial failed proof preserved, corrected full canonical proof, scoped audit, and root receipt. Only one nested row’s LIB-222/LIB-236 caption role text changed; all gold, factual groups, splits, and other source rows unchanged. Final V16 proof covers 24 rows/288 native decisions/132 exact source reads. Latest V6r3 proof overlay covers 12 worlds/168 decisions/72 exact scoped reads. The proof validator fix removes arbitrary filename assumptions but still binds each read to the exact reference path and full declared FileHandle bytes. Historical V16 iterate trajectories remain held; only root-listed nested indices are generation-approved. No teacher observations, independent-world increase, or training admission.",
+      "notes": "Root-approved V16 same-world library caption-role clarification with initial failed proof preserved, corrected full canonical proof, scoped audit, and root receipt. Only one nested row\u2019s LIB-222/LIB-236 caption role text changed; all gold, factual groups, splits, and other source rows unchanged. Final V16 proof covers 24 rows/288 native decisions/132 exact source reads. Latest V6r3 proof overlay covers 12 worlds/168 decisions/72 exact scoped reads. The proof validator fix removes arbitrary filename assumptions but still binds each read to the exact reference path and full declared FileHandle bytes. Historical V16 iterate trajectories remain held; only root-listed nested indices are generation-approved. No teacher observations, independent-world increase, or training admission.",
       "derived_from": [
         "neuralese-static-depth2-v15-20261007-v15-cooperative-role-clarified",
         "neuralese-v15-iterate-richness-v6-reviewed-publication-20261007-v1"
@@ -5287,7 +5287,7 @@
         "**/*"
       ],
       "admission": "closed-audit-only-explicitly-held-no-training-admission-no-DPO",
-      "notes": "Immutable closed snapshots and action-level audit for V57/V59/V61/V63/V64. 60 queue slots finished: 59 exact native result exports (33 parent whole-world accepted, 26 rejected) and one V57 whole-case request-budget exhaustion with partial evidence and no native row. Repeated seeds cover existing reviewed source groups only; 0 new independent worlds. V63/V64 rejection review finds seven explicit model omissions/value-copy failures, with no source confounds; no local actions approved. Parent acceptance does not confer action admission. Includes exact raw campaign copies, queue/journal/export/trace evidence, source/runtime pins, and V57 supervisor recovery; V57 plan’s missing runtime frozen-manifest SHA is recorded as a gap.",
+      "notes": "Immutable closed snapshots and action-level audit for V57/V59/V61/V63/V64. 60 queue slots finished: 59 exact native result exports (33 parent whole-world accepted, 26 rejected) and one V57 whole-case request-budget exhaustion with partial evidence and no native row. Repeated seeds cover existing reviewed source groups only; 0 new independent worlds. V63/V64 rejection review finds seven explicit model omissions/value-copy failures, with no source confounds; no local actions approved. Parent acceptance does not confer action admission. Includes exact raw campaign copies, queue/journal/export/trace evidence, source/runtime pins, and V57 supervisor recovery; V57 plan\u2019s missing runtime frozen-manifest SHA is recorded as a gap.",
       "derived_from": [
         "neuralese-static-depth2-v15-20261007-v15-cooperative-role-clarified",
         "neuralese-v16-caption-role-clarification-publication-20261007-v1",
@@ -5322,7 +5322,7 @@
         "neuralese-successor-v14-v10r3-generation-only-20261007-v1",
         "luna-semantic-v65-v67-closed-audit-20261007-v1"
       ],
-      "notes": "Corrected same-world V14 source packet for the Westmere district-name boundary. Source SHA 235924d4a61224f797c7c0329a19fd7a84cd95d96df2454178de3ea14b725e95; only the meeting-notice phrase was clarified, preserving all 24 IDs, golds, groups, and splits. Root generation review SHA 76f04918f0a466407ef2fedf5161ef414122cd6c7136f765dd495e0986113a62 and frozen V69 proof SHA 83b9f86b9070490a3fe6116f02d10d34e63a0342a8721a41b656603b80f8d011 are included. Scripted CPU proof: 24 cases, 216 decisions, 84 reads; 0 model/provider calls. V68’s original case-14 output and original V10r3 bundle remain unchanged and held for source ambiguity. Generation-only; no teacher, trace, or training admission."
+      "notes": "Corrected same-world V14 source packet for the Westmere district-name boundary. Source SHA 235924d4a61224f797c7c0329a19fd7a84cd95d96df2454178de3ea14b725e95; only the meeting-notice phrase was clarified, preserving all 24 IDs, golds, groups, and splits. Root generation review SHA 76f04918f0a466407ef2fedf5161ef414122cd6c7136f765dd495e0986113a62 and frozen V69 proof SHA 83b9f86b9070490a3fe6116f02d10d34e63a0342a8721a41b656603b80f8d011 are included. Scripted CPU proof: 24 cases, 216 decisions, 84 reads; 0 model/provider calls. V68\u2019s original case-14 output and original V10r3 bundle remain unchanged and held for source ambiguity. Generation-only; no teacher, trace, or training admission."
     },
     {
       "id": "neuralese-semantic-iterate-v15-lineage-20261007-v1",
@@ -5332,7 +5332,7 @@
         "**/*"
       ],
       "admission": "source-generation-approved-v8; teacher-observation-trace-and-training-held",
-      "notes": "Immutable V1–V8 source/proof/history bundle. V8 source SHA 13a1da835ac738f1beefecd120a94c2731109e0eca1fc511a4c1a11eb2445b36 has root generation approval and frozen CPU proof; 12 factual groups only across all revisions. Earlier revisions and failed proof/review history retained. Scripted references are not teacher observations or admission. No V73 worker outputs included."
+      "notes": "Immutable V1\u2013V8 source/proof/history bundle. V8 source SHA 13a1da835ac738f1beefecd120a94c2731109e0eca1fc511a4c1a11eb2445b36 has root generation approval and frozen CPU proof; 12 factual groups only across all revisions. Earlier revisions and failed proof/review history retained. Scripted references are not teacher observations or admission. No V73 worker outputs included."
     },
     {
       "id": "neuralese-semantic-iterate-v15-soft-state-publication-20261007-v1",
@@ -5345,7 +5345,7 @@
       "derived_from": [
         "neuralese-semantic-iterate-v15-lineage-20261007-v1"
       ],
-      "notes": "Held publication bundle for V15 soft-state source V10, SHA 4a8f95f6ba6703437651c6c827b4042d89f536ab59cb2b7cc9496ed8199b7084. Includes V1–V10 variants, failed and passing scripted proofs, runtime feasibility probe, builder, V8 source lineage, and independent/root review evidence. V10 keeps 12 worlds/groups/splits/gold; 2 documented input clarifications. Latest CPU proof passes 12/12 with 48 source reads and 60 actual Neuralese writer-to-reader edges. Zero model/provider calls and zero teacher trajectories; scripted runtime success is not semantic truth or training admission."
+      "notes": "Held publication bundle for V15 soft-state source V10, SHA 4a8f95f6ba6703437651c6c827b4042d89f536ab59cb2b7cc9496ed8199b7084. Includes V1\u2013V10 variants, failed and passing scripted proofs, runtime feasibility probe, builder, V8 source lineage, and independent/root review evidence. V10 keeps 12 worlds/groups/splits/gold; 2 documented input clarifications. Latest CPU proof passes 12/12 with 48 source reads and 60 actual Neuralese writer-to-reader edges. Zero model/provider calls and zero teacher trajectories; scripted runtime success is not semantic truth or training admission."
     },
     {
       "id": "luna-semantic-v68-v71-closed-action-audit-20261007-v1",
@@ -5355,7 +5355,7 @@
         "**/*"
       ],
       "admission": "closed-actual-campaign-audit-only-held-no-native-action-approval-no-training-admission-no-DPO",
-      "notes": "Immutable 1453-file V68–V71 raw and audit snapshot. Four campaigns repeat 24 V14 fact worlds (12 train/12 test), not new independent worlds. 89 exports: 84 accepted parents, 5 rejected; 961 materialized actions remain held. This publication grants no action, recurrence, DPO, or training admission."
+      "notes": "Immutable 1453-file V68\u2013V71 raw and audit snapshot. Four campaigns repeat 24 V14 fact worlds (12 train/12 test), not new independent worlds. 89 exports: 84 accepted parents, 5 rejected; 961 materialized actions remain held. This publication grants no action, recurrence, DPO, or training admission."
     },
     {
       "id": "neuralese-reviewed-restart-cohort-20261007-v15-final",
@@ -6139,7 +6139,7 @@
       "include": [
         "**/*"
       ],
-      "notes": "Closed corrected-source campaign: Luna accepted indices0–5,7–11;6 request-budget partial lacks full execution graph and remains held. Bunny accepted15,16,20,23; transport timeouts/started-abandoned/unstarted cases retained and not model negatives. Recovery is separately reviewed; no automatic parent acceptance to action admission."
+      "notes": "Closed corrected-source campaign: Luna accepted indices0\u20135,7\u201311;6 request-budget partial lacks full execution graph and remains held. Bunny accepted15,16,20,23; transport timeouts/started-abandoned/unstarted cases retained and not model negatives. Recovery is separately reviewed; no automatic parent acceptance to action admission."
     },
     {
       "id": "luna-v17-recovery-runtime-20261008-a2a53630",
@@ -7623,7 +7623,7 @@
       "derived_from": [
         "s1-question-collection-v8-luna-campaign-20261008-v1"
       ],
-      "notes": "Corrected V8 independent review of closed indices 0–14 with nested execution graph/action ledgers, actual nL type signatures and transport provenance. Case19 and other rows are excluded pending closure; later successor required. V1 is preserved but explicitly superseded. No raw outcome changes or training admission."
+      "notes": "Corrected V8 independent review of closed indices 0\u201314 with nested execution graph/action ledgers, actual nL type signatures and transport provenance. Case19 and other rows are excluded pending closure; later successor required. V1 is preserved but explicitly superseded. No raw outcome changes or training admission."
     },
     {
       "id": "s1-question-collection-v8-quality-review-20261008-v3",
@@ -8403,7 +8403,7 @@
         "verified-reasoning-pools-v19-answer-key-v2-20261008-v1",
         "opencode-ling-sdk-collector-integration-closeout-20261008-v1"
       ],
-      "notes": "Exact approved source index 0 Ling CLI smoke, origin-only server amendment, effective OpenCode config, action-MCP/CLI/collector raw evidence and empty collector result are pinned. The official CLI emitted one finished step (16,111 total tokens), one bridge tool-use event and one execution_plan candidate, then a scheduled retry event reported ‘Upstream request failed: Endpoint is unavailable.’ The collector exited 2 with no result row; this is one request observation and does not establish general model availability. Captured isolated CLI caches and generated dependency source trees are preserved locally but excluded from transfer; output includes exact generated package.json/package-lock.json, with versions/integrities and omitted path sizes/counts in the outcome receipt. No rerun, paid fallback, or training admission."
+      "notes": "Exact approved source index 0 Ling CLI smoke, origin-only server amendment, effective OpenCode config, action-MCP/CLI/collector raw evidence and empty collector result are pinned. The official CLI emitted one finished step (16,111 total tokens), one bridge tool-use event and one execution_plan candidate, then a scheduled retry event reported \u2018Upstream request failed: Endpoint is unavailable.\u2019 The collector exited 2 with no result row; this is one request observation and does not establish general model availability. Captured isolated CLI caches and generated dependency source trees are preserved locally but excluded from transfer; output includes exact generated package.json/package-lock.json, with versions/integrities and omitted path sizes/counts in the outcome receipt. No rerun, paid fallback, or training admission."
     },
     {
       "id": "verified-reasoning-pools-v20-source-and-closed-luna-20261008-v1",
@@ -8630,7 +8630,7 @@
         ".git"
       ],
       "admission": "held generation/source evidence only; no training admission",
-      "notes": "Held duplicate source proposal: all96 records overlapped previous V11–V17 source cases. No generation, fresh-world credit, or training admission."
+      "notes": "Held duplicate source proposal: all96 records overlapped previous V11\u2013V17 source cases. No generation, fresh-world credit, or training admission."
     },
     {
       "id": "verified-reasoning-pools-v19-closed-raw-v2-v5-20261008-v1",
@@ -12427,7 +12427,7 @@
       "derived_from": [
         "neuralese-semantic-iterate-v17-guided-source-v7-20261008"
       ],
-      "notes": "Separate held record for rejected pre-correction V8 source SHA 5df1922d…; model-visible initial decision.json exposed gold. Retains exact rejected source/proposal/review and disposition. Deliberately omits all scripted runtime-proof directories; no provider campaign launched, generation count zero, never admitted.",
+      "notes": "Separate held record for rejected pre-correction V8 source SHA 5df1922d\u2026; model-visible initial decision.json exposed gold. Retains exact rejected source/proposal/review and disposition. Deliberately omits all scripted runtime-proof directories; no provider campaign launched, generation count zero, never admitted.",
       "include_root_prefixes": [
         "semantic-lambda-topology-v17-v8-review-v1",
         "neuralese-v17-v8-publication-20261008-v1"
@@ -17488,7 +17488,7 @@
         "criteria": "harness-bench-criteria/2",
         "working_copy": "/home/werg/data/harness-bench/build-20261009-1000"
       },
-      "notes": "SUPERSEDED by harness-bench-swe-rebench-openhands-pi-records-20261010-v2 (2026-10-10): 6 of its records carry OpenHands' bash soft-timeout notice (\"no new output after 30 seconds ... send keys ... use the timeout parameter in execute_bash\") in a pi bash result, which pi never shows; v2 replays with that notice as the divergence point. Kept for provenance; do not use. Harness-bench native records (natlang.teacher_training_turn.native/1, plans/neuralese/HARNESS_BENCH.md §2) built 2026-10-09/10 by harness_bench_build.sh at code commit 744bdd4f (applications/pi/bench/replay.ts, training/neuralese/natlang_neuralese/harness_bench/*): 492 resolved trajectories prepared, 489 replayed in pi-durable's tools over their base commits (3 clone failures, NREL/hescore-hpxml), 305 fully verified and 184 verified up to their first divergence; 22,538 of 22,722 steps verified. Divergences: task_tracker 113, execute_bash interactive input 31, read text mismatch 22, read failed in pi 8, write failed for the teacher 5, read failed for the teacher 4, str_replace_editor other 1. 3,852 records (3,740 train / 112 test), 20,359 digest parts; only steps before a divergence are kept. Per-record admission is in each record (harness-bench-criteria/2: resolved, pi-replayed-verified, exact-mapping; all 3,852 pass). surface_sha256 is the sha256 of the sorted-key JSON of surface.json that every record's provenance carries; surface_file_sha256 is the file's bytes. prepared.jsonl and replayed.jsonl carry the normalized transcripts and the replay verification; gold and test patches are not in any file. Corpus-level training admission is held: pending text-twin rendering with the fixed renderer and recipe cohort declaration (HARNESS_BENCH.md §7 step 2). Stored on /mnt/external with the other corpora (all files < 1 GiB; a finished, held corpus is not latency-critical).",
+      "notes": "SUPERSEDED by harness-bench-swe-rebench-openhands-pi-records-20261010-v2 (2026-10-10): 6 of its records carry OpenHands' bash soft-timeout notice (\"no new output after 30 seconds ... send keys ... use the timeout parameter in execute_bash\") in a pi bash result, which pi never shows; v2 replays with that notice as the divergence point. Kept for provenance; do not use. Harness-bench native records (natlang.teacher_training_turn.native/1, plans/neuralese/HARNESS_BENCH.md \u00a72) built 2026-10-09/10 by harness_bench_build.sh at code commit 744bdd4f (applications/pi/bench/replay.ts, training/neuralese/natlang_neuralese/harness_bench/*): 492 resolved trajectories prepared, 489 replayed in pi-durable's tools over their base commits (3 clone failures, NREL/hescore-hpxml), 305 fully verified and 184 verified up to their first divergence; 22,538 of 22,722 steps verified. Divergences: task_tracker 113, execute_bash interactive input 31, read text mismatch 22, read failed in pi 8, write failed for the teacher 5, read failed for the teacher 4, str_replace_editor other 1. 3,852 records (3,740 train / 112 test), 20,359 digest parts; only steps before a divergence are kept. Per-record admission is in each record (harness-bench-criteria/2: resolved, pi-replayed-verified, exact-mapping; all 3,852 pass). surface_sha256 is the sha256 of the sorted-key JSON of surface.json that every record's provenance carries; surface_file_sha256 is the file's bytes. prepared.jsonl and replayed.jsonl carry the normalized transcripts and the replay verification; gold and test patches are not in any file. Corpus-level training admission is held: pending text-twin rendering with the fixed renderer and recipe cohort declaration (HARNESS_BENCH.md \u00a77 step 2). Stored on /mnt/external with the other corpora (all files < 1 GiB; a finished, held corpus is not latency-critical).",
       "required_conversion": {
         "reason": "built with natlang.harness-bench-conversion/1: tool-output parts have type 'digest' and the piece is prompt:digest; DECISIONS.md 2026-10-09 (one summarizer family) renamed them to 'view' and prompt:view (view's body), by rewrite. train.trajectories refuses 'digest' parts before any model work.",
         "conversion": "scripts/neuralese_data/digest_to_view.py --source <this corpus> --out <new corpus dir> --copy summary.json surface.json prepared.jsonl replayed.jsonl replay.log",
@@ -17531,7 +17531,7 @@
         "criteria": "harness-bench-criteria/2",
         "working_copy": "/home/werg/data/harness-bench/build-20261010-1000"
       },
-      "notes": "SUPERSEDED for training use by harness-bench-swe-rebench-openhands-pi-records-20261010-v3 (2026-10-10, the registered digest→view conversion; this corpus stays as published and the trainer refuses its digest parts). Harness-bench native records (natlang.teacher_training_turn.native/1, plans/neuralese/HARNESS_BENCH.md §2), supersedes harness-bench-swe-rebench-openhands-pi-records-20261010-v1. Built 2026-10-10 by harness_bench_build.sh at code commit b4543ebd: same surface.json and prepared.jsonl as v1 (copied, byte-identical), replay and records re-run with the fix that an OpenHands bash timeout notice ('[The command has no new output after N seconds. ... send keys (\"C-c\", \"C-z\", \"C-d\") ... or use the timeout parameter in execute_bash for future commands.]', or its 'timed out after N seconds' form) is a divergence point: pi's bash waits for the command, so pi would never show that notice; replay stops before that step and records keep only the verified prefix. 492 resolved trajectories prepared, 489 replayed (3 clone failures, NREL/hescore-hpxml), 305 fully verified and 184 verified up to their first divergence; 22,468 of 22,652 steps verified. Divergences: task_tracker 112, bash soft timeout (OpenHands-only interaction) 31, read text mismatch 22, read failed in pi 8, write failed for the teacher 5, read failed for the teacher 4, execute_bash interactive input 1, str_replace_editor other 1. 3,843 records (3,731 train / 112 test), 20,302 digest parts; no record contains the soft-timeout notice (v1: 6). Per-record admission is in each record (harness-bench-criteria/2: resolved, pi-replayed-verified, exact-mapping; all 3,843 pass). surface_sha256 is the sha256 of the sorted-key JSON of surface.json that every record's provenance carries; surface_file_sha256 is the file's bytes. Gold and test patches are not in any file. Corpus-level training admission is held: pending text-twin rendering with the fixed renderer and recipe cohort declaration (HARNESS_BENCH.md §7 step 2). Stored on /mnt/external with the other corpora (all files < 1 GiB; a finished, held corpus is not latency-critical).",
+      "notes": "SUPERSEDED for training use by harness-bench-swe-rebench-openhands-pi-records-20261010-v3 (2026-10-10, the registered digest\u2192view conversion; this corpus stays as published and the trainer refuses its digest parts). Harness-bench native records (natlang.teacher_training_turn.native/1, plans/neuralese/HARNESS_BENCH.md \u00a72), supersedes harness-bench-swe-rebench-openhands-pi-records-20261010-v1. Built 2026-10-10 by harness_bench_build.sh at code commit b4543ebd: same surface.json and prepared.jsonl as v1 (copied, byte-identical), replay and records re-run with the fix that an OpenHands bash timeout notice ('[The command has no new output after N seconds. ... send keys (\"C-c\", \"C-z\", \"C-d\") ... or use the timeout parameter in execute_bash for future commands.]', or its 'timed out after N seconds' form) is a divergence point: pi's bash waits for the command, so pi would never show that notice; replay stops before that step and records keep only the verified prefix. 492 resolved trajectories prepared, 489 replayed (3 clone failures, NREL/hescore-hpxml), 305 fully verified and 184 verified up to their first divergence; 22,468 of 22,652 steps verified. Divergences: task_tracker 112, bash soft timeout (OpenHands-only interaction) 31, read text mismatch 22, read failed in pi 8, write failed for the teacher 5, read failed for the teacher 4, execute_bash interactive input 1, str_replace_editor other 1. 3,843 records (3,731 train / 112 test), 20,302 digest parts; no record contains the soft-timeout notice (v1: 6). Per-record admission is in each record (harness-bench-criteria/2: resolved, pi-replayed-verified, exact-mapping; all 3,843 pass). surface_sha256 is the sha256 of the sorted-key JSON of surface.json that every record's provenance carries; surface_file_sha256 is the file's bytes. Gold and test patches are not in any file. Corpus-level training admission is held: pending text-twin rendering with the fixed renderer and recipe cohort declaration (HARNESS_BENCH.md \u00a77 step 2). Stored on /mnt/external with the other corpora (all files < 1 GiB; a finished, held corpus is not latency-critical).",
       "supersedes": "harness-bench-swe-rebench-openhands-pi-records-20261010-v1",
       "required_conversion": {
         "reason": "built with natlang.harness-bench-conversion/1: tool-output parts have type 'digest' and the piece is prompt:digest; DECISIONS.md 2026-10-09 (one summarizer family) renamed them to 'view' and prompt:view (view's body), by rewrite. train.trajectories refuses 'digest' parts before any model work.",
@@ -17582,7 +17582,7 @@
           "working_copy": "/home/werg/data/harness-bench/build-20261010-1000"
         }
       },
-      "notes": "SUPERSEDED by harness-bench-swe-rebench-openhands-pi-records-20261010-v4 (2026-10-10): its split_of(repo, 5) splits disagree with S1's for 53 of its 321 repositories (cross-corpus closure); v4 follows S1. Kept for provenance and for lineages already pinned to it. Harness-bench native records of harness-bench-swe-rebench-openhands-pi-records-20261010-v2 after the registered view rename (DECISIONS.md 2026-10-09, one summarizer family; HARNESS_BENCH.md §3), converted 2026-10-10 by scripts/neuralese_data/digest_to_view.py@1: every 'digest' part is a 'view' part (name view:<sha12>, note '  // view of the ...'), the piece prompt:digest is prompt:view with view's body (natlang_neuralese.view.INSTRUCTIONS), neuralese_conversion.version natlang.harness-bench-conversion/2 with sites.view, views_in_trajectory, provenance view_chars, and each record carries view_rename (converter, from_version natlang.harness-bench-conversion/1, digest_parts). 3,843 records (3,731 train / 112 test), 20,302 view parts in 3,670 records, 1 piece renamed; summary.json, surface.json, prepared.jsonl, replayed.jsonl and replay.log copied byte for byte. conversion.json records input and output SHA-256 and the counts. Validated 2026-10-10 with the trajectory trainer's record loading (train.trajectories reject_digest_part on every part, no prompt:digest piece, authenticated_recurrence_context_view, crisp_messages rendering; no model load): all 3,843 records load and render, none held, no digest part remains, every receipt hash verifies. Per-record admission unchanged from v2 (harness-bench-criteria/2). Corpus-level training admission is held as for v2: pending text-twin rendering with the fixed renderer and recipe cohort declaration (HARNESS_BENCH.md §7 step 2). Stored on /mnt/external with the other corpora (data/neuralese/corpora is a symlink there; a finished, held corpus is not latency-critical). 2026-10-10: text twins rendered with the fixed renderer (harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v1, -text-mellum21-12b-20261010-v1) and the harness_bench cohort declared, held, in raw-recurrence-v3 / raw-recurrence-mellum-v2.",
+      "notes": "SUPERSEDED by harness-bench-swe-rebench-openhands-pi-records-20261010-v4 (2026-10-10): its split_of(repo, 5) splits disagree with S1's for 53 of its 321 repositories (cross-corpus closure); v4 follows S1. Kept for provenance and for lineages already pinned to it. Harness-bench native records of harness-bench-swe-rebench-openhands-pi-records-20261010-v2 after the registered view rename (DECISIONS.md 2026-10-09, one summarizer family; HARNESS_BENCH.md \u00a73), converted 2026-10-10 by scripts/neuralese_data/digest_to_view.py@1: every 'digest' part is a 'view' part (name view:<sha12>, note '  // view of the ...'), the piece prompt:digest is prompt:view with view's body (natlang_neuralese.view.INSTRUCTIONS), neuralese_conversion.version natlang.harness-bench-conversion/2 with sites.view, views_in_trajectory, provenance view_chars, and each record carries view_rename (converter, from_version natlang.harness-bench-conversion/1, digest_parts). 3,843 records (3,731 train / 112 test), 20,302 view parts in 3,670 records, 1 piece renamed; summary.json, surface.json, prepared.jsonl, replayed.jsonl and replay.log copied byte for byte. conversion.json records input and output SHA-256 and the counts. Validated 2026-10-10 with the trajectory trainer's record loading (train.trajectories reject_digest_part on every part, no prompt:digest piece, authenticated_recurrence_context_view, crisp_messages rendering; no model load): all 3,843 records load and render, none held, no digest part remains, every receipt hash verifies. Per-record admission unchanged from v2 (harness-bench-criteria/2). Corpus-level training admission is held as for v2: pending text-twin rendering with the fixed renderer and recipe cohort declaration (HARNESS_BENCH.md \u00a77 step 2). Stored on /mnt/external with the other corpora (data/neuralese/corpora is a symlink there; a finished, held corpus is not latency-critical). 2026-10-10: text twins rendered with the fixed renderer (harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v1, -text-mellum21-12b-20261010-v1) and the harness_bench cohort declared, held, in raw-recurrence-v3 / raw-recurrence-mellum-v2.",
       "supersedes": "harness-bench-swe-rebench-openhands-pi-records-20261010-v2",
       "superseded_by": "harness-bench-swe-rebench-openhands-pi-records-20261010-v4",
       "training_admission_reason": "2026-10-11 dgx-held-recovery: superseded by v4: identical records except split (53 repositories disagree with S1). No unique rows."
@@ -17644,7 +17644,7 @@
           }
         }
       },
-      "notes": "Harness-bench native records rebuilt 2026-10-10 from harness-bench-swe-rebench-openhands-pi-records-20261010-v3's replay outputs by the records stage at 621de060, which writes view parts directly (no digest_to_view step). Only the splits changed: harness-bench v3 split by split_of(repo, 5) while S1 (s1-full-final-20261003, repo: and swe-instance: groups) holds every one of these 321 repositories, 53 of them in the other split, so the view corpus v2 closure dropped 2,826 tool-output records (VIEW_CORPUS.md §4.1). Now all 321 repositories take S1's split (275 train / 46 test; moved from split_of: {\"test->train\": 8, \"train->test\": 45}; none unplaceable). 3843 records (2969 train / 874 test; v3: 3,731 / 112), 20302 view parts; every record equals its v3 record except split, provenance.split_placement (new: rule, touched corpora) and the absent view_rename (v3's converter receipt); pieces.jsonl byte-identical. Per-record admission unchanged (harness-bench-criteria/2, all approved). Admission as v3's (recurrence held). Cross-corpus index: cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1.",
+      "notes": "Harness-bench native records rebuilt 2026-10-10 from harness-bench-swe-rebench-openhands-pi-records-20261010-v3's replay outputs by the records stage at 621de060, which writes view parts directly (no digest_to_view step). Only the splits changed: harness-bench v3 split by split_of(repo, 5) while S1 (s1-full-final-20261003, repo: and swe-instance: groups) holds every one of these 321 repositories, 53 of them in the other split, so the view corpus v2 closure dropped 2,826 tool-output records (VIEW_CORPUS.md \u00a74.1). Now all 321 repositories take S1's split (275 train / 46 test; moved from split_of: {\"test->train\": 8, \"train->test\": 45}; none unplaceable). 3843 records (2969 train / 874 test; v3: 3,731 / 112), 20302 view parts; every record equals its v3 record except split, provenance.split_placement (new: rule, touched corpora) and the absent view_rename (v3's converter receipt); pieces.jsonl byte-identical. Per-record admission unchanged (harness-bench-criteria/2, all approved). Admission as v3's (recurrence held). Cross-corpus index: cross-corpus-index-harness-bench-swe-rebench-openhands-pi-records-20261010-v4-v1.",
       "supersedes": "harness-bench-swe-rebench-openhands-pi-records-20261010-v3",
       "review_status": "2026-10-11 dgx-held-recovery: owner-admitted 2026-10-10 harness bench records (v4 = S1-consistent splits, 2969 train / 874 test records); label said pending recurrence support, which is not a reason to exclude. JeFF scan done.",
       "consumable_by_direct_stage": false,
@@ -17710,7 +17710,7 @@
           "tokens": 72442697
         }
       },
-      "notes": "SUPERSEDED by harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v2 (2026-10-10): rendered from harness-bench-swe-rebench-openhands-pi-records-20261010-v3, whose splits disagree with S1; v2 renders harness-bench-swe-rebench-openhands-pi-records-20261010-v4. Training admission kept for lineages that already assembled it (e.g. neuralese-native-harness-text-mix-lfm25-8805-20261010-v1); new recipes pin v2. LFM2.5-350M tokenizer twin of harness-bench-swe-rebench-openhands-pi-records-20261010-v3, rendered 2026-10-10 by the shared native chat renderer (gold_text_rows, natlang.native_gold_chat/3: serving generation prompt + assistant reply rendered separately, the 2026-10-09 serving-boundary correction 9e504615; tokenizer loaded through the pinned-provenance guard load_pinned_tokenizer). View parts render as their preview (the trainer's --view preview). Per-record admission is the records' own (harness-bench-criteria/2, training_admission.approved); no approval was added. 3843 documents (3731 train / 112 test), 0 omitted, 74,552,953 tokens (72,442,697 train / 2,110,256 test), of which 791,583 (1.1%) are the supervised assistant suffix; max document 102,005 tokens. Each document is one record: the task, the whole earlier trajectory (tool outputs as pi shows them) and one target turn; a trajectory contributes up to 8 records, so its prefix recurs in each. Training admission held: the harness_bench cohort is declared, not admitted, in raw-recurrence-v3 / raw-recurrence-mellum-v2 (HARNESS_BENCH.md §6/§7). Stored on /mnt/external with the other corpora (data/neuralese/corpora symlink).",
+      "notes": "SUPERSEDED by harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v2 (2026-10-10): rendered from harness-bench-swe-rebench-openhands-pi-records-20261010-v3, whose splits disagree with S1; v2 renders harness-bench-swe-rebench-openhands-pi-records-20261010-v4. Training admission kept for lineages that already assembled it (e.g. neuralese-native-harness-text-mix-lfm25-8805-20261010-v1); new recipes pin v2. LFM2.5-350M tokenizer twin of harness-bench-swe-rebench-openhands-pi-records-20261010-v3, rendered 2026-10-10 by the shared native chat renderer (gold_text_rows, natlang.native_gold_chat/3: serving generation prompt + assistant reply rendered separately, the 2026-10-09 serving-boundary correction 9e504615; tokenizer loaded through the pinned-provenance guard load_pinned_tokenizer). View parts render as their preview (the trainer's --view preview). Per-record admission is the records' own (harness-bench-criteria/2, training_admission.approved); no approval was added. 3843 documents (3731 train / 112 test), 0 omitted, 74,552,953 tokens (72,442,697 train / 2,110,256 test), of which 791,583 (1.1%) are the supervised assistant suffix; max document 102,005 tokens. Each document is one record: the task, the whole earlier trajectory (tool outputs as pi shows them) and one target turn; a trajectory contributes up to 8 records, so its prefix recurs in each. Training admission held: the harness_bench cohort is declared, not admitted, in raw-recurrence-v3 / raw-recurrence-mellum-v2 (HARNESS_BENCH.md \u00a76/\u00a77). Stored on /mnt/external with the other corpora (data/neuralese/corpora symlink).",
       "superseded_by": "harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v2"
     },
     {
@@ -17845,7 +17845,7 @@
           "tokens": 92621371
         }
       },
-      "notes": "SUPERSEDED by harness-bench-swe-rebench-openhands-pi-text-mellum21-12b-20261010-v2 (2026-10-10): rendered from harness-bench-swe-rebench-openhands-pi-records-20261010-v3, whose splits disagree with S1; v2 renders harness-bench-swe-rebench-openhands-pi-records-20261010-v4. Mellum2.1-12B-A2.5B-Thinking tokenizer twin of harness-bench-swe-rebench-openhands-pi-records-20261010-v3, rendered 2026-10-10 by the shared native chat renderer (gold_text_rows, natlang.native_gold_chat/3: serving generation prompt + assistant reply rendered separately, the 2026-10-09 serving-boundary correction 9e504615; tokenizer loaded through the pinned-provenance guard load_pinned_tokenizer). View parts render as their preview (the trainer's --view preview). Per-record admission is the records' own (harness-bench-criteria/2, training_admission.approved); no approval was added. 3843 documents (3731 train / 112 test), 0 omitted, 95,410,999 tokens (92,621,371 train / 2,789,628 test), of which 821,583 (0.9%) are the supervised assistant suffix; max document 105,093 tokens. Each document is one record: the task, the whole earlier trajectory (tool outputs as pi shows them) and one target turn; a trajectory contributes up to 8 records, so its prefix recurs in each. Training admission held: the harness_bench cohort is declared, not admitted, in raw-recurrence-v3 / raw-recurrence-mellum-v2 (HARNESS_BENCH.md §6/§7). Stored on /mnt/external with the other corpora (data/neuralese/corpora symlink).",
+      "notes": "SUPERSEDED by harness-bench-swe-rebench-openhands-pi-text-mellum21-12b-20261010-v2 (2026-10-10): rendered from harness-bench-swe-rebench-openhands-pi-records-20261010-v3, whose splits disagree with S1; v2 renders harness-bench-swe-rebench-openhands-pi-records-20261010-v4. Mellum2.1-12B-A2.5B-Thinking tokenizer twin of harness-bench-swe-rebench-openhands-pi-records-20261010-v3, rendered 2026-10-10 by the shared native chat renderer (gold_text_rows, natlang.native_gold_chat/3: serving generation prompt + assistant reply rendered separately, the 2026-10-09 serving-boundary correction 9e504615; tokenizer loaded through the pinned-provenance guard load_pinned_tokenizer). View parts render as their preview (the trainer's --view preview). Per-record admission is the records' own (harness-bench-criteria/2, training_admission.approved); no approval was added. 3843 documents (3731 train / 112 test), 0 omitted, 95,410,999 tokens (92,621,371 train / 2,789,628 test), of which 821,583 (0.9%) are the supervised assistant suffix; max document 105,093 tokens. Each document is one record: the task, the whole earlier trajectory (tool outputs as pi shows them) and one target turn; a trajectory contributes up to 8 records, so its prefix recurs in each. Training admission held: the harness_bench cohort is declared, not admitted, in raw-recurrence-v3 / raw-recurrence-mellum-v2 (HARNESS_BENCH.md \u00a76/\u00a77). Stored on /mnt/external with the other corpora (data/neuralese/corpora symlink).",
       "superseded_by": "harness-bench-swe-rebench-openhands-pi-text-mellum21-12b-20261010-v2",
       "training_admission_reason": "2026-10-11 dgx-held-recovery: superseded by text v2 (renders records v4); v1 renders v3 splits."
     },
@@ -19659,7 +19659,7 @@
       ],
       "license": "Inherited authored source identities/license in referenced V22 source artifact",
       "independent_new_worlds": 0,
-      "notes": "Additional now-closed NVIDIA/Gemini3.5Lite source1–4 plus Kilo source0. Completes byte availability for independent reviewed10-row NVIDIA/Gemini comparison; Kilo wrong-output case preserved. Model done is not oracle pass. Do not mutate first closed corpus manifest; preserve all partial/error/success artifacts; native replay and source-quality admission pending."
+      "notes": "Additional now-closed NVIDIA/Gemini3.5Lite source1\u20134 plus Kilo source0. Completes byte availability for independent reviewed10-row NVIDIA/Gemini comparison; Kilo wrong-output case preserved. Model done is not oracle pass. Do not mutate first closed corpus manifest; preserve all partial/error/success artifacts; native replay and source-quality admission pending."
     },
     {
       "id": "free-provider-google-lite-and-new-free-screens-held-20261009-v1",
@@ -19911,7 +19911,7 @@
       ],
       "license": "Inherited exact source licenses, preserved per compatible batch",
       "independent_new_worlds": 0,
-      "notes": "131 strict source-consistent labels→23 authored collection IR cases (8 choice/14 binary/1 ordinal) at batch-size8. All23 actual scripted references accepted with visible captures and kind-specific runtime output instructions;308 held native turns. Binary probability source questions kept verbatim, typed output explicitly p>=0.5→boolean; choice/ordinal select exact source label, no probability envelope. Zero provider calls/teacher scaffold claims/new worlds/admission. Fully replayed static reference is not source-quality approval or learned-channel qualification. All125 rejected label rows preserved. V1 derivative superseded, not combined as additional worlds. Superseded by v3 shared ordinal source-mapping correction. Earlier snapshots remain held historical evidence, never mixed as additional worlds.",
+      "notes": "131 strict source-consistent labels\u219223 authored collection IR cases (8 choice/14 binary/1 ordinal) at batch-size8. All23 actual scripted references accepted with visible captures and kind-specific runtime output instructions;308 held native turns. Binary probability source questions kept verbatim, typed output explicitly p>=0.5\u2192boolean; choice/ordinal select exact source label, no probability envelope. Zero provider calls/teacher scaffold claims/new worlds/admission. Fully replayed static reference is not source-quality approval or learned-channel qualification. All125 rejected label rows preserved. V1 derivative superseded, not combined as additional worlds. Superseded by v3 shared ordinal source-mapping correction. Earlier snapshots remain held historical evidence, never mixed as additional worlds.",
       "superseded_by": "free-provider-static-decision-inline-lambdas-held-20261010-v3"
     },
     {
@@ -25375,7 +25375,7 @@
       "source_class": "iterative-guidance-trajectories-inputs",
       "training_admission": false,
       "admission": "held-source-native-quality-review",
-      "notes": "Fifteen V35 V5 train worlds indices 0–14, original V4 golds/facts/groups unchanged; corrected shared current-status note guidance. SCHED-543 index15 already recovered separately. Three workers beside at most two remaining V53 workers, total at most five. Repeated original worlds, no independent-world credit. Input-only while active."
+      "notes": "Fifteen V35 V5 train worlds indices 0\u201314, original V4 golds/facts/groups unchanged; corrected shared current-status note guidance. SCHED-543 index15 already recovered separately. Three workers beside at most two remaining V53 workers, total at most five. Repeated original worlds, no independent-world credit. Input-only while active."
     },
     {
       "id": "free-provider-google-v20-closed-raw-held-20261010-v1",
@@ -27830,7 +27830,7 @@
       "source_class": "held-generation-quality-and-source-closure",
       "training_admission": false,
       "admission": "held-pending-explicit-quality-and-source-review",
-      "notes": "Actual2native rows→29turns. Preservedfirstwrongapprovalbitsdiagnostic; correctedall29held then9exactreviewedactions only,20held. Selectednative9candidate,neuralese9held7unsupportedinterpolation/0childresult conversions. No blanketcorpus/operatoradmission."
+      "notes": "Actual2native rows\u219229turns. Preservedfirstwrongapprovalbitsdiagnostic; correctedall29held then9exactreviewedactions only,20held. Selectednative9candidate,neuralese9held7unsupportedinterpolation/0childresult conversions. No blanketcorpus/operatoradmission."
     },
     {
       "id": "luna-v64-seven-source-original-inputs-held-20261011-v1",
@@ -28331,7 +28331,7 @@
       "training_admission": false,
       "admission": "prepared-only-root-review-required",
       "independent_new_worlds": 0,
-      "notes": "Prepared five per-lane V73 queues from V35 static reference cases (55 programs/395 source items) on frozen runtime V16. Binds actual V72 worker lanes 1,3,4,5 plus the separate lane-02 supplement (PID 1033871) to V73 workers 1–5; each queue SHA and PID is pinned. V71 index16 retry is recorded as completed prerequisite, not substituted as V72 output. Some V72 predecessors were active/incomplete at preparation; the reviewed starter waits on exact PIDs and blocks any lane whose own queue is not terminally covered. All data held, no launch and no admission."
+      "notes": "Prepared five per-lane V73 queues from V35 static reference cases (55 programs/395 source items) on frozen runtime V16. Binds actual V72 worker lanes 1,3,4,5 plus the separate lane-02 supplement (PID 1033871) to V73 workers 1\u20135; each queue SHA and PID is pinned. V71 index16 retry is recorded as completed prerequisite, not substituted as V72 output. Some V72 predecessors were active/incomplete at preparation; the reviewed starter waits on exact PIDs and blocks any lane whose own queue is not terminally covered. All data held, no launch and no admission."
     },
     {
       "id": "luna-choice-confidence-v73-v35-runtimev16-input-plan-held-20261011-v2",
@@ -29097,7 +29097,7 @@
       "training_admission": false,
       "admission": "root-approved-generation-input-only-no-output-or-training-admission",
       "independent_new_worlds": 0,
-      "notes": "V75 v4 preparation-only input snapshot on runtime V17, 54 static programs / 390 source items, five exact worker queues. It binds the current 79-hold policy snapshot SHA c8eab8b4... and exact completed preparer snapshot SHA 6c1ff89f...; later canonical policy or code changes do not invalidate the prepared source identity. Predecessors are explicitly numbered logical lanes 1–5 with exact queue hashes and V16 runtime manifest pins in the reviewed/root-approved plans. Root supervisor 1052262 has started lane 2 and waits on other predecessor lanes; live campaign status/journals/results/logs excluded."
+      "notes": "V75 v4 preparation-only input snapshot on runtime V17, 54 static programs / 390 source items, five exact worker queues. It binds the current 79-hold policy snapshot SHA c8eab8b4... and exact completed preparer snapshot SHA 6c1ff89f...; later canonical policy or code changes do not invalidate the prepared source identity. Predecessors are explicitly numbered logical lanes 1\u20135 with exact queue hashes and V16 runtime manifest pins in the reviewed/root-approved plans. Root supervisor 1052262 has started lane 2 and waits on other predecessor lanes; live campaign status/journals/results/logs excluded."
     },
     {
       "id": "luna-choice-confidence-v75-v36-runtimev17-v4-root-approval-launch-held-20261011-v1",
@@ -29911,7 +29911,7 @@
       "training_admission": false,
       "admission": "static-reference-and-future-generation-source-only-no-provider-call-admission",
       "independent_new_worlds": 0,
-      "notes": "Immutable V41 append-only prefix snapshot at 356 label rows. The selected remainder excludes V78’s 187-row prefix and V78/V79 already-selected items/groups. Static adapter used 132 completed label rows to produce 16 programs/102 labels/zero replay failures; combined V80 source has 5 criteria-fixed CLINC programs plus 16 remainder programs, 139 unique inherited-train items/groups. Raw labels, source master cases/manifest, adapter rejections, held native scaffold, component archive, replay evidence, and combined input provenance are included."
+      "notes": "Immutable V41 append-only prefix snapshot at 356 label rows. The selected remainder excludes V78\u2019s 187-row prefix and V78/V79 already-selected items/groups. Static adapter used 132 completed label rows to produce 16 programs/102 labels/zero replay failures; combined V80 source has 5 criteria-fixed CLINC programs plus 16 remainder programs, 139 unique inherited-train items/groups. Raw labels, source master cases/manifest, adapter rejections, held native scaffold, component archive, replay evidence, and combined input provenance are included."
     },
     {
       "id": "luna-choice-confidence-v80-v41-prefix-input-held-20261011-v1",
@@ -30157,7 +30157,7 @@
       "training_admission": false,
       "admission": "strict-source-label-static-reference-only-no-provider-output-or-training-admission",
       "independent_new_worlds": 0,
-      "notes": "Atomic 703-row newline-terminated prefix of live V41 JSON-object labels, with exact parent source cases/frozen model manifest. The selection records excluded prior V77–V81 IDs/groups; 254 remaining labels entered the shared adapter, yielding 148 exact-label accepted cases across 20 programs and 1,899 retained rejection rows; all 20 authored reference replays passed. The run is still held; replay/schema validity is not oracle or training admission."
+      "notes": "Atomic 703-row newline-terminated prefix of live V41 JSON-object labels, with exact parent source cases/frozen model manifest. The selection records excluded prior V77\u2013V81 IDs/groups; 254 remaining labels entered the shared adapter, yielding 148 exact-label accepted cases across 20 programs and 1,899 retained rejection rows; all 20 authored reference replays passed. The run is still held; replay/schema validity is not oracle or training admission."
     },
     {
       "id": "luna-choice-confidence-v82-v41-prefix-input-held-20261011-v1",
@@ -30204,7 +30204,7 @@
       "training_admission": false,
       "admission": "strict-source-label-static-reference-only-no-provider-output-or-training-admission",
       "independent_new_worlds": 0,
-      "notes": "Fresh 749-row append-only V41 prefix snapshot with exact V41 source cases/provider manifest, prior-selection exclusions V77–V82, 38 accepted source labels over six programs, all six authored reference replays passed. All label disagreements and rejection records remain preserved. This is held source/static-reference evidence, not teacher trajectories or training admission."
+      "notes": "Fresh 749-row append-only V41 prefix snapshot with exact V41 source cases/provider manifest, prior-selection exclusions V77\u2013V82, 38 accepted source labels over six programs, all six authored reference replays passed. All label disagreements and rejection records remain preserved. This is held source/static-reference evidence, not teacher trajectories or training admission."
     },
     {
       "id": "luna-choice-confidence-v83-v41-prefix-input-held-20261011-v1",
@@ -30521,7 +30521,7 @@
       "training_admission": false,
       "admission": "post-hoc inherited-label comparison and scope diagnostic only; no relabeling, admission, or independent semantic certification",
       "independent_new_worlds": 0,
-      "notes": "Joins all 65 result rows from closed campaigns V81–V85 to their exact static source program IDs and pinned source cases. 55 accepted program results, 10 rejected programs; 456 expected label slots across 456 distinct inherited source IDs/groups; 11 exact output/source-label disagreements; 33 scope-failure events. Mismatches are not independently adjudicated. Preserves per-result hashes and worker journals."
+      "notes": "Joins all 65 result rows from closed campaigns V81\u2013V85 to their exact static source program IDs and pinned source cases. 55 accepted program results, 10 rejected programs; 456 expected label slots across 456 distinct inherited source IDs/groups; 11 exact output/source-label disagreements; 33 scope-failure events. Mismatches are not independently adjudicated. Preserves per-result hashes and worker journals."
     },
     {
       "id": "free-provider-v73-admitted-ordinary-text-846-20261011-v1",
@@ -31041,7 +31041,7 @@
       "recurrence_admission": false,
       "independent_new_worlds": 0,
       "admission": "prepared-only; root_approved=false; no provider calls or launch",
-      "notes": "V90 proposes 52 programs/402 original source items from the separately held V40 static adapter, with five fresh queues of 10–11 programs each. Exact V40 source IDs/groups had zero overlap with current 79 item/group holds and the 5,005 prior Luna queue IDs/groups observed during preparation. Chains each lane to V89; V17 runtime. Root review and launch authorization required."
+      "notes": "V90 proposes 52 programs/402 original source items from the separately held V40 static adapter, with five fresh queues of 10\u201311 programs each. Exact V40 source IDs/groups had zero overlap with current 79 item/group holds and the 5,005 prior Luna queue IDs/groups observed during preparation. Chains each lane to V89; V17 runtime. Root review and launch authorization required."
     },
     {
       "id": "luna-choice-confidence-v90-approved-launch-held-20261011-v1",
@@ -32916,7 +32916,7 @@
       "derived_from": [
         "luna-v43-exact-map37-native-sft-926-20261011-v1"
       ],
-      "notes": "Existing converter output for the 926 already-admitted native SFT rows. Converts 20 compiler-attested model-authored inline instruction writers with 34 distinct reads (35 read appearances); 20/20 sidecars pass the scoped Python validator. Child-result conversion remains zero: 895 producer-missing, 164 host-result-only. Supersedes the preliminary v1 readiness report’s zero-inline-conversion interpretation; it does not add independent source credit or change native-SFT admission. Reciprocal writer/read, source quality, split, and recurrence review remain pending. Exact input and converter pins are in review.json."
+      "notes": "Existing converter output for the 926 already-admitted native SFT rows. Converts 20 compiler-attested model-authored inline instruction writers with 34 distinct reads (35 read appearances); 20/20 sidecars pass the scoped Python validator. Child-result conversion remains zero: 895 producer-missing, 164 host-result-only. Supersedes the preliminary v1 readiness report\u2019s zero-inline-conversion interpretation; it does not add independent source credit or change native-SFT admission. Reciprocal writer/read, source quality, split, and recurrence review remain pending. Exact input and converter pins are in review.json."
     },
     {
       "id": "semantic-inline-curriculum-s72-teacher-turns-20261007-v1",
@@ -38907,7 +38907,7 @@
       "training_admission": true,
       "trace_admission": false,
       "admission": "root-reviewed exact native child-action SFT; no trace, recurrence, writer, runtime, or new-world qualification",
-      "training_admission_reason": "Root admission fa9d09a1… authorizes exactly 371 native SFT child turns by ID, exact target and message hash, train split, and source groups. Candidate packet and source-quality review remain separately pinned. The employer-intent item is excluded. This does not admit parent trajectories, traces, recurrence, learned writer behavior, or runtime qualification.",
+      "training_admission_reason": "Root admission fa9d09a1\u2026 authorizes exactly 371 native SFT child turns by ID, exact target and message hash, train split, and source groups. Candidate packet and source-quality review remain separately pinned. The employer-intent item is excluded. This does not admit parent trajectories, traces, recurrence, learned writer behavior, or runtime qualification.",
       "candidate_selection_admission": {
         "schema": "natlang.registry-candidate-selection-admission/1",
         "decision": "admit-reviewed-candidate-selection",
@@ -47836,7 +47836,7 @@
       "training_admission": true,
       "trace_admission": false,
       "admission": "Root-approved exact selected native child-action SFT; no trace, recurrence, writer, runtime, or new-world qualification",
-      "training_admission_reason": "Root admission acfb348296cd… authorizes exactly 261 native SFT child turns by ID, item/target/message hashes, train split, and source groups. Candidate packet and source-quality review remain separately pinned; source exclusions remain held. This does not admit parent trajectories, traces, recurrence, learned writer behavior, or runtime qualification.",
+      "training_admission_reason": "Root admission acfb348296cd\u2026 authorizes exactly 261 native SFT child turns by ID, item/target/message hashes, train split, and source groups. Candidate packet and source-quality review remain separately pinned; source exclusions remain held. This does not admit parent trajectories, traces, recurrence, learned writer behavior, or runtime qualification.",
       "candidate_selection_admission": {
         "schema": "natlang.registry-candidate-selection-admission/1",
         "decision": "admit-reviewed-candidate-selection",
@@ -52321,7 +52321,7 @@
       "training_admission": true,
       "trace_admission": false,
       "admission": "Root-approved exact selected native child-action SFT; no trace, recurrence, writer, runtime, or new-world qualification",
-      "training_admission_reason": "Root admission 3c656a3a247f… authorizes exactly 244 native SFT child turns by ID, item/target/message hashes, train split, and source groups. Candidate packet and source-quality review remain separately pinned; source exclusions remain held. This does not admit parent trajectories, traces, recurrence, learned writer behavior, or runtime qualification.",
+      "training_admission_reason": "Root admission 3c656a3a247f\u2026 authorizes exactly 244 native SFT child turns by ID, item/target/message hashes, train split, and source groups. Candidate packet and source-quality review remain separately pinned; source exclusions remain held. This does not admit parent trajectories, traces, recurrence, learned writer behavior, or runtime qualification.",
       "candidate_selection_admission": {
         "schema": "natlang.registry-candidate-selection-admission/1",
         "decision": "admit-reviewed-candidate-selection",
@@ -80673,7 +80673,7 @@
       ],
       "source_class": "Luna train-only curriculum teacher decisions with exact outcome and required-process review",
       "license": "project-generated; CC-BY-SA-4.0 (HotpotQA source)",
-      "split": "train only; source IDs/groups checked against held packet and preceding seeds52067–52071; global union held/source-quality filters still required",
+      "split": "train only; source IDs/groups checked against held packet and preceding seeds52067\u201352071; global union held/source-quality filters still required",
       "admission": "99 selected jobs, 92 exact accepted roots, seven wrong-answer rejections; five dataset-workbench semantic-label holds; 87 admitted parents and 648 approved native decisions",
       "training_admission": true,
       "training_admission_reason": "Exact accepted roots and verified pinned source, explicit semantic/process holds, protected source-group check, native per-decision approval; only approved-turns.jsonl is a training input",
@@ -84623,7 +84623,7 @@
       "admission": "Five roots reviewed; four semantically clear, one ambiguous world-events criterion held; no direct training admission",
       "training_admission": false,
       "training_admission_reason": "Review and hold evidence, not training rows",
-      "review_status": "Corrected v2 audit verifies exact item days, text, expected and observed values; dataset16 day4 Bush–Kerry item correctly excluded by day11 cutoff",
+      "review_status": "Corrected v2 audit verifies exact item days, text, expected and observed values; dataset16 day4 Bush\u2013Kerry item correctly excluded by day11 cutoff",
       "required_conversion": "None for audit; approved rows curated separately",
       "notes": "V1 audit was never registered; it incorrectly claimed dataset16 M6 was day18. Exact source says day4. V2 is the valid independent audit."
     },
@@ -105744,7 +105744,7 @@
       "training_admission_reason": "Exact oracle success and protected-source check; one type-mismatch root held whole; native per-decision approval. Only approved-turns.jsonl is SFT input. No DPO pair admitted.",
       "review_status": "Four-case Sol pilot: three exact successes; one failed dataset answer; one successful ticket root held for failed root action, leaving two high-quality continuations.",
       "required_conversion": "Render LFM/Mellum twins in full, program-header and whole-trajectory before protected union",
-      "notes": "Original source handoffs are in the s52106–s52113 repair cycle; the nested-504 source was excluded from this pilot. Global union checks source identity and source-review holds."
+      "notes": "Original source handoffs are in the s52106\u2013s52113 repair cycle; the nested-504 source was excluded from this pilot. Global union checks source identity and source-review holds."
     },
     {
       "id": "sol-repair-pilot-s52106-s52113-render-20261015-v1",
@@ -108976,7 +108976,7 @@
         "source/whole-trajectory/mellum21/text-data.jsonl.zst"
       ],
       "source_class": "view-qualified-static-native-graphs-from-admitted-seed-teacher-turns",
-      "split": "Train-only incremental views from admitted seeds 52113–52118. Program-header and complete whole-trajectory views are separately qualified; neither creates native producer/consumer edges.",
+      "split": "Train-only incremental views from admitted seeds 52113\u201352118. Program-header and complete whole-trajectory views are separately qualified; neither creates native producer/consumer edges.",
       "admission": "3,019 program-header rows and 3,019 whole-trajectory rows per model. Exact source manifests, current protections, tokenizer-specific parsing, train-only splits, twins, source groups, and compressed output SHA/size are verified in validation-proof.json. Whole trajectories retain complete contexts, weight role/tool/context spans, and mask failed assistant actions.",
       "license_provenance": "Inherited from the registered source render corpora; owner accepts all licenses.",
       "derived_from": [
@@ -109030,7 +109030,7 @@
       ],
       "source_class": "view-qualified-static-native-whole-trajectory-graphs-from-admitted-seed-turns",
       "split": "Train-only whole-trajectory view. The source render manifests contain 743 train trajectories per model and no held rows.",
-      "admission": "743 whole-trajectory graphs per model from already admitted seed 52110–52112 renders. Exact source manifests, live protection closure, graph tokenizers, twins, source groups, train-only split and artifact SHAs are bound in validation-proof.json. Complete conversation context remains; role weights preserve assistant targets, downweight prompts/tool/runtime-openings, and failed assistant actions are masked. No native communication edges are inferred.",
+      "admission": "743 whole-trajectory graphs per model from already admitted seed 52110\u201352112 renders. Exact source manifests, live protection closure, graph tokenizers, twins, source groups, train-only split and artifact SHAs are bound in validation-proof.json. Complete conversation context remains; role weights preserve assistant targets, downweight prompts/tool/runtime-openings, and failed assistant actions are masked. No native communication edges are inferred.",
       "training_admission": true,
       "training_admission_reason": "This fills the previously missing native whole-trajectory view for admitted seed render sources. All 743 rows per tokenizer parse through the shared schema; exact twins and live source-group exclusion checks pass.",
       "license_provenance": "Inherited from the registered source render corpora; owner accepts all licenses.",
@@ -109072,7 +109072,7 @@
       ],
       "source_class": "verified-strong-teacher-positive-native-whole-trajectory-ordinary-SFT-graphs",
       "split": "Train-only. 11,687 unique graphs per model; empty test files; no held evaluation rows are claimed.",
-      "admission": "675 verified Qwen3.8-Flash-Next trajectories yielded 11,708 eligible assistant turns. Twenty-one exact token/weight duplicates per model were omitted after comparison with V1–V6 and clean-action V1–V4, leaving 11,687 train graphs per model. 1,415 turns per model remain explicit action omissions for failed/unexecuted proposals, one failed child and one missing authenticated typed-result target. Full captured prompts and trajectories remain bound; text emulation is ordinary one-node SFT, not an authentic Neuralese edge capture.",
+      "admission": "675 verified Qwen3.8-Flash-Next trajectories yielded 11,708 eligible assistant turns. Twenty-one exact token/weight duplicates per model were omitted after comparison with V1\u2013V6 and clean-action V1\u2013V4, leaving 11,687 train graphs per model. 1,415 turns per model remain explicit action omissions for failed/unexecuted proposals, one failed child and one missing authenticated typed-result target. Full captured prompts and trajectories remain bound; text emulation is ordinary one-node SFT, not an authentic Neuralese edge capture.",
       "training_admission": true,
       "training_admission_reason": "Independent terminal validation recomputed source/admission bindings, parsed all graphs under both expanded tokenizer fingerprints, verified identical model graph IDs, exact train-only split and source group closure, and found zero intersections with current held, quality, pending-review or decision-hold groups.",
       "derived_from": [
@@ -109101,7 +109101,7 @@
           "sha256": "dc80c994d6500b0cee3449ea70a3485f08e3c695e22538a174d2813ddc9341fc"
         },
         "decision_admission_cache_sha256": "e825edff2a87c77ed1814af9a749d9e3182fcb80469ed9ca5822256da00854da",
-        "deduplication": "v1–v6 verified-positive and clean-action V1–V4 exact token/weight comparison; 21 exact duplicates per model omitted.",
+        "deduplication": "v1\u2013v6 verified-positive and clean-action V1\u2013V4 exact token/weight comparison; 21 exact duplicates per model omitted.",
         "current_protection_manifest_sha256": "9f962ae8bf8b2afd0cb9f26a67e437dd449e79c990323d7b090738b6bbf87563",
         "current_source_review_sha256": "27b31f38b8d3b6108ea25eebb1cf1f614e204707a36b28b660b5484d9c2d9593",
         "validation_proof_sha256": "a1a4c6f85c856bf929bb9b5d43801f24edcc7e2ae16f8ef259ac43169d5f2bcc",
@@ -109565,7 +109565,7 @@
       ],
       "source_class": "verified-strong-teacher-positive-native-whole-trajectory-ordinary-SFT-graphs",
       "split": "Train-only. 7,790 unique graphs per model; empty test files; no held evaluation rows are claimed.",
-      "admission": "463 verified Qwen3.8-Flash-Next trajectories yielded 7,811 eligible assistant turns. Twenty-one exact token/weight duplicates per model were omitted after comparison with V1–V7 and clean-action V1–V4, leaving 7,790 new train graphs per model. 884 turns per model remain explicit action omissions for failed/unexecuted proposals. Full captured prompts and trajectories remain bound; text emulation is ordinary one-node SFT, not an authentic Neuralese edge capture.",
+      "admission": "463 verified Qwen3.8-Flash-Next trajectories yielded 7,811 eligible assistant turns. Twenty-one exact token/weight duplicates per model were omitted after comparison with V1\u2013V7 and clean-action V1\u2013V4, leaving 7,790 new train graphs per model. 884 turns per model remain explicit action omissions for failed/unexecuted proposals. Full captured prompts and trajectories remain bound; text emulation is ordinary one-node SFT, not an authentic Neuralese edge capture.",
       "training_admission": true,
       "training_admission_reason": "Independent terminal validation parsed both model views, verified identical train-only graph IDs and source-group closure against current held, quality and pending-review protection sources, and found zero intersections. A separate explicit decision-hold pass joined all 7,790 positive target decision IDs per model against the exact current sorted decision-hold files and found zero intersections.",
       "derived_from": [
@@ -109601,7 +109601,7 @@
         "eligible_turns": 7811,
         "duplicate_omissions_per_model": 21,
         "action_omissions_per_model": 884,
-        "deduplication": "V1–V7 verified-positive and clean-action V1–V4 exact token/weight comparison; 21 exact duplicates per model omitted.",
+        "deduplication": "V1\u2013V7 verified-positive and clean-action V1\u2013V4 exact token/weight comparison; 21 exact duplicates per model omitted.",
         "models": {
           "lfm25": {
             "model_id": "lfm2:f40d7a5bf651a03618ae8c06bda24a180e22fa79de964e55862c2c4984249da6",
@@ -109645,7 +109645,7 @@
       ],
       "source_class": "verified-strong-teacher-positive-native-whole-trajectory-ordinary-SFT-graphs",
       "split": "Train-only. 3,154 unique graphs per model; empty test files; no held evaluation rows are claimed.",
-      "admission": "184 verified Qwen3.8-Flash-Next trajectories yielded 3,157 eligible assistant turns. Three exact token/weight duplicates per model were omitted after comparison with V1–V8 and clean-action V1–V4, leaving 3,154 new train graphs per model. 359 turns per model remain explicit action omissions for failed or unexecuted proposals. Full captured prompts and trajectories remain bound; text emulation is ordinary one-node SFT, not an authentic Neuralese edge capture.",
+      "admission": "184 verified Qwen3.8-Flash-Next trajectories yielded 3,157 eligible assistant turns. Three exact token/weight duplicates per model were omitted after comparison with V1\u2013V8 and clean-action V1\u2013V4, leaving 3,154 new train graphs per model. 359 turns per model remain explicit action omissions for failed or unexecuted proposals. Full captured prompts and trajectories remain bound; text emulation is ordinary one-node SFT, not an authentic Neuralese edge capture.",
       "training_admission": true,
       "training_admission_reason": "Independent terminal validation recomputed source and decision-admission bindings, parsed both complete model views under their expanded tokenizer fingerprints, verified identical train-only graph IDs and source-group closure against current held, quality, and pending-review protections, and found zero intersections. A separate decision-hold closure joined every positive target decision ID per model to the exact current sorted decision-hold files and found zero intersections.",
       "derived_from": [
@@ -109682,7 +109682,7 @@
         "eligible_turns": 3157,
         "duplicate_omissions_per_model": 3,
         "action_omissions_per_model": 359,
-        "deduplication": "V1–V8 verified-positive and clean-action V1–V4 exact token/weight comparison; 3 exact duplicates per model omitted.",
+        "deduplication": "V1\u2013V8 verified-positive and clean-action V1\u2013V4 exact token/weight comparison; 3 exact duplicates per model omitted.",
         "decision_hold_closure": {
           "path": "runs/qwen-verified-positive-native-graphs-20261015-v9/decision-hold-closure-proof.json",
           "sha256": "ff578dc32460786317b81db6e86e67dfece2227917b104b3acee2cb8dc9e26d6",
@@ -109764,7 +109764,7 @@
         "eligible_turns": 2033,
         "duplicate_omissions_per_model": 5,
         "action_omissions_per_model": 244,
-        "deduplication": "V1–V9 verified-positive and clean-action V1–V4 exact token/weight comparison; exact duplicates per model omitted as listed in the bound build receipt.",
+        "deduplication": "V1\u2013V9 verified-positive and clean-action V1\u2013V4 exact token/weight comparison; exact duplicates per model omitted as listed in the bound build receipt.",
         "decision_hold_closure": {
           "path": "runs/qwen-verified-positive-native-graphs-20261015-v10/decision-hold-closure-proof.json",
           "sha256": "a7f08461603f01bd56a74361d759871e1279e47e7660badd01307efbd240d093",
@@ -109903,7 +109903,7 @@
         "eligible_turns": 1350,
         "duplicate_omissions_per_model": 3,
         "action_omissions_per_model": 145,
-        "deduplication": "V1–V9 verified-positive and clean-action V1–V4 exact token/weight comparison; exact duplicates per model omitted as listed in the bound build receipt.",
+        "deduplication": "V1\u2013V9 verified-positive and clean-action V1\u2013V4 exact token/weight comparison; exact duplicates per model omitted as listed in the bound build receipt.",
         "decision_hold_closure": {
           "path": "runs/qwen-verified-positive-native-graphs-20261015-v11/decision-hold-closure-proof.json",
           "sha256": "ebfb24a653b504470ada1538be1aa2ef7142b63e4a9e2c176784fc1bc49f07fd",
@@ -110099,7 +110099,7 @@
         "eligible_turns": 2644,
         "duplicate_omissions_per_model": 3,
         "action_omissions_per_model": 282,
-        "deduplication": "V1–V11 verified-positive and clean-action V1–V4 exact token/weight comparison; exact duplicates per model omitted as listed in the bound build receipt.",
+        "deduplication": "V1\u2013V11 verified-positive and clean-action V1\u2013V4 exact token/weight comparison; exact duplicates per model omitted as listed in the bound build receipt.",
         "decision_hold_closure": {
           "path": "runs/qwen-verified-positive-native-graphs-20261015-v12/decision-hold-closure-proof.json",
           "sha256": "4faa863b422a61937535a6f557639ef5f6eba97bd3dd91c6bc65daf277828a27",
@@ -110184,7 +110184,7 @@
         "eligible_turns": 1157,
         "duplicate_omissions_per_model": 1,
         "action_omissions_per_model": 131,
-        "deduplication": "V1–V12 verified-positive and clean-action V1–V4 exact token/weight comparison; exact duplicates per model omitted as listed in the bound build receipt.",
+        "deduplication": "V1\u2013V12 verified-positive and clean-action V1\u2013V4 exact token/weight comparison; exact duplicates per model omitted as listed in the bound build receipt.",
         "decision_hold_closure": {
           "path": "runs/qwen-verified-positive-native-graphs-20261015-v13/decision-hold-closure-proof.json",
           "sha256": "9480174cc7d1e86fd037793cadf5e9074b8b8336728b3ec0f35e5a3a17f97018",
@@ -110399,7 +110399,7 @@
         "eligible_turns": 2259,
         "duplicate_omissions_per_model": 9,
         "action_omissions_per_model": 271,
-        "deduplication": "V1–V13 verified-positive and clean-action V1–V4 exact token/weight comparison; exact duplicates per model omitted as listed in the bound build receipt.",
+        "deduplication": "V1\u2013V13 verified-positive and clean-action V1\u2013V4 exact token/weight comparison; exact duplicates per model omitted as listed in the bound build receipt.",
         "decision_hold_closure": {
           "path": "runs/qwen-verified-positive-native-graphs-20261015-v14/decision-hold-closure-proof.json",
           "sha256": "e124baa7cd7f785124a7cc633c250d46d4eb9ca512273eabc0a24b0668aab68a",
@@ -110486,7 +110486,7 @@
         "eligible_turns": 4434,
         "duplicate_omissions_per_model": 50,
         "action_omissions_per_model": 316,
-        "deduplication": "V1–V13 verified-positive and clean-action V1–V4 exact token/weight comparison; exact duplicates per model omitted as listed in the bound build receipt.",
+        "deduplication": "V1\u2013V13 verified-positive and clean-action V1\u2013V4 exact token/weight comparison; exact duplicates per model omitted as listed in the bound build receipt.",
         "decision_hold_closure": {
           "path": "runs/qwen-verified-positive-native-graphs-20261015-v15/decision-hold-closure-proof.json",
           "sha256": "4ca5997746193be39f00d6c8a20d933dca17db1c4dd7c071d62e624a80d92573",
@@ -111133,7 +111133,7 @@
         "eligible_turns": 7696,
         "duplicate_omissions_per_model": 18,
         "action_omissions_per_model": 466,
-        "deduplication": "V1–V15 verified-positive and clean-action V1–V4 exact token/weight comparison; exact duplicates per model omitted as listed in the bound build receipt.",
+        "deduplication": "V1\u2013V15 verified-positive and clean-action V1\u2013V4 exact token/weight comparison; exact duplicates per model omitted as listed in the bound build receipt.",
         "decision_hold_closure": {
           "path": "runs/qwen-verified-positive-native-graphs-20261015-v16/decision-hold-closure-proof.json",
           "sha256": "e51b5b9e3186b69f2afc82c676703d2c994422c575b3efed8e9a8b61a01f9cd0",
@@ -118583,7 +118583,7 @@
         "eligible_turns": 8352,
         "duplicate_omissions_per_model": 43,
         "action_omissions_per_model": 547,
-        "deduplication": "V1–V16 verified-positive and clean-action exact token/weight comparison; exact duplicates per model omitted as listed in the bound build receipt.",
+        "deduplication": "V1\u2013V16 verified-positive and clean-action exact token/weight comparison; exact duplicates per model omitted as listed in the bound build receipt.",
         "decision_hold_closure": {
           "path": "runs/qwen-verified-positive-native-graphs-20261015-v17/decision-hold-closure-proof.json",
           "sha256": "c4f5021b31986ecdc95a953018d488db08ed73362099d3641bbf2dba8645cf08",
@@ -119884,7 +119884,7 @@
         "eligible_turns": 25352,
         "duplicate_omissions_per_model": 249,
         "action_omissions_per_model": 1575,
-        "deduplication": "V1–V16 verified-positive and clean-action exact token/weight comparison; exact duplicates per model omitted as listed in the bound build receipt.",
+        "deduplication": "V1\u2013V16 verified-positive and clean-action exact token/weight comparison; exact duplicates per model omitted as listed in the bound build receipt.",
         "decision_hold_closure": {
           "path": "runs/qwen-verified-positive-native-graphs-20261015-v18/decision-hold-closure-proof.json",
           "sha256": "e48728b0a5744e3c26693d9272752adb4441f4a8615601723c2724ad6385f4d2",
@@ -119928,7 +119928,7 @@
       ],
       "source_class": "verified-strong-teacher-positive-native-whole-trajectory-ordinary-SFT-graphs",
       "split": "Train-only. 5,286 unique new graphs per model; empty test files; no held evaluation rows are claimed.",
-      "admission": "220 verified Qwen3.8-Flash-Next trajectories yielded 5,499 eligible assistant turns. 213 exact token/weight duplicates per model were omitted after comparison against V1–V19 verified-positive views, leaving 5,286 new train graphs per model. 333 source actions remain explicit omissions because no original provider action or nonempty assistant reply was available. Full captured prompts and trajectories remain bound.",
+      "admission": "220 verified Qwen3.8-Flash-Next trajectories yielded 5,499 eligible assistant turns. 213 exact token/weight duplicates per model were omitted after comparison against V1\u2013V19 verified-positive views, leaving 5,286 new train graphs per model. 333 source actions remain explicit omissions because no original provider action or nonempty assistant reply was available. Full captured prompts and trajectories remain bound.",
       "training_admission": true,
       "training_admission_reason": "Independent validation recomputed source and decision-admission bindings, parsed both complete views, matched graph IDs across models, verified current source-group protections, and joined every positive target decision ID against the exact current sorted decision-hold files with zero intersections. Registration is not evidence of student exposure.",
       "derived_from": [
@@ -120065,7 +120065,7 @@
         "eligible_turns": 6920,
         "duplicate_omissions_per_model": 75,
         "action_omissions_per_model": 401,
-        "deduplication": "The exact LFM view was deduplicated against V1–V18 verified-positive and clean-action views; source-bound omissions are recorded in the build receipt.",
+        "deduplication": "The exact LFM view was deduplicated against V1\u2013V18 verified-positive and clean-action views; source-bound omissions are recorded in the build receipt.",
         "decision_hold_closure": {
           "path": "runs/qwen-verified-positive-native-graphs-20261015-v19/lfm-prefix-decision-hold-closure-proof.json",
           "sha256": "577becf54d22ac18dcb86a5457a4dc6c6c301dd43e4f4c5e5c3b155d5e7b4afe",
@@ -120152,7 +120152,7 @@
         "eligible_turns": 6920,
         "duplicate_omissions_per_model": 75,
         "action_omissions_per_model": 401,
-        "deduplication": "This Mellum view was compared against V1–V18 verified-positive/clean-action views; exact per-model token/weight omissions are bound in the build receipt.",
+        "deduplication": "This Mellum view was compared against V1\u2013V18 verified-positive/clean-action views; exact per-model token/weight omissions are bound in the build receipt.",
         "decision_hold_closure": {
           "path": "runs/qwen-verified-positive-native-graphs-20261015-v19/decision-hold-closure-proof.json",
           "sha256": "c619bd775f2544cdbd88e9c75a2527c750b21e6d3972fc0187ee5436057927dc",
@@ -121639,7 +121639,7 @@
         "normalized-additional-scaffold-qualification.json"
       ],
       "source_class": "immutable-RL-task-source-with-source-bound-live-qualified-curriculum-extension",
-      "split": "Train-only RL task source; preserves all 128 prior tasks byte-for-byte and adds 12 source-qualified tasks with the loader’s canonical qualification value.",
+      "split": "Train-only RL task source; preserves all 128 prior tasks byte-for-byte and adds 12 source-qualified tasks with the loader\u2019s canonical qualification value.",
       "admission": "RL-task-source-only; no native SFT graph rows or student exposure claim.",
       "training_admission": true,
       "training_admission_reason": "All 128 prior rows are unchanged; 12 task rows retain the existing accepted 48-row Qwen source qualification, represented as the canonical loader value. This is task-source eligibility only; no model exposure or execution is claimed.",
@@ -201221,6 +201221,474 @@
       "split": "original source split and complete cross-source global held-group closure; no truncation",
       "training_admission": true,
       "training_admission_reason": "One complete normalized source member is source-curated, not oracle or native-execution verified. Both pinned tokenizer views preserve the full global normalized-source held/quality/pending closure and exact decision holds. Other normalized source members remain explicitly pending. Current KEEP render qualification and exact whole-row capacity partition are bound; over-limit complete rows remain explicit pending obligations. No training exposure is claimed."
+    },
+    {
+      "id": "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0033-tranche0000",
+      "owner": "dgx",
+      "path": "runs/qwen-verified-positive-native-graphs-20261017-recovery7853-batch0033-tranche0000",
+      "include": [
+        "lfm25/receipt.json",
+        "lfm25/train/native-graphs.jsonl.zst",
+        "lfm25/test/native-graphs.jsonl.zst",
+        "mellum21/receipt.json",
+        "mellum21/train/native-graphs.jsonl.zst",
+        "mellum21/test/native-graphs.jsonl.zst",
+        "validation-proof.json",
+        "decision-hold-closure-proof.json"
+      ],
+      "source_class": "verified-strong-teacher-positive-native-whole-trajectory-ordinary-SFT-graphs",
+      "training_admission": true,
+      "training_admission_reason": "Both complete model views passed exact private-export recovery, original full-trajectory source/oracle/current protection, decision-hold, source-bound graph identity, and complete action accounting. Registration establishes no student exposure.",
+      "admission": "31 exact source trajectories / 298 captured actions; 31 materialized trajectories, 0 held for assigned partial-outcome review with no graph. Eligible, omitted and exact-duplicate action counts are preserved in each bound model receipt.",
+      "source_binding": {
+        "raw_source": {
+          "bytes": 20079369,
+          "path": "/mnt/external/natlang-development-data/teacher-incremental-7853-standard-20261017/admission/batch-0033/tranche-0000/native-trajectories.jsonl",
+          "sha256": "02887eba9361799b8a31792513814beb8b11581b1621d605c8cb31175846df2b"
+        },
+        "transfer_receipt": {
+          "bytes": 66285,
+          "path": "/mnt/external/natlang-development-data/teacher-incremental-7853-standard-20261017/admission/batch-0033/tranche-0000/transfer-receipt.json",
+          "sha256": "789c42117426795d4e22d731d63f14808838ae06b92fc65bc466948491a97206"
+        },
+        "batch_source_bindings": {
+          "bytes": 1675,
+          "path": "/mnt/external/natlang-development-data/teacher-incremental-7853-standard-20261017/admission/batch-0033/tranche-0000/batch-source-bindings.json",
+          "sha256": "b523fa7d52eb1cc01819aebf9e566d53d2bd13e23953442834364a02a53240e3"
+        },
+        "canonical_source_verification": {
+          "bytes": 2516,
+          "path": "/mnt/external/natlang-development-data/teacher-incremental-7853-standard-20261017/admission/batch-0033/tranche-0000/canonical-source-verification.json",
+          "sha256": "1dd9806b6c6ba71e6a598b259fd5f27ddc44d5a8bdb81f2bf2dd2f2e88783a86"
+        },
+        "current_protection": {
+          "bytes": 5469555,
+          "path": "/home/werg/data/dgxops/acquired-connected-source-protection-20261017-d13-d14-d32-v3/protection-manifest.json",
+          "sha256": "f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349"
+        },
+        "decision_hold_closure": {
+          "bytes": 1712,
+          "path": "/home/werg/natlang/runs/qwen-verified-positive-native-graphs-20261017-recovery7853-batch0033-tranche0000/decision-hold-closure-proof.json",
+          "sha256": "554900c22fbb6fe48135071c11e03fdc415542733aa2d87a59863316389c5f99"
+        },
+        "validation_proof": {
+          "path": "/home/werg/natlang/runs/qwen-verified-positive-native-graphs-20261017-recovery7853-batch0033-tranche0000/validation-proof.json",
+          "sha256": "1cb192c01282287fe98b7c3fd7bea3733fb655aa9a6e678e7a44be9d92f917f4"
+        },
+        "raw_task_source": {
+          "path": "/mnt/external/natlang-development-data/teacher-incremental-7853-standard-20261017/admission-recovery/batch-0033/tranche-0000/restored/context/source-cases.jsonl",
+          "sha256": "43370e5c7963edb87cd57ec461c2e51d77a517ea25d43734a89d8fdbb3a22477"
+        },
+        "executed_packet": {
+          "path": "/mnt/external/natlang-development-data/teacher-incremental-7853-standard-20261017/admission-recovery/batch-0033/tranche-0000/restored/context/packet.jsonl",
+          "sha256": "9d4d4fda7da417c5559050a13435a0b6c04d4549346a9f77c86d11a55c5b1ac5"
+        },
+        "actor": {
+          "bytes": 8930,
+          "path": "/work/datajobs/teacher-guarded-recovery-20261017/generation-epoch/teacher-serving-actor.json",
+          "sha256": "ef1e653cff3d05d9076051885346ea08e6d550c610cf9153fe48eefb2aa4be28"
+        },
+        "execution_identity": {
+          "bytes": 587,
+          "path": "/work/datajobs/teacher-guarded-recovery-20261017/generation-epoch/teacher-execution-identity.json",
+          "sha256": "15f338095d146a8057894e0a8df46376111333250cf63c74f0bc3c7f71326729"
+        },
+        "models": {
+          "lfm25": {
+            "action_accounting": {
+              "converted_eligible_actions": 268,
+              "materializer_approved_actions": 273,
+              "omitted_actions": 30,
+              "post_materializer_rejections": [
+                {
+                  "decision": {
+                    "approved": true,
+                    "invocation_id": "task-1-8bbcb16e-bd73-4bc9-92fd-ee16c06a5eef/2",
+                    "materialized_decision_id": "teacher-program:ca9b56f316adb3b2bcf9:decision:0003",
+                    "materialized_decision_sha256": "43aa6a2db7d9169049265a3700af0d3cb4c299b6b0b619db8cbb3c504d71c41c",
+                    "raw_response_sha256": "6361982b33d1577a386c53ada86c76649734b719377f84928f7422212dd71fa8",
+                    "reason": null
+                  },
+                  "reason": "captured provider-visible messages do not contain the exact authenticated block expansion",
+                  "source_row_id": "teacher-program:ca9b56f316adb3b2bcf9",
+                  "teacher_turn_index": 3,
+                  "unresolved_block_ids": [
+                    "nz1_lfkpacpvirqryieqa3zoazexk6lmnjz74n3smiqkqbwrbnn5mnua"
+                  ],
+                  "unresolved_scope": "prompt"
+                },
+                {
+                  "decision": {
+                    "approved": true,
+                    "invocation_id": "task-1-8bbcb16e-bd73-4bc9-92fd-ee16c06a5eef/3",
+                    "materialized_decision_id": "teacher-program:ca9b56f316adb3b2bcf9:decision:0004",
+                    "materialized_decision_sha256": "c43b736747ced516a233fd7c9d9dc2087e0f03d8c02c26836ad306e5fb6754fd",
+                    "raw_response_sha256": "bf9e3734f2001da457046d14b2468ca7203269f9cc60e4b13bc62a90dee95f21",
+                    "reason": null
+                  },
+                  "reason": "captured provider-visible messages do not contain the exact authenticated block expansion",
+                  "source_row_id": "teacher-program:ca9b56f316adb3b2bcf9",
+                  "teacher_turn_index": 4,
+                  "unresolved_block_ids": [
+                    "nz1_lfkpacpvirqryieqa3zoazexk6lmnjz74n3smiqkqbwrbnn5mnua"
+                  ],
+                  "unresolved_scope": "prompt"
+                },
+                {
+                  "decision": {
+                    "approved": true,
+                    "invocation_id": "task-1-8bbcb16e-bd73-4bc9-92fd-ee16c06a5eef/3",
+                    "materialized_decision_id": "teacher-program:ca9b56f316adb3b2bcf9:decision:0006",
+                    "materialized_decision_sha256": "df0f6b284dc5755cea2b9583ca1404fdde0c5809f49e9bdbe4274ca9c4ad7364",
+                    "raw_response_sha256": "8b7449ff1a81fb04f890b8fd05a2e510f249e5e1f3a82cbb39edd6e8720cc3e6",
+                    "reason": null
+                  },
+                  "reason": "captured provider-visible messages do not contain the exact authenticated block expansion",
+                  "source_row_id": "teacher-program:ca9b56f316adb3b2bcf9",
+                  "teacher_turn_index": 6,
+                  "unresolved_block_ids": [
+                    "nz1_lfkpacpvirqryieqa3zoazexk6lmnjz74n3smiqkqbwrbnn5mnua"
+                  ],
+                  "unresolved_scope": "prompt"
+                },
+                {
+                  "decision": {
+                    "approved": true,
+                    "invocation_id": "task-1-8bbcb16e-bd73-4bc9-92fd-ee16c06a5eef/5",
+                    "materialized_decision_id": "teacher-program:ca9b56f316adb3b2bcf9:decision:0007",
+                    "materialized_decision_sha256": "14018b40f7933d4eebaf836b35aea413c91bd6dee8d4de00d0c754ade1ab11c9",
+                    "raw_response_sha256": "62fe8ae466f3ae9950a40b045af15663e97921506c255d3181c10a2f797aff6f",
+                    "reason": null
+                  },
+                  "reason": "captured provider-visible messages do not contain the exact authenticated block expansion",
+                  "source_row_id": "teacher-program:ca9b56f316adb3b2bcf9",
+                  "teacher_turn_index": 7,
+                  "unresolved_block_ids": [
+                    "nz1_lfkpacpvirqryieqa3zoazexk6lmnjz74n3smiqkqbwrbnn5mnua"
+                  ],
+                  "unresolved_scope": "prompt"
+                },
+                {
+                  "decision": {
+                    "approved": true,
+                    "invocation_id": "task-1-8bbcb16e-bd73-4bc9-92fd-ee16c06a5eef/5",
+                    "materialized_decision_id": "teacher-program:ca9b56f316adb3b2bcf9:decision:0009",
+                    "materialized_decision_sha256": "71e0e8888bd426d537a1db1cdc9628cf32604a4e5e0393918bf9e58e42d8e804",
+                    "raw_response_sha256": "7d95b57b96d8a6e9cd4be7231f68646a16bbcf74638b05ea139b57eb2a388ce2",
+                    "reason": null
+                  },
+                  "reason": "captured provider-visible messages do not contain the exact authenticated block expansion",
+                  "source_row_id": "teacher-program:ca9b56f316adb3b2bcf9",
+                  "teacher_turn_index": 9,
+                  "unresolved_block_ids": [
+                    "nz1_lfkpacpvirqryieqa3zoazexk6lmnjz74n3smiqkqbwrbnn5mnua"
+                  ],
+                  "unresolved_scope": "prompt"
+                }
+              ],
+              "source_actions": 298
+            },
+            "action_omissions": 30,
+            "decision_admission": {
+              "output_sha256": "a1531a69c7a38c79356a976ce220efbbfbbb12d37f9d4a43fc608d21df691c08",
+              "path": "/mnt/external/natlang-development-data/teacher-incremental-7853-standard-20261017/admission/batch-0033/tranche-0000/decision-admission-cache/7dd8e62105e6d4cf55e1a4947cf5795b810b507c1bc2cbbd1ea1e15a9dc0c5da/receipt.json",
+              "sha256": "14215623066cef2d706b437b73811a35d65087ce77aaddfe3f44661c346b5879",
+              "summary": {
+                "accepted_rows": 31,
+                "authored_actions_held": 0,
+                "eligible_decisions": 273,
+                "output": "decisions.jsonl",
+                "rejected_rows": 0,
+                "replayed_context_decisions": 0,
+                "training_decisions": 298
+              }
+            },
+            "eligible_turns": 268,
+            "exact_dedup_omissions": 3,
+            "expanded_tokenizer_fingerprint": "be949ec48f44e17b2b17e1131aeb1dab4262175ba20f9783ecd8e59c27a58105",
+            "explicit_history_reasoning_policy": "keep",
+            "materialization_partition": {
+              "deduplicated_actions": 3,
+              "emitted_actions": 265,
+              "materialized_source_rows": 31,
+              "other_omitted_actions": 30,
+              "repair_source_actions": 0,
+              "repair_source_rows": [],
+              "repair_sources": [],
+              "source_actions": 298,
+              "source_rows": 31,
+              "training_admission": false
+            },
+            "outputs": {
+              "test": {
+                "bytes": 13,
+                "max_row_tokens": 0,
+                "path": "/home/werg/natlang/runs/qwen-verified-positive-native-graphs-20261017-recovery7853-batch0033-tranche0000/lfm25/test/native-graphs.jsonl.zst",
+                "rows": 0,
+                "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c",
+                "tokens": 0
+              },
+              "train": {
+                "bytes": 239387,
+                "max_row_tokens": 16219,
+                "path": "/home/werg/natlang/runs/qwen-verified-positive-native-graphs-20261017-recovery7853-batch0033-tranche0000/lfm25/train/native-graphs.jsonl.zst",
+                "rows": 265,
+                "sha256": "a7b291897cb1ba3854e04979dfea7008f1aca109e1005c16276f4bbe489525c4",
+                "tokens": 1943597
+              }
+            },
+            "receipt": {
+              "bytes": 75555,
+              "path": "/home/werg/natlang/runs/qwen-verified-positive-native-graphs-20261017-recovery7853-batch0033-tranche0000/lfm25/receipt.json",
+              "sha256": "df287f9b838527a9e76b5e9f715ae15cb9ff91d03385138f3c0adb6ab59fb123"
+            },
+            "source_rows": 31
+          },
+          "mellum21": {
+            "action_accounting": {
+              "converted_eligible_actions": 268,
+              "materializer_approved_actions": 273,
+              "omitted_actions": 30,
+              "post_materializer_rejections": [
+                {
+                  "decision": {
+                    "approved": true,
+                    "invocation_id": "task-1-8bbcb16e-bd73-4bc9-92fd-ee16c06a5eef/2",
+                    "materialized_decision_id": "teacher-program:ca9b56f316adb3b2bcf9:decision:0003",
+                    "materialized_decision_sha256": "43aa6a2db7d9169049265a3700af0d3cb4c299b6b0b619db8cbb3c504d71c41c",
+                    "raw_response_sha256": "6361982b33d1577a386c53ada86c76649734b719377f84928f7422212dd71fa8",
+                    "reason": null
+                  },
+                  "reason": "captured provider-visible messages do not contain the exact authenticated block expansion",
+                  "source_row_id": "teacher-program:ca9b56f316adb3b2bcf9",
+                  "teacher_turn_index": 3,
+                  "unresolved_block_ids": [
+                    "nz1_lfkpacpvirqryieqa3zoazexk6lmnjz74n3smiqkqbwrbnn5mnua"
+                  ],
+                  "unresolved_scope": "prompt"
+                },
+                {
+                  "decision": {
+                    "approved": true,
+                    "invocation_id": "task-1-8bbcb16e-bd73-4bc9-92fd-ee16c06a5eef/3",
+                    "materialized_decision_id": "teacher-program:ca9b56f316adb3b2bcf9:decision:0004",
+                    "materialized_decision_sha256": "c43b736747ced516a233fd7c9d9dc2087e0f03d8c02c26836ad306e5fb6754fd",
+                    "raw_response_sha256": "bf9e3734f2001da457046d14b2468ca7203269f9cc60e4b13bc62a90dee95f21",
+                    "reason": null
+                  },
+                  "reason": "captured provider-visible messages do not contain the exact authenticated block expansion",
+                  "source_row_id": "teacher-program:ca9b56f316adb3b2bcf9",
+                  "teacher_turn_index": 4,
+                  "unresolved_block_ids": [
+                    "nz1_lfkpacpvirqryieqa3zoazexk6lmnjz74n3smiqkqbwrbnn5mnua"
+                  ],
+                  "unresolved_scope": "prompt"
+                },
+                {
+                  "decision": {
+                    "approved": true,
+                    "invocation_id": "task-1-8bbcb16e-bd73-4bc9-92fd-ee16c06a5eef/3",
+                    "materialized_decision_id": "teacher-program:ca9b56f316adb3b2bcf9:decision:0006",
+                    "materialized_decision_sha256": "df0f6b284dc5755cea2b9583ca1404fdde0c5809f49e9bdbe4274ca9c4ad7364",
+                    "raw_response_sha256": "8b7449ff1a81fb04f890b8fd05a2e510f249e5e1f3a82cbb39edd6e8720cc3e6",
+                    "reason": null
+                  },
+                  "reason": "captured provider-visible messages do not contain the exact authenticated block expansion",
+                  "source_row_id": "teacher-program:ca9b56f316adb3b2bcf9",
+                  "teacher_turn_index": 6,
+                  "unresolved_block_ids": [
+                    "nz1_lfkpacpvirqryieqa3zoazexk6lmnjz74n3smiqkqbwrbnn5mnua"
+                  ],
+                  "unresolved_scope": "prompt"
+                },
+                {
+                  "decision": {
+                    "approved": true,
+                    "invocation_id": "task-1-8bbcb16e-bd73-4bc9-92fd-ee16c06a5eef/5",
+                    "materialized_decision_id": "teacher-program:ca9b56f316adb3b2bcf9:decision:0007",
+                    "materialized_decision_sha256": "14018b40f7933d4eebaf836b35aea413c91bd6dee8d4de00d0c754ade1ab11c9",
+                    "raw_response_sha256": "62fe8ae466f3ae9950a40b045af15663e97921506c255d3181c10a2f797aff6f",
+                    "reason": null
+                  },
+                  "reason": "captured provider-visible messages do not contain the exact authenticated block expansion",
+                  "source_row_id": "teacher-program:ca9b56f316adb3b2bcf9",
+                  "teacher_turn_index": 7,
+                  "unresolved_block_ids": [
+                    "nz1_lfkpacpvirqryieqa3zoazexk6lmnjz74n3smiqkqbwrbnn5mnua"
+                  ],
+                  "unresolved_scope": "prompt"
+                },
+                {
+                  "decision": {
+                    "approved": true,
+                    "invocation_id": "task-1-8bbcb16e-bd73-4bc9-92fd-ee16c06a5eef/5",
+                    "materialized_decision_id": "teacher-program:ca9b56f316adb3b2bcf9:decision:0009",
+                    "materialized_decision_sha256": "71e0e8888bd426d537a1db1cdc9628cf32604a4e5e0393918bf9e58e42d8e804",
+                    "raw_response_sha256": "7d95b57b96d8a6e9cd4be7231f68646a16bbcf74638b05ea139b57eb2a388ce2",
+                    "reason": null
+                  },
+                  "reason": "captured provider-visible messages do not contain the exact authenticated block expansion",
+                  "source_row_id": "teacher-program:ca9b56f316adb3b2bcf9",
+                  "teacher_turn_index": 9,
+                  "unresolved_block_ids": [
+                    "nz1_lfkpacpvirqryieqa3zoazexk6lmnjz74n3smiqkqbwrbnn5mnua"
+                  ],
+                  "unresolved_scope": "prompt"
+                }
+              ],
+              "source_actions": 298
+            },
+            "action_omissions": 30,
+            "decision_admission": {
+              "output_sha256": "a1531a69c7a38c79356a976ce220efbbfbbb12d37f9d4a43fc608d21df691c08",
+              "path": "/mnt/external/natlang-development-data/teacher-incremental-7853-standard-20261017/admission/batch-0033/tranche-0000/decision-admission-cache/7dd8e62105e6d4cf55e1a4947cf5795b810b507c1bc2cbbd1ea1e15a9dc0c5da/receipt.json",
+              "sha256": "14215623066cef2d706b437b73811a35d65087ce77aaddfe3f44661c346b5879",
+              "summary": {
+                "accepted_rows": 31,
+                "authored_actions_held": 0,
+                "eligible_decisions": 273,
+                "output": "decisions.jsonl",
+                "rejected_rows": 0,
+                "replayed_context_decisions": 0,
+                "training_decisions": 298
+              }
+            },
+            "eligible_turns": 268,
+            "exact_dedup_omissions": 3,
+            "expanded_tokenizer_fingerprint": "fbf22d8773d09be802cb9977895067db36cdfba747fcb24b02ddbf1312d3778f",
+            "explicit_history_reasoning_policy": null,
+            "materialization_partition": {
+              "deduplicated_actions": 3,
+              "emitted_actions": 265,
+              "materialized_source_rows": 31,
+              "other_omitted_actions": 30,
+              "repair_source_actions": 0,
+              "repair_source_rows": [],
+              "repair_sources": [],
+              "source_actions": 298,
+              "source_rows": 31,
+              "training_admission": false
+            },
+            "outputs": {
+              "test": {
+                "bytes": 13,
+                "max_row_tokens": 0,
+                "path": "/home/werg/natlang/runs/qwen-verified-positive-native-graphs-20261017-recovery7853-batch0033-tranche0000/mellum21/test/native-graphs.jsonl.zst",
+                "rows": 0,
+                "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c",
+                "tokens": 0
+              },
+              "train": {
+                "bytes": 230162,
+                "max_row_tokens": 16225,
+                "path": "/home/werg/natlang/runs/qwen-verified-positive-native-graphs-20261017-recovery7853-batch0033-tranche0000/mellum21/train/native-graphs.jsonl.zst",
+                "rows": 265,
+                "sha256": "073d9f29ce963d34ec935fa911639a348e76ed9b1c6888fbbed7307b28a0976e",
+                "tokens": 1955352
+              }
+            },
+            "receipt": {
+              "bytes": 75665,
+              "path": "/home/werg/natlang/runs/qwen-verified-positive-native-graphs-20261017-recovery7853-batch0033-tranche0000/mellum21/receipt.json",
+              "sha256": "1cd1b503614ab67c6e736d1fa2bb9053277dec5dfd150203b76cabb7d63bacd1"
+            },
+            "source_rows": 31
+          }
+        },
+        "materialization_partition": {
+          "deduplicated_actions": 3,
+          "emitted_actions": 265,
+          "materialized_source_rows": 31,
+          "other_omitted_actions": 30,
+          "repair_source_actions": 0,
+          "repair_source_rows": [],
+          "repair_sources": [],
+          "source_actions": 298,
+          "source_rows": 31,
+          "training_admission": false
+        },
+        "batch": 33,
+        "tranche": 0,
+        "nonadmitted_predecessors": [],
+        "supplemental_admitted_corpora": []
+      },
+      "license_provenance": "Project-collected trajectories from pinned RadixArk/Qwen3.8-Flash-Next-NVFP4 stronger self-hosted base teacher; source model license provenance retained as fact.",
+      "split": "Train-only; empty test views. Current connected held/quality/pending source and decision protections remain excluded.",
+      "note": "New recovery epoch, not reconstructed historical generation. Ordinary one-node text graphs do not claim authentic shared-state communication edges; base-teacher samples are not student on-policy data. Actual exposure is zero until recorded by training.",
+      "derived_from": [
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-tranche0000",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-tranche0001",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-tranche0002",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-tranche0003",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-tranche0004",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-tranche0005",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-tranche0006",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-tranche0007",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-tranche0008",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-tranche0009",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-tranche0010",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-tranche0011",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-tranche0012",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-tranche0013",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-tranche0014",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-tranche0005-callable-repair-v1",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-tranche0017",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-tranche0015-json-file-quality-v1",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-tranche0018",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-tranche0020",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-tranche0021",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-tranche0022",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-tranche0023",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-tranche0024",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-tranche0025",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-tranche0026",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-tranche0027",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0022-tranche0000",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0021-repair0001-tranche0000",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0022-tranche0001",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0022-tranche0002",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0022-tranche0003",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0023-tranche0000",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0023-tranche0000-quality-source-argument-oracle-v1",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0023-tranche0001",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0023-tranche0000-quality-authoring-construct-oracle-v1",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0024-tranche0000",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0024-tranche0001",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0025-tranche0000",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0025-tranche0001",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0026-tranche0000",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0026-tranche0001",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0027-tranche0000-quality-authoring-construct-oracle-v1",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0027-tranche0000-quality-authoring-compiler-oracle-v1",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0028-tranche0000",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0028-tranche0001",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0028-tranche0002",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0028-tranche0003",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0028-tranche0004",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0028-tranche0000-quality-exact-child-v1",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0028-tranche0005",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0028-tranche0001-quality-exact-child-v1",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0028-tranche0006",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0028-tranche0002-quality-exact-child-v1",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0028-tranche0007",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0028-tranche0008",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0028-tranche0009",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0028-tranche0010",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0028-tranche0011",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0029-tranche0000",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0029-tranche0001",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0030-tranche0000-quality-reviewed-source-child-oracle-v1",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0030-tranche0000-quality-reviewed-source-child-callback-v1",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0031-tranche0000",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0031-tranche0001",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0031-tranche0002",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0031-tranche0003",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0031-tranche0004",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0030-tranche0001-quality-reviewed-source-child-oracle-v1",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0030-tranche0002-quality-reviewed-source-child-oracle-v1",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0030-tranche0003-quality-reviewed-source-child-oracle-v1",
+        "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0032-tranche0000-quality-exact-child-v1"
+      ]
     }
   ],
   "coverage_backlog": [
@@ -201246,7 +201714,7 @@
     "free-provider-mixed-labels-and-diagnostics-held-20261009-v1: currentIR conversion and source/quality gates pending; retain failures and success-pair candidates. Corrected reviewv2 artifacts supersede v1 summaries; active GeminiLite batches excluded until immutable closeout.",
     "free-provider-v22-native-results-and-partials-held-20261009-v1: source/quality/native replay admission pending. Restore exact frozen runtime artifacts if needed; manifests alone are not runtime qualification. Keep API partials separate from semantic failure/success preference pairs.",
     "free-provider-google-pool-v1-closed-held-20261009-v1 has an explicit currentIR derivative free-provider-static-decision-inline-lambdas-held-20261010-v1 for131 strict source-consistent labels/36 authored controller cases. Remaining125 labels stay rejected with reasons. Static reference/data quality admission remains pending; no automatic train promotion and no new-world credit. Other provider cohorts still require explicit conversion.",
-    "free-provider-static-decision-inline-lambdas-held-20261010-v2 supersedes v1: all23 authored IR cases replayed, kind-specific probability→crisp instructions qualified for runtime/capture shape only. Source/static-reference-quality admission still required.308native turns are held authored references, not teacher-generated traces, and are excluded from target training until reviewed.",
+    "free-provider-static-decision-inline-lambdas-held-20261010-v2 supersedes v1: all23 authored IR cases replayed, kind-specific probability\u2192crisp instructions qualified for runtime/capture shape only. Source/static-reference-quality admission still required.308native turns are held authored references, not teacher-generated traces, and are excluded from target training until reviewed.",
     "free-provider-zai45-first3-native-and-partial-held-20261010-v1: rawtwoaccepted andoneincomplete remainheld; thirdscopebehaviorcorrect, sharednote prompt clarification+freshsource derivative/recoverypending. Resource-limit partial is not a DPO semanticnegative. Source quality review still blocks new data admission.",
     "luna-v22-current-pass-pending-facts-source-held-20261010-v1: prompt-only derivative, original source gold/group/file scopes unchanged, actual recovery PID777319 is running separately and must receive immutable closeout/review. No retroactive migration of old teacher traces, no new worlds or source admission.",
     "Silent 1500-character source-state clipping affects historical decision corpora: BoardgameQA, HelpSteer, Newsgroups, Yelp, BoolQ and PubMedQA. Preserve original rows and raw outcomes. Historical rows lacking immutable upstream source revisions/source_refs cannot be safely backfilled from current dataset versions; register as unresolved full-evidence conversion, exclude evidence-insufficient cases explicitly. Fresh builds retain full source text; downstream context eligibility skips oversized inputs with reasons, never silently truncates. Corrected input derivatives keep original source groups and receive no independent-world credit."
