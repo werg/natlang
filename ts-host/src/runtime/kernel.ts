@@ -39,6 +39,8 @@ export type CallableDefinition = {
   params: { name: string; type: string; optional?: boolean }[];
   /** Takes whatever each call passes (an inline function saved without parameters; see InlineLambdaPlan). */
   openParameters?: boolean;
+  /** Compiler-authenticated fixed signature; JS callback extras are not inputs. */
+  declaredParameters?: true;
   returns: string;
   types: Record<string, string>;
   /** Callable context: the record tree this definition (and its inline descendants) may call. */
@@ -339,6 +341,8 @@ export async function prepareDefinitionNode(definition: CallableDefinition, inpu
  */
 export function invokeDefinition(frame: Frame, definition: CallableDefinition, positional: unknown[],
   options: InvokeOptions = {}): Promise<unknown> {
+  if (definition.declaredParameters && !definition.openParameters)
+    positional = positional.slice(0, definition.params.length);
   // Each call can be stopped on its own (its eval failed, or finished without awaiting it) and stops with its caller.
   const abort = new AbortController();
   const signal = AbortSignal.any([frame.signal ?? frame.task.signal, abort.signal]);
@@ -700,6 +704,7 @@ function openCapture(store: CallStoreLike, task: Frame['task'], frame: Frame, ca
       key: definitionKey({ ...definition, body }), interface: interfaceHash(definition.codebase), site,
       ...(inlineSite?.template_segments ? { template: hexDigest(JSON.stringify(inlineSite.template_segments)).slice(0, 24) } : {}),
       subtype: definition.subtype, params: definition.params, returns: definition.returns,
+      ...(definition.declaredParameters ? { declaredParameters: true as const } : {}),
       instructions: { complete: false, reason: 'excluded' }, types: definition.types, ...(definition.readout ? { readout: definition.readout } : {}),
       ...(definition.generic && definition.representation ? { generic: { name: definition.generic.name, constraint: definition.generic.constraint },
         representation: definition.representation } : {}) };

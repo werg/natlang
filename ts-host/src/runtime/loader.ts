@@ -37,7 +37,7 @@ export type ExportRecord =
   | { kind: 'value'; type?: string };
 
 export type NatlangRecord = { programId?: string; kind: 'natlang'; id: string; name: string; source: string; revision: string; text: string;
-  description: string; args: Record<string, string>;
+  description: string; args: Record<string, string>; declaredParameters?: true;
   /** The result type; for a representation-generic result, its crisp instance (what a call with no expected type runs). */
   returns: string; instructions: string;
   types: Record<string, string>; subtype: 'function' | 'directory-reducer'; codebase: Record<string, ItemRecord>;

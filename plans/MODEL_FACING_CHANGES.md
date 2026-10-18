@@ -1122,3 +1122,17 @@ of the integrated training, serving, conversion and recipe wiring.
 Removing the erroneous built-in shadow error for erased TypeScript callable declarations changes feedback. Isolated compiler/actual authoring checks and all-run revalidation of six captured TRAIN programs are required before publication; these are not live sampling. A useful 48-trajectory own-Qwen window is owed after the updated task runtime is bound at a natural teacher packet boundary. Preserve current c5 adoption and running old-runtime packets; queue only source-owned TRAIN authoring tasks, retain exact actor/runtime/results and independently verify them. Actual runtime shadows keep the existing error.
 
 Concrete ambient/module-loader follow-up: `/home/werg/data/dgxops/teacher27-compiler-repair-measurement-20261018/obligation.json` binds 24 original TRAIN source programs and a fresh-seed 48-job `queue.jsonl`, currently unarmed. The corrected `.with`-only module analysis also removes the previous raw-tag error. Keep the original captured 43e outcomes unchanged; execute this useful own-teacher queue only after all original reference runs and truthful new runtime/header/source custody are bound through the existing guardian mechanism.
+
+
+## 2026-10-18: source-declared callback argument projection
+
+Checked explicit/contextual inline signatures now ignore ordinary JavaScript
+callback extras; open/untyped callables retain all supplied values. This removes
+unintended index/whole-array input from one-parameter model calls. Source-owned
+scripted regressions cover 1/2/3 parameter direct map callbacks and open/rest
+forwarding. Live executor measurement is pending: prepare 24 source-qualified
+TRAIN callback cases with two own-Qwen trajectories each through the existing
+sole guardian sequence, then retain full trajectories and exact actor/runtime
+provenance. This is assigned to DGX native_state_independent_review; no external
+generation or concurrent primary feeder. Existing teacher30 captured001-00 and
+its source tests are a concrete regression, not the live48 qualification.

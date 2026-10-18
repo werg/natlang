@@ -60,6 +60,8 @@ export type InlineLambdaPlan = {
    * eval): each call passes whatever arguments it has, typed from their values.
    */
   openParameters?: boolean;
+  /** Source-checked fixed parameters; ordinary JS callback extras are ignored. */
+  declaredParameters?: true;
   returns: TargetDescriptor;
   captures: CapturePlan[];
   /** `nl.with({ … })`: the captures are exactly the listed ones; no names are captured by mention. */
@@ -228,7 +230,7 @@ const unwrapParentheses = (node: ts.Node): ts.Node => {
   return node;
 };
 
-type Signature = { parameters?: { name: string; type: ts.Type }[]; returns?: ts.Type; origin: string; open?: boolean };
+type Signature = { parameters?: { name: string; type: ts.Type }[]; returns?: ts.Type; origin: string; open?: boolean; declaredParameters?: true };
 
 export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.SourceFile[],
   options: InlineAnalysisOptions = {}): { plans: InlineLambdaPlan[]; diagnostics: NatlangDiagnostic[]; neuralese: NeuraleseLiteral[];
@@ -400,6 +402,7 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
       }
       if (ts.isFunctionTypeNode(annotation)) {
         signature.parameters = [];
+        signature.declaredParameters = true;
         for (const parameter of annotation.parameters) {
           if (!ts.isIdentifier(parameter.name) || parameter.dotDotDotToken) {
             report(parameter, 'nl-spread', 'Annotated `nl` parameters must be named identifiers without rest syntax.');
@@ -449,6 +452,7 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
             'Use an async map and then an ordinary filter or loop.');
           return;
         }
+        signature.declaredParameters = true;
         signature.parameters = only.getParameters().map(parameter => {
           const declaration = parameter.valueDeclaration;
           if (declaration && ts.isParameter(declaration) && declaration.dotDotDotToken)
@@ -747,7 +751,8 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
       const adaptation: InlineLambdaPlan['adaptation'] = options.authored ? { templateStart: template.getStart(),
         templateEnd: template.getEnd(), expressions: [], visibleBindings: [...listed].sort(), slotBindings: [] } : undefined;
       plans.push({ sourceSpan, templateSpan, interpolations, definitionId, ...(adaptation ? { adaptation } : {}), strings: softBody ? [''] : strings, instructions: softBody ? '' : strings.join('${…}'),
-        parameters: parameterTargets, ...(signature.open ? { openParameters: true } : {}), returns, captures, explicitCaptures: true,
+        parameters: parameterTargets, ...(signature.open ? { openParameters: true } : {}),
+        ...(signature.declaredParameters ? { declaredParameters: true as const } : {}), returns, captures, explicitCaptures: true,
         ...(softBody ? { softBody,...(softBodyUse(template)?.stopGradient?{softBodyStopGradient:true as const}:{}),...(softBodyUse(template)?.sourceOccurrence?{softBodySourceOccurrence:softBodyUse(template)!.sourceOccurrence}:{}) } : {}), inheritedCodebaseRevision: options.codebaseRevision ?? '' });
       return;
     }
@@ -830,7 +835,8 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
     const sourceSpan = spanOf(node, displayPath);
     const definitionId = `nl:${hexDigest(`${options.sourceRevision ?? ''}\0${sourceSpan.file}\0${sourceSpan.start}\0${sourceSpan.end}`).slice(0, 16)}`;
     plans.push({ sourceSpan, templateSpan, interpolations, definitionId, ...(adaptation ? { adaptation } : {}), strings, instructions: strings.join('${…}'),
-      parameters: parameterTargets, ...(signature.open ? { openParameters: true } : {}), returns, captures,
+      parameters: parameterTargets, ...(signature.open ? { openParameters: true } : {}),
+        ...(signature.declaredParameters ? { declaredParameters: true as const } : {}), returns, captures,
       inheritedCodebaseRevision: options.codebaseRevision ?? '' });
   };
 

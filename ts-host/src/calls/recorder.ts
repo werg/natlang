@@ -42,9 +42,9 @@ export function reportStoreFailure(store: object, error: unknown): void {
 
 /** The revision key compilations are stored under: what ran, as run (instructions and contract). */
 export function definitionKey(definition: { id: string; body: string; params: unknown; returns: string; types: unknown;
-  subtype: string; readout?: string }): string {
+  subtype: string; readout?: string; declaredParameters?: true }): string {
   return hexDigest(JSON.stringify({ id: definition.id, body: definition.body, params: definition.params, returns: definition.returns,
-    types: definition.types, subtype: definition.subtype, readout: definition.readout ?? null })).slice(0, 32);
+    types: definition.types, subtype: definition.subtype, readout: definition.readout ?? null, ...(definition.declaredParameters ? { declaredParameters: true } : {}) })).slice(0, 32);
 }
 
 /** The hash of a context's interface: what a case may call, by name, kind and revision. */

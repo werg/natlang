@@ -132,7 +132,7 @@ function captureType(value: unknown): string {
 /** Signature of an executable node, compared when rebinding and when editing. */
 function signatureOf(record: ItemRecord): string {
   if (record.kind === 'natlang') return canonicalJson({ kind: 'natlang', subtype: record.subtype, args: record.args, returns: record.returns,
-    ...(record.generic ? { generic: record.generic.constraint } : {}) });
+    ...(record.generic ? { generic: record.generic.constraint } : {}), ...(record.declaredParameters ? { declaredParameters: true } : {}) });
   if (record.kind === 'module') return canonicalJson({ kind: 'module', exports: Object.fromEntries(Object.entries(record.exports)
     .map(([name, spec]) => [name, spec.kind === 'function' ? { args: spec.args, returns: spec.returns, async: spec.async } : { type: spec.type ?? null }])) });
   return canonicalJson({ kind: 'namespace', items: Object.fromEntries(Object.entries(record.codebase).map(([name, child]) => [name, signatureOf(child)])) });
@@ -392,6 +392,7 @@ function executableRecord(value: unknown): ItemRecord | undefined {
     revision: meta.definition.revision ?? `runtime:${meta.definition.id}`, text: '', description: meta.definition.description ?? '',
     args: Object.fromEntries(meta.definition.params.map(param => [`${param.name}${param.optional ? '?' : ''}`, param.type])),
     returns: meta.definition.returns, instructions: meta.definition.body, types: meta.definition.types,
+    ...(meta.definition.declaredParameters ? { declaredParameters: true as const } : {}),
     subtype: meta.definition.subtype, codebase: meta.definition.codebase as Record<string, ItemRecord> };
 }
 

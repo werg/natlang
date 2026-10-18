@@ -195,6 +195,7 @@ export function planDefinition(plan: InlineLambdaPlan, codebase: Record<string, 
     body: plan.instructions,
     params: plan.parameters.map(parameter => ({ name: parameter.name, type: targetType(parameter.type) })),
     ...(plan.openParameters ? { openParameters: true } : {}),
+    ...(plan.declaredParameters ? { declaredParameters: true as const } : {}),
     returns: targetType(plan.returns), types: planTypes(plan), codebase, subtype: 'function',
     revision: plan.inheritedCodebaseRevision || undefined, source: plan.sourceSpan.file };
 }

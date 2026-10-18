@@ -7,7 +7,7 @@
  */
 
 /** Version of generated lowering. A runtime refuses output from another major version. */
-export const NATLANG_COMPILE_VERSION = 7 as const;
+export const NATLANG_COMPILE_VERSION = 8 as const;
 
 /** Shared type contract for free `iterateOn` and eval's normalized `fn.iterateOn` analysis form. */
 export const ITERATE_ON_SIGNATURE = '<T, A extends unknown[]>(step: (state: T, ...args: A) => T | Promise<T>, initial: T, ...args: A): Iteration<T>';

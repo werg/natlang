@@ -17,7 +17,8 @@ export function namedDescriptor(program: string, record: NatlangRecord): Compone
   return descriptor(componentKey(program, record.source), 'named',
     { kind: 'lambda.instructions', template: { segments: [record.instructions], slotIds: [] } },
     { ...baseContract(), parameters: Object.entries(record.args).map(([name, type]) => ({ name, type })),
-      returns: record.returns, types: record.types, subtype: record.subtype, helpers: helpers(record.codebase) },
+      returns: record.returns, types: record.types, subtype: record.subtype, helpers: helpers(record.codebase),
+      ...(record.declaredParameters ? { declaredParameters: true as const } : {}) },
     { definitionId: record.id, source: { path: record.source, start: 0, end: record.text.length } });
 }
 export function inlineDescriptor(program: string, plan: InlineLambdaPlan): ComponentDescriptor {
@@ -28,6 +29,7 @@ export function inlineDescriptor(program: string, plan: InlineLambdaPlan): Compo
   return descriptor(componentKey(program, plan.sourceSpan.file, site + ':instructions'), 'authored-inline',
     { kind: 'lambda.instructions', template: { segments: plan.strings, slotIds: slots } },
     { ...baseContract(), parameters: plan.parameters, returns: plan.returns, openParameters: !!plan.openParameters,
+      ...(plan.declaredParameters ? { declaredParameters: true as const } : {}),
       captures: plan.captures.map(({ name, type, mutable, shadowedByParameter }) =>
         ({ name, type, mutable, ...(shadowedByParameter ? { shadowedByParameter: true } : {}) }))
         .sort((a, b) => a.name.localeCompare(b.name)), slots, visibleBindings, slotBindings },

@@ -33,7 +33,7 @@ export function definitionFor(store: CallStore, record: CallRecord): { definitio
   const body = store.value(identity.instructions);
   if (typeof body !== 'string') throw new Error(`the instructions of ${identity.name} were not recorded`);
   return { loaded: false, definition: { id: identity.id, name: identity.name, body, params: identity.params, returns: identity.returns,
-    types: identity.types, codebase: {}, subtype: identity.subtype, ...(identity.readout ? { readout: identity.readout as 'decision' } : {}),
+    types: identity.types, codebase: {}, subtype: identity.subtype, ...(identity.declaredParameters ? { declaredParameters: true as const } : {}), ...(identity.readout ? { readout: identity.readout as 'decision' } : {}),
     ...(identity.source ? { source: identity.source } : {}) } };
 }
 
