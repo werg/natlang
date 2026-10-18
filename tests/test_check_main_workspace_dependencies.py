@@ -20,8 +20,10 @@ def _roots(tmp_path: Path):
     (main / 'node_modules' / '@natlang').mkdir(parents=True)
     (main / 'npm-packages' / 'node').mkdir(parents=True)
     (main / 'npm-packages' / 'cli').mkdir(parents=True)
+    (main / 'npm-packages' / 'retired').mkdir(parents=True)
     (worktree / 'npm-packages' / 'node').mkdir(parents=True)
     (worktree / 'npm-packages' / 'cli').mkdir(parents=True)
+    (worktree / 'tools' / 'local-workspace').mkdir(parents=True)
     (worktree / 'ts-host').mkdir()
     (main / 'node_modules' / 'shared-dependency').mkdir()
     (main / 'node_modules' / 'shared-dependency' / 'package.json').write_text(
@@ -34,16 +36,26 @@ def _roots(tmp_path: Path):
             f'export default {json.dumps(version)};\n')
     (main / 'npm-packages' / 'cli' / 'package.json').write_text(json.dumps({
         'name': '@natlang/cli', 'version': '1.0.0'}))
+    (main / 'npm-packages' / 'retired' / 'package.json').write_text(json.dumps({
+        'name': '@natlang/retired', 'version': '1.0.0'}))
     (worktree / 'npm-packages' / 'cli' / 'package.json').write_text(json.dumps({
         'name': '@natlang/cli', 'version': '1.0.0'}))
+    (worktree / 'tools' / 'local-workspace' / 'package.json').write_text(json.dumps({
+        'name': 'local-workspace', 'version': '1.0.0'}))
     (worktree / 'ts-host' / 'package.json').write_text(json.dumps({
         'name': '@natlang/typescript-host', 'version': '1.0.0'}))
     (worktree / 'package.json').write_text(json.dumps({
-        'name': 'fixture-workspace', 'workspaces': ['ts-host', 'npm-packages/*']}))
+        'name': 'fixture-workspace', 'workspaces': ['ts-host', 'npm-packages/*', 'tools/*']}))
+    (main / 'package.json').write_text(json.dumps({
+        'name': 'fixture-main', 'workspaces': ['ts-host', 'npm-packages/*']}))
     (main / 'node_modules' / '@natlang' / 'node').symlink_to(
         main / 'npm-packages' / 'node', target_is_directory=True)
     (main / 'node_modules' / '@natlang' / 'cli').symlink_to(
         main / 'npm-packages' / 'cli', target_is_directory=True)
+    (main / 'node_modules' / '@natlang' / 'retired').symlink_to(
+        main / 'npm-packages' / 'retired', target_is_directory=True)
+    (main / 'node_modules' / 'local-workspace').symlink_to(
+        main / 'npm-packages' / 'node', target_is_directory=True)
     (worktree / 'node_modules').symlink_to(main / 'node_modules', target_is_directory=True)
     return main, worktree
 
@@ -58,6 +70,9 @@ def test_linked_worktree_shares_third_party_but_uses_its_workspace_packages(tmp_
         worktree / 'npm-packages' / 'node').resolve()
     assert (worktree / 'node_modules' / '@natlang' / 'cli').resolve() == (
         worktree / 'npm-packages' / 'cli').resolve()
+    assert (worktree / 'node_modules' / 'local-workspace').resolve() == (
+        worktree / 'tools' / 'local-workspace').resolve()
+    assert not (worktree / 'node_modules' / '@natlang' / 'retired').exists()
 
     script = """
 const { createRequire } = await import('node:module');

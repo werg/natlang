@@ -16,8 +16,10 @@ can continue to come from the canonical checkout's already-installed
 3. If the worktree root `node_modules` is absent or is the exact symlink the
    old setup made to the canonical root `node_modules`, create a local
    directory. Link each canonical root dependency into it except workspace
-   package entries, then link each declared workspace package from the tested
-   checkout under its package name. Preserve unrelated scoped packages.
+   package entries declared by either checkout, then link each declared
+   workspace package from the tested checkout under its package name. Preserve
+   unrelated scoped packages; do not leak a canonical-only workspace into an
+   older tested checkout.
 4. If a worktree root install already exists as a directory and its workspace
    links resolve locally, leave it unchanged. If it contains a foreign or
    incomplete workspace link, fail with a precise message rather than
@@ -37,6 +39,7 @@ behavior. No package installation or source-tree copying is performed.
 
 A temporary two-checkout test will prove that the linked worktree resolves its
 own workspace package while resolving a third-party dependency from the shared
-canonical install. It will also check idempotent setup and preservation of an
+canonical install. It will also check idempotent setup, an unscoped local
+workspace, exclusion of a canonical-only workspace, and preservation of an
 unrelated pre-existing `node_modules` directory. The actual stale-worktree
-package adaptation test will be rerun against its own worktree package tree.
+package adaptation test is rerun against its own worktree package tree.
