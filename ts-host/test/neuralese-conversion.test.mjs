@@ -69,7 +69,9 @@ test('runtime soft-state conversion supports an exact nested typed member and re
     source: { trajectory_id: 't', source_row_sha256: 'x', split: 'train', source_groups: ['g'],
       transport_mode: 'text-marker-standin/2', learned_vectors: false, qualification_certificate: false, training_admission: false }, edges: [edge] };
   const converted = convertTrajectory(reader, { softStateEdges: proof }).record;
-  assert.ok(converted.messages[1].content.some(part => part.type === 'read' && part.name === `soft-state:${block}`));
+  const eventName = `soft-state:${block}@${cryptoCreateHash('sha256')
+    .update(JSON.stringify(['t', 'writer', 'writer#1'])).digest('hex').slice(0, 12)}`;
+  assert.ok(converted.messages[1].content.some(part => part.type === 'read' && part.name === eventName));
   assert.throws(() => convertTrajectory(reader, { softStateEdges: { ...proof, edges: [{ ...edge, consumer_argument: 'input.outputContract' }] } }),
     /does not expose exact input.outputContract/);
 });
