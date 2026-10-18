@@ -51,10 +51,11 @@ def test_wrong_export_readback_preserves_pending_and_prior_state(tmp_path,field)
     paths=module.paths_for(tmp_path,'lfm');assert paths['pending'].exists()and not paths['state'].exists()
 
 
+@pytest.mark.parametrize('relative',['production/round-000001/learner','cycles/000003/supervised/001/learner','cycles/000003/supervised/001/retry-predecessor-v2/learner'])
 @pytest.mark.parametrize('failure',[None,'incomplete','conflict'])
-def test_remote_actual_full_checkpoint_global_step_independent_pin_and_failure_cleanup(tmp_path,failure):
+def test_remote_actual_full_checkpoint_global_step_independent_pin_and_failure_cleanup(tmp_path,failure,relative):
     import torch
-    root=tmp_path/'production';slot=root/'rounds/lfm/production/round-000001/learner/checkpoint.pt';slot.parent.mkdir(parents=True)
+    root=tmp_path/'production';slot=root/'rounds/lfm'/relative/'checkpoint.pt';slot.parent.mkdir(parents=True)
     torch.save({'step':42,'training':{'step':5,'optimizer':{}if failure=='incomplete'else{'moment':torch.tensor([1.25])},
         'rng':{'cpu':torch.get_rng_state()},'source_receipts':[{'path':'actual-source'}]}},slot)
     pins=tmp_path/'pins';pins.mkdir();target=pins/'lfm-native-checkpoint-step-42.pt'
@@ -74,9 +75,10 @@ def test_remote_actual_full_checkpoint_global_step_independent_pin_and_failure_c
 
 
 
-def test_canonical_glob_rejects_foreign_role_checkpoint_symlink_before_copy(tmp_path):
+@pytest.mark.parametrize('relative',['production/round-1/learner','cycles/000003/supervised/001/learner','cycles/000003/supervised/001/retry-predecessor-v2/learner'])
+def test_canonical_glob_rejects_foreign_role_checkpoint_symlink_before_copy(tmp_path,relative):
     root=tmp_path/'production';foreign=root/'rounds/mellum/production/round-1/learner/checkpoint.pt';foreign.parent.mkdir(parents=True);foreign.write_bytes(b'foreign checkpoint never decoded')
-    alias=root/'rounds/lfm/production/round-1/learner/checkpoint.pt';alias.parent.mkdir(parents=True);alias.symlink_to(foreign)
+    alias=root/'rounds/lfm'/relative/'checkpoint.pt';alias.parent.mkdir(parents=True);alias.symlink_to(foreign)
     pins=tmp_path/'pins';pins.mkdir()
     code=module.remote_code(role='lfm',root=root,known={},last=0,extra=None,pin_directory=pins,minimum_available_bytes=0)
     result=subprocess.run([sys.executable,'-c',code],capture_output=True,text=True,timeout=30)
@@ -99,9 +101,9 @@ def test_default_remote_code_is_byte_identical_when_sidecar_unused(tmp_path):
     spec=importlib.util.spec_from_file_location('published_actor_exporter',original_path)
     original=importlib.util.module_from_spec(spec);spec.loader.exec_module(original)
     options=dict(role='lfm',root='/root',known={},last=0,extra=None,pin_directory='/pins',minimum_available_bytes=0)
-    assert module.remote_code(**options)==original.remote_code(**options)
+    assert module.remote_code(**options)==original.remote_code(**options).replace('cycles/*/supervised/*/learner/checkpoint.pt','cycles/*/supervised/*/**/learner/checkpoint.pt')
     options.update(actor_view_directory='/views',actor_view_runtime='/runtime')
-    assert module.remote_code(**options)==original.remote_code(**options)
+    assert module.remote_code(**options)==original.remote_code(**options).replace('cycles/*/supervised/*/learner/checkpoint.pt','cycles/*/supervised/*/**/learner/checkpoint.pt')
 
 
 def test_completed_remote_observation_recovers_after_lost_rpc_without_decode(tmp_path):
