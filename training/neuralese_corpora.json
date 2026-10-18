@@ -207057,6 +207057,162 @@
         "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0035-tranche0002",
         "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0035-tranche0003"
       ]
+    },
+    {
+      "id": "external-expansion-deepdive-reference-qa-handoffs-20261018-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/external-expansion-deepdive-reference-qa-handoffs-20261018-v1",
+      "include": [
+        "*.port-records.jsonl",
+        "preparation.json",
+        "joint-closure-manifest.json",
+        "admission-review.json"
+      ],
+      "source_class": "external-static-reference-answer-handoff",
+      "training_admission": true,
+      "training_admission_reason": "Owner comprehensive adaptive training: include usable pinned source reference QA now with exact custody and protected question closure",
+      "admission": {
+        "schema": "natlang.external-static-admission/1",
+        "approved": true,
+        "policy": "Owner comprehensive adaptive training: include usable pinned source reference QA now with exact custody and protected question closure",
+        "source": "Pinned D31 qa_sft and qa_rl reference answers, not tool trajectories or on-policy rollouts",
+        "source_manifest": {
+          "path": "/home/werg/natlang/training/corpus-manifests/external-expansion-d31-source-20261014-v1.json",
+          "bytes": 1364,
+          "sha256": "c5ff86cd4455ae12638245e2e6a993c2dcb86c8900446024698d7a193fbc1d63"
+        },
+        "qa_inputs": [
+          {
+            "path": "/home/werg/natlang/data/neuralese/external-expansion-20261014/D31/acquisition.json",
+            "bytes": 2499,
+            "sha256": "c19829269da9180bc6dfc71c38c0ca421ce203ef2e2b6bbc5c43f7c299bfe532"
+          },
+          {
+            "path": "/home/werg/natlang/data/neuralese/external-expansion-20261014/D31/data/qa_rl-00000-of-00001.parquet",
+            "bytes": 1364161,
+            "sha256": "cfde3734fb4367cc748fefb7ac6df034269a8f40f20bfa05c81e69eaea7eeadb"
+          },
+          {
+            "path": "/home/werg/natlang/data/neuralese/external-expansion-20261014/D31/data/qa_sft-00000-of-00001.parquet",
+            "bytes": 600602,
+            "sha256": "4265643ce84abb1149ba8366b89105db52e55d0619a242af7de7ecacd9064f02"
+          }
+        ],
+        "closure": {
+          "qa_inputs": 3250,
+          "exact_duplicates": 41,
+          "new_reference_records": 3209,
+          "prior_trajectory_records": 3016,
+          "prior_rows_reappended": 0,
+          "invalid": 0,
+          "protected_hits": 0,
+          "closure_violations": 0,
+          "manifest": {
+            "path": "/home/werg/data/external-expansion/deepdive-reference-qa-v1/joint-closed/manifest.json",
+            "bytes": 3128,
+            "sha256": "a54f4a62e9b9e84f4b1f61212c5a4f433eedb2a29a522a430acc378c57d9b525"
+          },
+          "protected": {
+            "path": "/home/werg/natlang/data/neuralese/corpora/protected-bgkit-20261003/bgkit-benchmarks.protected.json",
+            "bytes": 6460751,
+            "sha256": "585b21e7091adfbc4f851ef35b0b3c6da00f032fffe69a8b98816a567abad7bf"
+          }
+        },
+        "native": {
+          "items": 3209,
+          "cases": 803,
+          "decisions": 8024,
+          "omissions": {}
+        },
+        "literal_reference_fidelity": "Quoted think/tool-call text remains literal assistant content; template-altering rows explicitly rejected, actual source omissions zero",
+        "split": "All train after shared D31 question/task groups and protected closure",
+        "certificate_limit": "Static reference-answer plumbing only, not independently verified research execution, genuine communication training, RL or model lift",
+        "model_facing_measurement": "Pending approximately48 own-sandbox samples; tracked plans/MODEL_FACING_CHANGES.md",
+        "training_exposure": 0
+      },
+      "derived_from": [
+        "external-expansion-d31-source-20261014-v1"
+      ],
+      "license": "Apache-2.0 from pinned D31 acquisition card"
+    },
+    {
+      "id": "external-expansion-deepdive-reference-qa-native-20261018-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/external-expansion-deepdive-reference-qa-native-20261018-v1",
+      "include": [
+        "turns/**/*.turns.jsonl.zst",
+        "turns/**/*.summary.json",
+        "ir/**/build.json",
+        "ir/**/omissions.jsonl",
+        "runtime-page.json",
+        "admission-review.json"
+      ],
+      "source_class": "statically-lowered-external-native-reference-answer-turns",
+      "training_admission": true,
+      "training_admission_reason": "Owner comprehensive adaptive training: include usable pinned source reference QA now with exact custody and protected question closure",
+      "admission": {
+        "schema": "natlang.external-static-admission/1",
+        "approved": true,
+        "policy": "Owner comprehensive adaptive training: include usable pinned source reference QA now with exact custody and protected question closure",
+        "source": "Pinned D31 qa_sft and qa_rl reference answers, not tool trajectories or on-policy rollouts",
+        "source_manifest": {
+          "path": "/home/werg/natlang/training/corpus-manifests/external-expansion-d31-source-20261014-v1.json",
+          "bytes": 1364,
+          "sha256": "c5ff86cd4455ae12638245e2e6a993c2dcb86c8900446024698d7a193fbc1d63"
+        },
+        "qa_inputs": [
+          {
+            "path": "/home/werg/natlang/data/neuralese/external-expansion-20261014/D31/acquisition.json",
+            "bytes": 2499,
+            "sha256": "c19829269da9180bc6dfc71c38c0ca421ce203ef2e2b6bbc5c43f7c299bfe532"
+          },
+          {
+            "path": "/home/werg/natlang/data/neuralese/external-expansion-20261014/D31/data/qa_rl-00000-of-00001.parquet",
+            "bytes": 1364161,
+            "sha256": "cfde3734fb4367cc748fefb7ac6df034269a8f40f20bfa05c81e69eaea7eeadb"
+          },
+          {
+            "path": "/home/werg/natlang/data/neuralese/external-expansion-20261014/D31/data/qa_sft-00000-of-00001.parquet",
+            "bytes": 600602,
+            "sha256": "4265643ce84abb1149ba8366b89105db52e55d0619a242af7de7ecacd9064f02"
+          }
+        ],
+        "closure": {
+          "qa_inputs": 3250,
+          "exact_duplicates": 41,
+          "new_reference_records": 3209,
+          "prior_trajectory_records": 3016,
+          "prior_rows_reappended": 0,
+          "invalid": 0,
+          "protected_hits": 0,
+          "closure_violations": 0,
+          "manifest": {
+            "path": "/home/werg/data/external-expansion/deepdive-reference-qa-v1/joint-closed/manifest.json",
+            "bytes": 3128,
+            "sha256": "a54f4a62e9b9e84f4b1f61212c5a4f433eedb2a29a522a430acc378c57d9b525"
+          },
+          "protected": {
+            "path": "/home/werg/natlang/data/neuralese/corpora/protected-bgkit-20261003/bgkit-benchmarks.protected.json",
+            "bytes": 6460751,
+            "sha256": "585b21e7091adfbc4f851ef35b0b3c6da00f032fffe69a8b98816a567abad7bf"
+          }
+        },
+        "native": {
+          "items": 3209,
+          "cases": 803,
+          "decisions": 8024,
+          "omissions": {}
+        },
+        "literal_reference_fidelity": "Quoted think/tool-call text remains literal assistant content; template-altering rows explicitly rejected, actual source omissions zero",
+        "split": "All train after shared D31 question/task groups and protected closure",
+        "certificate_limit": "Static reference-answer plumbing only, not independently verified research execution, genuine communication training, RL or model lift",
+        "model_facing_measurement": "Pending approximately48 own-sandbox samples; tracked plans/MODEL_FACING_CHANGES.md",
+        "training_exposure": 0
+      },
+      "derived_from": [
+        "external-expansion-deepdive-reference-qa-handoffs-20261018-v1"
+      ],
+      "license": "Apache-2.0 from pinned D31 acquisition card"
     }
   ],
   "coverage_backlog": [

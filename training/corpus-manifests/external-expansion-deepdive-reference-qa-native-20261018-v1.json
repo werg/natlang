@@ -1,0 +1,70 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "external-expansion-deepdive-reference-qa-native-20261018-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/external-expansion-deepdive-reference-qa-native-20261018-v1",
+  "files": [
+    {
+      "path": "admission-review.json",
+      "bytes": 2663,
+      "sha256": "b40c3a944d230d46ff7f6ff8567b5d81a118687e3e7bb140e4aa9ba5e1bb779c"
+    },
+    {
+      "path": "ir/trajectory_continuation_research/build.json",
+      "bytes": 769,
+      "sha256": "a66aeae8596d3dd606bdaba730cd47a60ffb2e3f4bb1941cef03db6977bfec87"
+    },
+    {
+      "path": "ir/trajectory_continuation_research/omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "runtime-page.json",
+      "bytes": 107,
+      "sha256": "c59ceadc774cf4ea37b3e7885c3bcf03cfd205462ba386c957a9b9e2e5f4a0ea"
+    },
+    {
+      "path": "turns/trajectory_continuation_research/00000.summary.json",
+      "bytes": 250,
+      "sha256": "323085c904e75e696cea614aa48bfef4613c1ea98c8ff8f7ada98373b90c47cb"
+    },
+    {
+      "path": "turns/trajectory_continuation_research/00000.turns.jsonl.zst",
+      "bytes": 1127372,
+      "sha256": "8bf3421d2d2030f73532998b9fa7b539d0b60c2d70b930521e8cb2f52a9adb12"
+    },
+    {
+      "path": "turns/trajectory_continuation_research/00001.summary.json",
+      "bytes": 250,
+      "sha256": "323085c904e75e696cea614aa48bfef4613c1ea98c8ff8f7ada98373b90c47cb"
+    },
+    {
+      "path": "turns/trajectory_continuation_research/00001.turns.jsonl.zst",
+      "bytes": 1129097,
+      "sha256": "8b9ac88331eaabba89e88c07c31157a5524c04b70a6e97844fdbef3c8bd046e8"
+    },
+    {
+      "path": "turns/trajectory_continuation_research/00002.summary.json",
+      "bytes": 250,
+      "sha256": "323085c904e75e696cea614aa48bfef4613c1ea98c8ff8f7ada98373b90c47cb"
+    },
+    {
+      "path": "turns/trajectory_continuation_research/00002.turns.jsonl.zst",
+      "bytes": 1124067,
+      "sha256": "ac07b70c2a003bb3b66351488e559ef10786e94116216739363db24954ac7d9f"
+    },
+    {
+      "path": "turns/trajectory_continuation_research/00003.summary.json",
+      "bytes": 246,
+      "sha256": "a33c5d94832d8aca379e1a4d7c040eef5a778534d429e644ed720ecd0544900c"
+    },
+    {
+      "path": "turns/trajectory_continuation_research/00003.turns.jsonl.zst",
+      "bytes": 244623,
+      "sha256": "cd5709ba4047f47457fb5d41d6916b53d632abb9013ceafbc60f38dd45a0a0ac"
+    }
+  ],
+  "bytes": 3629694
+}
