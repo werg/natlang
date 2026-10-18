@@ -16,6 +16,7 @@ AUTHORING_REVIEWED_ALIAS_SCHEMA = 'natlang.teacher-reviewed-source-authoring-qua
 AUTHORING_ALIAS_SCHEMA = 'natlang.teacher-source-grounded-authoring-quality-continuation/1'
 AUTHORING_REQUIREMENT_SCHEMA = 'natlang.teacher-authoring-construct-quality-continuation/1'
 AUTHORING_COMPILER_SCHEMA = 'natlang.teacher-authoring-compiler-quality-continuation/1'
+SPAN_REVIEW_SCHEMA = 'natlang.teacher-span-answer-quality-continuation/1'
 HISTORICAL_AUTHORING_RUNTIME = '43e248a84b6faba6e793181fe593796dc03c878b05199091d95e824408de7ed1'
 
 
@@ -102,7 +103,10 @@ def verify_quality_continuation(row, original, original_binding):
     continuation = (continue_authoring_requirement_quality if schema == AUTHORING_REQUIREMENT_SCHEMA else
                     continue_authoring_alias_quality if schema == AUTHORING_ALIAS_SCHEMA else
                     continue_authoring_quality if schema == AUTHORING_SCHEMA else continue_quality)
-    if schema == AUTHORING_REVIEWED_ALIAS_SCHEMA:
+    if schema == SPAN_REVIEW_SCHEMA:
+        expected = continue_span_answer_quality(original, original_binding,
+            review_reference=row['source_quality_continuation']['source_review'])
+    elif schema == AUTHORING_REVIEWED_ALIAS_SCHEMA:
         expected = continue_authoring_alias_quality(original, original_binding,
             source_review=row['source_quality_continuation']['source_review'])
     elif schema == AUTHORING_COMPILER_SCHEMA:
@@ -121,6 +125,124 @@ def verify_quality_continuation(row, original, original_binding):
     expected['source_quality_continuation']['verifier'] = historical
     if canonical_json_sha256_hex(row) != canonical_json_sha256_hex(expected):
         raise ValueError('teacher quality continuation differs from exact original evaluation view')
+
+
+def reviewed_span_answer(original, original_binding, review_reference):
+    """Authenticate an independent NL verdict, without deciding equivalence here."""
+    from scripts.coreweave.teacher_tranche_admission import read_bound
+    review = read_bound(review_reference)
+    if (review.get('schema') != 'natlang.teacher-span-answer-semantic-review/1'
+            or review.get('reviewer') != 'independent-root-source-meaning-review'
+            or review.get('training_admission') is not False
+            or not isinstance(review.get('reason_verbatim'), str)
+            or not review['reason_verbatim'].strip()):
+        raise ValueError('span answer requires independent source-rubric review')
+    inventory = read_bound(review['inventory'])
+    if (inventory.get('schema') != 'natlang.source-owned-answer-equivalence-review-inventory/1'
+            or inventory.get('training_admission') is not False
+            or inventory.get('parent_release') is not False):
+        raise ValueError('span answer review inventory is not exact non-admission custody')
+    if sha256_file_hex(original_binding['path']) != original_binding['sha256']:
+        raise ValueError('span answer original raw file changed')
+    from natlang_neuralese.common.jsonio import iter_jsonl_rows
+    captured_rows = [value for _, value in iter_jsonl_rows(original_binding['path'])
+                     if value.get('id') == original.get('id')]
+    if (len(captured_rows) != 1
+            or canonical_json_sha256_hex(captured_rows[0]) != canonical_json_sha256_hex(original)):
+        raise ValueError('span answer differs from complete original captured row')
+    matches = [entry for entry in inventory['records']
+        if entry['source_row_id'] == original.get('id')
+        and entry['raw_output']['sha256'] == original_binding['sha256']]
+    approvals = [entry for entry in review.get('approved', [])
+        if entry.get('row_id') == original.get('id')
+        and entry.get('raw_output_sha256') == original_binding['sha256']]
+    if len(matches) != 1 or len(approvals) != 1:
+        raise ValueError('span answer needs one exact reviewed original and approval')
+    entry, approval = matches[0], approvals[0]
+    program = original['task']['program_ir']; semantics = program['semantics']
+    outcome = original['outcome']
+    expected = {'source_row_id': original['id'], 'program_id': program['id'],
+        'program_ir_sha256': canonical_json_sha256_hex(program), 'family': program.get('family'),
+        'source_groups': program['source_groups'], 'source_gold': program.get('gold_sources'),
+        'question': semantics['inputs'].get('question'), 'expected': semantics['expected'],
+        'declared_oracle': semantics['oracle'], 'declared_instruction_files': semantics['files'],
+        'captured_actual': outcome['value'], 'captured_oracle': outcome['oracle'],
+        'captured_checks': outcome['checks'], 'captured_file_check': outcome.get('files_check'),
+        'training_admission': False}
+    if (any(canonical_json_sha256_hex(entry.get(key)) != canonical_json_sha256_hex(value)
+            for key, value in expected.items())
+            or entry['raw_output']['bytes'] != Path(original_binding['path']).stat().st_size
+            or approval.get('program_ir_sha256') != expected['program_ir_sha256']
+            or approval.get('accepted') is not True
+            or not isinstance(approval.get('reason'), str) or not approval['reason'].strip()):
+        raise ValueError('reviewed span answer/source/rubric binding differs')
+    return {'accepted': True, 'verdict': approval['reason']}
+
+
+def span_answer_verdict(original, approval):
+    """Use the existing span oracle and its exact, source-bound judge interface."""
+    root = Path(__file__).resolve().parents[2]
+    oracle = root / 'ts-host/dist/evaluation/oracles.js'
+    paths = [Path(__file__).resolve(), root / 'ts-host/src/evaluation/oracles.ts',
+             *sorted((root / 'ts-host/dist').rglob('*.js'))]
+    bindings = {str(path.relative_to(root)): sha256_file_hex(path) for path in paths}
+    semantics = original['task']['program_ir']['semantics']
+    payload = {'actual': original['outcome']['value'], 'expected': semantics['expected'],
+               'spec': semantics['oracle'], 'approval': approval}
+    code = ('import {readFileSync} from "node:fs";import {isDeepStrictEqual} from "node:util";'
+        'const {checkOracle}=await import(process.argv[1]);'
+        'const p=JSON.parse(readFileSync(0,"utf8"));let calls=0;'
+        'const legacy=await checkOracle(p.actual,p.expected,p.spec);'
+        'const verdict=await checkOracle(p.actual,p.expected,p.spec,async input=>{'
+        'if(!isDeepStrictEqual(input,{actual:p.actual,expected:{answer:p.expected,context:p.spec.context},'
+        'rubric:p.spec.rubric}))throw Error("reviewed oracle input changed");'
+        'calls++;return p.approval;});console.log(JSON.stringify({legacy,verdict,calls}));')
+    completed = subprocess.run(['node', '--input-type=module', '-e', code, oracle.as_uri()],
+        input=json.dumps(payload), capture_output=True, text=True, check=True)
+    if bindings != {str(path.relative_to(root)): sha256_file_hex(path) for path in paths}:
+        raise ValueError('span answer verifier changed during execution')
+    return json.loads(completed.stdout), {'files': len(bindings),
+        'inventory_sha256': canonical_json_sha256_hex(bindings)}
+
+
+def continue_span_answer_quality(original, original_binding, *, review_reference):
+    if 'source_quality_continuation' in original:
+        raise ValueError('span answer continuation requires original captured execution')
+    program = original['task']['program_ir']; semantics = program['semantics']
+    outcome = original['outcome']; checks = outcome.get('checks'); spec = semantics.get('oracle')
+    required = {'seeded_failure_requirement', 'expected_status', 'honest_stop',
+                'effects', 'files', 'world', 'file_return_consistency', 'answer'}
+    if (program.get('split') != 'train' or not program.get('source_groups')
+            or not isinstance(spec, dict) or spec.get('level') != 'span'
+            or not isinstance(spec.get('rubric'), str) or not spec['rubric'].strip()
+            or outcome.get('status') != 'done' or outcome.get('accepted') is not False
+            or outcome.get('oracle', {}).get('accepted') is not False
+            or outcome.get('oracle', {}).get('level') != 'span'
+            or outcome.get('oracle', {}).get('needs_review') is not True
+            or outcome.get('quality_pending') != ['answer_needs_review']
+            or outcome.get('rejection_reasons') != ['answer']
+            or not isinstance(checks, dict) or not required <= set(checks)
+            or checks.get('answer') is not False
+            or any(value is not True for key, value in checks.items() if key != 'answer')):
+        raise ValueError('span answer requires only a completed answer-equivalence review')
+    approval = reviewed_span_answer(original, original_binding, review_reference)
+    checked, verifier = span_answer_verdict(original, approval)
+    if (reviewed_span_answer(original, original_binding, review_reference) != approval
+            or canonical_json_sha256_hex(checked['legacy']) != canonical_json_sha256_hex(outcome['oracle'])
+            or checked.get('calls') != 1 or checked['verdict'].get('accepted') is not True
+            or checked['verdict'].get('level') != 'span' or checked['verdict'].get('needs_review')
+            or checked['verdict'].get('score') != checked['legacy'].get('score')):
+        raise ValueError('fresh original span comparison and bound semantic review failed')
+    result = copy.deepcopy(original)
+    result['outcome'].update(accepted=True, oracle=checked['verdict'],
+        quality_pending=[], rejection_reasons=[])
+    result['outcome']['checks']['answer'] = True
+    result['source_quality_continuation'] = {'schema': SPAN_REVIEW_SCHEMA,
+        'original': original_binding, 'original_row_sha256': canonical_json_sha256_hex(original),
+        'source_review': review_reference, 'verifier': verifier,
+        'comparator': {'kind': 'source-reviewed-span-answer/1'},
+        'claim': 'Independent semantic review under unchanged source span rubric; original negative oracle, files, target answer and complete captured trajectory retained unchanged in original custody'}
+    return result
 
 
 def authoring_verdict(row, *, source_aliases=False, construct_requirements=False, reviewed_source=None):
