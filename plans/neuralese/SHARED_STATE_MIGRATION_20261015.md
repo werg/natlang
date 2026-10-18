@@ -48,6 +48,61 @@ through the projected-value implementation.
 
 ## Current status
 
+October 18, 23:50 UTC: both useful diagnostic trainers continue. LFM reached
+15347 global / 14591 ordinary updates at about 3000 supervised tokens/s;
+Mellum reached 24872 global / 23856 ordinary, with a recent 4688 tokens/s.
+Both GPUs were sampled at 100% utilization. LFM's current resident generation
+is `1c082270` (1,313,265 rows); Mellum remains on `3b7085c0` (1,234,855 rows).
+These are actual progress observations, not whole-recipe completion or a
+current task-quality improvement claim. Historical protected scores remain
+LFM14952=0/16 and Mellum22016=11/16; the newer Mellum24464 view is transferring
+for evaluation. Mellum24508's full 48,739,398,749-byte parent is independently
+uploaded and fully read back with exact SHA-256 `4775b9f3`.
+
+The latest Mellum successor passed exact full/view/cache forward comparison,
+then failed its complete 314-parameter gradient check before any SGD. A real
+FP32 reduction/BF16 midpoint reproducer and an independent actor/microbatch
+counterexample localized concrete mechanisms. Shared repair `0bc25389f`
+preserves invocation-local reductions, cached reverse-token convolution fan-in,
+interleaved actor ordering and checkpoint execution context while still running
+one layer-major graph traversal. Focused tests pass; its complete repository
+check and actual-parent cloud gradient/capacity qualification remain pending.
+See [gradient partition implementation](shared-state/GRAPH_GRADIENT_PARTITIONS_20261019.md)
+and [ordered convolution](shared-state/FINITE_CONVOLUTION_COTANGENT_ORDER_20261019.md).
+LFM's next successor also removes checkpoint-input file offload and may use the
+explicit device FP32 accumulator after actual restored-model capacity proof.
+No runtime package is credited as successful production training merely for
+being staged.
+
+A proposed 2343-row LFM continuation contained 1739 already represented rows.
+The learner rejected it before commit; the pending request was withdrawn and
+received zero training credit. The replacement contains 604 genuinely new
+whole rows, preserving all pending obligations and excluding over-frontier rows
+without truncation. Shared resident-prefix and pending-commit race safeguards
+are integrated (`236e4b130`, `bbb481a21`, `a47ca02c9`); actual consumer closure,
+publication and learner adoption of the corrected continuation remain separate.
+Native graph communication classification also needs an explicit metadata/cache
+continuation: existing native graph rows executed their topology, but their
+communication flag was false. Correct per-row exposure accounting before claiming
+producer/consumer readiness; do not reset or invent exposure.
+
+The self-hosted Qwen teacher remains busy. Actual hardware census identifies
+its existing sandbox as RTX PRO 6000 Blackwell with 96 GB, correcting the older
+B200 description. The Node runtime passed strict physical verification and fresh
+3/3 typed plus 24/24 ordinary recovery and 3/3 private recovery references.
+A future-only 198-packet source/runtime epoch adds three 48-trajectory windows;
+its new configuration is applied and publisher reconciliation is in progress.
+Existing collectors retain their original runtime custody. No future sample,
+admission or completed measurement is inferred from that configuration change.
+
+Neither model has completed its whole foundation/production recipe or earned
+cross-model VAE readiness. Continue genuine shared-state graphs, ordinary data,
+full-graph policy updates and executable existing coordinator stage handback
+as their real dependencies become ready. Exact live owners, save/adoption
+receipts and counters are maintained in the DGX coordination status.
+
+## Earlier October 18 operational record
+
 October 18, 18:15 UTC operational position: both models are training. LFM has
 adopted its source03 continuation; Mellum continues useful R18 ordinary
 diagnostic SGD while the shared cotangent repair awaits its actual R19 check.
