@@ -203368,6 +203368,87 @@
         "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0034-tranche0001",
         "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0033-tranche0001"
       ]
+    },
+    {
+      "build": {
+        "audit": "admission-d32-source40-history-keep-v2/audit.json",
+        "audit_sha256": "96bff0c3cdf4db7cc16b5d159abbda81902298331535606c98b70b9f904b6a2e",
+        "capacity_partition": {
+          "path": "capacity-source40-v2/partition/receipt.json",
+          "sha256": "120a434352017c9b604f92db53f9849f6bf9617158433fffdeb1aa3e5b6fdd31"
+        },
+        "source_render_samples": {
+          "path": "admission-d32-source40-history-keep-v2/source-render-samples.json",
+          "sha256": "42b0ed8a8bc13d787d43dd461c65c34c3e24636e97e06d9874a7246ecbc215b2"
+        }
+      },
+      "documents": {
+        "lfm25": {
+          "capacity:train-fit-graphs": 1574,
+          "capacity:train-fit-tokens": 51789062,
+          "capacity:train-pending-long-graphs": 229,
+          "capacity:train-pending-long-tokens": 24461796,
+          "graphs:train": 1803,
+          "max_row_tokens": 135664,
+          "positive_sessions": 1803,
+          "source-render-pending:tool-arguments": 27,
+          "tokens:test": 0,
+          "tokens:train": 76250858
+        },
+        "mellum21": {
+          "capacity:train-fit-graphs": 1593,
+          "capacity:train-fit-tokens": 61598170,
+          "capacity:train-pending-long-graphs": 210,
+          "capacity:train-pending-long-tokens": 26292567,
+          "graphs:train": 1803,
+          "max_row_tokens": 155872,
+          "positive_sessions": 1803,
+          "source-render-pending:tool-arguments": 27,
+          "tokens:test": 0,
+          "tokens:train": 87890737
+        }
+      },
+      "id": "d32-source40-history-keep-v2",
+      "include": [
+        "761b3854d8d13b16f9f54c0dbc1a3502dccbccdedad8acdb94544755292e4a3e/lfm25/omissions.jsonl",
+        "761b3854d8d13b16f9f54c0dbc1a3502dccbccdedad8acdb94544755292e4a3e/lfm25/receipt.json",
+        "761b3854d8d13b16f9f54c0dbc1a3502dccbccdedad8acdb94544755292e4a3e/lfm25/resume-state.json",
+        "761b3854d8d13b16f9f54c0dbc1a3502dccbccdedad8acdb94544755292e4a3e/lfm25/test/native-graphs.jsonl.zst",
+        "761b3854d8d13b16f9f54c0dbc1a3502dccbccdedad8acdb94544755292e4a3e/lfm25/train/native-graphs.jsonl.zst",
+        "761b3854d8d13b16f9f54c0dbc1a3502dccbccdedad8acdb94544755292e4a3e/mellum21/omissions.jsonl",
+        "761b3854d8d13b16f9f54c0dbc1a3502dccbccdedad8acdb94544755292e4a3e/mellum21/receipt.json",
+        "761b3854d8d13b16f9f54c0dbc1a3502dccbccdedad8acdb94544755292e4a3e/mellum21/resume-state.json",
+        "761b3854d8d13b16f9f54c0dbc1a3502dccbccdedad8acdb94544755292e4a3e/mellum21/test/native-graphs.jsonl.zst",
+        "761b3854d8d13b16f9f54c0dbc1a3502dccbccdedad8acdb94544755292e4a3e/mellum21/train/native-graphs.jsonl.zst",
+        "admission-d32-source40-history-keep-v2/audit.json",
+        "admission-d32-source40-history-keep-v2/lfm25-train-sources.json",
+        "admission-d32-source40-history-keep-v2/mellum21-train-sources.json",
+        "admission-d32-source40-history-keep-v2/row-proof.jsonl",
+        "admission-d32-source40-history-keep-v2/source-render-samples.json",
+        "capacity-source40-v2/limits.json",
+        "capacity-source40-v2/partition/files/coverage.jsonl",
+        "capacity-source40-v2/partition/files/lfm25/test/fit.jsonl.zst",
+        "capacity-source40-v2/partition/files/lfm25/test/remaining-long.jsonl.zst",
+        "capacity-source40-v2/partition/files/lfm25/train/fit-sources.json",
+        "capacity-source40-v2/partition/files/lfm25/train/fit.jsonl.zst",
+        "capacity-source40-v2/partition/files/lfm25/train/remaining-long-sources.json",
+        "capacity-source40-v2/partition/files/lfm25/train/remaining-long.jsonl.zst",
+        "capacity-source40-v2/partition/files/mellum21/test/fit.jsonl.zst",
+        "capacity-source40-v2/partition/files/mellum21/test/remaining-long.jsonl.zst",
+        "capacity-source40-v2/partition/files/mellum21/train/fit-sources.json",
+        "capacity-source40-v2/partition/files/mellum21/train/fit.jsonl.zst",
+        "capacity-source40-v2/partition/files/mellum21/train/remaining-long-sources.json",
+        "capacity-source40-v2/partition/files/mellum21/train/remaining-long.jsonl.zst",
+        "capacity-source40-v2/partition/files/pending-sources.json",
+        "capacity-source40-v2/partition/receipt.json"
+      ],
+      "license": "exact source license facts retained in each graph acquired_session provenance",
+      "owner": "dgx",
+      "path": "runs/acquired-connected-native-graphs-20261018-history-keep-v2/D32/source40",
+      "source_class": "source-curated-complete-acquired-agent-native-session-graphs",
+      "split": "original source split and complete cross-source global held-group closure; no truncation",
+      "training_admission": true,
+      "training_admission_reason": "One complete normalized source member is source-curated, not oracle or native-execution verified. Both pinned tokenizer views preserve the full global normalized-source held/quality/pending closure and exact decision holds. Other normalized source members remain explicitly pending. Current KEEP render qualification and exact whole-row capacity partition are bound; over-limit complete rows remain explicit pending obligations. No training exposure is claimed."
     }
   ],
   "coverage_backlog": [
