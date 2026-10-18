@@ -221,6 +221,7 @@ class _Operation(nn.Module):
 def _effective_replacements(parameters, resolved, gradient_precision):
     """Construct once from immutable base objects, never another actor's scope."""
     replacement = {}
+    deltas_by_key = {}
     for _, scale, spec, coefficients, bases in resolved:
         for name, coefficient in coefficients.items():
             weight = parameters[name]
@@ -231,6 +232,7 @@ def _effective_replacements(parameters, resolved, gradient_precision):
                 projection.to(device=weight.device) if projection is not None else None)
             delta = ((left @ core) @ right.transpose(-2, -1)) * scale
             key = 'model.'+name
+            deltas_by_key.setdefault(key, []).append((delta, coefficient))
             from ..common.native_higher_order import active_reference_arithmetic
             if active_reference_arithmetic() is not None:
                 # The declared mathematical reference differentiates actual
@@ -242,6 +244,12 @@ def _effective_replacements(parameters, resolved, gradient_precision):
                 replacement[key] = rounded_weight_carrier(replacement.get(key, weight), delta, weight.dtype)
             else:
                 replacement[key] = replacement.get(key, weight) + delta.to(weight.dtype)
+    from .native_weight_carrier import active_cotangent_scope
+    cotangents = active_cotangent_scope()
+    if cotangents is not None:
+        for key, value in replacement.items():
+            cotangents.register_effective_weight(value, parameters[key.removeprefix('model.')],
+                                                 deltas_by_key[key])
     storage_dtypes = {}
     from ..common.native_higher_order import active_reference_arithmetic
     if gradient_precision == 'fp32' or active_reference_arithmetic() is not None:
@@ -254,7 +262,8 @@ def _effective_replacements(parameters, resolved, gradient_precision):
     return replacement, storage_dtypes
 
 
-def run_native(engine, callback, entries=None, *, leaves=None, gradient_precision=None):
+def run_native(engine, callback, entries=None, *, leaves=None, gradient_precision=None,
+               track_adapter_cotangents=True, adapter_cotangent_target_ids=None):
     """Run one atomic native operation with exact temporary parameter substitution.
 
     Unadapted operations acquire the same lock. torch.func restores original
@@ -283,18 +292,42 @@ def run_native(engine, callback, entries=None, *, leaves=None, gradient_precisio
         token = _ACTIVE.set((*_ACTIVE.get(), (engine, identity, binding, entries, set(), {}, gradient_precision or 'storage', lifecycle)))
         try:
             if not resolved:
-                return callback()
+                # A serving model is normally frozen, so retain the exact old
+                # no-adapter fast path. A model-parameter VJP temporarily marks
+                # its selected BF16 leaves trainable; those uses still need the
+                # shared carrier even though no functional actor was installed.
+                parameters=target_parameters(engine.shared_model)
+                selected=[value for value in parameters.values()
+                          if value.requires_grad and value.dtype in (torch.float16,torch.bfloat16)]
+                if not selected:
+                    return callback()
+                from .native_weight_carrier import ParameterCotangentScope
+                cotangent_scope=ParameterCotangentScope.for_model(engine.shared_model,mode='vjp',
+                    track_auxiliary=track_adapter_cotangents,
+                    auxiliary_target_ids=adapter_cotangent_target_ids)
+                with cotangent_scope:
+                    result=callback()
+                    cotangent_scope.finish()
+                    return result
             parameters = target_parameters(engine.shared_model)
-            replacement, storage_dtypes = _effective_replacements(parameters, resolved, gradient_precision)
-            _ACTIVE.get()[-1][5].update(storage_dtypes)
-            _ACTIVE.get()[-1][4].update(id(value) for value in replacement.values())
-            from ..common.native_higher_order import active_reference_arithmetic
-            if gradient_precision == 'fp32' or active_reference_arithmetic() is not None:
-                from .native_weight_carrier import carrier_linear_modules
+            from .native_weight_carrier import ParameterCotangentScope, carrier_linear_modules
+            cotangent_scope = ParameterCotangentScope(parameters.items(), mode='vjp',
+                track_auxiliary=track_adapter_cotangents,
+                auxiliary_target_ids=adapter_cotangent_target_ids)
+            cotangent_scope.model=engine.shared_model
+            with cotangent_scope:
+                replacement, storage_dtypes = _effective_replacements(parameters, resolved, gradient_precision)
+                _ACTIVE.get()[-1][5].update(storage_dtypes)
+                _ACTIVE.get()[-1][4].update(id(value) for value in replacement.values())
                 selected = [parameters[key.removeprefix('model.')] for key in replacement]
-                with carrier_linear_modules(engine.shared_model, selected):
-                    return torch.func.functional_call(_Operation(engine.shared_model, callback), replacement, ())
-            return torch.func.functional_call(_Operation(engine.shared_model, callback), replacement, ())
+                from ..common.native_higher_order import active_reference_arithmetic
+                if active_reference_arithmetic() is not None:
+                    result = torch.func.functional_call(_Operation(engine.shared_model, callback), replacement, ())
+                else:
+                    with carrier_linear_modules(engine.shared_model, selected):
+                        result = torch.func.functional_call(_Operation(engine.shared_model, callback), replacement, ())
+                cotangent_scope.finish()
+                return result
         finally:
             if reference is None:lifecycle['active'] = False
             _ACTIVE.reset(token)
@@ -500,6 +533,8 @@ def require_model_execution_actor(model, identity, binding):
 
 def native_forward_storage_dtype(weight):
     """Explicit forward storage dtype of an active carrier or its bank views."""
+    from .native_weight_carrier import active_cotangent_scope
+    scope = active_cotangent_scope()
     current = weight
     while current is not None:
         for frame in reversed(_ACTIVE.get()):
@@ -507,6 +542,8 @@ def native_forward_storage_dtype(weight):
             if dtype is not None:
                 return dtype
         current = getattr(current, '_base', None)
+    if scope is not None and scope.anchors_for_weight(weight):
+        return weight.dtype
     return None
 
 

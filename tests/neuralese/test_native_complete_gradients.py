@@ -87,6 +87,28 @@ def test_inventory_cannot_omit_a_trainable_or_alias_a_parameter():
         compare_complete_gradients(a,b,[('a',x),('b',x)],x,x,atol=1e-5,rtol=1e-4)
 
 
+def test_complete_gradient_observer_start_failure_closes_flat_cotangent_scope():
+    import os
+    from natlang_neuralese.model.native_weight_carrier import ParameterCotangentScope,active_cotangent_scope
+    class FailingObserver:
+        def begin_vjp_observation(self):raise RuntimeError('injected observer setup failure')
+    model=torch.nn.Sequential(torch.nn.Linear(4,3,bias=True)).to(dtype=torch.bfloat16)
+    original=model[0]
+    named=list(model.named_parameters())
+    inputs=torch.randn(2,4,dtype=torch.bfloat16,requires_grad=True)
+    cotangents=ParameterCotangentScope.for_model(model,mode='vjp')
+    cotangents.__enter__()
+    loss=model(inputs).float().square().mean()
+    scratch=cotangents.directory
+    assert model[0] is not original
+    with pytest.raises(RuntimeError,match='injected observer setup failure'):
+        compare_complete_gradients(loss,None,named,inputs,None,atol=1e-5,rtol=1e-4,
+            gradient_observer=FailingObserver(),flat_cotangent_scope=cotangents)
+    assert active_cotangent_scope() is None
+    assert model[0] is original
+    assert not os.path.exists(scratch)
+
+
 @pytest.mark.parametrize('family',['lfm','mellum'])
 def test_actual_runtime_qualifier_labels_complete_inventory_and_legacy_channel(family):
     from types import SimpleNamespace
@@ -98,9 +120,13 @@ def test_actual_runtime_qualifier_labels_complete_inventory_and_legacy_channel(f
         def decode(self,*args,**kwargs):return 'lexical source'
     model=SharedStateModel(tiny(family),(58,59,60,61),rank=4)
     model.port.checkpoint_layers=False
+    model.port.hf.to(dtype=torch.bfloat16)
     if family=='mellum':model.port.hf.natlang_precision='bf16'
+    for parameter in model.port.parameters():parameter.requires_grad_(True)
     with torch.no_grad():model.adapter.up.weight.normal_(std=.03)
     optimizer,named=make_native_optimizer(model,lr=3e-6,in_backward=True)
+    assert any(name.startswith('backbone.') and parameter.dtype is torch.bfloat16
+               for name,parameter in named)
     roles=SimpleNamespace(produce_open=58,produce_close=59,consume_open=60,consume_close=61)
     config={'architecture':model.port.config.model_type,'tokenizer_fingerprint':'b'*64}
     args=dict(checkpoint_sha256='a'*64,forward_atol=1e-4,gradient_atol=1e-5)

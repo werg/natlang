@@ -29,8 +29,9 @@ class Backend:
         finally:self.active=previous
 
 
-def fixture(family,device="cpu",inactive=False):
+def fixture(family,device="cpu",inactive=False,bf16=False):
     model=SharedStateModel(tiny(family).to(device),(58,59,60,61),rank=4);model.port.checkpoint_layers=False
+    if bf16:model.port.hf.to(dtype=torch.bfloat16)
     if family=='mellum':model.port.hf.natlang_precision='bf16'
     if inactive:
         expert=torch.nn.Module();expert.self_attn=torch.nn.Module();expert.self_attn.q_proj=torch.nn.Linear(3,3,bias=False,device=device)
@@ -43,6 +44,18 @@ def fixture(family,device="cpu",inactive=False):
     roles=SimpleNamespace(produce_open=58,produce_close=59,consume_open=60,consume_close=61)
     config=dict(architecture=model.port.config.model_type,tokenizer_fingerprint='b'*64)
     return model,optimizer,named,roles,config
+
+
+@pytest.mark.parametrize('family',['lfm','mellum'])
+def test_attention_transition_complete_vjps_use_bf16_parameter_cotangent_scopes(family):
+    model,optimizer,named,roles,config=fixture(family,bf16=True)
+    assert any(parameter.dtype is torch.bfloat16 for name,parameter in named if name.startswith('backbone.'))
+    report=transition.qualify_attention_transition(model,Tokenizer(),roles,config,optimizer=optimizer,
+        previous_mode='ieee',candidate_mode='ieee',checkpoint_sha256='a'*64,
+        forward_atol=1e-4,gradient_atol=1e-5)
+    assert report['cross_mode_passed'] and report['transition_equivalence']['passed']
+    assert all(row['passed'] for execution in report['cross_mode'].values()
+               for row in execution['comparisons'].values())
 
 
 def equal(left,right):

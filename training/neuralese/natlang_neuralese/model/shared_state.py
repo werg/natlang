@@ -139,11 +139,11 @@ def _convolution_stops(plan,width,rows,device):
 def _finite_convolution(kernel, histories, c):
     # Histories [B,Q,W,C]. One explicit FP32 reduction per channel avoids
     # graph/cached cuDNN summation differences crossing tensor-core rounding
-    # boundaries in the following linear layers.
-    out = (histories.contiguous().float() * kernel.weight[:, 0].T.float()[None, None]).sum(2)
-    if kernel.bias is not None:
-        out = out + kernel.bias.float()
-    return c * out.to(c.dtype)
+    # boundaries in the following linear layers. In an explicit native
+    # cotangent scope the same forward is wrapped so all invocation contributions
+    # reach the original low-precision convolution parameter before rounding.
+    from .native_weight_carrier import stored_finite_convolution
+    return stored_finite_convolution(histories, kernel.weight, kernel.bias, c)
 
 
 def _fp32_kv_cotangents(port, tensor):
@@ -507,7 +507,8 @@ class SharedStateModel(nn.Module):
         return bool(token_ids)
 
     def embed(self, ids):
-        result = F.embedding(ids, self.port.embedding_weight)
+        from .native_weight_carrier import stored_embedding
+        result = stored_embedding(ids, self.port.embedding_weight)
         for index, token in enumerate(self.marker_ids):
             result = torch.where((ids == token)[..., None], self.input_rows[index].to(result.dtype), result)
         for index, token in enumerate(self.token_override_ids):

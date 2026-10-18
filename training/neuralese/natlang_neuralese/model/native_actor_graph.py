@@ -79,7 +79,9 @@ class NativeInvocationActors:
             if not replacement:
                 return callback()
             from ..common.native_higher_order import active_reference_arithmetic
-            if self.precision=='fp32' or active_reference_arithmetic() is not None:
+            from .native_weight_carrier import active_cotangent_scope
+            if (self.precision=='fp32' or active_reference_arithmetic() is not None
+                    or active_cotangent_scope() is not None):
                 from .native_weight_carrier import carrier_linear_modules
                 with carrier_linear_modules(self.engine.shared_model,selected):
                     return torch.func.functional_call(_Operation(self.engine.shared_model,callback),replacement,())
@@ -102,17 +104,35 @@ class NativeInvocationActors:
         return [(name,torch.tensor(rows,device=device,dtype=torch.long)) for name,rows in groups.values() if rows]
 
 
-def run_invocation_actors(engine,names,bindings,callback,*,default=None,leaves=None,gradient_precision='storage',source_names=None):
+def run_invocation_actors(engine,names,bindings,callback,*,default=None,leaves=None,gradient_precision='storage',source_names=None,
+                          track_adapter_cotangents=True,adapter_cotangent_target_ids=None):
     """One operation lease includes every actor's forward and checkpoint backward."""
     with engine.native_execution_lock:
-        bank=NativeInvocationActors(engine,names,bindings,default=default,leaves=leaves,gradient_precision=gradient_precision,source_names=source_names)
-        frame=(engine,dict(engine.native_identity),[],None,set(),{},gradient_precision,bank.lifecycle)
-        active=_ACTIVE.set((*_ACTIVE.get(),frame));token=_BANKS.set((*_BANKS.get(),bank))
-        try:
-            return callback(bank)
-        finally:
-            if not bank.reference_lifetime:bank.lifecycle['active']=False
-            _BANKS.reset(token);_ACTIVE.reset(active)
+        from contextlib import nullcontext
+        from .native_weight_carrier import ParameterCotangentScope, active_cotangent_scope
+        # run_native may already own the operation-wide accumulator. Invocation
+        # actors are a nested view of that same execution, so registering a
+        # second scope would split parameter fan-in and lose the composed VJP.
+        cotangents=active_cotangent_scope()
+        owns_cotangents=cotangents is None
+        if owns_cotangents:
+            cotangents=ParameterCotangentScope.for_model(engine.shared_model,mode='vjp',
+                track_auxiliary=track_adapter_cotangents,
+                auxiliary_target_ids=adapter_cotangent_target_ids)
+        elif cotangents.model is not None and cotangents.model is not engine.shared_model:
+            raise NativeAdapterError('invocation actor cannot join a cotangent scope owned by another model')
+        with cotangents if owns_cotangents else nullcontext(cotangents):
+            bank=NativeInvocationActors(engine,names,bindings,default=default,leaves=leaves,gradient_precision=gradient_precision,source_names=source_names)
+            frame=(engine,dict(engine.native_identity),[],None,set(),{},gradient_precision,bank.lifecycle)
+            active=_ACTIVE.set((*_ACTIVE.get(),frame));token=_BANKS.set((*_BANKS.get(),bank))
+            try:
+                result=callback(bank)
+                if owns_cotangents:
+                    cotangents.finish()
+                return result
+            finally:
+                if not bank.reference_lifetime:bank.lifecycle['active']=False
+                _BANKS.reset(token);_ACTIVE.reset(active)
 
 
 def validate_invocation_actor_receipt(receipt,base):

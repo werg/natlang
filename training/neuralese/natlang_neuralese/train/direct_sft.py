@@ -2632,6 +2632,8 @@ def main(argv=None):
         with the latents stepped in it, the shared clip and optimizer step. Logged as kind e2e."""
         tick = time.time()
         with contextlib.ExitStack() as scope:
+            from ..model.native_weight_carrier import ParameterCotangentScope
+            cotangents = scope.enter_context(ParameterCotangentScope.for_model(backbone.hf, mode='vjp'))
             update_precision(scope, point, mix)
             with shared_parametrized_weights(backbone.hf) as next_pass:
                 next_pass()
@@ -2642,7 +2644,8 @@ def main(argv=None):
                         raise RuntimeError('nonfinite e2e loss in the mixed run')
                     with profile_region('update/e2e_backward'), backward_phase():
                         loss.backward()
-                latent_norm = armed.norm()
+            cotangents.finish()
+            latent_norm = armed.norm()
         if spike is not None:
             global_norm = clip_finite_gradients(other_trainables, consumed_norm=latent_norm, spike=spike)
         else:
@@ -2705,6 +2708,9 @@ def main(argv=None):
                 teachers = ([teacher_states([window]) for window in batch]
                             if plan['mode'] == 'sequential' and len(batch) > 1 else teacher_states(batch))
         with contextlib.ExitStack() as scope:
+            from ..model.native_weight_carrier import ParameterCotangentScope
+            cotangent_mode = 'update' if plan['mode'] == 'sequential' and len(batch) > 1 else 'vjp'
+            cotangents = scope.enter_context(ParameterCotangentScope.for_model(backbone.hf, mode=cotangent_mode))
             if saved_tensor_audit is not None:
                 scope.enter_context(saved_tensor_audit)
             if member is not None:  # through backward: checkpointed layers recompute as the member
@@ -2725,6 +2731,7 @@ def main(argv=None):
                 # other parameters, and the shared optimizer updates every partition exactly once below.
                 with shared_parametrized_weights(backbone.hf):
                     for position, window in enumerate(batch):
+                        cotangents.new_backward()
                         with profile_region('update/forward'):
                             part, part_metrics, _, _, part_stats = forward(
                                 [window], gradients=True, accumulation=normalizers,
@@ -2736,6 +2743,7 @@ def main(argv=None):
                         loss_value += float(part.detach())
                         metrics_rows.append((part_metrics, part_stats))
                         del part
+                cotangents.finish()
                 span_total = (sum(stats['valid_positions'] for _, stats in metrics_rows)
                               if rl_objective is not None else int(valid_positions))
                 metrics = {
@@ -2779,6 +2787,7 @@ def main(argv=None):
                             raise RuntimeError('nonfinite neuralese_direct loss')
                         with profile_region('update/backward'), backward_phase():
                             loss.backward()
+                cotangents.finish()
                 latent_norm = armed.norm()
         gradient_metrics = None
         if step_index < a.gradient_audit_steps:

@@ -99,6 +99,24 @@ def native_graph_gradient(engine, body, owner, *, coefficient_targets=None, eval
                     leaves[ident]=(adapter_leaves_override[ident] if adapter_leaves_override is not None
                         and ident in adapter_leaves_override else
                         {name:value.detach().clone().requires_grad_(True) for name,value in coefficients.items()})
+        adapter_target_ids=None
+        target_specs=(coefficient_targets if coefficient_targets is not None else
+                      ([body.get('target')] if isinstance(body.get('target'),dict)
+                       and body['target'].get('kind')=='adapter' else []))
+        if target_specs:
+            selected_ids=set()
+            for declaration in target_specs:
+                ident=declaration.get('id')
+                available=leaves.get(ident,{})
+                requested=declaration.get('names')
+                # Keep this selection identical to _native_graph_gradient_impl:
+                # omitted names mean every active coefficient tensor.  Passing
+                # the mapping itself through the sequence check silently made
+                # the carrier scope select no auxiliary cotangent routes.
+                requested=tuple(available) if requested is None else requested
+                if isinstance(requested,(list,tuple)):
+                    selected_ids.update(id(available[name]) for name in requested if name in available)
+            adapter_target_ids=selected_ids
         if declarations is not None:
             from ..model.native_actor_graph import run_invocation_actors
             selected=(_parameter_targets(engine.shared_model,body['target'].get('names'))
@@ -112,13 +130,30 @@ def native_graph_gradient(engine, body, owner, *, coefficient_targets=None, eval
                     lambda bank:_native_graph_gradient_impl(engine,body,owner,leaves,actor_bank=bank,coefficient_targets=coefficient_targets,evaluation_callback=evaluation_callback,
                         native_state_overrides=native_state_overrides,evaluation_targets=evaluation_targets),
                     default=body.get('adapters'),leaves=leaves,
-                    gradient_precision=body.get('adapter_gradient_precision','storage'),source_names=source_names)
+                    gradient_precision=body.get('adapter_gradient_precision','storage'),source_names=source_names,
+                    track_adapter_cotangents=(body.get('target',{}).get('kind')!='model-parameters'),
+                    adapter_cotangent_target_ids=adapter_target_ids)
             finally:
                 for parameter,enabled in restore.items():parameter.requires_grad_(enabled)
-        return run_native(engine, lambda: _native_graph_gradient_impl(engine, body, owner, leaves,coefficient_targets=coefficient_targets,evaluation_callback=evaluation_callback,
-            native_state_overrides=native_state_overrides,evaluation_targets=evaluation_targets),
-                          body.get('adapters'), leaves=leaves,
-                          gradient_precision=body.get('adapter_gradient_precision', 'storage'))
+        selected=(_parameter_targets(engine.shared_model,body['target'].get('names'))
+                  if (body.get('target') or {}).get('kind')=='model-parameters' else {})
+        # run_native snapshots its carrier inventory before entering the callback.
+        # Enable exact requested backbone leaves first so BF16 cotangent anchors
+        # exist for this operation; the inner target selection restores to this
+        # temporary state, then this outer boundary restores serving's frozen base.
+        restore={parameter:parameter.requires_grad for parameter in selected.values()}
+        try:
+            for parameter in restore:
+                parameter.requires_grad_(True)
+            return run_native(engine, lambda: _native_graph_gradient_impl(engine, body, owner, leaves,coefficient_targets=coefficient_targets,evaluation_callback=evaluation_callback,
+                native_state_overrides=native_state_overrides,evaluation_targets=evaluation_targets),
+                              body.get('adapters'), leaves=leaves,
+                              gradient_precision=body.get('adapter_gradient_precision', 'storage'),
+                              track_adapter_cotangents=(body.get('target',{}).get('kind')!='model-parameters'),
+                              adapter_cotangent_target_ids=adapter_target_ids)
+        finally:
+            for parameter,enabled in restore.items():
+                parameter.requires_grad_(enabled)
     except RequestError:
         raise
     except (ValueError, KeyError, TypeError, RuntimeError) as error:

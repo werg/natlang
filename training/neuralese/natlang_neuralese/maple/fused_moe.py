@@ -364,7 +364,8 @@ def dense_grouped_experts(x: torch.Tensor, index: torch.Tensor, weights: torch.T
     from ..model.native_adapters import native_forward_storage_dtype
     if glue or native_forward_storage_dtype(gate_up) is not None or native_forward_storage_dtype(down) is not None:
         from .fp8_experts import GroupedLinear
-        project = lambda a, w: GroupedLinear.apply(a, w, offsets, False)
+        from ..model.native_weight_carrier import _scope_anchors
+        project = lambda a, w: GroupedLinear.apply(a, w, offsets, False, *_scope_anchors(w))
     else:
         project = lambda a, w: torch._grouped_mm(a, w.transpose(-2, -1), offs=offsets)
     hidden = project(rows, gate_up)
@@ -479,10 +480,14 @@ class _DenseExpertProjection(torch.autograd.Function):
     """y[p] = A[rows[p]] @ W_eᵀ with the fixed tile; gradients to A and to the (latent) expert weights."""
 
     @staticmethod
-    def forward(ctx, a, rows, weight, plan):
+    def forward(ctx, a, rows, weight, plan, *anchors):
         from ..model.native_adapters import native_forward_storage_dtype
         dtype = native_forward_storage_dtype(weight)
         ctx.carrier = dtype is not None
+        ctx.anchors = anchors
+        ctx.scope_weight = weight if anchors else None
+        from ..model.native_weight_carrier import active_cotangent_scope
+        ctx.scope = active_cotangent_scope() if anchors else None
         weight = weight.to(dtype) if ctx.carrier else weight
         ctx.save_for_backward(a, rows, weight)
         ctx.plan = plan
@@ -510,7 +515,14 @@ class _DenseExpertProjection(torch.autograd.Function):
                 tokens = plan.position.numel() // plan.top_k
                 summed = _gather_sum(grad_rows, plan.position, tokens, plan.top_k)
                 grad_a = torch.cat([summed, summed.new_zeros(1, summed.shape[-1])], 0).to(a.dtype)
-        return grad_a, None, grad_weight, None
+        anchor_grads = (None,) * len(ctx.anchors)
+        if ctx.anchors and grad_weight is not None:
+            from ..model.native_weight_carrier import _scope_add
+            _scope_add(ctx.scope_weight, grad_weight, ctx.anchors, ctx.scope)
+            grad_weight = None
+            anchor_grads = tuple(grad.new_ones((), dtype=torch.float32) if anchor is not None else None
+                                 for anchor in ctx.anchors)
+        return grad_a, None, grad_weight, None, *anchor_grads
 
 
 def invariant_dense_experts(x: torch.Tensor, index: torch.Tensor, weights: torch.Tensor, gate_up: torch.Tensor,
@@ -520,9 +532,10 @@ def invariant_dense_experts(x: torch.Tensor, index: torch.Tensor, weights: torch
     tokens, top_k = index.shape
     plan = Plan(index, gate_up.shape[0], tokens, INVARIANT_BLOCK)
     padded_x = torch.cat([x, x.new_zeros(1, x.shape[-1])], 0)  # the padding rows read zeros
-    hidden = _DenseExpertProjection.apply(padded_x, plan.rows, gate_up, plan)
+    from ..model.native_weight_carrier import _scope_anchors
+    hidden = _DenseExpertProjection.apply(padded_x, plan.rows, gate_up, plan, *_scope_anchors(gate_up))
     h = _swiglu(hidden, down.shape[-1], clamp)
-    out = _DenseExpertProjection.apply(h, None, down, plan)
+    out = _DenseExpertProjection.apply(h, None, down, plan, *_scope_anchors(down))
     return _gather_sum(out, plan.position, tokens, top_k, weights)
 
 
@@ -542,8 +555,12 @@ class _InvariantLinear(torch.autograd.Function):
     """x @ wᵀ for every row with the same fixed tile (FP32 inputs in exact FP32): the router's logits."""
 
     @staticmethod
-    def forward(ctx, x, w, precision, forward_storage_dtype):
+    def forward(ctx, x, w, precision, forward_storage_dtype, *cotangent_anchors):
         ctx.carrier = forward_storage_dtype is not None
+        ctx.anchors = cotangent_anchors
+        ctx.scope_weight = w if cotangent_anchors else None
+        from ..model.native_weight_carrier import active_cotangent_scope
+        ctx.scope = active_cotangent_scope() if cotangent_anchors else None
         w = w.to(forward_storage_dtype) if ctx.carrier else w
         ctx.save_for_backward(x, w)
         ctx.precision = precision
@@ -580,13 +597,21 @@ class _InvariantLinear(torch.autograd.Function):
                 dw = grad.T @ x.to(torch.bfloat16).float()
             else:
                 dw = grad.T @ x
-        return dx, dw, None, None
+        anchor_grads = (None,) * len(ctx.anchors)
+        if ctx.anchors and dw is not None:
+            from ..model.native_weight_carrier import _scope_add
+            _scope_add(ctx.scope_weight, dw, ctx.anchors, ctx.scope)
+            dw = None
+            anchor_grads = tuple(grad.new_ones((), dtype=torch.float32) if anchor is not None else None
+                                 for anchor in ctx.anchors)
+        return dx, dw, None, None, *anchor_grads
 
 
-def invariant_linear(x: torch.Tensor, w: torch.Tensor, *, precision="ieee", forward_storage_dtype=None) -> torch.Tensor:
+def invariant_linear(x: torch.Tensor, w: torch.Tensor, *, precision="ieee", forward_storage_dtype=None,
+                     cotangent_anchors=()) -> torch.Tensor:
     from ..common.native_higher_order import active_reference_arithmetic,reference_linear
     if active_reference_arithmetic() is not None:
         return reference_linear(x,w)
     if precision not in {"ieee", "tf32x3", "tf32", "bf16", "bf16x6"}:
         raise ValueError("native fixed linear requires explicit ieee, tf32x3, tf32, bf16 or bf16x6 arithmetic")
-    return _InvariantLinear.apply(x, w, precision, forward_storage_dtype)
+    return _InvariantLinear.apply(x, w, precision, forward_storage_dtype, *cotangent_anchors)

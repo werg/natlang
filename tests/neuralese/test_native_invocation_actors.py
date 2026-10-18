@@ -217,6 +217,25 @@ def test_actual_typed_invocation_gradient_optimizer_service_and_durable_restart(
                  {'name':'peer','token_ids':[11,12,13],'target_weights':[0]*3}]}
     fixture=tmp_path/'actor-service.json';fixture.write_text(json.dumps({'identity':engine.native_identity,'source':source.id,
         'target':target.id,'target_names':[next(name for name in source.artifact.tensors if name.endswith('v_proj.weight'))],'graph':graph,'bindings':{'producer':[source.id],'reader':[target.id],'peer':[source.id]}}))
+    # The model-parameter gradient API temporarily unfreezes only its exact
+    # named BF16 target. Its carrier scope must be created after that flag
+    # change and shared across the producer/reader/peer actor replacements.
+    # Run this while the fixture adapters are still live; the Node roundtrip
+    # below intentionally updates and collects their original IDs.
+    from natlang_neuralese.serve.native_grad import native_graph_gradient
+    parameter_name=next(name for name in source.artifact.tensors if name.endswith('v_proj.weight'))
+    parameter=dict(engine.shared_model.named_parameters())[parameter_name]
+    was_trainable,old_grad=parameter.requires_grad,parameter.grad
+    model_gradient=native_graph_gradient(engine,{
+        'schema':'natlang.native-gradient-request/1','graph':graph,
+        'adapters':[source.id], 'invocation_adapters':{'producer':[source.id],
+            'reader':[target.id], 'peer':[source.id]},
+        'adapter_gradient_precision':'fp32',
+        'target':{'kind':'model-parameters','names':[parameter_name]}},None)
+    gradient=engine.store.get_native_tensor_artifact(model_gradient['gradient']['id']).artifact
+    assert gradient.tensors[parameter_name].dtype==parameter.dtype
+    assert gradient.tensors[parameter_name].norm()>0
+    assert parameter.requires_grad is was_trainable and parameter.grad is old_grad
     engine.start();server=serve(engine,'127.0.0.1',0)
     thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
     try:
@@ -225,6 +244,37 @@ def test_actual_typed_invocation_gradient_optimizer_service_and_durable_restart(
         assert result.returncode==0,result.stdout+'\n'+result.stderr
     finally:
         server.shutdown();server.server_close();engine.stop();engine.store.close()
+
+
+@pytest.mark.parametrize('family',['lfm','mellum'])
+def test_model_parameter_vjp_uses_one_scope_across_distinct_invocation_actors(tmp_path,family):
+    """The public parameter VJP crosses actor replacements without nesting scopes."""
+    from natlang_neuralese.serve.native_grad import native_graph_gradient
+    engine=engine_fixture(tmp_path,family,service_template=True)
+    source,target=adapters(engine)
+    roles=engine.role_tokens
+    graph={'schema':'natlang.neuralese-native-graph/1','id':'cotangent-actor-vjp',
+        'split':'train','source_groups':['cotangent-actor-vjp-fixture'],
+        'tokenizer_fingerprint':engine.native_identity['tokenizer_fingerprint'],
+        'nodes':[{'name':'producer','token_ids':[4,roles.produce_open,5,6,roles.produce_close,7],
+                  'producing':[[2,4]],'target_weights':[0]*6},
+                 {'name':'reader','token_ids':[8,roles.consume_open,roles.consume_close,9,10],
+                  'imports':[{'at':2,'source':'producer','start':2,'stop':4}],
+                  'target_weights':[0,0,0,1,1]},
+                 {'name':'peer','token_ids':[11,12,13],'target_weights':[0]*3}]}
+    parameter_name=next(name for name in source.artifact.tensors if name.endswith('v_proj.weight'))
+    parameter=dict(engine.shared_model.named_parameters())[parameter_name]
+    was_trainable,old_grad=parameter.requires_grad,parameter.grad
+    result=native_graph_gradient(engine,{'schema':'natlang.native-gradient-request/1',
+        'graph':graph,'adapters':[source.id],
+        'invocation_adapters':{'producer':[source.id],'reader':[target.id],'peer':[source.id]},
+        'adapter_gradient_precision':'fp32',
+        'target':{'kind':'model-parameters','names':[parameter_name]}},None)
+    gradient=engine.store.get_native_tensor_artifact(result['gradient']['id']).artifact
+    assert gradient.tensors[parameter_name].dtype==parameter.dtype
+    assert gradient.tensors[parameter_name].norm()>0
+    assert parameter.requires_grad is was_trainable and parameter.grad is old_grad
+    engine.store.close()
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(),reason='actual grouped expert FP8 execution')

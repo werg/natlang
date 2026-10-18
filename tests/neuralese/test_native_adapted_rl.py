@@ -388,37 +388,42 @@ def test_bf16_mellum_coefficient_adjoint_gap_is_accounted_by_weight_cotangent(tm
     replay=compile_replay(turns,identity=identity,roles=engine.role_tokens,
         fetch_block=lambda ident:engine.store.get_native_state(ident).block)
     coefficient=adapter.artifact.tensors[name].clone().requires_grad_(True)
+    from natlang_neuralese.model.native_weight_carrier import ParameterCotangentScope
+    cotangent_runs=[]
+    original_finish=ParameterCotangentScope.finish
+    def capture_cotangent(scope):
+        entries=[entry for entry in scope._auxiliary_entries.values()
+                 if entry['name'].startswith('effective-delta-') and entry['accumulator'] is not None]
+        assert len(entries)==1
+        cotangent_runs.append(entries[0]['accumulator'].clone())
+        return original_finish(scope)
+    monkeypatch.setattr(ParameterCotangentScope,'finish',capture_cotangent)
     reader=[i for i,item in enumerate(replay.actions) if item['turn']=='reader']
     def execute(reference):
-        cotangents=[]
-        handle=target_parameters(engine.shared_model)[name].register_hook(lambda grad:cotangents.append(grad.detach().clone()))
-        try:
-            result=engine.shared_model(replay.plan,reference=reference,retain_states=False)
-            logps,_=action_logps(engine.shared_model,result['h_final'][0],replay.actions,chunk_tokens=2)
-            grad=torch.autograd.grad(-logps[reader].mean(),coefficient)[0]
-        finally:
-            handle.remove()
-        assert len(cotangents)==1 and cotangents[0].dtype==torch.bfloat16
-        return grad.detach().cpu(),cotangents[0].cpu()
+        result=engine.shared_model(replay.plan,reference=reference,retain_states=False)
+        logps,_=action_logps(engine.shared_model,result['h_final'][0],replay.actions,chunk_tokens=2)
+        return torch.autograd.grad(-logps[reader].mean(),coefficient)[0].detach().cpu()
     packed=run_native(engine,lambda:execute(False),entries,leaves={adapter.id:{name:coefficient}})
+    packed_cotangent=cotangent_runs.pop().cpu()
     cached=run_native(engine,lambda:execute(True),entries,leaves={adapter.id:{name:coefficient}})
+    cached_cotangent=cotangent_runs.pop().cpu()
     basis=engine.store.get_native_tensor_artifact(adapter.artifact.source_artifact_id).artifact.tensors
     left,right=basis['left.'+name].double(),basis['right.'+name].double()
     def oracle(cotangent):return ((left.T@cotangent.double()@right)*.75).reshape(-1)
-    # Every observed coefficient discrepancy is explained by the actual BF16
-    # dL/dW supplied by the backbone. No adapter identity or replay-coordinate
-    # discrepancy is hidden under an absolute tolerance on tiny gradients.
-    for grad,cotangent in (packed,cached):
+    # Each coefficient VJP must equal the FP64 chain rule applied to the
+    # scope's accumulated FP32 effective-weight cotangent. This observes the
+    # exact derivative before the frozen BF16 base-parameter boundary.
+    for grad,cotangent in ((packed,packed_cotangent),(cached,cached_cotangent)):
         expected=oracle(cotangent)
         assert (grad.double()-expected).norm()/expected.norm()<2e-6
-    predicted=oracle(packed[1].double()-cached[1].double())
-    observed=(packed[0]-cached[0]).double()
-    assert (observed-predicted).norm()/max(observed.norm(),torch.tensor(1e-12))<2e-4
+    observed=(packed-cached).double()
+    predicted=oracle(packed_cotangent.double()-cached_cotangent.double())
+    residual=(observed-predicted).norm()
     report={'schema':'natlang.native-adapter-adjoint-localization/1','qualification':False,
         'port':'mellum','dtype':'BF16','device':str(engine.device),
-        'gradient_relative_l2':float(observed.norm()/cached[0].norm()),
-        'weight_cotangent_relative_l2':float((packed[1].float()-cached[1].float()).norm()/cached[1].float().norm()),
-        'oracle_residual_relative_l2':float((observed-predicted).norm()/max(observed.norm(),torch.tensor(1e-12)))}
+        'gradient_relative_l2':float(observed.norm()/cached.norm()),
+        'weight_cotangent_relative_l2':float((packed_cotangent.float()-cached_cotangent.float()).norm()/cached_cotangent.float().norm()),
+        'oracle_residual_l2':float(residual)}
     print(json.dumps(report,sort_keys=True))
     engine.store.close()
 

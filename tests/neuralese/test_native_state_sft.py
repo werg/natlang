@@ -553,6 +553,43 @@ def test_each_paired_model_trains_consumer_to_producer_through_one_flat_forward(
     torch.testing.assert_close(cached_gradient,gradient,atol=3e-6,rtol=2e-5)
 
 
+@pytest.mark.parametrize('family',['lfm','mellum'])
+def test_real_bf16_native_training_update_uses_shared_parameter_cotangent_scope(family):
+    """Exercise the production native SFT backward/optimizer seam on both ports."""
+    import torch
+    from test_shared_state import tiny
+    from natlang_neuralese.model.shared_state import SharedStateModel
+    from natlang_neuralese.train.native_state_sft import make_native_optimizer,native_training_update
+
+    torch.manual_seed(1907)
+    port=tiny(family).to(dtype=torch.bfloat16)
+    port.checkpoint_layers=False
+    port.ffn_chunk_tokens=2
+    if family=='mellum':
+        # The tiny source starts as an ordinary dense Mellum reference. Declare
+        # the same BF16 latent policy selected by the production loader.
+        port.hf.natlang_precision='bf16'
+    model=SharedStateModel(port,(60,61,62,63),rank=4)
+    model.train()
+    example=parse_graph({**graph('bf16-native-update',[0,1,1]),
+        'nodes':[{'name':'answer','token_ids':[4,5,6,7,8,9],
+                  'target_weights':[0,0,1,1,1,1]}]},tokenizer_fingerprint='tokenizer-sha')
+    name=next(key for key,value in model.named_parameters()
+              if key.endswith('q_proj.weight') and value.dtype==torch.bfloat16)
+    parameter=dict(model.named_parameters())[name]
+    before=parameter.detach().clone()
+    optimizer,_=make_native_optimizer(model,lr=1e-4,weight_decay=0.)
+    assert parameter.requires_grad
+    observed=[]
+    handle=parameter.register_hook(lambda gradient:observed.append(gradient.detach().clone()))
+    loss,_=native_training_update(model,optimizer,[example],checkpoint_layers=False,chunk_tokens=8)
+    handle.remove()
+    assert torch.isfinite(loss)
+    assert observed and observed[0].dtype==parameter.dtype
+    assert torch.isfinite(observed[0]).all() and observed[0].norm()>0
+    assert not torch.equal(parameter,before)
+
+
 def test_native_manifest_hash_and_recipe_dependencies_bind_every_input(tmp_path):
     from natlang_neuralese.train.recipe import native_source_dependencies, require_input_decoders, _inputs_without
     from natlang_neuralese.common.hashing import sha256_file_hex

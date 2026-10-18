@@ -46,12 +46,16 @@ def rowwise_quant(x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
 
 class GroupedLinear(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, rows, weight, offsets, fp8):
+    def forward(ctx, rows, weight, offsets, fp8, *anchors):
         if fp8:
             raise ValueError('FP8 expert GEMMs run through maple/expert_gemm.py (--fp8-training triton-experts)')
         from ..model.native_adapters import native_forward_storage_dtype
         dtype = native_forward_storage_dtype(weight)
         ctx.carrier = dtype is not None
+        ctx.anchors = anchors
+        ctx.scope_weight = weight if anchors else None
+        from ..model.native_weight_carrier import active_cotangent_scope
+        ctx.scope = active_cotangent_scope() if anchors else None
         weight = weight.to(dtype) if ctx.carrier else weight
         ctx.save_for_backward(rows, weight, offsets)
         return torch._grouped_mm(rows, weight.transpose(-2, -1), offs=offsets)
@@ -66,7 +70,14 @@ class GroupedLinear(torch.autograd.Function):
         if ctx.needs_input_grad[1]:
             grad_weight = (grouped_weight_gradient(grad, rows, offsets, weight.shape) if ctx.carrier else
                            torch._grouped_mm(grad.t(), rows, offs=offsets))
-        return grad_rows, grad_weight, None, None
+        anchor_grads = (None,) * len(ctx.anchors)
+        if ctx.anchors and grad_weight is not None:
+            from ..model.native_weight_carrier import _scope_add
+            _scope_add(ctx.scope_weight, grad_weight, ctx.anchors, ctx.scope)
+            grad_weight = None
+            anchor_grads = tuple(grad.new_ones((), dtype=torch.float32) if anchor is not None else None
+                                 for anchor in ctx.anchors)
+        return grad_rows, grad_weight, None, None, *anchor_grads
 
 
 @triton.jit

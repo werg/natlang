@@ -397,8 +397,16 @@ class DenseExperts(nn.Module):
         return self._value(self.gate_up[index], dtype), self._value(self.down[index], dtype)
 
     def run(self, x: torch.Tensor, index: int, dtype) -> torch.Tensor:
-        y = x @ self._value(self.gate_up[index], x.dtype).T
-        return swiglu(y[..., :self.ff], y[..., self.ff:], self.clamp) @ self._value(self.down[index], x.dtype).T
+        gate_up, down = self._value(self.gate_up[index], x.dtype), self._value(self.down[index], x.dtype)
+        from ..model.native_adapters import native_forward_storage_dtype
+        from ..model.native_weight_carrier import stored_linear
+        gate_storage = native_forward_storage_dtype(gate_up)
+        down_storage = native_forward_storage_dtype(down)
+        y = (stored_linear(x, gate_up, storage_dtype=gate_storage) if gate_storage is not None
+             else x @ gate_up.T)
+        hidden = swiglu(y[..., :self.ff], y[..., self.ff:], self.clamp)
+        return (stored_linear(hidden, down, storage_dtype=down_storage) if down_storage is not None
+                else hidden @ down.T)
 
     def unbound(self, dtype) -> tuple[tuple[torch.Tensor, ...], tuple[torch.Tensor, ...]]:
         """Every expert's (ramped ternary) weights from one op per tensor. Indexing the latent per expert instead
@@ -488,7 +496,18 @@ class SparseMoE(nn.Module):
         if self.active_experts is not None and STATE["enabled"] and key in self.private_gate:
             logits = F.linear(x.float(), self.private_gate[key])  # the member's own rows, in its expert order
         else:
-            if x.is_cuda and isinstance(self.experts, DenseExperts):
+            from ..model.native_weight_carrier import _scope_anchors
+            anchors=_scope_anchors(self.gate.weight)
+            if anchors and x.is_cuda and isinstance(self.experts, DenseExperts):
+                # Keep the established FP32 router operand while routing its
+                # BF16 weight derivative through the shared scope.
+                from .fused_moe import invariant_linear
+                logits=invariant_linear(x.float(),self.gate.weight,forward_storage_dtype=torch.float32,
+                                        cotangent_anchors=anchors)
+            elif anchors:
+                from ..model.native_weight_carrier import stored_linear
+                logits=stored_linear(x.float(),self.gate.weight,storage_dtype=torch.float32)
+            elif x.is_cuda and isinstance(self.experts, DenseExperts):
                 # Exact FP32 with one fixed tile per row: top-k routing flips near ties on any shape-dependent
                 # rounding (and the NGC containers' TF32 override would otherwise run this FP32 product in TF32).
                 # Expert precision/dispatch must not change the router's

@@ -132,6 +132,33 @@ def test_native_carrier_restores_aliases_hooks_and_weights_on_failure(tmp_path):
     engine.store.close()
 
 
+def test_adapter_vjp_default_names_matches_explicit_all_names(tmp_path):
+    """Default adapter selection must install the same widened cotangent routes."""
+    from natlang_neuralese.serve.native_grad import native_graph_gradient
+    torch.manual_seed(1701)
+    engine=engine_fixture(tmp_path,'mellum',service_template=True)
+    name=next(name for name in target_parameters(engine.shared_model) if name.endswith('q_proj.weight'))
+    initial=create_adapter(engine,{'kind':'xs','rank':2,'parameter_names':[name]})
+    adapter=engine.store.put_native_tensor_artifact(replace(initial.artifact,
+        tensors={name:torch.full_like(initial.artifact.tensors[name],.04)}))
+    graph={'schema':'natlang.neuralese-native-graph/1','id':'adapter-vjp-default-targets',
+        'split':'train','source_groups':['adapter-vjp-default-targets-fixture'],
+        'tokenizer_fingerprint':engine.native_identity['tokenizer_fingerprint'],
+        'nodes':[{'name':'answer','token_ids':[4,5,6,7],'target_weights':[0,1,1,1]}]}
+    common={'schema':'natlang.native-gradient-request/1','graph':graph,
+        'adapters':[adapter.id],'adapter_gradient_precision':'fp32'}
+    def gradient(target):
+        result=native_graph_gradient(engine,{**common,'target':target},None)
+        artifact=engine.store.get_native_tensor_artifact(result['gradient']['id']).artifact
+        assert artifact.provenance['target_names']==[name]
+        return artifact.tensors[name]
+    default=gradient({'kind':'adapter','id':adapter.id})
+    explicit=gradient({'kind':'adapter','id':adapter.id,'names':[name]})
+    assert torch.equal(default,explicit)
+    assert torch.isfinite(default).all() and default.norm()>0
+    engine.store.close()
+
+
 def test_native_attention_compiler_contract_separates_actual_adjoint_and_inference_modes(monkeypatch):
     from natlang_neuralese.model import shared_state
     from natlang_neuralese.common import native_attention_delta

@@ -503,7 +503,8 @@ class PortBackbone(nn.Module):
         self.checkpoint_preserve_rng = False
 
     def embed(self, ids: torch.Tensor) -> torch.Tensor:
-        out = F.embedding(ids, self.embedding_weight)
+        from .native_weight_carrier import stored_embedding
+        out = stored_embedding(ids, self.embedding_weight)
         if not hasattr(self, 'control_rows'):
             return out
         rows = self.control_rows.to(out.dtype)
@@ -675,7 +676,8 @@ class PortBackbone(nn.Module):
                 prev = states[i]
                 if (self.fast and self.conv_kernel is not None and prev is None and h.is_cuda
                         and steps > self.conv_window):
-                    conv_out = self.conv_kernel.causal_conv1d_fn(
+                    from .native_weight_carrier import stored_causal_conv1d
+                    conv_out = stored_causal_conv1d(self.conv_kernel.causal_conv1d_fn,
                         gated.contiguous(), conv.conv.weight.squeeze(1), conv.conv.bias)
                     out = conv.out_proj((c * conv_out).transpose(-1, -2).contiguous())
                     states[i] = ConvState(gated[..., -self.conv_window:])
@@ -688,7 +690,9 @@ class PortBackbone(nn.Module):
                 else:
                     prev_window = prev.window
                 window = torch.cat([prev_window, gated], dim=-1)
-                conv_out = F.conv1d(window, conv.conv.weight, conv.conv.bias, groups=gated.shape[1])
+                from .native_weight_carrier import stored_conv1d
+                conv_out = stored_conv1d(window, conv.conv.weight, conv.conv.bias,
+                                         groups=gated.shape[1])
                 out = conv.out_proj((c * conv_out).transpose(-1, -2).contiguous())
                 states[i] = ConvState(window[..., -self.conv_window:])
             h = h + out

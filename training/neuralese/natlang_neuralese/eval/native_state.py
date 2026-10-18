@@ -159,6 +159,7 @@ def qualify_existing(model, tokenizer, roles, config, *, checkpoint_sha256, forw
     labels = torch.tensor(target[import_at+1:], device=model.input_rows.device)
     previous_mode, previous_checkpointing = model.training, model.port.checkpoint_layers
     complete=None
+    flat_cotangent_scope=None
     adapter = model.adapter.up.weight
     try:
         model.eval()
@@ -166,6 +167,9 @@ def qualify_existing(model, tokenizer, roles, config, *, checkpoint_sha256, forw
         if gradient_parameters is not None:
             from .native_gradients import production_inventory
             named,gradient_roles=production_inventory(model,gradient_parameters)
+            from ..model.native_weight_carrier import ParameterCotangentScope
+            flat_cotangent_scope=ParameterCotangentScope.for_model(model,mode='vjp')
+            flat_cotangent_scope.__enter__()
             ids=plan.tensor([token for node in plan.invocations for token in node.token_ids],model.input_rows.device)
             from ..train.loop import capture_training_rng_state
             graph_rng=capture_training_rng_state(model.input_rows.device)
@@ -192,14 +196,22 @@ def qualify_existing(model, tokenizer, roles, config, *, checkpoint_sha256, forw
             # Construct it only after the flat derivatives have been collected.
             def cached_forward():
                 nonlocal reference,reference_loss
-                if before_graph is not None:before_graph()
-                restore_training_rng_state(graph_rng,model.input_rows.device)
-                reference_inputs=model.embed(ids[None])
-                reference=model(plan,embeddings=reference_inputs,reference=True)
-                reference_loss=objective(reference)
-                return reference_loss,reference_inputs
+                from ..model.native_weight_carrier import ParameterCotangentScope
+                cached_scope=ParameterCotangentScope.for_model(model,mode='vjp')
+                cached_scope.__enter__()
+                try:
+                    if before_graph is not None:before_graph()
+                    restore_training_rng_state(graph_rng,model.input_rows.device)
+                    reference_inputs=model.embed(ids[None])
+                    reference=model(plan,embeddings=reference_inputs,reference=True)
+                    reference_loss=objective(reference)
+                    return reference_loss,reference_inputs,cached_scope
+                except BaseException:
+                    cached_scope.close()
+                    raise
             complete=compare_complete_gradients(flat_loss,None,named,flat_inputs,None,
-                atol=gradient_atol,rtol=gradient_rtol,cached_factory=cached_forward,gradient_observer=gradient_observer)
+                atol=gradient_atol,rtol=gradient_rtol,cached_factory=cached_forward,
+                gradient_observer=gradient_observer,flat_cotangent_scope=flat_cotangent_scope)
             case={'invocations':[invocation_dict(node)for node in plan.invocations],
                 'positions':positions.tolist(),'labels':labels.tolist(),'loss':'consumer-cross-entropy/mean'}
             complete.update(native_identity=identity,roles=gradient_roles,case=case,
@@ -244,6 +256,8 @@ def qualify_existing(model, tokenizer, roles, config, *, checkpoint_sha256, forw
                                 for key, value in before.items())
         del result, prefix, suffix, cache, block
     finally:
+        if flat_cotangent_scope is not None:
+            flat_cotangent_scope.close()
         model.port.checkpoint_layers = previous_checkpointing
         model.train(previous_mode)
     passed = (forward_error <= forward_atol and incremental_error <= forward_atol and

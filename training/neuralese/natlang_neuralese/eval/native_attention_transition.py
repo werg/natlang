@@ -240,22 +240,30 @@ def qualify_attention_transition(model, tokenizer, roles, config, *, optimizer,
             for execution in ('graph', 'cached'):
                 outputs = {}
                 def forward(mode, slot):
-                    select(mode)
-                    embeddings = model.embed(ids[None])
-                    result = model(plan, embeddings=embeddings, reference=execution == 'cached')
-                    hidden = result['h_final']
-                    loss = F.cross_entropy(model.logits(hidden[:, positions]).float().flatten(0, 1), labels)
-                    outputs[slot] = (hidden.detach().clone(), float(loss.detach()))
-                    return loss, embeddings
+                    from ..model.native_weight_carrier import ParameterCotangentScope
+                    cotangent_scope=ParameterCotangentScope.for_model(model,mode='vjp')
+                    cotangent_scope.__enter__()
+                    try:
+                        select(mode)
+                        embeddings = model.embed(ids[None])
+                        result = model(plan, embeddings=embeddings, reference=execution == 'cached')
+                        hidden = result['h_final']
+                        loss = F.cross_entropy(model.logits(hidden[:, positions]).float().flatten(0, 1), labels)
+                        outputs[slot] = (hidden.detach().clone(), float(loss.detach()))
+                        return loss, embeddings, cotangent_scope
+                    except BaseException:
+                        cotangent_scope.close()
+                        raise
                 before=backend.collect_row_counts()if backend is not None else {}
                 split={}
                 def candidate_forward():
                     split.update(backend.collect_row_counts()if backend is not None else {})
                     return forward(candidate_mode,'candidate')
                 with backend.autocast()if backend is not None else contextlib.nullcontext():
-                    old_loss,old_inputs=forward(previous_mode,'old')
+                    old_loss,old_inputs,old_scope=forward(previous_mode,'old')
                     comparison=compare_complete_gradients(old_loss,None,named,old_inputs,None,
-                        atol=gradient_atol,rtol=gradient_rtol,cached_factory=candidate_forward)
+                        atol=gradient_atol,rtol=gradient_rtol,cached_factory=candidate_forward,
+                        flat_cotangent_scope=old_scope)
                 after=backend.collect_row_counts()if backend is not None else {}
                 def execution_evidence(first,last):
                     delta={key:last.get(key,0)-first.get(key,0)for key in last}

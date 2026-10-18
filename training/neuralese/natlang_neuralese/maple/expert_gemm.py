@@ -182,10 +182,14 @@ class Fp8ExpertProjection(torch.autograd.Function):
     via ``slot_of`` when ``rows`` is given), the weight gradient in BF16 in the parameter layout."""
 
     @staticmethod
-    def forward(ctx, a, rows, slot_of, top_k, weight, table, offsets, hand=None):
+    def forward(ctx, a, rows, slot_of, top_k, weight, table, offsets, hand=None, *anchors):
         from ..model.native_adapters import native_forward_storage_dtype
         dtype = native_forward_storage_dtype(weight)
         ctx.carrier = dtype is not None
+        ctx.anchors = anchors
+        ctx.scope_weight = weight if anchors else None
+        from ..model.native_weight_carrier import active_cotangent_scope
+        ctx.scope = active_cotangent_scope() if anchors else None
         weight = weight.to(dtype) if ctx.carrier else weight
         E, N, K = weight.shape
         aq, sa = rowwise_quant(a)
@@ -242,7 +246,14 @@ class Fp8ExpertProjection(torch.autograd.Function):
                 grad_weight = grouped_weight_gradient(grad, a[rows] if rows is not None else a, offsets, weight.shape)
             else:
                 grad_weight = torch._grouped_mm(grad.t(), a[rows] if rows is not None else a, offs=offsets)
-        return grad_a, None, None, None, grad_weight, None, None, None
+        anchor_grads = (None,) * len(ctx.anchors)
+        if ctx.anchors and grad_weight is not None:
+            from ..model.native_weight_carrier import _scope_add
+            _scope_add(ctx.scope_weight, grad_weight, ctx.anchors, ctx.scope)
+            grad_weight = None
+            anchor_grads = tuple(grad.new_ones((), dtype=torch.float32) if anchor is not None else None
+                                 for anchor in ctx.anchors)
+        return grad_a, None, None, None, grad_weight, None, None, None, *anchor_grads
 
 
 def fp8_dense_experts(x, index, weights, gate_up, down, clamp):
@@ -263,7 +274,9 @@ def fp8_dense_experts(x, index, weights, gate_up, down, clamp):
     handoff = (fused and os.environ.get('NATLANG_FUSED_GRAD_QUANT', '1') != '0'
                and DENSE_MOE.get('fp8_input_gradient_precision', 'fp8') == 'fp8')
     hand_up, hand_down = (GradQuant(), GradQuant()) if handoff else (None, None)
-    hidden = Fp8ExpertProjection.apply(x.contiguous(), source, slot_of, top_k, gate_up, table, offsets, hand_up)
+    from ..model.native_weight_carrier import _scope_anchors
+    hidden = Fp8ExpertProjection.apply(x.contiguous(), source, slot_of, top_k, gate_up, table, offsets, hand_up,
+                                      *_scope_anchors(gate_up))
     if fused:
         from .moe_glue import swiglu
         act = swiglu(hidden, ff, hand_up)
@@ -272,5 +285,6 @@ def fp8_dense_experts(x, index, weights, gate_up, down, clamp):
         if clamp is not None:
             gate, up = gate.clamp(max=clamp), up.clamp(-clamp, clamp)
         act = (F.silu(gate) * up).contiguous()
-    out = Fp8ExpertProjection.apply(act, None, None, top_k, down, table, offsets, hand_down)
+    out = Fp8ExpertProjection.apply(act, None, None, top_k, down, table, offsets, hand_down,
+                                   *_scope_anchors(down))
     return Combine.apply(out, slot_of, weights, hand_down)

@@ -314,7 +314,8 @@ def native_training_update(model, optimizer, batch, *, backend=None, checkpoint_
         from contextlib import nullcontext
         context = nullcontext()
     try:
-        with context:
+        from ..model.native_weight_carrier import ParameterCotangentScope
+        with ParameterCotangentScope.for_model(model, mode='vjp') as cotangents, context:
             if backend is not None:
                 with backend.autocast():
                     loss, details = packed_graph_loss(model, batch,
@@ -325,6 +326,7 @@ def native_training_update(model, optimizer, batch, *, backend=None, checkpoint_
                     checkpoint_layers=checkpoint_layers, chunk_tokens=chunk_tokens,
                     objective=objective, share_causal_prefixes=getattr(model, 'share_causal_prefixes', False))
             loss.backward()
+            cotangents.finish()
         if optimizer.latent is not None:
             optimizer.latent._armed = None
         params = [p for p in model.parameters() if p.requires_grad and p.grad is not None]

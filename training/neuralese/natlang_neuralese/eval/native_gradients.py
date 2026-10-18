@@ -23,7 +23,21 @@ def gradient_metrics(actual,expected,*,atol,rtol):
         'actual_l2':float(an),'mismatched_elements':bad,'elements':a.numel(),'atol':atol,'rtol':rtol}
 
 
-def compare_complete_gradients(flat_loss,cached_loss,named,flat_inputs,cached_inputs,*,atol,rtol,cached_factory=None,gradient_observer=None):
+def compare_complete_gradients(flat_loss,cached_loss,named,flat_inputs,cached_inputs,*,atol,rtol,cached_factory=None,gradient_observer=None,
+                               flat_cotangent_scope=None):
+    try:
+        return _compare_complete_gradients(flat_loss,cached_loss,named,flat_inputs,cached_inputs,
+            atol=atol,rtol=rtol,cached_factory=cached_factory,gradient_observer=gradient_observer,
+            flat_cotangent_scope=flat_cotangent_scope)
+    finally:
+        # The caller entered this scope before its forward. Validation and
+        # observer setup can fail before the VJP's own cleanup block begins.
+        if flat_cotangent_scope is not None:
+            flat_cotangent_scope.close()
+
+
+def _compare_complete_gradients(flat_loss,cached_loss,named,flat_inputs,cached_inputs,*,atol,rtol,cached_factory=None,gradient_observer=None,
+                                flat_cotangent_scope=None):
     """Release each CPU flat derivative as its complete cached counterpart arrives.
 
     autograd.grad never accumulates parameter.grad or invokes post-accumulate
@@ -44,11 +58,23 @@ def compare_complete_gradients(flat_loss,cached_loss,named,flat_inputs,cached_in
         gradient_observer.begin_vjp_observation()
     old_grads={id(p):(p.grad,None if p.grad is None else p.grad._version)for p in parameters}
     flat_values=(flat_inputs,*parameters)
-    flat=torch.autograd.grad(flat_loss,flat_values,allow_unused=True)
+    try:
+        flat=torch.autograd.grad(flat_loss,flat_values,allow_unused=True)
+        if flat_cotangent_scope is not None:
+            flat_cotangent_scope.finish()
+    finally:
+        if flat_cotangent_scope is not None:
+            flat_cotangent_scope.close()
     waiting={name:None if value is None else value.detach().to('cpu')
              for name,value in zip(names,flat)}
     del flat
-    if cached_factory is not None:cached_loss,cached_inputs=cached_factory()
+    cached_cotangent_scope=None
+    if cached_factory is not None:
+        produced=cached_factory()
+        if len(produced)==3:
+            cached_loss,cached_inputs,cached_cotangent_scope=produced
+        else:
+            cached_loss,cached_inputs=produced
     cached_values=(cached_inputs,*parameters)
     retained=sum(g.numel()*g.element_size()for g in waiting.values()if g is not None)
     remaining=retained;max_pair=0;comparisons={};hooks=[]
@@ -68,6 +94,8 @@ def compare_complete_gradients(flat_loss,cached_loss,named,flat_inputs,cached_in
     try:
         for name,value in zip(names,cached_values):hooks.append(value.register_hook(hook(name)))
         current=torch.autograd.grad(cached_loss,cached_values,allow_unused=True)
+        if cached_cotangent_scope is not None:
+            cached_cotangent_scope.finish()
         for name,value in zip(names,current):
             if name in waiting:
                 previous=waiting.pop(name)
@@ -83,6 +111,8 @@ def compare_complete_gradients(flat_loss,cached_loss,named,flat_inputs,cached_in
     finally:
         for item in hooks:item.remove()
         waiting.clear()
+        if cached_cotangent_scope is not None:
+            cached_cotangent_scope.close()
     if gradient_observer is not None and callable(getattr(gradient_observer,'finish',None)):
         gradient_observer.finish()
     preserved=all(p.grad is old_grads[id(p)][0]and(p.grad is None or p.grad._version==old_grads[id(p)][1])for p in parameters)
