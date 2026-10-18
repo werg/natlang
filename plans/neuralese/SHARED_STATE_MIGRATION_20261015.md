@@ -48,8 +48,9 @@ through the projected-value implementation.
 
 ## Current status
 
-October 18, 14:34 UTC operational position: LFM is training; Mellum is
-restarting ordinary production training from its exact step-21930 full parent.
+October 18, 18:15 UTC operational position: both models are training. LFM has
+adopted its source03 continuation; Mellum continues useful R18 ordinary
+diagnostic SGD while the shared cotangent repair awaits its actual R19 check.
 Neither foundation is complete, and neither model has earned cross-model VAE
 readiness. Current custody and counters are in the DGX coordination status;
 the dated history below is not a live process report.
@@ -439,7 +440,7 @@ the inspected requests. Preserve held separation and use distinct nonheld tasks
 to improve tool-error recovery, API indexing and typed returns while useful
 production training continues.
 
-### Production continuation (current at 2026-10-18 17:34 UTC)
+### Production continuation (current at 2026-10-18 18:15 UTC)
 
 Mellum's retained R18 diagnostic collection stopped at 14:13 UTC with zero RAW
 updates. Its completed TRAIN and protected HELD partials, evidence and native
@@ -458,14 +459,18 @@ lifetime and whole optimizer/RNG preservation. Independent review cleared the
 change. The same-parent v4 owner restored state, but its actual complete
 comparison then failed numerically before SGD: 166 / 315 derivative comparisons
 failed, all observed failures in BF16 backbone weights, despite bitwise-equal
-forward outputs and input-embedding derivatives. This is an unresolved implementation
-bug. The producer/consumer parameter-gradient accumulation boundary and existing
-FP32 cotangent carriers are being checked against an exact reference; no gate
-was waived. Ordinary maximum-row backward and R19 SGD remain pending.
+forward outputs and input-embedding derivatives. The shared repair is now published through `a17a6ca3b`: FP32 parameter
+cotangents accumulate across graph branches and cast once to the original
+parameter dtype. Expert-bank views and requested VJP subsets retain exact
+ancestry; qualification and capacity checks use the production scopes with
+failure cleanup. Independent integrated CPU/CUDA gradient tests passed 88/88;
+capacity/source-reuse checks passed 45/45 and quick checks passed. The actual
+current-parent 315-gradient comparison, ordinary maximum-row backward and R19
+SGD remain pending; focused tests do not waive those gates.
 Completed actor/cache parity was reused only under the verified comparator-only
 delta. Useful R18 ordinary diagnostic training has resumed from that exact
 parent while the complete cotangent repair is implemented and independently
-reviewed. Actual step22,666 / ordinary21,650 represents 736 earned updates;
+reviewed. Actual step22,965 / ordinary21,949 at 17:51 represents 1,035 earned updates;
 these do not qualify R19 or finish the communication foundation. Full step22,016
 is privately backed up with independent GET SHA-256
 `a0c02d4ad4e57e7facc8e41b99931acae3fe827dab37ce4e5e6886d284d2b1ec`.
@@ -477,8 +482,10 @@ its exact receipt was attached under the cursor observation lease, preserving
 the full private receipt and the existing publisher. The 24,308,806,125-byte
 view subsequently passed private independent GET verification at 16:53 UTC,
 SHA-256 `094dbfe76f945e579044bc6df8d97dad347b625626a7526d371d9d075c8ba5b7`.
-The 4,100-row continuation was actually adopted; a further 4,285 verified rows
-are being prepared for incremental admission. Neither addition implies exposure.
+The 4,100-row and 4,285-row continuations were actually adopted. The resident
+recipe reached 1,190,990 rows. A further 4,012 QA rows passed incremental CPU
+preparation; final submission/adoption is owned by the cloud supervisor. Newly
+loaded data does not establish completed per-row exposure.
 
 LFM continues R19 training. The 384-row teacher continuation was adopted at
 14,588 and followed by actual optimizer updates. Communication
@@ -489,8 +496,8 @@ three actual whole-graph backward and exact numerical-reference checks: the
 frontier, and authentic 137,052-token ordinary row. All 150 named gradients
 were present in each check, with zero qualification optimizer updates. The
 owned candidate actually adopted all 4,012 QA rows at the saved 14,841 boundary
-and reached 14,858 with 17 subsequent optimizer updates. Genuine communication
-exposure reached 21,853 / 107,766, including 21,853 / 26,312 foundation rows.
+and subsequently reached 14,969 / ordinary 14,213 at 18:15. Genuine communication
+exposure reached 21,991 / 107,766, including 21,991 / 26,312 foundation rows.
 QA rows are ordinary examples and do not earn communication credit. The
 resident capacity authority still names the previous 94,236 / 157,075 frontier;
 long-row live admission needs an explicit continuation despite the real new
@@ -513,7 +520,15 @@ This is unresolved task-quality debt, not a behavioral improvement claim.
 Source03's original private consumer check has now produced its completed
 proof. The proposed scanner retirement correctly stopped before sending any
 signal when it found that proof; no replacement scan was launched. The exact
-24,968 bridge graphs still need current-prefix admission and actual exposure.
+24,968 bridge graphs passed current-prefix incremental preparation, then actual
+learner adoption was independently confirmed at 18:15:05. Current generation
+`02b0d807326e73526b368366c843d3eb8fac1dc371354ee1bca82881b4d2c4bb`
+contains 1,262,856 rows, followed by actual SGD. The first pending submission
+failed before pointer mutation on a preparer/learner cache-root mismatch; exact
+index relocation to the learner's `/root/.cache/natlang/row-index` corrected it
+without changing source rows, geometry or completed exposure. All bridge rows
+are ordinary auxiliary examples, with zero communication credit. Actual
+per-row visits remain tracked by the learner.
 All 185 TRAIN and 14 HELD row indexes were verified under the selected cache
 root; the earlier nine supposedly missing entries were semantic pairs queried
 with incorrect cache keys. Its optional CPU pause guard
@@ -535,3 +550,12 @@ and private durability checks retained. Actual 80 exporter tests and independent
 review passed. Publisher-only handoff leaves the guardian, serving engine and
 collectors running. Live counters and subsequent adoption evidence remain in
 the DGX coordination status and bound operations receipts.
+
+Teacher sampling controls are published in `d55d1e2b9` with 227 independently
+verified focused checks. Future source declarations support group 4 authored-root
+and group 4 whole-student-root measurements; existing slots retain their exact
+original sampling authority. The repaired 12-task 48+48 live curriculum windows
+remain pending. Qwen text emulation cannot qualify native student state transport.
+Verified teacher continuations of 308, 32 and 343 graphs per model are registered;
+standard consumer/staging, actual learner adoption and exposure remain separate
+receipts. The source-level and decision protections remain intact.
