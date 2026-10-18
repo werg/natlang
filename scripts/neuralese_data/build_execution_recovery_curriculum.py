@@ -122,7 +122,7 @@ def graph_rows(*, revision: str = GRAPH_REVISION):
          'const reader: Neuralese<(note: Neuralese<string>) => Promise<string>> = nl.with<string>({})`Read the input note and return an exact copy of its text.`; return await reader(await writer());',
          [('Read the supplied evidence and write its exact text: violet harbor.', '<|neuralese|>violet harbor<|/neuralese|>'),
           ('Read the input note and return an exact copy of its text.', 'violet harbor')], 'string'),
-        ('producer-consumer-typed-total', '83',
+        ('producer-consumer-typed-total', 83,
          'const writer: Neuralese<() => Promise<Neuralese<string>>> = nl.with<Neuralese<string>>({})`Read the evidence note and write its exact text: item-count=4; total=83.`; '
          'const reader: Neuralese<(note: Neuralese<string>) => Promise<number>> = nl.with<number>({})`Read the note and return the number after total= as a number.`; return await reader(await writer());',
          [('Read the evidence note and write its exact text: item-count=4; total=83.', '<|neuralese|>item-count=4; total=83<|/neuralese|>'),

@@ -73,6 +73,13 @@ def test_private_state_packet_requires_complete_sampled_graph_topology():
         assert row['split'] == 'train'
         assert 'failure_seed' not in row['semantics']
         assert row['curriculum']['reference']['root'][1][1]['value'] == row['semantics']['expected']
+        declared = row['semantics']['files']['main.nl'].split('returns: ', 1)[1].split('\n', 1)[0]
+        expected = row['semantics']['expected']
+        assert (declared == 'number' and isinstance(expected, (int, float)) and not isinstance(expected, bool)) or (
+            declared == 'string' and isinstance(expected, str))
+    typed_total = next(row for row in rows if row['curriculum']['shape'] == 'producer-consumer-typed-total')
+    assert typed_total['semantics']['expected'] == 83
+    assert typed_total['curriculum']['reference']['children'][-1]['value'] == 83
     assert [row['curriculum']['trajectory_contract']['min_state_edges_from_children']
             for row in rows] == [1, 1, 2]
 
