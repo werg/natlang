@@ -370,6 +370,12 @@ afterwards. The rules below are consequences of this one.
   caller's shell environment is forwarded into a ledger unit. Verify these
   environments before launching substantial jobs; repeated import/launcher
   failures are a shared operational bug to fix, not useful qualification.
+- A ledger unit's explicit relative executable path resolves in its admitted
+  `--workdir`. Bare executable names retain PATH lookup. Use an absolute script
+  path for an intended checkout when inspecting or recovering older launches:
+  older `systemd-run` invocation paths resolved against the caller's checkout
+  before changing directory. Verify the tested checkout's path and revision in
+  the actual check log; a worktree claim alone is not evidence of its tests.
 - For DGX administrative ownership guards requiring `os.pidfd_open`, use the
   host `/usr/bin/python3`; the CoreWeave SDK venv lacks that API. Invoke SDK
   operations through its venv as a subprocess when both capabilities are needed.

@@ -700,7 +700,13 @@ def launch(spec):
     command += ['-E', f'NATLANG_LEDGER_UNIT={unit}', '-p', f'TimeoutStopSec={int(stop_seconds) + 30}',
                 '-p', f'ExecStopPost=-/usr/bin/docker stop -t {int(stop_seconds)} ' + ' '.join(
                     dict.fromkeys([container, *spec.get('containers', ())]))]
-    return subprocess.run(command + spec['command']).returncode
+    executable = list(spec['command'])
+    if executable and os.sep in executable[0] and not os.path.isabs(executable[0]):
+        # systemd-run resolves a relative executable in its caller's directory,
+        # before applying --working-directory. Honor the admitted checkout for
+        # explicit paths; ordinary PATH commands keep their existing lookup.
+        executable[0] = os.path.abspath(os.path.join(spec['workdir'], executable[0]))
+    return subprocess.run(command + executable).returncode
 
 
 def detached_waiter_command(argv, unit):

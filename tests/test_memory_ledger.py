@@ -591,6 +591,23 @@ def test_launch_puts_local_bin_first_on_path(monkeypatch):
     assert 'docker stop -t 5 u c1' in ' '.join(cmd)
 
 
+def test_relative_executable_uses_admitted_workdir_and_preserves_resume_spec(monkeypatch, tmp_path):
+    seen = []
+    monkeypatch.setattr(ledger.subprocess, 'run', lambda cmd, **k: seen.append(cmd) or type('R', (), {'returncode': 0})())
+    caller = tmp_path/'main'; checkout = tmp_path/'worktree'
+    caller.mkdir(); checkout.mkdir(); monkeypatch.chdir(caller)
+    spec = {'unit': 'u.service', 'budget': GIB, 'priority': 'low', 'oom_policy': 'stop',
+            'workdir': str(checkout), 'env': [], 'command': ['scripts/check-main.sh', '--quick'],
+            'stop_seconds': 5}
+    ledger.launch(spec)
+    assert seen[-1][-2:] == [str(checkout/'scripts/check-main.sh'), '--quick']
+    assert seen[-1][seen[-1].index('--working-directory')+1] == str(checkout)
+    assert spec['command'] == ['scripts/check-main.sh', '--quick']
+    for command in [['node', '-v'], ['/exact/tool', 'relative-argument']]:
+        ledger.launch({**spec, 'command': command})
+        assert seen[-1][-len(command):] == command
+
+
 def test_a_cache_walk_stops_itself_at_its_deadline_and_skips_the_slow_disk_by_default(tmp_path, monkeypatch):
     monkeypatch.setattr(ledger, 'STATE', str(tmp_path / 'ledger.json'))
     monkeypatch.setattr(ledger, 'balloon_reclaim', lambda *a, **k: 0)
