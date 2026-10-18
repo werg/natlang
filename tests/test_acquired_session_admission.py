@@ -306,3 +306,74 @@ def test_paired_admission_keeps_mellum_scalar_while_lfm2_records_exact_pending_o
         verify_model_source_parity({
             'lfm25':{'backbone':'lfm2','accepted':{},'pending':{key}},
             'mellum21':{'backbone':'mellum','accepted':{},'pending':set()}})
+def test_historical_runtime_mapping_requires_exact_full_receipt_inventory(tmp_path):
+    import hashlib
+    import pytest
+    from natlang_neuralese.common.hashing import canonical_json_sha256_hex
+    from scripts.neuralese_data.prepare_acquired_session_admission import _verify_conversion_runtime
+
+    observed = tmp_path / 'observed'; frozen = tmp_path / 'frozen'
+    names = ('scripts/neuralese_data/build.py', 'training/neuralese/data/conversion.py')
+    contents = (b'old builder bytes', b'old conversion bytes')
+    files = {}
+    for relative, content in zip(names, contents):
+        for root in (observed, frozen):
+            path = root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(content)
+        files[relative.rsplit('/', 1)[-1]] = {'sha256': hashlib.sha256(content).hexdigest()}
+    outside = tmp_path / 'external-dependency.py'
+    outside.write_bytes(b'exact external runtime dependency')
+    files['external'] = {'sha256': hashlib.sha256(outside.read_bytes()).hexdigest()}
+    runtime = {
+        'files': files,
+        'fingerprint': canonical_json_sha256_hex(files),
+        'observed_paths': {name: str((observed / relative).resolve())
+                           for name, relative in zip(tuple(files)[:2], names)},
+    }
+    runtime['observed_paths']['external'] = str(outside.resolve())
+    # A retired checkout may no longer exist; the explicit frozen mapping is
+    # sufficient only for files beneath that exact recorded root.
+    for relative in names:
+        (observed / relative).unlink()
+    authority = _verify_conversion_runtime(runtime, historical_observed_root=observed,
+                                           historical_runtime_root=frozen)
+    assert authority['runtime_fingerprint'] == runtime['fingerprint']
+    assert set(authority['mapped_files']) == set(files)
+    assert authority['mapped_files']['external']['location'] == 'original-outside-mapped-root'
+
+    changed = frozen / names[1]
+    changed.write_bytes(b'different bytes, even though the other file still matches')
+    with pytest.raises(ValueError, match='immutable acquired artifact changed'):
+        _verify_conversion_runtime(runtime, historical_observed_root=observed,
+                                   historical_runtime_root=frozen)
+    changed.write_bytes(contents[1])
+    outside.write_bytes(b'mutated external runtime dependency')
+    with pytest.raises(ValueError, match='immutable acquired artifact changed'):
+        _verify_conversion_runtime(runtime, historical_observed_root=observed,
+                                   historical_runtime_root=frozen)
+    outside.write_bytes(b'exact external runtime dependency')
+    tampered = {**runtime, 'fingerprint': '0' * 64}
+    with pytest.raises(ValueError, match='runtime inventory or fingerprint'):
+        _verify_conversion_runtime(tampered, historical_observed_root=observed,
+                                   historical_runtime_root=frozen)
+
+
+def test_absent_runtime_mapping_preserves_legacy_model_checkpoint_identity(tmp_path, monkeypatch):
+    import json
+    from scripts.neuralese_data import prepare_acquired_session_admission as admission
+    export_path = tmp_path / 'export.json'
+    source_path = tmp_path / 'full-trajectories.jsonl.zst'
+    directory = tmp_path / 'native'; directory.mkdir()
+    source_path.write_bytes(b'normalized source')
+    export_path.write_text(json.dumps({'complete_sessions': 1,
+        'outputs': {source_path.name: 'a' * 64}}))
+    monkeypatch.setattr(admission, 'model_checkpoint_identity', lambda **kwargs: kwargs)
+    result = admission._model_resume_identity(
+        export_path=export_path, source_path=source_path, original={'sha256': 'b' * 64}, rows=[{}],
+        model='lfm25', base=tmp_path, tokenizer={'fingerprint': 'c' * 64},
+        protection={'proof': 'd' * 64}, conversion_protection=None, decision_bindings=[],
+        global_accounting={'normalized_sessions': 1}, directory=directory, member_scope=None)
+    assert 'historical_runtime_mapping' not in result['policy']
+
+

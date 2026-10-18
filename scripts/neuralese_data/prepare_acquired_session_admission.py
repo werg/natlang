@@ -494,7 +494,8 @@ def _admission_verifier_files():
 def _model_resume_identity(*, export_path, source_path, original, rows, model, base,
                            tokenizer, protection, conversion_protection,
                            decision_bindings, global_accounting, directory,
-                           member_scope, source_closure_receipt=None):
+                           member_scope, source_closure_receipt=None,
+                           historical_runtime_mapping=None):
     """Bind cached model verification to the exact source, conversion and current policy."""
     directory = Path(directory).resolve(strict=True)
     export = json.loads(Path(export_path).read_text(encoding='utf-8'))
@@ -517,6 +518,8 @@ def _model_resume_identity(*, export_path, source_path, original, rows, model, b
         'conversion_protection': conversion_protection['proof'] if conversion_protection else None,
         'decision_holds': decision_contract(decision_bindings),
     }
+    if historical_runtime_mapping is not None:
+        policy['historical_runtime_mapping'] = historical_runtime_mapping
     return model_checkpoint_identity(
         source=source_identity,
         model={'name': model, 'base': str(Path(base).resolve(strict=True)),
@@ -597,8 +600,63 @@ def _sha256_concat(paths):
     return digest.hexdigest()
 
 
+def _verify_conversion_runtime(runtime, *, historical_observed_root=None,
+                               historical_runtime_root=None):
+    """Verify every converter dependency at its recorded or explicitly mapped path.
+
+    A historical mapping is all-or-nothing: every declared dependency must be
+    present under the supplied frozen root with the exact byte SHA already
+    recorded in the immutable conversion receipt. The full receipt fingerprint
+    is recomputed before any path is accepted. No dependency is waived or
+    substituted individually.
+    """
+    files = runtime.get('files')
+    observed = runtime.get('observed_paths')
+    if (not isinstance(files, dict) or not files or not isinstance(observed, dict)
+            or set(files) != set(observed)
+            or runtime.get('fingerprint') != canonical_json_sha256_hex(files)):
+        raise ValueError('native conversion runtime inventory or fingerprint is invalid')
+    if historical_observed_root is None and historical_runtime_root is None:
+        for name, binding in files.items():
+            bound(observed[name], binding)
+        return None
+    if historical_observed_root is None or historical_runtime_root is None:
+        raise ValueError('historical runtime mapping needs both recorded and frozen roots')
+    observed_root = Path(historical_observed_root).resolve(strict=True)
+    frozen_root = Path(historical_runtime_root).resolve(strict=True)
+    mapped = {}
+    for name, binding in files.items():
+        recorded = Path(observed[name])
+        if not recorded.is_absolute() or '..' in recorded.parts:
+            raise ValueError('recorded converter dependency path is not a normalized absolute path: ' + name)
+        try:
+            relative = recorded.relative_to(observed_root)
+        except ValueError:
+            # Dependencies outside the explicitly mapped checkout keep their
+            # original observed path and must still match the receipt exactly.
+            original = recorded.resolve(strict=True)
+            bound(original, binding)
+            mapped[name] = {'path': str(original), **binding, 'location': 'original-outside-mapped-root'}
+            continue
+        candidate = (frozen_root / relative).resolve(strict=True)
+        try:
+            candidate.relative_to(frozen_root)
+        except ValueError as exc:
+            raise ValueError('historical converter dependency escapes the frozen root: ' + name) from exc
+        bound(candidate, binding)
+        mapped[name] = {'path': str(candidate), **binding, 'location': 'frozen-mapped-root'}
+    return {
+        'schema': 'natlang.acquired-conversion-historical-runtime-map/1',
+        'recorded_root': str(observed_root), 'frozen_root': str(frozen_root),
+        'runtime_fingerprint': runtime['fingerprint'],
+        'files_sha256': canonical_json_sha256_hex(files),
+        'mapped_files': mapped,
+    }
+
+
 def verify_conversion(directory, export_path, *, protection, held_sources, decision_bindings, source_rows,
-                      conversion_protection=None, shard_checkpoint_root=None, checkpoint_context=None):
+                      conversion_protection=None, shard_checkpoint_root=None, checkpoint_context=None,
+                      historical_observed_root=None, historical_runtime_root=None):
     directory = Path(directory).resolve(strict=True); receipt_path = directory / 'receipt.json'
     if checkpoint_context is None:
         checkpoint_context = {}
@@ -628,8 +686,9 @@ def verify_conversion(directory, export_path, *, protection, held_sources, decis
             or state['binding']['runtime'] != {key: receipt['runtime'][key] for key in ('files', 'fingerprint')}
             or receipt['runtime']['fingerprint'] != canonical_json_sha256_hex(receipt['runtime']['files'])):
         raise ValueError('conversion source/runtime binding differs from its durable shard proof')
-    for name, binding in receipt['runtime']['files'].items():
-        bound(receipt['runtime']['observed_paths'][name], binding)
+    _verify_conversion_runtime(receipt['runtime'],
+        historical_observed_root=historical_observed_root,
+        historical_runtime_root=historical_runtime_root)
     compatible_bindings = {}
     runtime_continuation = state.get('runtime_continuation')
     if runtime_continuation is not None:
@@ -826,8 +885,17 @@ def main(argv=None):
     parser.add_argument('--incremental-member', action='store_true',
                         help='admit one complete source export while retaining the full global protection closure')
     parser.add_argument('--original-root', type=Path, required=True)
+    parser.add_argument('--historical-runtime-observed-root', type=Path,
+                        help='root recorded in the existing conversion receipt observed_paths')
+    parser.add_argument('--historical-runtime-root', type=Path,
+                        help='frozen runtime tree whose complete dependency inventory must match the receipt')
     parser.add_argument('--model', action='append', required=True, help='NAME=exact local tokenizer base directory')
     args = parser.parse_args(argv)
+    if (args.historical_runtime_observed_root is None) != (args.historical_runtime_root is None):
+        raise ValueError('historical runtime verification requires both recorded and frozen roots')
+    if args.historical_runtime_root is not None:
+        args.historical_runtime_observed_root = args.historical_runtime_observed_root.resolve(strict=True)
+        args.historical_runtime_root = args.historical_runtime_root.resolve(strict=True)
     # Registry paths are logical aliases; durable converter receipts name the
     # physical output directory. Compare the same exact files through either
     # entrypoint without treating symlink spelling as changed shard content.
@@ -895,24 +963,36 @@ def main(argv=None):
         model_source_views = {}
         for model in models:
             directory = native_conversion_directory(args.native_root, export_path, export, model)
+            conversion_receipt = json.loads((directory / 'receipt.json').read_text())
+            runtime_authority = _verify_conversion_runtime(conversion_receipt['runtime'],
+                historical_observed_root=args.historical_runtime_observed_root,
+                historical_runtime_root=args.historical_runtime_root)
             identity = _model_resume_identity(
                 export_path=export_path, source_path=source, original=original, rows=rows,
                 model=model, base=models[model], tokenizer=inventories[model],
                 protection=protection, conversion_protection=conversion_protection,
                 decision_bindings=decision_bindings, global_accounting=global_accounting,
                 directory=directory, member_scope=member_scope,
-                source_closure_receipt=args.source_closure_receipt)
+                source_closure_receipt=args.source_closure_receipt,
+                historical_runtime_mapping=runtime_authority)
             checkpoint_root = args.native_root / '.admission-checkpoints' / args.id / export_path.parent.name / model
             def validate_model():
                 receipt, outputs, proofs, groups = verify_conversion(directory, export_path, protection=protection,
                     held_sources=held_sources, decision_bindings=decision_bindings, source_rows=rows,
                     conversion_protection=conversion_protection,
-                    shard_checkpoint_root=checkpoint_root / 'shards', checkpoint_context=identity)
+                    shard_checkpoint_root=checkpoint_root / 'shards', checkpoint_context=identity,
+                    historical_observed_root=args.historical_runtime_observed_root,
+                    historical_runtime_root=args.historical_runtime_root)
+                runtime_authority = _verify_conversion_runtime(receipt['runtime'],
+                    historical_observed_root=args.historical_runtime_observed_root,
+                    historical_runtime_root=args.historical_runtime_root)
                 return {'receipt': receipt, 'outputs': outputs, 'proofs': proofs,
-                        'groups': {split: sorted(values) for split, values in groups.items()}}
+                        'groups': {split: sorted(values) for split, values in groups.items()},
+                        **({'runtime_authority': runtime_authority} if runtime_authority is not None else {})}
             result, checkpoint, resumed = load_or_compute_model_checkpoint(
                 checkpoint_root, identity, validate_model)
             receipt, outputs, proofs = result['receipt'], result['outputs'], result['proofs']
+            runtime_authority = result.get('runtime_authority')
             groups = {split: set(values) for split, values in result['groups'].items()}
             validation_checkpoints.append({
                 'model': model, 'source_export': str(export_path.resolve()),
@@ -924,6 +1004,7 @@ def main(argv=None):
                 'identity': identity, 'export_path': export_path, 'source_path': source,
                 'original': original, 'rows': rows, 'model': model, 'base': models[model],
                 'tokenizer': inventories[model], 'directory': directory,
+                'runtime_authority': runtime_authority,
             })
             if receipt['prepared_tokenizer']['base_files'] != inventories[model]:
                 raise ValueError('native cohort model selector differs from its exact tokenizer base inventory')
@@ -948,6 +1029,7 @@ def main(argv=None):
                 include.append(str((directory / name).relative_to(args.native_root)))
             bindings.append({'model': model, 'receipt': {'path': str(directory / 'receipt.json'),
                 'sha256': sha256_file_hex(directory / 'receipt.json')}, 'outputs': outputs,
+                **({'historical_runtime_authority': runtime_authority} if runtime_authority is not None else {}),
                 **({'conversion_protection': receipt['protection']} if conversion_protection is not None else {})})
             proof_rows.extend({**proof, 'model': model, 'original_source': original} for proof in proofs)
         verify_model_source_parity(model_source_views)
@@ -968,7 +1050,11 @@ def main(argv=None):
             base=check['base'], tokenizer=check['tokenizer'], protection=protection,
             conversion_protection=conversion_protection, decision_bindings=decision_bindings,
             global_accounting=global_accounting, directory=check['directory'],
-            member_scope=member_scope, source_closure_receipt=args.source_closure_receipt)
+            member_scope=member_scope, source_closure_receipt=args.source_closure_receipt,
+            historical_runtime_mapping=_verify_conversion_runtime(
+                json.loads((check['directory'] / 'receipt.json').read_text())['runtime'],
+                historical_observed_root=args.historical_runtime_observed_root,
+                historical_runtime_root=args.historical_runtime_root))
         if current_identity != check['identity']:
             raise ValueError('model conversion artifacts changed before admission publication')
     out.mkdir()
