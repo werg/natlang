@@ -1049,6 +1049,33 @@ def _guardian_lookahead_slots(state):
     return primary_ahead_slots(state)
 
 
+def _guardian_export_slot(state, batch):
+    """Follow the same immutable slot through primary adoption and closure."""
+    if type(batch) is not int:
+        return None
+    slot = _guardian_lookahead_slots(state).get(batch)
+    if slot is not None:
+        return slot
+    launches = state.get('primary_launches') or {}
+    if not isinstance(launches, dict):
+        raise ValueError('guardian primary launch history is malformed')
+    slot = launches.get(str(batch))
+    if not isinstance(slot, dict) or slot.get('batch') != batch:
+        return None
+    active = state.get('active_batch')
+    if active == batch:
+        if slot.get('owner') != state.get('owner'):
+            raise ValueError('adopted primary slot changed its exact owner')
+        return slot
+    frontier = active if type(active) is int else state.get('next_batch')
+    closed = (state.get('source_sequence') or {}).get('closed') or {}
+    if not isinstance(closed, dict):
+        raise ValueError('guardian closed source history is malformed')
+    if type(frontier) is int and frontier > batch and str(batch) in closed:
+        return slot
+    return None
+
+
 def discover_guardian_batch(publisher: dict, sandbox,
                             read_file: Callable[[str], bytes], *, batch_slot: int | None = None) -> dict | None:
     """Derive a poll config only from the exact live guardian owner and sealed batch.
@@ -1099,7 +1126,7 @@ def discover_guardian_batch(publisher: dict, sandbox,
     batch, owner = state.get('active_batch'), state.get('owner')
     slot=None
     if batch_slot is not None:
-        slot=_guardian_lookahead_slots(state).get(batch_slot)
+        slot=_guardian_export_slot(state,batch_slot)
         if (guardian.get('primary_parallel_batches',1)!=2 or not isinstance(slot,dict)
                 or type(batch_slot)is not int or slot.get('batch')!=batch_slot
                 or type(batch_slot)is not int):
@@ -1161,7 +1188,7 @@ def discover_guardian_batch(publisher: dict, sandbox,
                 or intent.get('prefetch',{}).get('task_runtime')!=slot['task_runtime']):
             raise ValueError('batch slot immutable source authority differs')
         feeder=ref['path'];phase_path=slot['phase_path']
-    closed_refs = {}
+    closed_refs = {}; closed_receipts = {}
     sequence_state = state.get('source_sequence') or {}
     for key, closed_ref in (sequence_state.get('closed') or {}).items():
         if not isinstance(closed_ref, dict) or not {'path', 'sha256', 'bytes'} <= closed_ref.keys():
@@ -1176,6 +1203,12 @@ def discover_guardian_batch(publisher: dict, sandbox,
                 or boundary_ref['path'] != f"{publisher['control_dir']}/boundaries/batch-{int(key):04d}.json"):
             raise ValueError('guardian closed-sequence history does not bind its exact boundary file')
         closed_refs[key] = boundary_ref
+        closed_receipts[key] = closed_receipt
+    if (batch_slot is not None and batch != state.get('active_batch')
+            and batch not in _guardian_lookahead_slots(state)):
+        started = sequence_state.get('started', {}).get(str(batch))
+        if (not started or closed_receipts.get(str(batch), {}).get('started') != started):
+            raise ValueError('historical primary slot lost its exact source closure')
     latest_boundary = state.get('last_boundary')
     if latest_boundary is not None:
         if not isinstance(latest_boundary, dict) or not {'path', 'sha256', 'bytes'} <= latest_boundary.keys():
@@ -1227,7 +1260,7 @@ except (FileNotFoundError,ProcessLookupError):
             fresh_raw=read_file(f'{control}/state.json');fresh=_json(fresh_raw,'prefetch transition state')
             if fresh.get('config')!=state.get('config')or read_file(guardian_ref['path'])!=guardian_raw:
                 raise ValueError('prefetch transition config changed')
-            current=_guardian_lookahead_slots(fresh).get(batch)
+            current=_guardian_export_slot(fresh,batch)
             if current!=slot:
                 adopted=(fresh.get('primary_launches')or{}).get(str(batch))
                 if adopted!=slot:raise ValueError('prefetch owner changed without its exact adoption')
@@ -1275,7 +1308,7 @@ except (FileNotFoundError,ProcessLookupError):
                 or fresh.get('schema')!=state['schema']or fresh.get('config')!=config_binding):
             raise ValueError('guardian preparation changed boot or config authority')
         if slot is not None:
-            latest=(_guardian_lookahead_slots(fresh).get(batch)if batch_slot is not None else(fresh.get('primary_launches')or{}).get(str(batch)))
+            latest=(_guardian_export_slot(fresh,batch)if batch_slot is not None else(fresh.get('primary_launches')or{}).get(str(batch)))
             if latest!=slot:raise ValueError('batch slot changed during feeder preparation')
         elif fresh.get('owner')!=owner or fresh.get('active_batch')!=batch:
             fresh,fresh_raw,reference=_closed_guardian_transition(
