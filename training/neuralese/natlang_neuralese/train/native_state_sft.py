@@ -1013,14 +1013,19 @@ def main(argv=None):
     if fingerprint != config['tokenizer_fingerprint']:
         raise ValueError('loaded tokenizer differs from native model configuration')
     if resident_state and resume and resident_state['payload']['stage_id'] == args.stage_id:
+        # A direct DPO/RAW frame describes its own objective source. Ordinary
+        # continuation must use the already carried ordinary frame, which the
+        # normal progress restore selects later with the same optimizer/RNG.
+        source_resume = ((carried_progress.get(args.stage_id or 'native-graph-ce') or resume)
+            if parent_continuation and args.objective_spec is None else resume)
         pending_reference = resident_state['payload']['plan']['stage_inputs'][args.stage_id].get('pending_native_sources')
         args.pending_native_sources = [Path(pending_reference['path'])] if pending_reference else []
         checkpoint_options['pending_native_sources'] = [str(path) for path in args.pending_native_sources]
-        prior = (resume.get('source_receipts') or [{}])[0]
+        prior = (source_resume.get('source_receipts') or [{}])[0]
         if prior.get('sha256') != resident_state['payload']['train']['sha256']:
             args.continued_native_graphs = Path(prior['path'])
             checkpoint_options['continued_native_graphs'] = str(args.continued_native_graphs)
-        prior_held = (resume.get('source_receipts') or [{}, {}])[1]
+        prior_held = (source_resume.get('source_receipts') or [{}, {}])[1]
         if prior_held.get('sha256') != resident_state['payload']['held']['sha256']:
             args.continued_held_native_graphs = Path(prior_held['path'])
             checkpoint_options['continued_held_native_graphs'] = str(args.continued_held_native_graphs)
