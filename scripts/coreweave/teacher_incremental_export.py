@@ -1040,6 +1040,27 @@ def _publisher_batch_runtime(publisher: dict, batch: int, read_file: Callable[[s
     return selected
 
 
+def _guardian_lookahead_slots(state):
+    """Completed work retains custody without consuming the next live slot."""
+    completed=state.get('primary_completed_ahead',{})
+    if not isinstance(completed,dict):raise ValueError('completed guardian slots are malformed')
+    result={};expected=state.get('active_batch')
+    if expected is None and type(state.get('next_batch'))is int:expected=state['next_batch']-1
+    if completed and type(expected)is not int:raise ValueError('completed guardian slots lack their live predecessor')
+    for key,slot in sorted(completed.items(),key=lambda item:int(item[0])):
+        expected+=1
+        if (key!=str(expected)or not isinstance(slot,dict)or slot.get('batch')!=expected
+                or not isinstance(slot.get('boundary'),dict)):
+            raise ValueError('completed guardian slots have a gap or no boundary')
+        result[expected]=slot
+    slot=state.get('primary_prefetch')
+    if slot is not None:
+        if type(expected)is not int or not isinstance(slot,dict)or slot.get('batch')!=expected+1:
+            raise ValueError('live guardian slot differs from its ordered predecessor chain')
+        result[expected+1]=slot
+    return result
+
+
 def discover_guardian_batch(publisher: dict, sandbox,
                             read_file: Callable[[str], bytes], *, batch_slot: int | None = None) -> dict | None:
     """Derive a poll config only from the exact live guardian owner and sealed batch.
@@ -1088,10 +1109,10 @@ def discover_guardian_batch(publisher: dict, sandbox,
     batch, owner = state.get('active_batch'), state.get('owner')
     slot=None
     if batch_slot is not None:
-        slot=state.get('primary_prefetch')
+        slot=_guardian_lookahead_slots(state).get(batch_slot)
         if (guardian.get('primary_parallel_batches',1)!=2 or not isinstance(slot,dict)
                 or type(batch_slot)is not int or slot.get('batch')!=batch_slot
-                or type(batch)is not int or batch_slot!=batch+1):
+                or type(batch_slot)is not int):
             raise ValueError('publisher requested an unowned next batch slot')
         batch,owner=batch_slot,slot.get('owner')
     elif batch is not None:
@@ -1216,7 +1237,7 @@ except (FileNotFoundError,ProcessLookupError):
             fresh_raw=read_file(f'{control}/state.json');fresh=_json(fresh_raw,'prefetch transition state')
             if fresh.get('config')!=state.get('config')or read_file(guardian_ref['path'])!=guardian_raw:
                 raise ValueError('prefetch transition config changed')
-            current=fresh.get('primary_prefetch')
+            current=_guardian_lookahead_slots(fresh).get(batch)
             if current!=slot:
                 adopted=(fresh.get('primary_launches')or{}).get(str(batch))
                 if adopted!=slot:raise ValueError('prefetch owner changed without its exact adoption')
@@ -1264,7 +1285,7 @@ except (FileNotFoundError,ProcessLookupError):
                 or fresh.get('schema')!=state['schema']or fresh.get('config')!=config_binding):
             raise ValueError('guardian preparation changed boot or config authority')
         if slot is not None:
-            latest=(fresh.get('primary_prefetch')if batch_slot is not None else(fresh.get('primary_launches')or{}).get(str(batch)))
+            latest=(_guardian_lookahead_slots(fresh).get(batch)if batch_slot is not None else(fresh.get('primary_launches')or{}).get(str(batch)))
             if latest!=slot:raise ValueError('batch slot changed during feeder preparation')
         elif fresh.get('owner')!=owner or fresh.get('active_batch')!=batch:
             fresh,fresh_raw,reference=_closed_guardian_transition(
@@ -1805,9 +1826,10 @@ def run_guardian_export_service(publisher_path: Path, *, poll_seconds: float = 1
                 last=_export_discovered_guardian_batch(active,batch_prior,publisher,publisher_raw,sandbox,reader,export_unseen_closed)
             overlap_results={}
             state=active.get('guardian_state',{})if active else{}
-            slot=state.get('primary_prefetch')
-            if (isinstance(slot,dict)and isinstance(slot.get('owner'),dict)
-                    and str(slot.get('batch'))in(state.get('source_sequence')or{}).get('started',{})):
+            for slot in _guardian_lookahead_slots(state).values():
+                if not(isinstance(slot.get('owner'),dict)
+                        and str(slot.get('batch'))in(state.get('source_sequence')or{}).get('started',{})):
+                    continue
                 extra=discover_guardian_batch(publisher,sandbox,reader,batch_slot=slot['batch'])
                 extra_prior=(prior.get('overlap_batches')or{}).get(str(slot['batch']),{})
                 if extra.get('draining'):

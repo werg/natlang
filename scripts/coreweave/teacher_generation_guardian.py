@@ -581,11 +581,13 @@ def maintain_primary_prefetch(folder,state,config):
     limit,threshold,workers=_primary_overlap_settings(config)
     slot=state.get('primary_prefetch')
     if limit==1:
-        if slot:raise ValueError('cannot disable overlap with an unreconciled next batch')
+        if slot or state.get('primary_completed_ahead'):raise ValueError('cannot disable overlap with an unreconciled next batch')
         return
     if slot:
-        if slot['batch']!=state['active_batch']+1:
-            raise ValueError('prefetch slot is not the sole next primary batch')
+        completed=state.get('primary_completed_ahead',{})
+        expected=state['active_batch']+len(completed)+1
+        if slot['batch']!=expected:
+            raise ValueError('prefetch slot is not the next ordered live worker slot')
         _spawn_primary_prefetch(folder,state,config,slot,slot['workers'])
         _source_sequence_helpers().observe_prefetched_source(folder,state,config)
         phase=Path(slot['phase_path'])
@@ -596,11 +598,13 @@ def maintain_primary_prefetch(folder,state,config):
                 prepare_retry(Path(folder),decision,entries)
                 slot['boundary']=binding(Path(folder)/'boundaries'/f"batch-{slot['batch']:04d}.json")
                 write(Path(folder)/'state.json',state)
-        return
+                _source_sequence_helpers().archive_completed_prefetch(folder,state,config,dict(slot))
+                slot=None
+        if slot:return
     if not alive(state.get('owner'))or Path(config['drain_file']).exists():return
     tail=primary_tail_frontier(config['root'],state['active_batch'],threshold)
     if tail is None:return
-    batch=state['active_batch']+1
+    batch=state['active_batch']+len(state.get('primary_completed_ahead',{}))+1
     pending=_source_sequence_helpers().prepare_prefetched_source(folder,state,config,batch)
     if pending is None:return
     declaration=config['source_sequence'];intent=_source_sequence_helpers()._json(pending['intent'],declaration)
@@ -617,7 +621,8 @@ def maintain_primary_prefetch(folder,state,config):
 
 
 def adopt_primary_prefetch(folder,state,config):
-    slot=state.get('primary_prefetch')
+    completed=state.get('primary_completed_ahead',{})
+    slot=completed.get(str(state['next_batch']))or state.get('primary_prefetch')
     if not slot:return False
     if slot['batch']!=state['next_batch']or state.get('owner')is not None:
         raise ValueError('prefetch adoption differs from actual primary closure')
@@ -630,7 +635,9 @@ def adopt_primary_prefetch(folder,state,config):
     _source_sequence_helpers().adopt_prefetched_source(folder,state,config,slot['batch'])
     state.setdefault('primary_launches',{})[str(slot['batch'])]=dict(slot)
     state.update(owner=slot.get('owner'),active_batch=slot['batch'],feeder=slot['feeder'],task_runtime=slot['task_runtime'])
-    state.pop('primary_prefetch');write(Path(folder)/'state.json',state)
+    if str(slot['batch'])in completed:completed.pop(str(slot['batch']))
+    else:state.pop('primary_prefetch')
+    write(Path(folder)/'state.json',state)
     return True
 
 

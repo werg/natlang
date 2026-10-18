@@ -581,23 +581,67 @@ def _prefetch_start(folder,sequence,declaration,pending,root):
     return binding(receipt)
 
 
+def _prefetch_service_chain(folder,state,config,*,require_live=True):
+    """Authenticate ordered reservations without advancing the live source cursor."""
+    declaration=config['source_sequence'];sequence=state['source_sequence']
+    pending=sequence.get('pending')
+    if not pending or pending['batch']!=state.get('active_batch')or (require_live and not alive(state.get('owner'))):
+        raise ValueError('prefetch lacks its exact live predecessor selection')
+    chain=[pending]
+    for key,slot in sorted(state.get('primary_completed_ahead',{}).items(),key=lambda item:int(item[0])):
+        batch=slot['batch']
+        if key!=str(batch)or batch!=chain[-1]['batch']+1 or alive(slot.get('owner')):
+            raise ValueError('completed prefetch chain has a gap or live owner')
+        reserved=sequence.get('prefetch_history',{}).get(key)
+        if not reserved or reserved['batch']!=batch or reserved['intent']!=slot['selection_intent']:
+            raise ValueError('completed prefetch lost its reservation')
+        reference=slot['boundary'];terminal=_json(reference,declaration)
+        if (Path(reference['path']).resolve()!=(Path(folder)/'boundaries'/f'batch-{batch:04d}.json').resolve()
+                or terminal.get('batch')!=batch):
+            raise ValueError('completed prefetch boundary differs')
+        started=_json(sequence['started'][key],declaration)
+        if any(terminal['bindings'].get(name)!=started['sealed'][name]for name in ('queue.jsonl','teacher-source.json')):
+            raise ValueError('completed prefetch boundary changed its sealed source')
+        _drained_boundary(folder,{**state,'last_boundary':reference},config,batch,terminal)
+        chain.append(reserved)
+    for item in chain:
+        batch=item['batch'];reference=sequence.get('started',{}).get(str(batch))
+        if not reference:raise ValueError('prefetch predecessor source was not actually sealed')
+        original=_json(reference,declaration)
+        root=Path(config['root'])/'evidence-collections-v2'/f'batch-{batch:04d}'
+        if (original.get('batch')!=batch or original.get('ordinal')!=item['ordinal']
+                or original.get('selection_intent')!=item['intent']
+                or original['sealed']!={name:binding(root/name)for name in ('source-cases.jsonl','queue.jsonl','teacher-source.json')}):
+            raise ValueError('prefetch predecessor selection identity or sealed source changed')
+    return chain
+
+
+def archive_completed_prefetch(folder,state,config,slot):
+    """Retain actual completed work while releasing only its worker slot."""
+    sequence=state['source_sequence'];reserved=sequence.get('prefetch')
+    if not reserved or reserved['batch']!=slot['batch']or reserved['intent']!=slot['selection_intent']:
+        raise ValueError('completed prefetch lost its exact active reservation')
+    key=str(slot['batch']);history=sequence.setdefault('prefetch_history',{})
+    if key in history and history[key]!=reserved:raise ValueError('completed reservation history changed')
+    history[key]=reserved
+    completed=state.setdefault('primary_completed_ahead',{})
+    if key in completed and completed[key]!=slot:raise ValueError('completed slot history changed')
+    completed[key]=slot
+    # Validate the whole proposed transition before publishing either removal.
+    _prefetch_service_chain(folder,state,config,require_live=False)
+    sequence.pop('prefetch');state.pop('primary_prefetch')
+    write(Path(folder)/'state.json',state)
+
+
 def prepare_prefetched_source(folder,state,config,batch):
-    """Reserve one next source without closing or changing the active source."""
+    """Reserve the next ordered source using released live worker capacity."""
     if config.get('primary_parallel_batches',1)!=2:
         raise ValueError('source prefetch requires explicit two-batch ownership')
     declaration=config['source_sequence'];sequence=state.get('source_sequence')or{}
-    pending=sequence.get('pending')
-    if (not pending or pending['batch']!=batch-1 or state.get('active_batch')!=batch-1
-            or not alive(state.get('owner'))):
-        raise ValueError('prefetch lacks its exact live predecessor selection')
-    predecessor=sequence.get('started',{}).get(str(batch-1))
-    if not predecessor:raise ValueError('prefetch predecessor source was not actually sealed')
-    original=_json(predecessor,declaration)
-    if original.get('batch')!=batch-1 or original.get('ordinal')!=pending['ordinal']or original.get('selection_intent')!=pending['intent']:
-        raise ValueError('prefetch predecessor selection identity changed')
-    root=Path(config['root'])/'evidence-collections-v2'/f'batch-{batch-1:04d}'
-    if original['sealed']!={name:binding(root/name)for name in ('source-cases.jsonl','queue.jsonl','teacher-source.json')}:
-        raise ValueError('prefetch predecessor sealed source changed')
+    chain=_prefetch_service_chain(folder,state,config)
+    pending=chain[-1]
+    if batch!=pending['batch']+1:raise ValueError('prefetch lacks its exact live predecessor selection')
+    predecessor=sequence['started'][str(pending['batch'])]
     if Path(declaration['task_runtime']).resolve()!=Path(config['task_runtime']).resolve()or not declaration['task_runtime_bindings']:
         raise ValueError('prefetch runtime authority differs')
     for reference in declaration['task_runtime_bindings']:_asset(reference,declaration)
@@ -611,15 +655,21 @@ def prepare_prefetched_source(folder,state,config,batch):
             return previous
         if (Path(config['root'])/'evidence-collections-v2'/f'batch-{batch:04d}').exists():
             raise ValueError('cannot reserve a materialized batch without its intent')
-        plan=_selection_authority(folder,sequence,declaration,extra_service=(pending,))
+        plan=_selection_authority(folder,sequence,declaration,extra_service=chain)
         ordinal,priority,skipped=_choose_packet(sequence,plan)
         if ordinal>=len(plan['entries']):return None
         value=_packet(plan['entries'][ordinal],declaration)
         target=Path(declaration['source_configuration']);actual=binding(target)
         if actual!=(sequence.get('configuration')or declaration['initial_configuration']):
             raise ValueError('prefetch ambient source authority changed')
+        old_raw=target.read_bytes()
+        if len(chain)>1:
+            # Cursor publication remains on the old live source; this future
+            # intent must nevertheless chain from its actual reserved predecessor.
+            old_raw=_read(_json(pending['intent'],declaration)['new_configuration'],declaration)[1]
+            actual={'path':str(target),'sha256':hashlib.sha256(old_raw).hexdigest(),'bytes':len(old_raw)}
         home=Path(folder)/'source-sequence';snapshot=home/'config-history'/(actual['sha256']+'.json')
-        _immutable(snapshot,target.read_bytes())
+        _immutable(snapshot,old_raw)
         candidate=home/'config-candidates'/f'batch-{batch:04d}.json';_immutable(candidate,value)
         manifest=home/'manifests'/(hashlib.sha256(plan['manifest_raw']).hexdigest()+'.json');_immutable(manifest,plan['manifest_raw'])
         intent=home/'intents'/f'batch-{batch:04d}.json'
@@ -649,7 +699,8 @@ def observe_prefetched_source(folder,state,config):
 
 def adopt_prefetched_source(folder,state,config,batch):
     """Confirm the reservation against real closed history before cursor adoption."""
-    declaration=config['source_sequence'];sequence=state['source_sequence'];reserved=sequence.get('prefetch')or sequence.get('prefetch_history',{}).get(str(batch))
+    declaration=config['source_sequence'];sequence=state['source_sequence'];reserved=sequence.get('prefetch')
+    if not reserved or reserved.get('batch')!=batch:reserved=sequence.get('prefetch_history',{}).get(str(batch))
     if reserved is None:raise ValueError('prefetch reservation custody is missing')
     if reserved['batch']!=batch or (sequence.get('pending')is not None and sequence['pending']!=reserved):
         raise ValueError('prefetched selection cannot bypass its unfinished predecessor')
@@ -689,5 +740,6 @@ def adopt_prefetched_source(folder,state,config,batch):
         _reconcile_publication(reserved,declaration)
         sequence['configuration']=binding(declaration['source_configuration'])
         sequence.setdefault('prefetch_history',{})[str(batch)]=reserved
-        sequence.pop('prefetch',None);write(Path(folder)/'state.json',state)
+        if (sequence.get('prefetch')or{}).get('batch')==batch:sequence.pop('prefetch')
+        write(Path(folder)/'state.json',state)
         return reserved
