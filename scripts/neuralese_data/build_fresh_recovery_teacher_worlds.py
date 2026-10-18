@@ -89,13 +89,13 @@ def worlds(shapes=16, *, revision=REVISION, domains=DOMAINS):
 TERMINAL_REVISION = 'authored-terminal-policy-recovery-20261018/1'
 
 
-def terminal_policy_worlds(shapes=1):
+def terminal_policy_worlds(shapes=1, *, revision=TERMINAL_REVISION, domains=None):
     """Fresh complete service facts, explicit exceptions, and terminal child answers."""
     # The existing constructor remains the only parent/service/recovery mechanism.
     # Changing its revision before construction gives independent IDs and inputs.
     # Pass the revision explicitly rather than mutating globals used by old worlds.
-    domains = {name: DOMAINS[name] for name in ('inventory', 'builds', 'support')}
-    for original in worlds(shapes, revision=TERMINAL_REVISION, domains=domains):
+    domains = domains if domains is not None else {name: DOMAINS[name] for name in ('inventory', 'builds', 'support')}
+    for original in worlds(shapes, revision=revision, domains=domains):
         row = original
         semantics = row['semantics']
         namespace, service = next(iter(semantics['services'].items()))
@@ -150,10 +150,54 @@ def terminal_policy_worlds(shapes=1):
         yield row
 
 
+TOOL_CONTRACT_REVISION = 'authored-tool-contract-recovery-20261018/1'
+
+
+def tool_contract_recovery_worlds(shapes=4):
+    """Fresh complete trajectories recovering from explicit outside-world contracts."""
+    domains = {name: DOMAINS[name] for name in ('shipping', 'packages')}
+    variants = {'namespace-reuse': 'reserved-service-binding',
+                'api-recovery': 'page-range-recovery',
+                'readback-recovery': 'typed-result-recovery'}
+    for row in terminal_policy_worlds(shapes, revision=TOOL_CONTRACT_REVISION, domains=domains):
+        original_variant = row['curriculum']['variant']
+        if original_variant not in variants:
+            continue
+        semantics = row['semantics']
+        namespace, service = next(iter(semantics['services'].items()))
+        shape = int(row['curriculum']['shape'].rsplit('-', 1)[1])
+        page_size = 4 + shape % 3
+        records = json.loads(service.split('const ROWS:Row[] = ', 1)[1].split(';\n', 1)[0])
+        page_count = (len(records) + page_size - 1) // page_size
+        old = f'export function page(n:number):Row[] {{return ROWS.slice((n-1)*{page_size},n*{page_size});}}'
+        assert service.count(old) == 1
+        guarded = (f'export function page(n:number):Row[] {{'
+                   f'if (!Number.isInteger(n) || n < 1 || n > {page_count}) '
+                   f'throw new Error("Page number must be an integer from 1 through {page_count}; use page_count() to read the declared range."); '
+                   f'return ROWS.slice((n-1)*{page_size},n*{page_size});}}')
+        semantics['services'][namespace] = service.replace(old, guarded).replace(
+            'an empty page follows the last.', 'use page_count() for the valid inclusive range.')
+        variant = variants[original_variant]
+        row['id'] = row['source_groups'][0] + ':' + variant
+        row['family'] = 'curriculum_fresh_tool_contract_recovery'
+        row['curriculum'].update(family='fresh_tool_contract_recovery', variant=variant)
+        if variant == 'page-range-recovery':
+            semantics['failure_seed']['code'] = f'return {namespace}.page(0);'
+        elif variant == 'typed-result-recovery':
+            semantics['failure_seed']['code'] = 'return {ids:[],total:"pending",count:0};'
+        root = semantics['files']['summarize.nl']
+        semantics['files']['summarize.nl'] = root.replace(
+            '1. Read every source page using the service interface.',
+            '1. Read the service interface and every source page in its declared range. '
+            'When an operation reports an error, use the reported contract to choose a corrected action and continue.')
+        row['curriculum']['minimum_sequence'].insert(0, 'recover from the reported service or result contract')
+        yield row
+
+
 def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--output',type=Path,required=True)
     p.add_argument('--protection',type=Path,required=True);p.add_argument('--shapes',type=int,default=16)
-    p.add_argument('--profile', choices=('legacy', 'terminal-policy'), default='legacy')
+    p.add_argument('--profile', choices=('legacy', 'terminal-policy', 'tool-contract-recovery'), default='legacy')
     a=p.parse_args()
     if a.shapes<1:raise ValueError('shapes must be positive')
     if a.output.exists():raise ValueError('new teacher packet output must not exist')
@@ -161,16 +205,17 @@ def main():
     root=Path(__file__).resolve().parents[2]
     holds,bindings=load_decision_holds(sorted((root/'training/decision-holds').glob('*.jsonl')))
     held_programs={identifier.split(':decision:',1)[0] for identifier in holds}
-    rows=list((terminal_policy_worlds if a.profile == 'terminal-policy' else worlds)(a.shapes));groups={group for row in rows for group in row['source_groups']}
+    constructors={'legacy':worlds,'terminal-policy':terminal_policy_worlds,'tool-contract-recovery':tool_contract_recovery_worlds}
+    rows=list(constructors[a.profile](a.shapes));groups={group for row in rows for group in row['source_groups']}
     if groups & (protection['held']|protection['quality']|protection['pending']):
         raise ValueError('fresh authored worlds intersect current protection')
     if {row['id'] for row in rows}&held_programs:raise ValueError('fresh program ID intersects decision holds')
     if len({row['id'] for row in rows})!=len(rows):raise ValueError('duplicate authored world IDs')
     a.output.mkdir(parents=True)
     source=a.output/'cases.jsonl'
-    source.write_text(''.join(json.dumps(row,sort_keys=(a.profile == 'terminal-policy'),ensure_ascii=False,separators=(',',':'))+'\n' for row in rows))
+    source.write_text(''.join(json.dumps(row,sort_keys=(a.profile != 'legacy'),ensure_ascii=False,separators=(',',':'))+'\n' for row in rows))
     write_json_durable(a.output/'selection-proof.json',{'schema':'natlang.fresh-authored-teacher-packet/1',
-        'cases':len(rows),'cases_sha256':sha256_file_hex(source),'worlds':len(groups),'revision':TERMINAL_REVISION if a.profile == 'terminal-policy' else REVISION,
+        'cases':len(rows),'cases_sha256':sha256_file_hex(source),'worlds':len(groups),'revision':{'legacy':REVISION,'terminal-policy':TERMINAL_REVISION,'tool-contract-recovery':TOOL_CONTRACT_REVISION}[a.profile],
         'profile':a.profile,
         'domain_counts':dict(Counter(row['curriculum']['shape'].rsplit('-',1)[0] for row in rows)),
         'family_shape_counts':dict(Counter(row['curriculum']['variant'] for row in rows)),

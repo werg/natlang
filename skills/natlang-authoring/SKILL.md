@@ -568,3 +568,12 @@ do not relabel older compiled plans or saved actor provenance.
 ### Terminal policy children
 
 When all facts and the decision rule are supplied to a typed child, compute its declared scalar result and return it directly. Apply explicit exceptions before ordinary inclusion conditions; keep parent aggregation and service/readback recovery separate. A delegation error calls for inspecting the supplied facts and completing the current decision, rather than delegating the same question again. The independently constructed terminal-policy recovery teacher packet exercises this pattern; its teacher measurement and training exposure are recorded separately.
+
+
+For an outside-world paged service, declare the valid page range in its interface
+and reject invalid indices with the exact range in one sentence. Recover from
+that feedback by choosing an in-range call; a failed call does not establish that
+the source has no records. Preserve reserved service bindings and return the
+declared result type after completing the original task. The fresh TRAIN
+`tool-contract-recovery` profile measures this behavior through the existing
+self-hosted teacher; it does not change ordinary runtime or compiler semantics.

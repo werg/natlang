@@ -1148,3 +1148,18 @@ Status: own-teacher measurement complete. The opt-in `terminal-policy` profile o
 ## 2026-10-18: DeepDive source-curated QA background instruction
 
 Pending live measurement: `deepdive-reference-qa` supplies the exact source question as background and asks, "Answer the research question supplied in the background." Its unchanged reference answer is static ordinary supervision, with no fabricated tool history or execution certificate. The adapter and split-group checks do not measure model behavior. Before adopting this instruction in a live teacher task window, sample approximately48 own-sandbox trajectories and verify answers against the source references, retaining actor/runtime and protected-question closure. Static conversion is tracked separately from training admission and exposure.
+
+
+## 2026-10-18: explicit tool-contract recovery TRAIN packet
+
+Pending own-teacher measurement: the optional `tool-contract-recovery` profile
+constructs 24 independent TRAIN cases (eight worlds, three recovery entries) with
+explicit positive-integer page-range errors, reserved service-binding recovery,
+and typed Summary return repair. The natural-language root chooses a changed
+action from the reported contract; its semantic child returns the declared boolean
+directly. The service error is new model-facing feedback. Existing 512 legacy
+worlds and terminal-policy outputs remain byte-identical. All 24 complete reference
+runs must freshly qualify before the existing guardian selects two own-sandbox
+teacher repeats per case. The actual 48 trajectories, their exact source/runtime
+receipt, and independent decision admission remain pending; construction and unit
+checks alone do not close this debt. No held inputs, answers or traces are used.
