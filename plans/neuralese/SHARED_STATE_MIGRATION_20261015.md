@@ -48,58 +48,91 @@ through the projected-value implementation.
 
 ## Current status
 
-October 18, 08:55 UTC operational position: both replacement models are
-training through the production recipe. LFM continues ordinary SFT from the
-exact step-13228 parent with optimizer, RNG and exposure history intact. At
-step 13529 it adopted a verified 3,492-graph stronger-teacher continuation;
-adoption is not completed row exposure. Its communication exposure was
-20,167/107,766 at step 13527, with foundation exposure still incomplete.
-Mellum completed another genuine whole-graph policy update at step 21227
-and resumed preference training, reaching step 21228. Its separately verified
-3,486-graph teacher addition is pending the next ordinary SFT stage. Earlier
-whole-graph RL, 250-update preference stages and ordinary SFT updates remain
-part of each saved lineage; none completes the whole recipe.
+October 18, 14:34 UTC operational position: LFM is training; Mellum is
+restarting ordinary production training from its exact step-21930 full parent.
+Neither foundation is complete, and neither model has earned cross-model VAE
+readiness. Current custody and counters are in the DGX coordination status;
+the dated history below is not a live process report.
 
-Both teacher views passed the actual resident training consumer and remote
-staging. The first proposal failed before publication because its merged
-receipt lacked flat geometry coverage. The shared coverage helper now
-validates the original component receipts and emits authenticated flat
-coverage without reparsing or changing the original graphs. Both replacement
-CPU preparations passed; the separate generation-checked submission preserves
-the existing row prefix and completed visits. The supervisor is checking actual
-new row visits after adoption, rather than crediting prepared data as trained.
+LFM reached global update 14420 / ordinary update 13664, with foundation
+exposure 21,287/26,312 and communication exposure 21,287/107,766. Its latest
+sampled update took 6.55 seconds. Verified teacher continuations of 1,000,
+1,052, 465, 824 and 1,187 rows were actually adopted, preserving optimizer,
+RNG and earlier row exposure. The resident recipe contains 1,230,694 rows.
+A further 1,046 rows are prepared and staged for prompt continuation. Adoption
+establishes availability to training, not completed visits to every new row.
 
-All 48 D32 source indices now have conversion receipts, including the recovered
-source-index09. Conversion alone does not establish admission, capacity,
-resident adoption or exposure. Remaining admissions and staged continuations
-continue independently of student SGD. The newly prepared 14-source D32
-geometry proofs are complete for both models and are being integrated against
-the current resident generations, retaining all whole pending rows. LFM's
-24,968 auxiliary bridge rows have a streaming consumer implementation; its
-full staged-data consumer proof is still running. No bridge exposure is claimed.
+Mellum's R18 RAW diagnostic was stopped at 14:13 UTC with zero new RAW update
+credit. It had achieved six valid case closures after repairs to its inherited
+wall-time limit and missing native-state archives, but still lacked actual
+full-policy learner backward/capacity qualification. Completing that diagnostic
+collection alone would not promptly produce SGD. All four TRAIN sessions and
+the separate protected monitoring session were drained by exact ownership;
+partial trajectories, authenticated evidence and recursive native artifacts
+were durably retained. Unfinished RAW obligations remain explicit, and protected
+monitoring data must never enter training.
 
-Ordinary training is independent of unrelated semantic-relay polling or
-cross-model readiness. Its own exact checkpoint/configuration, optimizer history
-and live-owner checks remain mandatory. Both new plan bindings are installed
-in the current relay, which reports repair-required; the completed-adaptation
-positive-release verification and shared CPU control bindings still need repair
-before semantic exchange. This grants no VAE readiness. Metadata services must
-not hold healthy independent SFT idle while those separate checks are repaired.
+The R19 ordinary process started at 14:31:43 UTC, owning the canonical lease
+and one standard CPU/mmap decode of the exact 48,584,411,037-byte full parent
+(SHA-256 `7b02c76f60cd30b32fc0bbba9027139d3e0a9b6e1ce9b18305a85b9ec28b32f0`).
+It preserves the genuinely completed ordinary frame 20914, full optimizer/RNG,
+and per-row history. The reviewed runtime combines shared rotary optimizations,
+bounded-memory resident digests and an explicit one-use preloaded-checkpoint
+argument to the standard restore path. Actual two-model preload tests passed;
+this is not a claim that production SGD has resumed. The ordinary entry must
+still pass current-parent full/view/cache comparison, the 4099-token transition
+with all named gradients, and whole-row backward capacity for the complete
+ordinary recipe, including its 161,172-token long row. Ordinary qualification
+does not grant policy-training qualification. Fresh R19 full-graph RL must prove
+its actual whole-policy backward path before its policy updates.
 
-Task quality remains a real impediment: the same protected16-task packet yields
-LFM11134=0/16, LFM11502=0/16, LFM12184=1/16, LFM12488=0/16 and
-Mellum16364=9/16, Mellum17786=10/16. LF12488 has nine repetition failures,
-two budget exhaustions and five semantic mismatches, with no infrastructure or
-unresolved cases. LF12742=1/16; its step-12964 evaluation is executing.
-Mellum20513=12/16 (three semantic mismatches and one repetition failure,
-no infrastructure failures); its sealed step-20515 request awaits scoring.
-These are historical actor measurements, not claims about current cloud weights. Generic
-recovery training, source exposure and the paired history-policy investigation
-are being checked without reusing held inputs or targets for training.
-Complete-gradient arithmetic qualification also remains unresolved; current
-reference-only results do not qualify production arithmetic or cross-model
-readiness. Shared-space VAE training must still wait for genuine completed
-producer/consumer graph training on both participants and its required evidence.
+Mellum's coherent 8,574-row stronger-teacher union passed exact ID/content
+exclusion audits, the unchanged resident consumer and remote staging. It includes
+1,147 older usable teacher rows found missing from Mellum, plus the pending
+2,906 rows and subsequent verified additions. Replace the pending component
+once with this union; do not append its components again. A separate 1,044-row
+continuation is ready. Both models already contain all four Search86–89 leaves
+at exact recorded paths and hashes; do not append those 6,741 rows a second time.
+
+All 48 D32 source indices have conversion receipts and staged artifacts. Remaining
+admission, whole-row capacity and actual exposure remain separate obligations.
+Source03's 24,968 LFM auxiliary bridge rows have strict geometry but still await
+the actual full-prefix consumer closure. Passive profiling attributes the long
+consumer scan to actual source/index parsing; missing prior-leaf cache reuse is
+being localized without repeatedly restarting the owned scan. Pending long rows
+retain their complete source and are not truncated to claim admission.
+
+The static D31 reference-QA addition is prepared as 4,012 whole-trajectory graphs
+per model, with complete geometry and protected-split provenance. An actual
+private LFM resident consumer committed all 4,012 rows on the full prefix. Its
+durable reconciliation records the duplicate-operator race explicitly rather
+than inventing a successful host terminal result. No production exposure or
+verified execution is credited to these unknown-outcome source trajectories.
+The bounded-memory digest fix preserves the old canonical digest exactly; the
+existing metadata-only runtime continuation admits the loader helper without
+changing numerical training. Production request preparation continues while
+Mellum restarts; it must not delay useful training on already-ready data.
+
+Task quality remains a real impediment. Historical protected-packet scores
+include LFM12742=1/16 and Mellum20513=12/16. LFM13951's newer partial oracle
+had zero successes among 13 terminal cases, with seven repetitions, two invalid
+actions and four semantic mismatches; three cases remained unresolved. These
+are historical actor measurements, not assertions about current cloud weights.
+Independent TRAIN-only stronger-teacher recovery tasks now cover explicit page
+ranges, reserved bindings and typed-return repair. All 24 service reference
+cases passed; the 193-packet generation sequence reached its new guardian
+configuration. Publication reconciliation and 48 future self-hosted teacher
+trajectories remain to be verified; no held task or answer is reused for training.
+
+Ordinary training is independent of unrelated semantic-relay polling and
+cross-model readiness. Actual parent/configuration, numerical correctness,
+recoverable state and task quality checks protect production; packaging and
+unrelated unfinished probes must not hold useful SGD idle. The objective remains
+both models through the entire evolving recipe, with prompt data continuations
+and later full-graph RL and cross-model work as their real dependencies become
+ready. Shared-space VAE training still requires genuine completed producer/
+consumer graph training on both participating models; ordinary text SFT alone
+never grants that readiness.
 
 The dated October16 deployment and qualification history below records the
 earlier transitions; its counters are not the current live counters.
