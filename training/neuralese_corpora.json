@@ -200573,6 +200573,168 @@
       "license_provenance": "Project-collected exact trajectories from the pinned self-hosted Qwen3.8-Flash-Next-NVFP4 base teacher; primary source provenance retained. Licenses recorded as facts.",
       "split": "Train-only; empty test views. Current global held/quality/pending and decision protection enforced.",
       "note": "Full captured trajectory context retained with all earlier assistant target weights zero for these partial-parent graphs; only exact approved child target receives assistant loss. Not student on-policy data or authentic communication graphs. Zero exposure until recorded by training."
+    },
+    {
+      "build": {
+        "audit": "admission-d32-source18-history-keep-v2/audit.json",
+        "audit_sha256": "30e71094e68a4c79b74f35be0839258ce003dd0ce91e3ddd4fa70e355670eafa",
+        "capacity_partition": {
+          "path": "capacity-source18-v2/partition/receipt.json",
+          "sha256": "ff93dda7b8995263ec1cff55b458e0df64c3ae5731d9d1abf47f36fa57fee636"
+        },
+        "source_render_samples": {
+          "path": "admission-d32-source18-history-keep-v2/source-render-samples.json",
+          "sha256": "4cb84d6438ec8ef8f9b93667b4a3dde4ab1716595e9f83aa909bf03cfc0b8773"
+        }
+      },
+      "documents": {
+        "lfm25": {
+          "capacity:train-fit-graphs": 1524,
+          "capacity:train-fit-tokens": 47009484,
+          "capacity:train-pending-long-graphs": 209,
+          "capacity:train-pending-long-tokens": 22675278,
+          "graphs:train": 1733,
+          "max_row_tokens": 127187,
+          "positive_sessions": 1733,
+          "source-render-pending:tool-arguments": 30,
+          "tokens:test": 0,
+          "tokens:train": 69684762
+        },
+        "mellum21": {
+          "capacity:train-fit-graphs": 1536,
+          "capacity:train-fit-tokens": 55317112,
+          "capacity:train-pending-long-graphs": 197,
+          "capacity:train-pending-long-tokens": 24972641,
+          "graphs:train": 1733,
+          "max_row_tokens": 147783,
+          "positive_sessions": 1733,
+          "source-render-pending:tool-arguments": 30,
+          "tokens:test": 0,
+          "tokens:train": 80289753
+        }
+      },
+      "id": "d32-source18-history-keep-v2",
+      "include": [
+        "3ad7da7de397aabcdbb403acea26349087408caa05a699e800caef08e0eafd4d/lfm25/omissions.jsonl",
+        "3ad7da7de397aabcdbb403acea26349087408caa05a699e800caef08e0eafd4d/lfm25/receipt.json",
+        "3ad7da7de397aabcdbb403acea26349087408caa05a699e800caef08e0eafd4d/lfm25/resume-state.json",
+        "3ad7da7de397aabcdbb403acea26349087408caa05a699e800caef08e0eafd4d/lfm25/test/native-graphs.jsonl.zst",
+        "3ad7da7de397aabcdbb403acea26349087408caa05a699e800caef08e0eafd4d/lfm25/train/native-graphs.jsonl.zst",
+        "3ad7da7de397aabcdbb403acea26349087408caa05a699e800caef08e0eafd4d/mellum21/omissions.jsonl",
+        "3ad7da7de397aabcdbb403acea26349087408caa05a699e800caef08e0eafd4d/mellum21/receipt.json",
+        "3ad7da7de397aabcdbb403acea26349087408caa05a699e800caef08e0eafd4d/mellum21/resume-state.json",
+        "3ad7da7de397aabcdbb403acea26349087408caa05a699e800caef08e0eafd4d/mellum21/test/native-graphs.jsonl.zst",
+        "3ad7da7de397aabcdbb403acea26349087408caa05a699e800caef08e0eafd4d/mellum21/train/native-graphs.jsonl.zst",
+        "admission-d32-source18-history-keep-v2/audit.json",
+        "admission-d32-source18-history-keep-v2/lfm25-train-sources.json",
+        "admission-d32-source18-history-keep-v2/mellum21-train-sources.json",
+        "admission-d32-source18-history-keep-v2/row-proof.jsonl",
+        "admission-d32-source18-history-keep-v2/source-render-samples.json",
+        "capacity-source18-v2/limits.json",
+        "capacity-source18-v2/partition/files/coverage.jsonl",
+        "capacity-source18-v2/partition/files/lfm25/test/fit.jsonl.zst",
+        "capacity-source18-v2/partition/files/lfm25/test/remaining-long.jsonl.zst",
+        "capacity-source18-v2/partition/files/lfm25/train/fit-sources.json",
+        "capacity-source18-v2/partition/files/lfm25/train/fit.jsonl.zst",
+        "capacity-source18-v2/partition/files/lfm25/train/remaining-long-sources.json",
+        "capacity-source18-v2/partition/files/lfm25/train/remaining-long.jsonl.zst",
+        "capacity-source18-v2/partition/files/mellum21/test/fit.jsonl.zst",
+        "capacity-source18-v2/partition/files/mellum21/test/remaining-long.jsonl.zst",
+        "capacity-source18-v2/partition/files/mellum21/train/fit-sources.json",
+        "capacity-source18-v2/partition/files/mellum21/train/fit.jsonl.zst",
+        "capacity-source18-v2/partition/files/mellum21/train/remaining-long-sources.json",
+        "capacity-source18-v2/partition/files/mellum21/train/remaining-long.jsonl.zst",
+        "capacity-source18-v2/partition/files/pending-sources.json",
+        "capacity-source18-v2/partition/receipt.json"
+      ],
+      "license": "exact source license facts retained in each graph acquired_session provenance",
+      "owner": "dgx",
+      "path": "runs/acquired-connected-native-graphs-20261018-history-keep-v2/D32/source18",
+      "source_class": "source-curated-complete-acquired-agent-native-session-graphs",
+      "split": "original source split and complete cross-source global held-group closure; no truncation",
+      "training_admission": true,
+      "training_admission_reason": "One complete normalized source member is source-curated, not oracle or native-execution verified. Both pinned tokenizer views preserve the full global normalized-source held/quality/pending closure and exact decision holds. Other normalized source members remain explicitly pending. Current KEEP render qualification and exact whole-row capacity partition are bound; over-limit complete rows remain explicit pending obligations. No training exposure is claimed."
+    },
+    {
+      "build": {
+        "audit": "admission-d32-source19-history-keep-v2/audit.json",
+        "audit_sha256": "3ac7bc593ba48efa441de72c7f3228f656d841ede2e05f0d2e8f634e25749de6",
+        "capacity_partition": {
+          "path": "capacity-source19-v2/partition/receipt.json",
+          "sha256": "edde831dd50ebb0ebbc400ef27c57b814a47665ae4002740c474ca0914946f76"
+        },
+        "source_render_samples": {
+          "path": "admission-d32-source19-history-keep-v2/source-render-samples.json",
+          "sha256": "354bd9dcd5ed7faf9a322ddace60ba2c24c8cca3b09474c8404a8e11b749d71a"
+        }
+      },
+      "documents": {
+        "lfm25": {
+          "capacity:train-fit-graphs": 1542,
+          "capacity:train-fit-tokens": 50926935,
+          "capacity:train-pending-long-graphs": 227,
+          "capacity:train-pending-long-tokens": 24246611,
+          "graphs:train": 1769,
+          "max_row_tokens": 128668,
+          "positive_sessions": 1769,
+          "source-render-pending:tool-arguments": 24,
+          "tokens:test": 0,
+          "tokens:train": 75173546
+        },
+        "mellum21": {
+          "capacity:train-fit-graphs": 1564,
+          "capacity:train-fit-tokens": 60960826,
+          "capacity:train-pending-long-graphs": 205,
+          "capacity:train-pending-long-tokens": 25708972,
+          "graphs:train": 1769,
+          "max_row_tokens": 150027,
+          "positive_sessions": 1769,
+          "source-render-pending:tool-arguments": 24,
+          "tokens:test": 0,
+          "tokens:train": 86669798
+        }
+      },
+      "id": "d32-source19-history-keep-v2",
+      "include": [
+        "83e5a41cd12bb0fb50f44843ad8d2122cbdaeb40a481952f597863c355220076/lfm25/omissions.jsonl",
+        "83e5a41cd12bb0fb50f44843ad8d2122cbdaeb40a481952f597863c355220076/lfm25/receipt.json",
+        "83e5a41cd12bb0fb50f44843ad8d2122cbdaeb40a481952f597863c355220076/lfm25/resume-state.json",
+        "83e5a41cd12bb0fb50f44843ad8d2122cbdaeb40a481952f597863c355220076/lfm25/test/native-graphs.jsonl.zst",
+        "83e5a41cd12bb0fb50f44843ad8d2122cbdaeb40a481952f597863c355220076/lfm25/train/native-graphs.jsonl.zst",
+        "83e5a41cd12bb0fb50f44843ad8d2122cbdaeb40a481952f597863c355220076/mellum21/omissions.jsonl",
+        "83e5a41cd12bb0fb50f44843ad8d2122cbdaeb40a481952f597863c355220076/mellum21/receipt.json",
+        "83e5a41cd12bb0fb50f44843ad8d2122cbdaeb40a481952f597863c355220076/mellum21/resume-state.json",
+        "83e5a41cd12bb0fb50f44843ad8d2122cbdaeb40a481952f597863c355220076/mellum21/test/native-graphs.jsonl.zst",
+        "83e5a41cd12bb0fb50f44843ad8d2122cbdaeb40a481952f597863c355220076/mellum21/train/native-graphs.jsonl.zst",
+        "admission-d32-source19-history-keep-v2/audit.json",
+        "admission-d32-source19-history-keep-v2/lfm25-train-sources.json",
+        "admission-d32-source19-history-keep-v2/mellum21-train-sources.json",
+        "admission-d32-source19-history-keep-v2/row-proof.jsonl",
+        "admission-d32-source19-history-keep-v2/source-render-samples.json",
+        "capacity-source19-v2/limits.json",
+        "capacity-source19-v2/partition/files/coverage.jsonl",
+        "capacity-source19-v2/partition/files/lfm25/test/fit.jsonl.zst",
+        "capacity-source19-v2/partition/files/lfm25/test/remaining-long.jsonl.zst",
+        "capacity-source19-v2/partition/files/lfm25/train/fit-sources.json",
+        "capacity-source19-v2/partition/files/lfm25/train/fit.jsonl.zst",
+        "capacity-source19-v2/partition/files/lfm25/train/remaining-long-sources.json",
+        "capacity-source19-v2/partition/files/lfm25/train/remaining-long.jsonl.zst",
+        "capacity-source19-v2/partition/files/mellum21/test/fit.jsonl.zst",
+        "capacity-source19-v2/partition/files/mellum21/test/remaining-long.jsonl.zst",
+        "capacity-source19-v2/partition/files/mellum21/train/fit-sources.json",
+        "capacity-source19-v2/partition/files/mellum21/train/fit.jsonl.zst",
+        "capacity-source19-v2/partition/files/mellum21/train/remaining-long-sources.json",
+        "capacity-source19-v2/partition/files/mellum21/train/remaining-long.jsonl.zst",
+        "capacity-source19-v2/partition/files/pending-sources.json",
+        "capacity-source19-v2/partition/receipt.json"
+      ],
+      "license": "exact source license facts retained in each graph acquired_session provenance",
+      "owner": "dgx",
+      "path": "runs/acquired-connected-native-graphs-20261018-history-keep-v2/D32/source19",
+      "source_class": "source-curated-complete-acquired-agent-native-session-graphs",
+      "split": "original source split and complete cross-source global held-group closure; no truncation",
+      "training_admission": true,
+      "training_admission_reason": "One complete normalized source member is source-curated, not oracle or native-execution verified. Both pinned tokenizer views preserve the full global normalized-source held/quality/pending closure and exact decision holds. Other normalized source members remain explicitly pending. Current KEEP render qualification and exact whole-row capacity partition are bound; over-limit complete rows remain explicit pending obligations. No training exposure is claimed."
     }
   ],
   "coverage_backlog": [
