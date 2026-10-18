@@ -119,6 +119,7 @@ def _compare_complete_gradients(flat_loss,cached_loss,named,flat_inputs,cached_i
     inventory=[{'name':name,'shape':list(value.shape),'dtype':str(value.dtype)}for name,value in named]
     return {'schema':SCHEMA,'passed':preserved and all(row['passed']for row in comparisons.values()),
         'inventory':inventory,'inventory_sha256':canonical_json_sha256_hex(inventory),
+        'trainable_parameter_count':len(inventory),'derivative_comparison_count':len(comparisons),
         'comparisons':comparisons,'parameter_grads_preserved':preserved,
         'retained_flat_gradient_bytes':retained,'largest_live_comparison_pair_bytes':max_pair,
         'retained_flat_gradient_device':'cpu','retained_flat_gradient_cuda_bytes':0,
@@ -127,6 +128,7 @@ def _compare_complete_gradients(flat_loss,cached_loss,named,flat_inputs,cached_i
 
 
 def production_inventory(model,named):
+    """Select the exact declared cohort; input_embeddings is a separate comparison."""
     named=list(named)
     if (len(named)!=len({name for name,_ in named})or len(named)!=len({id(p)for _,p in named})
             or any(not isinstance(name,str)or not name for name,_ in named)):
@@ -155,6 +157,10 @@ def validate_complete_proof(proof,identity,*,gradient_atol,execution_profile=Non
             or not 0<=proof.get('atol',float('inf'))<=gradient_atol or not 0<proof.get('rtol',float('inf'))<=1e-4):
         raise ValueError('complete communication gradient inventory or gates are invalid')
     comparisons=proof.get('comparisons')or{}
+    for key,count in (('trainable_parameter_count',len(inventory)),
+                      ('derivative_comparison_count',len(inventory)+1)):
+        if key in proof and (type(proof[key])is not int or proof[key]!=count):
+            raise ValueError('complete communication gradient count differs from its exact inventory')
     if set(comparisons)!={'input_embeddings',*(row['name']for row in inventory)}or any(row.get('passed')is not True for row in comparisons.values()):
         raise ValueError('complete communication gradient coverage is incomplete')
     roles=proof.get('roles')or{}

@@ -37,6 +37,8 @@ def test_all_production_gradients_connected_rows_and_inputs_preserved(family,wro
     report=compare_complete_gradients(a,b,named,flat_input,cached_input,atol=1e-5,rtol=1e-4)
     assert report['passed']is(not wrong_derivative)
     assert set(report['comparisons'])=={'input_embeddings',*(name for name,_ in named)}
+    assert report['trainable_parameter_count']==len(named)
+    assert report['derivative_comparison_count']==len(named)+1
     assert report['retained_flat_gradient_bytes']>report['largest_live_comparison_pair_bytes']
     assert report['retained_flat_gradient_device']=='cpu'and report['retained_flat_gradient_cuda_bytes']==0
     for role in('backbone','adapter','learned_input','learned_output'):
@@ -85,6 +87,28 @@ def test_inventory_cannot_omit_a_trainable_or_alias_a_parameter():
     x=torch.ones(2,requires_grad=True);a=x.square().sum();b=x.square().sum()
     with pytest.raises(ValueError,match='unique'):
         compare_complete_gradients(a,b,[('a',x),('b',x)],x,x,atol=1e-5,rtol=1e-4)
+
+
+def test_mellum_production_topology_counts_parameters_separately_from_input_derivative():
+    from natlang_neuralese.maple.model import MapleConfig,MapleForCausalLM
+    from natlang_neuralese.maple.maple_port import MaplePortBackbone
+    from natlang_neuralese.train.backbone_policy import configure_backbone_training
+    config=MapleConfig(vocab_size=64,hidden_size=16,num_hidden_layers=28,
+        num_attention_heads=4,num_key_value_heads=2,head_dim=4,
+        moe_intermediate_size=8,num_experts=2,num_experts_per_tok=1,
+        layer_types=['sliding_attention']*28,model_type='mellum',dense_experts=True)
+    with torch.device('meta'):
+        hf=MapleForCausalLM(config);hf.natlang_precision='bf16'
+        model=SharedStateModel(MaplePortBackbone(hf,markers=False),(58,59,60,61),
+            rank=4,token_override_ids=(23,24))
+        backbone=[('backbone.'+name,p)for name,p in configure_backbone_training(model.port,'latent')]
+        interface=[('interface.'+name,p)for name,p in model.named_parameters()
+            if name.startswith(('input_rows','output_rows','extra_input_rows','extra_output_rows','adapter.'))
+            and p.requires_grad]
+        named,roles=production_inventory(model,backbone+interface)
+    assert len(backbone)==28*11==308 and len(interface)==6
+    assert len(named)==314 and len({'input_embeddings',*(name for name,_ in named)})==315
+    assert all(roles.values())and all(p.device.type=='meta'for _,p in named)
 
 
 def test_complete_gradient_observer_start_failure_closes_flat_cotangent_scope():
@@ -137,6 +161,14 @@ def test_actual_runtime_qualifier_labels_complete_inventory_and_legacy_channel(f
     assert report['passed']and report['gradient_scope']=='complete-production-trainables'
     proof=report['complete_gradient_qualification']
     validate_complete_proof(proof,report['native_identity'],gradient_atol=1e-5)
+    assert proof['derivative_comparison_count']==proof['trainable_parameter_count']+1
+    for key in ('trainable_parameter_count','derivative_comparison_count'):
+        forged=copy.deepcopy(proof);forged[key]+=1
+        with pytest.raises(ValueError,match='count differs'):
+            validate_complete_proof(forged,report['native_identity'],gradient_atol=1e-5)
+    historical=copy.deepcopy(proof)
+    historical.pop('trainable_parameter_count');historical.pop('derivative_comparison_count')
+    validate_complete_proof(historical,report['native_identity'],gradient_atol=1e-5)
     assert all(roles for roles in proof['roles'].values())
 
 
