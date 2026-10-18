@@ -1,0 +1,10 @@
+# Native FFN capacity continuation
+
+Policy is the supervisor's adaptive production instruction: preserve complete source graphs and choose a qualified execution/storage layout when measured whole-graph capacity fails. The actual LF policy graph has 498,983 forward tokens and a failed 8.57 GiB allocation, exactly one expanded 4,608-wide FP32 FFN tensor. File-backed checkpoint input storage alone did not fit it; no optimizer updates were earned.
+
+1. Keep each admitted graph, edge, objective, actor identity and saved exposure intact. No source splitting or target removal is permitted by this mechanism.
+2. Reuse the existing token-local FFN chunk implementation in each backbone port. A shared optional training argument selects its token extent; zero retains existing unchunked behavior. An omitted value inherits the actual saved execution setting.
+3. Record the actual setting in saved options and capacity identity so an unchunked proof cannot silently qualify chunked execution or conversely. A negative setting fails before allocating a model.
+4. Compare complete graph outputs and named derivatives against existing unchunked execution, preserving reference tolerances. Then run actual-parent capacity qualification before useful SGD. A failed capacity report remains failed; no readiness/quality credit is inferred.
+
+All implementation is crisp plumbing: exact argument validation, existing port selection, durable option/certificate bindings and numerical tests. There is no new scheduling, graph, objective, inference policy or FFN arithmetic implementation. Architecture-specific ports retain their existing FFN implementation. Actual large-graph deployment requires a separately bound runtime transition; this code alone does not deploy it or resolve inherited cached-execution readiness debt.

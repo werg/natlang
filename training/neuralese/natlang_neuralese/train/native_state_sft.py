@@ -767,6 +767,8 @@ def build_parser():
         help='private file-backed checkpoint inputs in this directory; omission inherits, empty string selects CPU')
     parser.add_argument('--checkpoint-layers', action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument('--chunk-tokens', type=int, default=128)
+    parser.add_argument('--ffn-chunk-tokens', type=int, default=None,
+        help='Existing token-local FFN workspace bound; omitted inherits saved value, zero disables chunking')
     parser.add_argument('--fp8-training', choices=('off', 'te-fp8', 'triton-experts'), default='off')
     parser.add_argument('--fp8-recipe', choices=('delayed', 'current', 'current-bf16-dx'), default='delayed')
     parser.add_argument('--fp8-amax-history-len', type=int, default=16)
@@ -792,8 +794,19 @@ def build_parser():
     return parser
 
 
+def configure_ffn_chunk_tokens(port, requested, saved_training):
+    """Select the existing token-local port execution without resetting a resume."""
+    value=(saved_training.get('options')or{}).get('ffn_chunk_tokens',0)if requested is None else requested
+    if type(value)is not int or value<0:
+        raise ValueError('ffn-chunk-tokens must be a nonnegative integer')
+    port.ffn_chunk_tokens=value
+    return value
+
+
 def main(argv=None):
     args = build_parser().parse_args(argv)
+    if args.ffn_chunk_tokens is not None and args.ffn_chunk_tokens<0:
+        raise ValueError('ffn-chunk-tokens must be a nonnegative integer')
     if args.refresh_after_updates is not None and args.refresh_after_updates < 1:
         raise ValueError('refresh-after-updates must be a positive integer')
     history_reasoning_transition = None
@@ -1190,6 +1203,8 @@ def main(argv=None):
     args.checkpoint_input_offload_directory = getattr(hook, 'directory', None)
     checkpoint_options['checkpoint_input_offload_directory'] = args.checkpoint_input_offload_directory
     checkpoint_options['checkpoint_input_offload'] = args.checkpoint_input_offload
+    args.ffn_chunk_tokens=configure_ffn_chunk_tokens(model.port,args.ffn_chunk_tokens,saved_training)
+    checkpoint_options['ffn_chunk_tokens']=args.ffn_chunk_tokens
     model.port.checkpoint_layers = args.checkpoint_layers
     model.to(args.device)
     model.train()
