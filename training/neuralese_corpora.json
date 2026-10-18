@@ -183788,6 +183788,105 @@
         "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0026-tranche0001",
         "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0027-tranche0000-quality-authoring-construct-oracle-v1"
       ]
+    },
+    {
+      "build": {
+        "audit": "admission-d32-source03-history-keep-v1/audit.json",
+        "audit_sha256": "8002fd3697f875fcee26925589ab34911417b451c82526b1e4950e35a735ca26",
+        "capacity_partition": {
+          "execution_qualified": false,
+          "full_cohort_is_additional_training_source": false,
+          "path": "capacity-source03/partition/receipt.json",
+          "sha256": "ca55f56f314dff0d0a5ae614e5f423cee2e54c564dd08aa4af8fa9e87bf018c7",
+          "source_corpus_id": "d32-source03-history-keep-v1"
+        },
+        "source_render_samples": {
+          "path": "admission-d32-source03-history-keep-v1/source-render-samples.json",
+          "sha256": "6017cb728b224b036f1cea515f2bb219cdc22e9ebe9cb3aca4e8f71ad70350f3"
+        }
+      },
+      "documents": {
+        "lfm25": {
+          "earned_graph_visits": 0,
+          "fit_held_graphs": 0,
+          "fit_train_graphs": 1545,
+          "fit_train_tokens": 70998920,
+          "pending_long_graphs": 227,
+          "pending_long_held_graphs": 0,
+          "pending_long_tokens": 24139608,
+          "source_eligible_graphs": 1772
+        },
+        "mellum21": {
+          "earned_graph_visits": 0,
+          "fit_held_graphs": 0,
+          "fit_train_graphs": 1576,
+          "fit_train_tokens": 84928924,
+          "pending_long_graphs": 199,
+          "pending_long_held_graphs": 0,
+          "pending_long_tokens": 24930566,
+          "source_eligible_graphs": 1775
+        }
+      },
+      "id": "d32-source03-history-keep-v1-capacity",
+      "include": [
+        "admission-d32-source03-history-keep-v1/audit.json",
+        "admission-d32-source03-history-keep-v1/lfm25-train-sources.json",
+        "admission-d32-source03-history-keep-v1/mellum21-train-sources.json",
+        "admission-d32-source03-history-keep-v1/row-proof.jsonl",
+        "admission-d32-source03-history-keep-v1/source-render-samples.json",
+        "capacity-source03/lfm25-pending-v2.json",
+        "capacity-source03/mellum21-pending-v2.json",
+        "capacity-source03/partition/files/coverage.jsonl",
+        "capacity-source03/partition/files/lfm25/test/fit.jsonl.zst",
+        "capacity-source03/partition/files/lfm25/test/remaining-long.jsonl.zst",
+        "capacity-source03/partition/files/lfm25/train/fit-sources.json",
+        "capacity-source03/partition/files/lfm25/train/fit.jsonl.zst",
+        "capacity-source03/partition/files/lfm25/train/remaining-long-sources.json",
+        "capacity-source03/partition/files/lfm25/train/remaining-long.jsonl.zst",
+        "capacity-source03/partition/files/mellum21/test/fit.jsonl.zst",
+        "capacity-source03/partition/files/mellum21/test/remaining-long.jsonl.zst",
+        "capacity-source03/partition/files/mellum21/train/fit-sources.json",
+        "capacity-source03/partition/files/mellum21/train/fit.jsonl.zst",
+        "capacity-source03/partition/files/mellum21/train/remaining-long-sources.json",
+        "capacity-source03/partition/files/mellum21/train/remaining-long.jsonl.zst",
+        "capacity-source03/partition/files/pending-sources.json",
+        "capacity-source03/partition/receipt.json",
+        "cdc7035667d0e0844fed9ec9f812c073255038085011386a9c00ddca90296240/lfm25/omissions.jsonl",
+        "cdc7035667d0e0844fed9ec9f812c073255038085011386a9c00ddca90296240/lfm25/receipt.json",
+        "cdc7035667d0e0844fed9ec9f812c073255038085011386a9c00ddca90296240/lfm25/resume-state.json",
+        "cdc7035667d0e0844fed9ec9f812c073255038085011386a9c00ddca90296240/lfm25/test/native-graphs.jsonl.zst",
+        "cdc7035667d0e0844fed9ec9f812c073255038085011386a9c00ddca90296240/lfm25/train/native-graphs.jsonl.zst",
+        "cdc7035667d0e0844fed9ec9f812c073255038085011386a9c00ddca90296240/mellum21/omissions.jsonl",
+        "cdc7035667d0e0844fed9ec9f812c073255038085011386a9c00ddca90296240/mellum21/receipt.json",
+        "cdc7035667d0e0844fed9ec9f812c073255038085011386a9c00ddca90296240/mellum21/resume-state.json",
+        "cdc7035667d0e0844fed9ec9f812c073255038085011386a9c00ddca90296240/mellum21/test/native-graphs.jsonl.zst",
+        "cdc7035667d0e0844fed9ec9f812c073255038085011386a9c00ddca90296240/mellum21/train/native-graphs.jsonl.zst"
+      ],
+      "license": "exact source license facts retained in each graph acquired_session provenance",
+      "owner": "dgx",
+      "path": "runs/acquired-connected-native-graphs-20261018-history-keep-v1/D32/source03",
+      "source_class": "capacity-partition-of-admitted-complete-acquired-native-sessions",
+      "split": "original source split and complete cross-source global held-group closure; no truncation",
+      "training_admission": true,
+      "training_admission_reason": "Unchanged source-curated rows; ONLY explicit fit entrypoints may train after actual capacity qualification. Full cohort is provenance, not an additional training source; long rows remain mandatory zero-credit obligations.",
+      "training_entrypoints": {
+        "lfm25": {
+          "execution_qualified": false,
+          "held_native_graphs": null,
+          "native_graphs": "capacity-source03/partition/files/lfm25/train/fit-sources.json",
+          "pending_held_native_graphs": null,
+          "pending_native_sources": "capacity-source03/lfm25-pending-v2.json",
+          "requires_actual_capacity_certificate": true
+        },
+        "mellum21": {
+          "execution_qualified": false,
+          "held_native_graphs": null,
+          "native_graphs": "capacity-source03/partition/files/mellum21/train/fit-sources.json",
+          "pending_held_native_graphs": null,
+          "pending_native_sources": "capacity-source03/mellum21-pending-v2.json",
+          "requires_actual_capacity_certificate": true
+        }
+      }
     }
   ],
   "coverage_backlog": [
