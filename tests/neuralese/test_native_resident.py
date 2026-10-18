@@ -685,7 +685,8 @@ def source03_bridge_fixture(tmp_path, monkeypatch, *, with_ordinary=False,
                             old_geometry_override=None, old_forward_override=None,
                             invented_current_component=False, boolean_geometry=False,
                             omit_keep_coverage_bytes=False, wrong_final_keep_coverage_sha=False,
-                            legacy_fcb=False):
+                            legacy_fcb=False, source_ordinals=None,
+                            old_coverage_mutation=None):
     import hashlib
     import pickle
     import subprocess
@@ -696,6 +697,8 @@ def source03_bridge_fixture(tmp_path, monkeypatch, *, with_ordinary=False,
     tokenizer='tokenizer-sha';roles=[64402,64403,64404,64405]
     base=tmp_path/'base';model=base/'lfm25';model.mkdir(parents=True)
     graphs=[graph('bridge-a'),graph('bridge-b')]
+    source_ordinals = source_ordinals or list(range(len(graphs)))
+    assert len(source_ordinals) == len(graphs)
     if boolean_geometry:
         graphs[0]['nodes'][0]['token_ids'] = [1]
         graphs[0]['nodes'][0]['target_weights'] = [0]
@@ -717,7 +720,7 @@ def source03_bridge_fixture(tmp_path, monkeypatch, *, with_ordinary=False,
         raw_sha=hashlib.sha256(line).hexdigest();graph_sha=canonical_json_sha256_hex(row)
         side={'id':entry['id'],'binding':entry['binding'],'keep_parent_id':'parent-'+str(i),
             'keep_partition':'remaining-long','keep_source_graph_sha256':'1'*64,
-            'keep_source_row_bytes_sha256':'2'*64,'old_fit_source_row':i,
+            'keep_source_row_bytes_sha256':'2'*64,'old_fit_source_row':source_ordinals[i],
             'old_source_graph_sha256':graph_sha,'source_row_bytes_sha256':raw_sha,
             'source_sha256':old_source.file_sha256}
         side_rows.append(side)
@@ -726,14 +729,26 @@ def source03_bridge_fixture(tmp_path, monkeypatch, *, with_ordinary=False,
             row_geometry = {'forward_tokens':True,'kv_slots':True}
         if old_geometry_override is not None:
             row_geometry = old_geometry_override
-        old_cov_rows.append({'model':'lfm25','split':'train','disposition':'fit','source_row':i,'id':entry['id'],
+        old_cov_rows.append({'model':'lfm25','split':'train','disposition':'fit','source_row':source_ordinals[i],'id':entry['id'],
             'source_graph_sha256':graph_sha,'source_row_bytes_sha256':raw_sha,
             'geometry':row_geometry,'represented_by':{'fit':True}})
         bridge_cov_rows.append({'schema':'natlang.d32-source03-aux-bridge-geometry-row/1','bridge_row_index':i,
             'id':entry['id'],'binding':entry['binding'],'source_graph_sha256':graph_sha,
             'source_row_bytes_sha256':raw_sha,'geometry':row_geometry,
             'old_fit_coverage_row':{'source_sha256':old_source.file_sha256,
-                'coverage_sha256':'','old_source_row_index':i},'old_row_index_binding':entry['binding']})
+                'coverage_sha256':'','old_source_row_index':source_ordinals[i]},'old_row_index_binding':entry['binding']})
+    if source_ordinals != list(range(len(graphs))):
+        for original_row in sorted(set(range(max(source_ordinals) + 1)) - set(source_ordinals)):
+            old_cov_rows.append({'model':'lfm25','split':'train','disposition':'remaining-long',
+                'source_row':original_row,'id':'pending-original-row-'+str(original_row),
+                'source_graph_sha256':'3'*64,'source_row_bytes_sha256':'4'*64,
+                'geometry':{'forward_tokens':100,'kv_slots':100},'represented_by':{'fit':False}})
+    if old_coverage_mutation == 'wrong-id':
+        old_cov_rows[0]['id'] = 'different-old-graph'
+    elif old_coverage_mutation == 'wrong-sha':
+        old_cov_rows[0]['source_graph_sha256'] = 'f' * 64
+    elif old_coverage_mutation == 'duplicate-coordinate':
+        old_cov_rows.append(copy.deepcopy(old_cov_rows[0]))
     sidecar.write_text(''.join(json.dumps(row,sort_keys=True,separators=(',',':'))+'\n' for row in side_rows))
     old_coverage.write_text(''.join(json.dumps(row,separators=(',',':'))+'\n' for row in old_cov_rows))
     old_cov_sha=sha256_file_hex(old_coverage)
@@ -968,6 +983,35 @@ def test_source03_bridge_v1_requires_exact_current_fcb_policy(tmp_path,monkeypat
     assert json.loads(output.read_text())['new_train_rows']==2
     assert resident.geometry_from_evidence(source,0,proof,package=Path(resident.__file__).parents[1])=={
         'forward_tokens':3,'kv_slots':3}
+
+
+def test_source03_bridge_maps_historical_ordinals_to_compact_fit_positions(tmp_path,monkeypatch):
+    # The prepartition source had pending gaps: original source rows 7 and 11
+    # are compact FIT positions 0 and 1 in the old admitted FIT leaf.
+    source,parts=source03_bridge_fixture(tmp_path,monkeypatch,source_ordinals=[7,11])
+    output=tmp_path/'mapped-geometry.json'
+    proof=resident.prepare_whole_delta_geometry(source,parts,output,package=Path(resident.__file__).parents[1])
+    assert json.loads(output.read_text())['new_train_rows']==2
+    assert resident.geometry_from_evidence(source,0,proof,package=Path(resident.__file__).parents[1])=={
+        'forward_tokens':3,'kv_slots':3}
+
+
+@pytest.mark.parametrize('mutation',['wrong-id','wrong-sha','duplicate-coordinate'])
+def test_source03_bridge_rejects_ambiguous_historical_to_compact_fit_mapping(tmp_path,monkeypatch,mutation):
+    source,parts=source03_bridge_fixture(tmp_path,monkeypatch,source_ordinals=[7,11],
+        old_coverage_mutation=mutation)
+    output=tmp_path/'rejected-mapping.json'
+    with pytest.raises(ValueError,match='historical source coordinate'):
+        resident.prepare_whole_delta_geometry(source,parts,output,package=Path(resident.__file__).parents[1])
+    assert not output.exists()
+
+
+def test_source03_bridge_rejects_duplicate_historical_coordinate_across_distinct_fit_rows(tmp_path,monkeypatch):
+    source,parts=source03_bridge_fixture(tmp_path,monkeypatch,source_ordinals=[7,7])
+    output=tmp_path/'rejected-duplicate-original-coordinate.json'
+    with pytest.raises(ValueError,match='historical source coordinate'):
+        resident.prepare_whole_delta_geometry(source,parts,output,package=Path(resident.__file__).parents[1])
+    assert not output.exists()
 
 
 def test_source03_bridge_v1_rejects_a_different_parser_package(tmp_path,monkeypatch):

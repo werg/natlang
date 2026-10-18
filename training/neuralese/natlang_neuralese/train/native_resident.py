@@ -598,18 +598,50 @@ def _source03_bridge_geometry_part(part, *, preparation, package):
             or any(type(value) is not int or value < 1 for value in limits.values())):
         raise ValueError('source03 bridge part needs the exact current positive geometry limits')
 
-    # Hash the old raw source once and inspect only the referenced rows. The
-    # byte-bound row index supplies their exact positions; this does not compile
-    # or tokenize the 1.29B-position geometry.
-    requested_old_rows = {row.get('old_fit_source_row') for row in side_rows}
-    if (len(requested_old_rows) != row_count or any(type(i) is not int or i < 0 or i >= len(old_entries)
-            for i in requested_old_rows)):
-        raise ValueError('source03 bridge old-source row references are not unique and bounded')
+    # `old_fit_source_row` is the original source ordinal recorded by the
+    # partition coverage, while the old FIT leaf and its row index are compact
+    # after pending rows were removed. Resolve the historical coordinate
+    # through the uniquely bound old FIT coverage and row-index identity; only
+    # the resulting compact position is used to stream the compressed FIT leaf.
+    old_positions_by_id = {}
+    for compact_position, entry in enumerate(old_entries):
+        old_positions_by_id.setdefault(entry.get('id'), []).append((compact_position, entry))
+    old_position_by_bridge_row = {}
+    old_coverage_by_bridge_row = {}
+    requested_old_compact_positions = set()
+    requested_old_historical_coordinates = set()
+    requested_old_ids = set()
+    for bridge_row_index, side in enumerate(side_rows):
+        historical_source_row = side.get('old_fit_source_row')
+        side_id = side.get('id')
+        candidates = old_positions_by_id.get(side_id, [])
+        matches = [row for row in old_rows.get(side_id, [])
+            if row.get('source_row') == historical_source_row
+            and row.get('source_graph_sha256') == side.get('old_source_graph_sha256')
+            and row.get('source_row_bytes_sha256') == side.get('source_row_bytes_sha256')]
+        if (type(historical_source_row) is not int or historical_source_row < 0
+                or side_id in requested_old_ids
+                or historical_source_row in requested_old_historical_coordinates
+                or len(candidates) != 1 or len(matches) != 1
+                or candidates[0][1].get('binding') != side.get('binding')):
+            raise ValueError('source03 bridge historical source coordinate does not map uniquely to compact old FIT')
+        compact_position = candidates[0][0]
+        if (type(compact_position) is not int or not 0 <= compact_position < len(old_entries)
+                or compact_position in requested_old_compact_positions):
+            raise ValueError('source03 bridge old FIT compact positions are not unique')
+        requested_old_ids.add(side_id)
+        requested_old_compact_positions.add(compact_position)
+        requested_old_historical_coordinates.add(historical_source_row)
+        old_position_by_bridge_row[bridge_row_index] = compact_position
+        old_coverage_by_bridge_row[bridge_row_index] = matches[0]
+
+    # Hash the old raw source once and inspect only the mapped compact rows.
+    # This does not compile or tokenize the 1.29B-position geometry.
     old_raw_by_index = {}
     from ..common.jsonio import open_jsonl_text as open_rows
     with open_rows(old_fit_path) as stream:
         for index, line in enumerate(stream):
-            if index in requested_old_rows:
+            if index in requested_old_compact_positions:
                 old_raw_by_index[index] = (hashlib.sha256(line.encode('utf-8')).hexdigest(),
                                            canonical_json_sha256_hex(json.loads(line)))
     if len(old_raw_by_index) != row_count:
@@ -629,21 +661,19 @@ def _source03_bridge_geometry_part(part, *, preparation, package):
             graph = json.loads(line)
             raw_sha = hashlib.sha256(line.encode('utf-8')).hexdigest()
             old_index_at = side.get('old_fit_source_row')
-            prior = old_entries[old_index_at]
-            old_coverage_matches = old_rows.get(side.get('id'), [])
-            old_coverage_matches = [row for row in old_coverage_matches
-                if row.get('source_row') == old_index_at
-                and row.get('source_graph_sha256') == side.get('old_source_graph_sha256')
-                and row.get('source_row_bytes_sha256') == side.get('source_row_bytes_sha256')]
+            compact_old_position = old_position_by_bridge_row[index]
+            prior = old_entries[compact_old_position]
+            old_coverage_match = old_coverage_by_bridge_row[index]
             geometry = covered.get('geometry')
             if (side.get('id') != entry.get('id') or side.get('id') != indexed.get('id')
                     or side.get('binding') != entry.get('binding') or side.get('binding') != indexed.get('binding')
                     or side.get('source_sha256') != old_key.get('source_sha256')
                     or raw_sha != side.get('source_row_bytes_sha256')
                     or canonical_json_sha256_hex(graph) != side.get('old_source_graph_sha256')
-                    or old_raw_by_index[old_index_at] != (side.get('source_row_bytes_sha256'), side.get('old_source_graph_sha256'))
+                    or old_raw_by_index[compact_old_position] != (side.get('source_row_bytes_sha256'), side.get('old_source_graph_sha256'))
                     or prior.get('id') != side.get('id') or prior.get('binding') != side.get('binding')
-                    or len(old_coverage_matches) != 1
+                    or old_coverage_match.get('id') != side.get('id')
+                    or old_coverage_match.get('source_row') != old_index_at
                     or covered.get('schema') != 'natlang.d32-source03-aux-bridge-geometry-row/1'
                     or covered.get('bridge_row_index') != index or covered.get('id') != side.get('id')
                     or covered.get('binding') != side.get('binding')
@@ -653,8 +683,8 @@ def _source03_bridge_geometry_part(part, *, preparation, package):
                     or covered.get('old_fit_coverage_row', {}).get('old_source_row_index') != old_index_at
                     or covered.get('old_fit_coverage_row', {}).get('source_sha256') != old_key.get('source_sha256')
                     or covered.get('old_fit_coverage_row', {}).get('coverage_sha256') != old_files['old-fit/coverage.jsonl']['sha256']
-                    or old_coverage_matches[0].get('geometry') != geometry
-                    or prior.get('forward_tokens') != old_coverage_matches[0].get('geometry', {}).get('forward_tokens')
+                    or old_coverage_match.get('geometry') != geometry
+                    or prior.get('forward_tokens') != old_coverage_match.get('geometry', {}).get('forward_tokens')
                     or indexed.get('forward_tokens') != entry.get('forward_tokens')
                     or set(geometry or {}) != {'forward_tokens', 'kv_slots'}
                     or any(type(geometry[key]) is not int or geometry[key] <= 0 for key in geometry)
