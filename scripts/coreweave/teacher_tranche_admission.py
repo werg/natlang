@@ -466,3 +466,48 @@ def verify_paired_teacher_actions(models):
             'paired_model_source_actions_equal': True,
             'eligible_actions': len(first['eligible_actions']),
             'omitted_actions': len(first['omitted_actions'])}
+
+
+def classify_materializer_holds(raw_rows, held_ids, *, policy_root=None):
+    """Authenticate existing rejected-row policy; grant no target admission."""
+    import math
+    import subprocess
+    ids=list(held_ids)
+    if len(ids)!=len(set(ids))or any(ident not in raw_rows for ident in ids):
+        raise ValueError('materializer hold identities differ from original rows')
+    root=Path(policy_root).resolve(strict=True)if policy_root is not None else Path(__file__).resolve().parents[2]
+    policy=root/'ts-host/dist/teacher/curriculum-policy.js'
+    source=root/'ts-host/src/teacher/curriculum-policy.ts'
+    bindings=[file_binding(source),file_binding(policy)]
+    payload=[{'id':ident,'outcome':raw_rows[ident]['outcome'],'provenance':raw_rows[ident].get('provenance',{})}for ident in ids]
+    code=('import {readFileSync} from "node:fs";'
+          'const {trainingQualityReason}=await import(process.argv[1]);'
+          'const rows=JSON.parse(readFileSync(0,"utf8"));'
+          'console.log(JSON.stringify(rows.map(row=>({id:row.id,reason:trainingQualityReason(row)??null}))));')
+    process=subprocess.run(['node','--input-type=module','-e',code,policy.as_uri()],
+        input=json.dumps(payload,allow_nan=False),text=True,capture_output=True,check=True)
+    if [file_binding(source),file_binding(policy)]!=bindings:
+        raise ValueError('materializer hold policy changed during classification')
+    reasons=json.loads(process.stdout)
+    if [row.get('id')for row in reasons]!=ids:
+        raise ValueError('materializer hold classifier changed row identities')
+    result={}
+    for item in reasons:
+        ident=item['id'];outcome=raw_rows[ident]['outcome'];reason=item['reason']
+        files=outcome.get('files_check')or{};oracle=outcome.get('oracle')or{}
+        number=lambda x:type(x)in(int,float)and math.isfinite(x)and 0<=x<1
+        if outcome.get('accepted')is not True:
+            raise ValueError('materializer hold classification requires original positive candidate')
+        if reason=='quality_pending_partial_files':
+            if not(files.get('failed')or number(files.get('score'))):
+                raise ValueError('partial-file hold lacks actual failure evidence')
+            assigned='Exact partial-file quality review; original source retained, no graph or positive admission for this row'
+        elif reason=='quality_pending_partial_agreement':
+            if oracle.get('level')!='agreement'or not number(oracle.get('score')):
+                raise ValueError('partial-agreement hold lacks actual oracle score evidence')
+            assigned='Exact partial-answer agreement review; original source retained, no graph or positive admission for this row'
+        else:
+            raise ValueError('materializer hold needs explicit separately reviewed classification: '+str(reason))
+        result[ident]={'quality_reason':reason,'policy_bindings':bindings,'files_check':outcome.get('files_check'),
+            'oracle':outcome.get('oracle'),'assigned_use':assigned}
+    return result
