@@ -160,8 +160,8 @@ def aggregate_worker_journals(queue_raw: bytes, worker_queues: list[tuple[str, b
             raise ValueError('worker queue has an unexpected filename')
         worker_numbers.append(int(name[len('queue-worker-'):-len('.jsonl')]))
         rows = _jsonl_rows(raw, name)
-        if not rows:
-            raise ValueError('worker queue partition is empty')
+        # Batches smaller than the configured worker count have empty shards.
+        # Exact master coverage and per-shard event ownership remain mandatory.
         for row in rows:
             key = row.get('key')
             if key not in master or key in worker_owner:

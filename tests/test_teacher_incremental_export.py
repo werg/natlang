@@ -1161,3 +1161,29 @@ def test_runtime_epochs_reject_changed_or_ambiguous_custody(mutation):
     if mutation == 'original_runtime': publisher['identity']['runtime_path'] = '/other'
     with pytest.raises(ValueError):
         _publisher_batch_runtime(publisher, 28, remote.__getitem__)
+
+
+def test_small_batch_keeps_empty_shards_without_granting_job_custody():
+    row = {'key': 'only-job', 'index': 0, 'source': '/cases.jsonl'}
+    master = (json.dumps(row) + '\n').encode()
+    queues = [(f'queue-worker-{i}.jsonl', master if i == 0 else b'')
+              for i in range(24)]
+    event = (json.dumps({'event': 'finish', 'key': 'only-job'}) + '\n').encode()
+    journals = [(f'journal-worker-{i}.jsonl', event if i == 0 else None)
+                for i in range(24)]
+    assert aggregate_worker_journals(master, queues, journals) == event
+    borrowed = list(journals)
+    borrowed[-1] = (borrowed[-1][0], event)
+    with pytest.raises(ValueError, match='foreign to its exact queue shard'):
+        aggregate_worker_journals(master, queues, borrowed)
+    incomplete = list(queues)
+    incomplete[0] = (incomplete[0][0], b'')
+    with pytest.raises(ValueError, match='exactly partition'):
+        aggregate_worker_journals(master, incomplete, journals)
+    duplicate = list(queues)
+    duplicate[-1] = duplicate[-2]
+    with pytest.raises(ValueError, match='numeric contiguous order'):
+        aggregate_worker_journals(master, duplicate, journals)
+    missing = journals[:-1]
+    with pytest.raises(ValueError, match='exact queue worker set'):
+        aggregate_worker_journals(master, queues, missing)

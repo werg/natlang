@@ -48,3 +48,18 @@ generation selection policy, prompt, actor identity field, or training admission
 ## Natural feeder preparation and completed-phase grace
 
 A valid live feeder may be between its durable process launch and publication of the collecting worker table, or between publication of its completed phase and guardian closure. Treat only those exact known phases as a non-exporting wait after rechecking the same boot/config/process ownership. Keep all source/worker/runtime validation for collecting phases. A different live birth, unknown phase, changed config or unauthenticated advancement remains fatal. This is custody plumbing; no model-facing behavior, generation, admission or timeout policy changes.
+
+## Empty trailing worker shards (2026-10-18)
+
+Policy: retain every genuine completed teacher job, including batches smaller
+than the existing worker count. An unused shard neither grants completion nor
+contributes a job.
+
+1. Authenticate the nonempty master queue and every numbered worker queue.
+2. Permit empty worker queues; still require the exact unique contiguous shard
+   inventory and the union of nonempty shards to equal the master exactly.
+3. Accept journal events only for keys owned by that exact shard. Thus an empty
+   shard cannot supply any event or borrow another worker's completed job.
+
+Queue and journal byte verification is crisp custody plumbing; no model-facing
+text, scheduling policy, source selection, or training admission changes.
