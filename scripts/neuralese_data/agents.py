@@ -659,6 +659,45 @@ def deepdive_trajectories(limit=None):
         yield rid, trajectory
 
 
+def deepdive_reference_qa(limit=None):
+    """Source-curated QA targets, explicitly separate from observed tool sessions."""
+    root = EXPANSION_ROOT / 'D31'
+    receipt = json.loads((root / 'acquisition.json').read_text())
+    def rows():
+        for partition in ('qa_sft', 'qa_rl'):
+            for path in sorted(root.rglob(partition + '-*.parquet')):
+                for index, row in _parquet_groups(path):
+                    yield partition, f'{path.relative_to(root)}:{index}', row
+    for partition, rid, row in _limited(rows(), limit):
+        question, answer = row.get('question'), row.get('answer')
+        if not isinstance(question, str) or not question.strip():
+            yield rid, Reject('missing-deepdive-question')
+            continue
+        if not isinstance(answer, str) or not answer.strip():
+            yield rid, Reject('missing-deepdive-reference-answer')
+            continue
+        if row.get('conversations'):
+            yield rid, Reject('unexpected-deepdive-qa-conversations')
+            continue
+        if any(strip_markup(text) != text for text in (question, answer)):
+            yield rid, Reject('unsupported-deepdive-qa-template-markup')
+            continue
+        metadata = {'trajectory_id': task_hash(question), 'session_id': f'{partition}:{rid}',
+                    'source_row_id': row.get('id'), 'source_partition': partition,
+                    'question': question, 'relationship': 'source-curated-reference-answer'}
+        converted = {'metadata': metadata, '_expansion_task_group_text': question,
+                     'messages': [{'role': 'user', 'content': 'Answer the research question supplied in the background.'}]}
+        value = expansion_trajectory('D31', receipt, rid, converted)
+        # A reference can quote <think> or tool-call syntax literally. It is not
+        # an actor transcript and must bypass transcript interpretation.
+        value.messages.append({'role': 'assistant', 'content': answer})
+        value.background = [source('document', text=question)]
+        value.split_groups.append(group_key('question', task_hash(question)))
+        value.lineage['notes']['communication'] = 'derived-task-background'
+        value.lineage['notes']['target_kind'] = 'upstream-reference-answer'
+        yield rid, value
+
+
 def evidence_subagent(limit=None):
     yield from _expansion('D10', limit)
 
@@ -947,6 +986,7 @@ CORPORA.update({'gatc-sessions': (gatc_sessions, 4), "wideseek": (wideseek, 4), 
                 'terminaltraj': (terminaltraj, 4), 'dolci-tool-use': (dolci_tool_use, 4),
                 'cognitive-kernel': (cognitive_kernel, 4),
                 'deepdive-trajectories': (deepdive_trajectories, 4),
+                'deepdive-reference-qa': (deepdive_reference_qa, 1),
                 'agentsynth': (agentsynth, 4),
                 'deepnlp-orchestration': (deepnlp_orchestration, 4),
                 'finding-right-fit': (finding_right_fit, 4),

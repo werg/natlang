@@ -38,6 +38,76 @@ def test_deepdive_groups_sibling_sessions_without_loading_qa_targets(tmp_path, m
     assert values[0].lineage['notes']['native_execution_verified'] is False
 
 
+def test_deepdive_reference_qa_keeps_partition_identity_and_question_closure(tmp_path, monkeypatch):
+    import json
+    from neuralese_data import agents, trajectory
+    from neuralese_data.records import group_key
+    root = tmp_path / 'D31'; root.mkdir()
+    (root / 'acquisition.json').write_text(json.dumps({'repo': 'zai-org/DeepDive', 'revision': 'pin'}))
+    for partition in ('qa_sft', 'qa_rl'):
+        (root / (partition + '-00000-of-00001.parquet')).touch()
+    question = 'Which report contains the measurement?'
+    def rows(path):
+        return iter([(0, {'id': 0, 'question': question, 'answer': 'The exact report.', 'conversations': []})])
+    monkeypatch.setattr(agents, 'EXPANSION_ROOT', tmp_path)
+    monkeypatch.setattr(agents, '_parquet_groups', rows)
+    values = [t for _, t in agents.deepdive_reference_qa()]
+    assert len(values) == 2 and values[0].id != values[1].id
+    assert values[0].split_groups == values[1].split_groups
+    assert group_key('question', agents.task_hash(question)) in values[0].split_groups
+    assert group_key('expansion-d31-task', agents.task_hash(question)) in values[0].split_groups
+    for value in values:
+        assert value.messages[-1]['content'] == 'The exact report.'
+        assert value.background[0]['text'] == question
+        assert all(not m.get('tool_calls') and m['role'] != 'tool' for m in value.messages)
+        assert trajectory.windows(value, 1, 'fixture') == [(1, 1)]
+        assert value.outcome == {'label': 'teacher', 'checked': None}
+        assert value.lineage['notes']['native_execution_verified'] is False
+        assert value.lineage['notes']['communication'] == 'derived-task-background'
+        assert value.lineage['notes']['target_kind'] == 'upstream-reference-answer'
+    assert {v.lineage['notes']['metadata']['source_partition'] for v in values} == {'qa_sft', 'qa_rl'}
+
+
+def test_deepdive_reference_qa_rejects_invalid_rows_without_losing_later_rows(tmp_path, monkeypatch):
+    import json
+    from neuralese_data import agents
+    from neuralese_data.common import Reject
+    root = tmp_path / 'D31'; root.mkdir()
+    (root / 'acquisition.json').write_text(json.dumps({'repo': 'zai-org/DeepDive', 'revision': 'pin'}))
+    (root / 'qa_sft-00000-of-00001.parquet').touch()
+    rows = [{'id': 0, 'question': '', 'answer': 'a'},
+            {'id': 1, 'question': 'q', 'answer': ''},
+            {'id': 2, 'question': 'q', 'answer': 'a', 'conversations': [{'role': 'tool', 'content': 'x'}]},
+            {'id': 3, 'question': 'q', 'answer': 'a', 'conversations': []}]
+    monkeypatch.setattr(agents, 'EXPANSION_ROOT', tmp_path)
+    monkeypatch.setattr(agents, '_parquet_groups', lambda p: iter(enumerate(rows)))
+    values = [t for _, t in agents.deepdive_reference_qa()]
+    assert [str(t) for t in values[:3]] == ['missing-deepdive-question',
+        'missing-deepdive-reference-answer', 'unexpected-deepdive-qa-conversations']
+    assert all(isinstance(t, Reject) for t in values[:3])
+    assert values[3].messages[-1]['content'] == 'a'
+    assert len(list(agents.deepdive_reference_qa(limit=2))) == 2
+
+
+def test_deepdive_reference_answers_preserve_literal_think_and_tool_syntax(tmp_path, monkeypatch):
+    import json
+    from neuralese_data import agents, trajectory
+    from neuralese_data.common import Reject
+    root = tmp_path / 'D31'; root.mkdir()
+    (root / 'acquisition.json').write_text(json.dumps({'repo': 'zai-org/DeepDive', 'revision': 'pin'}))
+    (root / 'qa_rl-00000-of-00001.parquet').touch()
+    answer = '<think>quoted explanation</think>\n```xml\n<tool_call>{"name":"search","arguments":{"q":"literal"}}</tool_call>\n```'
+    rows = [{'question': 'What syntax is quoted?', 'answer': answer},
+            {'question': 'q', 'answer': '<|im_end|>'},
+            {'question': '<|neuralese|>q', 'answer': 'a'}]
+    monkeypatch.setattr(agents, 'EXPANSION_ROOT', tmp_path)
+    monkeypatch.setattr(agents, '_parquet_groups', lambda p: iter(enumerate(rows)))
+    values = [t for _, t in agents.deepdive_reference_qa()]
+    assert values[0].messages[-1] == {'role': 'assistant', 'content': answer}
+    assert trajectory.record(values[0], 1, 1)['target']['value'] == {'role': 'assistant', 'content': answer}
+    assert all(isinstance(t, Reject) and str(t) == 'unsupported-deepdive-qa-template-markup' for t in values[1:])
+
+
 def test_gatc_preserves_tools_and_protects_family_through_flagged_parent(tmp_path, monkeypatch):
     import json
     from neuralese_data import agents
