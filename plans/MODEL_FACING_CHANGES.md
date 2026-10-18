@@ -1152,14 +1152,19 @@ Pending live measurement: `deepdive-reference-qa` supplies the exact source ques
 
 ## 2026-10-18: explicit tool-contract recovery TRAIN packet
 
-Pending own-teacher measurement: the optional `tool-contract-recovery` profile
+Own-teacher measurement complete: the optional `tool-contract-recovery` profile
 constructs 24 independent TRAIN cases (eight worlds, three recovery entries) with
 explicit positive-integer page-range errors, reserved service-binding recovery,
 and typed Summary return repair. The natural-language root chooses a changed
 action from the reported contract; its semantic child returns the declared boolean
 directly. The service error is new model-facing feedback. Existing 512 legacy
 worlds and terminal-policy outputs remain byte-identical. All 24 complete reference
-runs must freshly qualify before the existing guardian selects two own-sandbox
-teacher repeats per case. The actual 48 trajectories, their exact source/runtime
-receipt, and independent decision admission remain pending; construction and unit
-checks alone do not close this debt. No held inputs, answers or traces are used.
+runs freshly qualified before the existing guardian selected two own-sandbox
+teacher repeats per case. Actual batch42 completed 48 unique trajectories with
+48 exact successes, 1,699 actions and no held reuse. Both source-owned verifiers,
+source bytes and actor/runtime identities are bound in
+`/home/werg/data/dgxops/teacher-tool-contract193-deployment-20261018/live48-measurement-v2.json`
+(SHA-256 `de5c2a48bb0c0d54ee7fb4e23a7226a6e106331f57a6cc42c0db951883bff31b`).
+This closes the live sampling debt. Per-decision admission and actual student
+training exposure remain separate; this measurement claims neither student lift
+nor optimal teacher trajectories. No held inputs, answers or traces were used.
