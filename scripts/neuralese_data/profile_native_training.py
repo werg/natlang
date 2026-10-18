@@ -207,6 +207,11 @@ def main(argv=None):
     parser.add_argument('--profile-out', type=Path, required=True)
     parser.add_argument('--first-update', type=int, default=2)
     parser.add_argument('--last-update', type=int, default=5)
+    parser.add_argument('--backbone-update-every', type=int, default=0,
+                        help='observe sampled actual backbone displacements at this relative-update cadence')
+    parser.add_argument('--backbone-update-samples', type=int, default=128)
+    parser.add_argument('--backbone-update-observer', type=json.loads,
+                        help='exact path/bytes/sha256 binding of the shared read-only update observer')
     parser.add_argument('--expected-observer-sha256',
                         help='supervisor-bound observer source; reject a different installed file')
     parser.add_argument('--module', default='natlang_neuralese.train.native_state_sft',
@@ -226,12 +231,32 @@ def main(argv=None):
         arguments = arguments[1:]
     if not arguments:
         parser.error('pass the original trainer arguments after --')
-    with observe_native_phases(args.profile_out) as phases, profile_native_updates(
+    if args.backbone_update_every < 0 or args.backbone_update_samples < 1:
+        parser.error('backbone cadence must be nonnegative and sample count positive')
+    if bool(args.backbone_update_every) != bool(args.backbone_update_observer):
+        parser.error('enabled backbone observation requires its exact bound helper')
+    updates = contextlib.nullcontext(None)
+    if args.backbone_update_observer is not None:
+        reference = args.backbone_update_observer
+        helper = Path(reference['path']).resolve(strict=True)
+        content = helper.read_bytes()
+        if (len(content) != reference['bytes']
+                or hashlib.sha256(content).hexdigest() != reference['sha256']):
+            parser.error('installed backbone update observer differs from its source binding')
+        namespace = {'__file__': str(helper), '__name__': '_bound_native_update_observer'}
+        exec(compile(content, str(helper), 'exec'), namespace)
+        updates = namespace['observe_backbone_updates'](args.profile_out,
+            every=args.backbone_update_every, samples=args.backbone_update_samples)
+    # The finite profiler restores this outer observer after its last update;
+    # periodic actual-displacement observation therefore continues afterwards.
+    with observe_native_phases(args.profile_out) as phases, updates as update_state, profile_native_updates(
             args.profile_out, first=args.first_update, last=args.last_update,
             first_update_observer=phases['finish_startup']) as state:
         state['observer_source'] = source_binding
         state['phase_diagnostic_errors'] = phases['diagnostic_errors']
         state['trainer_module'] = args.module
+        state['backbone_update_observer_source'] = args.backbone_update_observer
+        state['backbone_update_observer'] = update_state
         return importlib.import_module(args.module).main(arguments)
 
 
