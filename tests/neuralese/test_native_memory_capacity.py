@@ -93,7 +93,7 @@ def test_capacity_rejects_unscoped_low_precision_gradient_and_closes_scope(monke
     monkeypatch.setattr(ParameterCotangentScope,'for_model',classmethod(capture_factory))
     def bypass(*unused,**kwargs):return parameter.float().square().mean(),[]
     monkeypatch.setattr(native_state_sft,'packed_graph_loss',bypass)
-    with pytest.raises(RuntimeError,match='bypassed the shared low-precision cotangent carrier'):
+    with pytest.raises(RuntimeError,match='low-precision parameter gradient arrived without a cotangent carrier:'):
         qualify_capacity(model,optimizer,examples()[:1],checkpoint_sha256='a'*64,source_binding={})
     assert active_cotangent_scope() is None
     assert len(scopes)==1 and scopes[0]._closed
