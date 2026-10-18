@@ -263,7 +263,8 @@ def _effective_replacements(parameters, resolved, gradient_precision):
 
 
 def run_native(engine, callback, entries=None, *, leaves=None, gradient_precision=None,
-               track_adapter_cotangents=True, adapter_cotangent_target_ids=None):
+               track_adapter_cotangents=True, adapter_cotangent_target_ids=None,
+               cotangent_parameter_ids=None):
     """Run one atomic native operation with exact temporary parameter substitution.
 
     Unadapted operations acquire the same lock. torch.func restores original
@@ -304,16 +305,20 @@ def run_native(engine, callback, entries=None, *, leaves=None, gradient_precisio
                 from .native_weight_carrier import ParameterCotangentScope
                 cotangent_scope=ParameterCotangentScope.for_model(engine.shared_model,mode='vjp',
                     track_auxiliary=track_adapter_cotangents,
-                    auxiliary_target_ids=adapter_cotangent_target_ids)
+                    auxiliary_target_ids=adapter_cotangent_target_ids,
+                    parameter_target_ids=cotangent_parameter_ids)
                 with cotangent_scope:
                     result=callback()
                     cotangent_scope.finish()
                     return result
             parameters = target_parameters(engine.shared_model)
             from .native_weight_carrier import ParameterCotangentScope, carrier_linear_modules
-            cotangent_scope = ParameterCotangentScope(parameters.items(), mode='vjp',
+            scope_parameters = [(name, parameter) for name, parameter in parameters.items()
+                                if cotangent_parameter_ids is None or id(parameter) in cotangent_parameter_ids]
+            cotangent_scope = ParameterCotangentScope(scope_parameters, mode='vjp',
                 track_auxiliary=track_adapter_cotangents,
-                auxiliary_target_ids=adapter_cotangent_target_ids)
+                auxiliary_target_ids=adapter_cotangent_target_ids,
+                parameter_target_ids=cotangent_parameter_ids)
             cotangent_scope.model=engine.shared_model
             with cotangent_scope:
                 replacement, storage_dtypes = _effective_replacements(parameters, resolved, gradient_precision)

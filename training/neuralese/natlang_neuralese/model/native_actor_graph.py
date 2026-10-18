@@ -105,7 +105,8 @@ class NativeInvocationActors:
 
 
 def run_invocation_actors(engine,names,bindings,callback,*,default=None,leaves=None,gradient_precision='storage',source_names=None,
-                          track_adapter_cotangents=True,adapter_cotangent_target_ids=None):
+                          track_adapter_cotangents=True,adapter_cotangent_target_ids=None,
+                          cotangent_parameter_ids=None):
     """One operation lease includes every actor's forward and checkpoint backward."""
     with engine.native_execution_lock:
         from contextlib import nullcontext
@@ -118,7 +119,8 @@ def run_invocation_actors(engine,names,bindings,callback,*,default=None,leaves=N
         if owns_cotangents:
             cotangents=ParameterCotangentScope.for_model(engine.shared_model,mode='vjp',
                 track_auxiliary=track_adapter_cotangents,
-                auxiliary_target_ids=adapter_cotangent_target_ids)
+                auxiliary_target_ids=adapter_cotangent_target_ids,
+                parameter_target_ids=cotangent_parameter_ids)
         elif cotangents.model is not None and cotangents.model is not engine.shared_model:
             raise NativeAdapterError('invocation actor cannot join a cotangent scope owned by another model')
         with cotangents if owns_cotangents else nullcontext(cotangents):

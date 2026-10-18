@@ -132,7 +132,9 @@ def native_graph_gradient(engine, body, owner, *, coefficient_targets=None, eval
                     default=body.get('adapters'),leaves=leaves,
                     gradient_precision=body.get('adapter_gradient_precision','storage'),source_names=source_names,
                     track_adapter_cotangents=(body.get('target',{}).get('kind')!='model-parameters'),
-                    adapter_cotangent_target_ids=adapter_target_ids)
+                    adapter_cotangent_target_ids=adapter_target_ids,
+                    cotangent_parameter_ids=({id(value) for value in selected.values()}
+                        if (body.get('target') or {}).get('kind')=='model-parameters' else None))
             finally:
                 for parameter,enabled in restore.items():parameter.requires_grad_(enabled)
         selected=(_parameter_targets(engine.shared_model,body['target'].get('names'))
@@ -150,7 +152,9 @@ def native_graph_gradient(engine, body, owner, *, coefficient_targets=None, eval
                               body.get('adapters'), leaves=leaves,
                               gradient_precision=body.get('adapter_gradient_precision', 'storage'),
                               track_adapter_cotangents=(body.get('target',{}).get('kind')!='model-parameters'),
-                              adapter_cotangent_target_ids=adapter_target_ids)
+                              adapter_cotangent_target_ids=adapter_target_ids,
+                              cotangent_parameter_ids=({id(value) for value in selected.values()}
+                                  if (body.get('target') or {}).get('kind')=='model-parameters' else None))
         finally:
             for parameter,enabled in restore.items():
                 parameter.requires_grad_(enabled)

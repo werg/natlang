@@ -86,13 +86,15 @@ class ParameterCotangentScope:
     optimizer-facing gradient is materialized once, at finalization.
     """
     def __init__(self, parameters, *, mode='update', directory=None, track_auxiliary=True,
-                 auxiliary_target_ids=None):
+                 auxiliary_target_ids=None, parameter_target_ids=None):
         if mode not in ('update', 'vjp'):
             raise ValueError("cotangent scope mode must be 'update' or 'vjp'")
         self.mode = mode
         self.track_auxiliary = bool(track_auxiliary)
         self.auxiliary_target_ids = (None if auxiliary_target_ids is None
                                      else frozenset(auxiliary_target_ids))
+        self.parameter_target_ids = (None if parameter_target_ids is None
+                                     else frozenset(parameter_target_ids))
         unique = {}
         for name, parameter in parameters:
             if parameter.requires_grad and parameter.dtype in (torch.float16, torch.bfloat16):
@@ -185,7 +187,9 @@ class ParameterCotangentScope:
 
     @classmethod
     def for_model(cls, model, *, mode='update', directory=None, track_auxiliary=True,
-                  auxiliary_target_ids=None):
+                  auxiliary_target_ids=None, parameter_target_ids=None):
+        parameter_target_ids = (None if parameter_target_ids is None
+                                else frozenset(parameter_target_ids))
         selected, seen = [], set()
         for name, module in model.named_modules(remove_duplicate=False):
             weight = getattr(module, 'weight', None)
@@ -206,14 +210,20 @@ class ParameterCotangentScope:
                  name.endswith(('.experts.gate_up', '.experts.down'))) and parameter.ndim == 3
                     and parameter.dtype in (torch.float16, torch.bfloat16) and id(parameter) not in seen):
                 selected.append((name, parameter)); seen.add(id(parameter))
+        if parameter_target_ids is not None:
+            selected = [(name, parameter) for name, parameter in selected
+                        if id(parameter) in parameter_target_ids]
+            seen.intersection_update(parameter_target_ids)
         uncovered = [(name, parameter) for name, parameter in model.named_parameters(remove_duplicate=False)
                      if parameter.requires_grad and parameter.dtype in (torch.float16, torch.bfloat16)
+                     and (parameter_target_ids is None or id(parameter) in parameter_target_ids)
                      and id(parameter) not in seen]
         if uncovered:
             names = ', '.join(name for name, _ in uncovered[:8])
             raise RuntimeError('trainable low-precision parameters lack a shared cotangent route: ' + names)
         scope = cls(selected, mode=mode, directory=directory, track_auxiliary=track_auxiliary,
-                    auxiliary_target_ids=auxiliary_target_ids)
+                    auxiliary_target_ids=auxiliary_target_ids,
+                    parameter_target_ids=parameter_target_ids)
         scope.model = model
         return scope
 
@@ -251,7 +261,10 @@ class ParameterCotangentScope:
         if base_parameter.dtype not in (torch.float16, torch.bfloat16):
             return
         base = self._entry_for(base_parameter)
-        if base is None and base_parameter.requires_grad and base_parameter.dtype in (torch.float16, torch.bfloat16):
+        base_is_requested = (self.parameter_target_ids is None or
+                             id(base_parameter) in self.parameter_target_ids)
+        if (base is None and base_is_requested and base_parameter.requires_grad
+                and base_parameter.dtype in (torch.float16, torch.bfloat16)):
             index = len(self.entries)
             base = self._make_entry('effective-base', base_parameter, index)
             self.entries[id(base_parameter)] = base
@@ -293,7 +306,7 @@ class ParameterCotangentScope:
         return entry['anchor_value']
 
     def anchors_for_weight(self, weight):
-        route = self._effective_routes.get(id(weight))
+        _, route = self._effective_route_for(weight)
         if route is None:
             anchor = self.anchor_for(weight)
             return () if anchor is None else (anchor,)
@@ -304,6 +317,30 @@ class ParameterCotangentScope:
         anchors.extend(self.anchor_for(delta['parameter']) for delta in deltas)
         return tuple(anchors)
 
+    def _effective_route_for(self, weight):
+        """Resolve an effective adapter bank through exact tensor view ancestry."""
+        current = weight
+        visited = set()
+        while isinstance(current, torch.Tensor) and id(current) not in visited:
+            visited.add(id(current))
+            route = self._effective_routes.get(id(current))
+            if route is not None:
+                return current, route
+            current = getattr(current, '_base', None)
+        return None, None
+
+    @staticmethod
+    def _route_parameter_view(source, effective, view):
+        """Map an effective-bank view to the matching base/delta storage view."""
+        if tuple(source.shape) != tuple(effective.shape) or tuple(source.stride()) != tuple(effective.stride()):
+            raise RuntimeError('effective cotangent source bank geometry differs from its exact replacement')
+        relative_offset = view.storage_offset() - effective.storage_offset()
+        target_offset = source.storage_offset() + relative_offset
+        last = target_offset + sum((size - 1) * stride for size, stride in zip(view.shape, view.stride()))
+        if target_offset < source.storage_offset() or last >= source.storage_offset() + source.numel():
+            raise RuntimeError('effective cotangent view escapes its source bank')
+        return source.as_strided(view.shape, view.stride(), target_offset)
+
     def _entry_for(self, parameter):
         entry = self.entries.get(id(parameter))
         if entry is not None:
@@ -312,8 +349,12 @@ class ParameterCotangentScope:
         if entry is not None:
             return entry
         storage = parameter.untyped_storage().data_ptr()
-        return next((candidate for candidate in self.entries.values()
-                     if candidate['parameter'].untyped_storage().data_ptr() == storage), None)
+        matches = [candidate for entries in (self.entries.values(), self._auxiliary_entries.values())
+                   for candidate in entries
+                   if candidate['parameter'].untyped_storage().data_ptr() == storage]
+        if len(matches) > 1:
+            raise RuntimeError('cotangent view aliases multiple optimizer or auxiliary targets')
+        return matches[0] if matches else None
 
     def new_backward(self):
         """Start another forward/backward microbatch in one optimizer update."""
@@ -687,15 +728,17 @@ def _scope_add(weight, contribution, anchors, scope=None):
     scope = scope or active_cotangent_scope()
     if scope is None or not anchors:
         return False
-    route = scope._effective_routes.get(id(weight))
+    route_owner, route = scope._effective_route_for(weight)
     if route is None:
         scope.add(weight, contribution)
     else:
         base, deltas = route
         if base is not None:
-            scope.add(base['parameter'], contribution)
+            source_view = scope._route_parameter_view(base['parameter'], route_owner, weight)
+            scope.add(source_view, contribution)
         for delta in deltas:
-            scope.add(delta['parameter'], contribution)
+            source_view = scope._route_parameter_view(delta['parameter'], route_owner, weight)
+            scope.add(source_view, contribution)
     return True
 
 
@@ -783,6 +826,7 @@ class _TorchStoredLinear(torch.autograd.Function):
         stored = weight.to(storage_dtype)
         ctx.save_for_backward(x, stored)
         ctx.bias = bias is not None
+        ctx.weight_dtype = weight.dtype
         ctx.weight_anchor_count = int(weight_anchor_count)
         ctx.weight_anchors = anchors[:ctx.weight_anchor_count]
         ctx.bias_anchors = anchors[ctx.weight_anchor_count:]
@@ -810,7 +854,12 @@ class _TorchStoredLinear(torch.autograd.Function):
             dw = None
             weight_anchor_grads = tuple(grad.new_ones((), dtype=torch.float32) for _ in ctx.weight_anchors)
         elif dw is not None:
-            dw = dw.to(stored.dtype)
+            # An adapter's rounded effective weight is FP32 even though this
+            # projection stores BF16 operands for its forward. Preserve the
+            # FP32 derivative through that effective tensor so its coefficient
+            # basis receives an unrounded adjoint; ordinary BF16 parameters
+            # still return their native BF16 gradient here.
+            dw = dw.to(ctx.weight_dtype)
         bias_anchor_grads = (None,) * len(ctx.bias_anchors)
         if ctx.bias_anchors and db is not None:
             _scope_add(ctx.scope_bias, db, ctx.bias_anchors, ctx.scope)

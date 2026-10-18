@@ -159,6 +159,154 @@ def test_adapter_vjp_default_names_matches_explicit_all_names(tmp_path):
     engine.store.close()
 
 
+@pytest.mark.parametrize('target_suffix',['experts.gate_up','experts.down'])
+def test_mellum_expert_model_vjp_fans_in_base_and_adapter_across_actor_branches(tmp_path,target_suffix):
+    """Unbound expert views retain one exact BF16 base cotangent route."""
+    from natlang_neuralese.model.native_actor_graph import run_invocation_actors
+    torch.manual_seed(2207)
+    engine=engine_fixture(tmp_path,'mellum',service_template=True)
+    model=engine.shared_model
+    name=next(name for name in target_parameters(model) if name.endswith(target_suffix))
+    base=target_parameters(model)[name]
+    original_requires_grad=base.requires_grad
+    base.requires_grad_(True)
+    adapter=create_adapter(engine,{'kind':'xs','rank':2,'parameter_names':[name]})
+    adapter=engine.store.put_native_tensor_artifact(replace(adapter.artifact,
+        tensors={name:torch.full_like(adapter.artifact.tensors[name],.04)}))
+    coefficient=adapter.artifact.tensors[name].clone().requires_grad_(True)
+    moe=next(module for module in model.port.hf.modules()
+             if hasattr(module,'_experts') and hasattr(module,'top_k') and hasattr(module,'experts'))
+    hidden=moe.experts.gate_up.shape[-1]
+    x=torch.randn((2,hidden),device=base.device,dtype=base.dtype)
+    expert_ids=torch.arange(2,device=x.device,dtype=torch.long)[:,None].expand(2,moe.top_k) % moe.experts.gate_up.shape[0]
+    routing=torch.full((2,moe.top_k),1/moe.top_k,device=x.device,dtype=torch.float32)
+    bindings={'left':[{'id':adapter.id,'scale':.65}],
+              'right':[{'id':adapter.id,'scale':-.35}]}
+    leaves={adapter.id:{name:coefficient}}
+
+    def evaluate(bank):
+        outputs=[]
+        for actor in ('left','right'):
+            outputs.append(bank.execute(actor,lambda:moe._experts(
+                x,x,expert_ids,routing,(x.shape[0],x.shape[1]))))
+        objective=sum(output.float().square().mean() for output in outputs)
+        gradient=torch.autograd.grad(objective,base)[0].detach()
+        from natlang_neuralese.model.native_weight_carrier import active_cotangent_scope
+        scope=active_cotangent_scope()
+        entry=scope._entry_for(base)
+        assert entry is not None and entry['accumulator'] is not None
+        return gradient,entry['accumulator'].detach()
+
+    try:
+        actual=run_invocation_actors(engine,['left','right'],bindings,evaluate,leaves=leaves,
+            gradient_precision='fp32',track_adapter_cotangents=False)
+        # Independent per-actor oracle: hold each exact rounded effective bank
+        # as its own FP32 leaf, run the same BF16 stored expert projections,
+        # and sum the returned dW values in FP32 as they flow to the shared base.
+        from natlang_neuralese.model.native_adapters import _effective_replacements,resolve_adapters
+        from natlang_neuralese.model.native_weight_carrier import stored_linear
+        from natlang_neuralese.maple.model import swiglu
+        parameters=target_parameters(model)
+        expert_parent=name.rsplit('.',1)[0]
+        gate_name=expert_parent+'.gate_up'
+        down_name=expert_parent+'.down'
+        expected=torch.zeros_like(base,dtype=torch.float32)
+        for actor in ('left','right'):
+            resolved=resolve_adapters(engine,bindings[actor],leaves)
+            replacement,_=_effective_replacements(parameters,resolved,'fp32')
+            effective=replacement['model.'+name].detach().requires_grad_(True)
+            gate_bank=(effective if name==gate_name else parameters[gate_name].detach())
+            down_bank=(effective if name==down_name else parameters[down_name].detach())
+            token_outputs=[]
+            for row in range(x.shape[0]):
+                expert_outputs=[]
+                for slot in range(moe.top_k):
+                    expert=int(expert_ids[row,slot])
+                    gate=gate_bank[expert]
+                    down=down_bank[expert]
+                    projected=stored_linear(x[row:row+1],gate,storage_dtype=base.dtype)
+                    hidden_state=swiglu(projected[...,:moe.experts.ff],
+                                        projected[...,moe.experts.ff:],moe.clamp)
+                    expert_outputs.append(stored_linear(hidden_state,down,storage_dtype=base.dtype))
+                token_outputs.append(torch.stack(expert_outputs,dim=1))
+            routed=torch.cat(token_outputs,dim=0)
+            objective=(routed.float()*routing[...,None]).sum(1).square().mean()
+            expected.add_(torch.autograd.grad(objective,effective)[0].detach())
+        actual_gradient,actual_fp32_sum=actual
+        assert torch.isfinite(actual_gradient).all() and actual_gradient.norm()>0
+        torch.testing.assert_close(actual_fp32_sum,expected,rtol=2e-5,atol=3e-6)
+        torch.testing.assert_close(actual_gradient,expected.to(base.dtype),rtol=0,atol=0)
+    finally:
+        base.requires_grad_(original_requires_grad)
+        engine.store.close()
+
+
+def test_unanchored_fp32_effective_weight_keeps_fp32_stored_linear_adjoint():
+    from natlang_neuralese.model.native_weight_carrier import stored_linear
+    torch.manual_seed(2208)
+    x=torch.randn((5,7),dtype=torch.bfloat16)
+    effective=torch.randn((3,7),dtype=torch.float32,requires_grad=True)
+    upstream=torch.randn((5,3),dtype=torch.bfloat16)
+    output=stored_linear(x,effective,storage_dtype=torch.bfloat16)
+    actual=torch.autograd.grad(output,effective,upstream)[0]
+    expected=upstream.float().T@x.float()
+    assert actual.dtype==torch.float32
+    torch.testing.assert_close(actual,expected,rtol=0,atol=0)
+
+
+@pytest.mark.parametrize('target_suffix',['experts.gate_up','experts.down'])
+def test_native_service_model_parameter_vjp_targets_mellum_expert_bank_across_actors(
+        tmp_path,target_suffix):
+    from natlang_neuralese.serve.native_grad import native_graph_gradient
+    torch.manual_seed(2210)
+    engine=engine_fixture(tmp_path,'mellum',service_template=True)
+    try:
+        moe=next(module for module in engine.shared_model.port.hf.modules()
+                 if hasattr(module,'experts') and hasattr(module.experts,'make_latent'))
+        # Serving fixtures keep expert banks as buffers; the production
+        # optimizer's latent route promotes them to trainable parameters.
+        moe.experts.make_latent(quantize=False)
+        adapter_name=next(name for name in target_parameters(engine.shared_model) if name.endswith(target_suffix))
+        api_name=next(name for name in dict(engine.shared_model.named_parameters()) if name.endswith(target_suffix))
+        adapter=create_adapter(engine,{'kind':'xs','rank':2,'parameter_names':[adapter_name]})
+        roles=engine.role_tokens
+        graph={'schema':'natlang.neuralese-native-graph/1','id':'expert-bank-service-vjp',
+            'split':'train','source_groups':['expert-bank-service-vjp-fixture'],
+            'tokenizer_fingerprint':engine.native_identity['tokenizer_fingerprint'],
+            'nodes':[{'name':'producer','token_ids':[4,roles.produce_open,5,6,roles.produce_close,7],
+                      'producing':[[2,4]],'target_weights':[0]*6},
+                     {'name':'reader','token_ids':[8,roles.consume_open,roles.consume_close,9,10],
+                      'imports':[{'at':2,'source':'producer','start':2,'stop':4}],
+                      'target_weights':[0,0,0,1,1]},
+                     {'name':'peer','token_ids':[11,12,13],'target_weights':[0]*3}]}
+        parameter=dict(engine.shared_model.named_parameters())[api_name]
+        original_requires_grad,original_grad=parameter.requires_grad,parameter.grad
+        result=native_graph_gradient(engine,{'schema':'natlang.native-gradient-request/1',
+            'graph':graph,'adapters':[adapter.id],
+            'invocation_adapters':{'producer':[{'id':adapter.id,'scale':.65}],
+                'reader':[{'id':adapter.id,'scale':-.35}],'peer':[adapter.id]},
+            'adapter_gradient_precision':'fp32',
+            'target':{'kind':'model-parameters','names':[api_name]}},None)
+        artifact=engine.store.get_native_tensor_artifact(result['gradient']['id']).artifact
+        gradient=artifact.tensors[api_name]
+        assert gradient.dtype==parameter.dtype and gradient.norm()>0
+        assert parameter.requires_grad is original_requires_grad and parameter.grad is original_grad
+    finally:
+        engine.store.close()
+
+
+def test_effective_cotangent_view_mapping_preserves_offsets_and_rejects_escape():
+    from natlang_neuralese.model.native_weight_carrier import ParameterCotangentScope
+    source=torch.arange(48,dtype=torch.float32).reshape(4,3,4)
+    backing=torch.zeros((6,3,4),dtype=torch.float32)
+    effective=backing[:4]
+    mapped=ParameterCotangentScope._route_parameter_view(source,effective,effective[2])
+    assert mapped.shape==(3,4) and torch.equal(mapped,source[2])
+    outside=backing[4]
+    with pytest.raises(RuntimeError,match='escapes its source bank'):
+        ParameterCotangentScope._route_parameter_view(source,effective,outside)
+
+
 def test_native_attention_compiler_contract_separates_actual_adjoint_and_inference_modes(monkeypatch):
     from natlang_neuralese.model import shared_state
     from natlang_neuralese.common import native_attention_delta
