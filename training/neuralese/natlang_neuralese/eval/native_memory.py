@@ -272,7 +272,7 @@ def _run_one_prepared(model,optimizer,train,roles,config,args,*,backend,checkpoi
     from ..train.native_resident import bound,binding,code_inventory,_check_indexes
     from ..common.hashing import canonical_json_sha256_hex
     from ..common.jsonio import write_json_durable
-    from ..data.native_sources import NativeGraphSource
+    from ..train.native_source_preparation import NativeSourcePreparation
     from ..common.checkpoint_offload import configure_checkpoint_input_offload
     if args.checkpoint_input_offload and not args.checkpoint_layers:
         raise ValueError('checkpoint input offload requires activation checkpointing')
@@ -291,8 +291,9 @@ def _run_one_prepared(model,optimizer,train,roles,config,args,*,backend,checkpoi
     source_split=request.get('split','train')
     if source_split not in ('train','test'):
         raise ValueError('capacity source split must be train or test')
-    source=NativeGraphSource(bound(request['source']),config['tokenizer_fingerprint'],
-        required_split=source_split,pair_model=request.get('pair_model'),role_ids=roles.ids)
+    preparation=NativeSourcePreparation(config['tokenizer_fingerprint'],roles.ids)
+    preparation.retain(train)
+    source=preparation.load(request['source'],split=source_split,pair_model=request.get('pair_model'))
     selected=request['cases']
     if not selected or len({row['index'] for row in selected})!=len(selected):
         raise ValueError('memory qualification needs distinct complete graph cases')
