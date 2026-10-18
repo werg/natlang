@@ -65,7 +65,71 @@ def verify_request(request):
     return verify_environment(provenance)
 
 
-def seal_request(checkpoint,*,identity,step,spec,out,base,queue,source_export=None,device='cuda',consume_export=False):
+def _active_request(directory,request):
+    return {'step':request['step'],'checkpoint_sha256':request['evaluation_provenance']['checkpoint']['sha256'],
+            'request':str(directory),'stage_out':request['stage_out'],'spec':request['spec'],
+            'pending':True,'eligible':None}
+
+
+def _publish_request(active,queue):
+    queue=Path(queue);queue.mkdir(parents=True,exist_ok=True)
+    write_json_durable(queue/('native-'+active['checkpoint_sha256']+'.json'),{'request':active['request']})
+
+
+def _recover_request(*,out,identity,step,spec,base,source_export,device,prepared=None):
+    """Authenticate a sealed request without rewriting it or downloading again."""
+    from .task_cadence import ASYNC_SCHEMA,parse_task_eval,require_native_transport
+    from ..train.checkpoint_policy import CheckpointPolicy
+    from ..model.native_model import CHECKPOINT_SCHEMA,base_inventory
+    stage=Path(out).resolve()/'checkpoints'/identity['sha256']
+    directory=stage/'task-eval/async'/f'step-{step:07d}';path=directory/'request.json'
+    if not path.exists()and prepared is None:return None
+    if (not isinstance(prepared,dict)or prepared.get('schema')!='natlang.native-eval-seal/1'
+            or prepared.get('directory')!=str(directory)or not isinstance(prepared.get('request'),dict)
+            or canonical_json_sha256_hex(prepared['request'])!=prepared.get('sha256')):
+        raise ValueError('native eval sealed request differs from durable preparation')
+    request=json.loads(path.read_text())if path.exists()else prepared['request']
+    if canonical_json_sha256_hex(request)!=prepared['sha256']:
+        raise ValueError('native eval sealed request differs from durable preparation')
+    provenance=request['evaluation_provenance']
+    expected=require_native_transport(parse_task_eval(spec))
+    # The frozen runtime is authoritative after sealing, even after a live build.
+    expected['runtime']=request['spec']['runtime']
+    weights=directory/'weights.pt'
+    packet=Path(expected['packet']['path'])
+    if not packet.is_absolute():
+        from .task_cadence import TaskEval
+        packet=TaskEval(expected,stage,None,prompt_rendering=expected['prompt_rendering']).repo/packet
+    if (request.get('schema')!=ASYNC_SCHEMA or request.get('step')!=step
+            or request.get('stage_out')!=str(stage) or request.get('spec')!=expected
+            or request.get('base')!=str(Path(base).resolve()) or request.get('device')!=device
+            or request.get('native_state')is not True or request.get('weights')!=str(weights)
+            or provenance.get('checkpoint')!=file_binding(weights)
+            or provenance['checkpoint']['sha256']!=identity['sha256']
+            or provenance['checkpoint']['bytes']!=identity['bytes']
+            or provenance.get('source_checkpoint_sha256')!=identity['sha256']
+            or provenance.get('source_export')!=source_export
+            or provenance.get('case_indices')!=expected['cases']
+            or provenance.get('packet')!=file_binding(packet)
+            or provenance.get('sampler')!={'temperature':expected['temperature'],'seed_base':400000,
+                'repeat_seed_stride':100000,'noise_repeats':expected['noise_repeats'],
+                'neuralese_server':expected.get('neuralese_server',False)}):
+        raise ValueError('native eval sealed request differs from admitted export')
+    state=CheckpointPolicy.load(weights)
+    if (state.get('schema')!=CHECKPOINT_SCHEMA or state.get('step')!=step
+            or state.get('model_config')!=provenance.get('model_config')
+            or state.get('inference_source')!=provenance.get('inference_source')
+            or (state.get('inference_source')is not None and
+                state['inference_source']['training_checkpoint_sha256']!=provenance.get('source_training_checkpoint_sha256'))
+            or state['model_config']['base_inventory']!=base_inventory(base)):
+        raise ValueError('native eval sealed request differs from saved checkpoint')
+    del state
+    verify_request(request)
+    if not path.exists():write_json_durable(path,request)
+    return _active_request(directory,request)
+
+
+def seal_request(checkpoint,*,identity,step,spec,out,base,queue,source_export=None,device='cuda',consume_export=False,on_sealed=None,on_prepared=None):
     """Seal verified export bytes; keep a derived view's original parent separate."""
     from ..train.checkpoint_policy import CheckpointPolicy
     from ..model.native_model import CHECKPOINT_SCHEMA,base_inventory
@@ -136,11 +200,12 @@ def seal_request(checkpoint,*,identity,step,spec,out,base,queue,source_export=No
         'base':str(Path(base).resolve()),'weights':str(weights),'checkpoint':str(checkpoint),
         'requested_at':time.time(),'evaluation_provenance':provenance,
         'trainer_code_commit':(source_export or {}).get('source_code_commit')}
+    if on_prepared is not None:on_prepared(request_dir,request)
     write_json_durable(request_dir/'request.json',request)
-    queue=Path(queue);queue.mkdir(parents=True,exist_ok=True)
-    write_json_durable(queue/('native-'+identity['sha256']+'.json'),{'request':str(request_dir)})
-    return {'step':step,'checkpoint_sha256':identity['sha256'],'request':str(request_dir),
-            'stage_out':str(stage),'spec':spec,'pending':True,'eligible':None}
+    active=_active_request(request_dir,request)
+    if on_sealed is not None:on_sealed(active)
+    _publish_request(active,queue)
+    return active
 
 
 def poll_latest(export_state,*,out,spec,base,queue,fetch_command,local_checkpoint=None,device='cuda',export_admission=None):
@@ -153,6 +218,16 @@ def poll_latest(export_state,*,out,spec,base,queue,fetch_command,local_checkpoin
         prior=json.loads(state_path.read_text()) if state_path.exists() else {}
         active=prior.get('active')
         if active:
+            if active.get('publication_pending')and Path(active['request']).exists():
+                current=selected_ingest_export(export_state,prior);receipt=verified_export(current)
+                recovered=_recover_request(out=out,identity=receipt['identity'],step=current['last_verified_step'],
+                    spec=spec,base=base,source_export=receipt,device=device,prepared=prior.get('sealing_request'))
+                if (recovered is None or {k:active[k]for k in recovered}!=recovered
+                        or file_binding(Path(active['request'])/'request.json')['sha256']!=active['request_sha256']):
+                    raise ValueError('native eval pending publication changed')
+                _publish_request(recovered,queue)
+                active=recovered;prior['active']=active;prior.pop('fetching_export',None);prior.pop('sealing_request',None)
+                write_json_durable(state_path,prior)
             evaluator=TaskEval(active['spec'],Path(active['stage_out']),None,
                                prompt_rendering=active['spec']['prompt_rendering'])
             result=evaluator.landed(active['step'])
@@ -161,33 +236,51 @@ def poll_latest(export_state,*,out,spec,base,queue,fetch_command,local_checkpoin
                 return {'event':'native_eval_pending','active_step':active['step'],'eligible':None}
             write_json_durable(out/'latest-result.json',{'checkpoint_sha256':active['checkpoint_sha256'],
                 'step':active['step'],'result':result,'historical':True,'qualifies_current_weights':False})
-            prior['last_completed_sha256']=active['checkpoint_sha256'];prior.pop('active')
+            prior['last_completed_sha256']=active['checkpoint_sha256'];prior.pop('active');prior.pop('fetching_export',None);prior.pop('sealing_request',None)
             write_json_durable(state_path,prior)
         current=selected_ingest_export(export_state,prior);receipt=verified_export(current)
         identity=receipt['identity']
         if identity['sha256']==prior.get('last_completed_sha256'):
             return {'event':'native_eval_up_to_date','step':current['last_verified_step']}
+        def journal_sealed(sealed):
+            prior['active']={**sealed,'publication_pending':True,
+                'request_sha256':file_binding(Path(sealed['request'])/'request.json')['sha256']}
+            write_json_durable(state_path,prior)
+        def journal_prepared(directory,request):
+            prior['sealing_request']={'schema':'natlang.native-eval-seal/1','directory':str(directory),
+                'request':request,'sha256':canonical_json_sha256_hex(request)}
+            write_json_durable(state_path,prior)
+        recovered=_recover_request(out=out,identity=identity,step=current['last_verified_step'],
+            spec=spec,base=base,source_export=receipt,device=device,prepared=prior.get('sealing_request'))
+        if recovered is not None:
+            journal_sealed(recovered);_publish_request(recovered,queue)
+            prior.pop('fetching_export',None);prior.pop('sealing_request',None);prior['active']=recovered
+            write_json_durable(state_path,prior)
+            return {'event':'native_eval_enqueued',**recovered}
         destination=out/'incoming'/('checkpoint-'+identity['sha256']+'.pt')
         if export_admission is not None:
             admission=export_admission(current,destination)
             if admission is not None:return admission
         destination.parent.mkdir(parents=True,exist_ok=True)
         receipt_path=destination.with_suffix('.receipt.json');write_json_durable(receipt_path,receipt)
-        if local_checkpoint:
+        sealed_weights=out/'checkpoints'/identity['sha256']/'task-eval/async'/f"step-{current['last_verified_step']:07d}"/'weights.pt'
+        if 'fetching_export'not in prior:
+            selected={'last_verified_step':current['last_verified_step'],'receipt':receipt}
+            prior['fetching_export']={'schema':'natlang.native-eval-transfer/1',
+                'export':selected,'sha256':canonical_json_sha256_hex(selected)}
+            write_json_durable(state_path,prior)
+        if sealed_weights.exists():
+            checkpoint=sealed_weights
+        elif local_checkpoint:
             checkpoint=Path(local_checkpoint)
         else:
-            selected={'last_verified_step':current['last_verified_step'],'receipt':receipt}
-            if 'fetching_export'not in prior:
-                prior['fetching_export']={'schema':'natlang.native-eval-transfer/1',
-                    'export':selected,'sha256':canonical_json_sha256_hex(selected)}
-                write_json_durable(state_path,prior)
             argv=[part.replace('{receipt}',str(receipt_path)).replace('{out}',str(destination)) for part in fetch_command]
             subprocess.run(argv,check=True,stdout=subprocess.DEVNULL)
             checkpoint=destination
         active=seal_request(checkpoint,identity=identity,step=current['last_verified_step'],
             spec=spec,out=out,base=base,queue=queue,source_export=receipt,device=device,
-            consume_export=not local_checkpoint)
-        prior.pop('fetching_export',None)
+            consume_export=not local_checkpoint,on_sealed=journal_sealed,on_prepared=journal_prepared)
+        prior.pop('fetching_export',None);prior.pop('sealing_request',None)
         write_json_durable(state_path,{**prior,'active':active,'last_enqueued_at':time.time()})
         if not local_checkpoint:destination.unlink(missing_ok=True)  # sealed request now owns immutable bytes
         receipt_path.unlink(missing_ok=True)

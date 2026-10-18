@@ -164,3 +164,29 @@ def test_shell_wrapper_arguments_are_not_an_executing_python_evaluator(tmp_path)
     directory=tmp_path/'request'
     assert service._executes_request(['python','-m','natlang_neuralese.eval.task_cadence','--async-request',str(directory)],directory)
     assert not service._executes_request(['sh','-c','exec "$@"','python','-m','natlang_neuralese.eval.task_cadence','--async-request',str(directory)],directory)
+
+
+def test_sealed_owned_weights_need_only_existing_reserve_before_recovery(tmp_path):
+    c=config(tmp_path)
+    owned=Path(c['out'])/'checkpoints'/('f'*64)/'task-eval/async/step-0010922/weights.pt'
+    owned.parent.mkdir(parents=True);owned.write_bytes(b'x'*100)
+    assert service.poll(c,ingest=lambda *a,**kw:dict(event='native_eval_enqueued'),
+                        available=lambda _:SimpleNamespace(free=200))['event']=='native_eval_enqueued'
+
+
+def test_service_publishes_prior_landed_result_before_blocking_transfer(tmp_path,monkeypatch):
+    c=config(tmp_path);result={'step':20513,'historical':True,'result':{'task_successes':12}}
+    dump(Path(c['out'])/'latest-result.json',result)
+    def blocking_poll(config):
+        assert json.loads((Path(config['status'])/'latest-result.json').read_text())==result
+        return dict(event='native_eval_up_to_date')
+    monkeypatch.setattr(service,'poll',blocking_poll)
+    service.run(c,max_polls=1)
+
+
+def test_current_request_progress_does_not_depend_on_latest_export_availability(tmp_path):
+    c=config(tmp_path)
+    dump(Path(c['out'])/'native-async-state.json',dict(active=dict(step=10922)))
+    Path(c['export_state']).unlink()
+    assert service.poll(c,ingest=lambda *a,**kw:dict(event='native_eval_pending',active_step=10922),
+        available=lambda _:pytest.fail('no new transfer is requested'))['active_step']==10922

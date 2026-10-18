@@ -132,10 +132,6 @@ def poll(config, *, observe=dispatch_evidence, ingest=poll_latest, available=Non
     out=Path(config['out']);out.mkdir(parents=True,exist_ok=True)
     existing=out/'native-async-state.json'
     prior=json.loads(existing.read_text())if existing.exists()else{}
-    source=selected_ingest_export(config['export_state'],prior);receipt=verified_export(source)
-    if receipt['role']!=config['role']:raise ValueError('native ingestion export role differs')
-    if source['last_verified_step']<config['minimum_step']:
-        return dict(event='native_eval_waiting_for_minimum_step',step=source['last_verified_step'])
     spec=parse_task_eval(json.loads(Path(config['spec']).read_text()))
     active=bool(prior.get('active'))
     def admit(selected,destination):
@@ -143,12 +139,14 @@ def poll(config, *, observe=dispatch_evidence, ingest=poll_latest, available=Non
         if exact['role']!=config['role']:raise ValueError('native ingestion export role differs')
         if selected['last_verified_step']<config['minimum_step']:
             return dict(event='native_eval_waiting_for_minimum_step',step=selected['last_verified_step'])
-        retained=max((p.stat().st_size for p in(destination,destination.with_name(destination.name+'.pending'))if p.is_file()),default=0)
+        owned=out/'checkpoints'/exact['identity']['sha256']/'task-eval/async'/f"step-{selected['last_verified_step']:07d}"/'weights.pt'
+        retained=max((p.stat().st_size for p in(destination,destination.with_name(destination.name+'.pending'),owned)if p.is_file()),default=0)
         needed=max(0,exact['identity']['bytes']-retained)+config['disk_reserve_bytes']
         free=(available or shutil.disk_usage)(out).free
         if free<needed:return dict(event='native_eval_disk_wait',available_bytes=free,needed_bytes=needed)
         return None
     if not active:
+        source=selected_ingest_export(config['export_state'],prior);receipt=verified_export(source)
         decision=admit(source,out/'incoming'/('checkpoint-'+receipt['identity']['sha256']+'.pt'))
         if decision is not None:return decision
     # Recheck the selected receipt under the ingester's transfer lease. The
@@ -164,9 +162,12 @@ def run(config, *, every=60, max_polls=None):
         write_json_durable(status/'started.json',dict(at=time.time(),pid=os.getpid(),configuration=config,mechanism=binding(__file__)))
         count=0
         while max_polls is None or count<max_polls:
+            # A prior poll may have drained a result before blocking in the
+            # next checkpoint transfer. Publish that durable result on restart.
+            latest=Path(config['out'])/'latest-result.json'
+            if latest.exists():write_json_durable(status/'latest-result.json',json.loads(latest.read_text()))
             try:event=poll(config)
             except Exception as error:event=dict(event='native_eval_ingest_retry',error_type=type(error).__name__)
-            latest=Path(config['out'])/'latest-result.json'
             if latest.exists():write_json_durable(status/'latest-result.json',json.loads(latest.read_text()))
             event=dict(at=time.time(),**event);write_json_durable(status/'status.json',event)
             print(json.dumps(event),flush=True);count+=1

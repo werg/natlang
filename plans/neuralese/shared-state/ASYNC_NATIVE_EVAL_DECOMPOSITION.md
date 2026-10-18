@@ -17,9 +17,24 @@ with no new teacher, evaluator, quality gate or task limit. The shared service's
 disk admission must use the same pinned receipt, including its retained bytes.
 The floor callback rechecks that selection under the existing transfer lease;
 an export advancing during the preliminary floor check cannot evade admission.
-The separate, pre-existing request-publication-to-active-journal crash window
-still needs authenticated existing-request recovery; interrupted-fetch tests do
-not certify that whole sealing transaction.
+Request publication also resumes as one durable transaction: persist the exact
+prepared request and its hash before exposing request.json, then record the
+sealed request and its hash in the active journal before publishing its queue
+pointer. If interrupted before journaling, authenticate the existing immutable
+request against the pinned export, specification, base, weights and runtime;
+reuse its bytes. The prior preparation authenticates the frozen runtime even
+when an alternate runtime and its internal digests are individually valid. If
+interrupted before request writing, finish that exact prepared request. If
+interrupted before publication, republish the same pointer.
+Never fetch or reseal a request that already owns verified checkpoint bytes.
+An interruption after moving weights but before writing the request reuses those
+verified weights. Existing dispatched work and drained results remain owned by
+the sole dispatcher. These are exact durability helpers, not selection policy.
+An active request's progress is independent of latest-export availability; new
+transfer admission still checks the actual selected receipt under the lease.
+Focused verification: 65 tests passed, including both model roles at five
+sealing interruption boundaries, alternate valid runtime rejection, completed
+request drain, and retained-byte disk admission. Independent source review clear.
 
 1. Read the existing periodic exporter's verified receipt without modifying its
    state. Use its existing private owner-authenticated transfer, exact SHA/size

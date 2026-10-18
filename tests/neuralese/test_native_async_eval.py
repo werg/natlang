@@ -356,3 +356,113 @@ def test_native_dispatch_memory_families_are_separate_and_live_units_stay_owned(
     monkeypatch.setattr(dispatcher,'unit_state',state)
     assert dispatcher.dispatch(queue)==[]
     assert observed==[legacy]
+
+
+@pytest.mark.parametrize('role',['lfm','mellum'])
+@pytest.mark.parametrize('boundary',['preparation','weights','request','journal','published'])
+def test_real_seal_crash_reuses_weights_request_and_single_queue_pointer(tmp_path,monkeypatch,role,boundary):
+    import subprocess
+    from natlang_neuralese.eval import native_async
+    base,_,checkpoint,spec,export=fixture(tmp_path)
+    export['receipt']['role']=role
+    source_bytes=checkpoint.read_bytes();calls=[]
+    export_path=tmp_path/'export.json';export_path.write_text(json.dumps(export))
+    def fetch(argv,**kwargs):
+        calls.append(argv);Path(argv[2]).write_bytes(source_bytes)
+        return subprocess.CompletedProcess(argv,0)
+    monkeypatch.setattr(native_async.subprocess,'run',fetch)
+    real_write=native_async.write_json_durable;real_publish=native_async._publish_request
+    class Crash(RuntimeError):pass
+    def interrupt_write(path,value):
+        path=Path(path)
+        if boundary=='preparation'and path.name=='native-async-state.json'and 'sealing_request'in value:raise Crash()
+        if boundary=='weights'and path.name=='request.json':raise Crash()
+        if boundary=='request'and path.name=='native-async-state.json'and value.get('active',{}).get('publication_pending'):raise Crash()
+        if boundary=='published'and path.name=='native-async-state.json'and 'active'in value and not value['active'].get('publication_pending'):raise Crash()
+        return real_write(path,value)
+    def interrupt_publish(active,queue):
+        if boundary=='journal':raise Crash()
+        return real_publish(active,queue)
+    monkeypatch.setattr(native_async,'write_json_durable',interrupt_write)
+    monkeypatch.setattr(native_async,'_publish_request',interrupt_publish)
+    options=dict(out=tmp_path/'eval',spec=spec,base=base,queue=tmp_path/'queue',
+                 fetch_command=['fetch','{receipt}','{out}'],device='cpu')
+    with pytest.raises(Crash):poll_latest(export_path,**options)
+    request=tmp_path/'eval/checkpoints'/export['receipt']['identity']['sha256']/'task-eval/async/step-0000007/request.json'
+    frozen=request.read_bytes()if request.exists()else None
+    weights=request.with_name('weights.pt');assert weights.read_bytes()==source_bytes
+    state_path=tmp_path/'eval/native-async-state.json'
+    assert json.loads(state_path.read_text())['fetching_export']['export']['last_verified_step']==7
+    export_path.unlink()  # Recovery must use durable admission, not latest discovery.
+    monkeypatch.setattr(native_async,'write_json_durable',real_write)
+    monkeypatch.setattr(native_async,'_publish_request',real_publish)
+    resumed=poll_latest(export_path,**options)
+    assert resumed.get('step',resumed.get('active_step'))==7
+    assert len(calls)==1 and weights.read_bytes()==source_bytes
+    if frozen is not None:assert request.read_bytes()==frozen
+    pointers=list((tmp_path/'queue').glob('*.json'));assert len(pointers)==1
+    assert json.loads(pointers[0].read_text())=={'request':str(request.parent)}
+    final=json.loads(state_path.read_text());assert 'fetching_export'not in final
+    assert 'sealing_request'not in final
+    assert not final['active'].get('publication_pending')
+    assert poll_latest(export_path,**options)['active_step']==7
+    assert len(calls)==1
+
+
+@pytest.mark.parametrize('field',['source_export','spec','weights','model_config','valid_other_runtime'])
+def test_recovered_sealed_request_cannot_change_admission_or_saved_model(tmp_path,monkeypatch,field):
+    from natlang_neuralese.eval import native_async
+    from natlang_neuralese.common.hashing import canonical_json_sha256_hex
+    base,_,checkpoint,spec,export=fixture(tmp_path)
+    def prepare(directory,request):
+        native_async.write_json_durable(tmp_path/'eval/native-async-state.json',dict(sealing_request=dict(
+            schema='natlang.native-eval-seal/1',directory=str(directory),request=request,
+            sha256=canonical_json_sha256_hex(request))))
+    active=seal_request(checkpoint,identity=export['receipt']['identity'],step=7,spec=spec,
+        out=tmp_path/'eval',base=base,queue=tmp_path/'queue',source_export=export['receipt'],device='cpu',on_prepared=prepare)
+    request_path=Path(active['request'])/'request.json';request=json.loads(request_path.read_text())
+    if field=='source_export':request['evaluation_provenance']['source_export']['run']='another/run'
+    elif field=='spec':request['spec']['temperature']=.99
+    elif field=='weights':Path(request['weights']).write_bytes(b'changed model')
+    elif field=='model_config':request['evaluation_provenance']['model_config']['rank']=999
+    else:
+        from natlang_neuralese.common.runtime_inventory import snapshot_task_runtime,task_runtime_inventory
+        (Path(spec['runtime'])/'prelude.js').write_text('another valid compiled runtime')
+        other=snapshot_task_runtime(Path(spec['runtime']),tmp_path/'other-runtimes')
+        inventory=task_runtime_inventory(other)
+        request['spec']['runtime']=str(other)
+        request['evaluation_provenance']['runtime']=dict(path=str(other),inventory=inventory,sha256=canonical_json_sha256_hex(inventory))
+        request['evaluation_provenance']['evaluation_spec_sha256']=canonical_json_sha256_hex(request['spec'])
+        native_async.verify_request(request)  # Internally valid; prior seal must still reject it.
+    request_path.write_text(json.dumps(request))
+    export_path=tmp_path/'export.json';export_path.write_text(json.dumps(export))
+    monkeypatch.setattr(native_async.subprocess,'run',lambda *a,**kw:pytest.fail('must not fetch a sealed request'))
+    with pytest.raises(ValueError,match='sealed request differs'):
+        poll_latest(export_path,out=tmp_path/'eval',spec=spec,base=base,queue=tmp_path/'queue',fetch_command=[],device='cpu')
+
+
+def test_publication_crash_after_dispatch_drain_keeps_result_and_clears_pin(tmp_path,monkeypatch):
+    from natlang_neuralese.eval import native_async
+    base,_,checkpoint,spec,export=fixture(tmp_path)
+    export_path=tmp_path/'export.json';export_path.write_text(json.dumps(export))
+    real_write=native_async.write_json_durable
+    def interrupt(path,value):
+        if Path(path).name=='native-async-state.json'and 'active'in value and not value['active'].get('publication_pending'):
+            raise RuntimeError('crash after publishing')
+        return real_write(path,value)
+    monkeypatch.setattr(native_async,'write_json_durable',interrupt)
+    options=dict(out=tmp_path/'eval',spec=spec,base=base,queue=tmp_path/'queue',fetch_command=[],local_checkpoint=checkpoint,device='cpu')
+    with pytest.raises(RuntimeError,match='after publishing'):poll_latest(export_path,**options)
+    state_path=tmp_path/'eval/native-async-state.json';active=json.loads(state_path.read_text())['active']
+    def execute(self,run,repeat=0):
+        run.mkdir(parents=True,exist_ok=True)
+        return {'task_successes':1,'task_success_rate':1.,'complete':True,'cases':[],
+                'cases_expected':1,'outcome_counts':{'task_success':1,'infrastructure_error':0,'unresolved':0}},[0]
+    monkeypatch.setattr(task_cadence.TaskEval,'_execute',execute)
+    assert task_cadence.run_request(Path(active['request']))['eligible']
+    assert not Path(active['request']).exists()
+    monkeypatch.setattr(native_async,'write_json_durable',real_write)
+    assert poll_latest(export_path,**options)['event']=='native_eval_up_to_date'
+    state=json.loads(state_path.read_text());assert 'active'not in state and 'fetching_export'not in state
+    assert state['last_completed_sha256']==export['receipt']['identity']['sha256']
+    assert json.loads((tmp_path/'eval/latest-result.json').read_text())['result']['task_successes']==1
