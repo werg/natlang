@@ -364,7 +364,8 @@ def test_actual_compiler_reader_and_writer_names_close_through_python_pair_build
     fixture_path = repo / 'ts-host/test/fixtures/neuralese-v83-soft-edges-minimal.json'
     fixture = json.loads(fixture_path.read_text())
     edge = fixture['proof']['edges'][0]
-    node = shutil.which('node') or '/home/werg/.local/share/natlang-dev/node-v24.0.1-linux-arm64/bin/node'
+    node = shutil.which('node')
+    assert node is not None, 'compiler integration requires Node on PATH, as the normal build does'
     script = r"""
       import fs from 'node:fs';
       import { convertTrajectory } from './dist/compiler/neuralese-conversion.js';
