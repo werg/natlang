@@ -564,3 +564,7 @@ argument supplied. To recover from an unexpected missing callback value, put
 that value in the callable's declared signature rather than relying on an
 undeclared array-method extra. Recompile source with the matching runtime;
 do not relabel older compiled plans or saved actor provenance.
+
+### Terminal policy children
+
+When all facts and the decision rule are supplied to a typed child, compute its declared scalar result and return it directly. Apply explicit exceptions before ordinary inclusion conditions; keep parent aggregation and service/readback recovery separate. A delegation error calls for inspecting the supplied facts and completing the current decision, rather than delegating the same question again. The independently constructed terminal-policy recovery teacher packet exercises this pattern; its teacher measurement and training exposure are recorded separately.

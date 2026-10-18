@@ -1136,3 +1136,7 @@ sole guardian sequence, then retain full trajectories and exact actor/runtime
 provenance. This is assigned to DGX native_state_independent_review; no external
 generation or concurrent primary feeder. Existing teacher30 captured001-00 and
 its source tests are a concrete regression, not the live48 qualification.
+
+## 2026-10-18: terminal policy recovery TRAIN packet
+
+Status: measurement pending. The opt-in `terminal-policy` profile of `build_fresh_recovery_teacher_worlds.py` adds complete independent TRAIN record facts, explicit conjunction/waiver/blocking policy, and a direct boolean-return instruction. Existing profiles and generation tasks remain unchanged. Qualify 24 cases (three service domains, two worlds, four real recovery seeds), then collect two repeats through the existing self-hosted teacher guardian (48 trajectories) before promoting this prompt variant. Bind current source/protection/runtime and preserve every failed outcome. This uses no held prompts, inputs, traces, or targets. Ticket intent, evolving roster, and terminal enum/numeric children remain subsequent packet obligations.
