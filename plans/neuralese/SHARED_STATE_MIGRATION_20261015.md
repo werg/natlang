@@ -552,10 +552,57 @@ collectors running. Live counters and subsequent adoption evidence remain in
 the DGX coordination status and bound operations receipts.
 
 Teacher sampling controls are published in `d55d1e2b9` with 227 independently
-verified focused checks. Future source declarations support group 4 authored-root
-and group 4 whole-student-root measurements; existing slots retain their exact
-original sampling authority. The repaired 12-task 48+48 live curriculum windows
-remain pending. Qwen text emulation cannot qualify native student state transport.
+verified focused checks. Future source declarations select their root mode and
+group size; existing slots retain their exact original sampling authority.
+The current live windows require three private-child authored tasks ×16 and
+all twelve student-root tasks ×4. Nine literal authored roots make no model
+calls and cannot count toward live48. Both windows remain pending. Qwen text
+emulation cannot qualify native student state transport.
 Verified teacher continuations of 308, 32 and 343 graphs per model are registered;
 standard consumer/staging, actual learner adoption and exposure remain separate
 receipts. The source-level and decision protections remain intact.
+
+### Operational continuation, 2026-10-18 19:15 UTC
+
+LFM actually adopted all683 teacher rows at global15,067, followed by genuine
+SGD at15,070. Its recipe contains1,263,539 rows. These are ordinary examples;
+their admission grants no completed per-row exposure or communication credit.
+Another15 verified teacher rows per model from batch43/tranche3 are registered
+in `34f80c47d`, passed both standard consumers and reached both sandboxes.
+Their learner adoption remains separate.
+
+Mellum saved global23,485 / ordinary22,469 and exited cleanly. The immutable
+48,668,097,885-byte full parent, SHA-256
+`94765f281ffcc7ccd182769badae68e83a5e97a782a82815b623d8e2efa34bc0`,
+is retained under the owned cotangent boundary's v1 directory. Two attempts
+failed before model decode or SGD: the preload guard counted reclaimable file
+cache as unavailable, and the diagnostic fallback inspected a newer parser
+attribute. The independently reviewed v2 fixes both, reuses that exact saved
+parent, and performs no new save, checkpoint copy or old-learner signal.
+Candidate1436959 began its standard owned preload. Actual315 named gradients,
+fresh actor parity, capacity and subsequent SGD remain required; a launched
+preload is not qualification. The cursor exporter is paused during this critical
+path and must be rebound to the actual new owner/specification after its gates.
+
+The full `a20f51abb8` check completed with six neural failures and all other ten
+sections passing. Failures cover BF16 sparse-row inventory, functional model
+VJP, an adapted-RL gradient observer, and optimizer/reference parity. Shared
+repairs and exact-reference diagnosis are active; tolerances are not relaxed.
+Production uses FP32 learned rows, but the counterfactual/public APIs still
+require repair. The earlier full `c23968eeba` pass is not a pass for this code.
+
+The all48-part D32 audit found25 admitted fit components absent as exact leaves
+from both current recipes. They contain38,526 LFM /39,155 Mellum candidate rows
+before complete-prefix duplicate checks. Fit-only continuation preparation is
+active; the remaining11,021 /9,807 whole long rows stay explicitly tracked.
+Missing manifest identity alone does not prove missing row IDs or exposure.
+
+The source-host role relay's repeated strict rejection was localized to stale
+pending-proof `native_raw_rounds` hashes. Both current helpers have identical
+mechanisms and contracts. Existing `withdraw` reissued only pending LF revision8
+and Mellum revision14 under exact pointer checks and unchanged unreleased raw
+state. Its natural poll returned `waiting-for-semantic-consumption` at19:10:49.
+No eligible/released certificate was reinterpreted; neither model gains readiness.
+Exact audit and renewal receipts are in
+`/home/werg/data/dgxops/native-role-relay-authority-root-audit-20261018.json` and
+`/home/werg/data/dgxops/native-role-pending-authority-renewal-root-20261018.json`.
