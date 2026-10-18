@@ -726,3 +726,44 @@ def test_delta_geometry_producer_does_not_publish_completed_report_when_maximum_
     with pytest.raises(OSError,match='maximum-row'):
         resident.prepare_whole_delta_geometry(source,[part],output,package=Path(resident.__file__).parents[1])
     assert not output.exists()and not list(tmp_path.glob('.geometry.json.preparing-*'))
+
+
+def absolute_teacher_part(tmp_path,monkeypatch):
+    import shutil
+    original=tmp_path/'original';original.mkdir();monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE',str(tmp_path/'cache'))
+    _,part=ordinary_coverage_part(original,'natlang.admitted-ordinary-source-capacity-preparation/1')
+    # The real producer stores per-model fit manifests below its original root.
+    model=original/'fixture';model.mkdir();manifest=original/'fit-sources.json'
+    doc=json.loads(manifest.read_text());doc['sources'][0]['path']='../fit.jsonl';write_json(model/'fit-sources.json',doc)
+    receipt=json.loads((original/'receipt.json').read_text())
+    receipt['fit_sources']['fixture']=resident.binding(model/'fit-sources.json')
+    receipt['files']=[{**row,'path':str(original/row['path'])}for row in receipt['files']if row['path']!='fit-sources.json']
+    fit=model/'fit-sources.json';receipt['files'].append({**resident.binding(fit),'bytes':fit.stat().st_size})
+    write_json(original/'receipt.json',receipt)
+    staged=tmp_path/'staged';shutil.copytree(original,staged);shutil.rmtree(original)
+    source=NativeGraphSource(staged/'fixture/fit-sources.json','tokenizer-sha',required_split='train')
+    part={'model':'fixture','source':resident.binding(staged/'fixture/fit-sources.json'),
+        'coverage':resident.binding(staged/'coverage.jsonl'),'receipt':resident.binding(staged/'receipt.json')}
+    return source,part,receipt
+
+
+def test_whole_delta_teacher_absolute_original_namespace_is_authenticated_after_relocation(tmp_path,monkeypatch):
+    source,part,_=absolute_teacher_part(tmp_path,monkeypatch)
+    proof=resident.prepare_whole_delta_geometry(source,[part],tmp_path/'geometry.json',package=Path(resident.__file__).parents[1])
+    assert resident.geometry_from_evidence(source,0,proof,package=Path(resident.__file__).parents[1])=={'forward_tokens':4,'kv_slots':4}
+
+
+@pytest.mark.parametrize('mutation',['root','traversal','duplicate','mixed','outside','sha','bytes','acquired-absolute'])
+def test_teacher_absolute_namespace_drift_cannot_publish_geometry(tmp_path,monkeypatch,mutation):
+    source,part,receipt=absolute_teacher_part(tmp_path,monkeypatch)
+    if mutation=='root':receipt['fit_sources']['fixture']['path']=receipt['fit_sources']['fixture']['path'].replace('/original/','/different/')
+    elif mutation=='traversal':receipt['files'][0]['path']=receipt['files'][0]['path'].replace('/original/','/original/../original/')
+    elif mutation=='duplicate':receipt['files'].append(copy.deepcopy(receipt['files'][0]))
+    elif mutation=='mixed':receipt['files'][0]['path']='coverage.jsonl'
+    elif mutation=='outside':receipt['files'][0]['path']='/another-root/coverage.jsonl'
+    elif mutation=='sha':next(row for row in receipt['files']if row['path'].endswith('/coverage.jsonl'))['sha256']='f'*64
+    elif mutation=='bytes':next(row for row in receipt['files']if row['path'].endswith('/coverage.jsonl'))['bytes']+=1
+    else:receipt['schema']='natlang.acquired-native-capacity-partition/1'
+    p=Path(part['receipt']['path']);write_json(p,receipt);part['receipt']=resident.binding(p);out=tmp_path/'geometry.json'
+    with pytest.raises(ValueError):resident.prepare_whole_delta_geometry(source,[part],out,package=Path(resident.__file__).parents[1])
+    assert not out.exists()

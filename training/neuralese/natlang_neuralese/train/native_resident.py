@@ -319,11 +319,37 @@ def prepare_whole_delta_geometry(source, parts, output, *, package):
         path=bound(part['receipt']);receipt=json.loads(path.read_text());model=part['model']
         if receipt.get('source_eligibility_unchanged')is not True or receipt.get('exact_original_row_bytes')is not True:
             raise ValueError('delta geometry needs exact original admitted row coverage')
+        kind=receipt.get('schema');members=receipt['files'];declared_root=None
+        if any(Path(row['path']).is_absolute()for row in members):
+            # Completed teacher receipts retain their original absolute namespace
+            # after the exact immutable bundle is staged on another source host.
+            fit_declaration=Path((receipt.get('fit_sources',{}).get(model)or{}).get('path',''))
+            if (kind!='natlang.admitted-ordinary-source-capacity-preparation/1'
+                    or not fit_declaration.is_absolute()or '..'in fit_declaration.parts
+                    or fit_declaration.name!='fit-sources.json'or fit_declaration.parent.name!=model):
+                raise ValueError('absolute delta members lack their exact declared teacher root')
+            declared_root=fit_declaration.parent.parent
+        normalized=[]
+        for row in members:
+            declared=Path(row['path'])
+            if '..'in declared.parts:
+                raise ValueError('delta receipt member contains path traversal')
+            if declared_root is not None:
+                if not declared.is_absolute():raise ValueError('delta receipt mixes absolute and relative members')
+                try:relative=declared.relative_to(declared_root)
+                except ValueError:raise ValueError('delta teacher member escaped its declared original root')from None
+            else:
+                if declared.is_absolute():raise ValueError('delta receipt needs relative members')
+                relative=declared
+            if str(relative)in('','.'):raise ValueError('delta receipt member is not a file')
+            normalized.append({**row,'path':str(relative)})
+        if len({row['path']for row in normalized})!=len(normalized):
+            raise ValueError('delta receipt repeated a normalized member')
         def member(reference):
             actual=bound(reference)
             try:relative=str(actual.relative_to(path.parent))
             except ValueError:raise ValueError('delta coverage escaped its receipt namespace')from None
-            matches=[row for row in receipt['files']if row['path']==relative]
+            matches=[row for row in normalized if row['path']==relative]
             if len(matches)!=1 or matches[0]['sha256']!=reference['sha256']or matches[0]['bytes']!=actual.stat().st_size:
                 raise ValueError('delta geometry member differs from its completed partition receipt')
             return actual
@@ -334,7 +360,8 @@ def prepare_whole_delta_geometry(source, parts, output, *, package):
             expected=receipt['counts'][model]['train:fit']['rows'];limits=receipt['binding']['limits'][model]
             accepted=lambda row:row.get('model')==model and row.get('split')=='train'and row.get('partition')=='fit'
         elif kind=='natlang.admitted-ordinary-source-capacity-preparation/1':
-            if receipt.get('passed')is not True or receipt['fit_sources'][model]['sha256']!=part['source']['sha256']:
+            if (receipt.get('passed')is not True or receipt['fit_sources'][model]['sha256']!=part['source']['sha256']
+                    or declared_root is not None and fit!=path.parent/model/'fit-sources.json'):
                 raise ValueError('delta teacher geometry lacks its completed fit source')
             expected=sum(row['fit']for row in receipt['counts'][model].values());limits=receipt['limits'][model]
             accepted=lambda row:row.get('model')==model and row.get('split')=='train'and row.get('disposition')=='fit'
