@@ -171,6 +171,23 @@ def test_tied_bf16_embedding_and_readout_share_reference_cotangent(tmp_path, mod
     torch.testing.assert_close(actual, expected, rtol=0, atol=0)
 
 
+def test_vjp_accepts_only_exact_reference_parameter_cotangent(tmp_path):
+    from natlang_neuralese.common.native_higher_order import reference_arithmetic
+
+    layer, x, _, _, _ = _case()
+    weight = layer.weight
+    initial = torch.full_like(weight, 2)
+    weight.grad = initial.clone()
+    with ParameterCotangentScope.for_model(layer, mode='vjp', directory=tmp_path) as scope:
+        with reference_arithmetic():
+            reference = scope.reference_parameter(weight)
+            loss = torch.nn.functional.linear(x.float(), reference).square().sum()
+            expected, = torch.autograd.grad(loss, reference, retain_graph=True)
+            loss.backward()
+        scope.finish()
+    torch.testing.assert_close(weight.grad, initial + expected.to(weight.dtype), rtol=0, atol=0)
+
+
 def test_update_rejects_unwrapped_gradient_even_when_reference_route_exists(tmp_path):
     from natlang_neuralese.common.native_higher_order import reference_arithmetic
 

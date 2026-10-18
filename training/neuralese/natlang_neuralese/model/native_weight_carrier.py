@@ -160,6 +160,7 @@ class ParameterCotangentScope:
             self.entries[id(parameter)] = {'name': name, 'parameter': parameter,
                 'count': 0, 'path': os.path.join(self.directory, f'{index:06d}.f32'), 'accumulator': None,
                 'anchor_value': None, 'anchor_backward': 0, 'initial_grad': initial_grad,
+                'initial_grad_value': None, 'reference_gradient_audited': False,
                 'initial_grad_version': None if initial_grad is None else initial_grad._version}
 
     def __enter__(self):
@@ -224,6 +225,7 @@ class ParameterCotangentScope:
             expected = reference.to(device=gradient.device, dtype=gradient.dtype)
             if not torch.equal(gradient, expected):
                 raise RuntimeError(f"reference cotangent fan-in changed before cast: {entry['name']}")
+            entry['reference_gradient_audited'] = True
             return gradient
         if not entry['count']:
             raise RuntimeError(
@@ -290,6 +292,7 @@ class ParameterCotangentScope:
         return {'name': name, 'parameter': parameter, 'count': 0,
             'path': os.path.join(self.directory, f'{index:06d}.f32'), 'accumulator': None,
             'anchor_value': None, 'anchor_backward': 0, 'initial_grad': initial_grad,
+            'initial_grad_value': None, 'reference_gradient_audited': False,
             'initial_grad_version': None if initial_grad is None else initial_grad._version}
 
     def _register_auxiliary(self, name, tensor):
@@ -380,6 +383,8 @@ class ParameterCotangentScope:
             value = parameter.float()
             if value.requires_grad:
                 def capture(gradient, item=entry):
+                    if item['initial_grad'] is not None and item['initial_grad_value'] is None:
+                        item['initial_grad_value'] = item['initial_grad'].detach().clone()
                     item['reference_cotangent'] = gradient.detach()
                     return gradient
                 value.register_hook(capture)
@@ -565,10 +570,16 @@ class ParameterCotangentScope:
             reference = entry.get('reference_cotangent')
             if self.mode == 'vjp' and entry['anchor_backward'] > 0:
                 continue
+            # Explicit higher-order reference arithmetic has its own shared
+            # differentiable FP32 cast edge. _audit_vjp_gradient verifies its
+            # exact once-cast contribution; .grad may be an autograd context
+            # side effect and is not the VJP returned by autograd.grad.
+            if self.mode == 'vjp' and entry['reference_gradient_audited']:
+                continue
             if self.mode == 'update' and reference is not None:
                 expected = reference.to(device=parameter.device, dtype=parameter.dtype)
-                if entry['initial_grad'] is not None:
-                    expected = entry['initial_grad'] + expected
+                if entry['initial_grad_value'] is not None:
+                    expected = entry['initial_grad_value'].to(device=parameter.device) + expected
                 if gradient is not None and torch.equal(gradient, expected):
                     continue
             bypasses.append(entry['name'])
