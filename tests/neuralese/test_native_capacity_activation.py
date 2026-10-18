@@ -11,7 +11,7 @@ from natlang_neuralese.common.hashing import sha256_file_hex
 from test_native_resident import ordinary_coverage_part
 
 
-def fixture(tmp_path, monkeypatch, *, filtered=False):
+def fixture(tmp_path, monkeypatch, *, filtered=False, role_interpretation='ordinary-text'):
     monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE', str(tmp_path/'cache'))
     source, part = ordinary_coverage_part(tmp_path, 'natlang.acquired-native-capacity-partition/1')
     coverage = Path(part['coverage']['path'])
@@ -37,7 +37,7 @@ def fixture(tmp_path, monkeypatch, *, filtered=False):
         from scripts.neuralese_data.withdraw_native_graph_targets import filter_source, continue_filtered_index
         leaf=source.children[0].path
         graphs=[json.loads(v) for v in leaf.read_text().splitlines()]
-        for value in graphs:value['conversion']={'role_interpretation':'ordinary-text'}
+        for value in graphs:value['conversion']={'role_interpretation':role_interpretation}
         # Rebuild the original receipt/index for these explicitly ordinary bytes.
         leaf.write_text(''.join(json.dumps(v)+'\n'for v in graphs))
         manifest=source.path;doc=json.loads(manifest.read_text());doc['sources'][0].update(resident.binding(leaf));write(manifest,doc)
@@ -241,3 +241,11 @@ def test_unfiltered_activation_rejects_resealed_nonordinary_producer_evidence(tm
     document['files']=[refs.get(v['path'],v)for v in document['files']];write(registered,document);part['registered_manifest']=resident.binding(registered)
     with pytest.raises(ValueError,match='producer/audit chain|all-row admission proof'):
         resident.prepare_whole_delta_geometry(source,[part],tmp_path/'bad.json',package=package)
+
+
+def test_filtered_whole_trajectory_chat_role_graphs_preserve_original_weights_and_bindings(tmp_path,monkeypatch):
+    source,part,package=fixture(tmp_path,monkeypatch,filtered=True,role_interpretation='whole-trajectory-chat-roles')
+    result=resident.prepare_whole_delta_geometry(source,[part],tmp_path/'report.json',package=package)
+    value=json.loads(Path(result['path']).read_text());assert value['new_train_rows']==1
+    proof=json.loads(Path(part['filter_proof']['path']).read_text());assert proof['old_rows']==2 and proof['new_rows']==1
+    assert resident.geometry_from_evidence(source,0,result,package=package)=={'forward_tokens':3,'kv_slots':3}

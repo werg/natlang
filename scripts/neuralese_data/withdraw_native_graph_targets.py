@@ -74,7 +74,7 @@ def filter_source(source, output, rows, *, source_sha256):
                             if (row.get('split') != 'train' or len(row.get('nodes', [])) != 1
                                     or set(row)-{'schema','id','split','source_groups','tokenizer_fingerprint','nodes','conversion'}
                                     or set(row['nodes'][0])-{'name','token_ids','target_weights'}
-                                    or conversion.get('role_interpretation') != 'ordinary-text'):
+                                    or conversion.get('role_interpretation') not in ('ordinary-text', 'whole-trajectory-chat-roles')):
                                 raise ValueError('withdrawal target is not an ordinary train row')
                             removed.append({**selected[ident], 'raw_row_sha256':hashlib.sha256(raw).hexdigest()})
                         else:

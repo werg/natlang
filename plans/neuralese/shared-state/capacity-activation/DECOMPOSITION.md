@@ -18,3 +18,7 @@
 These are exact durability and provenance operations, so they use crisp code.
 The original parser, numerical runtime, source files, and pending obligations
 remain authoritative. Both model lines use this same producer mechanism.
+
+Whole-trajectory chat-role conversion metadata remains ordinary for one-node,
+non-producing graphs. Exact filtering accepts both registered ordinary role
+interpretations; it preserves every retained byte and position weight.

@@ -186,7 +186,7 @@ def geometry_part(part, *, preparation, package):
                             or graph.get('split') != 'train' or len(graph.get('nodes', [])) != 1
                             or graph.get('external_states') or graph.get('edges')
                             or graph['nodes'][0].get('imports') or graph['nodes'][0].get('exports')
-                            or (graph.get('conversion') or {}).get('role_interpretation') != 'ordinary-text'):
+                            or (graph.get('conversion') or {}).get('role_interpretation') not in ('ordinary-text', 'whole-trajectory-chat-roles')):
                         raise ValueError('capacity activation original whole ordinary row hashes/topology differ')
                     raw_seen.add(ident)
                 if raw.strip() and ident in removed:
