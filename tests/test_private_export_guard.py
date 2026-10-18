@@ -70,3 +70,48 @@ def test_equivalent_path_preserves_actual_upload_and_full_get_history():
     assert alias['reused_verified_export']['upload_source']==original['source']
     assert not alias['reused_verified_export']['new_upload']
     with pytest.raises(ValueError):receipt_for_source(original,source='/different/pin.pt',identity={**IDENTITY,'bytes':1})
+
+
+def test_cache_bounded_reader_preserves_read_seek_and_readinto(tmp_path, monkeypatch):
+    import os
+    from private_export_guard import CacheBoundedReader
+    path=tmp_path/'source';path.write_bytes(b'0123456789')
+    advised=[]
+    monkeypatch.setattr(os,'posix_fadvise',lambda fd,start,count,mode:advised.append((start,count,mode)))
+    with CacheBoundedReader(path,release_bytes=3)as stream:
+        assert stream.read(2)==b'01' and stream.read(2)==b'23'
+        assert advised==[(0,4,os.POSIX_FADV_DONTNEED)]
+        stream.seek(8)
+        assert stream.read(2)==b'89' and stream.read(2)==b''
+        assert advised[-1]==(8,2,os.POSIX_FADV_DONTNEED)
+        stream.seek(0);buffer=bytearray(10)
+        assert stream.readinto(buffer)==10 and bytes(buffer)==path.read_bytes()
+        assert stream.tell()==10
+    with pytest.raises(ValueError):CacheBoundedReader(path,release_bytes=0)
+
+
+def test_cache_bounded_reader_is_length_preserving_http_put_body(tmp_path):
+    import hashlib
+    import http.server
+    import threading
+    import requests
+    from private_export_guard import CacheBoundedReader
+    body=bytes(range(256))*8192
+    path=tmp_path/'source';path.write_bytes(body)
+    received={}
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_PUT(self):
+            received['length']=int(self.headers['Content-Length'])
+            received['encoding']=self.headers.get('Transfer-Encoding')
+            received['sha256']=hashlib.sha256(self.rfile.read(received['length'])).hexdigest()
+            self.send_response(200);self.end_headers()
+        def log_message(self,*args):pass
+    with http.server.HTTPServer(('127.0.0.1',0),Handler)as server:
+        server.timeout=5
+        worker=threading.Thread(target=server.handle_request);worker.start()
+        try:
+            with CacheBoundedReader(path,release_bytes=16384)as stream:
+                result=requests.put(f'http://127.0.0.1:{server.server_port}/object',data=stream,timeout=5)
+            assert result.status_code==200
+        finally:worker.join(6)
+    assert received=={'length':len(body),'encoding':None,'sha256':hashlib.sha256(body).hexdigest()}

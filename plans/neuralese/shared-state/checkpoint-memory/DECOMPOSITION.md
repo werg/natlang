@@ -32,6 +32,12 @@ remain authoritative. Do not inject code into the running learner or claim an
 unperformed final save.
 # Independently published inference parents
 
+Large private exports may use a sequential file reader that releases consumed
+clean cache pages with POSIX advice. This crisp I/O helper preserves ordinary
+read/seek bytes and file length; it neither skips the complete source hash nor
+the independent private-object readback. The operator selects its use so a
+backup need not evict the learner's mapped gradient and optimizer working set.
+
 The owner retention policy keeps active recovery and quality dependencies while
 pruning superseded private exports. The exact artifact verifier may accept an
 inference pointer newer than the decoded progress-summary pointer only when its

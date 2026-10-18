@@ -4,11 +4,52 @@ from __future__ import annotations
 from contextlib import contextmanager
 import fcntl
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
 import re
 import tempfile
+
+
+class CacheBoundedReader(io.FileIO):
+    """Read unchanged file bytes while advising away consumed clean cache pages.
+
+    FileIO preserves fileno/tell/seek and length discovery for HTTP clients.
+    Seeked-over ranges are never treated as consumed. Advice is an I/O hint;
+    callers still hash every byte and independently verify the private object.
+    """
+    def __init__(self, path, *, release_bytes=16*1024**2):
+        if type(release_bytes) is not int or release_bytes <= 0:
+            raise ValueError('cache release interval must be a positive byte count')
+        super().__init__(path, 'r')
+        self.release_bytes = release_bytes
+        self._released = self._next = 0
+
+    def _before_read(self):
+        position = self.tell()
+        if position != self._next:
+            self._released = position
+
+    def _after_read(self, eof):
+        position = self.tell()
+        count = position-self._released
+        if count and (count >= self.release_bytes or eof):
+            os.posix_fadvise(self.fileno(), self._released, count, os.POSIX_FADV_DONTNEED)
+            self._released = position
+        self._next = position
+
+    def read(self, size=-1):
+        self._before_read()
+        value = super().read(size)
+        self._after_read(not value)
+        return value
+
+    def readinto(self, buffer):
+        self._before_read()
+        count = super().readinto(buffer)
+        self._after_read(not count)
+        return count
 
 
 def _identity(value):
