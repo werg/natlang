@@ -111,16 +111,30 @@ def tail(tmp_path,*,unstarted=0,unfinished=2):
     return home,journal
 
 
-def test_tail_requires_all_started_and_bounded_actual_work(tmp_path):
+def test_tail_records_bounded_actual_work(tmp_path):
     home,journal=tail(tmp_path)
     value=g.primary_tail_frontier(tmp_path,28,6)
     assert value['remaining_keys']==['6','7']and not value['unstarted_keys']
+    assert value['active_keys']==['6','7']
     assert value['queue']==g.binding(home/'queue.jsonl')
     assert g.primary_tail_frontier(tmp_path,28,1)is None
 
 
-def test_unstarted_work_never_grants_an_extra_batch(tmp_path):
-    tail(tmp_path,unstarted=1,unfinished=1)
+def test_static_shard_unstarted_keys_preserve_custody_while_capacity_is_available(tmp_path):
+    home,journal=tail(tmp_path,unstarted=5,unfinished=2)
+    before={str(p):p.read_bytes()for p in(home/'queue.jsonl',journal)}
+    value=g.primary_tail_frontier(tmp_path,28,6)
+    assert value['schema']=='natlang.teacher-primary-tail-capacity/2'
+    assert value['active_keys']==['1','2']
+    assert value['unstarted_keys']==['3','4','5','6','7']
+    assert value['remaining_keys']==['1','2','3','4','5','6','7']
+    assert {str(p):p.read_bytes()for p in(home/'queue.jsonl',journal)}==before
+    assert g.primary_tail_frontier(tmp_path,28,1)is None
+
+
+@pytest.mark.parametrize('unstarted,unfinished',[(6,2),(0,0),(8,0)])
+def test_startup_or_complete_batch_does_not_create_a_tail(tmp_path,unstarted,unfinished):
+    tail(tmp_path,unstarted=unstarted,unfinished=unfinished)
     assert g.primary_tail_frontier(tmp_path,28,6)is None
 
 

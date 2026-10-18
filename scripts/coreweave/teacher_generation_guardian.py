@@ -521,11 +521,17 @@ def primary_tail_frontier(root,batch,threshold):
     if not set(finished)<=started:raise ValueError('tail finish lacks its actual start')
     if before!={str(p):binding(p)for p in [queue,*journals]}:return None
     remaining=keys-set(finished)
-    if keys-started or not 0<len(remaining)<=threshold:return None
-    return {'schema':'natlang.teacher-primary-tail-capacity/1','batch':batch,
+    active=started-set(finished)
+    unstarted=keys-started
+    # Static shard tails can leave pending keys behind a few live workers after
+    # other workers exit. They retain those keys; the separate second batch
+    # uses available serving capacity. Do not interpret startup as a tail.
+    if not finished or not remaining or len(active)>threshold:return None
+    return {'schema':'natlang.teacher-primary-tail-capacity/2','batch':batch,
         'queue':before[str(queue)],'journals':[before[str(p)]for p in journals],
         'started_keys':sorted(started),'finished_keys':sorted(finished),
-        'remaining_keys':sorted(remaining),'unstarted_keys':[],
+        'remaining_keys':sorted(remaining),'unstarted_keys':sorted(unstarted),
+        'active_keys':sorted(active),
         'claim':'actual capacity observation only; no original completion or admission'}
 
 
