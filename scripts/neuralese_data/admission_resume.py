@@ -125,7 +125,8 @@ def save_model_checkpoint(root, identity, result):
             os.link(temp_name, destination)
         except FileExistsError:
             payload_existing = json.loads(destination.read_text(encoding='utf-8'))
-            if payload_existing.get('identity') != identity or payload_existing.get('result') != result:
+            if (canonical_json_bytes(payload_existing.get('identity')) != canonical_json_bytes(identity)
+                    or canonical_json_bytes(payload_existing.get('result')) != canonical_json_bytes(result)):
                 raise ValueError('concurrent admission checkpoint publisher wrote different content')
         directory_fd = os.open(root, os.O_DIRECTORY)
         try:

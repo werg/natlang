@@ -117,6 +117,30 @@ def test_json_round_trip_preserves_tuple_based_identity_and_result_checkpoint(tm
     assert loaded == json.loads(canonical_json_bytes(result))
     assert calls == []
 
+    # The original process-local tuple identity also loads the JSON array
+    # representation directly; this is the path used by a same-process retry.
+    assert load_model_checkpoint(cache, current) == json.loads(canonical_json_bytes(result))
+
     # The original process-local tuple form must also see the same immutable
     # JSON checkpoint and permit an idempotent save.
     assert save_model_checkpoint(cache, current, result) == path
+
+
+def test_concurrent_publication_of_same_tuple_checkpoint_is_idempotent(tmp_path, monkeypatch):
+    source = tmp_path / 'source.zst'; source.write_bytes(b'source')
+    current = identity(source)
+    current['policy']['decision_holds'] = [('hold.jsonl', 'a' * 64, 17, 'decision-hold')]
+    result = {'groups': {'train': ('group-a', 'group-b')}}
+    real_link = os.link
+
+    def publish_same_payload_then_report_race(source_path, destination):
+        # Model another publisher committing the identical canonical payload
+        # between our exists check and link().
+        real_link(source_path, destination)
+        raise FileExistsError(destination)
+
+    monkeypatch.setattr('scripts.neuralese_data.admission_resume.os.link',
+                        publish_same_payload_then_report_race)
+    checkpoint = save_model_checkpoint(tmp_path / 'cache', current, result)
+    assert load_model_checkpoint(tmp_path / 'cache', current) == json.loads(canonical_json_bytes(result))
+    assert checkpoint.is_file()
