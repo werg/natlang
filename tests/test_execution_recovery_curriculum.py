@@ -7,6 +7,7 @@ from pathlib import Path
 
 from scripts.neuralese_data.build_execution_recovery_curriculum import (
     VARIANTS, graph_rows, short_worlds)
+from natlang_neuralese.common.paths import resolve
 
 
 def service_rows(service):
@@ -86,7 +87,9 @@ def test_private_state_packet_requires_complete_sampled_graph_topology():
 
 def test_source_builder_emits_two_separate_nonadmitted_sampling_modes(tmp_path):
     root = Path(__file__).resolve().parents[1]
-    protection = Path('/home/werg/data/dgxops/acquired-connected-source-protection-20261017-d13-d14-d32-v3/protection-manifest.json')
+    protection = resolve('data_nvme', 'dgxops',
+                         'acquired-connected-source-protection-20261017-d13-d14-d32-v3',
+                         'protection-manifest.json')
     if not protection.is_file():
         return
     out = tmp_path / 'curriculum'
