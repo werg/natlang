@@ -196313,6 +196313,100 @@
         "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0029-tranche0000",
         "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0029-tranche0001"
       ]
+    },
+    {
+      "build": {
+        "audit": "admission-d32-source16-syntax-repair-v2/audit.json",
+        "audit_sha256": "cc6ffad8f96fe4ac85d52e8cec84a41a48f24e23e6adeba141d40087028c4538",
+        "capacity_partition": {
+          "path": "capacity-source16/partition/receipt.json",
+          "sha256": "68c6ceebf5c73f54bf5e3b927e0d730bba6e5051aa3091c6f21ee85f1f5d5d2a"
+        },
+        "source_render_samples": {
+          "path": "admission-d32-source16-syntax-repair-v2/source-render-samples.json",
+          "sha256": "48c9ed103a46613ad65e8ced213ad637ddbf144a5cb9caa19ee429bf3c36577b"
+        },
+        "source_syntax_repair": {
+          "path": "admission-d32-source16-syntax-repair-v2/source-repair-evidence/source-repair-inventory.json",
+          "repair_calls": 34,
+          "schema": "natlang.d32-source16-syntax-repair-admission-evidence/1",
+          "selected_sessions": 21,
+          "sha256": "6e3b362018016bc28d7f9f4aecd7041c7b679e16c3feabdd158be5511bbe70d3",
+          "tool_execution_verified": false,
+          "training_admission": false,
+          "unresolved_sessions": 5
+        }
+      },
+      "documents": {
+        "lfm25": {
+          "capacity:train-fit-graphs": 15,
+          "capacity:train-fit-tokens": 878454,
+          "capacity:train-pending-long-graphs": 6,
+          "capacity:train-pending-long-tokens": 637606,
+          "graphs:train": 21,
+          "max_row_tokens": 119350,
+          "positive_sessions": 21,
+          "tokens:test": 0,
+          "tokens:train": 1516060
+        },
+        "mellum21": {
+          "capacity:train-fit-graphs": 16,
+          "capacity:train-fit-tokens": 1118803,
+          "capacity:train-pending-long-graphs": 5,
+          "capacity:train-pending-long-tokens": 628113,
+          "graphs:train": 21,
+          "max_row_tokens": 138030,
+          "positive_sessions": 21,
+          "tokens:test": 0,
+          "tokens:train": 1746916
+        }
+      },
+      "id": "d32-source16-syntax-repair-v2",
+      "include": [
+        "admission-d32-source16-syntax-repair-v2/audit.json",
+        "admission-d32-source16-syntax-repair-v2/lfm25-train-sources.json",
+        "admission-d32-source16-syntax-repair-v2/mellum21-train-sources.json",
+        "admission-d32-source16-syntax-repair-v2/row-proof.jsonl",
+        "admission-d32-source16-syntax-repair-v2/source-render-samples.json",
+        "admission-d32-source16-syntax-repair-v2/source-repair-evidence/source-complete.json",
+        "admission-d32-source16-syntax-repair-v2/source-repair-evidence/source-export.json",
+        "admission-d32-source16-syntax-repair-v2/source-repair-evidence/source-repair-inventory.json",
+        "admission-d32-source16-syntax-repair-v2/source-repair-evidence/source-repair-manifest.json",
+        "admission-d32-source16-syntax-repair-v2/source-repair-evidence/source-trajectories.jsonl.zst",
+        "c8c4029a107e91180bb9815c893c02bc36140bd777730923bb026682ae9cd32e/lfm25/omissions.jsonl",
+        "c8c4029a107e91180bb9815c893c02bc36140bd777730923bb026682ae9cd32e/lfm25/receipt.json",
+        "c8c4029a107e91180bb9815c893c02bc36140bd777730923bb026682ae9cd32e/lfm25/resume-state.json",
+        "c8c4029a107e91180bb9815c893c02bc36140bd777730923bb026682ae9cd32e/lfm25/test/native-graphs.jsonl.zst",
+        "c8c4029a107e91180bb9815c893c02bc36140bd777730923bb026682ae9cd32e/lfm25/train/native-graphs.jsonl.zst",
+        "c8c4029a107e91180bb9815c893c02bc36140bd777730923bb026682ae9cd32e/mellum21/omissions.jsonl",
+        "c8c4029a107e91180bb9815c893c02bc36140bd777730923bb026682ae9cd32e/mellum21/receipt.json",
+        "c8c4029a107e91180bb9815c893c02bc36140bd777730923bb026682ae9cd32e/mellum21/resume-state.json",
+        "c8c4029a107e91180bb9815c893c02bc36140bd777730923bb026682ae9cd32e/mellum21/test/native-graphs.jsonl.zst",
+        "c8c4029a107e91180bb9815c893c02bc36140bd777730923bb026682ae9cd32e/mellum21/train/native-graphs.jsonl.zst",
+        "capacity-source16/limits.json",
+        "capacity-source16/partition/files/coverage.jsonl",
+        "capacity-source16/partition/files/lfm25/test/fit.jsonl.zst",
+        "capacity-source16/partition/files/lfm25/test/remaining-long.jsonl.zst",
+        "capacity-source16/partition/files/lfm25/train/fit-sources.json",
+        "capacity-source16/partition/files/lfm25/train/fit.jsonl.zst",
+        "capacity-source16/partition/files/lfm25/train/remaining-long-sources.json",
+        "capacity-source16/partition/files/lfm25/train/remaining-long.jsonl.zst",
+        "capacity-source16/partition/files/mellum21/test/fit.jsonl.zst",
+        "capacity-source16/partition/files/mellum21/test/remaining-long.jsonl.zst",
+        "capacity-source16/partition/files/mellum21/train/fit-sources.json",
+        "capacity-source16/partition/files/mellum21/train/fit.jsonl.zst",
+        "capacity-source16/partition/files/mellum21/train/remaining-long-sources.json",
+        "capacity-source16/partition/files/mellum21/train/remaining-long.jsonl.zst",
+        "capacity-source16/partition/files/pending-sources.json",
+        "capacity-source16/partition/receipt.json"
+      ],
+      "license": "exact source license facts retained in each graph acquired_session provenance",
+      "owner": "dgx",
+      "path": "runs/acquired-connected-native-graphs-20261018-syntax-repair-v2/D32/source16",
+      "source_class": "source-curated-complete-acquired-agent-native-session-graphs",
+      "split": "original source split and complete cross-source global held-group closure; no truncation",
+      "training_admission": true,
+      "training_admission_reason": "One complete normalized source member is source-curated, not oracle or native-execution verified. Both pinned tokenizer views preserve the full global normalized-source held/quality/pending closure and exact decision holds. Other normalized source members remain explicitly pending. Deterministic, source-bound syntax repair changed only uniquely delimited unquoted JSON query string slices; original source arguments and unresolved sessions remain preserved in the included repair evidence, and no tool execution or intended task semantics are claimed. Whole graphs above the current envelope remain bound as pending; no truncation or exposure claim."
     }
   ],
   "coverage_backlog": [

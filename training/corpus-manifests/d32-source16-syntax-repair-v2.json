@@ -1,0 +1,193 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "d32-source16-syntax-repair-v2",
+  "owner": "dgx",
+  "path": "runs/acquired-connected-native-graphs-20261018-syntax-repair-v2/D32/source16",
+  "files": [
+    {
+      "path": "admission-d32-source16-syntax-repair-v2/audit.json",
+      "bytes": 5516531,
+      "sha256": "cc6ffad8f96fe4ac85d52e8cec84a41a48f24e23e6adeba141d40087028c4538"
+    },
+    {
+      "path": "admission-d32-source16-syntax-repair-v2/lfm25-train-sources.json",
+      "bytes": 355,
+      "sha256": "ab873736b8a0b20616183ae5c1c7d8ee48f655565adfd360aae40968f9b61f2d"
+    },
+    {
+      "path": "admission-d32-source16-syntax-repair-v2/mellum21-train-sources.json",
+      "bytes": 358,
+      "sha256": "d6440a96d51a8a8ebe83cf71a82a7f649e288a4e913e3f747ebfba16747e1c1d"
+    },
+    {
+      "path": "admission-d32-source16-syntax-repair-v2/row-proof.jsonl",
+      "bytes": 43718,
+      "sha256": "eaa338ec8a8036b01c3083102368280092d5171ac643e4a64f87540af10d9a4e",
+      "lines": 42
+    },
+    {
+      "path": "admission-d32-source16-syntax-repair-v2/source-render-samples.json",
+      "bytes": 18555,
+      "sha256": "48c9ed103a46613ad65e8ced213ad637ddbf144a5cb9caa19ee429bf3c36577b"
+    },
+    {
+      "path": "admission-d32-source16-syntax-repair-v2/source-repair-evidence/source-complete.json",
+      "bytes": 479,
+      "sha256": "92f8198faa36ca02adddcf576fddc32b797cbef8006c1f7ca912475dfbecd409"
+    },
+    {
+      "path": "admission-d32-source16-syntax-repair-v2/source-repair-evidence/source-export.json",
+      "bytes": 2014,
+      "sha256": "629df8ce69c90d6f6c143677d9f80e793f7829ad9d25cfb06234e469ce0740ba"
+    },
+    {
+      "path": "admission-d32-source16-syntax-repair-v2/source-repair-evidence/source-repair-inventory.json",
+      "bytes": 2453,
+      "sha256": "6e3b362018016bc28d7f9f4aecd7041c7b679e16c3feabdd158be5511bbe70d3"
+    },
+    {
+      "path": "admission-d32-source16-syntax-repair-v2/source-repair-evidence/source-repair-manifest.json",
+      "bytes": 61093,
+      "sha256": "aefb46166a806f1cdb0c6159445bb3417b382de6a475e7ec1a874b9e4e121dd0"
+    },
+    {
+      "path": "admission-d32-source16-syntax-repair-v2/source-repair-evidence/source-trajectories.jsonl.zst",
+      "bytes": 1081941,
+      "sha256": "2c5cf42cd31bc8fc2472083f0cd2710daf0cd27141e12a54389d96f4daa63448"
+    },
+    {
+      "path": "c8c4029a107e91180bb9815c893c02bc36140bd777730923bb026682ae9cd32e/lfm25/omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "c8c4029a107e91180bb9815c893c02bc36140bd777730923bb026682ae9cd32e/lfm25/receipt.json",
+      "bytes": 8381,
+      "sha256": "af7f8af71c1b74ba07d4507c9a795cb5f45a44c01f07df2e8066a856289f3387"
+    },
+    {
+      "path": "c8c4029a107e91180bb9815c893c02bc36140bd777730923bb026682ae9cd32e/lfm25/resume-state.json",
+      "bytes": 8095,
+      "sha256": "bf79798be364969fee592d9e2a09d0dff5dca0f7d912b20e034c35bc2c9112d9"
+    },
+    {
+      "path": "c8c4029a107e91180bb9815c893c02bc36140bd777730923bb026682ae9cd32e/lfm25/test/native-graphs.jsonl.zst",
+      "bytes": 13,
+      "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+    },
+    {
+      "path": "c8c4029a107e91180bb9815c893c02bc36140bd777730923bb026682ae9cd32e/lfm25/train/native-graphs.jsonl.zst",
+      "bytes": 1323997,
+      "sha256": "1e5d8f826e636f3e072ab4a1dd84fba6e18c0e6af99e4ebd37e217ff27e04f91"
+    },
+    {
+      "path": "c8c4029a107e91180bb9815c893c02bc36140bd777730923bb026682ae9cd32e/mellum21/omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "c8c4029a107e91180bb9815c893c02bc36140bd777730923bb026682ae9cd32e/mellum21/receipt.json",
+      "bytes": 8529,
+      "sha256": "65f3a3194b2b269227a5138228d238b7fe731a8eb2fc345eeaa29a5199e045da"
+    },
+    {
+      "path": "c8c4029a107e91180bb9815c893c02bc36140bd777730923bb026682ae9cd32e/mellum21/resume-state.json",
+      "bytes": 8237,
+      "sha256": "cf3b25927e28d9efcf3227634b977c36367f0af16e5d93a03b7c49821153d706"
+    },
+    {
+      "path": "c8c4029a107e91180bb9815c893c02bc36140bd777730923bb026682ae9cd32e/mellum21/test/native-graphs.jsonl.zst",
+      "bytes": 13,
+      "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+    },
+    {
+      "path": "c8c4029a107e91180bb9815c893c02bc36140bd777730923bb026682ae9cd32e/mellum21/train/native-graphs.jsonl.zst",
+      "bytes": 1335500,
+      "sha256": "b95f65a79a44443b3446c39074572f47b66a561dc42b13fe91cd370a40864a3d"
+    },
+    {
+      "path": "capacity-source16/limits.json",
+      "bytes": 117,
+      "sha256": "85b2310699d8369867839ea397e97d986082c27a0a6fb045c5376eba56aa049c"
+    },
+    {
+      "path": "capacity-source16/partition/files/coverage.jsonl",
+      "bytes": 39554,
+      "sha256": "5712803589627aa008e3f740f0b8a5067fe0cba59f62c1148e901ce8c62b7594",
+      "lines": 42
+    },
+    {
+      "path": "capacity-source16/partition/files/lfm25/test/fit.jsonl.zst",
+      "bytes": 13,
+      "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+    },
+    {
+      "path": "capacity-source16/partition/files/lfm25/test/remaining-long.jsonl.zst",
+      "bytes": 13,
+      "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+    },
+    {
+      "path": "capacity-source16/partition/files/lfm25/train/fit-sources.json",
+      "bytes": 265,
+      "sha256": "629eedde7ba118c2b8ab31d53aaf4ec2eca7ecaa504f89b674cd361a6227c36e"
+    },
+    {
+      "path": "capacity-source16/partition/files/lfm25/train/fit.jsonl.zst",
+      "bytes": 814988,
+      "sha256": "e83665ee3164ce809deaed157cce8e737c406d03b254f1f11e559cd0311a7ef6"
+    },
+    {
+      "path": "capacity-source16/partition/files/lfm25/train/remaining-long-sources.json",
+      "bytes": 276,
+      "sha256": "4661b38c2ce7b65128ad88be5eb590188c40adaf2b037d81d25a35c92184b1d9"
+    },
+    {
+      "path": "capacity-source16/partition/files/lfm25/train/remaining-long.jsonl.zst",
+      "bytes": 525261,
+      "sha256": "05c67bcc06d2d4829d569702b5cf8b23d9715acf4432c5270263fcc842c212b5"
+    },
+    {
+      "path": "capacity-source16/partition/files/mellum21/test/fit.jsonl.zst",
+      "bytes": 13,
+      "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+    },
+    {
+      "path": "capacity-source16/partition/files/mellum21/test/remaining-long.jsonl.zst",
+      "bytes": 13,
+      "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+    },
+    {
+      "path": "capacity-source16/partition/files/mellum21/train/fit-sources.json",
+      "bytes": 265,
+      "sha256": "f176ebad9f716e7e429a75c3aeab13780f605fe4d7f59b99b3a7b1fbfacab984"
+    },
+    {
+      "path": "capacity-source16/partition/files/mellum21/train/fit.jsonl.zst",
+      "bytes": 862811,
+      "sha256": "b6a44c48778c2f90b48f7159d52db3fd5cdc156ce6da04f3741accaa39688807"
+    },
+    {
+      "path": "capacity-source16/partition/files/mellum21/train/remaining-long-sources.json",
+      "bytes": 276,
+      "sha256": "280560ad1623b424db6a13948cb839f0bc78bfc5b89cf4e338c63935a66b8611"
+    },
+    {
+      "path": "capacity-source16/partition/files/mellum21/train/remaining-long.jsonl.zst",
+      "bytes": 443039,
+      "sha256": "3276c2753faf554b1ea2d93157e072f2503a57ad9587bb77c5dde3e8e23e4817"
+    },
+    {
+      "path": "capacity-source16/partition/files/pending-sources.json",
+      "bytes": 7235,
+      "sha256": "4c2693a55134b14af3c13205ae59fcf18cd6ea93140214fffa50931b2b586a36"
+    },
+    {
+      "path": "capacity-source16/partition/receipt.json",
+      "bytes": 6464,
+      "sha256": "68c6ceebf5c73f54bf5e3b927e0d730bba6e5051aa3091c6f21ee85f1f5d5d2a"
+    }
+  ],
+  "bytes": 12120865
+}
