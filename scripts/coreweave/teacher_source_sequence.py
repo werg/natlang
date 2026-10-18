@@ -230,6 +230,11 @@ def observe_source_sequence(folder, state, config):
     elif _json(started[key],declaration)['sealed']!=sealed:
         raise ValueError('sequence started batch artifacts changed')
     intent=_json(pending['intent'],declaration)
+    if intent.get('prefetch')is not None:
+        previous=sequence.get('closed',{}).get(str(batch-1))
+        if not previous or _json(previous,declaration).get('started')!=intent['prefetch']['predecessor_started']:
+            raise ValueError('prefetched source publication precedes its genuine predecessor closure')
+        _reconcile_publication(pending,declaration)
     current=binding(declaration['source_configuration'])
     if current['sha256']!=intent['new_configuration']['sha256']:
         raise ValueError('started source configuration differs from publication intent')
@@ -387,27 +392,7 @@ def _closed_packet_ordinals(folder,sequence,declaration,entries):
     return result
 
 
-def prepare_source_sequence(folder, state, config, batch):
-    declaration=config.get('source_sequence')
-    if declaration is None:return
-    anchor=declaration['anchor']
-    if batch<=anchor['batch']:return  # Never replace the selected 140 before batch21 seals.
-    if (Path(declaration['task_runtime']).resolve()!=Path(config['task_runtime']).resolve()
-            or not declaration['task_runtime_bindings']):
-        raise ValueError('sequence task runtime authority differs')
-    for reference in declaration['task_runtime_bindings']:_asset(reference,declaration)
-    if alive(state.get('owner')):raise ValueError('cannot select a source under a live feeder')
-    if (Path(config['root'])/'evidence-collections-v2'/f'batch-{batch:04d}').exists():
-        raise ValueError('cannot replace a materialized teacher batch')
-    anchor_root=Path(config['root'])/'evidence-collections-v2'/f"batch-{anchor['batch']:04d}"
-    if (binding(anchor_root/'source-cases.jsonl')['sha256']!=anchor['cases_sha256']
-            or json.loads((anchor_root/'teacher-source.json').read_text()).get('source_cases_sha256')!=anchor['cases_sha256']
-            or not (anchor_root/'queue.jsonl').is_file()):
-        raise ValueError('sequence anchor packet was not actually sealed')
-    terminal=_json(state['last_boundary'],declaration)
-    _drained_boundary(folder, state, config, batch-1, terminal)
-    observe_source_sequence(folder,state,config)
-    sequence=state.setdefault('source_sequence',{'next_ordinal':0})
+def _selection_authority(folder,sequence,declaration,*,extra_service=()):
     manifest_path=Path(declaration['ready_manifest']);manifest_raw=manifest_path.read_bytes();manifest=json.loads(manifest_raw)
     if manifest.get('schema')!='natlang.strong-teacher-ready-packet-sequence/1':raise ValueError('unknown ready sequence')
     if manifest['candidate_inventory']!=declaration['candidate_inventory']:
@@ -420,13 +405,17 @@ def prepare_source_sequence(folder, state, config, batch):
         if entry.get('ordinal')!=index or entry['candidate_packet']!=inventory['packets'][index]:
             raise ValueError('ready sequence is not the declared candidate order')
     ordinal=sequence['next_ordinal']
+    for pending in extra_service:
+        intent=_json(pending['intent'],declaration)
+        ordinal=(intent['priority']['resume_ordinal'] if intent.get('priority') is not None else pending['ordinal']+1)
     deferral_reference,deferrals,excluded_programs=_source_context_deferrals(declaration,entries,sequence)
     closed_ordinals=_closed_packet_ordinals(folder,sequence,declaration,entries)
+    service=[*closed_ordinals.values(),*[{'intent':_json(item['intent'],declaration)} for item in extra_service]]
     actual_streak=0
-    for item in sorted(closed_ordinals.values(),key=lambda item:item['intent']['batch'],reverse=True):
+    for item in sorted(service,key=lambda item:item['intent']['batch'],reverse=True):
         if item['intent'].get('priority')is None:break
         actual_streak+=1
-    if type(sequence.get('priority_streak',0))is not int or sequence.get('priority_streak',0)!=actual_streak:
+    if not extra_service and (type(sequence.get('priority_streak',0))is not int or sequence.get('priority_streak',0)!=actual_streak):
         raise ValueError('priority service differs from actual closed packet history')
     priority_reference=declaration.get('priority_packets')
     priority_proof,priority_entries=(_priority_policy(priority_reference,declaration,entries)if priority_reference else(None,{}))
@@ -450,6 +439,70 @@ def prepare_source_sequence(folder, state, config, batch):
     elif priority_reference and policies[priority_reference['sha256']]!=priority_reference:
         raise ValueError('priority policy history reference changed')
     sequence['observed_entries']=entries
+    return dict(declaration=declaration,manifest_path=manifest_path,manifest_raw=manifest_raw,manifest=manifest,entries=entries,ordinal=ordinal,deferral_reference=deferral_reference,deferrals=deferrals,excluded_programs=excluded_programs,closed_ordinals=closed_ordinals,priority_reference=priority_reference,priority_proof=priority_proof,priority_entries=priority_entries,service_streak=actual_streak,service_ordinals={item['ordinal']for item in extra_service})
+
+
+def _choose_packet(sequence,plan,*,already_reserved=None):
+    """The same source/priority decision for serial launch and bounded preview."""
+    ordinal=plan['ordinal'];deferrals=plan['deferrals'];closed=plan['closed_ordinals']
+    skipped=[]
+    while ordinal in deferrals or ordinal in closed:
+        if ordinal not in deferrals and closed[ordinal]['intent'].get('priority')is None:
+            raise ValueError('ordinary cursor cannot silently skip a non-priority closed packet')
+        skipped.append(ordinal);ordinal+=1
+    priority_selection=None;proof=plan['priority_proof']
+    if proof and ordinal>=proof['minimum_original_ordinal']:
+        streak=plan['service_streak']
+        if type(streak)is not int or streak<0:raise ValueError('priority service counter changed')
+        if streak<proof['max_consecutive']:
+            started={_json(ref,plan['declaration'])['ordinal']for ref in sequence.get('started',{}).values()}
+            for candidate in plan['priority_entries']:
+                if candidate in closed or candidate in plan.get('service_ordinals',set()):continue
+                if candidate<ordinal or (candidate in started and candidate!=already_reserved)or candidate in deferrals:
+                    raise ValueError('priority declaration cannot reclassify started, past or deferred work')
+                if candidate==ordinal:break
+                priority_selection=dict(policy=plan['priority_reference'],resume_ordinal=ordinal)
+                ordinal=candidate;break
+    return ordinal,priority_selection,skipped
+
+
+def prepare_source_sequence(folder, state, config, batch):
+    declaration=config.get('source_sequence')
+    if declaration is None:return
+    reserved=(state.get('source_sequence')or{}).get('prefetch')
+    if reserved and reserved['batch']==batch:
+        return adopt_prefetched_source(folder,state,config,batch)
+    anchor=declaration['anchor']
+    if batch<=anchor['batch']:return  # Never replace the selected 140 before batch21 seals.
+    if (Path(declaration['task_runtime']).resolve()!=Path(config['task_runtime']).resolve()
+            or not declaration['task_runtime_bindings']):
+        raise ValueError('sequence task runtime authority differs')
+    for reference in declaration['task_runtime_bindings']:_asset(reference,declaration)
+    if alive(state.get('owner')):raise ValueError('cannot select a source under a live feeder')
+    if (Path(config['root'])/'evidence-collections-v2'/f'batch-{batch:04d}').exists():
+        raise ValueError('cannot replace a materialized teacher batch')
+    anchor_root=Path(config['root'])/'evidence-collections-v2'/f"batch-{anchor['batch']:04d}"
+    if (binding(anchor_root/'source-cases.jsonl')['sha256']!=anchor['cases_sha256']
+            or json.loads((anchor_root/'teacher-source.json').read_text()).get('source_cases_sha256')!=anchor['cases_sha256']
+            or not (anchor_root/'queue.jsonl').is_file()):
+        raise ValueError('sequence anchor packet was not actually sealed')
+    terminal=_json(state['last_boundary'],declaration)
+    _drained_boundary(folder, state, config, batch-1, terminal)
+    observe_source_sequence(folder,state,config)
+    sequence=state.setdefault('source_sequence',{'next_ordinal':0})
+    plan=_selection_authority(folder,sequence,declaration)
+    manifest_path=plan['manifest_path']
+    manifest_raw=plan['manifest_raw']
+    manifest=plan['manifest']
+    entries=plan['entries']
+    ordinal=plan['ordinal']
+    deferral_reference=plan['deferral_reference']
+    deferrals=plan['deferrals']
+    excluded_programs=plan['excluded_programs']
+    closed_ordinals=plan['closed_ordinals']
+    priority_reference=plan['priority_reference']
+    priority_proof=plan['priority_proof']
+    priority_entries=plan['priority_entries']
     lock=(Path(config['root'])/'next-source-selection.lock').open('a')
     with lock:
         fcntl.flock(lock,fcntl.LOCK_EX)
@@ -463,27 +516,13 @@ def prepare_source_sequence(folder, state, config, batch):
             _reconcile_publication(pending,declaration)
             sequence['configuration']=binding(declaration['source_configuration'])
             write(Path(folder)/'state.json',state);return
-        while ordinal in deferrals or ordinal in closed_ordinals:
-            if ordinal in deferrals:
-                _defer_context_packet(folder,state,declaration,entries[ordinal],deferrals[ordinal],deferral_reference,excluded_programs)
+        selected,priority_selection,skipped=_choose_packet(sequence,plan)
+        for skipped_ordinal in skipped:
+            if skipped_ordinal in deferrals:
+                _defer_context_packet(folder,state,declaration,entries[skipped_ordinal],deferrals[skipped_ordinal],deferral_reference,excluded_programs)
             else:
-                if closed_ordinals[ordinal]['intent'].get('priority')is None:
-                    raise ValueError('ordinary cursor cannot silently skip a non-priority closed packet')
-                sequence['next_ordinal']=ordinal+1;write(Path(folder)/'state.json',state)
-            ordinal=sequence['next_ordinal']
-        priority_selection=None
-        if priority_proof and ordinal>=priority_proof['minimum_original_ordinal']:
-            streak=sequence.get('priority_streak',0)
-            if type(streak)is not int or streak<0:raise ValueError('priority service counter changed')
-            if streak<priority_proof['max_consecutive']:
-                started_ordinals={_json(ref,declaration)['ordinal']for ref in sequence.get('started',{}).values()}
-                for candidate in priority_entries:
-                    if candidate in closed_ordinals:continue
-                    if candidate<ordinal or candidate in started_ordinals or candidate in deferrals:
-                        raise ValueError('priority declaration cannot reclassify started, past or deferred work')
-                    if candidate==ordinal:break
-                    priority_selection=dict(policy=priority_reference,resume_ordinal=ordinal)
-                    ordinal=candidate;break
+                sequence['next_ordinal']=skipped_ordinal+1;write(Path(folder)/'state.json',state)
+        ordinal=selected
         if ordinal>=len(entries):
             if declaration.get('on_unready')!='retain-current':raise ValueError('next declared packet is not ready')
             write(Path(folder)/'state.json',state);return
@@ -521,3 +560,134 @@ def verify_prepared_source(state, config, batch):
         if expected!=_json(intent['new_configuration'],declaration):
             raise ValueError('prepared packet authority changed before launch')
         _reconcile_publication(pending,declaration)
+
+
+def _prefetch_start(folder,sequence,declaration,pending,root):
+    names=('source-cases.jsonl','queue.jsonl','teacher-source.json')
+    if not all((root/name).is_file()for name in names):return None
+    sealed={name:binding(root/name)for name in names}
+    source=json.loads((root/'teacher-source.json').read_bytes())
+    if (source.get('batch')!=pending['batch']
+            or sealed['source-cases.jsonl']['sha256']!=pending['cases_sha256']
+            or source.get('source_cases_sha256')!=pending['cases_sha256']):
+        raise ValueError('reserved batch differs from its immutable source')
+    intent=_json(pending['intent'],declaration)
+    if source.get('actual_task_runtime')!=intent['prefetch']['task_runtime']:
+        raise ValueError('reserved feeder used a different task runtime')
+    receipt=Path(folder)/'source-sequence/started'/f"batch-{pending['batch']:04d}.json"
+    _immutable(receipt,{'batch':pending['batch'],'ordinal':pending['ordinal'],'sealed':sealed,
+        'selection_intent':pending['intent'],'claim':'actual sealed batch; no generation admission/exposure'})
+    sequence.setdefault('started',{})[str(pending['batch'])]=binding(receipt)
+    return binding(receipt)
+
+
+def prepare_prefetched_source(folder,state,config,batch):
+    """Reserve one next source without closing or changing the active source."""
+    if config.get('primary_parallel_batches',1)!=2:
+        raise ValueError('source prefetch requires explicit two-batch ownership')
+    declaration=config['source_sequence'];sequence=state.get('source_sequence')or{}
+    pending=sequence.get('pending')
+    if (not pending or pending['batch']!=batch-1 or state.get('active_batch')!=batch-1
+            or not alive(state.get('owner'))):
+        raise ValueError('prefetch lacks its exact live predecessor selection')
+    predecessor=sequence.get('started',{}).get(str(batch-1))
+    if not predecessor:raise ValueError('prefetch predecessor source was not actually sealed')
+    original=_json(predecessor,declaration)
+    if original.get('batch')!=batch-1 or original.get('ordinal')!=pending['ordinal']or original.get('selection_intent')!=pending['intent']:
+        raise ValueError('prefetch predecessor selection identity changed')
+    root=Path(config['root'])/'evidence-collections-v2'/f'batch-{batch-1:04d}'
+    if original['sealed']!={name:binding(root/name)for name in ('source-cases.jsonl','queue.jsonl','teacher-source.json')}:
+        raise ValueError('prefetch predecessor sealed source changed')
+    if Path(declaration['task_runtime']).resolve()!=Path(config['task_runtime']).resolve()or not declaration['task_runtime_bindings']:
+        raise ValueError('prefetch runtime authority differs')
+    for reference in declaration['task_runtime_bindings']:_asset(reference,declaration)
+    lock=(Path(config['root'])/'next-source-selection.lock').open('a')
+    with lock:
+        fcntl.flock(lock,fcntl.LOCK_EX)
+        previous=sequence.get('prefetch')
+        if previous:
+            if previous['batch']!=batch:raise ValueError('another next source is already reserved')
+            _json(previous['intent'],declaration)
+            return previous
+        if (Path(config['root'])/'evidence-collections-v2'/f'batch-{batch:04d}').exists():
+            raise ValueError('cannot reserve a materialized batch without its intent')
+        plan=_selection_authority(folder,sequence,declaration,extra_service=(pending,))
+        ordinal,priority,skipped=_choose_packet(sequence,plan)
+        if ordinal>=len(plan['entries']):return None
+        value=_packet(plan['entries'][ordinal],declaration)
+        target=Path(declaration['source_configuration']);actual=binding(target)
+        if actual!=(sequence.get('configuration')or declaration['initial_configuration']):
+            raise ValueError('prefetch ambient source authority changed')
+        home=Path(folder)/'source-sequence';snapshot=home/'config-history'/(actual['sha256']+'.json')
+        _immutable(snapshot,target.read_bytes())
+        candidate=home/'config-candidates'/f'batch-{batch:04d}.json';_immutable(candidate,value)
+        manifest=home/'manifests'/(hashlib.sha256(plan['manifest_raw']).hexdigest()+'.json');_immutable(manifest,plan['manifest_raw'])
+        intent=home/'intents'/f'batch-{batch:04d}.json'
+        _immutable(intent,{'batch':batch,'ordinal':ordinal,'old_configuration':actual,'old_snapshot':binding(snapshot),
+            'new_configuration':binding(candidate),'manifest':binding(manifest),
+            'candidate_packet':plan['entries'][ordinal]['candidate_packet'],
+            'qualified_packet':plan['entries'][ordinal]['qualified_packet'],
+            **({'priority':priority}if priority is not None else{}),
+            'prefetch':{'predecessor_started':predecessor,'predecessor_intent':pending['intent'],
+                'task_runtime':config['task_runtime'],'skipped_ordinals':skipped,
+                'selection_policy':{'priority_packets':plan['priority_reference'],
+                    'context_deferrals':plan['deferral_reference']},
+                'claim':'conditional next selection; predecessor remains unfinished'}})
+        reserved={'batch':batch,'ordinal':ordinal,'intent':binding(intent),'cases_sha256':value['cases_sha256']}
+        sequence['prefetch']=reserved;write(Path(folder)/'state.json',state)
+        return reserved
+
+
+def observe_prefetched_source(folder,state,config):
+    sequence=state.get('source_sequence')or{};pending=sequence.get('prefetch')
+    if not pending:return None
+    root=Path(config['root'])/'evidence-collections-v2'/f"batch-{pending['batch']:04d}"
+    result=_prefetch_start(folder,sequence,config['source_sequence'],pending,root)
+    if result:write(Path(folder)/'state.json',state)
+    return result
+
+
+def adopt_prefetched_source(folder,state,config,batch):
+    """Confirm the reservation against real closed history before cursor adoption."""
+    declaration=config['source_sequence'];sequence=state['source_sequence'];reserved=sequence.get('prefetch')or sequence.get('prefetch_history',{}).get(str(batch))
+    if reserved is None:raise ValueError('prefetch reservation custody is missing')
+    if reserved['batch']!=batch or (sequence.get('pending')is not None and sequence['pending']!=reserved):
+        raise ValueError('prefetched selection cannot bypass its unfinished predecessor')
+    intent=_json(reserved['intent'],declaration);predecessor=intent['prefetch']['predecessor_started']
+    closed=sequence.get('closed',{}).get(str(batch-1))
+    if not closed or _json(closed,declaration).get('started')!=predecessor:
+        raise ValueError('prefetch predecessor has not genuinely closed')
+    lock=(Path(config['root'])/'next-source-selection.lock').open('a')
+    with lock:
+        fcntl.flock(lock,fcntl.LOCK_EX)
+        # Current authority still authenticates the full retained prefix, source
+        # protection and debt. The already-started reservation keeps its exact
+        # scheduling policy when later unstarted priorities are appended.
+        plan=_selection_authority(folder,sequence,declaration)
+        basis=intent['prefetch']['selection_policy']
+        if not isinstance(basis,dict)or set(basis)!={'priority_packets','context_deferrals'}:
+            raise ValueError('prefetch lost its immutable selection policy')
+        frozen={**declaration,**basis}
+        ref=basis['priority_packets']
+        proof,entries=(_priority_policy(ref,frozen,plan['entries'])if ref else(None,{}))
+        dref,deferrals,programs=_source_context_deferrals(frozen,plan['entries'],sequence)
+        plan={**plan,'declaration':frozen,'priority_reference':ref,'priority_proof':proof,
+            'priority_entries':entries,'deferral_reference':dref,'deferrals':deferrals,
+            'excluded_programs':programs}
+        ordinal,priority,skipped=_choose_packet(sequence,plan,already_reserved=reserved['ordinal'])
+        if (ordinal!=reserved['ordinal']or priority!=intent.get('priority')
+                or skipped!=intent['prefetch']['skipped_ordinals']
+                or _packet(plan['entries'][ordinal],declaration)!=_json(intent['new_configuration'],declaration)):
+            raise ValueError('reserved next source differs from actual serial source policy')
+        for skipped_ordinal in skipped:
+            if skipped_ordinal in plan['deferrals']:
+                _defer_context_packet(folder,state,declaration,plan['entries'][skipped_ordinal],plan['deferrals'][skipped_ordinal],plan['deferral_reference'],plan['excluded_programs'])
+            else:sequence['next_ordinal']=skipped_ordinal+1;write(Path(folder)/'state.json',state)
+        _prefetch_start(folder,sequence,declaration,reserved,
+            Path(config['root'])/'evidence-collections-v2'/f'batch-{batch:04d}')
+        sequence['pending']=reserved;write(Path(folder)/'state.json',state)
+        _reconcile_publication(reserved,declaration)
+        sequence['configuration']=binding(declaration['source_configuration'])
+        sequence.setdefault('prefetch_history',{})[str(batch)]=reserved
+        sequence.pop('prefetch',None);write(Path(folder)/'state.json',state)
+        return reserved

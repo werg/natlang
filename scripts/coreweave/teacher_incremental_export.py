@@ -929,7 +929,7 @@ def _validate_live_identity(config: dict, sandbox, read_file: Callable[[str], by
             'runtime_path': expected['runtime_path']}
 
 
-def _closed_guardian_transition(publisher, guardian_raw, state, batch, read_file, *, owner_exited):
+def _closed_guardian_transition(publisher, guardian_raw, state, batch, read_file, *, owner_exited, phase_path=None):
     """Verify an advanced state and its exact old boundary; export no active rows."""
     control = publisher['control_dir']
     config_ref = publisher['guardian_config']
@@ -987,7 +987,7 @@ def _closed_guardian_transition(publisher, guardian_raw, state, batch, read_file
         return fresh, fresh_raw, reference
     if fresh.get('owner') != state.get('owner') or fresh.get('active_batch') != batch:
         raise ValueError('guardian owner changed without authenticated batch advancement')
-    phase = _json(read_file(f"{publisher['generation_root']}/feed-evidence-phase.json"),
+    phase = _json(read_file(phase_path or f"{publisher['generation_root']}/feed-evidence-phase.json"),
                   'drained teacher feed phase')
     if owner_exited and phase.get('batch') == batch and phase.get('phase') == 'batch_complete':
         # Closing may need arbitrarily long to durably collect outcomes. This
@@ -1041,7 +1041,7 @@ def _publisher_batch_runtime(publisher: dict, batch: int, read_file: Callable[[s
 
 
 def discover_guardian_batch(publisher: dict, sandbox,
-                            read_file: Callable[[str], bytes]) -> dict | None:
+                            read_file: Callable[[str], bytes], *, batch_slot: int | None = None) -> dict | None:
     """Derive a poll config only from the exact live guardian owner and sealed batch.
 
     The publisher file is owner-host authority. The remote guardian config,
@@ -1086,6 +1086,70 @@ def discover_guardian_batch(publisher: dict, sandbox,
                           'bytes': guardian_ref['bytes']}:
         raise ValueError('guardian state does not bind the publisher config revision')
     batch, owner = state.get('active_batch'), state.get('owner')
+    slot=None
+    if batch_slot is not None:
+        slot=state.get('primary_prefetch')
+        if (guardian.get('primary_parallel_batches',1)!=2 or not isinstance(slot,dict)
+                or type(batch_slot)is not int or slot.get('batch')!=batch_slot
+                or type(batch)is not int or batch_slot!=batch+1):
+            raise ValueError('publisher requested an unowned next batch slot')
+        batch,owner=batch_slot,slot.get('owner')
+    elif batch is not None:
+        slot=(state.get('primary_launches')or{}).get(str(batch))
+    feeder=guardian['feeder'];phase_path=f"{publisher['generation_root']}/feed-evidence-phase.json"
+    if slot is not None:
+        original_ref=slot.get('guardian_config')
+        if (not isinstance(original_ref,dict)or set(original_ref)!={'path','sha256','bytes'}
+                or type(original_ref['bytes'])is not int or original_ref['bytes']<0
+                or not isinstance(original_ref['sha256'],str)
+                or re.fullmatch(r'[0-9a-f]{64}',original_ref['sha256'])is None
+                or original_ref['path']!=f"{control}/config-history/{original_ref['sha256']}.json"):
+            raise ValueError('batch slot lacks its immutable guardian configuration snapshot')
+        original_raw=read_file(original_ref['path'])
+        if len(original_raw)!=original_ref['bytes']or _sha(original_raw)!=original_ref['sha256']:
+            raise ValueError('batch slot guardian configuration snapshot changed')
+        original_guardian=_json(original_raw,'batch slot original guardian configuration')
+        if (original_guardian.get('control')!=control or original_guardian.get('root')!=publisher['generation_root']
+                or original_guardian.get('primary_parallel_batches')!=2
+                or (original_guardian.get('teacher_identity')or{}).get('sha256')
+                    !=guardian['teacher_identity'].get('sha256')
+                or original_guardian.get('task_runtime')!=slot.get('task_runtime')):
+            raise ValueError('batch slot guardian snapshot changed control, engine or runtime')
+        context=slot.get('collection_context')
+        if (not isinstance(context,dict)or set(context)!={'repo','queue_worker','node_bin'}
+                or context.get('repo')!=original_guardian.get('collection_repo')
+                or context.get('node_bin')!=original_guardian.get('node_bin')
+                or not isinstance(context.get('queue_worker'),dict)
+                or context['queue_worker'].get('path')!=original_guardian.get('queue_worker')
+                or context['queue_worker']!=original_guardian.get('collection_worker')):
+            raise ValueError('batch slot collection context changed from its original guardian')
+        worker_ref=context['queue_worker'];worker_raw=read_file(worker_ref['path'])
+        if len(worker_raw)!=worker_ref.get('bytes')or _sha(worker_raw)!=worker_ref.get('sha256'):
+            raise ValueError('batch slot collection queue worker changed')
+        if (slot.get('batch')!=batch or slot.get('feeder')!=original_guardian.get('overlap_feeder')
+                or slot.get('phase_path')!=f"{publisher['generation_root']}/feeder-phases/batch-{batch:04d}.json"
+                or slot.get('task_runtime')!=_publisher_batch_runtime(publisher,batch,read_file)):
+            raise ValueError('batch slot changed feeder, phase or runtime authority')
+        ref=slot['feeder'];raw=read_file(ref['path'])
+        if len(raw)!=ref['bytes']or _sha(raw)!=ref['sha256']:
+            raise ValueError('batch slot feeder bytes changed')
+        sequence=state.get('source_sequence')or{}
+        pending=(sequence.get('prefetch')if batch_slot is not None else sequence.get('pending'))
+        if not pending or pending.get('batch')!=batch or pending.get('intent')!=slot.get('selection_intent'):
+            # An already closed primary retains its immutable started intent.
+            started=sequence.get('started',{}).get(str(batch))
+            if not started:raise ValueError('batch slot lost its actual selected source')
+            data=read_file(started['path'])
+            if len(data)!=started['bytes']or _sha(data)!=started['sha256']or _json(data,'batch slot started')['selection_intent']!=slot.get('selection_intent'):
+                raise ValueError('batch slot selection changed')
+        intent_ref=slot['selection_intent'];raw=read_file(intent_ref['path'])
+        if len(raw)!=intent_ref['bytes']or _sha(raw)!=intent_ref['sha256']:
+            raise ValueError('batch slot selection intent changed')
+        intent=_json(raw,'batch slot intent')
+        if (intent.get('batch')!=batch or intent.get('new_configuration')!=slot.get('source_configuration')
+                or intent.get('prefetch',{}).get('task_runtime')!=slot['task_runtime']):
+            raise ValueError('batch slot immutable source authority differs')
+        feeder=ref['path'];phase_path=slot['phase_path']
     closed_refs = {}
     sequence_state = state.get('source_sequence') or {}
     for key, closed_ref in (sequence_state.get('closed') or {}).items():
@@ -1140,7 +1204,7 @@ except (FileNotFoundError,ProcessLookupError):
  print(json.dumps({'valid':False,'missing':True,'boot_id':actual_boot}))
 """
     checked = sandbox.exec(['python', '-c', probe, str(owner['pid']), str(owner['start_ticks']),
-                            owner['boot_id'], guardian['feeder'], str(batch)], timeout_seconds=20).result(timeout=30)
+                            owner['boot_id'], feeder, str(batch)], timeout_seconds=20).result(timeout=30)
     process = (_json(checked.stdout.encode(), 'live guardian feeder probe')
                if checked.returncode == 0 else {'probe_failed': True})
     if process.get('valid') is not True:
@@ -1148,9 +1212,33 @@ except (FileNotFoundError,ProcessLookupError):
             raise ValueError('missing guardian feeder probe changed its boot identity')
         if not any(process.get(key) is True for key in ('missing', 'exited', 'probe_failed')):
             raise ValueError('guardian feeder PID/start/boot/argv/batch differs from active state')
+        if batch_slot is not None:
+            fresh_raw=read_file(f'{control}/state.json');fresh=_json(fresh_raw,'prefetch transition state')
+            if fresh.get('config')!=state.get('config')or read_file(guardian_ref['path'])!=guardian_raw:
+                raise ValueError('prefetch transition config changed')
+            current=fresh.get('primary_prefetch')
+            if current!=slot:
+                adopted=(fresh.get('primary_launches')or{}).get(str(batch))
+                if adopted!=slot:raise ValueError('prefetch owner changed without its exact adoption')
+            refs=list(closed_boundaries)
+            boundary_ref=slot.get('boundary')
+            if boundary_ref is not None:
+                data=read_file(boundary_ref['path'])
+                if (boundary_ref['path']!=f'{control}/boundaries/batch-{batch:04d}.json'
+                        or len(data)!=boundary_ref['bytes']or _sha(data)!=boundary_ref['sha256']
+                        or _json(data,'prefetch boundary').get('batch')!=batch):
+                    raise ValueError('prefetch terminal boundary changed')
+                refs.append(boundary_ref)
+            else:
+                phase=_json(read_file(phase_path),'prefetch draining phase')
+                if phase.get('phase')!='batch_complete'or phase.get('batch')!=batch:
+                    raise ValueError('prefetch owner exited without an authenticated drained phase')
+            return {'draining':True,'batch':batch,'guardian_state':fresh,
+                'guardian_state_sha256':_sha(fresh_raw),'sandbox_id':publisher['sandbox_id'],
+                'closed_boundaries':refs,'verified_owner_transition':boundary_ref is not None}
         fresh, fresh_raw, boundary_ref = _closed_guardian_transition(
             publisher, guardian_raw, state, batch, read_file,
-            owner_exited=process.get('missing') is True or process.get('exited') is True)
+            owner_exited=process.get('missing') is True or process.get('exited') is True,phase_path=phase_path)
         refs = {reference['path']: reference for reference in closed_boundaries}
         if boundary_ref is not None and boundary_ref['path'] in refs and refs[boundary_ref['path']] != boundary_ref:
             raise ValueError('guardian transition changed an already observed boundary binding')
@@ -1160,7 +1248,6 @@ except (FileNotFoundError,ProcessLookupError):
                 'guardian_state_sha256': _sha(fresh_raw), 'sandbox_id': publisher['sandbox_id'],
                 'closed_boundaries': list(refs.values()), 'verified_owner_transition': boundary_ref is not None}
 
-    phase_path=f"{publisher['generation_root']}/feed-evidence-phase.json"
     try:phase_raw=read_file(phase_path)
     except (KeyError,FileNotFoundError)as error:
         if batch!=publisher['anchor_batch']and not(state.get('source_sequence')or{}).get('started',{}).get(str(batch)):
@@ -1176,9 +1263,12 @@ except (FileNotFoundError,ProcessLookupError):
                 or read_file(guardian_ref['path'])!=guardian_raw
                 or fresh.get('schema')!=state['schema']or fresh.get('config')!=config_binding):
             raise ValueError('guardian preparation changed boot or config authority')
-        if fresh.get('owner')!=owner or fresh.get('active_batch')!=batch:
+        if slot is not None:
+            latest=(fresh.get('primary_prefetch')if batch_slot is not None else(fresh.get('primary_launches')or{}).get(str(batch)))
+            if latest!=slot:raise ValueError('batch slot changed during feeder preparation')
+        elif fresh.get('owner')!=owner or fresh.get('active_batch')!=batch:
             fresh,fresh_raw,reference=_closed_guardian_transition(
-                publisher,guardian_raw,state,batch,read_file,owner_exited=False)
+                publisher,guardian_raw,state,batch,read_file,owner_exited=False,phase_path=phase_path)
             refs={r['path']:r for r in closed_boundaries}
             if reference is not None:refs[reference['path']]=reference
             return {'draining':True,'batch':batch,'guardian_state':fresh,
@@ -1572,6 +1662,66 @@ def run_incremental_once(config_path: Path) -> dict:
         chunk_size=config['chunk_size'], flush_partial=bool(config.get('flush_partial', False)))
 
 
+def _export_discovered_guardian_batch(active,prior,publisher,publisher_raw,sandbox,reader,export_unseen_closed):
+    # Re-read all identity-bound bytes through the ordinary poll
+    # validator immediately before queue/journal/output collection.
+    identity = _validate_live_identity(active, sandbox, reader)
+    directory = Path(active['directory']).resolve()
+    directory.mkdir(parents=True, exist_ok=True)
+    active_identity = {'sandbox_id': publisher['sandbox_id'], 'batch': active['batch'],
+                       'teacher_source_sha256': identity['teacher_source_sha256']}
+    queue_snapshot = reader(active['queue_path'])
+    if _sha(queue_snapshot) != active['queue_sha256']:
+        raise ValueError('active queue changed after guardian discovery')
+    if active['worker_queue_paths']:
+        worker_queues = [(Path(path).name, reader(path)) for path in active['worker_queue_paths']]
+        worker_journals = [(name, reader(path) if path is not None else None)
+            for name, path in active['worker_journal_paths'].items()]
+        journal_snapshot = aggregate_worker_journals(queue_snapshot, worker_queues, worker_journals)
+    else:
+        journal_snapshot = reader(active['journal_path'])
+    journal_sha = _sha(journal_snapshot)
+    prior_identity = prior.get('active_identity')
+    if isinstance(prior_identity, list) and len(prior_identity) == 3:
+        # Compatibility with the earlier tuple serialized by JSON.
+        prior_identity = {'sandbox_id': prior_identity[0], 'batch': prior_identity[1],
+                          'teacher_source_sha256': prior_identity[2]}
+    completed_sha = _completed_outputs_sha256(queue_snapshot, journal_snapshot)
+    changed = active_identity != prior_identity or completed_sha != prior.get('completed_outputs_sha256')
+    changed_at = time.time() if changed else float(prior.get('completed_outputs_changed_at', time.time()))
+    if (active_identity == prior_identity and 'completed_outputs_sha256' not in prior
+            and journal_sha == prior.get('journal_sha256')):
+        changed_at = float(prior.get('journal_changed_at', time.time()))
+    journal_changed_at = (time.time() if journal_sha != prior.get('journal_sha256')
+                          else float(prior.get('journal_changed_at', time.time())))
+    idle_flush = time.time() - changed_at >= float(publisher.get('idle_flush_after_seconds', 300))
+
+    def export_file(tranche: dict, receipt_path: Path) -> dict:
+        return export_private_tranche(tranche, exporter=Path(publisher['exporter_path']),
+            role=publisher['role'], receipt_path=receipt_path)
+
+    result = export_finished_tranches(batch=active['batch'],
+        queue_path=active['queue_path'], journal_path=active['journal_path'],
+        context_paths=active['context_paths'], directory=directory,
+        read_file=reader, export_file=export_file, chunk_size=active['chunk_size'],
+        flush_partial=bool(publisher.get('flush_partial', False)) or idle_flush,
+        prune_after_private_verification=True, queue_snapshot=queue_snapshot,
+        journal_snapshot=journal_snapshot)
+    closed = export_unseen_closed(active.get('closed_boundaries'), active.get('guardian_state') or {},
+                                  active_batch=active['batch'])
+    last = {'schema': 'natlang.teacher-incremental-export-publisher-state/1',
+        'at': time.time(), 'publisher_sha256': _sha(publisher_raw),
+        'active': True, 'active_identity': active_identity,
+        'guardian_state_sha256': active['guardian_state_sha256'],
+        'source_sequence_started_sha256': active['source_sequence_started_sha256'],
+        'journal_sha256': journal_sha, 'journal_changed_at': journal_changed_at,
+        'completed_outputs_sha256': completed_sha, 'completed_outputs_changed_at': changed_at,
+        'identity': identity, 'result': result,
+        'closed_exports_this_poll': closed,
+        'training_admission': False, 'exposure': False}
+    return last
+
+
 def run_guardian_export_service(publisher_path: Path, *, poll_seconds: float = 15,
                                 max_polls: int | None = None,
                                 allowed_spool_root: Path | None = None) -> dict:
@@ -1651,62 +1801,23 @@ def run_guardian_export_service(publisher_path: Path, *, poll_seconds: float = 1
                     'closed_exports_this_poll': closed,
                     'training_admission': False, 'exposure': False}
             else:
-                # Re-read all identity-bound bytes through the ordinary poll
-                # validator immediately before queue/journal/output collection.
-                identity = _validate_live_identity(active, sandbox, reader)
-                directory = Path(active['directory']).resolve()
-                directory.mkdir(parents=True, exist_ok=True)
-                active_identity = {'sandbox_id': publisher['sandbox_id'], 'batch': active['batch'],
-                                   'teacher_source_sha256': identity['teacher_source_sha256']}
-                queue_snapshot = reader(active['queue_path'])
-                if _sha(queue_snapshot) != active['queue_sha256']:
-                    raise ValueError('active queue changed after guardian discovery')
-                if active['worker_queue_paths']:
-                    worker_queues = [(Path(path).name, reader(path)) for path in active['worker_queue_paths']]
-                    worker_journals = [(name, reader(path) if path is not None else None)
-                        for name, path in active['worker_journal_paths'].items()]
-                    journal_snapshot = aggregate_worker_journals(queue_snapshot, worker_queues, worker_journals)
+                batch_prior=(prior.get('overlap_batches')or{}).get(str(active['batch']),prior)
+                last=_export_discovered_guardian_batch(active,batch_prior,publisher,publisher_raw,sandbox,reader,export_unseen_closed)
+            overlap_results={}
+            state=active.get('guardian_state',{})if active else{}
+            slot=state.get('primary_prefetch')
+            if (isinstance(slot,dict)and isinstance(slot.get('owner'),dict)
+                    and str(slot.get('batch'))in(state.get('source_sequence')or{}).get('started',{})):
+                extra=discover_guardian_batch(publisher,sandbox,reader,batch_slot=slot['batch'])
+                extra_prior=(prior.get('overlap_batches')or{}).get(str(slot['batch']),{})
+                if extra.get('draining'):
+                    exported=export_unseen_closed(extra.get('closed_boundaries'),extra['guardian_state'])
+                    extra_result={'active':False,'draining_batch':slot['batch'],'closed_exports_this_poll':exported,
+                        'guardian_state_sha256':extra['guardian_state_sha256'],'training_admission':False,'exposure':False}
                 else:
-                    journal_snapshot = reader(active['journal_path'])
-                journal_sha = _sha(journal_snapshot)
-                prior_identity = prior.get('active_identity')
-                if isinstance(prior_identity, list) and len(prior_identity) == 3:
-                    # Compatibility with the earlier tuple serialized by JSON.
-                    prior_identity = {'sandbox_id': prior_identity[0], 'batch': prior_identity[1],
-                                      'teacher_source_sha256': prior_identity[2]}
-                completed_sha = _completed_outputs_sha256(queue_snapshot, journal_snapshot)
-                changed = active_identity != prior_identity or completed_sha != prior.get('completed_outputs_sha256')
-                changed_at = time.time() if changed else float(prior.get('completed_outputs_changed_at', time.time()))
-                if (active_identity == prior_identity and 'completed_outputs_sha256' not in prior
-                        and journal_sha == prior.get('journal_sha256')):
-                    changed_at = float(prior.get('journal_changed_at', time.time()))
-                journal_changed_at = (time.time() if journal_sha != prior.get('journal_sha256')
-                                      else float(prior.get('journal_changed_at', time.time())))
-                idle_flush = time.time() - changed_at >= float(publisher.get('idle_flush_after_seconds', 300))
-
-                def export_file(tranche: dict, receipt_path: Path) -> dict:
-                    return export_private_tranche(tranche, exporter=Path(publisher['exporter_path']),
-                        role=publisher['role'], receipt_path=receipt_path)
-
-                result = export_finished_tranches(batch=active['batch'],
-                    queue_path=active['queue_path'], journal_path=active['journal_path'],
-                    context_paths=active['context_paths'], directory=directory,
-                    read_file=reader, export_file=export_file, chunk_size=active['chunk_size'],
-                    flush_partial=bool(publisher.get('flush_partial', False)) or idle_flush,
-                    prune_after_private_verification=True, queue_snapshot=queue_snapshot,
-                    journal_snapshot=journal_snapshot)
-                closed = export_unseen_closed(active.get('closed_boundaries'), active.get('guardian_state') or {},
-                                              active_batch=active['batch'])
-                last = {'schema': 'natlang.teacher-incremental-export-publisher-state/1',
-                    'at': time.time(), 'publisher_sha256': _sha(publisher_raw),
-                    'active': True, 'active_identity': active_identity,
-                    'guardian_state_sha256': active['guardian_state_sha256'],
-                    'source_sequence_started_sha256': active['source_sequence_started_sha256'],
-                    'journal_sha256': journal_sha, 'journal_changed_at': journal_changed_at,
-                    'completed_outputs_sha256': completed_sha, 'completed_outputs_changed_at': changed_at,
-                    'identity': identity, 'result': result,
-                    'closed_exports_this_poll': closed,
-                    'training_admission': False, 'exposure': False}
+                    extra_result=_export_discovered_guardian_batch(extra,extra_prior,publisher,publisher_raw,sandbox,reader,export_unseen_closed)
+                overlap_results[str(slot['batch'])]=extra_result
+            if overlap_results:last['overlap_batches']=overlap_results
             # Persist every verified boundary, not just the most recent one.
             # This makes restarts and slow polls recover all completed tails.
             last['closed_boundaries'] = closed_exports

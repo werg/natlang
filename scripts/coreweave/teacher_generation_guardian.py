@@ -196,8 +196,8 @@ def assess(entries, journal, codes, score):
                 'index': entry['index'], 'seed': entry['seed'],
                 'finish': finishes.get(entry['key'])} for entry in entries]}
 
-def boundary(root, folder, expected_batch=None):
-    phase = json.loads((root/'feed-evidence-phase.json').read_text())
+def boundary(root, folder, expected_batch=None, *, phase_path=None):
+    phase = json.loads(Path(phase_path or root/'feed-evidence-phase.json').read_text())
     if phase['phase'] != 'batch_complete': raise ValueError('no drained batch boundary; preserve state for targeted repair')
     batch = phase['batch']
     if expected_batch is not None and batch != expected_batch: raise ValueError('feeder exited at a different batch boundary')
@@ -456,7 +456,7 @@ def config_revision(folder, state, path, *, publish=True):
     raw=Path(path).read_bytes();config=json.loads(raw);current=binding(path)
     if state.get('config')==current: return config
     previous=state.get('config_value')
-    allowed={'task_runtime','server','model_id','feeder','queue_worker','node_bin','drain_file','teacher_identity','source_sequence','repair_parallel_batches'}
+    allowed={'task_runtime','server','model_id','feeder','queue_worker','node_bin','drain_file','teacher_identity','source_sequence','repair_parallel_batches','primary_parallel_batches','primary_tail_max_running','overlap_workers','overlap_feeder','collection_repo','collection_worker'}
     changes={key for key in set(previous or {})|set(config) if (previous or {}).get(key)!=config.get(key)}
     if previous is not None and changes-allowed: raise ValueError('guardian root/ownership configuration changed; preserve and explicitly migrate this state')
     snapshot=folder/'config-history'/(current['sha256']+'.json');snapshot.parent.mkdir(parents=True,exist_ok=True)
@@ -472,6 +472,161 @@ def config_revision(folder, state, path, *, publish=True):
     state.update(config=current,config_snapshot=binding(snapshot),config_value=config)
     if publish: write(folder/'state.json',state)
     return config
+
+def _primary_overlap_settings(config):
+    limit=config.get('primary_parallel_batches',1)
+    if type(limit)is not int or limit not in (1,2):
+        raise ValueError('primary_parallel_batches must be one or two')
+    threshold=config.get('primary_tail_max_running',6);workers=config.get('overlap_workers',12)
+    if type(threshold)is not int or not 1<=threshold<=6 or type(workers)is not int or not 1<=workers<=24:
+        raise ValueError('primary overlap limits differ from the bounded policy')
+    if limit==2:
+        if not isinstance(config.get('collection_repo'),str)or not Path(config['collection_repo']).is_absolute():
+            raise ValueError('overlap collection needs its explicit actual source repository')
+        worker=config.get('collection_worker')
+        if (not isinstance(worker,dict)or worker.get('path')!=config.get('queue_worker')
+                or binding(worker['path'])!=worker):
+            raise ValueError('overlap collection needs its exact configured queue-worker bytes')
+        feeder=config.get('overlap_feeder')
+        if not isinstance(feeder,dict)or binding(feeder['path'])!=feeder:
+            raise ValueError('overlap feeder lacks an exact source binding')
+    return limit,threshold,workers
+
+
+def primary_tail_frontier(root,batch,threshold):
+    """Observe immutable queue custody and actual worker journal capacity."""
+    home=Path(root)/'evidence-collections-v2'/f'batch-{batch:04d}';queue=home/'queue.jsonl'
+    if not queue.is_file():return None
+    entries=[json.loads(line)for line in queue.read_text().splitlines()if line]
+    keys={row['key']for row in entries}
+    if not entries or len(keys)!=len(entries):raise ValueError('tail queue has duplicate identities')
+    journals=sorted(home.glob('journal*worker-*.jsonl'))
+    if not journals:return None
+    before={str(p):binding(p)for p in [queue,*journals]};started=set();finished={}
+    for journal in journals:
+        raw=journal.read_bytes()
+        # Active writers can be sampled between fragments of one append. Do
+        # not interpret a partial event as either completion or a fatal batch.
+        if raw and not raw.endswith(b'\n'):return None
+        for line in raw.split(b'\n'):
+            if not line:continue
+            row=json.loads(line)
+            if row.get('event')not in ('start','finish'):continue
+            if row.get('key')not in keys:raise ValueError('tail observation includes another batch key')
+            if row['event']=='start':started.add(row['key'])
+            else:
+                if row['key']in finished and finished[row['key']]!=row:
+                    raise ValueError('tail observation has conflicting finishes')
+                finished[row['key']]=row
+    if not set(finished)<=started:raise ValueError('tail finish lacks its actual start')
+    if before!={str(p):binding(p)for p in [queue,*journals]}:return None
+    remaining=keys-set(finished)
+    if keys-started or not 0<len(remaining)<=threshold:return None
+    return {'schema':'natlang.teacher-primary-tail-capacity/1','batch':batch,
+        'queue':before[str(queue)],'journals':[before[str(p)]for p in journals],
+        'started_keys':sorted(started),'finished_keys':sorted(finished),
+        'remaining_keys':sorted(remaining),'unstarted_keys':[],
+        'claim':'actual capacity observation only; no original completion or admission'}
+
+
+def _spawn_primary_prefetch(folder,state,config,slot,workers):
+    recovered=recover_token(slot['token'],script_prefix=Path(slot['feeder']['path']).name)
+    if recovered:
+        slot['owner']=public_identity(recovered);write(Path(folder)/'state.json',state);return
+    if alive(slot.get('owner')):return
+    home=Path(config['root'])/'evidence-collections-v2'/f"batch-{slot['batch']:04d}"
+    if home.exists():return  # A materialized orphan requires reconciliation, never a duplicate spawn.
+    if config.get('drain_file')and Path(config['drain_file']).exists():return
+    if binding(slot['feeder']['path'])!=slot['feeder']:
+        raise ValueError('reserved feeder mechanism changed')
+    for item in Path('/proc').iterdir():
+        if not item.name.isdigit():continue
+        current=process(item.name)
+        if not current:continue
+        is_feeder=any(Path(arg.decode(errors='replace')).name.startswith('feed-evidence-')
+            or arg.decode(errors='replace')==slot['feeder']['path']for arg in current['argv'][:5])
+        if is_feeder and public_identity(current)!=state.get('owner'):
+            raise ValueError('unowned feeder prevents next-batch overlap')
+    if binding(slot['source_configuration']['path'])!=slot['source_configuration']:
+        raise ValueError('reserved immutable source configuration changed')
+    context=slot['collection_context']
+    if binding(context['queue_worker']['path'])!=context['queue_worker']:
+        raise ValueError('reserved collection queue worker changed')
+    env={**os.environ,TOKEN:slot['token'],'NATLANG_TEACHER_START_BATCH':str(slot['batch']),
+        'NATLANG_TEACHER_SINGLE_BATCH':'1','NATLANG_TEACHER_TASK_RUNTIME':slot['task_runtime'],
+        'NATLANG_TEACHER_GUARDIAN_MODULE_ROOT':str(Path(__file__).parent),
+        'NATLANG_TEACHER_GENERATION_ROOT':config['root'],'NATLANG_REPO':context['repo'],
+        'NATLANG_TEACHER_QUEUE_WORKER':context['queue_worker']['path'],'NATLANG_TEACHER_NODE_BIN':context['node_bin'],
+        'NATLANG_TEACHER_IDENTITY':config['teacher_identity']['path'],
+        'NATLANG_TEACHER_SOURCE_CONFIGURATION':slot['source_configuration']['path'],
+        'NATLANG_TEACHER_SOURCE_CONFIGURATION_SHA256':slot['source_configuration']['sha256'],
+        'NATLANG_TEACHER_SOURCE_CONFIGURATION_BYTES':str(slot['source_configuration']['bytes']),
+        'NATLANG_TEACHER_WORKER_COUNT':str(workers)}
+    verify_teacher_identity(config['teacher_identity']['path'],server=config['server'],model_id=config['model_id'])
+    log=(Path(folder)/f"prefetch-{slot['batch']:04d}.log").open('ab')
+    child=subprocess.Popen(['nice','-n','10','python','-u',slot['feeder']['path']],
+        env=env,stdout=log,stderr=log,start_new_session=True)
+    identity=process(child.pid)
+    if identity is None:raise ValueError('reserved feeder exited before custody publication')
+    slot['owner']=public_identity(identity);write(Path(folder)/'state.json',state)
+
+
+def maintain_primary_prefetch(folder,state,config):
+    limit,threshold,workers=_primary_overlap_settings(config)
+    slot=state.get('primary_prefetch')
+    if limit==1:
+        if slot:raise ValueError('cannot disable overlap with an unreconciled next batch')
+        return
+    if slot:
+        if slot['batch']!=state['active_batch']+1:
+            raise ValueError('prefetch slot is not the sole next primary batch')
+        _spawn_primary_prefetch(folder,state,config,slot,slot['workers'])
+        _source_sequence_helpers().observe_prefetched_source(folder,state,config)
+        phase=Path(slot['phase_path'])
+        if not alive(slot.get('owner'))and phase.is_file():
+            value=json.loads(phase.read_text())
+            if value.get('phase')=='batch_complete':
+                decision,entries=boundary(Path(config['root']),Path(folder),slot['batch'],phase_path=phase)
+                prepare_retry(Path(folder),decision,entries)
+                slot['boundary']=binding(Path(folder)/'boundaries'/f"batch-{slot['batch']:04d}.json")
+                write(Path(folder)/'state.json',state)
+        return
+    if not alive(state.get('owner'))or Path(config['drain_file']).exists():return
+    tail=primary_tail_frontier(config['root'],state['active_batch'],threshold)
+    if tail is None:return
+    batch=state['active_batch']+1
+    pending=_source_sequence_helpers().prepare_prefetched_source(folder,state,config,batch)
+    if pending is None:return
+    declaration=config['source_sequence'];intent=_source_sequence_helpers()._json(pending['intent'],declaration)
+    slot={'batch':batch,'token':uuid.uuid4().hex,'owner':None,'feeder':config['overlap_feeder'],
+        'guardian_config':state['config_snapshot'],
+        'collection_context':{'repo':config['collection_repo'],'queue_worker':config['collection_worker'],
+            'node_bin':config['node_bin']},
+        'task_runtime':config['task_runtime'],'workers':workers,'source_configuration':intent['new_configuration'],
+        'selection_intent':pending['intent'],'tail_observation':tail,
+        'predecessor_owner':state['owner'],
+        'phase_path':str(Path(config['root'])/'feeder-phases'/f'batch-{batch:04d}.json')}
+    state['primary_prefetch']=slot;write(Path(folder)/'state.json',state)
+    _spawn_primary_prefetch(folder,state,config,slot,workers)
+
+
+def adopt_primary_prefetch(folder,state,config):
+    slot=state.get('primary_prefetch')
+    if not slot:return False
+    if slot['batch']!=state['next_batch']or state.get('owner')is not None:
+        raise ValueError('prefetch adoption differs from actual primary closure')
+    # A crash can follow durable reservation or Popen but precede the owner
+    # write, including while the predecessor exits. Recover the same token
+    # before considering another launch or publishing the next active owner.
+    _spawn_primary_prefetch(folder,state,config,slot,slot['workers'])
+    home=Path(config['root'])/'evidence-collections-v2'/f"batch-{slot['batch']:04d}"
+    if not alive(slot.get('owner'))and not home.exists():return False
+    _source_sequence_helpers().adopt_prefetched_source(folder,state,config,slot['batch'])
+    state.setdefault('primary_launches',{})[str(slot['batch'])]=dict(slot)
+    state.update(owner=slot.get('owner'),active_batch=slot['batch'],feeder=slot['feeder'],task_runtime=slot['task_runtime'])
+    state.pop('primary_prefetch');write(Path(folder)/'state.json',state)
+    return True
+
 
 def run(config_path, *, external_transition=None, external_reconciliation=None, drained_fanout_transition=None):
     config_path = Path(config_path); config = json.loads(config_path.read_text()); folder = Path(config['control']); folder.mkdir(parents=True, exist_ok=True)
@@ -506,18 +661,25 @@ def run(config_path, *, external_transition=None, external_reconciliation=None, 
         if config.get('source_sequence'):
             _source_sequence_helpers().observe_source_sequence(folder,state,config)
         if alive(state.get('owner')):
+            maintain_primary_prefetch(folder,state,config)
             if not Path(config['drain_file']).exists(): launch_repair(folder,state,config)
             write(folder/'phase.json', {'at': time.time(), 'phase': 'waiting_natural_feeder_exit', 'owner': state['owner'], 'drain_requested': Path(config['drain_file']).exists()})
             time.sleep(5); continue
         if state.get('active_batch') is not None:
-            decision, entries = boundary(root, folder, state['active_batch']); prepare_retry(folder, decision, entries)
+            launch=(state.get('primary_launches')or{}).get(str(state['active_batch']),{})
+            decision, entries = boundary(root, folder, state['active_batch'],phase_path=launch.get('phase_path')); prepare_retry(folder, decision, entries)
             state.update(next_batch=decision['batch']+1, active_batch=None, owner=None,
                 last_boundary=binding(folder/'boundaries'/f"batch-{decision['batch']:04d}.json"))
             write(target, state)
+            if config.get('source_sequence'):_source_sequence_helpers().observe_source_sequence(folder,state,config)
+            if adopt_primary_prefetch(folder,state,config):continue
         if Path(config['drain_file']).exists():
             write(folder/'phase.json', {'at': time.time(), 'phase': 'operator_drained', 'repair_running': alive(state.get('repair_owner')), 'next_batch': state['next_batch']})
             time.sleep(5); continue
         launch_repair(folder, state, config)
+        if adopt_primary_prefetch(folder,state,config):continue
+        if state.get('primary_prefetch'):
+            raise ValueError('reserved next primary has not acquired an actual feeder owner')
         launch_feeder(folder, state, config, state['next_batch'])
 
 if __name__ == '__main__':
