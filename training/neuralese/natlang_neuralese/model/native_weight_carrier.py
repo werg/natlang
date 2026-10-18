@@ -119,6 +119,7 @@ class ParameterCotangentScope:
         self._wrappers = {}
         self._gradient_hooks = []
         self.model = None
+        self._reference_parameters = {}
         for index, (name, parameter) in enumerate(unique.values()):
             initial_grad=parameter.grad if parameter.is_leaf else None
             self.entries[id(parameter)] = {'name': name, 'parameter': parameter,
@@ -162,7 +163,8 @@ class ParameterCotangentScope:
                         original = module.forward
                         module.forward = _lfm_causal_carrier_forward(self, module, original)
                         self._module_changes.append(('forward', module, original))
-                    elif _is_rms_norm_module(module) and id(weight) in selected:
+                    elif (type(module).__name__ in _RMS_NORM_TYPES and isinstance(weight, torch.Tensor)
+                          and id(weight) in selected):
                         from ..common.native_higher_order import active_reference_arithmetic
                         if active_reference_arithmetic() is not None:
                             continue
@@ -179,6 +181,18 @@ class ParameterCotangentScope:
         return self
 
     def _audit_vjp_gradient(self, entry, gradient):
+        # Auxiliary adapter values are normally FP32. Their gradients already
+        # fan in without the low-precision rounding this scope protects, and
+        # explicit high-precision reference arithmetic intentionally bypasses
+        # the carrier edge. Audit only low-precision targets.
+        if entry['parameter'].dtype not in (torch.float16, torch.bfloat16):
+            return gradient
+        reference = entry.get('reference_cotangent')
+        if reference is not None:
+            expected = reference.to(device=gradient.device, dtype=gradient.dtype)
+            if not torch.equal(gradient, expected):
+                raise RuntimeError(f"reference cotangent fan-in changed before cast: {entry['name']}")
+            return gradient
         if not entry['count']:
             raise RuntimeError(
                 f"low-precision parameter gradient arrived without a cotangent carrier: {entry['name']}"
@@ -198,20 +212,29 @@ class ParameterCotangentScope:
             weight = getattr(module, 'weight', None)
             bias = getattr(module, 'bias', None)
             if isinstance(module, nn.Embedding):
-                if weight.dtype in (torch.float16, torch.bfloat16) and id(weight) not in seen:
+                if isinstance(weight, torch.Tensor) and weight.dtype in (torch.float16, torch.bfloat16) and id(weight) not in seen:
                     selected.append((name + '.weight', weight)); seen.add(id(weight))
             elif isinstance(module, (nn.Linear, nn.Conv1d)):
                 for suffix, parameter in (('weight', weight), ('bias', bias)):
-                    if (isinstance(parameter, nn.Parameter) and parameter.dtype in (torch.float16, torch.bfloat16)
+                    if (isinstance(parameter, torch.Tensor) and parameter.dtype in (torch.float16, torch.bfloat16)
                             and id(parameter) not in seen):
                         selected.append((name + '.' + suffix, parameter)); seen.add(id(parameter))
-            elif _is_rms_norm_module(module) and isinstance(weight, nn.Parameter):
+            elif type(module).__name__ in _RMS_NORM_TYPES and isinstance(weight, torch.Tensor):
                 if weight.dtype in (torch.float16, torch.bfloat16) and id(weight) not in seen:
                     selected.append((name + '.weight', weight)); seen.add(id(weight))
         for name, parameter in model.named_parameters(remove_duplicate=False):
             if ((name in ('experts.gate_up', 'experts.down') or
                  name.endswith(('.experts.gate_up', '.experts.down'))) and parameter.ndim == 3
                     and parameter.dtype in (torch.float16, torch.bfloat16) and id(parameter) not in seen):
+                selected.append((name, parameter)); seen.add(id(parameter))
+        # SharedStateModel's sparse role/override rows are registered directly
+        # on the model rather than owned by nn.Embedding/nn.Linear modules.
+        # They still participate in repeated embedding and readout uses, so
+        # they need the same one-cast cotangent path when stored in BF16.
+        for name, parameter in model.named_parameters(remove_duplicate=False):
+            if (name in {'input_rows', 'output_rows', 'extra_input_rows', 'extra_output_rows'}
+                    and parameter.dtype in (torch.float16, torch.bfloat16)
+                    and id(parameter) not in seen):
                 selected.append((name, parameter)); seen.add(id(parameter))
         if parameter_target_ids is not None:
             selected = [(name, parameter) for name, parameter in selected
@@ -307,6 +330,47 @@ class ParameterCotangentScope:
         if entry['anchor_value'] is None:
             entry['anchor_value'] = _ParameterCotangentAnchor.apply(entry['parameter'], self)
         return entry['anchor_value']
+
+    def reference_parameter(self, parameter):
+        """Share one differentiable FP32 cast for explicit higher-order references.
+
+        Reference arithmetic must preserve Hessian/VJP semantics, so it cannot
+        use the file-backed first-order custom edge. Reusing one ordinary cast
+        node makes autograd sum every use in FP32 before the single cast back
+        to a BF16 leaf.
+        """
+        entry = self._entry_for(parameter)
+        if entry is None or parameter.dtype not in (torch.float16, torch.bfloat16):
+            return parameter
+        key = id(parameter)
+        value = self._reference_parameters.get(key)
+        if value is None:
+            value = parameter.float()
+            if value.requires_grad:
+                def capture(gradient, item=entry):
+                    item['reference_cotangent'] = gradient.detach()
+                    return gradient
+                value.register_hook(capture)
+            self._reference_parameters[key] = value
+        return value
+
+    def widen_parameter(self, parameter):
+        """Expose a direct low-precision parameter as an FP32 cotangent edge.
+
+        This is for compact native sparse tables used directly by the model,
+        outside a module-owned projection. Forward values are the exact FP32
+        promotion of stored values. Backward accumulates in the shared scope,
+        and the common anchor returns/commits one cast after all uses.
+        """
+        entry = self._entry_for(parameter)
+        if entry is None:
+            return parameter
+        anchor = self.anchor_for(parameter)
+        if anchor is None:
+            # Frozen serving tables remain ordinary values even when another
+            # scope happens to contain their storage.
+            return parameter
+        return _WidenedParameterCotangent.apply(parameter, anchor, self)
 
     def anchors_for_weight(self, weight):
         _, route = self._effective_route_for(weight)
@@ -462,7 +526,8 @@ class ParameterCotangentScope:
                     if (entry['parameter'].grad is not entry['initial_grad'] or
                         entry['parameter'].grad is not None and
                         entry['parameter'].grad._version != entry['initial_grad_version'])
-                    and not (self.mode == 'vjp' and entry['anchor_backward'] > 0)]
+                    and not (entry['anchor_backward'] > 0 or
+                             entry.get('reference_cotangent') is not None)]
         if bypasses:
             counts = {entry['name']: entry['count'] for entry in self.entries.values()
                       if entry['name'] in bypasses}
@@ -475,10 +540,15 @@ class ParameterCotangentScope:
                                )
         if self.mode == 'update':
             for entry in self.entries.values():
-                if not entry['count']:
+                reference = entry.get('reference_cotangent')
+                if reference is not None:
+                    entry['parameter'].grad = reference.to(device=entry['parameter'].device,
+                                                           dtype=entry['parameter'].dtype)
+                elif entry['count']:
+                    entry['parameter'].grad = entry['accumulator'].to(device=entry['parameter'].device,
+                                                                       dtype=entry['parameter'].dtype)
+                else:
                     continue
-                entry['parameter'].grad = entry['accumulator'].to(device=entry['parameter'].device,
-                                                                   dtype=entry['parameter'].dtype)
         self._closed = True
 
     def close(self):
@@ -505,6 +575,7 @@ class ParameterCotangentScope:
             entry['accumulator'] = None
             entry['anchor_value'] = None
         self._effective_routes.clear()
+        self._reference_parameters.clear()
         self._auxiliary_entries.clear()
         self.entries.clear()
         self._wrappers.clear()
@@ -532,6 +603,21 @@ class _ParameterCotangentAnchor(torch.autograd.Function):
         if ctx.scope.mode == 'update':
             return None, None
         return entry['accumulator'].to(device=ctx.parameter.device, dtype=torch.float32), None
+
+
+class _WidenedParameterCotangent(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, parameter, anchor, scope):
+        ctx.parameter, ctx.scope = parameter, scope
+        # The scalar is exactly zero; retaining it only supplies the common
+        # once-cast optimizer/VJP edge. Do not preserve an autograd edge to the
+        # original low-precision table here.
+        return parameter.detach().float() + anchor
+
+    @staticmethod
+    def backward(ctx, gradient):
+        ctx.scope.add(ctx.parameter, gradient)
+        return None, gradient.new_ones((), dtype=torch.float32), None
 
 
 class _TorchStoredRMSNorm(torch.autograd.Function):
@@ -719,6 +805,17 @@ def active_cotangent_scope():
 def _scope_anchors(weight):
     scope = active_cotangent_scope()
     return () if scope is None else scope.anchors_for_weight(weight)
+
+
+def widen_direct_parameter(parameter):
+    """Route a direct sparse-table use through the active FP32 accumulator."""
+    scope = active_cotangent_scope()
+    if scope is None or parameter.dtype not in (torch.float16, torch.bfloat16):
+        return parameter
+    from ..common.native_higher_order import active_reference_arithmetic
+    if active_reference_arithmetic() is not None:
+        return scope.reference_parameter(parameter)
+    return scope.widen_parameter(parameter)
 
 
 def _scope_anchor(weight):

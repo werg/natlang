@@ -78,6 +78,15 @@ def reference_linear(x,weight,bias=None):
     state=active_reference_arithmetic()
     if state is None:raise RuntimeError('native reference linear needs its explicit arithmetic scope')
     state.record('linear')
+    # A shared ordinary cast node preserves higher-order autograd while making
+    # repeated low-precision parameter uses add in FP32 before the leaf cast.
+    # The production carrier uses a first-order file-backed edge; reference
+    # arithmetic must remain differentiable for nested derivative programs.
+    from ..model.native_weight_carrier import active_cotangent_scope
+    scope=active_cotangent_scope()
+    if scope is not None:
+        weight=scope.reference_parameter(weight)
+        if bias is not None:bias=scope.reference_parameter(bias)
     return F.linear(x.double(),weight.double(),None if bias is None else bias.double()).to(x.dtype)
 
 

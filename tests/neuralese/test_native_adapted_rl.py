@@ -261,8 +261,6 @@ def test_adapted_policy_bundle_restart_gradient_service_and_optimizer(tmp_path,m
                 normalized_inputs.append(hidden.detach().reshape(-1,hidden.shape[-1])[-1])
                 return original_logits(hidden)
             engine.shared_model.logits=traced_logits
-            weight_handle=target_parameters(engine.shared_model)[name].register_hook(
-                lambda gradient:trace['cached_dw'].append(gradient.detach().clone()))
             seq=Sequence(request,Future(),prompt_plan=engine._prompt_plan(request.messages,None))
             engine._native_prefill(seq)
             actions=spec['rows'][graphs[0]['id']]['actions']
@@ -280,11 +278,27 @@ def test_adapted_policy_bundle_restart_gradient_service_and_optimizer(tmp_path,m
             loss=clipped_token_loss(new,old,spec['rows'][graphs[0]['id']]['advantage'],
                 clip_low=spec.get('clip_low',.2),clip_high=spec.get('clip_high',.28)).mean()
             trace['cached_logps']=new.detach();trace['cached_loss']=loss.detach()
-            try:return torch.autograd.grad(loss,coefficient)[0]
-            finally:engine.shared_model.logits=original_logits;weight_handle.remove()
+            # The trace compares the cached and flat base-weight cotangents as
+            # well as the adapter VJP. Request both derivatives explicitly;
+            # autograd does not call a base-weight hook for a coefficient-only
+            # request.
+            try:
+                coefficient_grad, _base_grad = torch.autograd.grad(loss,(coefficient,base_weight))
+                return coefficient_grad
+            finally:engine.shared_model.logits=original_logits
+        base_weight=target_parameters(engine.shared_model)[name]
+        base_requires_grad=base_weight.requires_grad
+        base_weight.requires_grad_(True)
+        weight_handle=base_weight.register_hook(
+            lambda gradient:trace['cached_dw'].append(gradient.detach().clone()))
         with layer_trace('cached'):
-            expected_grad=run_native(engine,cached_objective,current_entries,
-                leaves={current_id:{name:coefficient}},gradient_precision='fp32')
+            try:
+                expected_grad=run_native(engine,cached_objective,current_entries,
+                    leaves={current_id:{name:coefficient}},gradient_precision='fp32')
+            finally:
+                weight_handle.remove()
+                base_weight.requires_grad_(base_requires_grad)
+        base_weight.requires_grad_(base_requires_grad)
         actual_grad=second_gradient.tensors[name].to(expected_grad)
         if os.environ.get('NATLANG_ADAPTER_STATE_DIAGNOSTIC_OUT'):
             from natlang_neuralese.rl.native_replay import NativePolicyObjective,action_logps
@@ -303,17 +317,22 @@ def test_adapted_policy_bundle_restart_gradient_service_and_optimizer(tmp_path,m
                     return objective(model,result,context)
             def flat_objective():
                 objective.bind_actor(engine);objective.native_state_modes={block_id:'same-base-adapter-state'}
-                handle=target_parameters(engine.shared_model)[name].register_hook(
-                    lambda gradient:trace['flat_dw'].append(gradient.detach().clone()))
-                try:
-                    loss,_=packed_graph_loss(engine.shared_model,[parse_graph(graphs[0],
-                        tokenizer_fingerprint=engine.native_identity['tokenizer_fingerprint'])],objective=Traced())
-                    trace['flat_loss']=loss.detach()
-                    return torch.autograd.grad(loss,coefficient)[0]
-                finally:handle.remove()
+                loss,_=packed_graph_loss(engine.shared_model,[parse_graph(graphs[0],
+                    tokenizer_fingerprint=engine.native_identity['tokenizer_fingerprint'])],objective=Traced())
+                trace['flat_loss']=loss.detach()
+                coefficient_grad, _base_grad = torch.autograd.grad(loss,(coefficient,base_weight))
+                return coefficient_grad
+            base_weight.requires_grad_(True)
+            flat_base_handle=base_weight.register_hook(
+                lambda gradient:trace['flat_dw'].append(gradient.detach().clone()))
             with layer_trace('flat'):
-                manual=run_native(engine,flat_objective,current_entries,
-                    leaves={current_id:{name:coefficient}},gradient_precision='fp32')
+                try:
+                    manual=run_native(engine,flat_objective,current_entries,
+                        leaves={current_id:{name:coefficient}},gradient_precision='fp32')
+                finally:
+                    flat_base_handle.remove()
+                    base_weight.requires_grad_(base_requires_grad)
+            base_weight.requires_grad_(base_requires_grad)
             assert torch.equal(manual,actual_grad)
             def differences(left,right):
                 left,right=left.detach().double().cpu(),right.detach().double().cpu()

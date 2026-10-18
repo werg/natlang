@@ -63,8 +63,15 @@ def qualify_updates(hook_model,batch,*,checkpoint_layers,chunk_tokens,objective=
         observed.clear()
         rng=torch.get_rng_state()
         reference_optimizer.zero_grad(set_to_none=True)
-        expected,_=packed_graph_loss(reference,batch,checkpoint_layers=checkpoint_layers,chunk_tokens=chunk_tokens,objective=objective)
-        expected.backward()
+        # Compare both optimizer schedules under the same exact FP32
+        # low-precision-parameter fan-in. The deferred path must not use the
+        # old per-invocation BF16 gradient rounding as its oracle.
+        from natlang_neuralese.model.native_weight_carrier import ParameterCotangentScope
+        with ParameterCotangentScope.for_model(reference,mode='update') as cotangents:
+            expected,_=packed_graph_loss(reference,batch,checkpoint_layers=checkpoint_layers,
+                                         chunk_tokens=chunk_tokens,objective=objective)
+            expected.backward()
+            cotangents.finish()
         gradients={name:value.grad.detach().clone() for name,value in reference_named if value.grad is not None}
         reference_optimizer.step()
         torch.set_rng_state(rng)

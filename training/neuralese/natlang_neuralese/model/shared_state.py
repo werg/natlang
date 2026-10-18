@@ -507,23 +507,27 @@ class SharedStateModel(nn.Module):
         return bool(token_ids)
 
     def embed(self, ids):
-        from .native_weight_carrier import stored_embedding
+        from .native_weight_carrier import stored_embedding, widen_direct_parameter
         result = stored_embedding(ids, self.port.embedding_weight)
+        input_rows = widen_direct_parameter(self.input_rows)
+        extra_input_rows = (widen_direct_parameter(self.extra_input_rows)
+                            if self.token_override_ids else None)
         for index, token in enumerate(self.marker_ids):
-            result = torch.where((ids == token)[..., None], self.input_rows[index].to(result.dtype), result)
+            result = torch.where((ids == token)[..., None], input_rows[index].to(result.dtype), result)
         for index, token in enumerate(self.token_override_ids):
-            result = torch.where((ids == token)[..., None], self.extra_input_rows[index].to(result.dtype), result)
+            result = torch.where((ids == token)[..., None], extra_input_rows[index].to(result.dtype), result)
         return result
 
     def logits(self, h):
         from .readout_storage import readout_weight
         normalized = self.port.final_norm(h)
         logits = _linear_weight(normalized, readout_weight(self.port, self.port.output_weight, normalized.dtype), precision=getattr(self, "native_linear_precision", "ieee"))
-        rows = self.input_rows if self.tied else self.output_rows
+        from .native_weight_carrier import widen_direct_parameter
+        rows = widen_direct_parameter(self.input_rows if self.tied else self.output_rows)
         logits = logits.clone()
         logits[..., list(self.marker_ids)] = _linear_weight(normalized, rows.to(normalized.dtype), precision=getattr(self, "native_linear_precision", "ieee"))
         if self.token_override_ids:
-            extra = self.extra_input_rows if self.tied else self.extra_output_rows
+            extra = widen_direct_parameter(self.extra_input_rows if self.tied else self.extra_output_rows)
             baseline = self.port.output_weight[list(self.token_override_ids)].to(normalized.dtype)
             delta = extra.to(normalized.dtype) - baseline
             logits[..., list(self.token_override_ids)] += _linear_weight(normalized, delta, precision=getattr(self, 'native_linear_precision', 'ieee'))
