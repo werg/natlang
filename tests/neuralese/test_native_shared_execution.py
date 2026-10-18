@@ -111,7 +111,9 @@ def test_real_checkpoint_resume_inherits_profile_and_exact_optimizer_rng_exposur
         observed=[]
         def inspect_transition(model,*a,**kw):
             _same(model_state(model)['backbone_state'],first['backbone_state'])
-            _same(model_state(model)['interface_state'],first['interface_state'])
+            interface=model_state(model)['interface_state']
+            assert interface.pop('native_shared_execution')=='stable-v1'
+            _same(interface,first['interface_state'])
             _same(kw['optimizer'].state_dict(),first['training']['optimizer'])
             _same(capture_training_rng_state('cpu'),first['training']['rng'])
             result=original(model,*a,**kw)
@@ -136,3 +138,38 @@ def test_real_checkpoint_resume_inherits_profile_and_exact_optimizer_rng_exposur
         assert key in resumed;_same(resumed[key],explicit[key])
     for key in('optimizer','rng','global_step','exposure_counts','source_row_bindings','source_row_order'):
         _same(resumed['training'][key],explicit['training'][key])
+
+
+@pytest.mark.parametrize('family',['lfm','mellum'])
+def test_stable_saved_tensor_identity_preserves_runtime_validation_and_rejects_profile_conflict(tmp_path,monkeypatch,family):
+    from test_native_serving_adapters import engine_fixture
+    from test_native_raw_policy import parent_training
+    from natlang_neuralese.model import native_model as native
+    from natlang_neuralese.rl.native_raw_policy import prepare_raw_policy
+    from natlang_neuralese.common.hashing import sha256_file_hex
+    engine=engine_fixture(tmp_path,family);model=engine.shared_model;config=engine.model_config
+    configure_shared_execution(model,'stable-v1');config['native_shared_execution']='stable-v1'
+    saved={'schema':native.CHECKPOINT_SCHEMA,'step':9,'model_config':config,**native.model_state(model),'training':parent_training()}
+    assert saved['interface_state']['native_shared_execution']=='stable-v1'
+    parent=tmp_path/'stable.pt';torch.save(saved,parent)
+    expected=native.native_identity(model,config,checkpoint_sha256=sha256_file_hex(parent))
+    actual=prepare_raw_policy(parent,base=config['base'],tokenizer_out=tmp_path/'tokens')
+    assert actual['native_identity']==expected
+    # An older explicitly stable diagnostic interface omitted this duplicate
+    # declaration. Its already-bound model_config still defines the same mode.
+    legacy=copy.deepcopy(saved);legacy['interface_state'].pop('native_shared_execution')
+    legacy_path=tmp_path/'legacy-stable.pt';torch.save(legacy,legacy_path)
+    restored,_,_,restored_config,_=native.load_native_checkpoint(legacy_path)
+    assert native.native_identity(restored,restored_config,checkpoint_sha256=sha256_file_hex(legacy_path))==prepare_raw_policy(
+        legacy_path,base=config['base'],tokenizer_out=tmp_path/'legacy-tokens')['native_identity']
+    corrupted=copy.deepcopy(saved);corrupted['interface_state']['native_shared_execution']='source-v1'
+    bad=tmp_path/'mismatch.pt';torch.save(corrupted,bad)
+    with pytest.raises(ValueError,match='native_shared_execution'):
+        native.load_native_checkpoint(bad)
+    with pytest.raises(ValueError,match='shared execution differs'):
+        prepare_raw_policy(bad,base=config['base'],tokenizer_out=tmp_path/'bad-tokens')
+    # Actual served-model identity must still reject tampered installed kernels.
+    module=next(m for m in model.port.modules()if hasattr(m,'_native_shared_source_forward'))
+    module.forward=module._native_shared_source_forward
+    with pytest.raises(ValueError,match='module differs'):
+        native.native_identity(model,config,checkpoint_sha256=sha256_file_hex(parent))

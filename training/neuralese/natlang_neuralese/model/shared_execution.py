@@ -51,12 +51,17 @@ def configure_shared_execution(model,profile='source-v1'):
     return profile
 
 
-def validate_shared_execution(model,config):
+def validate_shared_execution_profile(model,config):
     profile=config.get('native_shared_execution','source-v1')
     if (profile not in NATIVE_SHARED_EXECUTIONS
             or getattr(model,'native_shared_execution','source-v1')!=profile
             or getattr(model.port,'native_shared_execution','source-v1')!=profile):
         raise ValueError('native shared execution differs from declared profile')
+    return profile
+
+
+def validate_shared_execution(model,config):
+    profile=validate_shared_execution_profile(model,config)
     for name,module in model.port.named_modules():
         implementation=(_fixed_ffn if type(module)is torch.nn.Linear and '.feed_forward.'in name
             else _fixed_norm if type(module).__name__ in _NORM_TYPES else None)

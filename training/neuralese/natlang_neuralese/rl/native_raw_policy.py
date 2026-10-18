@@ -68,7 +68,7 @@ def prepare_raw_policy(checkpoint, *, base, tokenizer_out, require_optimizer=Tru
     import torch
     from transformers import AutoTokenizer
     from ..train.checkpoint_policy import CheckpointPolicy
-    from ..model.native_model import CHECKPOINT_SCHEMA, native_identity
+    from ..model.native_model import CHECKPOINT_SCHEMA, native_tensor_identity
     from ..model.shared_state import provision_role_tokenizer
     from ..data.text_corpus import tokenizer_fingerprint
     checkpoint = Path(checkpoint).resolve(strict=True)
@@ -100,9 +100,12 @@ def prepare_raw_policy(checkpoint, *, base, tokenizer_out, require_optimizer=Tru
     # These are views of saved tensors, not modules or randomly initialized
     # weights. Reuse serving's exact identity law, including activation casts.
     attention_mode=interface.get('native_attention_precision','ieee')
+    shared_mode=interface.get('native_shared_execution',config.get('native_shared_execution','source-v1'))
     proxy = SimpleNamespace(port=SimpleNamespace(embedding_weight=state['backbone_state'][embedding_keys[0]].to(dtype),
-        native_attention_precision=attention_mode, native_norm_execution=interface.get('native_norm_execution','source-v1')),
+        native_attention_precision=attention_mode, native_norm_execution=interface.get('native_norm_execution','source-v1'),
+        native_shared_execution=shared_mode),
         native_attention_precision=attention_mode,
+        native_shared_execution=shared_mode,
         native_norm_execution=interface.get('native_norm_execution','source-v1'),
         native_ordinary_precision=config.get('native_ordinary_precision'),
         _native_norm_parameter_dtypes=tuple(value.dtype for name,value in state['backbone_state'].items()
@@ -112,7 +115,7 @@ def prepare_raw_policy(checkpoint, *, base, tokenizer_out, require_optimizer=Tru
         token_override_ids=tuple(interface.get('token_override_ids', ())),
         tied=interface.get('output_rows') is None,
         extra_input_rows=interface.get('extra_input_rows'), extra_output_rows=interface.get('extra_output_rows'))
-    identity = native_identity(proxy, config, checkpoint_sha256=sha256_file_hex_cached(checkpoint))
+    identity = native_tensor_identity(proxy, config, checkpoint_sha256=sha256_file_hex_cached(checkpoint))
     tokenizer = AutoTokenizer.from_pretrained(base, local_files_only=True)
     from ..serve.chat import bind_history_reasoning
     bind_history_reasoning(tokenizer, policy=config.get('history_reasoning_policy'), require_declared=True,

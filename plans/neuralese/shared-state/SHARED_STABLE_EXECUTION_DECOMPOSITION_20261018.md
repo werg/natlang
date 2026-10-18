@@ -9,6 +9,22 @@ The production policy is to repair the localized numerical defects and keep trai
 5. Verify both architectures, checkpoint recomputation, real optimizer/RNG/exposure continuation, block transport/cached inference and fixed/unchunked FFNs. Compare bounded gather against its mathematical reference, including duplicate/shared rows, masked gradients and multiple consumers; measure actual GPU peak to reject a hidden FP64 history expansion.
 6. Independently review the integrated code before cutover. Qualify the actual current parent and full policy capacity; resume useful established-capacity SFT while this implementation proceeds. The small diagnostic and publishing source alone grant no production readiness.
 
+Checkpoint-control integration correction: raw-policy preparation deliberately
+uses saved embedding/interface tensor views without constructing a backbone.
+Separate declared-profile/tensor identity from actual module-dispatch validation.
+Both paths share the exact embedding identity law; served models still validate
+their installed modules. Checkpoint-only preparation validates the saved shared
+profile against its configuration and does not claim runtime qualification.
+Carry the shared execution profile in new interface snapshots as well as model
+configuration, rejecting disagreement. Existing source-profile snapshots remain
+byte-compatible. A missing field in an earlier stable diagnostic interface is
+interpreted using its already explicit model configuration, not a new profile.
+Validation: 171 focused tests passed, covering all 45 previously failing raw
+policy/control cases, both architectures and all three profile declarations,
+no second model construction or parent decode, exact RNG preservation,
+source-to-stable continuation, explicit interface/config disagreement and actual
+installed-kernel tampering. Independent source review cleared the split.
+
 This is crisp arithmetic, durability and verification plumbing for the owner's natural-language supervision policy. It adds no new model-facing markers, task policy, scheduling or latent channel. The full training and inference path, source/continuation identities and cross-model compatibility checks must land together; do not publish a disconnected helper as completion.
 
 Integrated validation (2026-10-18): the historical 9478 checkpoint passed the complete 4,099-token FFN transition with the bounded gather implementation (`lfm9478-integrated-stable-ffn4096-transition-root-20261018.json`, 291 seconds, no SGD, unchanged tolerances). This comparison uses fresh diagnostic optimizer inventory and grants no current-parent readiness. Independent review then caught and repaired private RMS gain preservation and the higher-order reference fallback. The expanded suite passed 140 cases, including both architectures on actual CUDA, every trainable external-state gradient, checkpoint recomputation, private gains, second derivatives, and exact saved weights/moments/RNG/exposure across a source-to-stable continuation. The source-profile CUDA fixture explicitly uses production's declared stable norm dispatch; raw Maple constructor compilation donates backward buffers and forbids its retained-graph comparison. Independent integrated review cleared sealing; actual latest-parent qualification and complete policy capacity remain mandatory before deployment.

@@ -906,6 +906,9 @@ def channel_checkpoint(model):
     execution = getattr(model, 'native_norm_execution', 'source-v1')
     if execution != 'source-v1':
         result['native_norm_execution'] = execution
+    shared_execution=getattr(model,'native_shared_execution','source-v1')
+    if shared_execution!='source-v1':
+        result['native_shared_execution']=shared_execution
     attention_mode = getattr(model, 'native_attention_precision', 'ieee')
     if attention_mode != 'ieee':
         result['native_attention_precision'] = attention_mode
@@ -925,6 +928,10 @@ def restore_channel_checkpoint(model, state):
         raise ValueError('native channel checkpoint native_linear_precision differs from this model')
     if state.get('native_norm_execution', 'source-v1') != expected.get('native_norm_execution', 'source-v1'):
         raise ValueError('native channel checkpoint native_norm_execution differs from this model')
+    # Earlier stable diagnostics declared this in model_config only. New
+    # interfaces repeat it so independent interface/config disagreement rejects.
+    if state.get('native_shared_execution',expected.get('native_shared_execution','source-v1'))!=expected.get('native_shared_execution','source-v1'):
+        raise ValueError('native channel checkpoint native_shared_execution differs from this model')
     if state.get('native_attention_precision', 'ieee') != expected.get('native_attention_precision', 'ieee'):
         raise ValueError('native channel checkpoint native_attention_precision differs from this model')
     if tuple(state.get('token_override_ids', ())) != model.token_override_ids:

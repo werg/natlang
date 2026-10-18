@@ -74,12 +74,19 @@ def configure_native_precision():
 
 def native_identity(model, config, *, checkpoint_sha256):
     """Fingerprint the actual restored embedding path once per served checkpoint."""
+    from .shared_execution import validate_shared_execution
+    validate_shared_execution(model,config)
+    return native_tensor_identity(model,config,checkpoint_sha256=checkpoint_sha256)
+
+
+def native_tensor_identity(model, config, *, checkpoint_sha256):
+    """Identity of saved embedding tensors/profiles; no runtime qualification."""
     from ..common.jsonio import canonical_json_bytes
     from .native_parameter_precision import validate_norm_precision, validate_norm_execution
     validate_norm_precision(model, config)
     validate_norm_execution(model, config)
-    from .shared_execution import validate_shared_execution
-    validate_shared_execution(model,config)
+    from .shared_execution import validate_shared_execution_profile
+    validate_shared_execution_profile(model,config)
     digest = hashlib.sha256(b'natlang.native-embedding-path/1\0')
     mode = config.get('native_linear_precision', 'ieee')
     if mode != getattr(model, 'native_linear_precision', 'ieee'):

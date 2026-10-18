@@ -16,7 +16,8 @@ def parent_training():
 
 @pytest.mark.parametrize('family',['lfm','mellum'])
 @pytest.mark.parametrize('attention',['ieee','tf32x3'])
-def test_raw_policy_identity_and_tokenizer_match_actual_loaded_model_without_construction(tmp_path,monkeypatch,family,attention):
+@pytest.mark.parametrize('shared',[None,'source-v1','stable-v1'])
+def test_raw_policy_identity_and_tokenizer_match_actual_loaded_model_without_construction(tmp_path,monkeypatch,family,attention,shared):
     import natlang_neuralese.model.native_model as native
     from transformers import AutoTokenizer
     from natlang_neuralese.data.text_corpus import tokenizer_fingerprint
@@ -24,6 +25,9 @@ def test_raw_policy_identity_and_tokenizer_match_actual_loaded_model_without_con
     engine=engine_fixture(tmp_path,family)
     model,tokenizer,roles,config=engine.shared_model,engine.tokenizer,engine.role_tokens,engine.model_config
     base=Path(config['base'])
+    if shared is not None:
+        from natlang_neuralese.model.shared_execution import configure_shared_execution
+        configure_shared_execution(model,shared);config['native_shared_execution']=shared
     if attention!='ieee':
         from natlang_neuralese.model.native_precision import set_native_attention_precision
         set_native_attention_precision(model,attention);config['native_attention_precision']=attention
