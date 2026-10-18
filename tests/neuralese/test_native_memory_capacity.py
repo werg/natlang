@@ -84,7 +84,7 @@ def test_offload_small_actual_weight_comparison_uses_bitwise_all_gradient_digest
     assert model.port.activation_checkpoint is hook
 
 
-def prepared_fixture(tmp_path,monkeypatch,novel_split="train",checkpoint_layers=True):
+def prepared_fixture(tmp_path,monkeypatch,novel_split="train",checkpoint_layers=True,family='lfm'):
     import json
     from types import SimpleNamespace
     from pathlib import Path
@@ -93,7 +93,8 @@ def prepared_fixture(tmp_path,monkeypatch,novel_split="train",checkpoint_layers=
     from natlang_neuralese.data.native_sources import NativeGraphSource
     from test_native_state_sft import graph
     monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE',str(tmp_path/'indexes'))
-    model=SharedStateModel(tiny('lfm'),(58,59,60,61),rank=4)
+    model=SharedStateModel(tiny(family),(58,59,60,61),rank=4)
+    if family=='mellum':model.port.hf.natlang_precision='bf16'
     optimizer,_=make_native_optimizer(model,lr=3e-6,in_backward=True)
     configure_checkpoint_input_offload(model.port,enabled=checkpoint_layers)
     sources=[]
