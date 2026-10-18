@@ -402,3 +402,32 @@ def test_default_materializer_continuation_requires_all_decision_bytes_and_typed
     value=json.loads(current.read_bytes());value['output_sha256']=file_binding(current.parent/'decisions.jsonl')['sha256'];put(current,value)
     with pytest.raises(ValueError,match='every original decision'):check()
     assert Path(refs[0]['path']).read_bytes()==old_bytes
+
+
+def test_requalified_identical_cases_select_actual_full_packet_authority(tmp_path):
+    ready, collection, prepared, references = packet(tmp_path)
+    old = json.loads(Path(prepared['path']).read_text())
+    old['references'] = dict(old['references'])
+    old['references']['selection'] = put(tmp_path / 'old-selection.json', {
+        **collection['protected_selection'], 'reference_epoch': 'older',
+    })
+    old_prepared = put(tmp_path / 'old-prepared.json', old)
+    for entries in ([old_prepared, prepared], [prepared, old_prepared]):
+        current_ready = put(Path(ready['path']), {'entries': [
+            {'qualified_packet': ref} for ref in entries]})
+        result = packet_references(current_ready, collection)
+        assert result['prepared'] == prepared
+        assert result['references'] == references
+    # Same cases and same embedded selection still cannot substitute a different
+    # authenticated provenance file for the actually captured collection.
+    old['references']['selection'] = references['selection']
+    old['references']['global_protection_join'] = put(tmp_path / 'old-join.json', {
+        'passed': True, 'reference_epoch': 'older',
+    })
+    old_prepared = put(tmp_path / 'old-prepared.json', old)
+    current_ready = put(Path(ready['path']), {'entries': [
+        {'qualified_packet': old_prepared}, {'qualified_packet': prepared}]})
+    assert packet_references(current_ready, collection)['prepared'] == prepared
+    collection['source_provenance']['selection']['sha256'] = '0' * 64
+    with pytest.raises(ValueError, match='provenance differs'):
+        packet_references(current_ready, collection)

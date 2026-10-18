@@ -94,3 +94,11 @@ This introduces no new model-facing policy or quality exception.
 
 These are crisp identity/count verifiers. Selection and acceptance remain in the
 existing materializer and converter; original captures and receipts stay intact.
+
+
+Identical cases may be independently requalified under a later exact source
+selection and protection-join authority. Packet resolution authenticates all
+candidate bytes, then matches the captured selection and source-provenance
+hashes before requiring exactly one full packet. An older same-cases packet
+cannot block the actual requalified packet or substitute its authority. This
+is crisp identity verification; task selection and admission policy are unchanged.

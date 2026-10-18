@@ -206,6 +206,7 @@ def packet_references(ready_reference, collection):
     """
     ready = read_bound(ready_reference)
     matches = []
+    selection_mismatch = provenance_mismatch = False
     for entry in ready['entries']:
         prepared = read_bound(entry['qualified_packet'])
         if prepared['cases']['sha256'] != collection.get('source_cases_sha256'):
@@ -230,15 +231,25 @@ def packet_references(ready_reference, collection):
         if (_exact(selection) != _exact(collection.get('protected_selection'))
                 or selection.get('cases_sha256') != cases['sha256']
                 or selection.get('training_admission') is not False):
-            raise ValueError('collection selected tasks differ from the qualified ready packet')
+            selection_mismatch = True
+            continue
         provenance = collection.get('source_provenance') or {}
+        candidate_matches = True
         for key in ('selection', 'global_protection_join'):
             original = provenance.get(key) or {}
             if (original.get('sha256') != references[key]['sha256']
                     or not isinstance(original.get('path'), str)):
-                raise ValueError('collection packet provenance differs from its qualified source')
+                provenance_mismatch = True
+                candidate_matches = False
+                break
+        if not candidate_matches:
+            continue
         matches.append({'prepared': entry['qualified_packet'], 'qualification': prepared['qualification'],
                         'references': references, 'remote_references': provenance})
+    if not matches and provenance_mismatch:
+        raise ValueError('collection packet provenance differs from its qualified source')
+    if not matches and selection_mismatch:
+        raise ValueError('collection selected tasks differ from the qualified ready packet')
     if len(matches) != 1:
         raise ValueError('collection needs exactly one matching qualified ready packet')
     # Guard the declaration after all per-packet reads, too.
