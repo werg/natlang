@@ -14,3 +14,8 @@ Only external native-state SFT owners use this seam. The existing lineage policy
 receives the exact authenticated started ID; active input rewrites continue to
 require its existing declared-continuation checks. All default paths remain as
 before. Historical verification recomputes the same evidence and policy result.
+
+A supervisor spawn receipt may omit its redundant script field when the exact
+script remains independently byte-bound by the shared launch intent and captured
+owner argv, both owner identities/intents match, and the exact child argv is
+present. An explicitly null or different script field remains a rejection.

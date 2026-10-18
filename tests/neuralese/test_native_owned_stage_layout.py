@@ -46,3 +46,11 @@ def test_active_source_stays_active_under_authenticated_external_layout(external
         unstarted_stage_input_changes(old,new,x['external_root'],started_stage_ids=('sft',))
     with pytest.raises(ValueError,match='authenticated started stages'):
         lineage_handoff(old,old,x['newpackage'],x['newpackage'],x['external_root']/'unused.json',dry_run=True,started_stage_ids=('foreign',))
+
+
+@pytest.mark.parametrize('external',['owner-layout-null-script','owner-layout-wrong-script'],indirect=True)
+@pytest.mark.parametrize('later',['lfm'],indirect=True)
+def test_present_invalid_supervisor_script_binding_is_not_omission(external):
+    reference,recipe,out,package=external['rejected_layout_request']
+    with pytest.raises(ValueError,match='exact captured supervisor'):
+        handoff.prepare_drained_recipe_handoff(reference,recipe,out,package=package,external_package=package)

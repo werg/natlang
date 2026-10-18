@@ -39,7 +39,12 @@ def external(ordinary,tmp_path,request):
     try:
         assert process.stdout.readline().strip()=='ready';owner=handoff.observe(process.pid)
         original=N/'launch.json';write(original,{'owner':owner,'argv':argv,'intent':resident.binding(launch_intent)})
-        spawn=N/'spawn.json';write(spawn,{'identity':owner,'intent':resident.binding(launch_intent),'script':resident.binding(script)})
+        spawn=N/'spawn.json';spawn_value={'identity':owner,'intent':resident.binding(launch_intent),'script':resident.binding(script)}
+        mode=getattr(request,'param','')or''
+        if mode=='owner-layout':spawn_value.pop('script')
+        elif mode=='owner-layout-null-script':spawn_value['script']=None
+        elif mode=='owner-layout-wrong-script':spawn_value['script']={'path':str(script),'sha256':'0'*64}
+        write(spawn,spawn_value)
         observed=N/'observed.json';write(observed,{'at':time.time(),'pid':owner['pid'],'argv':supervisor,'identity':owner,
             'original_launch':resident.binding(original),'spawn':resident.binding(spawn)})
         intent=handoff.capture_drain_intent(resident.binding(observed),N/'drain-intent.json')
@@ -72,7 +77,9 @@ def external(ordinary,tmp_path,request):
     from natlang_neuralese.train.native_continuation import collect_sft_progress,progress_obligations
     from natlang_neuralese.train.native_operation_report import compact_obligations
     r=json.loads(receipt.read_text());r['mandatory_sft']=compact_obligations(progress_obligations(collect_sft_progress(saved['training'],borrow_frames=True)),{'path':str(slot.resolve()),'sha256':resident.binding(pin)['sha256'],'bytes':pin.stat().st_size});write(receipt,r)
-    if getattr(request,'param',None)=='owner-layout':(N/'sft').rmdir()
+    if str(getattr(request,'param','')).startswith('owner-layout'):(N/'sft').rmdir()
+    if getattr(request,'param',None)in('owner-layout-null-script','owner-layout-wrong-script'):
+        x['rejected_layout_request']=(drained,successor_path,N/'external-transition.json',x['newpackage']);return x
 
     transition=handoff.prepare_drained_recipe_handoff(drained,successor_path,N/'external-transition.json',
         package=x['newpackage'],external_package=x['newpackage'])

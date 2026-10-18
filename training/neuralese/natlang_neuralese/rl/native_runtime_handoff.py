@@ -83,7 +83,7 @@ def _owned_launch_chain(record, snapshots=None):
     if (not same_process(original['owner'],captured['owner'])
             or not same_process(spawn['identity'],captured['owner'])
             or original['intent']!=spawn['intent'] or original['argv']!=argv
-            or spawn.get('script')!=launch_intent.get('supervisor')
+            or ('script' in spawn and spawn['script']!=launch_intent.get('supervisor'))
             or supervisor_ref['path'] not in
                 process_argv(captured['owner'])
             or not any(child['ppid']==captured['owner']['pid'] and
