@@ -21,8 +21,10 @@ from test_native_state_store import _block
 
 
 @pytest.mark.parametrize('failure', [False, True])
-def test_real_collector_session_drains_orphans_without_stopping_other_worker(tmp_path, failure):
-    from natlang_neuralese.rl.production import _run_collector
+def test_real_collector_session_drains_orphans_without_stopping_other_worker(tmp_path, monkeypatch, failure):
+    from natlang_neuralese.rl import production
+    monkeypatch.setattr(production, 'root', lambda _:Path(__file__).resolve().parents[2])
+    _run_collector=production._run_collector
     from scripts.coreweave.teacher_engine_guard import session_process
     ready = tmp_path / 'owned.json'
     grand_ready = tmp_path / 'grand-ready'
@@ -60,6 +62,24 @@ pathlib.Path({str(ready)!r}).write_text(json.dumps([os.getpid(),p.pid]))
             try:os.kill(pid, signal.SIGKILL)
             except ProcessLookupError:pass
         sibling.kill();sibling.wait()
+
+
+@pytest.mark.parametrize('change', ['old-api', 'other-runtime'])
+def test_collector_rejects_unbound_custody_helper_before_process_launch(tmp_path, monkeypatch, change):
+    from natlang_neuralese.rl import production
+    from scripts.coreweave import teacher_engine_guard as guard
+    if change == 'old-api':
+        monkeypatch.setattr(guard, 'cleanup_session', lambda owner, child, grace: None)
+    else:
+        copied = tmp_path / 'teacher_engine_guard.py'
+        copied.write_bytes(Path(guard.__file__).read_bytes())
+        monkeypatch.setattr(guard, '__file__', str(copied))
+    calls = []
+    monkeypatch.setattr(production.subprocess, 'Popen', lambda *a, **kw: calls.append((a, kw)))
+    with (tmp_path / 'worker.log').open('w') as log:
+        with pytest.raises(RuntimeError, match='exact runtime session-custody helper'):
+            production._run_collector([sys.executable, '-c', 'pass'], log, None)
+    assert calls == []
 
 
 class Actor:
@@ -298,8 +318,8 @@ def test_wait_exception_drains_actual_child_before_native_partial_archive(tmp_pa
     actual_run = production._run_collector
     script = ('import signal,time,pathlib;signal.signal(signal.SIGTERM,signal.SIG_IGN);'
               f'pathlib.Path({str(partial)!r}).write_bytes({raw!r});time.sleep(60)')
-    def run(_command, log, control):
-        return actual_run([sys.executable, '-c', script], log, control, shutdown_grace=.05)
+    def run(_command, log, control, **kwargs):
+        return actual_run([sys.executable, '-c', script], log, control, shutdown_grace=.05, **kwargs)
     monkeypatch.setattr(production, '_run_collector', run)
     class Control:
         stop = SimpleNamespace(requested=False)

@@ -21,7 +21,7 @@ These are crisp helpers because hashes, dependency completeness, evidence-prefix
 lengths and HTTP byte equality require exact verification. Existing collector
 partial/request validation and fatal replay hydration remain authoritative. No
 prompt, sampling, objective, output credit or production scheduling policy changes.
-# Worker process custody before archival
+## Worker process custody before archival
 
 Every collector worker starts an owned session. Reuse the existing engine
 guard's exact birth/session verifier and cleanup, with an explicit session-only
@@ -32,3 +32,10 @@ exception, before the collection can archive partials. Keep the engine guard's
 default whole-guard behavior unchanged. Exercise actual signal-ignoring child
 and grandchild processes plus a concurrent unrelated sibling; mocks alone do
 not establish process custody.
+
+The worker verifies helper origin and session-only API before launch, writes its
+exact helper SHA/size and command to a separate process-custody receipt, and
+checks helper stability after drainage. This records the extra script dependency
+without rewriting the existing sampling/request binding of retained partials.
+Future sealed runtime compositions include this exact helper alongside the
+native package; an old or cross-runtime helper fails before starting a worker.

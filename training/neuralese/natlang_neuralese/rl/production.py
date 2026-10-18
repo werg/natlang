@@ -106,10 +106,21 @@ class RunControl:
                 pass
 
 
-def _run_collector(command, log, control, *, shutdown_grace=30.):
+def _run_collector(command, log, control, *, shutdown_grace=30., custody_receipt=None):
     """Drain exactly this collector's session before partial custody can run."""
     import os
-    from scripts.coreweave.teacher_engine_guard import session_process, cleanup_session
+    import inspect
+    from scripts.coreweave import teacher_engine_guard as guard
+    from ..common.hashing import sha256_file_hex
+    helper=Path(guard.__file__).resolve(strict=True)
+    if (helper != (root('repo')/'scripts/coreweave/teacher_engine_guard.py').resolve(strict=True)
+            or 'session_only' not in inspect.signature(guard.cleanup_session).parameters):
+        raise RuntimeError('collector needs its exact runtime session-custody helper before launch')
+    helper_binding={'path':str(helper),'sha256':sha256_file_hex(helper),'bytes':helper.stat().st_size}
+    if custody_receipt is not None:
+        write_json_durable(custody_receipt,{'schema':'natlang.rl-collector-process-custody/1',
+            'helper':helper_binding,'scope':'owned worker session only','command':command})
+    session_process,cleanup_session=guard.session_process,guard.cleanup_session
     process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT,
                                start_new_session=True)
     owner = session_process(process.pid)
@@ -124,6 +135,8 @@ def _run_collector(command, log, control, *, shutdown_grace=30.):
         return process.wait() if control is None else control.wait(process)
     finally:
         cleanup_session(owner, process, shutdown_grace, session_only=True)
+        if sha256_file_hex(helper)!=helper_binding['sha256']:
+            raise RuntimeError('collector session-custody helper changed during owned execution')
 
 
 def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, workers=4,
@@ -212,7 +225,8 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
         if neuralese_server:
             command.append('--neuralese-server')
         with (directory / f'worker-{index}.log').open('a') as log:
-            code = _run_collector(command, log, control)
+            code = _run_collector(command, log, control,
+                custody_receipt=directory/f'worker-{index}-process-custody.json')
         return {'worker': index, 'returncode': code, 'journal': str(journal)}
     try:
         with ThreadPoolExecutor(max_workers=workers) as pool:
