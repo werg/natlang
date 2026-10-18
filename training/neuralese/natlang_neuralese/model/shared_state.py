@@ -35,10 +35,15 @@ def _rotate(port, tensor, positions, layer):
     return _rotate_pair(port, tensor, tensor, positions, layer)[0]
 
 
-def _rotate_pair(port, query, key, positions, layer):
-    """Rotate new cached query/key rows once at their shared logical positions."""
+def _rotary_tables(port, query, positions):
+    """The port's model-wide tables depend on positions, device and dtype."""
     dummy = query.new_empty(1, len(positions), port.embedding_weight.shape[1])
-    cos, sin = port._rope(dummy, positions[None])
+    return port._rope(dummy, positions[None])
+
+
+def _rotate_pair(port, query, key, positions, layer, *, tables=None):
+    """Rotate new cached query/key rows once at their shared logical positions."""
+    cos, sin = _rotary_tables(port, query, positions) if tables is None else tables
     if hasattr(port, '_apply_rope'):
         return port._apply_rope(layer, query, key, cos, sin)
     from transformers.models.lfm2.modeling_lfm2 import apply_rotary_pos_emb
@@ -698,6 +703,7 @@ def native_step(model, ids, cache=None, *, producing=False):
     h = model.adapter(raw, mask)
     states, captures = [], []
     masks = {}
+    rotary_tables = {}
     layout = AttentionLayout(tuple(range(start, start+ids.shape[1])), start+ids.shape[1])
     for i, layer in enumerate(port.layers):
         attention = port.is_attention(i)
@@ -706,7 +712,11 @@ def native_step(model, ids, cache=None, *, producing=False):
         if attention:
             q, k, v = values
             captures.append({'kind': 'attention', 'raw_k': k[0].transpose(0, 1), 'v': v[0].transpose(0, 1)})
-            q, rotated_k = _rotate_pair(port, q, k.to(q.dtype), positions, i)
+            rotary_key = (q.device, q.dtype)
+            if rotary_key not in rotary_tables:
+                rotary_tables[rotary_key] = _rotary_tables(port, q, positions)
+            q, rotated_k = _rotate_pair(port, q, k.to(q.dtype), positions, i,
+                                        tables=rotary_tables[rotary_key])
             value_slots = v.to(q.dtype)
             if _fp32_kv_cotangents(port, q):
                 rotated_k, value_slots = rotated_k.float(), value_slots.float()

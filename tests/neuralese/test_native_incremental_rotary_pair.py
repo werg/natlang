@@ -37,7 +37,7 @@ def test_cached_rotary_pair_matches_independent_execution(monkeypatch, family, d
         return outputs
 
     actual = execute(fast)
-    def independent(port, query, key, positions, layer):
+    def independent(port, query, key, positions, layer, *, tables=None):
         # The old independent execution is the reference, including its two
         # positional table calls and discarded paired rotary outputs.
         def one(tensor):
@@ -49,9 +49,12 @@ def test_cached_rotary_pair_matches_independent_execution(monkeypatch, family, d
             return apply_rotary_pos_emb(tensor, tensor, cos, sin)[0]
         return one(query), one(key)
     monkeypatch.setattr(shared_state, '_rotate_pair', independent)
+    # The explicit old path constructs its own two tables per layer. Avoid
+    # counting the new preparation, which this reference intentionally ignores.
+    monkeypatch.setattr(shared_state, '_rotary_tables', lambda *args: (None, None))
     expected = execute(slow)
-    assert counts['slow'] == 2*counts['fast']
-    assert counts['fast'] == 3*sum(port.is_attention(i) for i in range(port.num_layers))
+    assert counts['slow'] == 6*sum(port.is_attention(i) for i in range(port.num_layers))
+    assert counts['fast'] == 3
     for a, b in zip(actual, expected):
         for name in ['h_final', 'embeddings', 'positions', 'token_ids']:
             torch.testing.assert_close(a[name], b[name], rtol=0, atol=0)
