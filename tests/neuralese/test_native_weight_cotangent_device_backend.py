@@ -115,6 +115,17 @@ def test_device_backend_recipe_contract_is_explicit_and_transition_needs_fresh_c
     direct_windowing_handoffs(old, safe, out=tmp_path)
 
 
+def test_legacy_resume_identity_defaults_backend_without_mutating_saved_identity():
+    from natlang_neuralese.train.native_state_sft import _resume_identity_for_comparison
+
+    saved = {'schema': 'native-training-identity/1', 'seed': 7}
+    previous = _resume_identity_for_comparison(saved)
+    assert previous == {**saved, 'cotangent_accumulator_backend': 'cpu_file'}
+    assert saved == {'schema': 'native-training-identity/1', 'seed': 7}
+    assert _resume_identity_for_comparison({**saved, 'cotangent_accumulator_backend': 'device_fp32'})[
+        'cotangent_accumulator_backend'] == 'device_fp32'
+
+
 @pytest.mark.skipif(not torch.cuda.is_available(), reason='CUDA device backend needs a CUDA device')
 def test_device_backend_keeps_explicit_higher_order_reference_arithmetic(tmp_path):
     from natlang_neuralese.common.native_higher_order import reference_arithmetic

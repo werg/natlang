@@ -279,7 +279,8 @@ def capacity_identity(config,args,backend):
         'checkpoint_input_offload':args.checkpoint_input_offload,
         **({'share_causal_prefixes':True} if getattr(args,'share_causal_prefixes',False) else {}),
         'runtime':memory_runtime(args.device),
-        'cotangent_accumulator_backend':accumulator_backend,
+        **({'cotangent_accumulator_backend': accumulator_backend}
+           if accumulator_backend != 'cpu_file' else {}),
         'fp8':{'kind':args.fp8_training,'recipe':args.fp8_recipe,'amax_history_len':args.fp8_amax_history_len,
                'input_gradient_precision':getattr(backend,'input_gradient_precision',None)}}
 

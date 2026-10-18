@@ -586,6 +586,13 @@ def _retain_current_held_coverage(metrics, training, held):
         metrics['held_coverage']=copy.deepcopy(coverage)
 
 
+def _resume_identity_for_comparison(identity):
+    """Normalize legacy default-backend omission without mutating checkpoint state."""
+    previous = dict(identity or {})
+    previous.setdefault('cotangent_accumulator_backend', 'cpu_file')
+    return previous
+
+
 def _save(policy, model, optimizer, *, config, identity, step, epoch, cursor, source_receipts,
           source_hash, source_row_bindings, held_row_bindings, exposure_counts, global_step, rng, metrics,
           architecture, options, fp8_state=None, sft_progress=None):
@@ -1191,8 +1198,7 @@ def main(argv=None):
         checkpoint_options['source_predecessors'] = continuation_predecessors(resume,
             {role: getattr(args, role) for role in ('continued_native_graphs', 'continued_held_native_graphs')},
             stage_id=args.stage_id or 'native-graph-ce')
-        previous = resume.get('identity') or {}
-        previous.setdefault('cotangent_accumulator_backend', 'cpu_file')
+        previous = _resume_identity_for_comparison(resume.get('identity'))
         stable = ('schema', 'optimizer', 'seed', 'rank', 'fp8', 'objective',
                   'cotangent_accumulator_backend')
         if previous.get('cotangent_accumulator_backend') != args.cotangent_accumulator_backend:

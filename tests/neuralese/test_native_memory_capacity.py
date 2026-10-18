@@ -460,6 +460,24 @@ def test_capacity_identity_binds_exact_causal_prefix_packing_mode(monkeypatch):
     assert {k:v for k,v in shared.items() if k!='share_causal_prefixes'}=={k:v for k,v in legacy.items() if k!='share_causal_prefixes'}
 
 
+def test_default_cotangent_backend_preserves_legacy_capacity_identity(monkeypatch):
+    from types import SimpleNamespace
+    from natlang_neuralese.eval import native_memory as memory
+    monkeypatch.setattr(memory,'memory_runtime',lambda device:{'device':device})
+    args=SimpleNamespace(batch_graphs=1,batch_tokens=65536,checkpoint_layers=True,
+        chunk_tokens=1024,checkpoint_input_offload=False,device='cpu',
+        fp8_training='off',fp8_recipe='delayed',fp8_amax_history_len=16)
+    legacy=memory.capacity_identity({},args,None)
+    assert 'cotangent_accumulator_backend' not in legacy
+    args.cotangent_accumulator_backend='cpu_file'
+    assert memory.capacity_identity({},args,None)==legacy
+    args.cotangent_accumulator_backend='device_fp32'
+    device_identity=memory.capacity_identity({},args,None)
+    assert device_identity['cotangent_accumulator_backend']=='device_fp32'
+    assert {key:value for key,value in device_identity.items()
+            if key!='cotangent_accumulator_backend'}==legacy
+
+
 
 @pytest.mark.parametrize('retained_smaller',[False,True])
 def test_actual_sft_needs_capacity_but_keeps_smaller_pass_after_larger_failure(tmp_path,monkeypatch,retained_smaller):
