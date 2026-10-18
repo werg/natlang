@@ -1130,13 +1130,16 @@ Checked explicit/contextual inline signatures now ignore ordinary JavaScript
 callback extras; open/untyped callables retain all supplied values. This removes
 unintended index/whole-array input from one-parameter model calls. Source-owned
 scripted regressions cover 1/2/3 parameter direct map callbacks and open/rest
-forwarding. Live executor measurement is pending: prepare 24 source-qualified
-TRAIN callback cases with two own-Qwen trajectories each through the existing
-sole guardian sequence, then retain full trajectories and exact actor/runtime
-provenance. This is assigned to DGX native_state_independent_review; no external
-generation or concurrent primary feeder. Existing teacher30 captured001-00 and
-its source tests are a concrete regression, not the live48 qualification.
+forwarding. The own-teacher window completed in actual batch34: 24 independent
+TRAIN cases, two repeats, 48 complete trajectories, 47 strict positives. Current
+paired admission earned 649 LFM / 643 Mellum graphs; the one genuinely invalid
+captured module stays excluded and has a source-qualified binding-repair case.
+Proof: `/home/werg/data/dgxops/teacher-callback48-measurement-completed-20261018.json`
+(SHA-256 `77249b8a2dcb176727be4857ff74f79448d24c6090f7d4067162783fd3bf4365`).
+The physical executor was 24c. This records the completed window, not a causal
+comparison or measured student improvement. Direct callback-form incidence has
+not been summarized, so this does not assert 48 direct map-callback executions.
 
 ## 2026-10-18: terminal policy recovery TRAIN packet
 
-Status: measurement pending. The opt-in `terminal-policy` profile of `build_fresh_recovery_teacher_worlds.py` adds complete independent TRAIN record facts, explicit conjunction/waiver/blocking policy, and a direct boolean-return instruction. Existing profiles and generation tasks remain unchanged. Qualify 24 cases (three service domains, two worlds, four real recovery seeds), then collect two repeats through the existing self-hosted teacher guardian (48 trajectories) before promoting this prompt variant. Bind current source/protection/runtime and preserve every failed outcome. This uses no held prompts, inputs, traces, or targets. Ticket intent, evolving roster, and terminal enum/numeric children remain subsequent packet obligations.
+Status: own-teacher measurement complete. The opt-in `terminal-policy` profile of `build_fresh_recovery_teacher_worlds.py` supplies independent TRAIN record facts, explicit conjunction/waiver/blocking policy, and a direct boolean-return instruction. Actual batch36 selected source ordinal191 through the existing guardian: 24 qualified cases (three service domains, two worlds, four real recovery seeds), two repeats, 48 completed trajectories. All 48 passed unchanged world/effect/file/answer/seeded-recovery checks and fresh current source verification; both strict admissions earned 1,423 graphs per model with zero held parents. Actor/runtime, raw sources and both admissions are bound in `/home/werg/data/dgxops/teacher-terminal-policy48-measurement-completed-20261018.json` (SHA-256 `ee90ab92e36506245ebe911c5155400b0aea6696b82f2b2b251402c358e61db3`). This is a completed teacher window, not student training exposure, a causal quality comparison, or a claim that all actions were direct or optimal. No held prompts, inputs, traces, or targets were used. Ticket intent, evolving roster, and terminal enum/numeric children remain subsequent packet obligations.
