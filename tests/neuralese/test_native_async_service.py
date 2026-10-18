@@ -94,6 +94,42 @@ def test_disk_guard_preserves_partial_fetch(tmp_path):
     assert pending.read_bytes()==b'x'*50
 
 
+def test_disk_guard_uses_pinned_transfer_instead_of_newer_export(tmp_path):
+    from natlang_neuralese.common.hashing import canonical_json_sha256_hex
+    c=config(tmp_path);out=Path(c['out']);out.mkdir()
+    selected=json.loads(Path(c['export_state']).read_text())
+    dump(out/'native-async-state.json',dict(fetching_export=dict(
+        schema='natlang.native-eval-transfer/1',export=selected,
+        sha256=canonical_json_sha256_hex(selected))))
+    incoming=out/'incoming';incoming.mkdir()
+    (incoming/('checkpoint-'+'f'*64+'.pt.pending')).write_bytes(b'x'*50)
+    newer=json.loads(Path(c['export_state']).read_text());newer['last_verified_step']+=1
+    newer['receipt']['identity']={'sha256':'e'*64,'bytes':100000}
+    newer['receipt']['independent_verification']=newer['receipt']['identity']
+    dump(Path(c['export_state']),newer)
+    result=service.poll(c,ingest=lambda *a,**kw:dict(event='native_eval_enqueued'),
+                        available=lambda _:SimpleNamespace(free=250))
+    assert result['event']=='native_eval_enqueued'
+
+
+def test_first_transfer_rechecks_larger_export_advanced_during_disk_guard(tmp_path,monkeypatch):
+    from natlang_neuralese.eval import native_async
+    c=config(tmp_path);calls=[]
+    def available(_):
+        calls.append(True)
+        if len(calls)==1:
+            newer=json.loads(Path(c['export_state']).read_text());newer['last_verified_step']+=1
+            newer['receipt']['identity']={'sha256':'e'*64,'bytes':100000}
+            newer['receipt']['independent_verification']=newer['receipt']['identity']
+            dump(Path(c['export_state']),newer)
+        return SimpleNamespace(free=300)
+    monkeypatch.setattr(native_async.subprocess,'run',lambda *a,**k:pytest.fail('unadmitted transfer'))
+    result=service.poll(c,available=available)
+    assert result==dict(event='native_eval_disk_wait',available_bytes=300,needed_bytes=100200)
+    assert len(calls)==2
+    assert not(Path(c['out'])/'native-async-state.json').exists()
+
+
 @pytest.mark.parametrize('state,request_arg,active,expected',[
     ('S','correct',True,True),('R','foreign',True,False),('Z','correct',True,False),('S','correct',False,False)])
 def test_actual_unit_process_reader_rejects_foreign_or_dead_process(tmp_path,state,request_arg,active,expected):

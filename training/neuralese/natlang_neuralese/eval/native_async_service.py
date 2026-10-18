@@ -11,7 +11,7 @@ import subprocess
 import time
 
 from ..common.jsonio import write_json_durable
-from .native_async import poll_latest, verified_export, verify_request
+from .native_async import poll_latest, verified_export, verify_request, selected_ingest_export
 from .task_cadence import parse_task_eval, request_queue
 
 
@@ -130,21 +130,31 @@ def poll(config, *, observe=dispatch_evidence, ingest=poll_latest, available=Non
     if not gate(status,config.get('after_dispatch'),observe=observe):
         return dict(event='native_eval_waiting_for_prior_dispatch',dependency=config['after_dispatch'])
     out=Path(config['out']);out.mkdir(parents=True,exist_ok=True)
-    source=json.loads(Path(config['export_state']).read_text());receipt=verified_export(source)
+    existing=out/'native-async-state.json'
+    prior=json.loads(existing.read_text())if existing.exists()else{}
+    source=selected_ingest_export(config['export_state'],prior);receipt=verified_export(source)
     if receipt['role']!=config['role']:raise ValueError('native ingestion export role differs')
     if source['last_verified_step']<config['minimum_step']:
         return dict(event='native_eval_waiting_for_minimum_step',step=source['last_verified_step'])
     spec=parse_task_eval(json.loads(Path(config['spec']).read_text()))
-    existing=out/'native-async-state.json'
-    active=existing.exists()and bool(json.loads(existing.read_text()).get('active'))
-    if not active:
-        destination=out/'incoming'/('checkpoint-'+receipt['identity']['sha256']+'.pt')
+    active=bool(prior.get('active'))
+    def admit(selected,destination):
+        exact=verified_export(selected)
+        if exact['role']!=config['role']:raise ValueError('native ingestion export role differs')
+        if selected['last_verified_step']<config['minimum_step']:
+            return dict(event='native_eval_waiting_for_minimum_step',step=selected['last_verified_step'])
         retained=max((p.stat().st_size for p in(destination,destination.with_name(destination.name+'.pending'))if p.is_file()),default=0)
-        needed=max(0,receipt['identity']['bytes']-retained)+config['disk_reserve_bytes']
+        needed=max(0,exact['identity']['bytes']-retained)+config['disk_reserve_bytes']
         free=(available or shutil.disk_usage)(out).free
         if free<needed:return dict(event='native_eval_disk_wait',available_bytes=free,needed_bytes=needed)
+        return None
+    if not active:
+        decision=admit(source,out/'incoming'/('checkpoint-'+receipt['identity']['sha256']+'.pt'))
+        if decision is not None:return decision
+    # Recheck the selected receipt under the ingester's transfer lease. The
+    # exporter may advance after the inexpensive preliminary floor check.
     return ingest(config['export_state'],out=out,spec=spec,base=config['base'],queue=config['queue'],
-                  fetch_command=config['fetch_command'],device=config['device'])
+                  fetch_command=config['fetch_command'],device=config['device'],export_admission=admit)
 
 
 def run(config, *, every=60, max_polls=None):

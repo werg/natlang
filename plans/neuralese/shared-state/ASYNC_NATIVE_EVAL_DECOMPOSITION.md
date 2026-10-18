@@ -5,6 +5,22 @@ An evaluation already admitted or running finishes; newer exports coalesce while
 it runs. Results describe their historical weights and never qualify different
 current training weights. Both cloud trainers retain resource ownership.
 
+Transfer continuation correction (2026-10-18): admission starts when the
+supervisor commits to downloading a verified export. Pin that exact receipt and
+step durably before fetching. Resume that transfer after preemption even when
+the exporter has advanced; only coalesce to a newer export after the selected
+request drains. The 20513 Mellum transfer was interrupted at 23.9/24.3 GB and
+the restarted supervisor began downloading 20515 instead. Its manually rescued
+20513 request is now queued; the shared mechanism below prevents recurrence on
+either model. This is exact transfer/durability plumbing for the same policy,
+with no new teacher, evaluator, quality gate or task limit. The shared service's
+disk admission must use the same pinned receipt, including its retained bytes.
+The floor callback rechecks that selection under the existing transfer lease;
+an export advancing during the preliminary floor check cannot evade admission.
+The separate, pre-existing request-publication-to-active-journal crash window
+still needs authenticated existing-request recovery; interrupted-fetch tests do
+not certify that whole sealing transaction.
+
 1. Read the existing periodic exporter's verified receipt without modifying its
    state. Use its existing private owner-authenticated transfer, exact SHA/size
    check and immutable local artifact. No Mellum checkpoint download.

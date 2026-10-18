@@ -117,6 +117,68 @@ def test_latest_export_coalesces_without_changing_running_request(tmp_path,monke
     assert (Path(first['request'])/'request.json').read_bytes()==frozen
 
 
+@pytest.mark.parametrize('role',['lfm','mellum'])
+def test_interrupted_real_transfer_resumes_original_receipt_before_newer_export(tmp_path,monkeypatch,role):
+    import copy,subprocess
+    from natlang_neuralese.eval import native_async
+    base,_,checkpoint,spec,export=fixture(tmp_path)
+    export['receipt']['role']=role
+    old_bytes=checkpoint.read_bytes();old_identity=export['receipt']['identity']
+    export_path=tmp_path/'export-state.json';export_path.write_text(json.dumps(export))
+    newer=copy.deepcopy(export);newer['last_verified_step']=8
+    newer['receipt']['identity']={'sha256':'a'*64,'bytes':len(old_bytes)}
+    newer['receipt']['independent_verification']=newer['receipt']['identity']
+    calls=[]
+    def transfer(argv,**kwargs):
+        receipt=json.loads(Path(argv[1]).read_text());destination=Path(argv[2])
+        assert receipt==export['receipt']
+        pending=destination.with_name(destination.name+'.pending')
+        calls.append(receipt['identity']['sha256'])
+        if len(calls)==1:
+            pending.write_bytes(old_bytes[:len(old_bytes)//2])
+            export_path.write_text(json.dumps(newer))
+            raise subprocess.CalledProcessError(1,argv)
+        assert pending.read_bytes()==old_bytes[:len(old_bytes)//2]
+        destination.write_bytes(old_bytes);pending.unlink()
+        return subprocess.CompletedProcess(argv,0)
+    monkeypatch.setattr(native_async.subprocess,'run',transfer)
+    options=dict(out=tmp_path/'eval',spec=spec,base=base,queue=tmp_path/'queue',
+                 fetch_command=['fetch','{receipt}','{out}'],device='cpu')
+    with pytest.raises(subprocess.CalledProcessError):poll_latest(export_path,**options)
+    state_path=tmp_path/'eval/native-async-state.json'
+    interrupted=json.loads(state_path.read_text())
+    assert interrupted['fetching_export']['export']=={'last_verified_step':7,'receipt':export['receipt']}
+    assert 'active'not in interrupted
+    # The exact verified transfer survives even an unavailable latest-export file.
+    export_path.unlink()
+    resumed=poll_latest(export_path,**options)
+    assert resumed['step']==7 and resumed['checkpoint_sha256']==old_identity['sha256']
+    request=Path(resumed['request'])/'request.json';frozen=request.read_bytes()
+    assert json.loads(frozen)['evaluation_provenance']['source_export']==export['receipt']
+    assert 'fetching_export'not in json.loads(state_path.read_text())
+    export_path.write_text(json.dumps(newer))
+    assert poll_latest(export_path,**options)['active_step']==7
+    assert request.read_bytes()==frozen and calls==[old_identity['sha256']]*2
+
+
+def test_interrupted_transfer_binding_tamper_rejected_before_latest_read(tmp_path):
+    from natlang_neuralese.eval.native_async import selected_ingest_export
+    from natlang_neuralese.common.hashing import canonical_json_sha256_hex
+    selected={'last_verified_step':7,'receipt':{'role':'lfm','private':True,
+        'identity':{'sha256':'a'*64,'bytes':10},'independent_verification':{'sha256':'a'*64,'bytes':10}}}
+    pending={'schema':'natlang.native-eval-transfer/1','export':selected,
+             'sha256':canonical_json_sha256_hex(selected)}
+    selected['last_verified_step']=8
+    with pytest.raises(ValueError,match='transfer binding changed'):
+        selected_ingest_export(tmp_path/'unavailable-export',{'fetching_export':pending})
+
+
+def test_null_interrupted_transfer_rejected_before_latest_read(tmp_path):
+    from natlang_neuralese.eval.native_async import selected_ingest_export
+    with pytest.raises(ValueError,match='transfer binding changed'):
+        selected_ingest_export(tmp_path/'unavailable-export',{'fetching_export':None})
+
+
 def test_export_schema_step_and_identity_are_exact(tmp_path):
     base,_,checkpoint,spec,export=fixture(tmp_path)
     options=dict(identity=export['receipt']['identity'],spec=spec,out=tmp_path/'eval',base=base,queue=tmp_path/'queue')

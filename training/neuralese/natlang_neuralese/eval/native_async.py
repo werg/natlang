@@ -27,6 +27,22 @@ def verified_export(state):
     return receipt
 
 
+def selected_ingest_export(export_state, prior):
+    """An interrupted transfer retains its verified receipt before newer exports."""
+    pending=prior.get('fetching_export')
+    if 'fetching_export'not in prior:
+        selected=json.loads(Path(export_state).read_text())
+    else:
+        if (not isinstance(pending,dict)
+                or pending.get('schema')!='natlang.native-eval-transfer/1'
+                or not isinstance(pending.get('export'),dict)
+                or canonical_json_sha256_hex(pending['export'])!=pending.get('sha256')):
+            raise ValueError('native eval interrupted transfer binding changed')
+        selected=pending['export']
+    verified_export(selected)
+    return selected
+
+
 def verify_environment(provenance):
     runtime=task_runtime_inventory(provenance['runtime']['path'])
     if canonical_json_sha256_hex(runtime)!=provenance['runtime']['sha256']:
@@ -127,7 +143,7 @@ def seal_request(checkpoint,*,identity,step,spec,out,base,queue,source_export=No
             'stage_out':str(stage),'spec':spec,'pending':True,'eligible':None}
 
 
-def poll_latest(export_state,*,out,spec,base,queue,fetch_command,local_checkpoint=None,device='cuda'):
+def poll_latest(export_state,*,out,spec,base,queue,fetch_command,local_checkpoint=None,device='cuda',export_admission=None):
     """One immutable admitted request at a time; exports coalesce while it drains."""
     from .task_cadence import TaskEval
     out=Path(out).resolve();out.mkdir(parents=True,exist_ok=True)
@@ -147,22 +163,31 @@ def poll_latest(export_state,*,out,spec,base,queue,fetch_command,local_checkpoin
                 'step':active['step'],'result':result,'historical':True,'qualifies_current_weights':False})
             prior['last_completed_sha256']=active['checkpoint_sha256'];prior.pop('active')
             write_json_durable(state_path,prior)
-        current=json.loads(Path(export_state).read_text());receipt=verified_export(current)
+        current=selected_ingest_export(export_state,prior);receipt=verified_export(current)
         identity=receipt['identity']
         if identity['sha256']==prior.get('last_completed_sha256'):
             return {'event':'native_eval_up_to_date','step':current['last_verified_step']}
         destination=out/'incoming'/('checkpoint-'+identity['sha256']+'.pt')
+        if export_admission is not None:
+            admission=export_admission(current,destination)
+            if admission is not None:return admission
         destination.parent.mkdir(parents=True,exist_ok=True)
         receipt_path=destination.with_suffix('.receipt.json');write_json_durable(receipt_path,receipt)
         if local_checkpoint:
             checkpoint=Path(local_checkpoint)
         else:
+            selected={'last_verified_step':current['last_verified_step'],'receipt':receipt}
+            if 'fetching_export'not in prior:
+                prior['fetching_export']={'schema':'natlang.native-eval-transfer/1',
+                    'export':selected,'sha256':canonical_json_sha256_hex(selected)}
+                write_json_durable(state_path,prior)
             argv=[part.replace('{receipt}',str(receipt_path)).replace('{out}',str(destination)) for part in fetch_command]
             subprocess.run(argv,check=True,stdout=subprocess.DEVNULL)
             checkpoint=destination
         active=seal_request(checkpoint,identity=identity,step=current['last_verified_step'],
             spec=spec,out=out,base=base,queue=queue,source_export=receipt,device=device,
             consume_export=not local_checkpoint)
+        prior.pop('fetching_export',None)
         write_json_durable(state_path,{**prior,'active':active,'last_enqueued_at':time.time()})
         if not local_checkpoint:destination.unlink(missing_ok=True)  # sealed request now owns immutable bytes
         receipt_path.unlink(missing_ok=True)
