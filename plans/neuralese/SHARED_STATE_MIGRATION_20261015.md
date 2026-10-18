@@ -439,13 +439,13 @@ the inspected requests. Preserve held separation and use distinct nonheld tasks
 to improve tool-error recovery, API indexing and typed returns while useful
 production training continues.
 
-### Production continuation (2026-10-18 15:35 UTC)
+### Production continuation (current at 2026-10-18 16:45 UTC)
 
 Mellum's retained R18 diagnostic collection stopped at 14:13 UTC with zero RAW
 updates. Its completed TRAIN and protected HELD partials, evidence and native
 state artifacts were captured before stopping the owned processes. Unfinished
-RAW work remains unfinished. Current R19 startup restores the exact full 21,930
-parent, optimizer/RNG and completed ordinary frame 20,914; it includes the
+RAW work remains unfinished. R19 startup restored the exact full 21,930
+parent, optimizer/RNG and completed ordinary frame 20,914; it included the
 deduplicated 8,574-row teacher continuation, including the missing 1,147 rows.
 Newly loaded data is not evidence of completed row visits.
 
@@ -463,22 +463,50 @@ bug. The producer/consumer parameter-gradient accumulation boundary and existing
 FP32 cotangent carriers are being checked against an exact reference; no gate
 was waived. Ordinary maximum-row backward and R19 SGD remain pending.
 Completed actor/cache parity was reused only under the verified comparator-only
-delta. Both administrative exporters now target the exact v4 output; no extra
-save, learner signal or parent decode was needed for that handoff.
+delta. Useful R18 ordinary diagnostic training has resumed from that exact
+parent while the complete cotangent repair is implemented and independently
+reviewed. Actual step22,353 / ordinary21,337 represents 423 earned updates;
+these do not qualify R19 or finish the communication foundation. Full step22,016
+is privately backed up with independent GET SHA-256
+`a0c02d4ad4e57e7facc8e41b99931acae3fe827dab37ce4e5e6886d284d2b1ec`.
+Its optional actor export exposed an old/new package-origin collision. A tiny
+real bitwise writer fixture qualified old R18 dependencies with the explicit
+`b3cf1af2` sidecar, and the cursor configuration was corrected. The actual
+22,016 view was then extracted and bitwise verified without model construction;
+its exact receipt was attached under the cursor observation lease, preserving
+the full private receipt and the existing publisher. View private verification
+remains pending; no inference-readiness claim precedes it.
 
-LFM continues R19 training. The 332-row teacher continuation was adopted at
-14,570 and followed by actual optimizer updates at 14,572. Communication
-exposure there was 21,480 / 107,766. The next 384-row continuation is being
-prepared, followed by a safe loader-only update, the 4,012-row static QA append
+LFM continues R19 training. The 384-row teacher continuation was adopted at
+14,588 and followed by actual optimizer updates. Communication
+exposure remains incomplete (21,500 / 107,766 at the latest recorded boundary).
+A safe loader-only update is staged for the 4,012-row static QA append
 and an explicit ordinary 137,052-token maximum-row backward check. Exact
 source-bound maximum rows inspected for both students and source16 repairs are
 single-node graphs with no edges; the earlier 500k policy case alone does not
 qualify their ordinary capacity admission. Complete source rows remain pending
-rather than clipped or silently lost.
+rather than clipped or silently lost. The first save request did not stop the
+old learner, which continued earning updates; its signal-handler routing is
+being investigated before launching another optimizer. The protected step14,123
+task evaluation actually completed at 0/16: twelve repetitions, one invalid
+action, one budget exhaustion, two semantic mismatches and no infrastructure
+errors. Thirteen retained partial traces contain 179 reasoning-bearing turns
+out of231, so the older absence-of-reasoning symptom cannot explain this result.
+This is unresolved task-quality debt, not a behavioral improvement claim.
+
+Source03's scanner still owes consumer adoption. Its optional CPU pause guard
+now persists STOP intent before signaling and lets either peer complete the
+intent and resume safely. Seven actual process/fault tests and independent
+review preceded deployment; both replacement peers have the verified new
+implementation while preserving the original scanner, pause and thresholds.
+Exact closure is recorded in
+`/home/werg/data/dgxops/source03-pause-guard-upgrade-v2-result-20261018.json`.
 
 Teacher generation continues on the dedicated self-hosted Qwen sandbox. Actual
-batch42 selected the 24 new recovery cases with two trajectories each; this is
-selection evidence, not quality measurement or training admission. Shared
+batch42 completed the 24 new recovery cases with two trajectories each, with
+48/48 source-verified exact successes and1,699 actions. The bound live48 receipt
+in `plans/MODEL_FACING_CHANGES.md` closes teacher sampling debt; actual student
+admission and per-row exposure remain separate. Shared
 bounded SDK reads now cover both tranche payloads and worker queue/journal
 prefixes (`3f5cadf6f`), with original partition, provenance, incomplete-append
 and private durability checks retained. Actual 80 exporter tests and independent
