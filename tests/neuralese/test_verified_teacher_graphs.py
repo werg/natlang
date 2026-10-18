@@ -919,3 +919,71 @@ def test_reviewed_guided_children_require_exact_review_and_structured_input_guar
     assert reviewed_guided_decision_authority(changed,review_bound=False)=={}
     changed=copy.deepcopy(row);changed['collection_guidance']={}
     assert reviewed_guided_decision_authority(changed,review_bound=False)=={}
+
+
+def _legacy_content_cache(tmp_path, monkeypatch, *, corruption=None):
+    from natlang_neuralese.common import row_index
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE', str(tmp_path/'cache'))
+    path=tmp_path/'graph.jsonl';path.write_text(json.dumps(_content_graph())+'\n')
+    expected=converter.seed_content_fingerprints([path], 'tokenizer-a')
+    current=next((tmp_path/'cache').glob('teacher-content-*.pkl'))
+    value=row_index.load(current);current.unlink()
+    value['key']={**value['key'], 'policy_sha256':converter._REVIEWED_LEGACY_CONTENT_CACHE['legacy_policy_sha256']}
+    if corruption == 'metadata':value['metadata_sha256']='0'*64
+    elif corruption == 'tokenizer':value['key']['tokenizer_fingerprint']='wrong'
+    elif corruption == 'source':value['key']['source_sha256']='0'*64
+    elif corruption == 'rows':value['rows']=True
+    # Name by the expected key so altered payloads cannot evade validation by
+    # simply being absent from the lookup location.
+    key={**value['key'],'source_sha256':converter.sha256_file(path),'tokenizer_fingerprint':'tokenizer-a'}
+    old=row_index.entry_path('teacher-content', converter.canonical_json_sha256_hex(key))
+    row_index.save(old,value)
+    return path,expected,old,old.read_bytes()
+
+
+def test_reviewed_content_cache_migrates_exact_legacy_without_reparse(tmp_path, monkeypatch):
+    from natlang_neuralese.common import row_index
+    path,expected,old,original=_legacy_content_cache(tmp_path,monkeypatch)
+    monkeypatch.setattr(converter,'parse_graph',lambda *_a,**_kw:pytest.fail('reviewed exact legacy must not reparse'))
+    assert converter.seed_content_fingerprints([path], 'tokenizer-a')==expected
+    assert old.read_bytes()==original
+    caches=list((tmp_path/'cache').glob('teacher-content-*.pkl'))
+    assert len(caches)==2
+    new=row_index.load(next(p for p in caches if p!=old))
+    assert new['key']['policy_sha256']==converter._content_index_policy_sha256()
+    assert new['metadata_sha256']==row_index.load(old)['metadata_sha256']
+
+
+@pytest.mark.parametrize('corruption',['metadata','tokenizer','source','rows'])
+def test_reviewed_content_cache_rejects_bad_legacy(tmp_path,monkeypatch,corruption):
+    path,expected,old,original=_legacy_content_cache(tmp_path,monkeypatch,corruption=corruption)
+    calls=[];parse=converter.parse_graph
+    monkeypatch.setattr(converter,'parse_graph',lambda *a,**kw:calls.append(True)or parse(*a,**kw))
+    assert converter.seed_content_fingerprints([path], 'tokenizer-a')==expected
+    assert calls==[True] and old.read_bytes()==original
+
+
+def test_content_cache_policy_tracks_law_not_unrelated_admission(tmp_path,monkeypatch):
+    original=converter._content_index_policy_sha256()
+    read=converter.Path.read_text;module=converter.Path(converter.__file__).resolve()
+    def unrelated(path,*a,**kw):
+        text=read(path,*a,**kw)
+        return text+'\ndef unrelated_admission_only():\n    return False\n' if path.resolve()==module else text
+    monkeypatch.setattr(converter.Path,'read_text',unrelated)
+    assert converter._content_index_policy_sha256()==original
+    def changed_law(path,*a,**kw):
+        text=read(path,*a,**kw)
+        return text.replace("'nodes': graph['nodes']", "'nodes': graph.get('nodes')") if path.resolve()==module else text
+    monkeypatch.setattr(converter.Path,'read_text',changed_law)
+    assert converter._content_index_policy_sha256()!=original
+
+
+def test_changed_parser_law_cannot_migrate_legacy(tmp_path,monkeypatch):
+    path,expected,old,original=_legacy_content_cache(tmp_path,monkeypatch)
+    sha=converter.sha256_file
+    monkeypatch.setattr(converter,'sha256_file',lambda p:'0'*64 if str(p).endswith('/data/native_graph.py')else sha(p))
+    assert converter._content_index_policy_sha256()!=converter._REVIEWED_LEGACY_CONTENT_CACHE['policy_sha256']
+    calls=[];parse=converter.parse_graph
+    monkeypatch.setattr(converter,'parse_graph',lambda *a,**kw:calls.append(True)or parse(*a,**kw))
+    assert converter.seed_content_fingerprints([path], 'tokenizer-a')==expected
+    assert calls==[True] and old.read_bytes()==original

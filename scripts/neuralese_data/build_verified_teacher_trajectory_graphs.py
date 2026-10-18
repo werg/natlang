@@ -9,6 +9,7 @@ the separate source-authenticated semantic-pair converter.
 from __future__ import annotations
 
 import argparse
+import ast
 import fcntl
 import hashlib
 import json
@@ -985,13 +986,57 @@ def reviewed_teacher_context_guard(turn, context, target, tools):
         raise ValueError('reviewed context requires its exact source-bound expanded input')
     return unambiguous_chat_input_guard(resolved, target, resolved_tools, capture=turn)
 
+def _validated_content_fingerprints(path, fingerprint):
+    contents, count = {}, 0
+    with open_jsonl_text(path) as source:
+        for line in source:
+            if not line.strip():
+                continue
+            graph = json.loads(line)
+            parsed = parse_graph(graph, tokenizer_fingerprint=fingerprint)
+            if parsed.split != 'train':
+                raise ValueError('teacher deduplication references must be train graphs')
+            contents.setdefault(graph_content_sha256(graph), parsed.id)
+            count += 1
+    return contents, count
+
+
+def _valid_content_index(cached, key):
+    contents = cached.get('fingerprints') if isinstance(cached, dict) else None
+    count = cached.get('rows') if isinstance(cached, dict) else None
+    return (isinstance(cached, dict) and cached.get('key') == key
+        and type(count) is int and count >= 0 and isinstance(contents, dict)
+        and count >= len(contents)
+        and all(isinstance(content, str) and len(content) == 64
+                and all(char in '0123456789abcdef' for char in content)
+                and isinstance(identifier, str) and identifier
+                for content, identifier in contents.items())
+        and cached.get('metadata_sha256') == canonical_json_sha256_hex(
+            {'rows': count, 'fingerprints': contents}))
+
+
 def _content_index_policy_sha256():
     from scripts.neuralese_data.continue_native_source_indexes import POLICY_FILES
     package = Path(__file__).resolve().parents[2] / 'training/neuralese/natlang_neuralese'
+    functions = {'graph_content_sha256', '_validated_content_fingerprints', '_valid_content_index'}
+    tree = ast.parse(Path(__file__).read_text())
+    law = {node.name: ast.dump(node, include_attributes=False) for node in tree.body
+           if isinstance(node, ast.FunctionDef) and node.name in functions}
+    if set(law) != functions:
+        raise ValueError('teacher content-index law is incomplete')
     return canonical_json_sha256_hex({
-        'converter': sha256_file(Path(__file__)),
+        'schema': 'natlang.teacher-content-index-law/2', 'functions': law,
         'parser': {name: sha256_file(package / name)
                    for name in (*POLICY_FILES, 'data/native_graph.py')}})
+
+
+# Independently reviewed legacy whole-converter identity. Migration is available
+# only while the complete new fingerprint/parser/cache-validation law matches.
+_REVIEWED_LEGACY_CONTENT_CACHE = {
+    'policy_sha256': '673e8c76458b0bb6fe3ad127494678df8c924f90da7b8ed2b73de6a2c3c27635',
+    'legacy_policy_sha256': '22dc344fa6c242e804294431241f39cc8f4b20d602353402710e1e6312d78db7',
+    'legacy_converter_sha256': '0e16b1d941f1ee4aa2a32cd68ded0fd8d7b9f4282ddbdacec1dd050a3b379491',
+}
 
 
 def seed_content_fingerprints(paths, fingerprint):
@@ -1004,32 +1049,22 @@ def seed_content_fingerprints(paths, fingerprint):
                'policy_sha256': policy, 'kind': 'teacher-content-fingerprints-v1'}
         cache_path = row_index.entry_path('teacher-content', canonical_json_sha256_hex(key))
         cached = row_index.load(cache_path)
-        contents = cached.get('fingerprints') if isinstance(cached, dict) else None
-        count = cached.get('rows') if isinstance(cached, dict) else None
-        valid = (isinstance(cached, dict) and cached.get('key') == key
-            and type(count) is int and count >= 0 and isinstance(contents, dict)
-            and count >= len(contents)
-            and all(isinstance(content, str) and len(content) == 64
-                    and all(char in '0123456789abcdef' for char in content)
-                    and isinstance(identifier, str) and identifier
-                    for content, identifier in contents.items())
-            and cached.get('metadata_sha256') == canonical_json_sha256_hex(
-                {'rows': count, 'fingerprints': contents}))
-        if not valid:
-            contents, count = {}, 0
-            with open_jsonl_text(path) as source:
-                for line in source:
-                    if not line.strip():
-                        continue
-                    graph = json.loads(line)
-                    parsed = parse_graph(graph, tokenizer_fingerprint=fingerprint)
-                    if parsed.split != 'train':
-                        raise ValueError('teacher deduplication references must be train graphs')
-                    contents.setdefault(graph_content_sha256(graph), parsed.id)
-                    count += 1
+        valid = _valid_content_index(cached, key)
+        migrated = False
+        continuation = _REVIEWED_LEGACY_CONTENT_CACHE
+        if not valid and policy == continuation['policy_sha256']:
+            legacy_key = {**key, 'policy_sha256': continuation['legacy_policy_sha256']}
+            legacy_path = row_index.entry_path('teacher-content', canonical_json_sha256_hex(legacy_key))
+            legacy = row_index.load(legacy_path)
+            if _valid_content_index(legacy, legacy_key):
+                cached, valid, migrated = legacy, True, True
+        if valid:
+            contents, count = cached['fingerprints'], cached['rows']
+        else:
+            contents, count = _validated_content_fingerprints(path, fingerprint)
         if sha256_file(path) != digest:
             raise ValueError('teacher deduplication source changed during validation')
-        if not valid:
+        if not valid or migrated:
             metadata = {'rows': count, 'fingerprints': contents}
             row_index.save(cache_path, {'key': key, **metadata,
                 'metadata_sha256': canonical_json_sha256_hex(metadata)})

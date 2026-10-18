@@ -71,3 +71,21 @@ new-data custody, with no executing-model prompt/runtime change or new samples.
 
 Crisp code verifies existing registered manifests, raw/view source hashes and
 complete validator counts; no new semantic selection policy is introduced.
+
+## Historical content indexes
+
+1. Reuse a validated immutable training source when its tokenizer, exact content
+   fingerprint law, train-only parser law and cache schema are unchanged.
+   Admission, rendering and command plumbing do not decide this equivalence.
+2. Bind the fingerprint and validation functions structurally, and bind the
+   existing parser/schema/hash/JSON dependencies by their exact bytes. Keep
+   source SHA and tokenizer in every cache key.
+3. Continue only the explicitly reviewed legacy whole-converter policy into
+   this exact law. Validate its complete original key, rows, fingerprints and
+   metadata digest; verify source bytes before and after reuse. Unknown or
+   changed laws take the normal parsing path.
+4. Preserve original indexes. Publish the continued entry through the existing
+   row-index mechanism and preserve first occurrence and source order.
+
+This is exact cache identity and provenance plumbing. It makes no new quality,
+training-admission, execution or exposure decision.
