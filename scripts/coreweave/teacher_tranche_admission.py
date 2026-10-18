@@ -383,6 +383,66 @@ def materialization_partition(raw_rows, decision_keys, omissions, emitted_keys, 
             'training_admission': False}
 
 
+def verify_teacher_action_accounting(raw_rows, decision_keys, receipt, summary):
+    """Authenticate the converter's stricter post-materializer action filter.
+
+    A rendering omission needs its own exact renderer proof; it cannot pass this
+    non-rendering verifier merely because a receipt declares a lower count.
+    """
+    from scripts.neuralese_data.build_verified_teacher_trajectory_graphs import admitted_teacher_turn
+    if not isinstance(decision_keys, dict):
+        raise ValueError('action accounting requires exact materialized decisions')
+    wanted = {(ident, index) for ident, row in raw_rows.items()
+              for index in range(len(row['trajectory']))}
+    if any(type(key) is not tuple or len(key) != 2 or type(key[0]) is not str
+           or type(key[1]) is not int or key not in wanted or not isinstance(value, dict)
+           or type(value.get('approved')) is not bool
+           for key, value in decision_keys.items()):
+        raise ValueError('action accounting has unknown or untyped decisions')
+    if (type(summary.get('training_decisions')) is not int
+            or summary['training_decisions'] != len(decision_keys)):
+        raise ValueError('materializer decision inventory differs from its exact count')
+    approved = sum(value['approved'] for value in decision_keys.values())
+    if type(summary.get('eligible_decisions')) is not int or summary['eligible_decisions'] != approved:
+        raise ValueError('materializer approved count differs from exact decisions')
+    rejected, eligible, filtered = {}, set(), []
+    for ident, row in raw_rows.items():
+        if row.get('id') != ident:
+            raise ValueError('action accounting source identity differs')
+        for index, turn in enumerate(row['trajectory']):
+            accepted, decision = admitted_teacher_turn(row, index, turn, decision_keys)
+            key = (ident, index)
+            if accepted:
+                eligible.add(key)
+            else:
+                expected = {'source_row_id': ident, 'teacher_turn_index': index,
+                            'reason': decision.get('reason'), 'decision': decision}
+                rejected[key] = expected
+                if decision_keys.get(key, {}).get('approved') is True:
+                    filtered.append(expected)
+    actual = {}
+    for omission in receipt['action_omissions']:
+        if not isinstance(omission, dict):
+            raise ValueError('action accounting omission is not an object')
+        key = (omission.get('source_row_id'), omission.get('teacher_turn_index'))
+        if type(key[1]) is not int or key not in rejected or key in actual:
+            raise ValueError('unknown, duplicate or unverified post-admission rendering omission')
+        if _exact(omission) != _exact(rejected[key]):
+            raise ValueError('action omission differs from current exact admission')
+        actual[key] = omission
+    if set(actual) != set(rejected):
+        raise ValueError('action accounting lost a rejected original action')
+    deduplication = receipt['deduplication']
+    counts = (receipt['turns'], deduplication['emitted_rows'], deduplication['omitted_rows'])
+    if (any(type(value) is not int or value < 0 for value in counts)
+            or counts[0] != len(eligible) or counts[1] + counts[2] != len(eligible)
+            or len(eligible) + len(actual) != len(wanted)):
+        raise ValueError('converted action accounting does not conserve original actions')
+    return {'source_actions': len(wanted), 'materializer_approved_actions': approved,
+            'converted_eligible_actions': len(eligible), 'omitted_actions': len(actual),
+            'post_materializer_rejections': filtered}
+
+
 def teacher_conversion_profile(receipt):
     """Read explicit ID authority separately from an effective backbone default."""
     if 'explicit_history_reasoning_policy' not in receipt:

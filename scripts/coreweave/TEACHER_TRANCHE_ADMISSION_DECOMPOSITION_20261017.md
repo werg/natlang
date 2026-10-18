@@ -76,3 +76,21 @@ not a new quality or source-selection policy.
    private-export, current protection/closure, original source/oracle, output
    bytes and registration checks remain authoritative and unchanged. Defaults
    retain their old graph IDs and exact pairing behavior.
+
+## Exact post-materializer action accounting (2026-10-18)
+
+Policy: train only an original provider action that the current shared admission
+policy accepts; retain every other action as an exact omission. A materializer's
+approved count precedes the existing converter's provider-capture checks and can
+therefore exceed the converted count (an empty provider reply is not a target).
+This introduces no new model-facing policy or quality exception.
+
+1. Count the authenticated materializer approvals independently.
+2. Replay the existing `admitted_teacher_turn` verifier on every original action.
+3. Match each rejection to its exact omission identity, reason and decision
+   payload. Reject missing, forged, duplicate or unverified rendering omissions.
+4. Conserve the independently accepted actions as emitted plus exact duplicates;
+   keep the existing graph/source/profile and BOTH pairing checks.
+
+These are crisp identity/count verifiers. Selection and acceptance remain in the
+existing materializer and converter; original captures and receipts stay intact.
