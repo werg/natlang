@@ -1,4 +1,4 @@
-"""Exact complete derivative comparison with one retained gradient set."""
+"""Exact complete derivative comparison with CPU reference storage."""
 from __future__ import annotations
 import math
 import torch
@@ -24,11 +24,13 @@ def gradient_metrics(actual,expected,*,atol,rtol):
 
 
 def compare_complete_gradients(flat_loss,cached_loss,named,flat_inputs,cached_inputs,*,atol,rtol,cached_factory=None,gradient_observer=None):
-    """Release each flat derivative as its complete cached counterpart arrives.
+    """Release each CPU flat derivative as its complete cached counterpart arrives.
 
     autograd.grad never accumulates parameter.grad or invokes post-accumulate
     optimizer hooks. Cached partial derivatives/activations still need memory;
     the recorded bytes describe retained comparison tensors, not a peak claim.
+    Exact CPU observer pairs and metrics avoid retaining a second full gradient
+    inventory on the GPU beside the actual cached VJP and restored optimizer.
     """
     if any(type(value)not in(float,int)or not math.isfinite(value)or value<0 for value in(atol,rtol)):
         raise ValueError('complete gradient comparison needs finite nonnegative gates')
@@ -43,7 +45,9 @@ def compare_complete_gradients(flat_loss,cached_loss,named,flat_inputs,cached_in
     old_grads={id(p):(p.grad,None if p.grad is None else p.grad._version)for p in parameters}
     flat_values=(flat_inputs,*parameters)
     flat=torch.autograd.grad(flat_loss,flat_values,allow_unused=True)
-    waiting=dict(zip(names,flat));del flat
+    waiting={name:None if value is None else value.detach().to('cpu')
+             for name,value in zip(names,flat)}
+    del flat
     if cached_factory is not None:cached_loss,cached_inputs=cached_factory()
     cached_values=(cached_inputs,*parameters)
     retained=sum(g.numel()*g.element_size()for g in waiting.values()if g is not None)
@@ -52,12 +56,13 @@ def compare_complete_gradients(flat_loss,cached_loss,named,flat_inputs,cached_in
         def compare(value):
             nonlocal remaining,max_pair
             previous=waiting.pop(name)
-            if gradient_observer is not None:gradient_observer(name,previous,value)
+            current=value.detach().to('cpu')
+            if gradient_observer is not None:gradient_observer(name,previous,current)
             if previous is None:comparisons[name]={'passed':False,'reason':'cached-only derivative'}
             else:
                 count=previous.numel()*previous.element_size();remaining-=count
                 max_pair=max(max_pair,count+value.numel()*value.element_size())
-                comparisons[name]=gradient_metrics(value,previous,atol=atol,rtol=rtol)
+                comparisons[name]=gradient_metrics(current,previous,atol=atol,rtol=rtol)
             return value
         return compare
     try:
@@ -66,7 +71,8 @@ def compare_complete_gradients(flat_loss,cached_loss,named,flat_inputs,cached_in
         for name,value in zip(names,current):
             if name in waiting:
                 previous=waiting.pop(name)
-                if gradient_observer is not None:gradient_observer(name,previous,value)
+                if gradient_observer is not None:
+                    gradient_observer(name,previous,None if value is None else value.detach().to('cpu'))
                 comparisons[name]=({'passed':True,'unused':True}if previous is None and value is None else
                     {'passed':False,'reason':'flat-only or missing cached derivative'})
         del current
@@ -85,7 +91,8 @@ def compare_complete_gradients(flat_loss,cached_loss,named,flat_inputs,cached_in
         'inventory':inventory,'inventory_sha256':canonical_json_sha256_hex(inventory),
         'comparisons':comparisons,'parameter_grads_preserved':preserved,
         'retained_flat_gradient_bytes':retained,'largest_live_comparison_pair_bytes':max_pair,
-        'memory_scope':'comparison tensors only; cached partial gradients and activations additional',
+        'retained_flat_gradient_device':'cpu','retained_flat_gradient_cuda_bytes':0,
+        'memory_scope':'CPU reference and pair tensors only; cached VJP gradients and activations additional',
         'optimizer_updates':0,'atol':atol,'rtol':rtol}
 
 

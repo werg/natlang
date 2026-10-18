@@ -1,4 +1,5 @@
 import copy
+import weakref
 import pytest
 import torch
 import torch.nn.functional as F
@@ -10,8 +11,10 @@ from natlang_neuralese.train.native_state_sft import make_native_optimizer
 
 @pytest.mark.parametrize('family',['lfm','mellum'])
 @pytest.mark.parametrize('wrong_derivative',[False,True])
-def test_all_production_gradients_connected_rows_and_inputs_preserved(family,wrong_derivative):
-    model=SharedStateModel(tiny(family),(58,59,60,61),rank=4)
+@pytest.mark.parametrize('device',['cpu','cuda'])
+def test_all_production_gradients_connected_rows_and_inputs_preserved(family,wrong_derivative,device):
+    if device=='cuda'and not torch.cuda.is_available():pytest.skip('CUDA unavailable')
+    model=SharedStateModel(tiny(family),(58,59,60,61),rank=4).to(device)
     model.port.checkpoint_layers=False
     if family=='mellum':model.port.hf.natlang_precision='bf16'
     with torch.no_grad():model.adapter.up.weight.normal_(std=.03)
@@ -27,14 +30,15 @@ def test_all_production_gradients_connected_rows_and_inputs_preserved(family,wro
     ids=plan.tensor([t for node in plan.invocations for t in node.token_ids],model.input_rows.device)
     flat_input=model.embed(ids[None]);cached_input=model.embed(ids[None])
     flat=model(plan,embeddings=flat_input);cached=model(plan,embeddings=cached_input,reference=True)
-    a=F.cross_entropy(model.logits(flat['h_final'][:,-1]).float(),torch.tensor([7]))
-    b=F.cross_entropy(model.logits(cached['h_final'][:,-1]).float(),torch.tensor([7]))
+    a=F.cross_entropy(model.logits(flat['h_final'][:,-1]).float(),torch.tensor([7],device=device))
+    b=F.cross_entropy(model.logits(cached['h_final'][:,-1]).float(),torch.tensor([7],device=device))
     if wrong_derivative:b=b*.5+b.detach()*.5
     rng=torch.get_rng_state()
     report=compare_complete_gradients(a,b,named,flat_input,cached_input,atol=1e-5,rtol=1e-4)
     assert report['passed']is(not wrong_derivative)
     assert set(report['comparisons'])=={'input_embeddings',*(name for name,_ in named)}
     assert report['retained_flat_gradient_bytes']>report['largest_live_comparison_pair_bytes']
+    assert report['retained_flat_gradient_device']=='cpu'and report['retained_flat_gradient_cuda_bytes']==0
     for role in('backbone','adapter','learned_input','learned_output'):
         assert roles[role]
         assert any(report['comparisons'][name].get('reference_l2',0)>0 for name in roles[role])
@@ -43,6 +47,34 @@ def test_all_production_gradients_connected_rows_and_inputs_preserved(family,wro
     for p,previous,value,version in before:
         assert p.grad is previous and torch.equal(p.grad,value)and p._version==version
     assert optimizer.state_dict()==state
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(),reason='actual CUDA reference lifetime')
+@pytest.mark.parametrize('dtype',[torch.float32,torch.bfloat16])
+def test_reference_gpu_tensors_are_released_before_cached_forward_and_observer_is_exact_cpu(monkeypatch,dtype):
+    parameter=torch.nn.Parameter(torch.linspace(.1,.5,128,device='cuda',dtype=dtype))
+    flat_input=torch.ones(2,128,device='cuda',dtype=dtype,requires_grad=True)
+    flat=(flat_input*parameter).square().mean()
+    original=torch.autograd.grad;references=[];observed=[]
+    def capture(*args,**kwargs):
+        result=original(*args,**kwargs)
+        if not references:references.extend(weakref.ref(value)for value in result if value is not None)
+        return result
+    monkeypatch.setattr(torch.autograd,'grad',capture)
+    def cached():
+        assert len(references)==2 and all(ref()is None for ref in references)
+        x=torch.ones_like(flat_input,requires_grad=True)
+        return (x*parameter).square().mean(),x
+    def observer(name,left,right):
+        assert left.device.type==right.device.type=='cpu'
+        assert left.dtype==right.dtype==dtype
+        assert torch.equal(left,right)
+        observed.append(name)
+    rng=torch.cuda.get_rng_state().clone()
+    report=compare_complete_gradients(flat,None,[('weight',parameter)],flat_input,None,
+        atol=1e-5,rtol=1e-4,cached_factory=cached,gradient_observer=observer)
+    assert report['passed']and set(observed)=={'input_embeddings','weight'}
+    assert parameter.grad is None and torch.equal(torch.cuda.get_rng_state(),rng)
 
 
 def test_inventory_cannot_omit_a_trainable_or_alias_a_parameter():
