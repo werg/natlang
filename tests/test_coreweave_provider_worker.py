@@ -28,6 +28,89 @@ def test_empty_closed_artifact_is_exact_without_zero_byte_store_upload(tmp_path)
         client.mirror('source','target',{**binding,'sha256':'f'*64})
 
 
+def metadata_client(tmp_path):
+    """Execute real remote code and count both exec and file RPCs."""
+    calls=[]
+    class Sandbox:
+        def exec(self,argv,**kwargs):
+            calls.append(argv)
+            rewritten=[sys.executable,*argv[1:-1],argv[-1].replace('/work/native-production',str(tmp_path/'guest'))]
+            return SimpleNamespace(result=lambda **kw:subprocess.run(rewritten,capture_output=True,text=True))
+        def read_file(self,path):
+            calls.append(('read_file',path))
+            physical=Path(path.replace('/work/native-production',str(tmp_path/'guest')))
+            return SimpleNamespace(result=lambda **kwargs:physical.read_bytes())
+    client=worker.SDKIO({'receipts':str(tmp_path/'receipts'),'sandboxes':{}})
+    client.sandbox=lambda sid:Sandbox()
+    (tmp_path/'guest').mkdir()
+    return client,calls
+
+
+@pytest.mark.parametrize('optional',[False,True])
+@pytest.mark.parametrize('payload',[b'',b'\x00\xff\xfe\r\nexact JSON bytes\n',b'{"stop":true}\n'])
+def test_metadata_reads_return_exact_bytes_in_one_rpc(tmp_path,optional,payload):
+    client,calls=metadata_client(tmp_path);(tmp_path/'guest/value').write_bytes(payload)
+    read=client.read_optional if optional else client.read
+    assert read('guest','/work/native-production/value')==payload
+    assert len(calls)==1
+    timing=json.loads((client.root/'metadata-timings.jsonl').read_text())
+    assert timing['status']=='completed'and timing['operation']=='_read_metadata'
+
+
+def test_optional_metadata_missing_directory_and_empty_are_distinct(tmp_path):
+    client,calls=metadata_client(tmp_path)
+    assert client.read_optional('guest','/work/native-production/missing')is None
+    (tmp_path/'guest/directory').mkdir()
+    assert client.read_optional('guest','/work/native-production/directory')is None
+    (tmp_path/'guest/empty').touch()
+    assert client.read_optional('guest','/work/native-production/empty')==b''
+    assert len(calls)==3
+    with pytest.raises(RuntimeError,match='private evidence'):
+        client.read('guest','/work/native-production/missing')
+    assert len(calls)==4 and len(list(client.root.glob('metadata-error-*.json')))==1
+    with pytest.raises(ValueError,match='namespace'):
+        client.read_optional('guest','/work/native-production/../escape')
+    assert len(calls)==4
+
+
+@pytest.mark.parametrize('extra',[0,1])
+def test_metadata_existing_size_boundary_is_preserved(tmp_path,extra):
+    client,calls=metadata_client(tmp_path);path=tmp_path/'guest/boundary'
+    with path.open('wb')as stream:stream.truncate(worker.MAX_METADATA_BYTES+extra)
+    if extra:
+        with pytest.raises(ValueError,match='exceeds16MiB'):client.read('guest','/work/native-production/boundary')
+    else:assert client.read('guest','/work/native-production/boundary')==bytes(worker.MAX_METADATA_BYTES)
+    assert len(calls)==(1 if extra else 2)
+
+
+@pytest.mark.parametrize('extra',[0,1])
+def test_metadata_inline_boundary_preserves_safe_file_transport(tmp_path,extra):
+    client,calls=metadata_client(tmp_path);payload=b'x'*(worker.INLINE_METADATA_BYTES+extra)
+    (tmp_path/'guest/value').write_bytes(payload)
+    assert client.read_optional('guest','/work/native-production/value')==payload
+    assert len(calls)==1+extra
+    if extra:assert calls[-1]==('read_file','/work/native-production/value')
+
+
+@pytest.mark.parametrize('changed',[b'truncated',bytearray(b'wrong SDK type')])
+def test_metadata_file_fallback_rejects_changed_length_or_type(tmp_path,changed):
+    client=worker.SDKIO({'receipts':str(tmp_path),'sandboxes':{}})
+    client.remote=lambda *args,**kwargs:{'sdk_file_bytes':worker.INLINE_METADATA_BYTES+1}
+    client.sandbox=lambda sid:SimpleNamespace(read_file=lambda path:SimpleNamespace(result=lambda **kwargs:changed))
+    with pytest.raises((ValueError,TypeError)):client.read('guest','/work/native-production/value')
+
+
+@pytest.mark.parametrize('value',[None,{}, {'bytes':True,'base64':''}, {'bytes':-1,'base64':''},
+    {'bytes':0,'base64':'AAAA'}, {'bytes':1,'base64':'AA==' ,'extra':1},
+    {'bytes':1,'base64':'!@#$'}, {'bytes':3,'base64':'AA=='},
+    {'bytes':worker.MAX_METADATA_BYTES+1,'base64':''}, {'sdk_file_bytes':True},
+    {'sdk_file_bytes':worker.MAX_METADATA_BYTES+1}, {'sdk_file_bytes':worker.INLINE_METADATA_BYTES}])
+def test_metadata_malformed_or_truncated_envelope_rejects(tmp_path,value):
+    client=worker.SDKIO({'receipts':str(tmp_path),'sandboxes':{}})
+    client.remote=lambda *args,**kwargs:value
+    with pytest.raises(ValueError):client.read('guest','/work/native-production/value')
+
+
 def test_metadata_inventory_uses_one_exact_archive_and_preserves_original_namespace(tmp_path):
     class Local(worker.SDKIO):
         def __init__(self):

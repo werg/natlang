@@ -6,6 +6,7 @@ and the existing scoped artifact ferry argv. The native controller owns policy.
 """
 from __future__ import annotations
 import argparse
+import base64
 import hashlib
 import json
 import os
@@ -21,6 +22,8 @@ import cwctl
 from provider_bridge import ProviderBridge, checked_binding, safe_path
 
 METADATA_ROOT = '/work/native-production/shared/bridge-metadata'
+MAX_METADATA_BYTES = 16*1024**2
+INLINE_METADATA_BYTES = 64*1024
 
 
 RUNNER = r'''import pathlib,json,fcntl,os,sys,time,signal
@@ -161,20 +164,49 @@ class SDKIO:
                                + '; private evidence=' + str(evidence))
         return json.loads(result.stdout) if result.stdout.strip() else None
 
-    def read(self, sid, path):
+    def _read_metadata(self, sid, path, *, optional):
+        """Read small metadata in one RPC; retain file transport for larger bytes."""
         safe_path(path)
-        size = self.remote(sid, 'import pathlib,json;p=pathlib.Path('+repr(path)+');print(json.dumps(p.stat().st_size))')
-        if size > 16*1024**2:
+        code='import pathlib,json,os,base64\np=pathlib.Path('+repr(path)+')\n'
+        code+='''def bounded():
+ if OPTIONAL and not p.is_file():return None
+ with p.open('rb')as stream:
+  size=os.fstat(stream.fileno()).st_size
+  if size>LIMIT:return {'oversized_bytes':size}
+  if size>INLINE:return {'sdk_file_bytes':size}
+  data=stream.read(LIMIT+1)
+  if len(data)!=size or len(data)>LIMIT:raise ValueError('provider metadata changed size during bounded read')
+ return {'bytes':size,'base64':base64.b64encode(data).decode('ascii')}
+print(json.dumps(bounded()))
+'''.replace('OPTIONAL',repr(optional)).replace('LIMIT',str(MAX_METADATA_BYTES)).replace('INLINE',str(INLINE_METADATA_BYTES))
+        value=self.remote(sid,code)
+        if value is None and optional:return None
+        if (isinstance(value,dict) and set(value)=={'oversized_bytes'}
+                and type(value['oversized_bytes'])is int and value['oversized_bytes']>MAX_METADATA_BYTES):
             raise ValueError('provider metadata exceeds16MiB; use artifact transfer for payloads')
-        data = self.sandbox(sid).read_file(path).result(timeout=120)
-        if not isinstance(data, bytes):
-            raise TypeError('SDK metadata read did not return bytes')
+        if (isinstance(value,dict) and set(value)=={'sdk_file_bytes'}
+                and type(value['sdk_file_bytes'])is int
+                and INLINE_METADATA_BYTES<value['sdk_file_bytes']<=MAX_METADATA_BYTES):
+            # Keep larger metadata on the qualified file API: exec output may
+            # truncate. This fallback still avoids the separate existence RPC.
+            data=self.sandbox(sid).read_file(path).result(timeout=120)
+            if not isinstance(data,bytes):raise TypeError('SDK metadata read did not return bytes')
+            if len(data)!=value['sdk_file_bytes']:raise ValueError('provider metadata file byte count changed')
+            return data
+        if (not isinstance(value,dict) or set(value)!={'bytes','base64'}
+                or type(value['bytes'])is not int or not 0<=value['bytes']<=MAX_METADATA_BYTES
+                or not isinstance(value['base64'],str)
+                or len(value['base64'])!=4*((value['bytes']+2)//3)):
+            raise ValueError('provider metadata returned an invalid bounded byte envelope')
+        data=base64.b64decode(value['base64'],validate=True)
+        if len(data)!=value['bytes']:raise ValueError('provider metadata decoded byte count changed')
         return data
 
+    def read(self, sid, path):
+        return self._read_metadata(sid,path,optional=False)
+
     def read_optional(self, sid, path):
-        safe_path(path)
-        exists = self.remote(sid, 'import pathlib,json;print(json.dumps(pathlib.Path('+repr(path)+').is_file()))')
-        return self.read(sid, path) if exists else None
+        return self._read_metadata(sid,path,optional=True)
 
     def write_atomic(self, sid, path, data):
         safe_path(path)
