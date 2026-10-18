@@ -234,6 +234,7 @@ def geometry_from_evidence(source, first, evidence, *, package, source_preparati
     """
     report = json.loads(bound(evidence).read_text())
     split = source.required_split
+    whole_delta=report.get('schema')=='natlang.native-whole-delta-geometry/1'
     if report.get('schema') == SCHEMA:
         payload = report['payload']
         if digest(payload) != report.get('generation'):
@@ -255,16 +256,27 @@ def geometry_from_evidence(source, first, evidence, *, package, source_preparati
         expected_rows = start + report['new_train_rows']
         expected_entries = None
         maximum = {key: report['maxima'][key][key] for key in ('forward_tokens', 'kv_slots')}
+        if whole_delta:
+            if (first!=0 or prior_binding is not None or start!=0
+                    or report.get('tokenizer_fingerprint')!=source.tokenizer_fingerprint
+                    or report.get('role_ids')!=list(source.role_ids)
+                    or not report.get('provenance')):
+                raise ValueError('whole-delta geometry needs exact complete train scope and source contract')
+            for reference in report['provenance']:bound(reference)
+            expected_entries=report['entries_sha256']
     if source_preparation is None:
         from .native_source_preparation import NativeSourcePreparation
         source_preparation = NativeSourcePreparation(source.tokenizer_fingerprint, source.role_ids)
         source_preparation._remember(source)
     covered = source_preparation.load(source_binding, split=split)
-    prior_source = source_preparation.load(prior_binding, split=split)
+    prior_source = source_preparation.load(prior_binding, split=split)if prior_binding is not None else None
+    if prior_source is None and not whole_delta:
+        raise ValueError('legacy geometry evidence needs its exact prior source')
+    prior_entries=prior_source.entries if prior_source is not None else []
     if start is None:
         start = len(prior_source)
-    if (type(start) is not int or start != len(prior_source) or len(covered) != expected_rows
-            or covered.entries[:start] != prior_source.entries
+    if (type(start) is not int or start != len(prior_entries) or len(covered) != expected_rows
+            or covered.entries[:start] != prior_entries
             or expected_entries is not None and digest(covered.entries) != expected_entries):
         raise ValueError('geometry evidence source prefix/count/metadata differs')
     _check_indexes(witnesses)
@@ -292,6 +304,83 @@ def geometry_from_evidence(source, first, evidence, *, package, source_preparati
         if any(actual.get(value['index']) != value for value in descriptors.values()):
             raise ValueError('geometry evidence maximum row identity/physical/total slots differ')
     return maximum
+
+
+def prepare_whole_delta_geometry(source, parts, output, *, package):
+    """Verify completed ordinary partition coverage, then reuse its actual KV geometry.
+
+    Receipts are supplied as exact admitted/staged bindings by the caller. This
+    verifies every covered row; arbitrary provenance files alone prove nothing.
+    """
+    from .native_source_preparation import NativeSourcePreparation
+    preparation=NativeSourcePreparation(source.tokenizer_fingerprint,source.role_ids)
+    preparation._remember(source);offset=0;maxima={};provenance=[]
+    for part in parts:
+        path=bound(part['receipt']);receipt=json.loads(path.read_text());model=part['model']
+        if receipt.get('source_eligibility_unchanged')is not True or receipt.get('exact_original_row_bytes')is not True:
+            raise ValueError('delta geometry needs exact original admitted row coverage')
+        def member(reference):
+            actual=bound(reference)
+            try:relative=str(actual.relative_to(path.parent))
+            except ValueError:raise ValueError('delta coverage escaped its receipt namespace')from None
+            matches=[row for row in receipt['files']if row['path']==relative]
+            if len(matches)!=1 or matches[0]['sha256']!=reference['sha256']or matches[0]['bytes']!=actual.stat().st_size:
+                raise ValueError('delta geometry member differs from its completed partition receipt')
+            return actual
+        coverage=member(part['coverage']);fit=member(part['source']);kind=receipt.get('schema')
+        if kind=='natlang.acquired-native-capacity-partition/1':
+            if coverage!=path.parent/receipt['coverage'] or fit!=path.parent/receipt['manifests'][model+':train:fit']:
+                raise ValueError('delta geometry lost its exact fit/coverage disposition')
+            expected=receipt['counts'][model]['train:fit']['rows'];limits=receipt['binding']['limits'][model]
+            accepted=lambda row:row.get('model')==model and row.get('split')=='train'and row.get('partition')=='fit'
+        elif kind=='natlang.admitted-ordinary-source-capacity-preparation/1':
+            if receipt.get('passed')is not True or receipt['fit_sources'][model]['sha256']!=part['source']['sha256']:
+                raise ValueError('delta teacher geometry lacks its completed fit source')
+            expected=sum(row['fit']for row in receipt['counts'][model].values());limits=receipt['limits'][model]
+            accepted=lambda row:row.get('model')==model and row.get('split')=='train'and row.get('disposition')=='fit'
+        else:raise ValueError('unsupported completed ordinary geometry coverage')
+        parsed=preparation.load(part['source'],split='train')
+        with coverage.open()as stream:rows=[json.loads(line)for line in stream if line.strip()]
+        rows=[row for row in rows if accepted(row)]
+        if (len(parsed)!=expected or len(rows)!=expected or len({row['id']for row in rows})!=expected
+                or offset+expected>len(source)):
+            raise ValueError('delta geometry coverage lost or repeated a fitted row')
+        if kind=='natlang.acquired-native-capacity-partition/1':
+            rows.sort(key=lambda row:row['partition_row_index'])
+            if [row['partition_row_index']for row in rows]!=list(range(expected)):
+                raise ValueError('delta geometry coverage order changed')
+        for index,(row,entry)in enumerate(zip(rows,parsed.entries,strict=True)):
+            actual=source.entries[offset+index];geometry=row['geometry']
+            without_priority=lambda value:{key:item for key,item in value.items()if key!='training_priority'}
+            if (row['id']!=entry['id']or without_priority(actual)!=without_priority(entry)
+                    or entry.get('communication')or set(geometry)!={'forward_tokens','kv_slots'}
+                    or any(type(value)is not int or value<1 for value in geometry.values())
+                    or geometry['forward_tokens']!=entry['forward_tokens']
+                    or geometry['kv_slots']!=geometry['forward_tokens']
+                    or any(geometry[key]>limits[key]for key in geometry)):
+                raise ValueError('delta ordinary coverage row/physical/KV geometry changed')
+            descriptor={'index':offset+index,'id':entry['id'],'binding':entry['binding'],**geometry}
+            for key in geometry:
+                if key not in maxima or descriptor[key]>maxima[key][key]:maxima[key]=descriptor
+        offset+=expected;provenance.extend([part['receipt'],part['coverage']])
+    if not parts or offset!=len(source):raise ValueError('delta geometry coverage omitted source rows')
+    report={'schema':'natlang.native-whole-delta-geometry/1','passed':True,'source':binding(source.path),
+        'prior_train':None,'old_train_rows':0,'new_train_rows':len(source),'entries_sha256':digest(source.entries),
+        'tokenizer_fingerprint':source.tokenizer_fingerprint,'role_ids':list(source.role_ids),
+        'indexes':_source_witness(source,package),'provenance':provenance,'maxima':maxima}
+    from uuid import uuid4
+    output=Path(output);output.parent.mkdir(parents=True,exist_ok=True)
+    temporary=output.with_name('.'+output.name+'.preparing-'+uuid4().hex)
+    try:
+        write_json(temporary,report)
+        geometry_from_evidence(source,0,binding(temporary),package=package,source_preparation=preparation)
+        with(output.parent/(output.name+'.lock')).open('a')as lock:
+            fcntl.flock(lock,fcntl.LOCK_EX)
+            if output.exists():
+                if json.loads(output.read_text())!=report:raise ValueError('existing delta geometry report differs')
+            else:write_json(output,report)
+        return binding(output)
+    finally:temporary.unlink(missing_ok=True)
 
 
 def process_owner():
@@ -372,7 +461,7 @@ def retire(directory, checkpoint, terminal, *, handoff=None, verified_handoff=No
 
 
 def _delta_payload(directory, previous, plan, proposed, stage_id, recipe_path,
-                   tokenizer_fingerprint, role_ids, package, delta_sources):
+                   tokenizer_fingerprint, role_ids, package, delta_sources, geometry_evidence=None):
     """Validate only explicit new leaves; the learner validates the full union."""
     from .recipe import native_recipe_binding
     if not isinstance(delta_sources, dict) or set(delta_sources) != {'train'}:
@@ -401,11 +490,14 @@ def _delta_payload(directory, previous, plan, proposed, stage_id, recipe_path,
     if not capacity:
         raise ValueError('resident delta append needs explicit geometry qualification')
     limits = geometry_capacity(capacity, identity=initial['geometry_identity'], code=plan['code'])
-    geometry = new_geometry(delta, 0)
+    if geometry_evidence and set(geometry_evidence)!={'train'}:
+        raise ValueError('resident delta geometry evidence must cover training only')
+    geometry = (geometry_from_evidence(delta,0,geometry_evidence['train'],package=package,
+        source_preparation=preparation)if geometry_evidence else new_geometry(delta,0))
     if any(geometry[key] > limits[key] for key in limits):
         raise ValueError('resident delta exceeds qualified whole-graph geometry')
     pending_declarations(proposed, stage_id, tokenizer_fingerprint)
-    return {'predecessor': previous['generation'] if previous else digest(plan),
+    payload={'predecessor': previous['generation'] if previous else digest(plan),
         'stage_id': stage_id, 'plan': proposed,
         'recipe': native_recipe_binding(recipe_path, plan['recipe_sha256']),
         'train': train_ref, 'prior_train': prior_ref, 'held': held_ref, 'prior_held': held_ref,
@@ -418,6 +510,8 @@ def _delta_payload(directory, previous, plan, proposed, stage_id, recipe_path,
             'source': delta_ref, 'rows': len(delta), 'entries_sha256': digest(
                 [{**entry, 'training_priority':entry.get('training_priority',0)} for entry in delta.entries]),
             'prior_rows': rows, 'prior_held_rows': held_rows, 'prior_plan_sha256': digest(plan)}}
+    if geometry_evidence:payload['geometry_evidence']=geometry_evidence
+    return payload
 
 
 def prepare(directory, recipe_path, stage_id, *, tokenizer_fingerprint, role_ids,
@@ -453,10 +547,8 @@ def prepare(directory, recipe_path, stage_id, *, tokenizer_fingerprint, role_ids
                  for dep in _binding_files(value)}
     proposed['inputs'] = {**{p: h for p, h in plan['inputs'].items() if p not in old_paths}, **inputs}
     if delta_sources is not None:
-        if geometry_evidence:
-            raise ValueError('resident delta preparation compiles new geometry directly, not full-source evidence')
         payload = _delta_payload(directory, previous, plan, proposed, stage_id, recipe_path,
-            tokenizer_fingerprint, role_ids, package, delta_sources)
+            tokenizer_fingerprint, role_ids, package, delta_sources,geometry_evidence)
     else:
         from .native_source_preparation import NativeSourcePreparation
         source_preparation = NativeSourcePreparation(tokenizer_fingerprint, role_ids)

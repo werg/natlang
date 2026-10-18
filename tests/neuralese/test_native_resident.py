@@ -600,3 +600,129 @@ def test_geometry_capacity_ignores_only_explicit_keep_rendering_metadata(tmp_pat
             resident.geometry_capacity(resident.binding(certificate),identity=wrong,code={'module':'same'})
     with pytest.raises(ValueError,match='differs'):
         resident.geometry_capacity(resident.binding(certificate),identity=actual,code={'module':'unreviewed'})
+
+
+def whole_delta_geometry(tmp_path,delta,manager):
+    source=NativeGraphSource(delta,'tokenizer-sha',required_split='train')
+    measured=[]
+    for index,example in enumerate(source.iter_indices(range(len(source)))):
+        measured.append({'index':index,'id':example.id,'binding':source.entries[index]['binding'],
+            'forward_tokens':example.plan.token_count,'kv_slots':len(example.plan.slot_sources)})
+    producer=tmp_path/'completed-geometry-producer.json';write_json(producer,{'passed':True,'rows':measured})
+    report={'schema':'natlang.native-whole-delta-geometry/1','passed':True,'source':resident.binding(delta),
+        'prior_train':None,'old_train_rows':0,'new_train_rows':len(source),'entries_sha256':resident.digest(source.entries),
+        'tokenizer_fingerprint':source.tokenizer_fingerprint,'role_ids':list(source.role_ids),
+        'indexes':resident._source_witness(source,manager.package),'provenance':[resident.binding(producer)],
+        'maxima':{key:max(measured,key=lambda row:row[key])for key in('forward_tokens','kv_slots')}}
+    path=tmp_path/'whole-delta-geometry.json';write_json(path,report)
+    return path
+
+
+def test_delta_reuses_authenticated_complete_geometry_and_retains_full_live_validation(tmp_path,monkeypatch):
+    paths,directory,manager,recipe,delta,_=delta_fixture(tmp_path,monkeypatch)
+    evidence=whole_delta_geometry(tmp_path,delta,manager)
+    old_train=manager.train
+    def no_full_compile(*args):raise AssertionError('completed delta evidence must avoid a full geometry pass')
+    monkeypatch.setattr(resident,'new_geometry',no_full_compile)
+    request=resident.prepare(directory,recipe,'sft',tokenizer_fingerprint='tokenizer-sha',role_ids=(),
+        delta_sources={'train':resident.binding(delta)},geometry_evidence={'train':resident.binding(evidence)})
+    payload=json.loads(resident.bound(request).read_text())['payload']
+    assert payload['geometry_evidence']=={'train':resident.binding(evidence)}
+    assert payload['geometry']['kv_slots']>0 and payload['delta_validation']['prior_rows']==2
+    assert 'entries_sha256'not in payload and not resident.current(directory)
+    assert manager.poll(9)is not None
+    assert manager.train.children[0]is old_train and manager.train.ordered_ids()==['a','b','c']
+    assert 'exposure_counts'not in resident.current(directory)
+
+
+@pytest.mark.parametrize('change',['metadata','tokenizer','roles','count','source','index','provenance','maximum','legacy-null-prior','held-scope'])
+def test_delta_geometry_reuse_rejects_unbound_or_incomplete_evidence(tmp_path,monkeypatch,change):
+    _,directory,manager,recipe,delta,_=delta_fixture(tmp_path,monkeypatch)
+    evidence=whole_delta_geometry(tmp_path,delta,manager);value=json.loads(evidence.read_text())
+    if change=='metadata':value['entries_sha256']='0'*64
+    elif change=='tokenizer':value['tokenizer_fingerprint']='another-tokenizer'
+    elif change=='roles':value['role_ids']=[1,2,3,4]
+    elif change=='count':value['new_train_rows']+=1
+    elif change=='source':value['source']['sha256']='0'*64
+    elif change=='index':value['indexes'][0]['metadata_sha256']='0'*64
+    elif change=='provenance':value['provenance'][0]['sha256']='0'*64
+    elif change=='maximum':value['maxima']['kv_slots']['kv_slots']+=1
+    elif change=='legacy-null-prior':value['schema']='legacy-tiered-source-geometry'
+    write_json(evidence,value)
+    scope='test'if change=='held-scope'else'train'
+    with pytest.raises(ValueError):
+        resident.prepare(directory,recipe,'sft',tokenizer_fingerprint='tokenizer-sha',role_ids=(),
+            delta_sources={'train':resident.binding(delta)},geometry_evidence={scope:resident.binding(evidence)})
+    assert not(directory/'pending.json').exists()and resident.current(directory)is None
+
+
+def ordinary_coverage_part(tmp_path,kind):
+    rows=[graph('small'),graph('large')]
+    rows[1]['nodes'][0]['token_ids']=[1,2,3,4]
+    rows[1]['nodes'][0]['target_weights']=[0,1,1,1]
+    leaf=tmp_path/'fit.jsonl';leaf.write_text(''.join(json.dumps(row)+'\n'for row in rows))
+    manifest=tmp_path/'fit-sources.json';write_json(manifest,{'schema':'natlang.native-graph-sources/1',
+        'sources':[{'kind':'native-graphs',**resident.binding(leaf)}]})
+    source=NativeGraphSource(manifest,'tokenizer-sha',required_split='train')
+    coverage=tmp_path/'coverage.jsonl'
+    covered=[]
+    for index,example in enumerate(source.iter_indices(range(len(source)))):
+        covered.append({'id':example.id,'model':'fixture','split':'train','partition':'fit','disposition':'fit',
+            'partition_row_index':index,'geometry':{'forward_tokens':example.plan.token_count,'kv_slots':len(example.plan.slot_sources)}})
+    coverage.write_text(''.join(json.dumps(row)+'\n'for row in covered))
+    receipt={'schema':kind,'passed':True,'source_eligibility_unchanged':True,'exact_original_row_bytes':True,
+        'files':[{**resident.binding(path),'path':path.name,'bytes':path.stat().st_size}for path in(leaf,manifest,coverage)],
+        'coverage':coverage.name,'manifests':{'fixture:train:fit':manifest.name},
+        'counts':{'fixture':{'train:fit':{'rows':2}}},'binding':{'limits':{'fixture':{'forward_tokens':10,'kv_slots':10}}}}
+    if kind=='natlang.admitted-ordinary-source-capacity-preparation/1':
+        receipt.update(fit_sources={'fixture':resident.binding(manifest)},counts={'fixture':{'one-corpus':{'fit':2}}},
+            limits={'fixture':{'forward_tokens':10,'kv_slots':10}})
+    path=tmp_path/'receipt.json';write_json(path,receipt)
+    return source,{'model':'fixture','source':resident.binding(manifest),'coverage':resident.binding(coverage),'receipt':resident.binding(path)}
+
+
+@pytest.mark.parametrize('kind',['natlang.acquired-native-capacity-partition/1','natlang.admitted-ordinary-source-capacity-preparation/1'])
+def test_whole_delta_producer_authenticates_all_standard_coverage_and_derives_actual_maxima(tmp_path,monkeypatch,kind):
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE',str(tmp_path/'cache'))
+    source,part=ordinary_coverage_part(tmp_path,kind)
+    output=tmp_path/'geometry.json';proof=resident.prepare_whole_delta_geometry(source,[part],output,
+        package=Path(resident.__file__).parents[1])
+    report=json.loads(output.read_text())
+    assert report['maxima']['kv_slots']['id']=='large'and report['maxima']['kv_slots']['kv_slots']==4
+    assert report['new_train_rows']==2 and report['provenance']==[part['receipt'],part['coverage']]
+    assert resident.geometry_from_evidence(source,0,proof,package=Path(resident.__file__).parents[1])=={'forward_tokens':4,'kv_slots':4}
+
+
+@pytest.mark.parametrize('bad',['unbound-coverage','nonmaximum-kv','over-limit','wrong-id','missing-row','duplicate-row','wrong-disposition','wrong-fit'])
+def test_whole_delta_producer_rejects_coverage_or_geometry_changes_before_publication(tmp_path,monkeypatch,bad):
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE',str(tmp_path/'cache'))
+    source,part=ordinary_coverage_part(tmp_path,'natlang.acquired-native-capacity-partition/1')
+    coverage=Path(part['coverage']['path']);rows=[json.loads(line)for line in coverage.read_text().splitlines()]
+    receipt_path=Path(part['receipt']['path']);receipt=json.loads(receipt_path.read_text())
+    if bad=='nonmaximum-kv':rows[0]['geometry']['kv_slots']=2
+    elif bad=='over-limit':receipt['binding']['limits']['fixture']['kv_slots']=3
+    elif bad=='wrong-id':rows[0]['id']='another-row'
+    elif bad=='missing-row':rows.pop()
+    elif bad=='duplicate-row':rows[1]['id']=rows[0]['id']
+    elif bad=='wrong-disposition':rows[0]['partition']='remaining-long'
+    elif bad=='wrong-fit':receipt['manifests']['fixture:train:fit']='another-manifest.json'
+    else:rows[0]['geometry']['kv_slots']=1
+    coverage.write_text(''.join(json.dumps(row)+'\n'for row in rows));part['coverage']=resident.binding(coverage)
+    if bad!='unbound-coverage':
+        item=next(item for item in receipt['files']if item['path']==coverage.name)
+        item.update(sha256=part['coverage']['sha256'],bytes=coverage.stat().st_size)
+    write_json(receipt_path,receipt);part['receipt']=resident.binding(receipt_path)
+    output=tmp_path/'not-published.json'
+    with pytest.raises(ValueError):resident.prepare_whole_delta_geometry(source,[part],output,package=Path(resident.__file__).parents[1])
+    assert not output.exists()
+
+
+def test_delta_geometry_producer_does_not_publish_completed_report_when_maximum_read_fails(tmp_path,monkeypatch):
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE',str(tmp_path/'cache'))
+    source,part=ordinary_coverage_part(tmp_path,'natlang.acquired-native-capacity-partition/1')
+    def unavailable(*args):raise OSError('actual maximum-row source read unavailable')
+    monkeypatch.setattr(source,'iter_indices',unavailable)
+    output=tmp_path/'geometry.json'
+    with pytest.raises(OSError,match='maximum-row'):
+        resident.prepare_whole_delta_geometry(source,[part],output,package=Path(resident.__file__).parents[1])
+    assert not output.exists()and not list(tmp_path.glob('.geometry.json.preparing-*'))
