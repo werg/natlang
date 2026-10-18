@@ -109,6 +109,15 @@ forward values, or checkpoint metadata.
   training/replay, and the standalone port's ordinary/fused causal Conv1d.
   LFM's finite-history route does not call the Hugging Face short-convolution
   module forward, so it has its own carrier at the actual reduction site.
+- `eval/native_state.py` and `eval/native_attention_transition.py`: enter
+  separate scopes for each real graph/cached VJP before its forward, close them
+  after backward and on validation/observer/compiler failures. Comparisons retain
+  the existing exact named-gradient gates and original `.grad` identities.
+- `eval/native_memory.py`: include the same production scope and finalization
+  inside the host/GPU measurement window, with the existing optimizer hooks
+  unarmed. Observe and release the once-cast gradients without stepping. Reject
+  direct low-precision paths before the observer can clear them, and restore
+  hooks, backend, RNG and scope state after forward or backward OOM.
 - Native training/backward coordinators: bracket one actual optimizer update
   with the scope, including all invocations, checkpoint recomputations,
   row/FFN chunks and repeated loss backward passes. Finalize immediately before
