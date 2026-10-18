@@ -197,6 +197,15 @@ def capture_native_execution(callback):
     return execute
 
 
+def capture_native_checkpoint_execution(callback):
+    """Preserve actor, arithmetic and gradient-carrier context on recompute."""
+    from ..common.native_higher_order import capture_reference_execution
+    from .native_gradient_partitions import capture_gradient_partitions
+    from .native_weight_carrier import capture_cotangent_scope
+    return capture_reference_execution(capture_native_execution(
+        capture_cotangent_scope(capture_gradient_partitions(callback))))
+
+
 def native_fp32_state_cotangents(port=None):
     """The explicit FP32 adapter-gradient scope also retains shared KV fan-in."""
     frame = next((frame for frame in reversed(_ACTIVE.get()) if port is None or frame[0].shared_model.port is port), None)

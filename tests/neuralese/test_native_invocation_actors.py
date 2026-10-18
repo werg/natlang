@@ -54,7 +54,11 @@ def test_layer_major_distinct_actor_graph_matches_cached_and_source_adjoints(tmp
         if not reference:
             for layer in model.port.layers:
                 rows=[count for ident,count in visits if ident==id(layer)]
-                assert sum(rows)==plan.token_count and len(rows)==2,rows
+                # Keep invocation order even when producer and peer share an
+                # actor: bucket coalescing changes shared-base FP32 fan-in
+                # after prior microbatches. Every physical row still runs once.
+                assert rows==[len(node.token_ids) for node in plan.invocations],rows
+                assert sum(rows)==plan.token_count
         from natlang_neuralese.model.shared_state import capture_block
         written=capture_block(result,'producer',2,4,text='t5 t6')
         receipt=result['invocation_actors']

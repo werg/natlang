@@ -416,10 +416,10 @@ def feed_forward_residual(layer, h, chunk_tokens=0):
     FFN bounds temporary expanded-width projections; saved activation storage
     still scales with total tokens unless the caller enables exact CPU offload.
     """
-    if chunk_tokens <= 0 or h.shape[1] <= chunk_tokens:
-        return h + layer.feed_forward(layer.ffn_norm(h))
-    return torch.cat([part + layer.feed_forward(layer.ffn_norm(part))
-                      for part in h.split(chunk_tokens, dim=1)], dim=1)
+    from .native_gradient_partitions import token_local_chunks
+    return token_local_chunks(h, chunk_tokens,
+        lambda part: part + layer.feed_forward(layer.ffn_norm(part)))
+
 
 
 class PortBackbone(nn.Module):
@@ -591,6 +591,8 @@ class PortBackbone(nn.Module):
                                                          _checkpoint_layer=True)
                     state = updated.states[index]
                     return (output, *state.fields()) if attention else (output, state.window)
+                from .native_adapters import capture_native_checkpoint_execution
+                run_one = capture_native_checkpoint_execution(run_one)
                 result = checkpoint(run_one, h, positions, padding, left_pad, cache.pad,
                                     *fields, use_reentrant=False,
                                     preserve_rng_state=self.checkpoint_preserve_rng)

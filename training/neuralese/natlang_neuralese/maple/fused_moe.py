@@ -556,6 +556,8 @@ class _InvariantLinear(torch.autograd.Function):
 
     @staticmethod
     def forward(ctx, x, w, precision, forward_storage_dtype, *cotangent_anchors):
+        from ..model.native_gradient_partitions import active_gradient_partitions
+        ctx.partitions = active_gradient_partitions()
         ctx.carrier = forward_storage_dtype is not None
         ctx.anchors = cotangent_anchors
         ctx.scope_weight = w if cotangent_anchors else None
@@ -590,17 +592,20 @@ class _InvariantLinear(torch.autograd.Function):
             precision=backward_precision) if ctx.needs_input_grad[0] else None
         dw = None
         if ctx.needs_input_grad[1]:
-            if ctx.carrier:
-                dw = invariant_weight_gradient(x, grad)
-            elif x.dtype == torch.float32 and ctx.precision == 'bf16':
-                # Cast-forward straight-through derivative, without adjoint rounding.
-                dw = grad.T @ x.to(torch.bfloat16).float()
-            else:
-                dw = grad.T @ x
-        anchor_grads = (None,) * len(ctx.anchors)
-        if ctx.anchors and dw is not None:
+            from ..model.native_gradient_partitions import reduce_parameter_rows
             from ..model.native_weight_carrier import _scope_add
-            _scope_add(ctx.scope_weight, dw, ctx.anchors, ctx.scope)
+            def contribution(section):
+                xx, gg = x[section], grad[section]
+                if ctx.carrier:
+                    return invariant_weight_gradient(xx, gg)
+                if xx.dtype == torch.float32 and ctx.precision == 'bf16':
+                    return gg.T @ xx.to(torch.bfloat16).float()
+                return gg.T @ xx
+            dw = reduce_parameter_rows(ctx.partitions, x.shape[0], contribution,
+                add=(lambda value: _scope_add(ctx.scope_weight, value, ctx.anchors, ctx.scope))
+                    if ctx.anchors else None)
+        anchor_grads = (None,) * len(ctx.anchors)
+        if ctx.anchors and ctx.needs_input_grad[1]:
             dw = None
             anchor_grads = tuple(grad.new_ones((), dtype=torch.float32) if anchor is not None else None
                                  for anchor in ctx.anchors)

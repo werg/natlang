@@ -14,10 +14,34 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
+from .native_gradient_partitions import active_gradient_partitions, reduce_parameter_rows
+
 
 _COTANGENT_SCOPE = contextvars.ContextVar('natlang_bf16_parameter_cotangent_scope', default=None)
 _RMS_NORM_TYPES = {'RMSNorm', 'Lfm2RMSNorm', 'Qwen2RMSNorm', 'Qwen3RMSNorm'}
 _COTANGENT_TRANSFER_CHUNK_BYTES = 16 * 1024 * 1024
+
+
+def capture_cotangent_scope(callback):
+    """Keep the forward's exact gradient carrier during checkpoint recompute."""
+    from functools import wraps
+    from ..common.native_higher_order import active_reference_arithmetic
+    if active_reference_arithmetic() is not None:
+        # Higher derivatives replay immutable functional parameter snapshots,
+        # not a completed first-order accumulator. Their own lifetime/context
+        # is captured by capture_reference_execution/capture_native_execution.
+        return callback
+    scope = active_cotangent_scope()
+    @wraps(callback)
+    def execute(*args, **kwargs):
+        if scope is not None and scope._closed:
+            raise RuntimeError('checkpoint recomputation outlived its parameter cotangent scope')
+        token = _COTANGENT_SCOPE.set(scope)
+        try:
+            return callback(*args, **kwargs)
+        finally:
+            _COTANGENT_SCOPE.reset(token)
+    return execute
 
 
 def _is_rms_norm_module(module):
@@ -515,6 +539,25 @@ class ParameterCotangentScope:
             target[start:stop].add_(piece)
         entry['count'] += 1
 
+    def add_ordered_finite_convolution(self, parameter, histories, gradient, *, bias=False):
+        """Fold finite-convolution token cotangents in cached reverse order."""
+        entry = self._entry_for(parameter)
+        if entry is None:
+            raise RuntimeError('finite-convolution path has no registered cotangent anchor')
+        if entry['accumulator'] is None:
+            entry['accumulator'] = self._allocate_accumulator(entry)
+        target = entry['accumulator']
+        if parameter is not entry['parameter']:
+            offset = parameter.storage_offset() - entry['parameter'].storage_offset()
+            last = offset + sum((size - 1) * stride for size, stride in zip(parameter.shape, parameter.stride()))
+            if offset < 0 or last >= entry['parameter'].numel():
+                raise RuntimeError(f"finite-convolution cotangent view escapes {entry['name']}")
+            target = target.as_strided(parameter.shape, parameter.stride(), offset)
+        from .ordered_finite_convolution import ordered_finite_convolution_accumulate
+        ordered_finite_convolution_accumulate(target, histories, gradient,
+            backend=self.accumulator_backend, bias=bias)
+        entry['count'] += 1
+
     def add_embedding_rows(self, parameter, indices, contribution, *, padding_idx=None,
                            scale_grad_by_freq=False):
         """Add indexed embedding dW rows directly to the selected accumulator."""
@@ -745,6 +788,7 @@ class _WidenedParameterCotangent(torch.autograd.Function):
 class _TorchStoredRMSNorm(torch.autograd.Function):
     @staticmethod
     def forward(ctx, x, weight, eps, module, original_forward, *anchors):
+        ctx.partitions = active_gradient_partitions()
         ctx.save_for_backward(x, weight)
         ctx.eps, ctx.anchors = float(eps), anchors
         ctx.parameter, ctx.scope = weight, active_cotangent_scope() if anchors else None
@@ -758,12 +802,22 @@ class _TorchStoredRMSNorm(torch.autograd.Function):
         xf = x.float()
         inverse = torch.rsqrt(xf.square().mean(dim=-1, keepdim=True) + ctx.eps)
         normalized = (xf * inverse).to(x.dtype)
-        dw = (gradient.float() * normalized.float()).sum(dim=tuple(range(gradient.ndim - 1)))
+        products = gradient.float() * normalized.float()
+        if ctx.partitions is None:
+            dw = products.sum(dim=tuple(range(gradient.ndim - 1)))
+        else:
+            if x.ndim < 3 or x.shape[0] != 1:
+                raise RuntimeError('graph RMSNorm cotangent lost its token axis')
+            dw = reduce_parameter_rows(ctx.partitions, x.shape[1],
+                lambda section: products[:, section].sum(dim=tuple(range(products.ndim - 1))),
+                add=(lambda value: _scope_add(ctx.parameter, value, ctx.anchors, ctx.scope))
+                    if ctx.anchors else None)
         dy = (gradient * weight).to(x.dtype).float()
         dx = (dy - xf * inverse.square() * (dy * xf).mean(dim=-1, keepdim=True)) * inverse
         anchor_grads = (None,) * len(ctx.anchors)
         if ctx.anchors:
-            _scope_add(ctx.parameter, dw, ctx.anchors, ctx.scope)
+            if ctx.partitions is None:
+                _scope_add(ctx.parameter, dw, ctx.anchors, ctx.scope)
             dw = None
             anchor_grads = tuple(gradient.new_ones((), dtype=torch.float32) for _ in ctx.anchors)
         else:
@@ -964,9 +1018,27 @@ def _scope_add(weight, contribution, anchors, scope=None):
     return True
 
 
+def _scope_add_ordered_finite(parameter, histories, gradient, anchors, scope, *, bias=False):
+    if scope is None or not anchors:
+        return False
+    route_owner, route = scope._effective_route_for(parameter)
+    if route is None:
+        scope.add_ordered_finite_convolution(parameter, histories, gradient, bias=bias)
+    else:
+        base, deltas = route
+        if base is not None:
+            source_view = scope._route_parameter_view(base['parameter'], route_owner, parameter)
+            scope.add_ordered_finite_convolution(source_view, histories, gradient, bias=bias)
+        for delta in deltas:
+            source_view = scope._route_parameter_view(delta['parameter'], route_owner, parameter)
+            scope.add_ordered_finite_convolution(source_view, histories, gradient, bias=bias)
+    return True
+
+
 class _TorchStoredFiniteConvolution(torch.autograd.Function):
     @staticmethod
     def forward(ctx, histories, weight, bias, c, weight_anchor_count, *anchors):
+        ctx.partitions = active_gradient_partitions()
         out = (histories.contiguous().float() * weight[:, 0].T.float()[None, None]).sum(2)
         if bias is not None:
             out = out + bias.float()
@@ -988,28 +1060,60 @@ class _TorchStoredFiniteConvolution(torch.autograd.Function):
         effective_gradient = (gradient * c).float()
         dh = (effective_gradient.unsqueeze(2) * weight[:, 0].T.float()[None, None]).to(histories.dtype)
         dc = gradient * stored_out
-        if ctx.weight_anchors:
-            dw = (effective_gradient.unsqueeze(2) * histories.detach().float()).sum(dim=(0, 1)).T[:, None, :]
-            _scope_add(ctx.scope_weight, dw, ctx.weight_anchors, ctx.scope)
-            d_weight = None
-            weight_grads = [gradient.new_ones((), dtype=torch.float32) for _ in ctx.weight_anchors]
+        if ctx.partitions is not None:
+            if (histories.shape[0] != 1 or ctx.partitions.token_count != histories.shape[1]):
+                raise RuntimeError('finite-convolution graph cotangent lost its token-row provenance')
+            if ctx.weight_anchors:
+                _scope_add_ordered_finite(ctx.scope_weight, histories.detach(), effective_gradient,
+                                          ctx.weight_anchors, ctx.scope)
+                d_weight = None
+                weight_grads = [gradient.new_ones((), dtype=torch.float32) for _ in ctx.weight_anchors]
+            else:
+                d_weight = torch.zeros_like(weight, dtype=torch.float32)
+                from .ordered_finite_convolution import ordered_finite_convolution_accumulate
+                ordered_finite_convolution_accumulate(d_weight, histories.detach(), effective_gradient,
+                    backend='device_fp32' if weight.is_cuda else 'cpu_file')
+                d_weight = d_weight.to(weight.dtype)
+                weight_grads = []
+            if ctx.has_bias and ctx.bias_anchors:
+                _scope_add_ordered_finite(ctx.scope_bias, None, effective_gradient,
+                                          ctx.bias_anchors, ctx.scope, bias=True)
+                d_bias = None
+                bias_grads = [gradient.new_ones((), dtype=torch.float32) for _ in ctx.bias_anchors]
+            elif ctx.has_bias:
+                d_bias = torch.zeros((effective_gradient.shape[-1],),
+                                     device=effective_gradient.device, dtype=torch.float32)
+                from .ordered_finite_convolution import ordered_finite_convolution_accumulate
+                ordered_finite_convolution_accumulate(d_bias, None, effective_gradient,
+                    backend='device_fp32' if gradient.is_cuda else 'cpu_file', bias=True)
+                d_bias = d_bias.to(ctx.bias_dtype)
+                bias_grads = []
+            else:
+                d_bias, bias_grads = None, []
         else:
-            d_weight = (effective_gradient.unsqueeze(2) * histories.detach().float()).sum(dim=(0, 1)).T[:, None, :].to(weight.dtype)
-            weight_grads = []
-        if ctx.has_bias and ctx.bias_anchors:
-            db = effective_gradient.sum(dim=(0, 1))
-            _scope_add(ctx.scope_bias, db, ctx.bias_anchors, ctx.scope)
-            d_bias = None
-            bias_grads = [gradient.new_ones((), dtype=torch.float32) for _ in ctx.bias_anchors]
-        else:
-            d_bias = effective_gradient.sum(dim=(0, 1)).to(ctx.bias_dtype) if ctx.has_bias else None
-            bias_grads = []
+            if ctx.weight_anchors:
+                dw = (effective_gradient.unsqueeze(2) * histories.detach().float()).sum(dim=(0, 1)).T[:, None, :]
+                _scope_add(ctx.scope_weight, dw, ctx.weight_anchors, ctx.scope)
+                d_weight = None
+                weight_grads = [gradient.new_ones((), dtype=torch.float32) for _ in ctx.weight_anchors]
+            else:
+                d_weight = (effective_gradient.unsqueeze(2) * histories.detach().float()).sum(dim=(0, 1)).T[:, None, :].to(weight.dtype)
+                weight_grads = []
+            if ctx.has_bias and ctx.bias_anchors:
+                db = effective_gradient.sum(dim=(0, 1))
+                _scope_add(ctx.scope_bias, db, ctx.bias_anchors, ctx.scope)
+                d_bias = None
+                bias_grads = [gradient.new_ones((), dtype=torch.float32) for _ in ctx.bias_anchors]
+            else:
+                d_bias = effective_gradient.sum(dim=(0, 1)).to(ctx.bias_dtype) if ctx.has_bias else None
+                bias_grads = []
         return dh, d_weight, d_bias, dc, None, *weight_grads, *bias_grads
 
 
 class _TorchStoredEmbedding(torch.autograd.Function):
     @staticmethod
     def forward(ctx, indices, weight, padding_idx, norm_type, scale_grad_by_freq, anchor_count, *anchors):
+        ctx.partitions = active_gradient_partitions()
         ctx.save_for_backward(indices)
         ctx.weight, ctx.padding_idx = weight, padding_idx
         ctx.norm_type, ctx.scale_grad_by_freq = float(norm_type), bool(scale_grad_by_freq)
@@ -1020,9 +1124,13 @@ class _TorchStoredEmbedding(torch.autograd.Function):
     @staticmethod
     def backward(ctx, gradient):
         indices, = ctx.saved_tensors
-        ctx.scope.add_embedding_rows(ctx.weight, indices, gradient,
-                                     padding_idx=ctx.padding_idx,
-                                     scale_grad_by_freq=ctx.scale_grad_by_freq)
+        from .native_gradient_partitions import token_slices
+        if ctx.partitions is not None and (indices.ndim != 2 or indices.shape[0] != 1):
+            raise RuntimeError('graph embedding cotangent lost its token axis')
+        for section in token_slices(ctx.partitions, indices.numel()):
+            ctx.scope.add_embedding_rows(ctx.weight, indices.reshape(-1)[section],
+                gradient.reshape(-1, gradient.shape[-1])[section],
+                padding_idx=ctx.padding_idx, scale_grad_by_freq=ctx.scale_grad_by_freq)
         anchor_gradients = tuple(gradient.new_ones((), dtype=torch.float32) for _ in ctx.anchors)
         return None, None, None, None, None, None, *anchor_gradients
 
@@ -1045,6 +1153,7 @@ def rounded_weight_carrier(previous, delta, storage_dtype):
 class _TorchStoredLinear(torch.autograd.Function):
     @staticmethod
     def forward(ctx, x, weight, bias, storage_dtype, weight_anchor_count, *anchors):
+        ctx.partitions = active_gradient_partitions()
         stored = weight.to(storage_dtype)
         ctx.save_for_backward(x, stored)
         ctx.bias = bias is not None
@@ -1064,15 +1173,22 @@ class _TorchStoredLinear(torch.autograd.Function):
         dx = (grad @ stored) if ctx.needs_input_grad[0] else None
         dw = None
         if ctx.needs_input_grad[1]:
-            if grad.is_cuda:
-                from ..maple.fused_moe import invariant_weight_gradient
-                dw = invariant_weight_gradient(flat_x, flat_grad)
-            else:
-                dw = flat_grad.float().T @ flat_x.float()
-        db = flat_grad.float().sum(0) if ctx.bias and ctx.needs_input_grad[2] else None
+            def contribution(section):
+                xx, gg = flat_x[section], flat_grad[section]
+                if grad.is_cuda:
+                    from ..maple.fused_moe import invariant_weight_gradient
+                    return invariant_weight_gradient(xx, gg)
+                return gg.float().T @ xx.float()
+            dw = reduce_parameter_rows(ctx.partitions, flat_x.shape[0], contribution,
+                add=(lambda value: _scope_add(ctx.scope_weight, value, ctx.weight_anchors, ctx.scope))
+                    if ctx.weight_anchors else None)
+        db = (reduce_parameter_rows(ctx.partitions, flat_grad.shape[0],
+                lambda section: flat_grad[section].float().sum(0),
+                add=(lambda value: _scope_add(ctx.scope_bias, value, ctx.bias_anchors, ctx.scope))
+                    if ctx.bias_anchors else None)
+              if ctx.bias and ctx.needs_input_grad[2] else None)
         weight_anchor_grads = (None,) * len(ctx.weight_anchors)
-        if ctx.weight_anchors and dw is not None:
-            _scope_add(ctx.scope_weight, dw, ctx.weight_anchors, ctx.scope)
+        if ctx.weight_anchors and ctx.needs_input_grad[1]:
             dw = None
             weight_anchor_grads = tuple(grad.new_ones((), dtype=torch.float32) for _ in ctx.weight_anchors)
         elif dw is not None:
@@ -1083,8 +1199,7 @@ class _TorchStoredLinear(torch.autograd.Function):
             # still return their native BF16 gradient here.
             dw = dw.to(ctx.weight_dtype)
         bias_anchor_grads = (None,) * len(ctx.bias_anchors)
-        if ctx.bias_anchors and db is not None:
-            _scope_add(ctx.scope_bias, db, ctx.bias_anchors, ctx.scope)
+        if ctx.bias_anchors and ctx.bias and ctx.needs_input_grad[2]:
             db = None
             bias_anchor_grads = tuple(grad.new_ones((), dtype=torch.float32) for _ in ctx.bias_anchors)
         elif db is not None:
