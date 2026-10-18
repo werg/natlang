@@ -259,10 +259,12 @@ def _bind_backbone_revision(model, checkpoint_sha256):
 
 
 def load_native_checkpoint(path, *, base=None, device='cpu', dtype=None, participant=None, allow_weights_only=False,
-                           actor_view=None):
+                           actor_view=None, preloaded_checkpoint=None):
     """Return (model, tokenizer, roles, model_config, full_checkpoint_state)."""
     from pathlib import Path
     path = Path(path).resolve(strict=True)
+    if preloaded_checkpoint is not None and (actor_view is not None or allow_weights_only):
+        raise ValueError('preloaded checkpoint is only for the exact full-state restore')
     if actor_view is not None and (not allow_weights_only or participant is not None):
         raise ValueError('actor view is only for explicit read-only native inference')
     with path.open('rb') as stream:
@@ -270,13 +272,21 @@ def load_native_checkpoint(path, *, base=None, device='cpu', dtype=None, partici
     if prefix == b'{':
         manifest = json.loads(path.read_text())
         if manifest.get('schema') == COMPOSITE_CHECKPOINT_SCHEMA:
+            if preloaded_checkpoint is not None:
+                raise ValueError('composite checkpoint keeps its complete loader')
             if actor_view is not None:
                 raise ValueError('composite actor keeps the complete checkpoint loader')
             from .native_composite import load_native_composite_checkpoint
             return load_native_composite_checkpoint(path, base=base, device=device, dtype=dtype)
     from ..train.checkpoint_policy import CheckpointPolicy
     if actor_view is None:
-        state = CheckpointPolicy.load(path, shared_participant=participant)
+        if preloaded_checkpoint is None:
+            state = CheckpointPolicy.load(path, shared_participant=participant)
+        else:
+            from ..train.checkpoint_policy import PreloadedCheckpoint
+            if type(preloaded_checkpoint) is not PreloadedCheckpoint:
+                raise ValueError('native preload requires the exact one-use checkpoint authority')
+            state = preloaded_checkpoint.consume(path, shared_participant=participant)
     else:
         from .native_bundle import load_actor_view
         state = load_actor_view(path,actor_view)
