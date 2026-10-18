@@ -178,12 +178,12 @@ class ParameterCotangentScope:
                     bias = getattr(module, 'bias', None)
                     if type(module) is nn.Embedding and id(weight) in selected:
                         original = module.forward
+                        self._module_changes.append(('forward', module, ('forward' in module.__dict__, module.__dict__.get('forward'))))
                         module.forward = _embedding_carrier_forward(module)
-                        self._module_changes.append(('forward', module, original))
                     elif type(module) is nn.Linear and (id(weight) in selected or id(bias) in selected):
                         wrapper = self._wrappers.setdefault(id(module), NativeCarrierLinear(module))
                         if not name:
-                            self._module_changes.append(('root', module, module.forward))
+                            self._module_changes.append(('root', module, ('forward' in module.__dict__, module.__dict__.get('forward'))))
                             module.forward = wrapper.forward
                             continue
                         parent_name, _, child = name.rpartition('.')
@@ -192,18 +192,18 @@ class ParameterCotangentScope:
                         parent._modules[child] = wrapper
                     elif type(module) is nn.Conv1d and (id(weight) in selected or id(bias) in selected):
                         original = module.forward
+                        self._module_changes.append(('forward', module, ('forward' in module.__dict__, module.__dict__.get('forward'))))
                         module.forward = _conv1d_carrier_forward(self, module, original)
-                        self._module_changes.append(('forward', module, original))
                     elif (type(module).__name__ == 'Lfm2ShortConv' and
                           id(getattr(getattr(module, 'conv', None), 'weight', None)) in selected):
                         original = module.forward
+                        self._module_changes.append(('forward', module, ('forward' in module.__dict__, module.__dict__.get('forward'))))
                         module.forward = _lfm_causal_carrier_forward(self, module, original)
-                        self._module_changes.append(('forward', module, original))
                     elif (type(module).__name__ in _RMS_NORM_TYPES and isinstance(weight, torch.Tensor)
                           and id(weight) in selected):
                         original = module.forward
+                        self._module_changes.append(('forward', module, ('forward' in module.__dict__, module.__dict__.get('forward'))))
                         module.forward = _rms_norm_carrier_forward(self, module, original)
-                        self._module_changes.append(('forward', module, original))
             if self.mode == 'vjp':
                 for entry in self.entries.values():
                     self._gradient_hooks.append(entry['parameter'].register_hook(
@@ -623,10 +623,12 @@ class ParameterCotangentScope:
             _COTANGENT_SCOPE.reset(self._token)
             self._token = None
         for parent, child, original in reversed(self._module_changes):
-            if parent == 'forward':
-                child.forward = original
-            elif parent == 'root':
-                child.forward = original
+            if parent in ('forward', 'root'):
+                had_forward, forward = original
+                if had_forward:
+                    child.forward = forward
+                else:
+                    delattr(child, 'forward')
             else:
                 parent._modules[child] = original
         self._module_changes.clear()
@@ -1130,8 +1132,16 @@ def stored_embedding(indices, weight, *, padding_idx=None, max_norm=None, norm_t
 class NativeCarrierLinear(nn.Linear):
     """Preserve native fixed projections and ordinary HF Linear arithmetic."""
     def __init__(self, original):
+        # Only a plain bound alias can safely yield to the carrier forward.
+        override = original.__dict__.get('forward')
+        if 'forward' in original.__dict__ and not (
+                getattr(override, '__self__', None) is original and
+                getattr(override, '__func__', None) is nn.Linear.forward):
+            raise RuntimeError('Linear cotangent carrier cannot replace a custom instance forward')
         # Preserve hooks/config/ties without resetting or cloning parameters.
         self.__dict__ = original.__dict__.copy()
+        # An instance alias must not shadow this carrier class's forward.
+        self.__dict__.pop('forward', None)
         self._parameters = original._parameters.copy()
         self._buffers = original._buffers.copy()
         self._modules = original._modules.copy()

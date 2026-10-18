@@ -449,3 +449,73 @@ def test_actor_replacements_share_base_fanin_and_keep_delta_vjps(tmp_path):
     torch.testing.assert_close(actual_a, expected_a, rtol=0, atol=0)
     torch.testing.assert_close(actual_b, expected_b, rtol=0, atol=0)
 
+
+
+@pytest.mark.parametrize('kind', ['linear', 'embedding', 'conv', 'rms'])
+@pytest.mark.parametrize('instance_alias', [False, True])
+def test_two_consecutive_scopes_restore_exact_forward_attribute(kind, instance_alias, tmp_path):
+    class RMSNorm(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.weight = nn.Parameter(torch.ones(8, dtype=torch.bfloat16))
+            self.eps = 1e-5
+
+        def forward(self, x):
+            normalized = (x.float() * torch.rsqrt(x.float().square().mean(-1, keepdim=True) + self.eps)).to(x.dtype)
+            return normalized * self.weight
+
+    torch.manual_seed(197)
+    if kind == 'linear':
+        module, value = nn.Linear(8, 4, bias=False).to(torch.bfloat16), torch.randn(3, 8).bfloat16()
+    elif kind == 'embedding':
+        module, value = nn.Embedding(11, 8).to(torch.bfloat16), torch.tensor([1, 3, 1])
+    elif kind == 'conv':
+        module, value = nn.Conv1d(2, 3, 3, bias=False).to(torch.bfloat16), torch.randn(1, 2, 7).bfloat16()
+    else:
+        module, value = RMSNorm(), torch.randn(3, 8).bfloat16()
+    if instance_alias:
+        module.forward = module.forward
+    prior_present = 'forward' in module.__dict__
+    prior_attribute = module.__dict__.get('forward')
+    parameter = module.weight
+    expected = module(value).detach()
+    original_parameters = tuple(module.parameters())
+    for _ in range(2):
+        x = value.detach().clone().requires_grad_(value.is_floating_point())
+        reference_x = value.detach().clone().requires_grad_(value.is_floating_point())
+        reference = module(reference_x)
+        expected_dx = (torch.autograd.grad(reference.float().sum(), reference_x)[0]
+                       if reference_x.requires_grad else None)
+        with ParameterCotangentScope.for_model(module, mode='vjp', directory=tmp_path) as scope:
+            output = module(x)
+            assert torch.equal(output, expected)
+            requested = (parameter, x) if x.requires_grad else (parameter,)
+            gradients = torch.autograd.grad(output.float().sum(), requested)
+            assert torch.isfinite(gradients[0]).all()
+            assert scope.entries[id(parameter)]['count'] > 0
+            if expected_dx is not None:
+                torch.testing.assert_close(gradients[1], expected_dx, atol=.016, rtol=.016)
+            scope.finish()
+        assert tuple(module.parameters()) == original_parameters
+        assert ('forward' in module.__dict__) == prior_present
+        assert module.__dict__.get('forward') is prior_attribute
+        assert torch.equal(module(value), expected)
+
+
+@pytest.mark.parametrize('child', [False, True])
+def test_custom_linear_instance_forward_rejected_without_changing_semantics(child, tmp_path):
+    from natlang_neuralese.model.native_weight_carrier import active_cotangent_scope
+    linear = nn.Linear(8, 4, bias=False).to(torch.bfloat16)
+    original = linear.forward
+    linear.forward = lambda x: original(x) * 3 + 2
+    override = linear.forward
+    model = nn.Sequential(linear) if child else linear
+    x = torch.randn(3, 8, dtype=torch.bfloat16)
+    expected = model(x).detach()
+    with pytest.raises(RuntimeError, match='cannot replace a custom instance forward'):
+        with ParameterCotangentScope.for_model(model, mode='vjp', directory=tmp_path):
+            pytest.fail('unsupported override must be rejected before model execution')
+    assert active_cotangent_scope() is None
+    assert linear.__dict__['forward'] is override
+    assert (model[0] if child else model) is linear
+    assert torch.equal(model(x), expected)
