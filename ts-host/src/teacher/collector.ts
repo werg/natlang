@@ -9,7 +9,7 @@ import { mkdir, open, readFile, readdir, rename, unlink } from 'node:fs/promises
 import { basename, dirname, join } from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import { neuraleseServerModelTurn } from '../model/neuralese-server.js';
+import { archiveNeuraleseReplyArtifacts, HttpNeuraleseStore, neuraleseServerModelTurn } from '../model/neuralese-server.js';
 import { MemoryNeuraleseStore } from '../native/neuralese-store.js';
 import { openAICompatibleModelTurn } from '../model/openai-compatible.js';
 import { createManagedModelSession } from '../model/local-server.js';
@@ -906,6 +906,8 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     const textNeuralese = config.textNeuraleseEmulation ? createTextNeuraleseEmulation() : undefined;
     const textNeuraleseLibrary = await textNeuralese?.standardLibraryReady;
     const nativeStore = config.neuraleseServer ? new MemoryNeuraleseStore() : undefined;
+    const replayRemote = nativeStore ? new HttpNeuraleseStore(config.endpoint!,
+      config.apiKeyEnv ? { authorization: 'Bearer ' + process.env[config.apiKeyEnv] } : undefined) : undefined;
     const nativeInfo = config.neuraleseServer ? await fetch(config.endpoint!.replace(/\/$/, '') + '/v1/neuralese/info', {
       ...(config.apiKeyEnv ? { headers: { authorization: 'Bearer ' + process.env[config.apiKeyEnv] } } : {}),
     }).then(async response => {
@@ -1261,6 +1263,18 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
       let response: ModelTurn;
       if (recorded) {
         response = structuredClone(recorded.response);
+        if (nativeStore && replayRemote) {
+          try {
+            await archiveNeuraleseReplyArtifacts(response.raw_response ?? {}, replayRemote, nativeStore,
+              [request.messages, response.calls, response.text]);
+          } catch (error) {
+            // Missing saved policy inputs are an infrastructure failure. A child
+            // must not catch this and replace the retained response with a new turn.
+            fatalCollectionError = error instanceof Error ? error : new Error(String(error));
+            providerFatalAbort.abort(fatalCollectionError);
+            throw fatalCollectionError;
+          }
+        }
         if (authoredRoot && request.invocation_id === executionRunId &&
             response.raw_response?.natlang_action_provenance &&
             (response.raw_response.natlang_action_provenance as Record<string, unknown>).kind === 'authored_reference_root_eval' &&

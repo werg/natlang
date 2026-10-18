@@ -405,6 +405,40 @@ function normalizeReply(body: Json): Json {
   return body;
 }
 
+/** Archive the same exact reply closure for live turns and saved-turn replay. */
+export async function archiveNeuraleseReplyArtifacts(reply: Json, remote: NeuraleseStore,
+    store: NeuraleseStore | undefined, references: readonly unknown[] = []):
+    Promise<{ blocks: Set<string>; native: Set<string> }> {
+  const blocks = new Set<string>();
+  if (store) for (const meta of ((reply.neuralese as Json | undefined)?.blocks ?? []) as NeuraleseBlockMeta[]) {
+    if (!(await store.has(meta.id))) {
+      const block = await remote.get(meta.id);
+      if (!block) throw new Error(`neuralese-unknown-block: the server reported ${meta.id} but does not have it`);
+      const { id: _, ...rest } = meta;
+      const local = await store.put({ ...rest, dtype: block.meta.dtype, length: block.meta.length,
+        width: block.meta.width, data: block.data });
+      if (local.id !== meta.id) throw new Error(`neuralese block ${meta.id} arrived as ${local.id}: content IDs disagree`);
+    }
+    blocks.add(meta.id);
+  }
+  const nativeBlocks = ((reply.native_state as Json | undefined)?.blocks ?? []) as Array<{ id: string }>;
+  const sampling = reply.x_natlang_rl_capture as { prompt?: Array<{ kind?: string; id?: string; source_state_id?: string }>;
+    writes?: Array<{ state_id?: string; raw_state_id?: string }> } | undefined;
+  const native = new Set([...nativeBlocks.map(meta => meta.id), ...requestNativeStateIds([reply, ...references])]);
+  for (const observation of sampling?.prompt ?? [])
+    if (observation.kind === 'native_state') for (const id of [observation.id, observation.source_state_id]) if (id) native.add(id);
+  for (const write of sampling?.writes ?? [])
+    for (const id of [write.state_id, write.raw_state_id]) if (id) native.add(id);
+  for (const id of native) {
+    if (!isNativeStateId(id)) throw new Error('neuralese-block-integrity: sampling receipt names an invalid native artifact');
+    if (!store) continue;
+    if (!store.putNativeState || !store.getNativeState)
+      throw new Error('neuralese-native-archive-unavailable: configure a store that preserves native-state artifacts');
+    await archiveNativeArtifactFrom(remote, store, id);
+  }
+  return { blocks, native };
+}
+
 /** A model-turn driver for a Neuralese server. It advertises `neuralese: true`. */
 export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
     ((request: ModelTurnRequest, signal?: AbortSignal, options?: ModelTurnOptions) => Promise<ModelTurn>) & { neuralese: true; blocks: HttpNeuraleseStore; decide: DecisionScorer } {
@@ -483,37 +517,10 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
         const answer = await inner(requestBody, signal);
         return isStream(answer) ? await assembleChatCompletion(answer, onDelta) : answer;
       }, nativeUploaded), uploaded);
-    if (store) for (const meta of ((reply.neuralese as Json | undefined)?.blocks ?? []) as NeuraleseBlockMeta[]) {
-      if (!(await store.has(meta.id))) {
-        const block = await remote.get(meta.id);
-        if (!block) throw new Error(`neuralese-unknown-block: the server reported ${meta.id} but does not have it`);
-        const { id: _, ...rest } = meta;
-        const local = await store.put({ ...rest, dtype: block.meta.dtype, length: block.meta.length,
-          width: block.meta.width, data: block.data });
-        if (local.id !== meta.id) throw new Error(`neuralese block ${meta.id} arrived as ${local.id}: content IDs disagree`);
-      }
-      uploaded.add(meta.id);
-    }
-    const nativeBlocks = ((reply.native_state as Json | undefined)?.blocks ?? []) as Array<{ id: string }>;
-    // Sampling receipts also own raw producer captures and decoded native
-    // observations. Archive them before releasing the serving lease; compact
-    // outputs alone cannot reproduce the actor's actual policy inputs.
-    const sampling = reply.x_natlang_rl_capture as { prompt?: Array<{ kind?: string; id?: string;source_state_id?:string }>;
-      writes?: Array<{ state_id?: string; raw_state_id?: string }> } | undefined;
-    const archiveIds = new Set(nativeBlocks.map(meta => meta.id));
-    for (const observation of sampling?.prompt ?? [])
-      if (observation.kind === 'native_state') for(const id of [observation.id,observation.source_state_id])if(id)archiveIds.add(id);
-    for (const write of sampling?.writes ?? [])
-      for (const id of [write.state_id, write.raw_state_id]) if (id) archiveIds.add(id);
-    for (const id of archiveIds) {
-      if (!isNativeStateId(id)) throw new Error('neuralese-block-integrity: sampling receipt names an invalid native artifact');
-      const meta = { id };
-      if (!meta?.id || !store) continue;
-      if (!store.putNativeState || !store.getNativeState)
-        throw new Error('neuralese-native-archive-unavailable: configure a store that preserves native-state artifacts');
-      await archiveNativeArtifactFrom(remote,store,meta.id);
-      nativeUploaded.add(meta.id);
-    }
+    const archived = await archiveNeuraleseReplyArtifacts(reply, remote, store);
+    for (const id of archived.blocks) uploaded.add(id);
+    const archiveIds = archived.native;
+    for (const id of archiveIds) nativeUploaded.add(id);
     if(recorder){
       const message=(reply.choices as Json[]|undefined)?.[0]?.message as Json|undefined;
       const capture=reply.x_natlang_rl_capture as Record<string,unknown>|undefined;
@@ -527,7 +534,8 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
       if(native)reply.x_natlang_native_recorded_turn=native.id;
       if(message)recorder.record({messages:structuredClone((nativeRecording?preparedMessages:body.messages) as unknown[]),
         tools:body.tools?structuredClone(body.tools as unknown[]):undefined,reply:structuredClone(message),
-        blocks:structuredClone([...(((reply.neuralese as Json|undefined)?.blocks??[]) as Json[]),...nativeBlocks]),
+        blocks:structuredClone([...(((reply.neuralese as Json|undefined)?.blocks??[]) as Json[]),
+          ...(((reply.native_state as Json|undefined)?.blocks??[]) as Json[])]),
         ...(adapters.length?{adapters:[...adapters]}:{}),
         ...(consumptionModes?{native_state_modes:{...consumptionModes}}:{}),...(native?{native}:{})});
     }
