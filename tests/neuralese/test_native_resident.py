@@ -618,6 +618,196 @@ def whole_delta_geometry(tmp_path,delta,manager):
     return path
 
 
+def d31_reference_qa_part(tmp_path, *, model='lfm25', mutation=None):
+    import hashlib
+    roles=[64402,64403,64404,64405]
+    fingerprint='qa-tokenizer'
+    raw_path=tmp_path/'rendered-whole.jsonl'
+    graph_path=tmp_path/'graphs.jsonl'
+    raw_rows=[];graph_rows=[]
+    for index in range(2):
+        raw_id=f'whole-trajectory:teacher-program:p{index}:decision:0001:source-sha256:{index:064x}'
+        text=f'question {index} answer {index}'
+        groups=[f'qa-question:{index}',f'qa-task:{index}']
+        records=[{'id':f'teacher-program:p{index}:decision:0001','sha256':f'{index+1:064x}'}]
+        record_ids=[row['id'] for row in records]
+        source_record_groups={record_ids[0]:groups}
+        raw={'corpus':'qa-source','id':raw_id,'split':'train','text':text,
+            'tokenizer_sha256':'source-tokenizer','source_groups':groups,
+            'source_record_ids':record_ids,'source_records':records,
+            'source_record_groups':source_record_groups}
+        graph_row=graph(f'text:{raw_id}')
+        graph_row['tokenizer_fingerprint']=fingerprint
+        graph_row['nodes'][0]['target_weights']=[0.,0.05,1.]
+        graph_row['source_groups']=groups
+        graph_row['conversion']={'source_row_id':raw_id,
+            'source_text_sha256':hashlib.sha256(text.encode()).hexdigest(),
+            'source_record_ids':record_ids,'source_records':records,
+            'source_record_groups':source_record_groups,
+            'source_tokenizer_fingerprint':'source-tokenizer',
+            'supervision_policy':{'failed_assistant_tokens_masked':0,
+                'runtime_opening_assistant_turns':1,'runtime_opening_assistant_tokens':1,
+                'assistant_target_tokens':1}}
+        raw_rows.append(raw);graph_rows.append(graph_row)
+    raw_path.write_text(''.join(json.dumps(row,separators=(',',':'))+'\n' for row in raw_rows))
+    graph_path.write_text(''.join(json.dumps(row,separators=(',',':'))+'\n' for row in graph_rows))
+    def ref(path): return resident.binding(path)|{'bytes':path.stat().st_size}
+    qa_root=tmp_path/'d31-source-root';qa_item=qa_root/'data'/'qa_sft.json'
+    qa_item.parent.mkdir(parents=True);qa_item.write_text('{"sha":"source"}\n')
+    source_manifest=tmp_path/'d31-source-manifest.json'
+    qa_member={'path':'data/qa_sft.json','bytes':qa_item.stat().st_size,'sha256':resident.sha(qa_item)}
+    if mutation=='qa-input-manifest': qa_member['sha256']='0'*64
+    write_json(source_manifest,{'schema':'natlang.corpus-snapshot/1','id':'external-expansion-d31-source-20261014-v1',
+        'path':'d31-source-root','files':[qa_member]})
+    render_manifest=tmp_path/'render-manifest.json'
+    write_json(render_manifest,{'schema':'natlang.corpus-snapshot/1','id':'qa-render','files':[
+        {**ref(raw_path),'path':f'whole-trajectory/{model}/text-data.jsonl.zst'}]})
+    render_policy=tmp_path/'render-policy.json'
+    write_json(render_policy,{'schema':'natlang.render-parts-policy-binding-file/1','binding':{'controls':[]}})
+    policy=json.loads(render_policy.read_text());policy['sha256']=resident.digest(policy['binding']);write_json(render_policy,policy)
+    qa_admission={'schema':'natlang.external-static-admission/1','approved':True,'training_exposure':0,
+        'source_manifest':ref(source_manifest),'qa_inputs':[ref(qa_item)],
+        'closure':{'protected_hits':0,'closure_violations':0,'invalid':0}}
+    audit_path=tmp_path/'geometry-audit.json';write_json(audit_path,{'schema':'natlang.d31-qa-native-whole-graph-geometry-audit/1',
+        'training_admission':False,'training_exposure':0,'models':{model:{'rows':2,'sha256':resident.sha(graph_path)}}})
+    supervision={'rows':2,'failed_assistant_tokens_masked':0,
+        'runtime_opening_assistant_turns':2,'runtime_opening_assistant_tokens':2,
+        'assistant_target_tokens':2}
+    conversion_path=tmp_path/'conversion-receipt.json';write_json(conversion_path,{
+        'schema':'natlang.native-graph-text-build/1','model_id':'qa-model',
+        'source':ref(raw_path)|{'rows':2},'expanded_tokenizer_fingerprint':fingerprint,
+        'role_token_ids':roles,'outputs':[ref(graph_path)|{'path':f'{model}/train/native-graphs.jsonl.zst','rows':2}],
+        'whole_trajectory_supervision':{'train':supervision}})
+    review={'schema':'natlang.d31-reference-qa-whole-trajectory-native-graphs/1',
+        'source_class':'static-reference-answer-supervision','source_corpus_id':'qa-source',
+        'render_corpus_id':'qa-render','training_admission':True,'training_exposure':0,
+        'whole_trajectory_only':True,'approved_source_custody':True,
+        'quality_boundary':'Static reference QA plumbing only; not independently verified research execution, tool success, on-policy generation, communication-foundation credit, RL credit, or model-quality claim.',
+        'omissions':{'conversion':0,'failed_assistant_targets':0,'protected_hits':0},
+        'qa_source_admission':qa_admission,'source_manifest':ref(render_manifest),
+        'render_manifest':ref(render_manifest),'render_policy_binding':ref(render_policy),
+        'geometry_audit':ref(audit_path),
+        'program_header_crosscheck':{'source_record_ids_equal':True},
+        'models':{model:{'tokenizer_fingerprint':fingerprint,'role_token_ids':roles,
+            'model_id':'qa-model','source':ref(raw_path)|{'rows':2},
+            'graph_output':ref(graph_path)|{'rows':2},'receipt':ref(conversion_path),
+            'whole_trajectory_supervision':supervision}}}
+    if mutation=='held': review['qa_source_admission']['closure']['protected_hits']=1
+    review_path=tmp_path/'admission-review.json';write_json(review_path,review)
+    corpus_path=tmp_path/'corpus-manifest.json'
+    entries={
+        'keep-whole-graphs-v1/admission-review.json':review_path,
+        'keep-whole-graphs-v1/geometry-audit.json':audit_path,
+        f'keep-whole-graphs-v1/{model}/receipt.json':conversion_path,
+        f'keep-whole-graphs-v1/{model}/train/native-graphs.jsonl.zst':graph_path}
+    write_json(corpus_path,{'schema':'natlang.corpus-snapshot/1',
+        'id':'external-expansion-deepdive-reference-qa-native-graphs-20261018-v1',
+        'files':[{**ref(path),'path':name}for name,path in entries.items()]})
+    source=NativeGraphSource(graph_path,fingerprint,required_split='train',role_ids=roles)
+    part={'schema':resident._D31_REFERENCE_QA_PART,'model':model,'source':resident.binding(graph_path),
+        'corpus_manifest':resident.binding(corpus_path),'review':resident.binding(review_path),
+        'geometry_audit':resident.binding(audit_path),'conversion_receipt':resident.binding(conversion_path),
+        'render_manifest':resident.binding(render_manifest),'render_policy_binding':resident.binding(render_policy),
+        'render_source':resident.binding(raw_path),'qa_source_manifest':resident.binding(source_manifest)}
+    if mutation=='held':
+        doc=json.loads(corpus_path.read_text())
+        for member in doc['files']:
+            if member['path'].endswith('admission-review.json'):
+                member.update(resident.binding(review_path),bytes=review_path.stat().st_size)
+        write_json(corpus_path,doc);part['corpus_manifest']=resident.binding(corpus_path)
+    return source,part
+
+
+def test_d31_reference_qa_geometry_part_binds_rendered_rows_and_actual_consumer_geometry(tmp_path,monkeypatch):
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE',str(tmp_path/'cache'))
+    source,part=d31_reference_qa_part(tmp_path)
+    output=tmp_path/'qa-whole-delta.json'
+    proof=resident.prepare_whole_delta_geometry(source,[part],output,package=Path(resident.__file__).parents[1])
+    report=json.loads(output.read_text())
+    assert report['new_train_rows']==2
+    assert report['maxima']['forward_tokens']['forward_tokens']==3
+    assert report['maxima']['kv_slots']['kv_slots']==3
+    assert resident.geometry_from_evidence(source,0,proof,package=Path(resident.__file__).parents[1])=={
+        'forward_tokens':3,'kv_slots':3}
+    assert report['provenance'][-1]==part['qa_source_manifest']
+
+
+@pytest.mark.parametrize('mutation',['held','render-source','graph-lineage','qa-input-manifest','target-count'])
+def test_d31_reference_qa_geometry_rejects_changed_hold_or_row_lineage(tmp_path,monkeypatch,mutation):
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE',str(tmp_path/'cache'))
+    source,part=d31_reference_qa_part(tmp_path,mutation=mutation if mutation in ('held','qa-input-manifest') else None)
+    if mutation=='render-source':
+        raw=Path(part['render_source']['path']);rows=raw.read_text().splitlines();row=json.loads(rows[0]);row['split']='test'
+        rows[0]=json.dumps(row,separators=(',',':'));raw.write_text('\n'.join(rows)+'\n')
+        part['render_source']=resident.binding(raw)
+        part['render_source']['bytes']=raw.stat().st_size
+    elif mutation=='graph-lineage':
+        graph_file=Path(part['source']['path']);rows=graph_file.read_text().splitlines();row=json.loads(rows[0])
+        row['conversion']['source_row_id']='different-source-row'
+        rows[0]=json.dumps(row,separators=(',',':'));graph_file.write_text('\n'.join(rows)+'\n')
+        # Rebind every receipt so this reaches semantic source-row validation.
+        conversion=Path(part['conversion_receipt']['path']);conversion_doc=json.loads(conversion.read_text())
+        for output in conversion_doc['outputs']:
+            if output['path'].endswith('/train/native-graphs.jsonl.zst'):
+                output.update(sha256=resident.sha(graph_file),bytes=graph_file.stat().st_size)
+        write_json(conversion,conversion_doc)
+        review=Path(part['review']['path']);review_doc=json.loads(review.read_text())
+        model_review=review_doc['models'][part['model']]
+        model_review['graph_output']=resident.binding(graph_file)|{'bytes':graph_file.stat().st_size,'rows':2}
+        model_review['receipt']=resident.binding(conversion)|{'bytes':conversion.stat().st_size}
+        write_json(review,review_doc)
+        audit=Path(part['geometry_audit']['path']);audit_doc=json.loads(audit.read_text())
+        audit_doc['models'][part['model']]['sha256']=resident.sha(graph_file)
+        write_json(audit,audit_doc)
+        review_doc['geometry_audit']=resident.binding(audit)|{'bytes':audit.stat().st_size}
+        write_json(review,review_doc)
+        part['source']=resident.binding(graph_file)|{'bytes':graph_file.stat().st_size}
+        part['conversion_receipt']=resident.binding(conversion)|{'bytes':conversion.stat().st_size}
+        part['review']=resident.binding(review)|{'bytes':review.stat().st_size}
+        part['geometry_audit']=resident.binding(audit)|{'bytes':audit.stat().st_size}
+        corpus=Path(part['corpus_manifest']['path']);doc=json.loads(corpus.read_text())
+        changed={
+            'admission-review.json':review,'geometry-audit.json':audit,
+            f"{part['model']}/receipt.json":conversion,
+            f"{part['model']}/train/native-graphs.jsonl.zst":graph_file}
+        for member in doc['files']:
+            relative=member['path'].removeprefix('keep-whole-graphs-v1/')
+            if relative in changed:
+                path=changed[relative]
+                member.update(sha256=resident.sha(path),bytes=path.stat().st_size)
+        write_json(corpus,doc);part['corpus_manifest']=resident.binding(corpus)
+    elif mutation=='target-count':
+        conversion=Path(part['conversion_receipt']['path']);conversion_doc=json.loads(conversion.read_text())
+        conversion_doc['whole_trajectory_supervision']['train']['assistant_target_tokens']+=1
+        write_json(conversion,conversion_doc)
+        review=Path(part['review']['path']);review_doc=json.loads(review.read_text())
+        model_review=review_doc['models'][part['model']]
+        model_review['whole_trajectory_supervision']['assistant_target_tokens']+=1
+        model_review['receipt']=resident.binding(conversion)|{'bytes':conversion.stat().st_size}
+        write_json(review,review_doc)
+        part['conversion_receipt']=resident.binding(conversion)|{'bytes':conversion.stat().st_size}
+        part['review']=resident.binding(review)|{'bytes':review.stat().st_size}
+        corpus=Path(part['corpus_manifest']['path']);doc=json.loads(corpus.read_text())
+        for member in doc['files']:
+            if member['path'].endswith('/receipt.json'):
+                member.update(sha256=resident.sha(conversion),bytes=conversion.stat().st_size)
+            elif member['path'].endswith('admission-review.json'):
+                member.update(sha256=resident.sha(review),bytes=review.stat().st_size)
+        write_json(corpus,doc);part['corpus_manifest']=resident.binding(corpus)
+    output=tmp_path/'rejected.json'
+    expected_error = {
+        'graph-lineage': 'D31 QA row identity, source hash, split, or group closure differs',
+        'target-count': 'D31 QA complete source/target accounting differs',
+    }.get(mutation)
+    if expected_error is None:
+        error = pytest.raises(ValueError)
+    else:
+        error = pytest.raises(ValueError, match=expected_error)
+    with error:
+        resident.prepare_whole_delta_geometry(source,[part],output,package=Path(resident.__file__).parents[1])
+    assert not output.exists()
+
+
 def test_delta_reuses_authenticated_complete_geometry_and_retains_full_live_validation(tmp_path,monkeypatch):
     paths,directory,manager,recipe,delta,_=delta_fixture(tmp_path,monkeypatch)
     evidence=whole_delta_geometry(tmp_path,delta,manager)

@@ -307,6 +307,241 @@ def geometry_from_evidence(source, first, evidence, *, package, source_preparati
 
 
 _SOURCE03_BRIDGE_PART = 'natlang.d32-source03-aux-bridge-geometry-part/1'
+_D31_REFERENCE_QA_PART = 'natlang.d31-static-reference-qa-geometry-part/1'
+
+
+def _d31_reference_qa_geometry_part(part, *, preparation, package):
+    """Verify the registered D31 whole-trajectory QA contract and derive geometry."""
+    import hashlib
+    from ..common.jsonio import open_jsonl_text
+
+    if part.get('schema') != _D31_REFERENCE_QA_PART:
+        raise ValueError('unsupported D31 static-reference QA geometry part')
+    model = part.get('model')
+    if model not in ('lfm25', 'mellum21'):
+        raise ValueError('D31 static-reference QA model is unsupported')
+    required = ('source', 'corpus_manifest', 'review', 'geometry_audit', 'conversion_receipt',
+                'render_manifest', 'render_policy_binding', 'render_source', 'qa_source_manifest')
+    if any(not isinstance(part.get(name), dict) for name in required):
+        raise ValueError('D31 static-reference QA part lacks a bound provenance input')
+    paths = {name: bound(part[name]) for name in required}
+    corpus = json.loads(paths['corpus_manifest'].read_text())
+    review = json.loads(paths['review'].read_text())
+    audit = json.loads(paths['geometry_audit'].read_text())
+    conversion = json.loads(paths['conversion_receipt'].read_text())
+    render_manifest = json.loads(paths['render_manifest'].read_text())
+    render_policy = json.loads(paths['render_policy_binding'].read_text())
+    qa_manifest = json.loads(paths['qa_source_manifest'].read_text())
+    if (corpus.get('schema') != 'natlang.corpus-snapshot/1'
+            or corpus.get('id') != 'external-expansion-deepdive-reference-qa-native-graphs-20261018-v1'
+            or review.get('schema') != 'natlang.d31-reference-qa-whole-trajectory-native-graphs/1'
+            or review.get('source_class') != 'static-reference-answer-supervision'
+            or review.get('training_admission') is not True or review.get('training_exposure') != 0
+            or review.get('whole_trajectory_only') is not True
+            or review.get('quality_boundary') != ('Static reference QA plumbing only; not independently verified research execution, '
+                'tool success, on-policy generation, communication-foundation credit, RL credit, or model-quality claim.')
+            or review.get('approved_source_custody') is not True
+            or review.get('omissions') != {'conversion': 0, 'failed_assistant_targets': 0, 'protected_hits': 0}
+            or qa_manifest.get('schema') != 'natlang.corpus-snapshot/1'
+            or qa_manifest.get('id') != 'external-expansion-d31-source-20261014-v1'
+            or render_manifest.get('schema') != 'natlang.corpus-snapshot/1'
+            or render_manifest.get('id') != review.get('render_corpus_id')
+            or render_policy.get('schema') != 'natlang.render-parts-policy-binding-file/1'):
+        raise ValueError('D31 source class, quality boundary, or provenance schemas differ')
+    qa_admission = review.get('qa_source_admission') or {}
+    closure = qa_admission.get('closure') or {}
+    if (qa_admission.get('schema') != 'natlang.external-static-admission/1'
+            or qa_admission.get('approved') is not True
+            or qa_admission.get('training_exposure') != 0
+            or closure.get('protected_hits') != 0 or closure.get('closure_violations') != 0
+            or closure.get('invalid') != 0
+            or review.get('omissions', {}).get('protected_hits') != 0
+            or review.get('program_header_crosscheck', {}).get('source_record_ids_equal') is not True):
+        raise ValueError('D31 QA source does not carry a clean held/source closure')
+    model_review = (review.get('models') or {}).get(model)
+    if not isinstance(model_review, dict):
+        raise ValueError('D31 review lacks the selected model source')
+    tokenizer = model_review.get('tokenizer_fingerprint')
+    role_ids = model_review.get('role_token_ids')
+    if (tokenizer != preparation.tokenizer_fingerprint
+            or role_ids != list(preparation.role_ids)
+            or len(role_ids or []) != 4 or len(set(role_ids or [])) != 4):
+        raise ValueError('D31 QA tokenizer or role identity differs from the actual consumer')
+
+    def same_file(reference, path):
+        return (reference.get('sha256') == sha(path)
+                and (reference.get('bytes') is None or reference.get('bytes') == path.stat().st_size))
+
+    files = corpus.get('files') or []
+    if not isinstance(files, list) or len({row.get('path') for row in files}) != len(files):
+        raise ValueError('D31 registered corpus manifest repeats a member')
+    members = {row['path']: row for row in files}
+    base = 'keep-whole-graphs-v1/'
+    expected_members = {
+        base + 'admission-review.json': paths['review'],
+        base + 'geometry-audit.json': paths['geometry_audit'],
+        base + model + '/receipt.json': paths['conversion_receipt'],
+        base + model + '/train/native-graphs.jsonl.zst': paths['source'],
+    }
+    for relative, path in expected_members.items():
+        record = members.get(relative)
+        if (record is None or type(record.get('bytes')) is not int
+                or record['bytes'] != path.stat().st_size or record.get('sha256') != sha(path)):
+            raise ValueError('D31 QA staged graph corpus member differs: ' + relative)
+    for relative, record in members.items():
+        member_path = Path(relative)
+        if member_path.is_absolute() or '..' in member_path.parts or type(record.get('bytes')) is not int:
+            raise ValueError('D31 QA corpus has an unsafe member declaration')
+
+    render_source = paths['render_source']
+    render_source_record = next((row for row in render_manifest.get('files', [])
+        if row.get('path') == f'whole-trajectory/{model}/text-data.jsonl.zst'), None)
+    source_review = model_review.get('source') or {}
+    output_review = model_review.get('graph_output') or {}
+    output_record = next((row for row in conversion.get('outputs', [])
+        if row.get('path', '').endswith(f'/{model}/train/native-graphs.jsonl.zst')
+        or row.get('path') == f'{model}/train/native-graphs.jsonl.zst'), None)
+    render_checks = {
+        'render_source_manifest': render_source_record is not None and same_file(render_source_record, render_source),
+        'render_source_review': same_file(source_review, render_source),
+        'conversion_source': conversion.get('source', {}).get('sha256') == sha(render_source),
+        'conversion_source_rows': conversion.get('source', {}).get('rows') == source_review.get('rows'),
+        'output_review_sha': output_review.get('sha256') == sha(paths['source']),
+        'output_review_bytes': output_review.get('bytes') == paths['source'].stat().st_size,
+        'conversion_output': output_record is not None and output_record.get('sha256') == sha(paths['source']),
+        'conversion_output_bytes': output_record is not None and output_record.get('bytes') == paths['source'].stat().st_size,
+        'conversion_output_rows': output_record is not None and output_record.get('rows') == output_review.get('rows'),
+        'model_id': conversion.get('model_id') == model_review.get('model_id'),
+        'tokenizer': conversion.get('expanded_tokenizer_fingerprint') == tokenizer,
+        'roles': conversion.get('role_token_ids') == role_ids,
+        'supervision': conversion.get('whole_trajectory_supervision', {}).get('train') == model_review.get('whole_trajectory_supervision'),
+    }
+    if not all(render_checks.values()):
+        failed = ','.join(key for key, valid in render_checks.items() if not valid)
+        raise ValueError('D31 QA render-to-graph binding differs: ' + failed)
+    if (review.get('render_manifest', {}).get('sha256') != sha(paths['render_manifest'])
+            or review.get('render_manifest', {}).get('bytes') != paths['render_manifest'].stat().st_size
+            or review.get('render_policy_binding', {}).get('sha256') != sha(paths['render_policy_binding'])
+            or review.get('render_policy_binding', {}).get('bytes') != paths['render_policy_binding'].stat().st_size
+            or review.get('geometry_audit', {}).get('sha256') != sha(paths['geometry_audit'])
+            or review.get('geometry_audit', {}).get('bytes') != paths['geometry_audit'].stat().st_size
+            or model_review.get('receipt', {}).get('sha256') != sha(paths['conversion_receipt'])
+            or model_review.get('receipt', {}).get('bytes') != paths['conversion_receipt'].stat().st_size
+            or digest(render_policy.get('binding')) != render_policy.get('sha256')):
+        raise ValueError('D31 QA renderer policy receipt binding differs')
+    qa_source_binding = qa_admission.get('source_manifest') or {}
+    if (review.get('source_manifest') != review.get('render_manifest')
+            or qa_source_binding.get('sha256') != sha(paths['qa_source_manifest'])
+            or qa_source_binding.get('bytes') != paths['qa_source_manifest'].stat().st_size
+            or not isinstance(qa_manifest.get('files'), list)
+            or not qa_manifest.get('path')
+            or not isinstance(qa_admission.get('qa_inputs'), list)
+            or not qa_admission.get('qa_inputs')):
+        raise ValueError('D31 QA raw-source manifest chain differs')
+    qa_root = Path(qa_manifest['path'])
+    if qa_root.is_absolute() or '..' in qa_root.parts:
+        raise ValueError('D31 QA original source manifest root is unsafe')
+    qa_members = {}
+    for row in qa_manifest['files']:
+        relative = Path(row.get('path', ''))
+        if (relative.is_absolute() or '..' in relative.parts or not str(relative)
+                or type(row.get('bytes')) is not int or row['bytes'] < 0
+                or not isinstance(row.get('sha256'), str) or len(row['sha256']) != 64
+                or any(character not in '0123456789abcdef' for character in row['sha256'])
+                or relative.as_posix() in qa_members):
+            raise ValueError('D31 QA original source manifest has an unsafe or duplicate member')
+        qa_members[relative.as_posix()] = row
+    seen_qa_inputs = set()
+    root_parts = qa_root.parts
+    for input_ref in qa_admission['qa_inputs']:
+        if (not isinstance(input_ref, dict) or not isinstance(input_ref.get('path'), str)
+                or not Path(input_ref['path']).is_absolute() or type(input_ref.get('bytes')) is not int
+                or input_ref['bytes'] < 0 or not isinstance(input_ref.get('sha256'), str)):
+            raise ValueError('D31 QA input custody reference is malformed')
+        input_parts = Path(input_ref['path']).parts
+        matches = [Path(*input_parts[index + len(root_parts):]).as_posix()
+                   for index in range(len(input_parts) - len(root_parts) + 1)
+                   if input_parts[index:index + len(root_parts)] == root_parts]
+        if len(matches) != 1 or matches[0] in seen_qa_inputs:
+            raise ValueError('D31 QA input does not map uniquely to the original source manifest')
+        seen_qa_inputs.add(matches[0])
+        declared = qa_members.get(matches[0])
+        if (declared is None or declared['bytes'] != input_ref['bytes']
+                or declared['sha256'] != input_ref['sha256']):
+            raise ValueError('D31 QA input differs from its original source manifest member')
+
+    graph_source = preparation.load(part['source'], split='train')
+    if (graph_source.kind != 'native-graphs' or len(graph_source) != source_review.get('rows')
+            or len(graph_source) != output_review.get('rows')
+            or graph_source.file_sha256 != output_review.get('sha256')):
+        raise ValueError('D31 QA graph source row count or exact file differs')
+    # Streaming metadata comparison ties graph IDs and source text/content to the
+    # actual whole-trajectory render rows without trusting a count-only receipt.
+    from ..data.native_sources import _jsonl
+    geometry = {"forward_tokens": {}, "kv_slots": {}}
+    seen_raw_ids, seen_source_rows = set(), set()
+    row_count = 0
+    observed_supervision = {'rows': 0, 'failed_assistant_tokens_masked': 0,
+        'runtime_opening_assistant_turns': 0, 'runtime_opening_assistant_tokens': 0,
+        'assistant_target_tokens': 0}
+    with open_jsonl_text(render_source) as raw_stream:
+        for index, (raw, graph, example) in enumerate(zip(
+                raw_stream, _jsonl(paths['source']), graph_source.iter_from(), strict=True)):
+            if not isinstance(raw, str):
+                raise ValueError('D31 QA rendered source row is not JSON text')
+            try:
+                raw = json.loads(raw)
+            except json.JSONDecodeError:
+                raise ValueError('D31 QA rendered source row is malformed JSON') from None
+            conversion_row = graph.get('conversion') or {}
+            supervision = conversion_row.get('supervision_policy') or {}
+            if (raw.get('corpus') != review.get('source_corpus_id') or raw.get('split') != 'train'
+                    or not isinstance(raw.get('text'), str) or raw.get('id') in seen_raw_ids
+                    or graph.get('id') != 'text:' + str(raw.get('id'))
+                    or conversion_row.get('source_row_id') != raw.get('id')
+                    or conversion_row.get('source_text_sha256') != hashlib.sha256(raw['text'].encode('utf-8')).hexdigest()
+                    or conversion_row.get('source_record_ids') != raw.get('source_record_ids')
+                    or conversion_row.get('source_records') != raw.get('source_records')
+                    or conversion_row.get('source_record_groups') != raw.get('source_record_groups')
+                    or conversion_row.get('source_tokenizer_fingerprint') != raw.get('tokenizer_sha256')
+                    or any(type(supervision.get(key)) is not int or supervision[key] < 0 for key in (
+                        'failed_assistant_tokens_masked', 'runtime_opening_assistant_turns',
+                        'runtime_opening_assistant_tokens', 'assistant_target_tokens'))
+                    or graph.get('source_groups') != raw.get('source_groups')
+                    or not isinstance(conversion_row.get('source_row_id'), str)
+                    or conversion_row['source_row_id'] in seen_source_rows):
+                raise ValueError('D31 QA row identity, source hash, split, or group closure differs')
+            seen_raw_ids.add(raw['id']); seen_source_rows.add(conversion_row['source_row_id'])
+            if (example.id != graph.get('id') or example.split != 'train' or example.external_states
+                    or len(example.plan.invocations) != 1 or example.plan.external_names
+                    or any(node.imports or node.producing or node.logical_producing for node in example.plan.invocations)):
+                raise ValueError('D31 QA row is not one ordinary, self-contained train graph')
+            for key in observed_supervision:
+                if key == 'rows':
+                    continue
+                observed_supervision[key] += supervision[key]
+            observed_supervision['rows'] += 1
+            row_geometry = {'forward_tokens': example.plan.token_count,
+                            'kv_slots': len(example.plan.slot_sources)}
+            for key, value in row_geometry.items():
+                if type(value) is not int or value < 1:
+                    raise ValueError('D31 QA actual graph geometry is invalid')
+                geometry[key][index] = {'index': index, 'id': example.id,
+                    'binding': graph_source.entries[index]['binding'], **row_geometry}
+            row_count += 1
+    expected_supervision = model_review.get('whole_trajectory_supervision')
+    if (row_count != source_review.get('rows') or len(seen_raw_ids) != row_count
+            or len(seen_source_rows) != row_count or observed_supervision != expected_supervision):
+        raise ValueError('D31 QA complete source/target accounting differs')
+    audit_model = (audit.get('models') or {}).get(model)
+    if (audit.get('training_admission') is not False or audit.get('training_exposure') != 0
+            or audit_model is None or audit_model.get('rows') != row_count
+            or audit_model.get('sha256') != sha(paths['source'])):
+        raise ValueError('D31 QA geometry audit is not the exact unexposed graph audit')
+    maxima = {}
+    for key, descriptors in geometry.items():
+        maxima[key] = max(descriptors.values(), key=lambda item: item[key])
+    return graph_source, maxima, [part[name] for name in required], row_count
 
 
 def _source03_bridge_geometry_part(part, *, preparation, package):
@@ -766,6 +1001,23 @@ def prepare_whole_delta_geometry(source, parts, output, *, package):
     for part in ordinary_parts:
         if part.get('schema') == _SOURCE03_BRIDGE_PART:
             raise ValueError('source03 bridge may appear only once at the delta prefix')
+        if part.get('schema') == _D31_REFERENCE_QA_PART:
+            qa_source, qa_maxima, qa_provenance, qa_count = _d31_reference_qa_geometry_part(
+                part, preparation=preparation, package=package)
+            if offset + qa_count > len(source):
+                raise ValueError('D31 QA rows exceed the complete delta source')
+            for index, entry in enumerate(qa_source.entries):
+                actual = source.entries[offset + index]
+                if ({key:value for key,value in actual.items() if key!='training_priority'}
+                        != {key:value for key,value in entry.items() if key!='training_priority'}):
+                    raise ValueError('D31 QA source is not the exact ordered delta-source segment')
+            for key, descriptor in qa_maxima.items():
+                descriptor = {**descriptor, 'index': descriptor['index'] + offset}
+                if key not in maxima or descriptor[key] > maxima[key][key]:
+                    maxima[key] = descriptor
+            offset += qa_count
+            provenance.extend(qa_provenance)
+            continue
         path=bound(part['receipt']);receipt=json.loads(path.read_text());model=part['model']
         if receipt.get('source_eligibility_unchanged')is not True or receipt.get('exact_original_row_bytes')is not True:
             raise ValueError('delta geometry needs exact original admitted row coverage')
