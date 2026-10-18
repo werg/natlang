@@ -579,10 +579,16 @@ failed before model decode or SGD: the preload guard counted reclaimable file
 cache as unavailable, and the diagnostic fallback inspected a newer parser
 attribute. The independently reviewed v2 fixes both, reuses that exact saved
 parent, and performs no new save, checkpoint copy or old-learner signal.
-Candidate1436959 began its standard owned preload. Actual315 named gradients,
-fresh actor parity, capacity and subsequent SGD remain required; a launched
-preload is not qualification. The cursor exporter is paused during this critical
-path and must be rebound to the actual new owner/specification after its gates.
+Candidate1436959 completed its one standard preload at19:10:07 and CPU metadata
+preparation at19:10:12, then failed before model construction, gates or SGD:
+the helper importer assumed a `bytes` field in a valid path/SHA-only reference.
+The same-parent R18 fallback1440157 is restoring while the entry is repaired.
+All administrative imports, parser and geometry checks are being moved before
+the expensive parent decode, with an explicit two-phase metadata contract and
+no invented decode receipt. Actual315 named gradients, fresh actor parity,
+capacity and subsequent SGD remain required. The cursor exporter is paused
+during this critical path and must be rebound to the actual new owner and
+specification; any next attempt must preserve newly earned fallback updates.
 
 The full `a20f51abb8` check completed with six neural failures and all other ten
 sections passing. Failures cover BF16 sparse-row inventory, functional model
@@ -606,3 +612,70 @@ No eligible/released certificate was reinterpreted; neither model gains readines
 Exact audit and renewal receipts are in
 `/home/werg/data/dgxops/native-role-relay-authority-root-audit-20261018.json` and
 `/home/werg/data/dgxops/native-role-pending-authority-renewal-root-20261018.json`.
+
+### Operational continuation, 2026-10-18 19:46 UTC
+
+Both students are again doing actual SGD. Mellum's healthy R18 diagnostic
+fallback owns the saved continuation after the R19 helper-reference failure;
+no R19 or RAW qualification is claimed. Administrative imports and parser checks
+now complete before any expensive parent decode. The cursor exporter is bound
+to the actual fallback owner and output, preserving the existing writer profile.
+Any next candidate must use the fallback's newly earned checkpoint.
+
+LFM suffered a global OOM at19:09:45. Its last valid full checkpoint was actually
+written at18:07:19, correcting an earlier timestamp conversion to17:27.
+The hourly save appears to have become due immediately before failure; a missed
+checkpoint timer is not established. Save assembly/serialization memory is under
+investigation. The recovered learner restored global14,952 with exact optimizer,
+RNG and saved exposure, and resumed actual SGD at14,955. The180 observed unsaved
+updates are lost and receive no training credit. The existing complete137,052
+forward/157,075 KV capacity proof was applied explicitly without changing the
+numerical runtime or claiming new long-row exposure.
+
+All50 exact standard-parser indexes for the25 missing fit components are built
+and staged. LFM's standard private preparation accepted38,526 rows at19:45:02,
+proposing1,302,065 total rows while leaving current/pending/held state unchanged.
+Learner adoption remains a separate event. Mellum's coherent39,838-row successor
+combines39,155 fit rows with683 verified teacher rows. Whole-prefix row identity
+and binding checks remain active; cross-ID content disjointness is not inferred
+from absent manifest identities. The all48-part long-row audit retains11,021 LFM
+and9,807 Mellum rows, with maxima138,300 and161,972. Existing LFM capacity covers
+11,019 geometrically; its two larger whole rows remain explicit pending work.
+
+The completed protected LFM14,841 task score is0/16: ten repetitions, three
+budget exhaustions, one invalid output and two semantic failures, with no
+infrastructure failure. LFM14,952 evaluation is running. Mellum22,016's exact
+private actor transfer completed and entered the evaluation queue at19:31:57.
+None of these held trajectories enter teacher generation or fit data.
+
+The public cotangent fixes are integrated locally and the independent full-file
+focused suite is running. It has exposed a remaining failure; publication and
+the next full check wait for diagnosis rather than reusing an earlier pass.
+
+### Operational continuation, 2026-10-18 20:15 UTC
+
+Both fit continuations are actually admitted and followed by SGD: LFM38,526
+at global14,982 (1,302,065 total rows) and Mellum39,838 (1,234,840 total rows,
+including683 teacher examples). No per-new-row visit is inferred from admission.
+Both cursor exporters now follow their actual recovered owners. Mellum remains
+on its useful diagnostic numerical profile until the R19 gates really pass.
+
+The public model-VJP defect is repaired through an original-parameter hook that
+verifies the exact shared FP32 reference cotangent before authorizing the VJP.
+Independent scope/derivative checks passed47 with two architecture skips; the
+separate optimizer/sparse/carrier/higher-order remainder passed105. Quick22 and
+TypeScript passed. The next full suite must assess this integrated code.
+
+A real LFM14,952 metadata-only save measurement reached15.50GiB high water,
+excluding models/source indexes, and produced a1,135,003,485-byte pickle buffer.
+The old sandbox has less than5GiB global headroom. Real resumed-training
+weak-reference tests exposed the retention cause: `locals()` created a cached
+frame dictionary that retained setup objects after fast-local deletion.
+The shared trainer now uses explicitly initialized checkpoint references and
+releases predecessor/restored-frame aliases after setup. Both rolling and
+objective-continuation lifetime regressions pass; the complete continuation/SFT
+focused suite passed66. The fix preserves owned snapshots, exact history,
+optimizer/RNG, numerical operations and checkpoint format. Its deployment uses
+an explicitly reviewed metadata-only entry composition; no live code injection
+or successful final save is assumed. Recovery must record any unsaved loss.
+See [the decomposition](shared-state/checkpoint-memory/DECOMPOSITION.md).
