@@ -607,6 +607,13 @@ def export_private_tranche(tranche: dict, *, exporter: Path, role: str,
     return accept_private_receipt(receipt_path, tranche)
 
 
+def _read_tranche_files(read_file, paths):
+    """Collect once in source order; only scoped SDK readers opt into overlap."""
+    paths = list(dict.fromkeys(paths))
+    read_many = getattr(read_file, 'read_many', None)
+    return read_many(paths) if callable(read_many) else {path: read_file(path) for path in paths}
+
+
 def export_finished_tranches(*, batch: int, queue_path: str, journal_path: str,
                               context_paths: dict[str, str], directory: Path,
                               read_file: Callable[[str], bytes], export_file: Callable[[dict, Path], dict],
@@ -678,21 +685,33 @@ def export_finished_tranches(*, batch: int, queue_path: str, journal_path: str,
             if len(selected) < chunk_size and not (flush_partial and selected):
                 break
             selected = selected[:chunk_size]
-            context = {'teacher-source.json': read_file(context_paths['teacher-source.json']),
-                       'queue.jsonl': queue_raw,
-                       'source-cases.jsonl': read_file(context_paths['source-cases.jsonl'])}
+            selected_context = {'teacher-source.json': context_paths['teacher-source.json'],
+                                'source-cases.jsonl': context_paths['source-cases.jsonl']}
             for name, path in context_paths.items():
                 if name in ('teacher-source.json', 'source-cases.jsonl', 'queue.jsonl'):
                     continue
-                context[name] = read_file(path)
-            outputs = {}
+                selected_context[name] = path
+            paths = list(selected_context.values())
+            held_paths = {}
             for row in selected:
-                outputs[row['key']] = (read_file(row['output']), read_file(row['output'] + '.manifest.json'))
-                held = {}
+                paths.extend((row['output'], row['output'] + '.manifest.json'))
+                held_paths[row['key']] = {}
                 for job in row['finish_event']['output_accounting']['job_states']:
                     if job.get('state') == 'generation_held':
                         path = f"{row['jobs'].rstrip('/')}/{job['index']:06d}.error.json"
-                        held[f"held-errors/{job['index']:06d}.error.json"] = read_file(path)
+                        held_paths[row['key']][f"held-errors/{job['index']:06d}.error.json"] = path
+                        paths.append(path)
+            collected = _read_tranche_files(read_file, paths)
+            context = {'teacher-source.json': collected[selected_context['teacher-source.json']],
+                       'queue.jsonl': queue_raw,
+                       'source-cases.jsonl': collected[selected_context['source-cases.jsonl']]}
+            for name, path in selected_context.items():
+                if name not in context:
+                    context[name] = collected[path]
+            outputs = {}
+            for row in selected:
+                outputs[row['key']] = (collected[row['output']], collected[row['output'] + '.manifest.json'])
+                held = {name: collected[path] for name, path in held_paths[row['key']].items()}
                 if held:
                     outputs[row['key']] = (*outputs[row['key']], held)
             tranche = seal_tranche(batch=batch, number=number, entries=selected,
@@ -889,6 +908,19 @@ def scoped_sdk_session(sandbox_id: str, *, timeout: int = 180):
     def read(path: str) -> bytes:
         result = sandbox.read_file(path).result(timeout=timeout)
         return result if isinstance(result, bytes) else bytes(result)
+
+    def read_many(paths):
+        from concurrent.futures import ThreadPoolExecutor
+        paths = list(dict.fromkeys(paths))
+        executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix='teacher-scoped-read')
+        try:
+            return dict(zip(paths, executor.map(read, paths)))
+        finally:
+            # Keep export custody until all in-flight SDK operations finish.
+            # An error must not leave queued reads running after lock release.
+            executor.shutdown(wait=True, cancel_futures=True)
+
+    read.read_many = read_many
     return sandbox, read
 
 

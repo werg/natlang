@@ -719,6 +719,158 @@ def test_owner_exporter_checkpoints_chunks_and_resumes_sealed_tranche(tmp_path):
         export_finished_tranches(**{**kwargs, 'batch': 20})
 
 
+def test_scoped_reader_overlaps_four_reads_preserves_order_and_drains(monkeypatch):
+    import threading
+    from types import SimpleNamespace
+    from scripts.coreweave import teacher_incremental_export as module
+    lock = threading.Lock()
+    first_wave = threading.Event()
+    state = {'active': 0, 'peak': 0, 'started': 0}
+
+    class Read:
+        def __init__(self, path): self.path = path
+        def result(self, *, timeout):
+            assert timeout == 180
+            with lock:
+                state['active'] += 1
+                state['started'] += 1
+                state['peak'] = max(state['peak'], state['active'])
+                if state['started'] >= 4:
+                    first_wave.set()
+            try:
+                assert first_wave.wait(5), 'SDK reads did not overlap'
+                return self.path.encode()
+            finally:
+                with lock: state['active'] -= 1
+
+    sandbox = SimpleNamespace(read_file=Read)
+    monkeypatch.setattr(module, '_cwctl_module', lambda: SimpleNamespace(
+        read_sandbox=lambda *_args, **_kwargs: sandbox))
+    _, reader = module.scoped_sdk_session('sandbox')
+    paths = ['c', 'a', 'd', 'b', 'e', 'f', 'a']
+    result = reader.read_many(paths)
+    assert list(result) == list(dict.fromkeys(paths))
+    assert result == {path: path.encode() for path in paths}
+    assert state == {'active': 0, 'peak': 4, 'started': 6}
+
+
+def test_failed_scoped_read_keeps_export_lock_until_active_reads_finish(monkeypatch, tmp_path):
+    import fcntl
+    import threading
+    from types import SimpleNamespace
+    from scripts.coreweave import teacher_incremental_export as module
+    entries, queue, journal, context, outputs, _ = _fixture()
+    paths = {name: '/batch/' + name for name in context if name != 'queue.jsonl'}
+    remote = {'/batch/queue.jsonl': queue, '/batch/journal.jsonl': journal,
+              **{path: context[name] for name, path in paths.items()}}
+    for row in entries:
+        remote[row['output']], remote[row['output'] + '.manifest.json'] = outputs[row['key']]
+    mutex = threading.Lock()
+    first_wave, failing, release, done = (threading.Event() for _ in range(4))
+    state = {'active': 0, 'started': 0}
+    failures = []
+    class Read:
+        def __init__(self, path): self.path = path
+        def result(self, **_kwargs):
+            if self.path in ('/batch/queue.jsonl', '/batch/journal.jsonl'):
+                return remote[self.path]
+            with mutex:
+                state['active'] += 1
+                state['started'] += 1
+                if state['started'] >= 4: first_wave.set()
+            try:
+                assert first_wave.wait(5)
+                if self.path == paths['teacher-source.json']:
+                    failing.set()
+                    raise OSError('one SDK read failed')
+                assert release.wait(5), 'test did not release the other active reads'
+                return remote[self.path]
+            finally:
+                with mutex: state['active'] -= 1
+    monkeypatch.setattr(module, '_cwctl_module', lambda: SimpleNamespace(
+        read_sandbox=lambda *_args, **_kwargs: SimpleNamespace(read_file=Read)))
+    _, reader = module.scoped_sdk_session('sandbox')
+    def run():
+        try:
+            export_finished_tranches(batch=19, queue_path='/batch/queue.jsonl',
+                journal_path='/batch/journal.jsonl', context_paths=paths, directory=tmp_path,
+                read_file=reader, export_file=lambda *_: pytest.fail('failed reads cannot export'), chunk_size=2)
+        except BaseException as error:
+            failures.append(error)
+        finally:
+            done.set()
+    worker = threading.Thread(target=run)
+    worker.start()
+    try:
+        assert failing.wait(5)
+        assert not done.wait(.05), 'export custody ended while other reads were blocked'
+        with (tmp_path/'.export.lock').open('a+b') as lock:
+            with pytest.raises(BlockingIOError):
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        assert not (tmp_path/'frontier.json').exists()
+    finally:
+        release.set()
+        worker.join(5)
+    assert done.is_set() and not worker.is_alive()
+    assert len(failures) == 1 and isinstance(failures[0], OSError)
+    assert state['active'] == 0
+    with (tmp_path/'.export.lock').open('a+b') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+
+@pytest.mark.parametrize('fail_read', [False, True])
+def test_scoped_parallel_tranche_preserves_members_and_failure_atomicity(monkeypatch, tmp_path, fail_read):
+    from types import SimpleNamespace
+    from scripts.coreweave import teacher_incremental_export as module
+    entries, queue, journal, context, outputs, _ = _fixture()
+    context_paths = {name: '/batch/' + name for name in context if name != 'queue.jsonl'}
+    remote = {'/batch/queue.jsonl': queue, '/batch/journal.jsonl': journal,
+              **{path: context[name] for name, path in context_paths.items()}}
+    for row in entries:
+        remote[row['output']], remote[row['output'] + '.manifest.json'] = outputs[row['key']]
+    calls = []
+    class Read:
+        def __init__(self, path): self.path = path
+        def result(self, *, timeout):
+            calls.append(self.path)
+            if fail_read and self.path == entries[0]['output']:
+                raise OSError('scoped read failed')
+            return remote[self.path]
+    monkeypatch.setattr(module, '_cwctl_module', lambda: SimpleNamespace(
+        read_sandbox=lambda *_args, **_kwargs: SimpleNamespace(read_file=Read)))
+    _, reader = module.scoped_sdk_session('sandbox')
+    exported = []
+    def export(tranche, _receipt):
+        exported.append(tranche)
+        return {**tranche, 'private_export': {'identity': {
+            'bytes': tranche['archive_receipt']['archive_bytes'],
+            'sha256': tranche['archive_receipt']['archive_sha256']}}}
+    kwargs = dict(batch=19, queue_path='/batch/queue.jsonl', journal_path='/batch/journal.jsonl',
+                  context_paths=context_paths, export_file=export, chunk_size=2)
+    target = tmp_path/'parallel'
+    if fail_read:
+        with pytest.raises(OSError, match='scoped read failed'):
+            export_finished_tranches(**kwargs, directory=target, read_file=reader)
+        assert not exported
+        assert not (target/'frontier.json').exists()
+        assert not (target/'tranche-0000/tranche-0000.json').exists()
+        return
+    def interrupt(tranche, _receipt):
+        exported.append(tranche)
+        raise RuntimeError('interrupted after seal')
+    with pytest.raises(RuntimeError, match='interrupted after seal'):
+        export_finished_tranches(**{**kwargs, 'export_file': interrupt}, directory=target, read_file=reader)
+    parallel = exported[-1]
+    export_finished_tranches(**kwargs, directory=tmp_path/'serial', read_file=remote.__getitem__)
+    serial = exported[-1]
+    assert parallel['keys'] == serial['keys']
+    assert parallel['archive_receipt']['manifest']['files'] == serial['archive_receipt']['manifest']['files']
+    calls.clear()
+    result = export_finished_tranches(**kwargs, directory=target, read_file=reader)
+    assert result['durable_completed_keys'] == 2
+    assert set(calls) <= {'/batch/queue.jsonl', '/batch/journal.jsonl'}
+
+
 def test_verified_private_receipt_survives_crash_before_frontier_advance(tmp_path):
     entries, queue, journal, context, outputs, _ = _fixture()
     context_paths = {'teacher-source.json': '/batch/teacher-source.json',
@@ -890,7 +1042,10 @@ def test_prepared_packet_manifest_must_bind_executed_not_original_bytes(tmp_path
         seal_tranche(batch=19,number=0,entries=completed_entries(queue,journal),context=context,outputs=outputs,directory=tmp_path)
 
 
-def test_multiple_held_jobs_preserve_every_selected_rows_distinct_sidecar(tmp_path):
+@pytest.mark.parametrize('mode', ['serial', 'parallel', 'missing-held'])
+def test_multiple_held_jobs_preserve_every_selected_rows_distinct_sidecar(tmp_path, monkeypatch, mode):
+    from types import SimpleNamespace
+    from scripts.coreweave import teacher_incremental_export as module
     entries, queue, journal, context, outputs, _ = _fixture()
     events = [json.loads(line) for line in journal.split(b'\n') if line]
     remote = {'/batch/queue.jsonl': queue,
@@ -913,7 +1068,9 @@ def test_multiple_held_jobs_preserve_every_selected_rows_distinct_sidecar(tmp_pa
                     job_states=[{'state': 'generation_held', 'index': index, 'program_id': entry['task_id']}])
     remote['/batch/journal.jsonl'] = b''.join(json.dumps(e).encode()+b'\n' for e in events)
     seen = []
+    sealed = []
     def export(tranche, receipt_path):
+        sealed.append(tranche)
         for row in tranche['outputs']:
             held = row['held_payloads']
             assert len(held) == 1
@@ -926,13 +1083,32 @@ def test_multiple_held_jobs_preserve_every_selected_rows_distinct_sidecar(tmp_pa
         identity = {'bytes': tranche['archive_receipt']['archive_bytes'],
                     'sha256': tranche['archive_receipt']['archive_sha256']}
         return {**tranche, 'private_export': {'identity': identity}}
-    result = export_finished_tranches(batch=19, queue_path='/batch/queue.jsonl',
+    kwargs = dict(batch=19, queue_path='/batch/queue.jsonl',
         journal_path='/batch/journal.jsonl', context_paths={
             'teacher-source.json': '/batch/teacher-source.json',
-            'source-cases.jsonl': '/batch/source-cases.jsonl'}, directory=tmp_path/'exports',
-        read_file=remote.__getitem__, export_file=export, chunk_size=2)
+            'source-cases.jsonl': '/batch/source-cases.jsonl'}, export_file=export, chunk_size=2)
+    reader = remote.__getitem__
+    if mode != 'serial':
+        class Read:
+            def __init__(self, path): self.path = path
+            def result(self, **_kwargs): return remote[self.path]
+        monkeypatch.setattr(module, '_cwctl_module', lambda: SimpleNamespace(
+            read_sandbox=lambda *_args, **_kwargs: SimpleNamespace(read_file=Read)))
+        _, reader = module.scoped_sdk_session('sandbox')
+    if mode == 'missing-held':
+        del remote[f"{entries[0]['jobs']}/000000.error.json"]
+        with pytest.raises(KeyError):
+            export_finished_tranches(**kwargs, directory=tmp_path/'exports', read_file=reader)
+        assert not seen and not sealed
+        assert not (tmp_path/'exports/frontier.json').exists()
+        assert not (tmp_path/'exports/tranche-0000/tranche-0000.json').exists()
+        return
+    result = export_finished_tranches(**kwargs, directory=tmp_path/'exports', read_file=reader)
     assert seen == [0, 1]
     assert result['durable_completed_keys'] == 2
+    if mode == 'parallel':
+        export_finished_tranches(**kwargs, directory=tmp_path/'serial', read_file=remote.__getitem__)
+        assert sealed[0]['archive_receipt']['manifest']['files'] == sealed[1]['archive_receipt']['manifest']['files']
 
 
 @pytest.mark.parametrize('tamper', [None, 'packet', 'preparation', 'unpaired', 'extra'])
