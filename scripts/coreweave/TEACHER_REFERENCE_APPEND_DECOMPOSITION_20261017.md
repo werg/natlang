@@ -69,3 +69,12 @@ Never replace the declared source SHA or omit held and quality checks.
 These are exact equivalence and I/O mechanisms, not new data admission policy.
 The natural-language policy above retains useful completed work greedily while
 requiring a real audit when a relevant law changes.
+
+Candidate publication rechecks the actual discovered source population and the
+same extraction/protection/selection law. A registry change that adds only
+unrelated graph or receipt entries does not revoke completed source work when
+that population is exactly unchanged. A new/removed source, changed include
+selection, protection or selector still rejects publication until the catalog
+is continued. Record the actual registry checked at publication. Source-byte
+verification before and after output shares the same stat-guarded authentication
+cycle, retaining one full SHA plus exact before/after physical-file checks.

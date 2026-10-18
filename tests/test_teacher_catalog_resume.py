@@ -496,3 +496,37 @@ def test_unrelated_scanner_provenance_change_does_not_reaudit(live_catalog, monk
     assert before['authority'] != after['authority']
     assert mechanism.identical_raw_policy(mechanism.read(before['authority']), mechanism.read(after['authority']))
     assert c.reason() == previous_rows
+
+
+def test_unrelated_registry_append_keeps_completed_publication(live_catalog):
+    c = live_catalog; c.add(); c.run(); reference = binding(c.root/'adaptive-catalog-state.json')
+    registry = json.loads(c.registry.read_text()); registry['corpora'].append(dict(id='unrelated', path='other', include=['receipt.json'], training_admission=True)); c.registry.write_text(json.dumps(registry))
+    proof = mechanism.read(mechanism.export_candidates(c.root, reference))
+    assert proof['publication_registry'] == binding(c.registry)
+
+
+def test_new_unscanned_glob_member_rejects_publication(live_catalog):
+    c = live_catalog; c.add(); c.run(); reference = binding(c.root/'adaptive-catalog-state.json'); c.add('new')
+    with pytest.raises(ValueError, match='publication authority changed'):
+        mechanism.export_candidates(c.root, reference)
+
+
+def test_publication_uses_one_source_sha_and_rejects_midstream_mutation(live_catalog, monkeypatch):
+    c = live_catalog; source = c.add(); c.current.write_text(json.dumps(dict(held=[], quality=[], pending=[]))); c.run(); reference = binding(c.root/'adaptive-catalog-state.json')
+    original = mechanism.binding; reads = []
+    def counted(path):
+        if Path(path) == source: reads.append(str(path))
+        return original(path)
+    monkeypatch.setattr(mechanism, 'binding', counted)
+    mechanism.export_candidates(c.root, reference)
+    assert reads == [str(source)]
+
+
+def test_publication_rejects_source_mutation_after_initial_sha(live_catalog, monkeypatch):
+    c = live_catalog; source = c.add(); c.current.write_text(json.dumps(dict(held=[], quality=[], pending=[]))); c.run(); reference = binding(c.root/'adaptive-catalog-state.json')
+    original = mechanism.decode_body
+    def changed(body, sha):
+        value = original(body, sha); source.write_text(source.read_text()+'\n'); return value
+    monkeypatch.setattr(mechanism, 'decode_body', changed)
+    with pytest.raises(ValueError, match='source changed during scan cycle'):
+        mechanism.export_candidates(c.root, reference)

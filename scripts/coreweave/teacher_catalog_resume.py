@@ -509,11 +509,22 @@ def export_candidates(out, state_reference):
     authority = read(state['authority']); population = read(state['population'])
     policy = load_policy(authority['current']['mechanism'])
     policy.PROTECTION = Path(authority['current']['protection']['path'])
+    publication_registry = None
     def current_authority():
+        nonlocal publication_registry
         try:
-            return (policy.inputs()[2] == authority['current']
-                    and static_bindings(policy.REPO) == authority['static_guards']
-                    and selection_binding() == authority['selection_mechanism'])
+            actual = policy.inputs()[2]
+            without_registry = lambda value: {k:v for k,v in value.items() if k != 'registry'}
+            if without_registry(actual) != without_registry(authority['current']):
+                return False
+            files, corpora = discover_sources(policy.REPO, read(actual['registry']), read(actual['initial_selection']))
+            if files != population['files'] or corpora != population['corpora']:
+                return False
+            valid = (static_bindings(policy.REPO) == authority['static_guards']
+                     and selection_binding() == authority['selection_mechanism'])
+            if valid:
+                publication_registry = actual['registry']
+            return valid
         except ValueError:
             return False
     if not current_authority():
@@ -538,10 +549,11 @@ def export_candidates(out, state_reference):
                 WHERE f.complete IS NULL OR f.complete!=1''').fetchall()
             if missing:
                 raise ValueError('candidate population has incomplete sources')
+            source_bindings = _SourceBindingCycle()
             def verify_sources():
                 for path, sha, size in db.execute('''SELECT f.path,f.sha,f.bytes FROM files f
                         JOIN active_sources a ON a.path=f.path'''):
-                    actual = binding(Path(path))
+                    actual = source_bindings.authenticate(Path(path))
                     if actual['sha256'] != sha or actual['bytes'] != size:
                         raise ValueError('candidate source bytes changed: ' + path)
             verify_sources()
@@ -582,12 +594,12 @@ def export_candidates(out, state_reference):
             finally:
                 os.close(fd)
             summary = dict(schema='natlang.strong-teacher-native-program-catalog/1',
-                           inputs=authority['current'], source_population=state['population'],
+                           inputs=authority['current'], publisher=binding(Path(__file__)), publication_registry=publication_registry, source_population=state['population'],
                            cases=count, training_admission=False, generator_calls=0,
                            source_population_files=len(population['files']))
             summary_ref = immutable(out / ('adaptive-summary-' + key + '.json'), summary)
             return immutable(proof_path, dict(cases=count, cases_binding=binding(target),
-                catalog_summary=summary_ref, inputs=authority['current'], source_population=state['population'],
+                catalog_summary=summary_ref, inputs=authority['current'], publisher=binding(Path(__file__)), publication_registry=publication_registry, source_population=state['population'],
                 scope='Candidate extraction only; reference execution and fresh publication protection required',
                 training_admission=False, generator_calls=0))
         finally:
