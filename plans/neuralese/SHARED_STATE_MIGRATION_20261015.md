@@ -48,20 +48,35 @@ through the projected-value implementation.
 
 ## Current status
 
-October18,02:45UTC operational position: both replacement models completed
-genuine graph RL followed by250 DPO updates, reaching LFM12742 and Mellum20339.
-Their new SFT learners are restoring the saved states and preparing the next
-ordinary stage; a running worker is not yet evidence of a resumed update.
-Completed-stage consumption/adaptation now accounts for the finished DPO once,
-preserves optimizer/RNG/exposure and continues through the evolving recipe.
-Both ordinary recipes include KEEP D32 sources01–06 and the1572-graph teacher
-addition; LF uses learning rate1e-5 and Mellum retains3e-6. Exact row coverage
-remains required, including whole long pending rows and retained bridges.
-Foundation exposure was19176/26312 for LF at12488 and18352/26312 for Mellum
-at20080; neither complete communication exposure nor whole-recipe completion
-is established. Newly staged teacher569+173 and D32 sources07/08, with09 being
-staged, must enter explicit live continuations. Loading or staging is not
-training exposure.
+October 18, 08:55 UTC operational position: both replacement models are
+training through the production recipe. LFM continues ordinary SFT from the
+exact step-13228 parent with optimizer, RNG and exposure history intact. At
+step 13529 it adopted a verified 3,492-graph stronger-teacher continuation;
+adoption is not completed row exposure. Its communication exposure was
+20,167/107,766 at step 13527, with foundation exposure still incomplete.
+Mellum completed another genuine whole-graph policy update at step 21227
+and resumed preference training, reaching step 21228. Its separately verified
+3,486-graph teacher addition is pending the next ordinary SFT stage. Earlier
+whole-graph RL, 250-update preference stages and ordinary SFT updates remain
+part of each saved lineage; none completes the whole recipe.
+
+Both teacher views passed the actual resident training consumer and remote
+staging. The first proposal failed before publication because its merged
+receipt lacked flat geometry coverage. The shared coverage helper now
+validates the original component receipts and emits authenticated flat
+coverage without reparsing or changing the original graphs. Both replacement
+CPU preparations passed; the separate generation-checked submission preserves
+the existing row prefix and completed visits. The supervisor is checking actual
+new row visits after adoption, rather than crediting prepared data as trained.
+
+All 48 D32 source indices now have conversion receipts, including the recovered
+source-index09. Conversion alone does not establish admission, capacity,
+resident adoption or exposure. Remaining admissions and staged continuations
+continue independently of student SGD. The newly prepared 14-source D32
+geometry proofs are complete for both models and are being integrated against
+the current resident generations, retaining all whole pending rows. LFM's
+24,968 auxiliary bridge rows have a streaming consumer implementation; its
+full staged-data consumer proof is still running. No bridge exposure is claimed.
 
 Ordinary training is independent of unrelated semantic-relay polling or
 cross-model readiness. Its own exact checkpoint/configuration, optimizer history
@@ -75,8 +90,10 @@ Task quality remains a real impediment: the same protected16-task packet yields
 LFM11134=0/16, LFM11502=0/16, LFM12184=1/16, LFM12488=0/16 and
 Mellum16364=9/16, Mellum17786=10/16. LF12488 has nine repetition failures,
 two budget exhaustions and five semantic mismatches, with no infrastructure or
-unresolved cases; LF12742 is being evaluated. These are
-historical actor measurements, not claims about current cloud weights. Generic
+unresolved cases. LF12742=1/16; its step-12964 evaluation is executing.
+Mellum20513=12/16 (three semantic mismatches and one repetition failure,
+no infrastructure failures); its sealed step-20515 request awaits scoring.
+These are historical actor measurements, not claims about current cloud weights. Generic
 recovery training, source exposure and the paired history-policy investigation
 are being checked without reusing held inputs or targets for training.
 Complete-gradient arithmetic qualification also remains unresolved; current
