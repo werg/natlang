@@ -32,12 +32,17 @@ class LowRankTokenEmbedding(nn.Module):
 
 def _rotate(port, tensor, positions, layer):
     # Apply existing model-specific RoPE tables at logical consumer positions.
-    dummy = tensor.new_empty(1, len(positions), port.embedding_weight.shape[1])
+    return _rotate_pair(port, tensor, tensor, positions, layer)[0]
+
+
+def _rotate_pair(port, query, key, positions, layer):
+    """Rotate new cached query/key rows once at their shared logical positions."""
+    dummy = query.new_empty(1, len(positions), port.embedding_weight.shape[1])
     cos, sin = port._rope(dummy, positions[None])
     if hasattr(port, '_apply_rope'):
-        return port._apply_rope(layer, tensor, tensor, cos, sin)[0]
+        return port._apply_rope(layer, query, key, cos, sin)
     from transformers.models.lfm2.modeling_lfm2 import apply_rotary_pos_emb
-    return apply_rotary_pos_emb(tensor, tensor, cos, sin)[0]
+    return apply_rotary_pos_emb(query, key, cos, sin)
 
 
 def _layer_inputs(port, layer, h, attention):
@@ -701,7 +706,7 @@ def native_step(model, ids, cache=None, *, producing=False):
         if attention:
             q, k, v = values
             captures.append({'kind': 'attention', 'raw_k': k[0].transpose(0, 1), 'v': v[0].transpose(0, 1)})
-            q, rotated_k = _rotate(port, q, positions, i), _rotate(port, k.to(q.dtype), positions, i)
+            q, rotated_k = _rotate_pair(port, q, k.to(q.dtype), positions, i)
             value_slots = v.to(q.dtype)
             if _fp32_kv_cotangents(port, q):
                 rotated_k, value_slots = rotated_k.float(), value_slots.float()
