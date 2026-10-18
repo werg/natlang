@@ -15,6 +15,12 @@ completed provider result, actual saved optimizer and recipe/source contracts.
    cursor and current full checkpoint; future inputs earn no credit here.
 5. Refresh role-exchange plan bindings from the committed plan, separately from
    student readiness. Controller adoption checks this exact adaptation proof.
+6. For release verification, authenticate the original runtime first, then
+   replay the completed adaptation and require its exact owned declaration.
+   Use its future recipe and preserved lineage as the resident-history starting
+   point, including when the cursor still holds an explicitly retired resident
+   generation. This is an exact verifier, not a readiness decision: all existing
+   model, completed communication exposure, stage and numerical checks remain.
 
 No resident owner or optimizer-drain receipt is manufactured. Full checkpoint
 validation occurs once for preparing a boundary; normal historical proof reuse

@@ -56,7 +56,9 @@ def fixture(tmp_path):
     write(result,{'schema':bridge.RESULT_SCHEMA,'kind':'round','request_id':req['request_id'],
         'request_sha256':bridge.binding(request)['sha256'],'status':'completed','state':bridge.binding(job/'state.json'),
         'checkpoint':cp,'artifacts':bridge.inventory(job,exclude=[result])})
-    plan=tmp_path/'global.json';write(plan,{'models':[{'model':'lfm','production_recipe':adapt.binding(recipe_path)}]})
+    plan=tmp_path/'global.json';write(plan,{'models':[{'model':'lfm','production_recipe':adapt.binding(recipe_path),
+        'handoff_requirement':{'model_id':config['raw_model_id'],'recipe_sha256':rb['sha256'],
+            'recipe_lineage_sha256':rb['lineage_sha256'],'stage_ids':['full']}}]})
     config['runtime_binding']={'plan_sha256':adapt.binding(plan)['sha256'],'handoff':config['bootstrap_binding']['handoff']};config['supervised_stage_quantum_control']={'plan':adapt.binding(plan),'updates':config['supervised_stage_quantum_updates']};write(config_path,config)
     controller={'pid':99999999,'start_ticks':'0','boot_id':'gone'}
     return root,config_path,request,result,controller,plan,recipe_path
@@ -101,11 +103,19 @@ def test_bad_completed_authority_does_not_change_controls(tmp_path,mutation):
     assert before==[p.read_bytes()for p in (config,root/'cycle.json',root/'production/state.json')]
 
 
-def prepared(tmp_path,new_lr=1e-5):
+def prepared(tmp_path,new_lr=1e-5,old_declaration_overrides=None,runtime_package=None):
     root,config,request,result,controller,plan,recipe=fixture(tmp_path)
+    if old_declaration_overrides:
+        global_plan=json.loads(plan.read_text());global_plan['models'][0].update(old_declaration_overrides);write(plan,global_plan)
+        old_config=json.loads(config.read_text());old_config['runtime_binding']['plan_sha256']=adapt.binding(plan)['sha256']
+        old_config['supervised_stage_quantum_control']['plan']=adapt.binding(plan)
+        if 'runtime_handoff'in old_declaration_overrides:old_config['runtime_handoff']=old_declaration_overrides['runtime_handoff']
+        write(config,old_config)
     consumption=tmp_path/'consumed.json'
     _,pair=adapt.consume(config,bridge.binding(request),bridge.binding(result),consumption,controller=controller)
-    package=tmp_path/'package';package.mkdir();(package/'identity.py').write_text('VALUE=1\n')
+    if runtime_package is None:
+        package=tmp_path/'package';package.mkdir();(package/'identity.py').write_text('VALUE=1\n')
+    else:package=Path(runtime_package)
     new=json.loads(recipe.read_text());new['stages'][1]['parameters']['learning_rate']=new_lr
     future=tmp_path/'future.json';write(future,new)
     proof=adapt.prepare(config,plan,'lfm',adapt.binding(future),adapt.binding(consumption),pair,tmp_path/'adaptation/proof.json',package=package)
@@ -196,3 +206,103 @@ def test_prior_closed_withdrawal_requires_exact_proof_and_all_frame_absence(tmp_
     with pytest.raises(ValueError,match='reintroduced'):adapt._closed_withdrawals(training,{'full':{'source_row_bindings':{'rejected':'exact'}}},old)
     altered=copy.deepcopy(training);altered['options']['withdrawal_history'][0]['rows'][0]['binding']='wrong'
     with pytest.raises(ValueError,match='exact closed prior'):adapt._closed_withdrawals(altered,{},old)
+
+
+def release_declaration(proof):
+    value=adapt.verify(proof)
+    old=json.loads(Path(value['old_global_plan']['path']).read_text())['models'][0]
+    return {**old,'production_recipe':value['recipe'],'completed_supervised_adaptation':proof},value
+
+
+def test_release_uses_verified_future_recipe_without_new_checkpoint_decode_or_readiness(tmp_path,monkeypatch):
+    from natlang_neuralese.rl import native_raw_rounds as raw
+    from natlang_neuralese.train.recipe import recipe_identity_sha256
+    _,_,_,proof=prepared(tmp_path)
+    declaration,value=release_declaration(proof)
+    def no_decode(*args,**kwargs):raise AssertionError('release adaptation metadata must not decode historical tensors')
+    monkeypatch.setattr(torch,'load',no_decode)
+    requirement=raw._release_requirement(declaration,{})
+    assert requirement['recipe_sha256']==recipe_identity_sha256(Path(value['recipe']['path']))
+    assert requirement['recipe_sha256']!=declaration['handoff_requirement']['recipe_sha256']
+    assert requirement['recipe_lineage_sha256']==value['lineage']
+    assert requirement['model_id']==declaration['handoff_requirement']['model_id']
+    assert requirement['stage_ids']==['full']
+    assert value['new_sources_earned_visits']==0 and value['whole_recipe_completed']is False
+    assert 'readiness'not in requirement
+
+
+@pytest.mark.parametrize('mutation',['role','recipe','runtime','foundation','credit','lineage'])
+def test_release_adaptation_cannot_rebind_owned_authority_or_grant_credit(tmp_path,mutation):
+    from natlang_neuralese.rl import native_raw_rounds as raw
+    _,_,_,proof=prepared(tmp_path);declaration,value=release_declaration(proof)
+    if mutation=='role':declaration['model']='mellum'
+    elif mutation=='recipe':declaration['production_recipe']=value['old_plan']
+    elif mutation=='runtime':declaration['runtime_handoff']={'path':'invented','sha256':'a'*64}
+    elif mutation=='foundation':declaration['handoff_requirement']['stage_ids']=[]
+    else:
+        value['new_sources_earned_visits'if mutation=='credit'else'lineage']=1 if mutation=='credit'else'f'*64
+        write(Path(proof['path']),value);declaration['completed_supervised_adaptation']=adapt.binding(proof['path'])
+    with pytest.raises((ValueError,FileNotFoundError)):
+        raw._release_requirement(declaration,{})
+
+
+def test_release_preserves_runtime_authority_before_retired_resident_early_return(tmp_path,monkeypatch):
+    from natlang_neuralese.rl import native_raw_rounds as raw,native_runtime_handoff as runtime
+    from natlang_neuralese.train.recipe import recipe_identity_sha256
+    historical=tmp_path/'historical-runtime.json';write(historical,{'bootstrap':{'path':'old-bootstrap','sha256':'b'*64}})
+    _,_,_,proof=prepared(tmp_path,old_declaration_overrides={'runtime_handoff':adapt.binding(historical)})
+    declaration,value=release_declaration(proof)
+    retired={'path':'retired-generation','sha256':'c'*64};cursor=tmp_path/'retired-cursor.json';write(cursor,{'resident_current':retired})
+    observed=[]
+    def verified(reference,*,bootstrap):
+        observed.append((reference,bootstrap))
+        return {'recipe_handoff':None,'handoff':{'path':'drained','sha256':'d'*64},
+            'snapshots':{'cursor':adapt.binding(cursor)}}
+    monkeypatch.setattr(runtime,'verify_runtime_handoff',verified)
+    requirement=raw._release_requirement(declaration,{'resident_current':retired})
+    assert observed==[(adapt.binding(historical),{'path':'old-bootstrap','sha256':'b'*64})]
+    assert requirement['recipe_sha256']==recipe_identity_sha256(Path(value['recipe']['path']))
+    assert requirement['recipe_lineage_sha256']==value['lineage']
+    def rejected(*args,**kwargs):raise ValueError('original runtime authority rejected')
+    monkeypatch.setattr(runtime,'verify_runtime_handoff',rejected)
+    with pytest.raises(ValueError,match='original runtime authority rejected'):
+        raw._release_requirement(declaration,{'resident_current':retired})
+
+
+def test_release_follows_real_fresh_resident_append_after_completed_adaptation(tmp_path,monkeypatch):
+    from natlang_neuralese.rl import native_raw_rounds as raw
+    from natlang_neuralese.train import native_resident as resident
+    from natlang_neuralese.data.native_sources import NativeGraphSource
+    from natlang_neuralese.train.recipe import native_recipe_binding
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE',str(tmp_path/'cache'))
+    _,_,_,proof=prepared(tmp_path,runtime_package=Path(adapt.__file__).parents[1]);declaration,value=release_declaration(proof)
+    installed=json.loads(Path(value['lineage_handoff']['path']).read_text())
+    directory=tmp_path/'fresh/resident-data';directory.parent.mkdir()
+    # The actual adapted namespace starts from the transitioned plan, whose
+    # preserved lineage differs from the future recipe's content identity.
+    write(directory.parent/'recipe-plan.json',installed)
+    inputs=installed['stage_inputs']['full']
+    train=NativeGraphSource(inputs['native_graphs']['path'],'tokenizer-sha',required_split='train')
+    held=NativeGraphSource(inputs['held_native_graphs']['path'],'tokenizer-sha',required_split='test')
+    evidence=tmp_path/'geometry-evidence.json';write(evidence,{'passed':True,'scope':'tiny CPU fixture'})
+    capacity=tmp_path/'capacity.json';write(capacity,{'schema':'natlang.native-resident-geometry-qualification/1',
+        'passed':True,'identity':None,'runtime_code_sha256':resident.digest(installed['code']),
+        'limits':{'forward_tokens':1000000,'kv_slots':1000000},'evidence':resident.binding(evidence)})
+    manager=resident.ResidentAdoption(directory,stage_id='full',
+        recipe_binding=native_recipe_binding(value['recipe']['path'],value['lineage']),
+        train=train,held=held,package=value['package'],geometry_qualification=capacity)
+    appended=tmp_path/'appended.jsonl';appended.write_text(Path(inputs['native_graphs']['path']).read_text()+json.dumps(graph('new'))+'\n')
+    recipe=json.loads(Path(value['recipe']['path']).read_text());recipe['input_bindings']['appended']=adapt.binding(appended)
+    recipe['stages'][1]['inputs'].update(native_graphs='appended',continued_native_graphs='train')
+    new_recipe=tmp_path/'append-recipe.json';write(new_recipe,recipe)
+    resident.prepare(directory,new_recipe,'full',tokenizer_fingerprint='tokenizer-sha',role_ids=(),runtime_package=value['package'])
+    assert manager.poll(5)is not None
+    state=resident.current(directory);assert state['payload']['plan']['recipe_sha256']==value['lineage']
+    actual={'resident_current':adapt.binding(directory/'current.json')}
+    requirement=raw._release_requirement(declaration,actual)
+    assert requirement['recipe_sha256']==state['payload']['recipe']['sha256']
+    assert requirement['recipe_lineage_sha256']==value['lineage']and requirement['stage_ids']==['full']
+    assert 'exposure_counts'not in state
+    bad_ready=tmp_path/'bad-readiness.json';write(bad_ready,{'resident_adoption':{'generation':'forged','history':state['history']}})
+    with pytest.raises(ValueError,match='readiness omitted'):
+        raw._release_requirement(declaration,{**actual,'readiness':adapt.binding(bad_ready)})

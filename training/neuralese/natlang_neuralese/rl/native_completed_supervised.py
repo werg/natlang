@@ -316,11 +316,25 @@ def verify(reference):
     return value
 
 
+def verify_declaration(reference,declaration):
+    """Authenticate only the proof's declared owned-row recipe transition."""
+    proof=verify(reference)
+    old_global=_read(proof['old_global_plan'])
+    matches=[row for row in old_global['models']if row['model']==proof['role']]
+    if len(matches)!=1:
+        raise ValueError('completed adaptation lost its exact owned declaration')
+    expected={**matches[0],'production_recipe':proof['recipe'],
+        'completed_supervised_adaptation':reference}
+    if declaration!=expected:
+        raise ValueError('completed adaptation declaration changed outside its owned recipe transition')
+    return proof
+
+
 def configure(plan_path,declaration,bootstrap,config_path):
     """Apply only the proof-bound future invocation at the consumed boundary."""
     from .native_supervised import bind_recipe_lineage
     from .native_bootstrap_metadata import save
-    reference=declaration['completed_supervised_adaptation'];proof=verify(reference)
+    reference=declaration['completed_supervised_adaptation'];proof=verify_declaration(reference,declaration)
     old_global=_read(proof['old_global_plan']);actual=json.loads(Path(plan_path).read_text())
     expected=copy.deepcopy(old_global);role=proof['role']
     row=next(item for item in expected['models']if item['model']==role)

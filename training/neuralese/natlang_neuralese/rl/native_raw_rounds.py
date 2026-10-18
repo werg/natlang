@@ -742,6 +742,14 @@ def _release_requirement(declaration,value,*,verified_handoff=None):
         from ..train.recipe import recipe_identity_sha256
         requirement['recipe_sha256']=recipe_identity_sha256(_bound(transition['recipe']))
         requirement['recipe_lineage_sha256']=json.loads(_bound(transition['new_plan']).read_text())['recipe_sha256']
+    if declaration.get('completed_supervised_adaptation'):
+        from .native_completed_supervised import verify_declaration
+        from ..train.recipe import recipe_identity_sha256
+        adapted=verify_declaration(declaration['completed_supervised_adaptation'],declaration)
+        if requirement.get('recipe_lineage_sha256',adapted['lineage'])!=adapted['lineage']:
+            raise ValueError('raw release completed adaptation changed its preserved recipe lineage')
+        requirement['recipe_sha256']=recipe_identity_sha256(_bound(adapted['recipe']))
+        requirement['recipe_lineage_sha256']=adapted['lineage']
     reference=value.get('resident_current')
     # A later handoff explicitly retired this exact historical generation.
     # Keep the cursor receipt, but never reinterpret it as the new live plan.
