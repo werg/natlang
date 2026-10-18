@@ -583,6 +583,17 @@ def _restore_recipe_alias(source,copy):
     _bound(source)
 
 
+def completed_raw_cursor(config,cursor,result):
+    """The existing raw-to-supervised boundary, shared with stopped consumption."""
+    if result.get('phase')!='collect':raise RuntimeError('raw RL operation needs its actual drained published boundary')
+    if (cursor.get('phase')!='rl' or type(cursor.get('pending_rl_round'))is not int
+            or result.get('round',-1)<cursor['pending_rl_round']):
+        raise ValueError('completed raw cursor lost its actual pending round')
+    updated={**cursor,'phase':'sft','next_stage':0,'current_checkpoint':_current_checkpoint(config)}
+    updated.pop('pending_rl_round',None)
+    return updated
+
+
 def student_cycle(plan_path,declaration,handoff,directory,*,stop):
     """Resume exact per-operation outputs; every source remains a carried obligation."""
     from .native_rounds import round_job
@@ -612,9 +623,7 @@ def student_cycle(plan_path,declaration,handoff,directory,*,stop):
         result=(state if state['round']>=cursor['pending_rl_round'] else
             round_job(config_path,config,work/'rl-bridge',stop))
         if stop.requested:return cursor
-        if result.get('phase')!='collect':raise RuntimeError('raw RL operation needs its actual drained published boundary')
-        cursor.update(phase='sft',next_stage=0,current_checkpoint=_current_checkpoint(config))
-        cursor.pop('pending_rl_round',None)
+        cursor=completed_raw_cursor(config,cursor,result)
         write_json_durable(cursor_path,cursor)
     recipe=resolve_recipe_data(config['production_recipe'])
     stages=_supervised_stage_inventory(recipe,config['production_stage'])

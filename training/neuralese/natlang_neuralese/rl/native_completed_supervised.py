@@ -14,7 +14,9 @@ from ..train.native_readiness import _bound
 from ..train.native_resident import binding,code_inventory
 
 SCHEMA='natlang.native-completed-supervised-adaptation/1'
+SCHEMA_RAW='natlang.native-completed-raw-adaptation/1'
 CONSUMED='natlang.native-completed-supervised-consumption/1'
+CONSUMED_RAW='natlang.native-completed-raw-consumption/1'
 
 
 def _read(reference):return json.loads(_bound(reference).read_text())
@@ -72,6 +74,76 @@ def _operation(config,cursor,request_ref,result_ref):
             or request['parent_checkpoint']['sha256']!=cursor['current_checkpoint']['sha256']):
         raise ValueError('completed supervised stage changed its sealed recipe/parent')
     return request,result,continuation,stage
+
+
+def _raw_operation(config,cursor,request_ref,result_ref,operation_state=None):
+    """Authenticate a completed raw round without interpreting it as CE work."""
+    from .native_bridge import verify_result_inventory
+    request,result=verify_result_inventory(_bound(request_ref),_bound(result_ref))
+    operation=_read(operation_state or result['state'])
+    prior=_read(request['state']) if request.get('state') else None
+    invocation=_read(request['config'])
+    root=Path(config['out']).parent;cycle=cursor.get('cycle')
+    if (request.get('kind')!='round' or request.get('native_actor_mode')!='raw-state'
+            or result.get('status')!='completed' or not result.get('checkpoint')
+            or cursor.get('phase')!='rl' or type(cycle)is not int
+            or type(cursor.get('pending_rl_round'))is not int
+            or Path(request['out']).resolve()!=Path(config['out']).resolve()
+            or Path(request_ref['path']).resolve().parent!=root/'cycles'/f'{cycle:06d}'/'rl-bridge'
+            or invocation.get('mandatory_sft_only')is True or invocation.get('semantic_adapter')
+            or invocation.get('coefficient_policy') or request.get('semantic_adapter')
+            or binding(invocation['production_recipe'])!=binding(config['production_recipe'])
+            or invocation.get('raw_model_id')!=config.get('raw_model_id')
+            or any(request['parent_checkpoint'].get(k)!=cursor.get('current_checkpoint',{}).get(k)
+                   for k in('path','sha256'))):
+        raise ValueError('completed raw result differs from its exact owned cycle/request')
+    if (not isinstance(prior,dict) or prior.get('phase')!='collect'
+            or operation.get('phase')!='collect'
+            or operation.get('round')!=cursor['pending_rl_round']
+            or operation.get('round')!=prior.get('round',-1)+1
+            or operation.get('trained_rounds')!=prior.get('trained_rounds',-1)+1
+            or operation.get('pending_native_checkpoint')is not None
+            or operation.get('production_complete')is not False
+            or binding(prior['checkpoint'])['sha256']!=request['parent_checkpoint']['sha256']
+            or binding(operation['checkpoint'])['sha256']!=result['checkpoint']['sha256']
+            or result['checkpoint']['sha256']==request['parent_checkpoint']['sha256']
+            or (operation_state is not None and operation_state['sha256']!=result['state']['sha256'])):
+        raise ValueError('completed raw result lost its actual published update boundary')
+    return request,result,invocation,operation
+
+
+def _raw_receipt(saved,checkpoint,parent):
+    """Use the actual policy receipt; no mandatory-stage completion is inferred."""
+    from ..train.native_continuation import collect_sft_progress,progress_obligations
+    from ..train.native_operation_report import compact_obligations
+    from ..common.hashing import canonical_json_sha256_hex
+    receipt_path=Path(checkpoint['path']).parent/'native-training-receipt.json'
+    receipt=json.loads(receipt_path.read_text());training=saved['training'];options=training.get('options')or{}
+    updates=(receipt.get('continuation_boundary')or{}).get('new_optimizer_updates')
+    expected=compact_obligations(progress_obligations(collect_sft_progress(training,borrow_frames=True)),
+        {**checkpoint,'bytes':Path(checkpoint['path']).stat().st_size})
+    if (receipt.get('schema')!='natlang.native-training-readiness/1'
+            or receipt.get('policy_operation_completed')is not True or receipt.get('completed')is not False
+            or receipt.get('checkpoint',{}).get('sha256')!=checkpoint['sha256']
+            or receipt.get('continuation',{}).get('checkpoint_sha256')!=parent['sha256']
+            or (options.get('continuation')or{}).get('checkpoint_sha256')!=parent['sha256']
+            or receipt.get('mandatory_sft')!=expected
+            or type(updates)is not int or updates<=0
+            or receipt.get('resident_adoption')
+            or not isinstance(options.get('stage_id'),str) or receipt.get('stage_id')!=options['stage_id']):
+        raise ValueError('completed raw checkpoint lost its policy-only receipt/full carried progress')
+    # Bind the existing admission to the actual sampled parent and saved rows.
+    admission=receipt_path.parent/'rl-data-receipt.json';data=json.loads(admission.read_text())
+    objective=receipt_path.parent/'rl-native-objective.json';graphs=receipt_path.parent/'rl-native-graphs.jsonl'
+    if (data.get('schema')!='natlang.native-rl-admission/1'
+            or data.get('policy',{}).get('checkpoint_sha256')!=parent['sha256']
+            or data.get('native_graphs_sha256')!=binding(graphs)['sha256']
+            or data.get('objective_sha256')!=binding(objective)['sha256']
+            or not data.get('tasks_selected')or any(row.get('split')!='train'for row in data['tasks_selected'])
+            or (training.get('source_receipts')or [{}])[0].get('sha256')!=data['native_graphs_sha256']):
+        raise ValueError('completed raw checkpoint lost its sampled-policy admission/source binding')
+    return receipt_path,receipt,updates,{'admission':binding(admission),'objective':binding(objective),
+        'graphs':binding(graphs),'mandatory_sft_sha256':canonical_json_sha256_hex(expected)}
 
 
 def consume(config_path,request_ref,result_ref,out,*,controller):
@@ -162,6 +234,66 @@ def consume(config_path,request_ref,result_ref,out,*,controller):
         return value,pair
 
 
+def consume_raw(config_path,request_ref,result_ref,out,*,controller):
+    """Close the real completed raw cursor, keeping every supervised stage pending."""
+    from .native_bridge import verify_result
+    from .native_raw_rounds import completed_raw_cursor
+    out=Path(out);out.parent.mkdir(parents=True,exist_ok=True)
+    config,paths=_controls(config_path);_no_owner(controller);_no_active_operation(paths['config'].parent)
+    with(paths['config'].parent.parent/'controller.lock').open('a')as lease:
+        fcntl.flock(lease,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        if out.exists():
+            receipt=json.loads(out.read_text())
+            if (receipt.get('schema')!=CONSUMED_RAW or receipt['request']!=request_ref
+                    or receipt['result']!=result_ref or receipt['controller']!=controller
+                    or any(binding(path)!=receipt['after'][key]for key,path in paths.items())):
+                raise ValueError('completed raw consumption retry changed its authority/current controls')
+            from ..train.checkpoint_policy import CheckpointPolicy
+            return receipt,(receipt['checkpoint'],CheckpointPolicy.load(_bound(receipt['checkpoint'])))
+        intent=out.with_name(out.stem+'-intent.json');recovery=_read(binding(intent))if intent.exists()else None
+        if recovery:
+            if recovery['request']!=request_ref or recovery['result']!=result_ref or recovery['controller']!=controller:
+                raise ValueError('completed raw intent changed its exact operation')
+            before=recovery['before'];cursor=_read(recovery['snapshots']['cursor'])
+            if (binding(paths['config'])!=before['config']or binding(paths['state'])!=before['state']
+                    or binding(paths['cursor'])['sha256']not in(before['cursor']['sha256'],recovery['candidate_cursor']['sha256'])):
+                raise ValueError('completed raw recovery found an unknown control successor')
+            operation_ref=recovery['operation_state']
+        else:
+            before={key:binding(path)for key,path in paths.items()};cursor=json.loads(paths['cursor'].read_text());operation_ref=None
+        request,result,_,operation=_raw_operation(config,cursor,request_ref,result_ref,operation_ref)
+        if before['state']['sha256']!=result['state']['sha256']:
+            raise ValueError('completed raw production state differs from its actual result')
+        verified,pair=verify_result(_bound(request_ref),_bound(result_ref),return_raw_checkpoint=True)
+        receipt_path,training_receipt,updates,evidence=_raw_receipt(pair[1],pair[0],request['parent_checkpoint'])
+        next_cursor=completed_raw_cursor(config,cursor,operation)
+        if (next_cursor.get('next_stage')!=0 or next_cursor.get('phase')!='sft'
+                or any((paths['config'].parent/'cycles'/f"{cursor['cycle']:06d}"/'supervised').rglob('*.request.json'))):
+            raise ValueError('completed raw consumption lost its unstarted supervised-stage boundary')
+        directory=out.parent/(out.stem+'-controls');directory.mkdir(exist_ok=True)
+        snapshots={}
+        for key in('state','cursor'):
+            target=directory/('original-'+key+'.json')
+            if not target.exists():write_bytes_durable(target,_bound(before[key]).read_bytes())
+            snapshots[key]=binding(target)
+        candidate=directory/'candidate-cursor.json';write_json_durable(candidate,next_cursor)
+        value={'schema':CONSUMED_RAW,'controller':controller,'request':request_ref,'result':result_ref,
+            'before':before,'snapshots':snapshots,'operation_state':snapshots['state'],
+            'candidate_cursor':binding(candidate),'checkpoint':pair[0],'stage_id':None,
+            'operation_stage_id':training_receipt['stage_id'],'new_optimizer_updates':updates,
+            'global_step':pair[1]['training']['global_step'],'training_receipt':binding(receipt_path),
+            'raw_admission':evidence,'supervised_stage_credits_added':0,'whole_recipe_completed':False}
+        if recovery:
+            if recovery!=value:raise ValueError('completed raw recovery changed its exact candidate')
+        else:
+            if any(binding(path)!=before[key]for key,path in paths.items()):
+                raise ValueError('completed raw controls changed before durable intent')
+            write_json_durable(intent,value)
+        _no_owner(controller);write_bytes_durable(paths['cursor'],_bound(value['candidate_cursor']).read_bytes())
+        value.update(intent=binding(intent),after={key:binding(path)for key,path in paths.items()})
+        write_json_durable(out,value);return value,pair
+
+
 def _stable(plan):
     from .native_raw_handoff import _stable_handoff_plan
     return _stable_handoff_plan(plan)
@@ -221,7 +353,7 @@ def prepare(config_path,plan_path,role,recipe_reference,consumption,verified_che
     from .native_supervised import continuation_config,bind_recipe_lineage
     from .native_raw_rounds import _supervised_quantum
     config,paths=_controls(config_path);consumed=_read(consumption);reference,saved=verified_checkpoint
-    if (consumed.get('schema')!=CONSUMED or reference!=consumed['checkpoint']
+    if (consumed.get('schema')not in(CONSUMED,CONSUMED_RAW) or reference!=consumed['checkpoint']
             or binding(reference['path'])['sha256']!=reference['sha256']
             or any(binding(path)!=consumed['after'][key]for key,path in paths.items())):
         raise ValueError('future adaptation lost its exact consumed checkpoint/control pair')
@@ -237,7 +369,7 @@ def prepare(config_path,plan_path,role,recipe_reference,consumption,verified_che
     frames=collect_sft_progress(training,borrow_frames=True)
     started=[stage['id']for stage in old_plan['recipe']['stages']if stage['id']in frames]
     recorded=_read(consumed['training_receipt']).get('mandatory_sft',{}).get('stages',{})
-    if set(started)!=(set(recorded)&{stage['id']for stage in old_plan['recipe']['stages']}) or consumed['stage_id']not in started:
+    if set(started)!=(set(recorded)&{stage['id']for stage in old_plan['recipe']['stages']}) or(consumed['schema']==CONSUMED and consumed['stage_id']not in started):
         raise ValueError('future adaptation lost its actual saved stage inventory')
     closed_withdrawals=_closed_withdrawals(training,frames,old_plan)
     out=Path(out);out.parent.mkdir(parents=True,exist_ok=True)
@@ -251,7 +383,7 @@ def prepare(config_path,plan_path,role,recipe_reference,consumption,verified_che
         write_json_durable(out.parent/name,value)
     old_config=out.parent/'original-config.json';write_bytes_durable(old_config,Path(config_path).read_bytes())
     old_global=out.parent/'original-global-plan.json';write_bytes_durable(old_global,Path(plan_path).read_bytes())
-    value={'schema':SCHEMA,'role':role,'consumption':consumption,'checkpoint':reference,
+    value={'schema':SCHEMA_RAW if consumed['schema']==CONSUMED_RAW else SCHEMA,'role':role,'consumption':consumption,'checkpoint':reference,
         'global_step':consumed['global_step'],'package':str(package),'code':code,'started_stage_ids':started,
         'closed_prior_withdrawals':closed_withdrawals,'old_plan':binding(out.parent/'old-plan.json'),'future_plan':binding(out.parent/'future-plan.json'),
         'lineage_handoff':binding(out.parent/'lineage-handoff.json'),'future_config':binding(out.parent/'future-config.json'),
@@ -264,10 +396,11 @@ def verify(reference):
     """Replay policy verification over immutable controls; no historical tensor decode."""
     from ..train.recipe import lineage_handoff
     value=_read(reference)
-    if value.get('schema')!=SCHEMA or value.get('new_sources_earned_visits')!=0 or value.get('whole_recipe_completed')is not False:
+    if value.get('schema')not in(SCHEMA,SCHEMA_RAW) or value.get('new_sources_earned_visits')!=0 or value.get('whole_recipe_completed')is not False:
         raise ValueError('completed adaptation cannot grant future exposure/completion')
     consumed=_read(value['consumption']);config=_read(value['old_config'])
-    if (consumed.get('schema')!=CONSUMED or consumed['checkpoint']!=value['checkpoint']
+    if (consumed.get('schema')not in(CONSUMED,CONSUMED_RAW) or consumed['checkpoint']!=value['checkpoint']
+            or (value['schema']==SCHEMA_RAW)!=(consumed['schema']==CONSUMED_RAW)
             or consumed['global_step']!=value['global_step']or consumed['after']!=value['controls']
             or value['controls']['config']['sha256']!=value['old_config']['sha256']
             or config.get('recipe_lineage_sha256')!=value['lineage']):
@@ -275,7 +408,35 @@ def verify(reference):
     _bound(consumed['request']);_bound(consumed['result']);_bound(value['checkpoint'])
     training_receipt=_read(consumed['training_receipt'])
     old_cursor=_read(consumed['snapshots']['cursor'])
-    request,result,_,stage=_operation(config,old_cursor,consumed['request'],consumed['result'])
+    if consumed['schema']==CONSUMED_RAW:
+        request,result,_,operation=_raw_operation(config,old_cursor,consumed['request'],consumed['result'],consumed['operation_state'])
+        stage={'id':None}
+        evidence=consumed.get('raw_admission')or{}
+        if set(evidence)!={'admission','objective','graphs','mandatory_sft_sha256'}:
+            raise ValueError('completed raw proof lost its exact admission evidence')
+        admission=_read(evidence['admission']);_bound(evidence['objective']);_bound(evidence['graphs'])
+        from ..common.hashing import canonical_json_sha256_hex
+        if (admission.get('schema')!='natlang.native-rl-admission/1'
+                or admission.get('policy',{}).get('checkpoint_sha256')!=request['parent_checkpoint']['sha256']
+                or admission.get('objective_sha256')!=evidence['objective']['sha256']
+                or admission.get('native_graphs_sha256')!=evidence['graphs']['sha256']
+                or Path(evidence['admission']['path']).parent!=Path(consumed['training_receipt']['path']).parent
+                or Path(evidence['objective']['path'])!=Path(evidence['admission']['path']).parent/'rl-native-objective.json'
+                or Path(evidence['graphs']['path'])!=Path(evidence['admission']['path']).parent/'rl-native-graphs.jsonl'
+                or canonical_json_sha256_hex(training_receipt.get('mandatory_sft'))!=evidence['mandatory_sft_sha256']):
+            raise ValueError('completed raw proof changed its actual policy admission/source')
+        if (consumed.get('supervised_stage_credits_added')!=0 or consumed.get('stage_id')is not None
+                or training_receipt.get('policy_operation_completed')is not True
+                or training_receipt.get('completed')is not False
+                or training_receipt.get('stage_id')!=consumed.get('operation_stage_id')):
+            raise ValueError('completed raw proof granted supervised credit or lost its real policy stage')
+        from .native_raw_rounds import completed_raw_cursor
+        if completed_raw_cursor(config,old_cursor,operation)!=_read(consumed['candidate_cursor']):
+            raise ValueError('completed raw proof changed the shared raw-to-supervised transition')
+        if consumed['after']['state']!=consumed['before']['state'] or consumed['after']['config']!=consumed['before']['config']:
+            raise ValueError('completed raw consumption rewrote its production result/config')
+    else:
+        request,result,_,stage=_operation(config,old_cursor,consumed['request'],consumed['result'])
     if (stage['id']!=consumed['stage_id'] or result['checkpoint']!=value['checkpoint']
             or training_receipt.get('checkpoint',{}).get('sha256')!=value['checkpoint']['sha256']
             or training_receipt.get('continuation',{}).get('checkpoint_sha256')!=request['parent_checkpoint']['sha256']
