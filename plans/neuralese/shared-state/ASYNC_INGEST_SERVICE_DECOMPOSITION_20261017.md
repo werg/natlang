@@ -57,3 +57,23 @@ wait. This applies to both students through the same service.
 Natural-language policy is specified above; crisp additions provide exact
 leases, worker/configuration identities, ledger orchestration, durability and
 CLI entry points. Existing unconfigured service behavior is preserved.
+
+## External verified payloads
+
+An optional `external_payload_root` is operator storage configuration shared
+by LFM and Mellum. It must already exist on a filesystem distinct from the
+logical evaluation output and retain `external_min_free_bytes` after the
+missing payload bytes are accounted for (default 20 GiB). The service continues
+to journal the same receipt and uses the configured common fetch adapter. The
+adapter stores `.pending` and aria2 control together under a SHA-named external
+payload, verifies the full private receipt, then atomically installs an
+absolute symlink at the existing `incoming/checkpoint-<sha>.pt` path.
+
+Sealing verifies bytes by following the logical path but consumes the logical
+symlink itself into the request's existing `weights.pt` path on the same
+filesystem. This keeps the actual payload external through evaluation. A
+legacy partial under `incoming` is reported as requiring explicit migration;
+the service never starts a second full transfer under the external root while
+that old partial/control pair remains. Request cleanup removes the local
+symlink only. External bytes remain until exact reference-based retention
+proves no request uses them.

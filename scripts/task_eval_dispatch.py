@@ -173,6 +173,8 @@ def main(argv=None) -> int:
     parser.add_argument('--native-eval-spec', type=Path)
     parser.add_argument('--native-eval-out', type=Path)
     parser.add_argument('--native-base', type=Path)
+    parser.add_argument('--native-payload-root', type=Path,
+                        help='optional external content-addressed storage for verified native exports')
     parser.add_argument('--native-fetch-python', type=Path, default=Path.home()/'.local/share/natlang/cw-venv/bin/python')
     args = parser.parse_args(argv)
     native_options=(args.native_export_state,args.native_eval_spec,args.native_eval_out,args.native_base)
@@ -187,7 +189,9 @@ def main(argv=None) -> int:
                 event=poll_latest(args.native_export_state,out=args.native_eval_out,
                     spec=json.loads(args.native_eval_spec.read_text()),base=args.native_base,queue=queue,
                     fetch_command=[str(args.native_fetch_python),str(ROOT/'scripts/coreweave/fetch_native_eval_export.py'),
-                                   '--receipt','{receipt}','--out','{out}'])
+                                   '--receipt','{receipt}','--out','{out}']+
+                    (['--payload-root',str(args.native_payload_root.resolve())]
+                     if args.native_payload_root else []))
             except Exception as error:
                 # Private-provider failures can contain scoped URLs; log no credentials.
                 event={'event':'native_eval_ingest_wait','error_type':type(error).__name__}

@@ -134,7 +134,8 @@ def seal_request(checkpoint,*,identity,step,spec,out,base,queue,source_export=No
     from ..train.checkpoint_policy import CheckpointPolicy
     from ..model.native_model import CHECKPOINT_SCHEMA,base_inventory
     from .task_cadence import ASYNC_SCHEMA,TaskEval,parse_task_eval,require_native_transport
-    checkpoint=Path(checkpoint).resolve(strict=True);spec=require_native_transport(parse_task_eval(spec))
+    checkpoint_argument=Path(checkpoint)
+    checkpoint=checkpoint_argument.resolve(strict=True);spec=require_native_transport(parse_task_eval(spec))
     if file_binding(checkpoint)['sha256']!=identity['sha256'] or checkpoint.stat().st_size!=identity['bytes']:
         raise ValueError('native eval checkpoint differs from independently verified export')
     state=CheckpointPolicy.load(checkpoint)
@@ -170,7 +171,15 @@ def seal_request(checkpoint,*,identity,step,spec,out,base,queue,source_export=No
     if not weights.exists():
         if consume_export:
             import errno
-            try:os.replace(checkpoint,weights)
+            try:
+                # A verified external payload is presented through a logical
+                # symlink in the incoming directory. Move that symlink within
+                # the request filesystem; moving its resolved target would
+                # cross filesystems and copy the whole checkpoint back to RAM.
+                source=checkpoint_argument if checkpoint_argument.is_symlink() else checkpoint
+                if checkpoint_argument.is_symlink() and source.parent.stat().st_dev!=weights.parent.stat().st_dev:
+                    raise ValueError('logical export symlink is not colocated with the sealed request')
+                os.replace(source,weights)
             except OSError as error:
                 if error.errno!=errno.EXDEV:raise
                 from ..train.checkpoint_offload import verified_copy

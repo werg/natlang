@@ -136,12 +136,50 @@ def poll(config, *, observe=dispatch_evidence, ingest=poll_latest, available=Non
     prior=json.loads(existing.read_text())if existing.exists()else{}
     spec=parse_task_eval(json.loads(Path(config['spec']).read_text()))
     active=bool(prior.get('active'))
+    payload_root_value=config.get('external_payload_root')
+    payload_root=Path(payload_root_value).resolve() if payload_root_value else None
+    if payload_root is not None and not payload_root.is_dir():
+        raise ValueError('configured external payload root must already exist')
+    if payload_root is not None and payload_root.stat().st_dev==out.stat().st_dev:
+        raise ValueError('external payload root shares the logical evaluation filesystem')
+    external_floor=config.get('external_min_free_bytes',20<<30)
+    if type(external_floor)is not int or external_floor<0 or (payload_root is not None and external_floor<20<<30):
+        raise ValueError('external payload free-space floor is invalid or below 20 GiB')
+    fetch_command=list(config['fetch_command'])
+    if payload_root is not None:
+        if '--payload-root'in fetch_command:
+            raise ValueError('external payload root must be declared once in ingester config')
+        fetch_command.extend(['--payload-root',str(payload_root)])
     def admit(selected,destination):
         exact=verified_export(selected)
         if exact['role']!=config['role']:raise ValueError('native ingestion export role differs')
         if selected['last_verified_step']<config['minimum_step']:
             return dict(event='native_eval_waiting_for_minimum_step',step=selected['last_verified_step'])
         owned=out/'checkpoints'/exact['identity']['sha256']/'task-eval/async'/f"step-{selected['last_verified_step']:07d}"/'weights.pt'
+        if payload_root is not None:
+            legacy_pending=destination.with_name(destination.name+'.pending')
+            legacy_control=legacy_pending.with_name(legacy_pending.name+'.aria2')
+            if legacy_pending.exists() or legacy_control.exists():
+                return dict(event='native_eval_external_migration_required',
+                            logical_partial=str(legacy_pending),control=str(legacy_control),
+                            external_payload_root=str(payload_root))
+            payload=payload_root/exact['identity']['sha256']/('checkpoint-'+exact['identity']['sha256']+'.pt')
+            payload_pending=payload.with_name(payload.name+'.pending')
+            if payload.is_file() and payload.stat().st_size==exact['identity']['bytes']:
+                retained_external=exact['identity']['bytes']
+            else:
+                retained_external=(min(exact['identity']['bytes'],payload_pending.stat().st_blocks*512)
+                                   if payload_pending.is_file() else 0)
+            external_free=(available or shutil.disk_usage)(payload_root).free
+            external_needed=max(0,exact['identity']['bytes']-retained_external)+external_floor
+            if external_free<external_needed:
+                return dict(event='native_eval_external_disk_wait',available_bytes=external_free,
+                            needed_bytes=external_needed,free_floor_bytes=external_floor)
+            local_free=(available or shutil.disk_usage)(out).free
+            if local_free<config['disk_reserve_bytes']:
+                return dict(event='native_eval_disk_wait',available_bytes=local_free,
+                            needed_bytes=config['disk_reserve_bytes'])
+            return None
         retained=max((p.stat().st_size for p in(destination,destination.with_name(destination.name+'.pending'),owned)if p.is_file()),default=0)
         needed=max(0,exact['identity']['bytes']-retained)+config['disk_reserve_bytes']
         free=(available or shutil.disk_usage)(out).free
@@ -154,7 +192,7 @@ def poll(config, *, observe=dispatch_evidence, ingest=poll_latest, available=Non
     # Recheck the selected receipt under the ingester's transfer lease. The
     # exporter may advance after the inexpensive preliminary floor check.
     return ingest(config['export_state'],out=out,spec=spec,base=config['base'],queue=config['queue'],
-                  fetch_command=config['fetch_command'],device=config['device'],export_admission=admit)
+                  fetch_command=fetch_command,device=config['device'],export_admission=admit)
 
 
 def pending_event(config):
@@ -339,6 +377,8 @@ def main(argv=None):
     parser.add_argument('--after-dispatch-state',type=Path);parser.add_argument('--after-dispatch-minimum-step',type=int,default=0)
     parser.add_argument('--after-dispatch-architecture',choices=('lfm2','lfm2_moe','maple','mellum'))
     parser.add_argument('--device',default='cuda');parser.add_argument('--every',type=float,default=60)
+    parser.add_argument('--external-payload-root',type=Path)
+    parser.add_argument('--external-min-free-gib',type=int,default=20)
     parser.add_argument('--transfer-budget-gib',type=float)
     parser.add_argument('--transfer-reserve-gib',type=float,default=1)
     parser.add_argument('--fetch-command',nargs=argparse.REMAINDER,required=True)
@@ -346,12 +386,17 @@ def main(argv=None):
     import math
     if args.transfer_budget_gib is not None and(not math.isfinite(args.transfer_budget_gib)or args.transfer_budget_gib<=0
             or not math.isfinite(args.transfer_reserve_gib)or args.transfer_reserve_gib<0):parser.error('invalid transfer ledger allocation')
-    if not args.fetch_command or args.every<=0 or min(args.minimum_step,args.after_dispatch_minimum_step,args.disk_reserve_gib)<0:parser.error('invalid native ingestion limits/fetch command')
+    if (not args.fetch_command or args.every<=0 or min(args.minimum_step,args.after_dispatch_minimum_step,args.disk_reserve_gib,args.external_min_free_gib)<0
+            or (args.external_payload_root is not None and args.external_min_free_gib<20)):
+        parser.error('invalid native ingestion limits/fetch command or external free-space floor below 20 GiB')
     if bool(args.after_dispatch_state)!=bool(args.after_dispatch_architecture):parser.error('dispatch dependency needs state and architecture')
     config={key:str(getattr(args,key).resolve())for key in('export_state','out','spec','base','status')}
     config.update(role=args.role,minimum_step=args.minimum_step,disk_reserve_bytes=args.disk_reserve_gib*(1<<30),
                   queue=str((args.queue or request_queue()).resolve()),fetch_command=args.fetch_command,device=args.device,
                   after_dispatch=(dict(state=str(args.after_dispatch_state.resolve()),minimum_step=args.after_dispatch_minimum_step,architecture=args.after_dispatch_architecture)if args.after_dispatch_state else None))
+    if args.external_payload_root is not None:
+        config['external_payload_root']=str(args.external_payload_root.resolve())
+        config['external_min_free_bytes']=args.external_min_free_gib*(1<<30)
     if args.transfer_budget_gib is not None:
         config['transfer_ledger']=dict(budget_gib=args.transfer_budget_gib,reserve_gib=args.transfer_reserve_gib)
     run(config,every=args.every)

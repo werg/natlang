@@ -101,6 +101,24 @@ def test_sealed_weights_have_no_mutable_source_alias(tmp_path,consume_export):
     assert file_binding(weights)['sha256']==export['receipt']['identity']['sha256']
 
 
+def test_consumed_external_payload_keeps_logical_path_as_request_symlink(tmp_path):
+    base,_,checkpoint,spec,export=fixture(tmp_path/'protocol')
+    identity=export['receipt']['identity'];payload_root=tmp_path/'external'
+    payload_root.mkdir()
+    payload=payload_root/identity['sha256']/('checkpoint-'+identity['sha256']+'.pt');payload.parent.mkdir();payload.write_bytes(checkpoint.read_bytes())
+    incoming=tmp_path/'eval'/'incoming';incoming.mkdir(parents=True)
+    logical=incoming/('checkpoint-'+identity['sha256']+'.pt')
+    logical.symlink_to(payload)
+    active=seal_request(logical,identity=identity,step=7,spec=spec,out=tmp_path/'eval',
+        base=base,queue=tmp_path/'queue',device='cpu',consume_export=True)
+    request=json.loads((Path(active['request'])/'request.json').read_text())
+    weights=Path(request['weights'])
+    assert not logical.exists() and not logical.is_symlink()
+    assert weights.is_symlink() and weights.resolve()==payload.resolve()
+    assert file_binding(weights)['sha256']==identity['sha256']
+    assert payload.is_file() and payload.stat().st_size==identity['bytes']
+
+
 def test_latest_export_coalesces_without_changing_running_request(tmp_path,monkeypatch):
     base,_,checkpoint,spec,export=fixture(tmp_path)
     export_path=tmp_path/'export-state.json';export_path.write_text(json.dumps(export))
@@ -238,6 +256,63 @@ def test_verified_existing_download_cannot_be_replaced_by_stale_pending(tmp_path
     result=module.fetch({'private':True,'role':role,'identity':identity,
                         'independent_verification':identity},destination)
     assert result['sha256']==identity['sha256'] and destination.read_bytes()==b'verified'
+
+
+def test_external_fetch_publishes_only_verified_content_addressed_symlink(tmp_path,monkeypatch):
+    import importlib.util,sys,types
+    path=Path(__file__).resolve().parents[2]/'scripts/coreweave/fetch_native_eval_export.py'
+    monkeypatch.setitem(sys.modules,'cwctl',types.SimpleNamespace())
+    monkeypatch.setitem(sys.modules,'wandb',types.SimpleNamespace())
+    spec=importlib.util.spec_from_file_location('external_native_fetch_test',path)
+    module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    payload_root=tmp_path/'external';payload_root.mkdir()
+    seed=payload_root/'seed.pt';seed.write_bytes(b'private-view')
+    identity=file_binding(seed)
+    payload=payload_root/identity['sha256']/('checkpoint-'+identity['sha256']+'.pt');payload.parent.mkdir();seed.replace(payload)
+    destination=tmp_path/'eval'/'incoming'/'checkpoint.pt'
+    receipt={'private':True,'role':'mellum','identity':identity,'independent_verification':dict(identity)}
+    result=module.fetch(receipt,destination,payload_root=payload_root,require_separate_filesystem=False)
+    assert result['path']==str(destination) and result['payload_path']==str(payload_root/identity['sha256']/('checkpoint-'+identity['sha256']+'.pt'))
+    assert destination.is_symlink() and destination.resolve()==Path(result['payload_path'])
+    assert file_binding(destination)['sha256']==identity['sha256']
+    destination.unlink();payload.write_bytes(b'tampered-view')
+    with pytest.raises(ValueError,match='differs from private receipt'):
+        module.publish_payload_link(payload,destination,identity)
+
+
+def test_external_fetch_enforces_floor_before_provider_access(tmp_path,monkeypatch):
+    import importlib.util,sys,types
+    from types import SimpleNamespace
+    path=Path(__file__).resolve().parents[2]/'scripts/coreweave/fetch_native_eval_export.py'
+    monkeypatch.setitem(sys.modules,'cwctl',types.SimpleNamespace())
+    monkeypatch.setitem(sys.modules,'wandb',types.SimpleNamespace())
+    spec=importlib.util.spec_from_file_location('external_native_floor_fetch_test',path)
+    module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    payload_root=tmp_path/'external';payload_root.mkdir()
+    receipt={'private':True,'role':'lfm','identity':{'sha256':'a'*64,'bytes':100},
+             'independent_verification':{'sha256':'a'*64,'bytes':100}}
+    class NeverRequests:
+        def get(self,*args,**kwargs):pytest.fail('provider access before external floor admission')
+    floor=20<<30
+    with pytest.raises(OSError,match='free-space floor'):
+        module.fetch(receipt,tmp_path/'logical.pt',payload_root=payload_root,
+                     minimum_external_free_bytes=floor,requests_client=NeverRequests(),
+                     wandb_api=object(),available=lambda _:SimpleNamespace(free=floor+99),
+                     require_separate_filesystem=False)
+
+
+def test_external_fetch_rejects_root_on_same_filesystem(tmp_path,monkeypatch):
+    import importlib.util,sys,types
+    path=Path(__file__).resolve().parents[2]/'scripts/coreweave/fetch_native_eval_export.py'
+    monkeypatch.setitem(sys.modules,'cwctl',types.SimpleNamespace())
+    monkeypatch.setitem(sys.modules,'wandb',types.SimpleNamespace())
+    spec=importlib.util.spec_from_file_location('external_native_same_device_test',path)
+    module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    payload_root=tmp_path/'external';payload_root.mkdir()
+    receipt={'private':True,'role':'lfm','identity':{'sha256':'b'*64,'bytes':100},
+             'independent_verification':{'sha256':'b'*64,'bytes':100}}
+    with pytest.raises(ValueError,match='shares the logical path filesystem'):
+        module.fetch(receipt,tmp_path/'logical.pt',payload_root=payload_root)
 
 
 @pytest.mark.parametrize('family',['lfm','mellum'])

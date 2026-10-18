@@ -120,8 +120,10 @@ evaluation checkpoint.
 | --- | --- | --- |
 | Export selection and expected identity | Existing owner-side receipt | The exact size and SHA are already independently verified upstream. |
 | Private artifact lookup and authenticated HTTP stream | Crisp `fetch_native_eval_export.py` | W&B API/credentials and HTTP Range are external-service plumbing. |
-| Partial progress | `<destination>.pending` plus recomputed prefix SHA | A retry can continue at the exact durable byte offset without a second state format. |
-| Resume acceptance and publication | Crisp exact verifier | Check HTTP status, exact `Content-Range`, total length and final SHA before atomic rename. |
+| Partial progress | `<payload>.pending` plus recomputed prefix SHA and optional aria2 control file | A retry can continue at the exact durable byte offset without a second receipt or trust format. |
+| Payload placement | Optional configured external payload root keyed by receipt SHA | Large bytes can stay on an independently checked filesystem while the evaluator's logical incoming path stays in place. |
+| Resume acceptance and publication | Crisp exact verifier and atomic logical symlink publication | Check HTTP status, exact `Content-Range`, total length and final SHA before making the external object visible. |
+| Request consumption | Move the logical incoming file or symlink within the evaluation filesystem | A symlink moves as a symlink so sealing does not copy its external target into tmpfs. |
 
 An existing destination is reused only when its complete receipt-bound SHA and
 size match. A complete valid pending file is published without another API
@@ -129,7 +131,14 @@ request. A partial pending file is hashed from byte zero before requesting the
 remaining range. A server that ignores Range with HTTP 200 causes a safe
 truncate-and-rewrite from the beginning; a malformed 206 is rejected without
 changing the pending prefix. A complete artifact is exposed only after its
-receipt-bound byte count and SHA match, followed by parent-directory fsync.
+receipt-bound byte count and SHA match, followed by parent-directory fsync. An
+external payload root must already exist on a different filesystem and keep
+its configured free-space floor after the remaining bytes are allocated. A
+partial at the legacy logical path is not silently fetched again to an
+external root; its data and matching aria2 control require an explicit
+controlled migration. Request cleanup removes only the logical symlink;
+content-addressed external bytes remain until reference-based retention proves
+they are unused.
 
 ## Participant-sharded shared checkpoint storage
 

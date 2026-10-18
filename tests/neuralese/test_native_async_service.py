@@ -94,6 +94,46 @@ def test_disk_guard_preserves_partial_fetch(tmp_path):
     assert pending.read_bytes()==b'x'*50
 
 
+def _external_test_root(request):
+    import shutil,tempfile
+    external=Path(tempfile.mkdtemp(prefix='native-export-test-',dir='/dev/shm'))
+    request.addfinalizer(lambda:shutil.rmtree(external,ignore_errors=True))
+    return external
+
+
+def test_external_payload_admission_keeps_tmpfs_reserve_and_external_floor(tmp_path,request):
+    c=config(tmp_path);external=_external_test_root(request)
+    floor=20<<30;c['external_payload_root']=str(external);c['external_min_free_bytes']=floor
+    calls=[]
+    def ingest(export,**kwargs):
+        calls.append(kwargs)
+        selected=json.loads(Path(export).read_text())
+        return kwargs['export_admission'](selected,Path(c['out'])/'incoming'/('checkpoint-'+'f'*64+'.pt'))
+    def available(path):
+        return SimpleNamespace(free=floor+99 if Path(path)==external else 300)
+    result=service.poll(c,ingest=ingest,available=available)
+    assert result==dict(event='native_eval_external_disk_wait',available_bytes=floor+99,
+                        needed_bytes=floor+100,free_floor_bytes=floor)
+    assert not calls
+    def enough(path):return SimpleNamespace(free=floor+1000 if Path(path)==external else 300)
+    assert service.poll(c,ingest=ingest,available=enough)is None
+    assert calls[0]['fetch_command'][-2:]==['--payload-root',str(external.resolve())]
+    assert not (Path(c['out'])/'native-async-state.json').exists()
+
+
+def test_external_payload_requires_explicit_migration_of_logical_partial(tmp_path,request):
+    c=config(tmp_path);external=_external_test_root(request)
+    c['external_payload_root']=str(external)
+    destination=Path(c['out'])/'incoming'/('checkpoint-'+'f'*64+'.pt')
+    pending=destination.with_name(destination.name+'.pending');pending.parent.mkdir(parents=True)
+    pending.write_bytes(b'old partial')
+    control=pending.with_name(pending.name+'.aria2');control.write_bytes(b'resume control')
+    result=service.poll(c,ingest=lambda *a,**k:pytest.fail('must not start a second transfer'),
+                        available=lambda _:SimpleNamespace(free=1000))
+    assert result['event']=='native_eval_external_migration_required'
+    assert pending.read_bytes()==b'old partial' and control.read_bytes()==b'resume control'
+
+
 def test_disk_guard_uses_pinned_transfer_instead_of_newer_export(tmp_path):
     from natlang_neuralese.common.hashing import canonical_json_sha256_hex
     c=config(tmp_path);out=Path(c['out']);out.mkdir()
