@@ -419,7 +419,7 @@ def test_completed_nonfoundation_stage_does_not_qualify_foundation(tmp_path,monk
         write_json_durable(path,value);return result
     monkeypatch.setattr(native_rounds,'round_job',completed)
     cursor={};continuation={'mandatory_sft_only':True,'out':str(directory/'ordinary'),
-        'checkpoint':config['checkpoint'],'trainer_parameters':{'checkpoint_every':250,'refresh_at_checkpoint':True}}
+        'checkpoint':config['checkpoint'],'trainer_parameters':{'checkpoint_every':250,'refresh_at_checkpoint':True,'refresh_after_updates':250}}
     raw._supervised_job(continuation,directory/'ordinary-job',config,cursor,stop)
     assert 'foundation_qualified' not in cursor and 'readiness' not in cursor
 
@@ -496,8 +496,8 @@ def test_declared_stage_quanta_keep_preference_and_foundation_cadences_distinct(
     preference={'stage_id':'preference','eval_every':50}
     from natlang_neuralese.rl.native_raw_rounds import _supervised_quantum
     _supervised_quantum(config,ordinary);_supervised_quantum(config,preference)
-    assert ordinary=={'stage_id':'ordinary','eval_every':250,'checkpoint_every':1000,'refresh_at_checkpoint':True}
-    assert preference=={'stage_id':'preference','eval_every':50,'checkpoint_every':250,'refresh_at_checkpoint':True}
+    assert ordinary=={'stage_id':'ordinary','eval_every':250,'checkpoint_every':1000,'refresh_at_checkpoint':True,'refresh_after_updates':1000}
+    assert preference=={'stage_id':'preference','eval_every':50,'checkpoint_every':250,'refresh_at_checkpoint':True,'refresh_after_updates':250}
     fallback={'stage_id':'legacy','eval_every':16};_supervised_quantum(config,fallback)
     assert fallback['checkpoint_every']==128
 

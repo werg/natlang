@@ -194,7 +194,7 @@ def test_supervised_quantum_changes_only_checkpoint_boundary_in_real_emitted_arg
     raw._scheduling_controls(config,declaration,plan,{},pending=True)
     assert config['rows_per_round']==32  # Current selection remains the old packet.
     mandatory=original.copy();raw._supervised_quantum(config,mandatory)
-    assert mandatory=={**original,'checkpoint_every':16,'eval_every':16,'refresh_at_checkpoint':True}
+    assert mandatory=={**original,'checkpoint_every':16,'eval_every':16,'refresh_at_checkpoint':True,'refresh_after_updates':16}
     actual=[];monkeypatch.setattr(production.subprocess,'run',lambda argv,**kw:actual.append(argv))
     production.run_command(config['seed_command'],{'seed_trainer_args':stage_parameter_args(config['seed_trainer_parameters'])})
     assert actual[0][actual[0].index('--checkpoint-every')+1]=='16'
@@ -202,6 +202,7 @@ def test_supervised_quantum_changes_only_checkpoint_boundary_in_real_emitted_arg
     assert actual[0][actual[0].index('--eval-every')+1]=='16'
     assert actual[0][actual[0].index('--held-eval-tokens')+1]=='8192'
     assert '--refresh-at-checkpoint' in actual[0]
+    assert actual[0][actual[0].index('--refresh-after-updates')+1]=='16'
     assert config['trainer_parameters']==original
     raw._scheduling_controls(config,declaration,plan,{},pending=False)
     assert config['rows_per_round']==4

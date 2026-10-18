@@ -95,6 +95,7 @@ def _supervised_quantum(config,parameters):
         parameters['checkpoint_every']=quantum
         parameters['eval_every']=evaluation
         parameters['refresh_at_checkpoint']=True
+        parameters['refresh_after_updates']=quantum
 
 
 def _scheduling_controls(config,declaration,plan_path,record,*,pending=False):

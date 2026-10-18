@@ -42,7 +42,7 @@ HANDLERS = {
                          'parameters': {'base', 'rank', 'dtype', 'native_linear_precision', 'native_attention_precision', 'epochs', 'batch_graphs', 'batch_tokens', 'learning_rate', 'weight_decay',
                              'latent_ns', 'eval_every', 'held_eval_tokens', 'held_eval_graphs', 'checkpoint_every', 'checkpoint_seconds', 'checkpoint_layers', 'checkpoint_input_offload', 'checkpoint_input_offload_directory', 'chunk_tokens',
                              'fp8_training', 'fp8_recipe', 'fp8_amax_history_len', 'learned_row_learning_rate', 'interface_row_learning_rate', 'native_optimizer_migration', 'native_ordinary_precision', 'native_norm_execution', 'history_reasoning_policy', 'seed', 'task_eval',
-                             'task_eval_every', 'forward_atol', 'gradient_atol', 'qualify_training_backend', 'resident_geometry_qualification', 'memory_qualification', 'communication_foundation', 'foundation_communication_batches', 'urgent_cohort_fairness', 'refresh_at_checkpoint', 'learn_reasoning_boundaries', 'share_causal_prefixes'}, 'result': 'checkpoint.pt'},
+                             'task_eval_every', 'forward_atol', 'gradient_atol', 'qualify_training_backend', 'resident_geometry_qualification', 'memory_qualification', 'communication_foundation', 'foundation_communication_batches', 'urgent_cohort_fairness', 'refresh_at_checkpoint', 'refresh_after_updates', 'learn_reasoning_boundaries', 'share_causal_prefixes'}, 'result': 'checkpoint.pt'},
     # Neuralese direct v1 (plans/neuralese/NEURALESE_DIRECT_V1.md): plain target SFT from a base model with the
     # NeuraleseProjection; the TokenChoiceProjection is declared per stage (off in v1).
     # Its data is either prepared text (text_data, the shared declared input of neuralese-direct-v2) or records and
@@ -1348,7 +1348,7 @@ def write_json(path, value):
 
 # Stage parameters that change how a stage computes, not what it optimizes: a lineage may switch them in place
 # (``--handoff``). Each trainer also lists them among its resume-operational options.
-OPERATIONAL_STAGE_PARAMETERS = frozenset({'eval_every', 'checkpoint_every', 'checkpoint_seconds', 'moe_kernel',
+OPERATIONAL_STAGE_PARAMETERS = frozenset({'refresh_after_updates', 'eval_every', 'checkpoint_every', 'checkpoint_seconds', 'moe_kernel',
                                           'sdpa_backend', 'deterministic_training',
                                           # Recurrence resume already excludes this allocation envelope from its
                                           # objective identity; increasing it must not require a fresh optimizer.

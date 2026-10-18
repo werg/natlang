@@ -707,6 +707,8 @@ def build_parser():
     parser.add_argument('--pending-native-sources', action='append', default=[])
     parser.add_argument('--refresh-at-checkpoint', action=argparse.BooleanOptionalAction, default=False,
         help='return an explicit incomplete continuation for semantic refresh at the next declared checkpoint boundary')
+    parser.add_argument('--refresh-after-updates', type=int,
+        help='refresh after this many new optimizer updates since restoration; independent of periodic checkpoint alignment')
     parser.add_argument('--learn-reasoning-boundaries', action=argparse.BooleanOptionalAction, default=False,
                         help='explicitly add learned existing reasoning token rows to an old parent')
     parser.add_argument('--foundation-communication-batches', type=int,
@@ -792,6 +794,8 @@ def build_parser():
 
 def main(argv=None):
     args = build_parser().parse_args(argv)
+    if args.refresh_after_updates is not None and args.refresh_after_updates < 1:
+        raise ValueError('refresh-after-updates must be a positive integer')
     history_reasoning_transition = None
     if args.foundation_communication_batches is not None and args.foundation_communication_batches < 1:
         raise ValueError('foundation communication batches must be a positive integer')
@@ -1334,7 +1338,7 @@ def main(argv=None):
     resumed_step = step
     last_saved_step = step if policy.slot.is_file() and not parent_continuation else -1
     refresh_boundary = False
-    if args.refresh_at_checkpoint and not (args.checkpoint_every or args.checkpoint_seconds):
+    if args.refresh_at_checkpoint and args.refresh_after_updates is None and not (args.checkpoint_every or args.checkpoint_seconds):
         raise ValueError('semantic refresh needs a declared checkpoint step/time cadence')
     schedule = stream_pending_batches(train, pending_batches, priority_ids=foundation_priority_ids,
                                       cohort_ids=urgent_cohort_ids)
@@ -1501,7 +1505,9 @@ def main(argv=None):
                 log.write(json.dumps(progress, sort_keys=True) + '\n')
             write_json(args.out / 'progress.json', progress)
             print(json.dumps(progress, sort_keys=True), flush=True)
-            due_checkpoint = policy.due(step, end=step == total_end)
+            relative_refresh_due = (args.refresh_after_updates is not None
+                                    and step - resumed_step >= args.refresh_after_updates)
+            due_checkpoint = policy.due(step, end=step == total_end) or relative_refresh_due
             if policy.signaled:
                 break
             due_task = task_eval is not None and ((step == total_end and not policy_operation) or
@@ -1583,7 +1589,8 @@ def main(argv=None):
                       fp8_state=backend.extra_state() if backend is not None else None, sft_progress=carried_progress)
                 last_saved_step = step
                 metadata_dirty = False
-            if args.refresh_at_checkpoint and due_checkpoint:
+            if relative_refresh_due or (args.refresh_after_updates is None
+                                        and args.refresh_at_checkpoint and due_checkpoint):
                 refresh_boundary = True
                 break
         if step == total_end and not policy.signaled:
