@@ -48,21 +48,34 @@ through the projected-value implementation.
 
 ## Current status
 
-October17 operational position: both replacement trainers are making actual
-updates (LFM12049, Mellum18799 at21:49UTC). Their foundation obligations are
-18619/26312 and17533/26312 respectively; neither the entire production recipe
-nor complete communication exposure is finished. Mellum has adopted the new
-764-graph teacher addition and executed15 actual graph visits across all four
-new leaves. LFM's append exposed an omitted-versus-explicit IEEE capacity
-identity mismatch; the shared semantic-default repair preserves the original
-certificate and is being bundled with current-source argument normalization,
-the764 graphs, another458 verified authored graphs and the Source04 complete
-fit/pending partition at an exact saved-state continuation. Healthy training
-continues during preparation. Loading or staging these sources is not exposure.
+October18,02:45UTC operational position: both replacement models completed
+genuine graph RL followed by250 DPO updates, reaching LFM12742 and Mellum20339.
+Their new SFT learners are restoring the saved states and preparing the next
+ordinary stage; a running worker is not yet evidence of a resumed update.
+Completed-stage consumption/adaptation now accounts for the finished DPO once,
+preserves optimizer/RNG/exposure and continues through the evolving recipe.
+Both ordinary recipes include KEEP D32 sources01–06 and the1572-graph teacher
+addition; LF uses learning rate1e-5 and Mellum retains3e-6. Exact row coverage
+remains required, including whole long pending rows and retained bridges.
+Foundation exposure was19176/26312 for LF at12488 and18352/26312 for Mellum
+at20080; neither complete communication exposure nor whole-recipe completion
+is established. Newly staged teacher569+173 and D32 sources07/08, with09 being
+staged, must enter explicit live continuations. Loading or staging is not
+training exposure.
+
+Ordinary training is independent of unrelated semantic-relay polling or
+cross-model readiness. Its own exact checkpoint/configuration, optimizer history
+and live-owner checks remain mandatory. Both new plan bindings are installed
+in the current relay, which reports repair-required; the completed-adaptation
+positive-release verification and shared CPU control bindings still need repair
+before semantic exchange. This grants no VAE readiness. Metadata services must
+not hold healthy independent SFT idle while those separate checks are repaired.
 
 Task quality remains a real impediment: the same protected16-task packet yields
-LFM11134=0/16, LFM11502=0/16 and Mellum16364=9/16. The latest LF result has no
-infrastructure or unresolved cases and is dominated by repetition. These are
+LFM11134=0/16, LFM11502=0/16, LFM12184=1/16, LFM12488=0/16 and
+Mellum16364=9/16, Mellum17786=10/16. LF12488 has nine repetition failures,
+two budget exhaustions and five semantic mismatches, with no infrastructure or
+unresolved cases; LF12742 is being evaluated. These are
 historical actor measurements, not claims about current cloud weights. Generic
 recovery training, source exposure and the paired history-policy investigation
 are being checked without reusing held inputs or targets for training.
