@@ -1524,6 +1524,7 @@ def main(argv=None):
     # All live state now belongs to the sources, optimizer, RNG, counters,
     # checkpoint_options and carried_progress. Drop references, never mutate
     # the predecessor or weaken snapshot ownership to reclaim this memory.
+    saved_options = None
     saved_training = resume = shared_resume = continuation_training = restored_frame = None
     source_resume = foundation_frame = old_frame = old_options = None
     old_counts = old_quotas = prior_bindings = prior_order = prior_held = None
