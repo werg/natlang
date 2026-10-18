@@ -50,6 +50,7 @@ import sqlite3
 import tempfile
 from collections import Counter, defaultdict
 from contextlib import ExitStack
+from functools import partial
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
@@ -105,7 +106,11 @@ HELD_SPLIT_ALIASES = ('validation', 'valid', 'val', 'dev')
 _G: dict = {}
 
 
-from natlang_neuralese.common.hashing import sha256_file_hex as file_sha, sha256_hex as sha  # noqa: E402
+from natlang_neuralese.common.hashing import sha256_file_hex_cached, sha256_hex as sha  # noqa: E402
+# Source admission, selection and rendering revisit the same immutable inputs.
+# Reuse only actual byte hashes with exact inode/size/mtime/ctime validation;
+# archive receipts and the weaker legacy cache identity grant no authority here.
+file_sha = partial(sha256_file_hex_cached, trust_archive_receipt=False)
 from natlang_neuralese.common.jsonio import (canonical_json_str as canonical, open_jsonl_text,
                                               write_json_durable, write_jsonl_text)  # noqa: E402
 from natlang_neuralese.common.resumable_jsonl_frames import ResumableJsonlFrames  # noqa: E402
