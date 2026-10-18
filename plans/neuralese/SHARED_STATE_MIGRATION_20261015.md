@@ -438,3 +438,50 @@ not qualify the current model or establish improvement. Feedback is present in
 the inspected requests. Preserve held separation and use distinct nonheld tasks
 to improve tool-error recovery, API indexing and typed returns while useful
 production training continues.
+
+### Production continuation (2026-10-18 15:35 UTC)
+
+Mellum's retained R18 diagnostic collection stopped at 14:13 UTC with zero RAW
+updates. Its completed TRAIN and protected HELD partials, evidence and native
+state artifacts were captured before stopping the owned processes. Unfinished
+RAW work remains unfinished. Current R19 startup restores the exact full 21,930
+parent, optimizer/RNG and completed ordinary frame 20,914; it includes the
+deduplicated 8,574-row teacher continuation, including the missing 1,147 rows.
+Newly loaded data is not evidence of completed row visits.
+
+The complete cached-gradient comparison exposed a genuine GPU OOM while
+retaining all flat reference derivatives beside cached backward. Shared fix
+`7f17d5546` moves exact reference derivatives and comparison pairs to CPU,
+without changing returned gradients, model execution or acceptance gates.
+Actual 67 focused tests passed, including both models, CUDA/BF16 reference
+lifetime and whole optimizer/RNG preservation. Independent review cleared the
+change. The same-parent v4 owner restored state, but its actual complete
+comparison then failed numerically before SGD: 166 / 315 derivative comparisons
+failed, all observed failures in BF16 backbone weights, despite bitwise-equal
+forward outputs and input-embedding derivatives. This is an unresolved implementation
+bug. The producer/consumer parameter-gradient accumulation boundary and existing
+FP32 cotangent carriers are being checked against an exact reference; no gate
+was waived. Ordinary maximum-row backward and R19 SGD remain pending.
+Completed actor/cache parity was reused only under the verified comparator-only
+delta. Both administrative exporters now target the exact v4 output; no extra
+save, learner signal or parent decode was needed for that handoff.
+
+LFM continues R19 training. The 332-row teacher continuation was adopted at
+14,570 and followed by actual optimizer updates at 14,572. Communication
+exposure there was 21,480 / 107,766. The next 384-row continuation is being
+prepared, followed by a safe loader-only update, the 4,012-row static QA append
+and an explicit ordinary 137,052-token maximum-row backward check. Exact
+source-bound maximum rows inspected for both students and source16 repairs are
+single-node graphs with no edges; the earlier 500k policy case alone does not
+qualify their ordinary capacity admission. Complete source rows remain pending
+rather than clipped or silently lost.
+
+Teacher generation continues on the dedicated self-hosted Qwen sandbox. Actual
+batch42 selected the 24 new recovery cases with two trajectories each; this is
+selection evidence, not quality measurement or training admission. Shared
+bounded SDK reads now cover both tranche payloads and worker queue/journal
+prefixes (`3f5cadf6f`), with original partition, provenance, incomplete-append
+and private durability checks retained. Actual 80 exporter tests and independent
+review passed. Publisher-only handoff leaves the guardian, serving engine and
+collectors running. Live counters and subsequent adoption evidence remain in
+the DGX coordination status and bound operations receipts.
