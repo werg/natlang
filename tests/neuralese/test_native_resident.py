@@ -681,6 +681,153 @@ def ordinary_coverage_part(tmp_path,kind):
     return source,{'model':'fixture','source':resident.binding(manifest),'coverage':resident.binding(coverage),'receipt':resident.binding(path)}
 
 
+def source03_bridge_fixture(tmp_path, monkeypatch, *, with_ordinary=False):
+    import hashlib
+    import pickle
+    import subprocess
+    from natlang_neuralese.common.hashing import canonical_json_sha256_hex, sha256_file_hex
+    from natlang_neuralese.common import row_index
+
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE', str(tmp_path/'cache'))
+    tokenizer='tokenizer-sha';roles=[64402,64403,64404,64405]
+    base=tmp_path/'base';model=base/'lfm25';model.mkdir(parents=True)
+    graphs=[graph('bridge-a'),graph('bridge-b')]
+    raw_graphs=''.join(json.dumps(row,separators=(',',':'))+'\n' for row in graphs).encode()
+    bridge_leaf=model/'00-fit.jsonl.zst'
+    with bridge_leaf.open('wb') as compressed:
+        subprocess.run(['zstd','-q','-c'],input=raw_graphs,stdout=compressed,check=True)
+    sidecar=model/'bridge-row-bindings.jsonl'
+    old=tmp_path/'old';oldfit=old/'old-fit';(oldfit/'row-index').mkdir(parents=True)
+    old_leaf=oldfit/'00-fit.jsonl.zst'
+    with old_leaf.open('wb') as compressed:
+        subprocess.run(['zstd','-q','-c'],input=raw_graphs,stdout=compressed,check=True)
+    bridge_source=NativeGraphSource(bridge_leaf,tokenizer,required_split='train',role_ids=roles)
+    old_source=NativeGraphSource(old_leaf,tokenizer,required_split='train',role_ids=roles)
+    old_coverage=oldfit/'coverage.jsonl'
+    side_rows=[];old_cov_rows=[];bridge_cov_rows=[]
+    for i,(row,entry) in enumerate(zip(graphs,bridge_source.entries,strict=True)):
+        line=(json.dumps(row,separators=(',',':'))+'\n').encode()
+        raw_sha=hashlib.sha256(line).hexdigest();graph_sha=canonical_json_sha256_hex(row)
+        side={'id':entry['id'],'binding':entry['binding'],'keep_parent_id':'parent-'+str(i),
+            'keep_partition':'remaining-long','keep_source_graph_sha256':'1'*64,
+            'keep_source_row_bytes_sha256':'2'*64,'old_fit_source_row':i,
+            'old_source_graph_sha256':graph_sha,'source_row_bytes_sha256':raw_sha,
+            'source_sha256':old_source.file_sha256}
+        side_rows.append(side)
+        old_cov_rows.append({'model':'lfm25','split':'train','disposition':'fit','source_row':i,'id':entry['id'],
+            'source_graph_sha256':graph_sha,'source_row_bytes_sha256':raw_sha,
+            'geometry':{'forward_tokens':3,'kv_slots':3},'represented_by':{'fit':True}})
+        bridge_cov_rows.append({'schema':'natlang.d32-source03-aux-bridge-geometry-row/1','bridge_row_index':i,
+            'id':entry['id'],'binding':entry['binding'],'source_graph_sha256':graph_sha,
+            'source_row_bytes_sha256':raw_sha,'geometry':{'forward_tokens':3,'kv_slots':3},
+            'old_fit_coverage_row':{'source_sha256':old_source.file_sha256,
+                'coverage_sha256':'','old_source_row_index':i},'old_row_index_binding':entry['binding']})
+    sidecar.write_text(''.join(json.dumps(row,sort_keys=True,separators=(',',':'))+'\n' for row in side_rows))
+    old_coverage.write_text(''.join(json.dumps(row,separators=(',',':'))+'\n' for row in old_cov_rows))
+    old_cov_sha=sha256_file_hex(old_coverage)
+    for row in bridge_cov_rows:row['old_fit_coverage_row']['coverage_sha256']=old_cov_sha
+    coverage=tmp_path/'geometry-supplement'/'coverage.jsonl';coverage.parent.mkdir()
+    coverage.write_text(''.join(json.dumps(row,separators=(',',':'))+'\n' for row in bridge_cov_rows))
+
+    package=Path(resident.__file__).parents[1]
+    names=('data/native_sources.py','data/native_graph_schema.py','model/native_graph_plan.py',
+        'data/native_pair_schema.py','common/row_index.py','common/jsonio.py','common/hashing.py')
+    current_components={name:sha256_file_hex(package/name) for name in names}
+    old_components=dict(current_components);old_components['common/hashing.py']='a'*64
+    policy_old=canonical_json_sha256_hex(old_components);policy_new=canonical_json_sha256_hex(current_components)
+    def key_for(source,policy):
+        return {'source_sha256':source.file_sha256,'tokenizer':tokenizer,'split':'train',
+            'policy_sha256':policy,'kind':'native-graphs','pair_model':None,'role_ids':roles}
+    old_key=key_for(old_source,policy_old);bridge_key=key_for(bridge_source,policy_new)
+    def index_file(path,key,entries):
+        value={'schema':'natlang.row-index/1','key':key,'entries':entries,
+            'metadata_sha256':canonical_json_sha256_hex(entries)}
+        with path.open('wb') as stream:pickle.dump(value,stream)
+    old_index=oldfit/'row-index/native-graphs-436a086fe6a15ca3669c145776184b1089fdfc41.pkl';index_file(old_index,old_key,old_source.entries)
+    bridge_index=coverage.parent/'row-index/native-graphs-bridge.pkl';bridge_index.parent.mkdir()
+    index_file(bridge_index,bridge_key,bridge_source.entries)
+
+    old_files=[]
+    for p,name in ((old_leaf,'old-fit/00-fit.jsonl.zst'),(old_coverage,'old-fit/coverage.jsonl'),
+                   (old_index,'old-fit/row-index/native-graphs-436a086fe6a15ca3669c145776184b1089fdfc41.pkl')):
+        old_files.append({'path':name,'sha256':sha256_file_hex(p),'bytes':p.stat().st_size})
+    def artifact(path):return {'path':str(path),'sha256':sha256_file_hex(path),'bytes':path.stat().st_size}
+    keep_coverage=tmp_path/'keep-coverage.jsonl';keep_coverage.write_text('{}\n')
+    join={'schema':'natlang.d32-source03-aux-bridge-old-geometry-join/1','rows':2,
+        'mapping_sha256':'b'*64,'matched_old_fit_graph_sha':2,'old_fit_match_errors':[],'keep_parent_errors':[],
+        'artifacts':{'old_fit_source':artifact(old_leaf),'old_coverage':artifact(old_coverage),
+            'old_row_index':artifact(old_index),'bridge_source':artifact(bridge_leaf),
+            'row_binding_sidecar':artifact(sidecar),'keep_coverage':artifact(keep_coverage)},
+        'training_admission':False,'training_exposure':0}
+    join_path=old/'join-report.json';write_json(join_path,join)
+    old_files.append({'path':'join-report.json','sha256':sha256_file_hex(join_path),'bytes':join_path.stat().st_size})
+    provenance={'schema':'natlang.d32-source03-aux-bridge-old-join-provenance/1','files':old_files,
+        'geometry_forward_tokens_sum':6,'geometry_kv_slots_sum':6,'join_mapping_sha256':join['mapping_sha256'],
+        'matched_old_fit_graph_sha':2,'rows':2,'source_row_index_key':bridge_key,
+        'training_admission':False,'training_exposure':0,'unique_keep_parents':2}
+    provenance_path=old/'provenance.json';write_json(provenance_path,provenance)
+    def ref(path):return {'path':str(path),'sha256':sha256_file_hex(path),'bytes':path.stat().st_size}
+    fit_sources=model/'fit-sources.json';write_json(fit_sources,{'schema':'natlang.native-graph-sources/1',
+        'sources':[{'kind':'native-graphs',**resident.binding(bridge_leaf)}]})
+    evidence=model/'bridge-evidence-final.json';write_json(evidence,{'schema':'natlang.d32-history-keep-aux-bridge-final/1',
+        'source03':{'rows':2,'unique_keep_parents':2,'training_admission':False,'training_exposure':0,
+            'old_fit_source':artifact(old_leaf),'old_coverage':artifact(old_coverage),'old_row_index':artifact(old_index),
+            'keep_coverage':artifact(keep_coverage),
+            'bridge_source':{**artifact(bridge_leaf),'raw_selected_rows_sha256':hashlib.sha256(raw_graphs).hexdigest()},
+            'row_binding_sidecar':{**artifact(sidecar),'canonical_rows_sha256':hashlib.sha256(sidecar.read_bytes()).hexdigest()},
+            'keep_pending_parent_ids_sha256':resident.digest(['parent-0','parent-1'])}})
+    registration=model/'registration-audit.json';write_json(registration,{'schema':'natlang.d32-history-keep-aux-bridge-registration/1',
+        'training_admission':False,'training_exposure':0})
+    manifest=tmp_path/'corpus-manifest.json'
+    files=[]
+    for p,rel in ((bridge_leaf,'lfm25/00-fit.jsonl.zst'),(sidecar,'lfm25/bridge-row-bindings.jsonl'),
+                  (evidence,'lfm25/bridge-evidence-final.json'),(fit_sources,'lfm25/fit-sources.json'),
+                  (registration,'lfm25/registration-audit.json')):
+        files.append({'path':rel,'bytes':p.stat().st_size,'sha256':sha256_file_hex(p)})
+    write_json(manifest,{'schema':'natlang.corpus-snapshot/1','id':'d32-source03-history-keep-aux-bridge-v1',
+        'training_admission':False,'files':files})
+    supplement={'schema':'natlang.d32-source03-aux-bridge-geometry-supplement/1','source':ref(bridge_leaf),
+        'source_row_binding_sidecar':ref(sidecar),'old_fit_source':ref(old_leaf),'old_fit_coverage':ref(old_coverage),
+        'old_source_row_index':ref(old_index),'join_report':ref(join_path),'join_mapping_sha256':join['mapping_sha256'],
+        'coverage':ref(coverage),'source_row_index':ref(bridge_index),'row_index_key':bridge_key,
+        'row_index_entries_sha256':canonical_json_sha256_hex(bridge_source.entries),
+        'parser_policy_transition':{'old_policy_sha256':policy_old,'new_policy_sha256':policy_new,
+            'changed_components':['common/hashing.py'],'old_components':old_components,
+            'new_components':current_components,'unchanged_parser_components':[n for n in names if n!='common/hashing.py']},
+        'rows':2,'forward_tokens_sum':6,'kv_slots_sum':6,'unique_keep_parents':2,
+        'training_admission':False,'training_exposure':0}
+    supplement_path=coverage.parent/'supplement.json';write_json(supplement_path,supplement)
+    # The verifier resolves the staged technical package by sibling names, while
+    # each embedded reference retains its original source-host path and digest.
+    parts=[{'schema':'natlang.d32-source03-aux-bridge-geometry-part/1','model':'lfm25',
+        'source':resident.binding(fit_sources),'corpus_manifest':resident.binding(manifest),
+        'supplement':resident.binding(supplement_path),'old_join_provenance':resident.binding(provenance_path),
+        'limits':{'forward_tokens':10,'kv_slots':10}}]
+    main=bridge_leaf
+    if with_ordinary:
+        ordinary_row=graph('ordinary');ordinary_row['nodes'][0]['token_ids']=[1,2,3,4]
+        ordinary_row['nodes'][0]['target_weights']=[0,1,1,1]
+        ordinary=tmp_path/'ordinary.jsonl';ordinary.write_text(json.dumps(ordinary_row)+'\n')
+        main=tmp_path/'combined.jsonl';main.write_bytes(raw_graphs+ordinary.read_bytes())
+        ordinary_source=NativeGraphSource(ordinary,tokenizer,required_split='train',role_ids=roles)
+        combined=NativeGraphSource(main,tokenizer,required_split='train',role_ids=roles)
+        coverage2=tmp_path/'ordinary-coverage.jsonl'
+        coverage2.write_text(json.dumps({'id':ordinary_source.entries[0]['id'],'model':'fixture','split':'train',
+            'partition':'fit','disposition':'fit','partition_row_index':0,
+            'geometry':{'forward_tokens':4,'kv_slots':4}})+'\n')
+        receipt={'schema':'natlang.acquired-native-capacity-partition/1','source_eligibility_unchanged':True,
+            'exact_original_row_bytes':True,'files':[{'path':'ordinary.jsonl','sha256':sha256_file_hex(ordinary),'bytes':ordinary.stat().st_size},
+                {'path':'ordinary-coverage.jsonl','sha256':sha256_file_hex(coverage2),'bytes':coverage2.stat().st_size}],
+            'coverage':'ordinary-coverage.jsonl','manifests':{'fixture:train:fit':'ordinary.jsonl'},
+            'counts':{'fixture':{'train:fit':{'rows':1}}},'binding':{'limits':{'fixture':{'forward_tokens':10,'kv_slots':10}}}}
+        receipt_path=tmp_path/'ordinary-receipt.json';write_json(receipt_path,receipt)
+        parts.append({'model':'fixture','source':resident.binding(ordinary),'coverage':resident.binding(coverage2),
+            'receipt':resident.binding(receipt_path)})
+        return combined,parts
+    manifest_source=NativeGraphSource(fit_sources,tokenizer,required_split='train',role_ids=roles)
+    return manifest_source,parts
+
+
 @pytest.mark.parametrize('kind',['natlang.acquired-native-capacity-partition/1','natlang.admitted-ordinary-source-capacity-preparation/1'])
 def test_whole_delta_producer_authenticates_all_standard_coverage_and_derives_actual_maxima(tmp_path,monkeypatch,kind):
     monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE',str(tmp_path/'cache'))
@@ -767,3 +914,58 @@ def test_teacher_absolute_namespace_drift_cannot_publish_geometry(tmp_path,monke
     p=Path(part['receipt']['path']);write_json(p,receipt);part['receipt']=resident.binding(p);out=tmp_path/'geometry.json'
     with pytest.raises(ValueError):resident.prepare_whole_delta_geometry(source,[part],out,package=Path(resident.__file__).parents[1])
     assert not out.exists()
+
+
+def test_source03_bridge_geometry_is_verified_and_can_be_bridge_only_or_ordered_prefix(tmp_path,monkeypatch):
+    for with_ordinary in (False, True):
+        root=tmp_path/str(with_ordinary);root.mkdir()
+        source,parts=source03_bridge_fixture(root,monkeypatch,with_ordinary=with_ordinary)
+        output=root/'geometry.json'
+        proof=resident.prepare_whole_delta_geometry(source,parts,output,package=Path(resident.__file__).parents[1])
+        report=json.loads(output.read_text())
+        assert report['new_train_rows']==len(source)
+        assert report['maxima']['kv_slots']['kv_slots']==(4 if with_ordinary else 3)
+        assert report['maxima']['kv_slots']['index']==(2 if with_ordinary else 0)
+        assert report['provenance'][:4]==[
+            parts[0]['source'],parts[0]['corpus_manifest'],parts[0]['supplement'],parts[0]['old_join_provenance']]
+        assert resident.geometry_from_evidence(source,0,proof,package=Path(resident.__file__).parents[1])=={
+            'forward_tokens':4 if with_ordinary else 3,'kv_slots':4 if with_ordinary else 3}
+
+
+@pytest.mark.parametrize('mutation',['interleaved','duplicate','coverage','missing-row','wrong-geometry',
+                                    'wrong-policy','wrong-binding','old-source'])
+def test_source03_bridge_geometry_rejects_unbound_or_nonprefix_bridge(tmp_path,monkeypatch,mutation):
+    source,parts=source03_bridge_fixture(tmp_path,monkeypatch,with_ordinary=True)
+    bridge=parts[0]
+    if mutation=='interleaved':parts=[parts[1],bridge]
+    elif mutation=='duplicate':parts=[bridge,copy.deepcopy(bridge),parts[1]]
+    elif mutation=='coverage':
+        path=Path(bridge['supplement']['path']).parent/'coverage.jsonl'
+        rows=[json.loads(line) for line in path.read_text().splitlines()]
+        rows[0]['geometry']['kv_slots']=2
+        path.write_text(''.join(json.dumps(row,separators=(',',':'))+'\n' for row in rows))
+    elif mutation in {'missing-row','wrong-geometry'}:
+        path=Path(bridge['supplement']['path']);supplement=json.loads(path.read_text())
+        coverage=Path(supplement['coverage']['path'])
+        rows=[json.loads(line) for line in coverage.read_text().splitlines()]
+        if mutation=='missing-row':rows.pop()
+        else:rows[0]['geometry']['kv_slots']=4
+        coverage.write_text(''.join(json.dumps(row,separators=(',',':'))+'\n' for row in rows))
+        supplement['coverage']=resident.binding(coverage);write_json(path,supplement)
+        bridge['supplement']=resident.binding(path)
+    elif mutation=='wrong-policy':
+        path=Path(bridge['supplement']['path']);value=json.loads(path.read_text())
+        value['row_index_key']['policy_sha256']='f'*64;write_json(path,value)
+        bridge['supplement']=resident.binding(path)
+    elif mutation=='wrong-binding':
+        path=Path(bridge['source']['path']).parent/'bridge-row-bindings.jsonl'
+        rows=[json.loads(line) for line in path.read_text().splitlines()]
+        rows[0]['binding']='f'*64
+        path.write_text(''.join(json.dumps(row,separators=(',',':'))+'\n' for row in rows))
+    else:
+        path=Path(bridge['source']['path']).parent/'00-fit.jsonl.zst'
+        path.write_bytes(path.read_bytes()+b'changed')
+    output=tmp_path/'rejected-geometry.json'
+    with pytest.raises(ValueError):
+        resident.prepare_whole_delta_geometry(source,parts,output,package=Path(resident.__file__).parents[1])
+    assert not output.exists()

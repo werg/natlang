@@ -306,6 +306,349 @@ def geometry_from_evidence(source, first, evidence, *, package, source_preparati
     return maximum
 
 
+_SOURCE03_BRIDGE_PART = 'natlang.d32-source03-aux-bridge-geometry-part/1'
+
+
+def _source03_bridge_geometry_part(part, *, preparation, package):
+    """Verify one source03 bridge using its staged source and old-fit custody."""
+    import hashlib
+    import pickle
+    from ..common.jsonio import open_jsonl_text
+    from ..common.hashing import canonical_json_sha256_hex
+
+    if part.get('schema') != _SOURCE03_BRIDGE_PART or part.get('model') != 'lfm25':
+        raise ValueError('unsupported source03 bridge geometry part')
+    required = ('source', 'corpus_manifest', 'supplement', 'old_join_provenance', 'limits')
+    if any(not isinstance(part.get(name), dict) for name in required):
+        raise ValueError('source03 bridge part lacks an exact bound input')
+    source_manifest = bound(part['source'])
+    corpus_manifest_path = bound(part['corpus_manifest'])
+    supplement_path = bound(part['supplement'])
+    old_provenance_path = bound(part['old_join_provenance'])
+    corpus_manifest = json.loads(corpus_manifest_path.read_text())
+    supplement = json.loads(supplement_path.read_text())
+    provenance = json.loads(old_provenance_path.read_text())
+    if (corpus_manifest.get('schema') != 'natlang.corpus-snapshot/1'
+            or corpus_manifest.get('id') != 'd32-source03-history-keep-aux-bridge-v1'
+            or supplement.get('schema') != 'natlang.d32-source03-aux-bridge-geometry-supplement/1'
+            or provenance.get('schema') != 'natlang.d32-source03-aux-bridge-old-join-provenance/1'
+            or corpus_manifest.get('training_admission') is True
+            or provenance.get('training_admission') is not False
+            or provenance.get('training_exposure') != 0):
+        raise ValueError('source03 bridge custody/schema/exposure contract differs')
+
+    def verify_local_file(path, reference):
+        if (not isinstance(reference, dict) or type(reference.get('bytes')) is not int
+                or path.stat().st_size != reference['bytes'] or sha(path) != reference.get('sha256')):
+            raise ValueError('source03 bridge staged artifact differs from its bound byte identity: ' + str(path))
+        return path
+
+    files = {row.get('path'): row for row in corpus_manifest.get('files', [])}
+    if len(files) != len(corpus_manifest.get('files', [])):
+        raise ValueError('source03 bridge corpus manifest repeats a file')
+    expected_files = {'lfm25/00-fit.jsonl.zst', 'lfm25/bridge-evidence-final.json',
+        'lfm25/bridge-row-bindings.jsonl', 'lfm25/fit-sources.json', 'lfm25/registration-audit.json'}
+    if set(files) != expected_files:
+        raise ValueError('source03 bridge corpus member inventory differs')
+    corpus_root = source_manifest.parent.parent.resolve()
+    for relative, row in files.items():
+        member_path = Path(relative)
+        if member_path.is_absolute() or '..' in member_path.parts or type(row.get('bytes')) is not int:
+            raise ValueError('source03 bridge corpus member path or size is malformed')
+        member_path = (corpus_root / member_path).resolve(strict=True)
+        try:
+            member_path.relative_to(corpus_root)
+        except ValueError:
+            raise ValueError('source03 bridge corpus member escaped its staged root') from None
+        if member_path.stat().st_size != row['bytes'] or sha(member_path) != row.get('sha256'):
+            raise ValueError('source03 bridge corpus member bytes differ: ' + relative)
+    source_doc = json.loads(source_manifest.read_text())
+    if source_doc.get('schema') != 'natlang.native-graph-sources/1' or len(source_doc.get('sources', [])) != 1:
+        raise ValueError('source03 bridge must bind its single graph source manifest')
+    source_member = source_doc['sources'][0]
+    if source_member.get('kind') != 'native-graphs' or '..' in Path(source_member.get('path', '')).parts:
+        raise ValueError('source03 bridge graph source manifest is not a confined native-graph leaf')
+    graph_path = (source_manifest.parent / source_member['path']).resolve(strict=True)
+    try:
+        graph_relative = graph_path.relative_to(source_manifest.parent.resolve())
+    except ValueError:
+        raise ValueError('source03 bridge graph escaped its declared source root') from None
+    graph_binding = {'path': str(graph_path), 'sha256': source_member.get('sha256'),
+                     'bytes': graph_path.stat().st_size}
+    if (source_member.get('sha256') != supplement.get('source', {}).get('sha256')
+            or graph_binding['bytes'] != supplement.get('source', {}).get('bytes')
+            or files.get('lfm25/' + str(graph_relative), {}).get('sha256') != graph_binding['sha256']
+            or files.get('lfm25/' + str(graph_relative), {}).get('bytes') != graph_binding['bytes']
+            or files.get('lfm25/fit-sources.json', {}).get('sha256') != sha(source_manifest)
+            or files.get('lfm25/fit-sources.json', {}).get('bytes') != source_manifest.stat().st_size):
+        raise ValueError('source03 bridge graph leaf differs from its immutable corpus manifest')
+    bridge_source = preparation.load(part['source'], split='train')
+    if len(getattr(bridge_source, 'children', [])) != 1:
+        raise ValueError('source03 bridge source manifest lost its single exact leaf')
+    bridge_leaf_source = bridge_source.children[0]
+
+    model_root = source_manifest.parent
+    def local(reference, relative, inventory_path=None):
+        path = (model_root / relative).resolve(strict=True)
+        if path != model_root.resolve() / relative:
+            try:
+                path.relative_to(model_root.resolve())
+            except ValueError:
+                raise ValueError('source03 bridge artifact escaped its corpus root') from None
+        verify_local_file(path, reference)
+        if inventory_path is not None:
+            entry = files.get(inventory_path)
+            if not entry or entry.get('sha256') != reference.get('sha256') or entry.get('bytes') != reference.get('bytes'):
+                raise ValueError('source03 bridge artifact differs from its corpus manifest')
+        return path
+
+    sidecar_path = local(supplement['source_row_binding_sidecar'], 'bridge-row-bindings.jsonl',
+                         'lfm25/bridge-row-bindings.jsonl')
+    final_evidence_path = local({'path': str(model_root / 'bridge-evidence-final.json'),
+        'sha256': files.get('lfm25/bridge-evidence-final.json', {}).get('sha256'),
+        'bytes': files.get('lfm25/bridge-evidence-final.json', {}).get('bytes')},
+        'bridge-evidence-final.json', 'lfm25/bridge-evidence-final.json')
+    final_evidence = json.loads(final_evidence_path.read_text())
+    if final_evidence.get('schema') != 'natlang.d32-history-keep-aux-bridge-final/1':
+        raise ValueError('source03 bridge final source proof is missing')
+    final_source = final_evidence.get('source03', {})
+    if (final_source.get('rows') != supplement.get('rows')
+            or final_source.get('unique_keep_parents') != supplement.get('unique_keep_parents')
+            or final_source.get('training_admission') is not False
+            or final_source.get('training_exposure') != 0
+            or final_source.get('old_fit_source', {}).get('sha256') != supplement.get('old_fit_source', {}).get('sha256')
+            or final_source.get('old_coverage', {}).get('sha256') != supplement.get('old_fit_coverage', {}).get('sha256')
+            or final_source.get('old_row_index', {}).get('sha256') != supplement.get('old_source_row_index', {}).get('sha256')
+            or final_source.get('bridge_source', {}).get('sha256') != supplement.get('source', {}).get('sha256')
+            or final_source.get('row_binding_sidecar', {}).get('sha256')
+                != supplement.get('source_row_binding_sidecar', {}).get('sha256')):
+        raise ValueError('source03 bridge final source evidence differs from its staged artifacts')
+
+    geometry_root = supplement_path.parent.resolve()
+    coverage_path = (geometry_root / 'coverage.jsonl').resolve(strict=True)
+    index_rel = Path(supplement['source_row_index']['path']).name
+    index_path = (geometry_root / 'row-index' / index_rel).resolve(strict=True)
+    if not coverage_path.is_relative_to(geometry_root) or not index_path.is_relative_to(geometry_root):
+        raise ValueError('source03 bridge geometry artifact escaped its supplement package')
+    if (coverage_path.name != 'coverage.jsonl' or index_path.name != index_rel
+            or verify_local_file(coverage_path, supplement['coverage']) != coverage_path
+            or verify_local_file(index_path, supplement['source_row_index']) != index_path):
+        raise ValueError('source03 bridge geometry files differ from their supplement bindings')
+
+    old_root = old_provenance_path.parent.resolve()
+    old_files = {row.get('path'): row for row in provenance.get('files', [])}
+    if len(old_files) != len(provenance.get('files', [])):
+        raise ValueError('source03 bridge old-fit provenance repeats a file')
+    expected_old_names = {'old-fit/00-fit.jsonl.zst', 'old-fit/coverage.jsonl',
+                 'old-fit/row-index/native-graphs-436a086fe6a15ca3669c145776184b1089fdfc41.pkl',
+                 'join-report.json'}
+    for name in expected_old_names:
+        if name not in old_files:
+            raise ValueError('source03 bridge old-fit provenance omits ' + name)
+    if set(old_files) != expected_old_names:
+        raise ValueError('source03 bridge old-fit provenance has unexpected members')
+    old_fit_path = (old_root / 'old-fit/00-fit.jsonl.zst').resolve(strict=True)
+    old_coverage_path = (old_root / 'old-fit/coverage.jsonl').resolve(strict=True)
+    old_index_path = (old_root / 'old-fit/row-index/native-graphs-436a086fe6a15ca3669c145776184b1089fdfc41.pkl').resolve(strict=True)
+    join_path = (old_root / 'join-report.json').resolve(strict=True)
+    supplement_old_bindings = {
+        'old-fit/00-fit.jsonl.zst': supplement.get('old_fit_source'),
+        'old-fit/coverage.jsonl': supplement.get('old_fit_coverage'),
+        'old-fit/row-index/native-graphs-436a086fe6a15ca3669c145776184b1089fdfc41.pkl': supplement.get('old_source_row_index'),
+        'join-report.json': supplement.get('join_report'),
+    }
+    for name, reference in supplement_old_bindings.items():
+        if (not isinstance(reference, dict) or reference.get('sha256') != old_files[name].get('sha256')
+                or reference.get('bytes') != old_files[name].get('bytes')):
+            raise ValueError('source03 bridge supplement and old-fit provenance disagree: ' + name)
+    if (supplement.get('source', {}).get('sha256') != source_member.get('sha256')
+            or supplement.get('source', {}).get('bytes') != graph_binding['bytes']
+            or supplement.get('source_row_binding_sidecar', {}).get('sha256')
+                != files.get('lfm25/bridge-row-bindings.jsonl', {}).get('sha256')):
+        raise ValueError('source03 bridge supplement and registered source disagree')
+    def old_member(path, name):
+        expected = old_files[name]
+        if sha(path) != expected.get('sha256') or path.stat().st_size != expected.get('bytes'):
+            raise ValueError('source03 bridge old-fit staged member changed: ' + name)
+        return path
+    old_fit_path = old_member(old_fit_path, 'old-fit/00-fit.jsonl.zst')
+    old_coverage_path = old_member(old_coverage_path, 'old-fit/coverage.jsonl')
+    old_index_path = old_member(old_index_path, 'old-fit/row-index/native-graphs-436a086fe6a15ca3669c145776184b1089fdfc41.pkl')
+    join_path = old_member(join_path, 'join-report.json')
+    join_report = json.loads(join_path.read_text())
+    if (join_report.get('schema') != 'natlang.d32-source03-aux-bridge-old-geometry-join/1'
+            or join_report.get('rows') != provenance.get('rows')
+            or join_report.get('mapping_sha256') != provenance.get('join_mapping_sha256')
+            or join_report.get('old_fit_match_errors') or join_report.get('keep_parent_errors')
+            or join_report.get('training_admission') is not False or join_report.get('training_exposure') != 0):
+        raise ValueError('source03 bridge old-fit join report is incomplete')
+    join_artifacts = join_report.get('artifacts', {})
+    for report_name, reference in (
+            ('old_fit_source', supplement.get('old_fit_source')),
+            ('old_coverage', supplement.get('old_fit_coverage')),
+            ('old_row_index', supplement.get('old_source_row_index')),
+            ('bridge_source', supplement.get('source')),
+            ('row_binding_sidecar', supplement.get('source_row_binding_sidecar'))):
+        actual = join_artifacts.get(report_name, {})
+        if actual.get('sha256') != reference.get('sha256') or actual.get('bytes') != reference.get('bytes'):
+            raise ValueError('source03 bridge join report artifact differs: ' + report_name)
+    if (join_artifacts.get('keep_coverage', {}).get('sha256')
+            != final_source.get('keep_coverage', {}).get('sha256')
+            or join_artifacts.get('keep_coverage', {}).get('bytes')
+            != final_source.get('keep_coverage', {}).get('bytes')):
+        raise ValueError('source03 bridge current KEEP coverage binding differs')
+    if (provenance.get('geometry_forward_tokens_sum') != supplement.get('forward_tokens_sum')
+            or provenance.get('geometry_kv_slots_sum') != supplement.get('kv_slots_sum')
+            or provenance.get('join_mapping_sha256') != supplement.get('join_mapping_sha256')
+            or provenance.get('matched_old_fit_graph_sha') != join_report.get('matched_old_fit_graph_sha')
+            or provenance.get('source_row_index_key') != supplement.get('row_index_key')
+            or provenance.get('rows') != supplement.get('rows')
+            or provenance.get('unique_keep_parents') != supplement.get('unique_keep_parents')):
+        raise ValueError('source03 bridge old-fit provenance summary differs')
+
+    with old_index_path.open('rb') as stream:
+        old_index = pickle.load(stream)
+    old_entries = old_index.get('entries')
+    old_key = old_index.get('key')
+    policy_transition = supplement.get('parser_policy_transition', {})
+    old_components = policy_transition.get('old_components', {})
+    new_components = policy_transition.get('new_components', {})
+    component_names = set(old_components)
+    if (old_index.get('schema') != 'natlang.row-index/1' or not isinstance(old_entries, list)
+            or digest(old_entries) != old_index.get('metadata_sha256')
+            or old_key.get('source_sha256') != old_files['old-fit/00-fit.jsonl.zst']['sha256']
+            or old_key.get('tokenizer') != bridge_source.tokenizer_fingerprint
+            or old_key.get('role_ids') != list(bridge_source.role_ids)
+            or old_key.get('kind') != 'native-graphs' or old_key.get('split') != 'train'
+            or old_key.get('pair_model') is not None
+            or old_key.get('policy_sha256') != policy_transition.get('old_policy_sha256')
+            or policy_transition.get('new_policy_sha256') != supplement.get('row_index_key', {}).get('policy_sha256')
+            or policy_transition.get('changed_components') != ['common/hashing.py']
+            or component_names != set(new_components)
+            or set(policy_transition.get('unchanged_parser_components', [])) != component_names - {'common/hashing.py'}
+            or any(old_components[name] != new_components[name] for name in component_names - {'common/hashing.py'})
+            or old_components.get('common/hashing.py') == new_components.get('common/hashing.py')
+            or digest(old_components) != policy_transition.get('old_policy_sha256')
+            or digest(new_components) != policy_transition.get('new_policy_sha256')):
+        raise ValueError('source03 bridge old row index contract differs')
+    with index_path.open('rb') as stream:
+        bridge_index = pickle.load(stream)
+    bridge_entries = bridge_index.get('entries')
+    if (bridge_index.get('schema') != 'natlang.row-index/1' or bridge_index.get('key') != supplement.get('row_index_key')
+            or not isinstance(bridge_entries, list) or digest(bridge_entries) != supplement.get('row_index_entries_sha256')
+            or bridge_index.get('metadata_sha256') != supplement.get('row_index_entries_sha256')
+            or bridge_entries != bridge_leaf_source.entries or len(bridge_entries) != supplement.get('rows')):
+        raise ValueError('source03 bridge row-index differs from its exact current parser source')
+
+    old_rows = {}
+    with open_jsonl_text(old_coverage_path) as stream:
+        for line in stream:
+            if line.strip():
+                row = json.loads(line)
+                if row.get('model') == 'lfm25' and row.get('split') == 'train' and row.get('disposition') == 'fit':
+                    old_rows.setdefault(row.get('id'), []).append(row)
+    side_rows = []
+    with open_jsonl_text(sidecar_path) as stream:
+        side_rows = [json.loads(line) for line in stream if line.strip()]
+    with open_jsonl_text(coverage_path) as stream:
+        coverage_rows = [json.loads(line) for line in stream if line.strip()]
+    row_count = supplement.get('rows')
+    if (type(row_count) is not int or row_count < 1 or len(side_rows) != row_count
+            or len(coverage_rows) != row_count or len(bridge_source.entries) != row_count
+            or provenance.get('rows') != row_count or join_report.get('rows') != row_count
+            or provenance.get('matched_old_fit_graph_sha') != row_count
+            or provenance.get('unique_keep_parents') != supplement.get('unique_keep_parents')):
+        raise ValueError('source03 bridge source/coverage/provenance counts differ')
+    limits = part['limits']
+    if (set(limits) != {'forward_tokens', 'kv_slots'}
+            or any(type(value) is not int or value < 1 for value in limits.values())):
+        raise ValueError('source03 bridge part needs the exact current positive geometry limits')
+
+    # Hash the old raw source once and inspect only the referenced rows. The
+    # byte-bound row index supplies their exact positions; this does not compile
+    # or tokenize the 1.29B-position geometry.
+    requested_old_rows = {row.get('old_fit_source_row') for row in side_rows}
+    if (len(requested_old_rows) != row_count or any(type(i) is not int or i < 0 or i >= len(old_entries)
+            for i in requested_old_rows)):
+        raise ValueError('source03 bridge old-source row references are not unique and bounded')
+    old_raw_by_index = {}
+    from ..common.jsonio import open_jsonl_text as open_rows
+    with open_rows(old_fit_path) as stream:
+        for index, line in enumerate(stream):
+            if index in requested_old_rows:
+                old_raw_by_index[index] = (hashlib.sha256(line.encode('utf-8')).hexdigest(),
+                                           canonical_json_sha256_hex(json.loads(line)))
+    if len(old_raw_by_index) != row_count:
+        raise ValueError('source03 bridge old source lacks a referenced row')
+
+    maxima = {}
+    parents = set()
+    forward_sum = kv_sum = 0
+    raw_bridge = []
+    with open_jsonl_text(graph_path) as stream:
+        raw_bridge = list(stream)
+    if len(raw_bridge) != row_count:
+        raise ValueError('source03 bridge graph line count differs')
+    actual_limits = limits
+    for index, (line, side, covered, entry, indexed) in enumerate(zip(
+            raw_bridge, side_rows, coverage_rows, bridge_source.entries, bridge_entries, strict=True)):
+        graph = json.loads(line)
+        raw_sha = hashlib.sha256(line.encode('utf-8')).hexdigest()
+        old_index_at = side.get('old_fit_source_row')
+        prior = old_entries[old_index_at]
+        old_coverage_matches = old_rows.get(side.get('id'), [])
+        old_coverage_matches = [row for row in old_coverage_matches
+            if row.get('source_row') == old_index_at
+            and row.get('source_graph_sha256') == side.get('old_source_graph_sha256')
+            and row.get('source_row_bytes_sha256') == side.get('source_row_bytes_sha256')]
+        geometry = covered.get('geometry')
+        if (side.get('id') != entry.get('id') or side.get('id') != indexed.get('id')
+                or side.get('binding') != entry.get('binding') or side.get('binding') != indexed.get('binding')
+                or side.get('source_sha256') != old_key.get('source_sha256')
+                or raw_sha != side.get('source_row_bytes_sha256')
+                or canonical_json_sha256_hex(graph) != side.get('old_source_graph_sha256')
+                or old_raw_by_index[old_index_at] != (side.get('source_row_bytes_sha256'), side.get('old_source_graph_sha256'))
+                or prior.get('id') != side.get('id') or prior.get('binding') != side.get('binding')
+                or len(old_coverage_matches) != 1
+                or covered.get('schema') != 'natlang.d32-source03-aux-bridge-geometry-row/1'
+                or covered.get('bridge_row_index') != index or covered.get('id') != side.get('id')
+                or covered.get('binding') != side.get('binding')
+                or covered.get('source_graph_sha256') != side.get('old_source_graph_sha256')
+                or covered.get('source_row_bytes_sha256') != side.get('source_row_bytes_sha256')
+                or covered.get('old_row_index_binding') != prior.get('binding')
+                or covered.get('old_fit_coverage_row', {}).get('old_source_row_index') != old_index_at
+                or covered.get('old_fit_coverage_row', {}).get('source_sha256') != old_key.get('source_sha256')
+                or covered.get('old_fit_coverage_row', {}).get('coverage_sha256') != old_files['old-fit/coverage.jsonl']['sha256']
+                or indexed.get('forward_tokens') != entry.get('forward_tokens')
+                or set(geometry or {}) != {'forward_tokens', 'kv_slots'}
+                or geometry['forward_tokens'] != entry.get('forward_tokens')
+                or geometry['kv_slots'] != geometry['forward_tokens']
+                or any(geometry[key] > actual_limits[key] for key in geometry)):
+            raise ValueError('source03 bridge source/old-fit/coverage/geometry join differs at row ' + str(index))
+        parents.add(side.get('keep_parent_id'))
+        forward_sum += geometry['forward_tokens']
+        kv_sum += geometry['kv_slots']
+        descriptor = {'index': index, 'id': entry['id'], 'binding': entry['binding'], **geometry}
+        for key in geometry:
+            if key not in maxima or descriptor[key] > maxima[key][key]:
+                maxima[key] = descriptor
+    if len(parents) != supplement.get('unique_keep_parents'):
+        raise ValueError('source03 bridge unique KEEP-parent coverage count differs')
+    if (forward_sum != supplement.get('forward_tokens_sum')
+            or kv_sum != supplement.get('kv_slots_sum')
+            or forward_sum != provenance.get('geometry_forward_tokens_sum')
+            or kv_sum != provenance.get('geometry_kv_slots_sum')):
+        raise ValueError('source03 bridge geometry totals differ from bound summaries')
+    if (hashlib.sha256(''.join(raw_bridge).encode('utf-8')).hexdigest()
+            != final_source.get('bridge_source', {}).get('raw_selected_rows_sha256')
+            or hashlib.sha256(sidecar_path.read_bytes()).hexdigest()
+            != final_source.get('row_binding_sidecar', {}).get('canonical_rows_sha256')
+            or digest(sorted(parents)) != final_source.get('keep_pending_parent_ids_sha256')):
+        raise ValueError('source03 bridge final ordered-row/source custody digest differs')
+    return bridge_source, maxima, [part['source'], part['corpus_manifest'], part['supplement'],
+        part['old_join_provenance']], row_count
+
+
 def prepare_whole_delta_geometry(source, parts, output, *, package):
     """Verify completed ordinary partition coverage, then reuse its actual KV geometry.
 
@@ -315,7 +658,31 @@ def prepare_whole_delta_geometry(source, parts, output, *, package):
     from .native_source_preparation import NativeSourcePreparation
     preparation=NativeSourcePreparation(source.tokenizer_fingerprint,source.role_ids)
     preparation._remember(source);offset=0;maxima={};provenance=[]
-    for part in parts:
+    if not isinstance(parts, list) or not parts:
+        raise ValueError('delta geometry needs an ordered nonempty source-part list')
+    bridge_parts = [part for part in parts if part.get('schema') == _SOURCE03_BRIDGE_PART]
+    if bridge_parts:
+        if len(bridge_parts) != 1 or parts[0] is not bridge_parts[0]:
+            raise ValueError('source03 bridge must be the single explicit prefix of the delta source')
+        bridge, bridge_maxima, bridge_provenance, bridge_count = _source03_bridge_geometry_part(
+            parts[0], preparation=preparation, package=package)
+        if bridge_count > len(source):
+            raise ValueError('source03 bridge prefix exceeds the complete delta source')
+        for index, entry in enumerate(bridge.entries):
+            actual = source.entries[index]
+            if ({key:value for key,value in actual.items() if key!='training_priority'}
+                    != {key:value for key,value in entry.items() if key!='training_priority'}):
+                raise ValueError('source03 bridge is not the exact ordered delta-source prefix')
+        for key, descriptor in bridge_maxima.items():
+            descriptor = {**descriptor, 'index': descriptor['index'] + offset}
+            if key not in maxima or descriptor[key] > maxima[key][key]:
+                maxima[key] = descriptor
+        offset += bridge_count
+        provenance.extend(bridge_provenance)
+    ordinary_parts = parts[len(bridge_parts):] if bridge_parts else parts
+    for part in ordinary_parts:
+        if part.get('schema') == _SOURCE03_BRIDGE_PART:
+            raise ValueError('source03 bridge may appear only once at the delta prefix')
         path=bound(part['receipt']);receipt=json.loads(path.read_text());model=part['model']
         if receipt.get('source_eligibility_unchanged')is not True or receipt.get('exact_original_row_bytes')is not True:
             raise ValueError('delta geometry needs exact original admitted row coverage')
