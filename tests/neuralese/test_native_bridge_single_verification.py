@@ -1,5 +1,9 @@
 """Queue transport cannot replace the controller's real full continuation check."""
 import json
+import importlib.util
+import os
+from pathlib import Path
+import subprocess
 import sys
 from types import SimpleNamespace
 
@@ -45,6 +49,19 @@ def command(tmp_path):
         '--request', '{request}', '--result', '{result}', '--stop-file', '{stop_file}']
 
 
+def old_cli_environment(tmp_path):
+    """Real child import path whose historical bridge rejects any invocation."""
+    root=tmp_path/'historical-pythonpath'
+    actual=Path(bridge.__file__).resolve().parents[1]
+    package=root/'natlang_neuralese';package.mkdir(parents=True)
+    (package/'__init__.py').write_text('__path__.append('+repr(str(actual))+')\n')
+    rl=package/'rl';rl.mkdir()
+    (rl/'__init__.py').write_text('__path__.append('+repr(str(actual/'rl'))+')\n')
+    marker=tmp_path/'historical-cli-executed'
+    (rl/'native_bridge.py').write_text('from pathlib import Path\nPath('+repr(str(marker))+').touch()\nraise RuntimeError("historical CLI has no deferred flag")\n')
+    return {**os.environ,'PYTHONPATH':str(root)},marker
+
+
 @pytest.mark.parametrize('deferred', [False, True])
 def test_standalone_default_still_decodes_and_explicit_transport_defers_only_payload(tmp_path, monkeypatch, deferred):
     request, result, _, loads = fixture(tmp_path, monkeypatch)
@@ -58,15 +75,40 @@ def test_standalone_default_still_decodes_and_explicit_transport_defers_only_pay
 def test_actual_queue_cli_then_controller_performs_exactly_one_full_decode(tmp_path, monkeypatch):
     request, result, checkpoint, loads = fixture(tmp_path, monkeypatch)
     argv = command(tmp_path); original = list(argv)
+    environment,old_cli=old_cli_environment(tmp_path)
     def run(template, values):
         assert template[-1] == '--defer-checkpoint-verification'
-        parts = [part.format(**{key:str(value) for key,value in values.items()}) for part in template[3:]]
-        assert bridge.main(parts) == 0
+        assert template[1]=='-c'and template[3]==bridge.__file__
+        parts = [part.format(**{key:str(value) for key,value in values.items()}) for part in template]
+        child=subprocess.run(parts,env=environment,capture_output=True,text=True)
+        assert child.returncode==0,child.stderr
+        assert not old_cli.exists()
         assert loads == []
     monkeypatch.setattr(native_rounds, 'run_command', run)
     value = native_rounds.bridge_result(argv, request, SimpleNamespace(requested=False))
     assert value['checkpoint'] == bridge.binding(checkpoint)
     assert loads == [str(checkpoint)] and argv == original
+
+
+def test_copied_current_module_bootstrap_checks_exact_source_before_execution(tmp_path,monkeypatch):
+    request,result,_,loads=fixture(tmp_path,monkeypatch)
+    source=tmp_path/'published-current-bridge.py'
+    source.write_bytes(Path(bridge.__file__).read_bytes())
+    name='natlang_neuralese.rl.copied_queue_bridge'
+    spec=importlib.util.spec_from_file_location(name,source)
+    current=importlib.util.module_from_spec(spec);spec.loader.exec_module(current)
+    environment,old_cli=old_cli_environment(tmp_path)
+    argv=current.queue_client_command(command(tmp_path))
+    assert argv[3]==str(source)and argv.count('--defer-checkpoint-verification')==1
+    values={'request':str(request),'result':str(result),'stop_file':str(tmp_path/'stop.json')}
+    actual=[part.format(**values)for part in argv]
+    child=subprocess.run(actual,env=environment,capture_output=True,text=True)
+    assert child.returncode==0,child.stderr
+    assert not old_cli.exists()and loads==[]
+    source.write_bytes(source.read_bytes()+b'\n# changed after command binding\n')
+    rejected=subprocess.run(actual,env=environment,capture_output=True,text=True)
+    assert rejected.returncode!=0 and 'helper source binding changed'in rejected.stderr
+    assert not old_cli.exists()and loads==[]
 
 
 @pytest.mark.parametrize('tamper', ['bytes', 'parent', 'rng', 'optimizer', 'pruned'])

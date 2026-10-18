@@ -149,7 +149,7 @@ def configure_provider(config,declaration,plan,binding,config_path,*,write=True)
     return config
 
 def bridge_result(command, request, stop):
-    from .native_bridge import binding, verify_result
+    from .native_bridge import binding, verify_result, queue_client_command
     from .production import RunControl
     request = Path(request)
     result = request.with_suffix('.result.json')
@@ -161,9 +161,7 @@ def bridge_result(command, request, stop):
               '_bridge_request': binding(request)}
     # Only this known queue client is followed immediately by our complete
     # semantic verifier. Avoid decoding the same full checkpoint in both.
-    if (isinstance(command, list) and command[1:3] == ['-m', 'natlang_neuralese.rl.native_bridge']
-            and '--queue' in command and '--defer-checkpoint-verification' not in command):
-        command = [*command, '--defer-checkpoint-verification']
+    command = queue_client_command(command)
     run_command(command, values)
     if not result.is_file():
         raise RuntimeError('provider bridge returned without draining its exact remote worker/result')

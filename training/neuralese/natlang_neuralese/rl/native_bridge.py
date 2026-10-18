@@ -17,6 +17,31 @@ REQUEST_SCHEMA = 'natlang.native-rl-bridge-request/1'
 RESULT_SCHEMA = 'natlang.native-rl-bridge-result/1'
 
 
+def queue_client_command(command):
+    """Use these exact control bytes even with an older numerical PYTHONPATH."""
+    if (not isinstance(command,list)
+            or command[1:3]!=['-m','natlang_neuralese.rl.native_bridge']
+            or '--queue'not in command):
+        return command
+    source=binding(__file__)
+    bootstrap="""import hashlib,importlib,importlib.util,pathlib,sys
+path=pathlib.Path(sys.argv[1]);raw=path.read_bytes()
+if hashlib.sha256(raw).hexdigest()!=sys.argv[2]:
+ raise ValueError('queued bridge helper source binding changed')
+name='natlang_neuralese.rl.native_bridge'
+package=importlib.import_module('natlang_neuralese.rl')
+spec=importlib.util.spec_from_file_location(name,path)
+module=importlib.util.module_from_spec(spec)
+sys.modules[name]=module;setattr(package,'native_bridge',module)
+exec(compile(raw,str(path),'exec'),module.__dict__)
+raise SystemExit(module.main(sys.argv[3:]))
+"""
+    arguments=list(command[3:])
+    if '--defer-checkpoint-verification'not in arguments:
+        arguments.append('--defer-checkpoint-verification')
+    return [command[0],'-c',bootstrap,source['path'],source['sha256'],*arguments]
+
+
 def binding(path):
     path = Path(path).absolute()
     return {'path': str(path), 'sha256': sha256_file_hex_cached(path), 'bytes': path.stat().st_size}
