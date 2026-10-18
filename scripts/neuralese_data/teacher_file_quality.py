@@ -1,6 +1,7 @@
 """Exact JSON file-format evaluation continuation; original executions stay intact."""
 from __future__ import annotations
 import copy
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -11,6 +12,7 @@ from scripts.neuralese_data.ground_teacher_continuations import OUTPUT_CONTRACT
 
 SCHEMA = 'natlang.teacher-json-file-quality-continuation/1'
 AUTHORING_SCHEMA = 'natlang.teacher-executable-authoring-quality-continuation/1'
+AUTHORING_REVIEWED_ALIAS_SCHEMA = 'natlang.teacher-reviewed-source-authoring-quality-continuation/1'
 AUTHORING_ALIAS_SCHEMA = 'natlang.teacher-source-grounded-authoring-quality-continuation/1'
 AUTHORING_REQUIREMENT_SCHEMA = 'natlang.teacher-authoring-construct-quality-continuation/1'
 AUTHORING_COMPILER_SCHEMA = 'natlang.teacher-authoring-compiler-quality-continuation/1'
@@ -100,7 +102,10 @@ def verify_quality_continuation(row, original, original_binding):
     continuation = (continue_authoring_requirement_quality if schema == AUTHORING_REQUIREMENT_SCHEMA else
                     continue_authoring_alias_quality if schema == AUTHORING_ALIAS_SCHEMA else
                     continue_authoring_quality if schema == AUTHORING_SCHEMA else continue_quality)
-    if schema == AUTHORING_COMPILER_SCHEMA:
+    if schema == AUTHORING_REVIEWED_ALIAS_SCHEMA:
+        expected = continue_authoring_alias_quality(original, original_binding,
+            source_review=row['source_quality_continuation']['source_review'])
+    elif schema == AUTHORING_COMPILER_SCHEMA:
         expected = continue_authoring_compiler_quality(original, original_binding,
             row['source_quality_continuation']['historical_runtime'])
     else:
@@ -118,7 +123,7 @@ def verify_quality_continuation(row, original, original_binding):
         raise ValueError('teacher quality continuation differs from exact original evaluation view')
 
 
-def authoring_verdict(row, *, source_aliases=False, construct_requirements=False):
+def authoring_verdict(row, *, source_aliases=False, construct_requirements=False, reviewed_source=None):
     """Run the actual existing executable contract; no model generation."""
     root = Path(__file__).resolve().parents[2]
     paths = [Path(__file__).resolve(), root / 'ts-host/src/teacher/authoring.ts',
@@ -144,6 +149,16 @@ def authoring_verdict(row, *, source_aliases=False, construct_requirements=False
                 'const p=JSON.parse(readFileSync(0,"utf8"));'
                 'console.log(JSON.stringify({legacy:await checkAuthoringLegacyRequirements(p.files,p.spec),'
                 'verdict:await checkAuthoring(p.files,p.spec)}));')
+    if reviewed_source is not None:
+        if source_aliases or construct_requirements:
+            raise ValueError('reviewed source aliases require a separate original current verdict')
+        payload['review'] = reviewed_source
+        code = ('import {readFileSync} from "node:fs";'
+                'const {checkAuthoring,withSourceArgumentAliases}=await import(process.argv[1]);'
+                'const p=JSON.parse(readFileSync(0,"utf8"));'
+                'const legacy=await checkAuthoring(p.files,p.spec);'
+                'const spec=withSourceArgumentAliases({...p.spec,source_criterion_review:p.review},p.files);'
+                'console.log(JSON.stringify({legacy,spec,verdict:await checkAuthoring(p.files,spec)}));')
     completed = subprocess.run(['node', '--input-type=module', '-e', code,
         (root / 'ts-host/dist/teacher/authoring.js').as_uri()],
         input=json.dumps(payload), capture_output=True, text=True, check=True)
@@ -228,7 +243,7 @@ def continue_authoring_requirement_quality(original, original_binding):
     return result
 
 
-def continue_authoring_alias_quality(original, original_binding):
+def continue_authoring_alias_quality(original, original_binding, *, source_review=None):
     if 'source_quality_continuation' in original:
         raise ValueError('argument oracle continuation requires original captured execution')
     program=original['task']['program_ir']; semantics=program['semantics']; outcome=original['outcome']
@@ -236,36 +251,47 @@ def continue_authoring_alias_quality(original, original_binding):
     required={'seeded_failure_requirement','expected_status','honest_stop','effects','files','world','file_return_consistency','answer'}
     if (program.get('split')!='train' or not program.get('source_groups')
         or 'expected'not in semantics or semantics['expected']is not None
-        or not isinstance(spec,dict) or 'argument_aliases'in spec
+        or not isinstance(spec,dict) or 'argument_aliases'in spec or 'source_criterion_review'in spec
         or not isinstance(spec.get('runs'),list) or not spec['runs']
         or not isinstance(outcome.get('files'),dict) or not outcome['files']
         or outcome.get('status')!='done' or outcome.get('accepted')is not False
-        or outcome.get('oracle')!={'accepted':False,'level':'exact'}
+        or outcome.get('oracle') not in ([{'accepted':False,'level':'exact'},
+             {'accepted':False,'level':'exact','verdict':'executable-authoring/1'}] if source_review is not None
+             else [{'accepted':False,'level':'exact'}])
         or outcome.get('quality_pending',[])!=[] or outcome.get('rejection_reasons')!=['files']
         or not isinstance(checks,dict) or not required<=set(checks) or checks.get('files')is not False
         or any(value is not True for key,value in checks.items()if key!='files')
         or not isinstance(captured,dict) or captured.get('ok')is not False
         or not captured.get('problems') or any(not isinstance(item,str)or'The authoring oracle has no answer for this call.'not in item for item in captured['problems'])):
         raise ValueError('argument oracle continuation requires only captured child-oracle coverage failure')
-    checked,verifier=authoring_verdict(original,source_aliases=True)
+    reviewed = None
+    if source_review is not None:
+        reviewed = reviewed_source_criteria(original, original_binding, source_review)
+    checked,verifier=authoring_verdict(original,source_aliases=source_review is None,reviewed_source=reviewed)
+    if source_review is not None and reviewed_source_criteria(original, original_binding, source_review) != reviewed:
+        raise ValueError('source child review changed during executable verification')
     if canonical_json_sha256_hex(checked['legacy'])!=canonical_json_sha256_hex(captured):
         raise ValueError('original executable authoring verdict was not reproduced')
     derived_spec=checked['spec'];verdict=checked['verdict']
-    without_aliases={key:value for key,value in derived_spec.items()if key!='argument_aliases'}
+    without_aliases={key:value for key,value in derived_spec.items()if key not in ('argument_aliases','source_criterion_review')}
     if (canonical_json_sha256_hex(without_aliases)!=canonical_json_sha256_hex(spec)
         or not derived_spec.get('argument_aliases') or verdict.get('ok')is not True
-        or verdict.get('problems')!=[] or len(verdict.get('results',[]))!=len(spec['runs'])):
+        or verdict.get('problems')!=[] or len(verdict.get('results',[]))!=len(spec['runs'])
+        or (source_review is not None and canonical_json_sha256_hex(verdict.get('results')) !=
+            canonical_json_sha256_hex([run['expected'] for run in spec['runs']]))):
         raise ValueError('source-grounded executable authoring verification failed')
     result=copy.deepcopy(original);result['outcome'].update(accepted=True,authoring=verdict,rejection_reasons=[],
         oracle={'accepted':True,'level':'exact','verdict':'source-grounded-executable-authoring/1'})
     result['outcome']['checks']['files']=True
-    result['source_quality_continuation']={'schema':AUTHORING_ALIAS_SCHEMA,'original':original_binding,
+    result['source_quality_continuation']={'schema':AUTHORING_REVIEWED_ALIAS_SCHEMA if source_review is not None else AUTHORING_ALIAS_SCHEMA,'original':original_binding,
         'original_row_sha256':canonical_json_sha256_hex(original),'verifier':verifier,
         'comparator':{'kind':'source-run-argument-authoring/1'},
         'original_spec_sha256':canonical_json_sha256_hex(spec),
         'derived_spec_sha256':canonical_json_sha256_hex(derived_spec),
         'argument_aliases':derived_spec['argument_aliases'],
         'claim':'Source-derived child-oracle coverage and null-root accounting correction; original tests, expected results, files and captured trajectory unchanged'}
+    if source_review is not None:
+        result['source_quality_continuation'].update(source_review=source_review,source_criterion_review=reviewed)
     return result
 
 
@@ -338,3 +364,58 @@ def continue_authoring_compiler_quality(original, original_binding, historical_r
         'comparator':{'kind':'typescript-authoring-compiler/1'},
         'claim':'Reproduced historical compiler rejection; unchanged files and ALL exact original runs pass current compiler. Original actor, trajectory and targets unchanged.'}
     return result
+
+
+def reviewed_source_criteria(original, original_binding, review_reference):
+    from scripts.coreweave.teacher_tranche_admission import read_bound
+    review = read_bound(review_reference)
+    if (review.get('schema') != 'natlang.authored-child-source-semantic-review/1'
+            or review.get('reviewer') != 'independent-root-source-meaning-review'
+            or review.get('training_admission') is not False
+            or review.get('proposition') != 'whether-source-notes-announce-these-failures-as-expected'):
+        raise ValueError('source child aliases require explicit independent criterion review')
+    inventory = read_bound(review['inventory'])
+    if inventory.get('schema') != 'natlang.authored-source-criterion-custody/1' or inventory.get('training_admission') is not False:
+        raise ValueError('source child review has no exact original criterion inventory')
+    approved = review.get('approved_templates')
+    templates = inventory.get('templates')
+    if (not isinstance(approved, dict) or not approved or not isinstance(templates, dict)
+            or set(approved) - set(templates)):
+        raise ValueError('source child review approves unknown original criteria')
+    if sha256_file_hex(original_binding['path']) != original_binding['sha256']:
+        raise ValueError('source child original raw file changed')
+    matches = [row for row in inventory['rows'] if row['original']['sha256'] == original_binding['sha256']
+               and row['row_id'] == original.get('id')]
+    if len(matches) != 1:
+        raise ValueError('source child original needs exactly one reviewed inventory row')
+    row = matches[0]; program = original['task']['program_ir']; module = program['semantics']['authoring']['module']
+    source = original['outcome']['files'][module]
+    if (row['program_sha256'] != canonical_json_sha256_hex(program)
+            or canonical_json_sha256_hex(row['authoring_spec']) != canonical_json_sha256_hex(program['semantics']['authoring'])
+            or row['captured_file']['content'] != source
+            or row['captured_file']['sha256'] != hashlib.sha256(source.encode()).hexdigest()):
+        raise ValueError('reviewed source child program or captured module differs')
+    criteria = []; bindings = None
+    for tag in row['ast']['tags']:
+        descriptor = {key: tag[key] for key in ('tag', 'typeArguments', 'template', 'interpolated')}
+        key = canonical_json_sha256_hex(descriptor)
+        if key not in approved:
+            continue
+        if (key not in templates or templates[key]['criterion'] != descriptor
+                or row['key'] not in templates[key]['rows']):
+            raise ValueError('source child template does not bind the original AST inventory')
+        entry = approved[key]
+        if (not isinstance(entry, dict) or set(entry) - {'instruction', 'result_kind', 'literal_bindings'}
+                or not isinstance(entry.get('instruction'), str) or not entry['instruction'].strip()
+                or entry.get('result_kind') not in ('boolean', 'decision')):
+            raise ValueError('source child criterion review is malformed')
+        if entry.get('literal_bindings') is not None:
+            if bindings is not None and bindings != entry['literal_bindings']:
+                raise ValueError('source child interpolation bindings conflict')
+            bindings = entry['literal_bindings']
+        criteria.append({key: entry[key] for key in ('instruction', 'result_kind')})
+    if not criteria:
+        raise ValueError('source child has no independently reviewed exact criterion')
+    return {'schema': 'natlang.reviewed-source-child-criteria/1',
+            'module_sha256': row['captured_file']['sha256'], 'criteria': criteria,
+            **({'literal_bindings': bindings} if bindings is not None else {})}

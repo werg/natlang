@@ -5,6 +5,7 @@
  * wording is not known in advance; an unmatched child fails, which fails the check.
  */
 import { isDeepStrictEqual } from 'node:util';
+import { createHash } from 'node:crypto';
 import ts from 'typescript';
 import { withCallOf } from '../compiler/inline.js';
 import { createNatlangRuntime } from '../runtime/node.js';
@@ -22,6 +23,10 @@ export type AuthoringSpec = {
   oracle?: { match: string[]; value: unknown }[];
   /** Exact aliases derived from unchanged declared run arguments and original keyed oracle. */
   argument_aliases?: { match: string[]; value: unknown; source_id: string; source_text: string }[];
+  /** Offline independently reviewed literal child criteria; source tests remain unchanged. */
+  source_criterion_review?: { schema: 'natlang.reviewed-source-child-criteria/1';
+    module_sha256: string; literal_bindings?: { policy: string };
+    criteria: { instruction: string; result_kind: 'boolean' | 'decision' }[] };
   /** What the authored source must use. */
   requires?: { nl?: boolean; iterateOn?: boolean; calls?: string[]; noNl?: boolean };
 };
@@ -29,7 +34,7 @@ export type AuthoringSpec = {
 export type AuthoringResult = { ok: boolean; problems: string[]; results: unknown[] };
 
 /** Derive text aliases only from exact source Ticket records, never generated answers. */
-export function withSourceArgumentAliases(spec: AuthoringSpec): AuthoringSpec {
+export function withSourceArgumentAliases(spec: AuthoringSpec, files?: Record<string, string>): AuthoringSpec {
   const { argument_aliases: _supplied, ...original } = spec;
   spec = original;
   const aliases: NonNullable<AuthoringSpec['argument_aliases']> = [];
@@ -54,6 +59,84 @@ export function withSourceArgumentAliases(spec: AuthoringSpec): AuthoringSpec {
     Object.values(record).forEach(visit);
   }
   spec.runs.forEach(run => visit(run.args));
+  if (spec.source_criterion_review) {
+    const review = spec.source_criterion_review, source = files?.[spec.module];
+    if (review.schema !== 'natlang.reviewed-source-child-criteria/1' || typeof source !== 'string' ||
+        createHash('sha256').update(source).digest('hex') !== review.module_sha256 ||
+        !Array.isArray(review.criteria) || !review.criteria.length ||
+        review.criteria.some(value => !value || typeof value.instruction !== 'string' || !value.instruction.trim() ||
+          (value.result_kind !== 'boolean' && value.result_kind !== 'decision')) ||
+        new Set(review.criteria.map(value => value.instruction)).size !== review.criteria.length)
+      throw new Error('Reviewed source child criteria do not bind the captured module.');
+    const parsed = ts.createSourceFile(spec.module, source, ts.ScriptTarget.Latest, true);
+    const literalCriteria = new Set<string>();
+    let policy: string | undefined;
+    if (review.literal_bindings) {
+      if (Object.keys(review.literal_bindings).join(',') !== 'policy' || typeof review.literal_bindings.policy !== 'string')
+        throw new Error('Reviewed source interpolation requires one exact policy literal.');
+      const declarations: ts.Node[] = [];
+      function bindings(node: ts.Node): void {
+        if ((ts.isVariableDeclaration(node) || ts.isParameter(node) || ts.isBindingElement(node) ||
+            ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node) || ts.isImportSpecifier(node) ||
+            ts.isImportClause(node) || ts.isNamespaceImport(node)) && node.name &&
+            (ts.isIdentifier(node.name) ? node.name.text === 'policy' : node.name.getText(parsed).includes('policy')))
+          declarations.push(node);
+        ts.forEachChild(node, bindings);
+      }
+      bindings(parsed);
+      const node = declarations[0];
+      if (declarations.length !== 1 || !node || !ts.isVariableDeclaration(node) || !node.initializer ||
+          !ts.isStringLiteral(node.initializer) || node.initializer.text !== review.literal_bindings.policy ||
+          !ts.isVariableDeclarationList(node.parent) || !(node.parent.flags & ts.NodeFlags.Const) ||
+          !ts.isVariableStatement(node.parent.parent) || node.parent.parent.parent !== parsed)
+        throw new Error('Reviewed source interpolation is not an unshadowed module const policy.');
+      policy = node.initializer.text;
+    }
+    function collect(node: ts.Node): void {
+      if (ts.isTaggedTemplateExpression(node) &&
+          ((ts.isIdentifier(node.tag) && node.tag.text === 'nl') || withCallOf(undefined, node.tag))) {
+        if (ts.isNoSubstitutionTemplateLiteral(node.template)) literalCriteria.add(node.template.text.trim());
+        else if (policy !== undefined && node.template.templateSpans.every(span =>
+            ts.isIdentifier(span.expression) && span.expression.text === 'policy'))
+          literalCriteria.add((node.template.head.text + node.template.templateSpans.map(span =>
+            policy + span.literal.text).join('')).trim());
+      }
+      ts.forEachChild(node, collect);
+    }
+    collect(parsed);
+    if (review.criteria.some(value => !literalCriteria.has(value.instruction)))
+      throw new Error('Reviewed source child criterion is not an exact literal in the captured module.');
+    const labels = new Map<string, { value: boolean; decision: 'hold' | 'rollback'; id: string }>();
+    for (const run of spec.runs) {
+      if (run.args.length !== 1 || !Array.isArray(run.args[0]) || !run.expected ||
+          typeof run.expected !== 'object' || Array.isArray(run.expected))
+        throw new Error('Reviewed source child requires exact declared service tests.');
+      for (const record of run.args[0]) {
+        if (!record || typeof record !== 'object' || Object.keys(record).sort().join(',') !== 'id,notes,requests' ||
+            typeof record.id !== 'string' || typeof record.notes !== 'string' || !record.notes ||
+            !Array.isArray(record.requests) || record.requests.some((r: unknown) => !r || typeof r !== 'object' ||
+              Object.keys(r).join(',') !== 'status' || !Number.isInteger((r as { status?: unknown }).status)))
+          throw new Error('Reviewed source child requires unchanged full source service records.');
+        const expected = (run.expected as Record<string, unknown>)[record.id];
+        if (expected !== 'hold' && expected !== 'rollback') continue;
+        const failed = record.requests.filter((r: { status: number }) => r.status >= 500).length;
+        if (!record.requests.length || failed * 20 <= record.requests.length ||
+            !spec.oracle?.some(item => item.value === expected && item.match.includes(record.notes)))
+          throw new Error('Reviewed source child lacks agreeing above-threshold source oracle evidence.');
+        if (spec.oracle.some(item => item.match.includes(record.notes) &&
+            (item.value === 'hold' || item.value === 'rollback') && item.value !== expected))
+          throw new Error('Conflicting reviewed source note oracle evidence.');
+        const value = expected === 'hold', prior = labels.get(record.notes);
+        if (prior && prior.value !== value) throw new Error('Conflicting reviewed source note labels.');
+        if (!prior) labels.set(record.notes, { value, decision: expected, id: record.id });
+      }
+    }
+    if (!labels.size) throw new Error('Reviewed source child has no independent source labels.');
+    for (const criterion of review.criteria) for (const [notes, label] of labels)
+      aliases.push({ match: [criterion.instruction, JSON.stringify(notes)],
+        value: criterion.result_kind === 'boolean' ? label.value : label.decision,
+        source_id: label.id, source_text: notes });
+  }
   return aliases.length ? { ...spec, argument_aliases: aliases } : spec;
 }
 
@@ -83,7 +166,7 @@ export async function checkAuthoring(files: Record<string, string>, spec: Author
 
 async function runAuthoring(files: Record<string, string>, spec: AuthoringSpec, legacyRequirements: boolean): Promise<AuthoringResult> {
   const problems: string[] = [];
-  if (spec.argument_aliases && !isDeepStrictEqual(spec.argument_aliases, withSourceArgumentAliases(spec).argument_aliases))
+  if ((spec.argument_aliases || spec.source_criterion_review) && !isDeepStrictEqual(spec.argument_aliases, withSourceArgumentAliases(spec, files).argument_aliases))
     return { ok: false, problems: ['Source argument oracle aliases differ from the original declared runs.'], results: [] };
   const source = files[spec.module];
   if (source === undefined) return { ok: false, problems: [`${spec.module} does not exist`], results: [] };
