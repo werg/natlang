@@ -184,7 +184,7 @@ def tool_contract_recovery_worlds(shapes=4):
         if variant == 'page-range-recovery':
             semantics['failure_seed']['code'] = f'return {namespace}.page(0);'
         elif variant == 'typed-result-recovery':
-            semantics['failure_seed']['code'] = 'return {ids:[],total:"pending",count:0};'
+            semantics['failure_seed']['code'] = 'const result: Summary = {ids:[],total:"pending",count:0}; return result;'
         root = semantics['files']['summarize.nl']
         semantics['files']['summarize.nl'] = root.replace(
             '1. Read every source page using the service interface.',

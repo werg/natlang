@@ -35,3 +35,15 @@ construction. Existing legacy 512-world and terminal-policy outputs stay unchang
 This is one optional profile of the existing constructor, not a second generation
 or collection mechanism. Both students receive all independently verified full
 trajectories through the current shared admission and ordinary-SFT pipeline.
+
+Actual reference validation: the first 24-case packet qualified 16/24. Its eight
+typed-result seeds used an unannotated wrong return, which was recorded as a
+wrong result rather than a recoverable type diagnostic. That packet and its
+verdicts remain immutable. The corrected seed assigns the value to declared
+`Summary` before returning, so the existing compiler emits the real type error.
+Fresh v2 qualification completed 24/24 with zero model calls at 13:51:42 UTC.
+`/home/werg/data/dgxops/teacher-tool-contract24-v2-20261018/qualification/prepared.json`
+binds all executed source references, protection, runtime inventory and verdicts.
+The regression executes the authored TypeScript and requires its actual semantic
+assignment diagnostic, in addition to full independent reference qualification.
+Own-teacher 48-trajectory generation remains pending.

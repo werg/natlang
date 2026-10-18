@@ -54,13 +54,24 @@ def test_actual_typescript_page_service_contract():
     ts = root / 'node_modules/typescript'
     assert ts.is_dir(), 'use the existing dependency overlay for this worktree'
     node = shutil.which('node'); assert node
-    sources = [next(iter(r['semantics']['services'].values())) for r in tool_contract_recovery_worlds()]
+    sources = [{'service':next(iter(r['semantics']['services'].values())),
+                'seed':r['semantics']['failure_seed']['code'], 'variant':r['curriculum']['variant']}
+               for r in tool_contract_recovery_worlds()]
     script = r'''
 const ts = require(process.argv[1]);
 const vm = require('node:vm');
 let data = ''; process.stdin.on('data', x => data += x);
 process.stdin.on('end', () => {
- for (const source of JSON.parse(data)) {
+ for (const entry of JSON.parse(data)) {
+  const source=entry.service;
+  if(entry.variant==='typed-result-recovery') {
+   const file='/authored-contract-case.ts', text=source+'\n'+entry.seed;
+   const options={noEmit:true,strict:true,target:ts.ScriptTarget.ES2022};
+   const host=ts.createCompilerHost(options), get=host.getSourceFile.bind(host);
+   host.getSourceFile=(path,...args)=>path===file?ts.createSourceFile(path,text,ts.ScriptTarget.ES2022,true):get(path,...args);
+   const program=ts.createProgram([file],options,host);
+   if(!program.getSemanticDiagnostics().some(d=>d.code===2322 && ts.flattenDiagnosticMessageText(d.messageText,' ').includes("'number'"))) throw Error('typed seed no longer produces a recoverable declared-type error');
+  }
   const js = ts.transpileModule(source, {compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;
   const context = {exports:{}}; vm.runInNewContext(js, context);
   const {page,page_count} = context.exports; const count = page_count();
