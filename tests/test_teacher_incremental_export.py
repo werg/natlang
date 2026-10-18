@@ -1438,3 +1438,61 @@ def test_small_batch_keeps_empty_shards_without_granting_job_custody():
     missing = journals[:-1]
     with pytest.raises(ValueError, match='exact queue worker set'):
         aggregate_worker_journals(master, queues, missing)
+
+
+def test_scoped_reader_virtual_boot_uses_exec_and_keeps_closed_transition_guard(monkeypatch):
+    from types import SimpleNamespace
+    from scripts.coreweave import teacher_incremental_export as module
+    boot_path = '/proc/sys/kernel/random/boot_id'
+    config = {'path': '/control/config.json', 'sha256': 'a'*64, 'bytes': 2}
+    state = {'schema': 'guardian-test', 'config': config, 'active_batch': 43,
+             'next_batch': 43, 'owner': {'pid': 123}}
+    files = {config['path']: b'{}', '/control/state.json': json.dumps(state).encode(),
+             '/generation/feed-evidence-phase.json': b'{"batch":43,"phase":"batch_complete"}',
+             '/ordinary': b'ordinary bytes', boot_path + '.other': b'ordinary proc-like path'}
+    reads, executions = [], []
+    actual_boot = ['same-boot\n']
+    def read_file(path):
+        reads.append(path)
+        # Reproduce the SDK's empty zero-stat-size virtual file behavior.
+        return SimpleNamespace(result=lambda **_: b'' if path == boot_path else files[path])
+    def execute(argv, **kwargs):
+        executions.append((argv, kwargs))
+        return SimpleNamespace(result=lambda **_: SimpleNamespace(
+            returncode=0, stdout=actual_boot[0], stderr=''))
+    sandbox = SimpleNamespace(read_file=read_file, exec=execute)
+    monkeypatch.setattr(module, '_cwctl_module', lambda: SimpleNamespace(read_sandbox=lambda *_a, **_k: sandbox))
+    _, reader = module.scoped_sdk_session('sandbox')
+    publisher = {'control_dir': '/control', 'guardian_config': config,
+                 'sandbox_boot_id': 'same-boot', 'generation_root': '/generation'}
+    fresh, raw, boundary = module._closed_guardian_transition(
+        publisher, b'{}', state, 43, reader, owner_exited=True)
+    assert fresh == state and json.loads(raw) == state and boundary is None
+    assert reader.read_many([boot_path, '/ordinary', boot_path + '.other']) == {
+        boot_path: b'same-boot\n', '/ordinary': b'ordinary bytes',
+        boot_path + '.other': b'ordinary proc-like path'}
+    assert boot_path not in reads
+    assert all(argv == ['cat', boot_path] and kwargs == {'timeout_seconds': 30}
+               for argv, kwargs in executions)
+    actual_boot[0] = 'different-boot\n'
+    with pytest.raises(ValueError, match='guardian transition changed its boot identity'):
+        module._closed_guardian_transition(publisher, b'{}', state, 43, reader, owner_exited=True)
+
+
+@pytest.mark.parametrize('failure', ['nonzero', 'empty', 'timeout'])
+def test_scoped_virtual_boot_transport_fails_closed(monkeypatch, failure):
+    from types import SimpleNamespace
+    from scripts.coreweave import teacher_incremental_export as module
+    def result(**kwargs):
+        assert kwargs == {'timeout': 45}
+        if failure == 'timeout':
+            raise TimeoutError('boot exec timed out')
+        return SimpleNamespace(returncode=1 if failure == 'nonzero' else 0,
+                               stdout='', stderr='denied')
+    sandbox = SimpleNamespace(
+        exec=lambda *_a, **_k: SimpleNamespace(result=result),
+        read_file=lambda *_: pytest.fail('virtual boot must not fall back to the empty SDK read'))
+    monkeypatch.setattr(module, '_cwctl_module', lambda: SimpleNamespace(read_sandbox=lambda *_a, **_k: sandbox))
+    _, reader = module.scoped_sdk_session('sandbox')
+    with pytest.raises(TimeoutError if failure == 'timeout' else OSError):
+        reader('/proc/sys/kernel/random/boot_id')

@@ -63,3 +63,13 @@ contributes a job.
 
 Queue and journal byte verification is crisp custody plumbing; no model-facing
 text, scheduling policy, source selection, or training admission changes.
+
+## Virtual boot identity transport (2026-10-18)
+
+Authenticate the actual kernel boot on every existing transition check. The SDK
+file service may return empty bytes for zero-size virtual proc files. Reuse the
+existing bounded, read-only `cat` exec transport for the exact boot-ID path in
+the scoped reader, including multi-read callers. Ordinary artifact paths retain
+the SDK file transport. Nonzero exec, empty identity, changed identity and
+transport failures remain failures; no stored boot value substitutes for a read.
+This is crisp outside-world transport, with no policy or model-facing change.
