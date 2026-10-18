@@ -681,7 +681,9 @@ def ordinary_coverage_part(tmp_path,kind):
     return source,{'model':'fixture','source':resident.binding(manifest),'coverage':resident.binding(coverage),'receipt':resident.binding(path)}
 
 
-def source03_bridge_fixture(tmp_path, monkeypatch, *, with_ordinary=False):
+def source03_bridge_fixture(tmp_path, monkeypatch, *, with_ordinary=False,
+                            old_geometry_override=None, old_forward_override=None,
+                            invented_current_component=False):
     import hashlib
     import pickle
     import subprocess
@@ -716,7 +718,7 @@ def source03_bridge_fixture(tmp_path, monkeypatch, *, with_ordinary=False):
         side_rows.append(side)
         old_cov_rows.append({'model':'lfm25','split':'train','disposition':'fit','source_row':i,'id':entry['id'],
             'source_graph_sha256':graph_sha,'source_row_bytes_sha256':raw_sha,
-            'geometry':{'forward_tokens':3,'kv_slots':3},'represented_by':{'fit':True}})
+            'geometry':old_geometry_override or {'forward_tokens':3,'kv_slots':3},'represented_by':{'fit':True}})
         bridge_cov_rows.append({'schema':'natlang.d32-source03-aux-bridge-geometry-row/1','bridge_row_index':i,
             'id':entry['id'],'binding':entry['binding'],'source_graph_sha256':graph_sha,
             'source_row_bytes_sha256':raw_sha,'geometry':{'forward_tokens':3,'kv_slots':3},
@@ -738,12 +740,18 @@ def source03_bridge_fixture(tmp_path, monkeypatch, *, with_ordinary=False):
     def key_for(source,policy):
         return {'source_sha256':source.file_sha256,'tokenizer':tokenizer,'split':'train',
             'policy_sha256':policy,'kind':'native-graphs','pair_model':None,'role_ids':roles}
+    if invented_current_component:
+        current_components['data/native_sources.py'] = 'f' * 64
+        policy_new = canonical_json_sha256_hex(current_components)
     old_key=key_for(old_source,policy_old);bridge_key=key_for(bridge_source,policy_new)
     def index_file(path,key,entries):
         value={'schema':'natlang.row-index/1','key':key,'entries':entries,
             'metadata_sha256':canonical_json_sha256_hex(entries)}
         with path.open('wb') as stream:pickle.dump(value,stream)
-    old_index=oldfit/'row-index/native-graphs-436a086fe6a15ca3669c145776184b1089fdfc41.pkl';index_file(old_index,old_key,old_source.entries)
+    old_entries=copy.deepcopy(old_source.entries)
+    if old_forward_override is not None:
+        old_entries[0]['forward_tokens'] = old_forward_override
+    old_index=oldfit/'row-index/native-graphs-436a086fe6a15ca3669c145776184b1089fdfc41.pkl';index_file(old_index,old_key,old_entries)
     bridge_index=coverage.parent/'row-index/native-graphs-bridge.pkl';bridge_index.parent.mkdir()
     index_file(bridge_index,bridge_key,bridge_source.entries)
 
@@ -933,9 +941,13 @@ def test_source03_bridge_geometry_is_verified_and_can_be_bridge_only_or_ordered_
 
 
 @pytest.mark.parametrize('mutation',['interleaved','duplicate','coverage','missing-row','wrong-geometry',
-                                    'wrong-policy','wrong-binding','old-source'])
+                                    'wrong-policy','wrong-binding','old-source','old-geometry',
+                                    'old-forward-tokens','invented-current-parser'])
 def test_source03_bridge_geometry_rejects_unbound_or_nonprefix_bridge(tmp_path,monkeypatch,mutation):
-    source,parts=source03_bridge_fixture(tmp_path,monkeypatch,with_ordinary=True)
+    source,parts=source03_bridge_fixture(tmp_path,monkeypatch,with_ordinary=True,
+        old_geometry_override={'forward_tokens':2,'kv_slots':2} if mutation=='old-geometry' else None,
+        old_forward_override=2 if mutation=='old-forward-tokens' else None,
+        invented_current_component=mutation=='invented-current-parser')
     bridge=parts[0]
     if mutation=='interleaved':parts=[parts[1],bridge]
     elif mutation=='duplicate':parts=[bridge,copy.deepcopy(bridge),parts[1]]
@@ -957,6 +969,8 @@ def test_source03_bridge_geometry_rejects_unbound_or_nonprefix_bridge(tmp_path,m
         path=Path(bridge['supplement']['path']);value=json.loads(path.read_text())
         value['row_index_key']['policy_sha256']='f'*64;write_json(path,value)
         bridge['supplement']=resident.binding(path)
+    elif mutation in {'old-geometry','old-forward-tokens','invented-current-parser'}:
+        pass  # Fully bound malformed fixtures are constructed at creation time.
     elif mutation=='wrong-binding':
         path=Path(bridge['source']['path']).parent/'bridge-row-bindings.jsonl'
         rows=[json.loads(line) for line in path.read_text().splitlines()]

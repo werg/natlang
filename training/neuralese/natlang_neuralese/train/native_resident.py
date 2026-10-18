@@ -514,6 +514,13 @@ def _source03_bridge_geometry_part(part, *, preparation, package):
     old_components = policy_transition.get('old_components', {})
     new_components = policy_transition.get('new_components', {})
     component_names = set(old_components)
+    expected_component_names = {
+        'data/native_sources.py', 'data/native_graph_schema.py', 'model/native_graph_plan.py',
+        'data/native_pair_schema.py', 'common/row_index.py', 'common/jsonio.py', 'common/hashing.py',
+    }
+    from ..common.hashing import sha256_file_hex
+    package = Path(package).resolve(strict=True)
+    actual_new_components = {name: sha256_file_hex(package / name) for name in expected_component_names}
     if (old_index.get('schema') != 'natlang.row-index/1' or not isinstance(old_entries, list)
             or digest(old_entries) != old_index.get('metadata_sha256')
             or old_key.get('source_sha256') != old_files['old-fit/00-fit.jsonl.zst']['sha256']
@@ -524,7 +531,9 @@ def _source03_bridge_geometry_part(part, *, preparation, package):
             or old_key.get('policy_sha256') != policy_transition.get('old_policy_sha256')
             or policy_transition.get('new_policy_sha256') != supplement.get('row_index_key', {}).get('policy_sha256')
             or policy_transition.get('changed_components') != ['common/hashing.py']
+            or component_names != expected_component_names
             or component_names != set(new_components)
+            or new_components != actual_new_components
             or set(policy_transition.get('unchanged_parser_components', [])) != component_names - {'common/hashing.py'}
             or any(old_components[name] != new_components[name] for name in component_names - {'common/hashing.py'})
             or old_components.get('common/hashing.py') == new_components.get('common/hashing.py')
@@ -619,6 +628,8 @@ def _source03_bridge_geometry_part(part, *, preparation, package):
                 or covered.get('old_fit_coverage_row', {}).get('old_source_row_index') != old_index_at
                 or covered.get('old_fit_coverage_row', {}).get('source_sha256') != old_key.get('source_sha256')
                 or covered.get('old_fit_coverage_row', {}).get('coverage_sha256') != old_files['old-fit/coverage.jsonl']['sha256']
+                or old_coverage_matches[0].get('geometry') != geometry
+                or prior.get('forward_tokens') != old_coverage_matches[0].get('geometry', {}).get('forward_tokens')
                 or indexed.get('forward_tokens') != entry.get('forward_tokens')
                 or set(geometry or {}) != {'forward_tokens', 'kv_slots'}
                 or geometry['forward_tokens'] != entry.get('forward_tokens')
