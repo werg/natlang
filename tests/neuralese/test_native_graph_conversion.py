@@ -652,7 +652,8 @@ def test_reviewed_child_masks_all_prior_assistant_targets_preserving_context_and
         text_row_graph(source, **options, mask_assistant_history=True)
 
 
-def test_partial_parent_final_verifier_rebuilds_mask_and_keeps_parent_debt(monkeypatch):
+@pytest.mark.parametrize('parent_kind', ['partial', 'guided'])
+def test_partial_parent_final_verifier_rebuilds_mask_and_keeps_parent_debt(monkeypatch, parent_kind):
     import copy
     import pytest
     from scripts.coreweave.teacher_tranche_admission import verify_teacher_model_actions
@@ -670,6 +671,10 @@ def test_partial_parent_final_verifier_rebuilds_mask_and_keeps_parent_debt(monke
         {'assistant':{'content':'positive'},'model_response':{'raw_calls':[]},'context':[],'tools_offered':[]} ]}}
     decision = {'approved':True, 'parent_quality_hold':'quality_pending_partial_files',
                 'parent_task_qualified':False,'materialized_decision_id':'row:decision:0000'}
+    if parent_kind == 'guided':
+        raw['row']['collection_guidance'] = {'training_admission': False}
+        decision = {'approved': True, 'guided_parent_review': True, 'parent_trace_qualified': False,
+                    'materialized_decision_id': 'row:decision:0000'}
     graph = text_row_graph(dict(id=converter.teacher_action_graph_id('row','a'*64,0),split='train',
         source_groups=['train'],tokenizer_sha256='c'*64,text=text,token_ids=ids,
         supervised_suffix_start=boundary), source_tokenizer_fingerprint='c'*64,tokenizer=tokenizer,
@@ -685,9 +690,14 @@ def test_partial_parent_final_verifier_rebuilds_mask_and_keeps_parent_debt(monke
     options = dict(raw_rows=raw,raw_row_shas={'row':'a'*64},source_sha256='d'*64,
                    decision_keys={('row',0):decision},hold_ids=set(),partial_tokenizer=tokenizer)
     proof = verify_teacher_model_actions([graph],receipt,**options)
-    assert proof['partition']['partial_source_rows'] == ['row']
     assert proof['partition']['materialized_source_rows'] == 0
-    assert proof['partition']['partial_parent_tasks_qualified'] is False
+    if parent_kind == 'partial':
+        assert proof['partition']['partial_source_rows'] == ['row']
+        assert proof['partition']['partial_parent_tasks_qualified'] is False
+    else:
+        assert proof['partition']['guided_source_rows'] == ['row']
+        assert proof['partition']['guided_parent_traces_admitted'] is False
+        assert proof['partition']['authored_static_root_actions'] == 0
     for mutation in ('weight','boundary','context','maskproof','approval','tokenizer'):
         bad = copy.deepcopy(graph); changed = dict(options)
         if mutation == 'weight':bad['nodes'][0]['target_weights'][20] = .05

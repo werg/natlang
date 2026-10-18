@@ -431,3 +431,34 @@ def test_requalified_identical_cases_select_actual_full_packet_authority(tmp_pat
     collection['source_provenance']['selection']['sha256'] = '0' * 64
     with pytest.raises(ValueError, match='provenance differs'):
         packet_references(current_ready, collection)
+
+
+def test_guided_reference_root_omissions_conserve_sampled_children():
+    import copy
+    import pytest
+    from scripts.coreweave.teacher_tranche_admission import materialization_partition
+    root = {'kind': 'authored_reference_eval', 'source': 'curriculum.reference.root',
+            'source_program_id': 'program', 'code_sha256': 'a'*64, 'sampled': False, 'status': 'finished'}
+    provenance = {k:v for k,v in root.items() if k != 'status'}
+    provenance['kind'] = 'authored_reference_root_eval'
+    raw = {'row': {'task': {'program_ir': {'id': 'program'}},
+        'collection_guidance': {'training_admission': False, 'root_action': root},
+        'trajectory': [{'action_provenance': provenance}, {'assistant': {'content': 'correct child'}}]}}
+    omission = {'source_row_id': 'row', 'teacher_turn_index': 0,
+        'reason': 'shared native materializer did not qualify this original decision',
+        'decision': {'reason': 'shared native materializer did not qualify this original decision'}}
+    proof = materialization_partition(raw, {('row',1)}, [omission], [('row',1)])
+    assert proof['source_actions'] == 2 and proof['emitted_actions'] == 1
+    assert proof['authored_static_root_actions'] == 1 and proof['guided_source_rows'] == ['row']
+    assert proof['materialized_source_rows'] == 0 and proof['guided_parent_traces_admitted'] is False
+    for mutation in ('sampled', 'program', 'code', 'guidance', 'missing_child', 'invented_omission'):
+        changed = copy.deepcopy(raw); omissions = copy.deepcopy([omission]); keys = {('row',1)}
+        if mutation == 'sampled':changed['row']['trajectory'][0]['action_provenance']['sampled'] = True
+        elif mutation == 'program':changed['row']['trajectory'][0]['action_provenance']['source_program_id'] = 'other'
+        elif mutation == 'code':changed['row']['trajectory'][0]['action_provenance']['code_sha256'] = 'b'*64
+        elif mutation == 'guidance':changed['row']['collection_guidance']['training_admission'] = True
+        elif mutation == 'missing_child':changed['row']['trajectory'].append({'assistant': {'content': 'lost'}})
+        elif mutation == 'invented_omission':omissions[0]['reason'] = 'generic archive'
+        with pytest.raises(ValueError):materialization_partition(changed, keys, omissions, [('row',1)])
+    with pytest.raises(ValueError, match='static roots'):
+        materialization_partition(raw, {('row',0),('row',1)}, [], [('row',0),('row',1)])

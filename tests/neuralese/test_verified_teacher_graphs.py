@@ -892,3 +892,30 @@ def test_content_cache_write_failure_keeps_original_validation_result(tmp_path, 
     seen,inputs=converter.seed_content_fingerprints([path], 'tokenizer-a')
     assert next(iter(seen.values())) == {'path':str(path),'id':'first'}
     assert inputs[0]['rows'] == 1
+
+
+def test_reviewed_guided_children_require_exact_review_and_structured_input_guard():
+    import copy
+    import pytest
+    from scripts.neuralese_data.build_verified_teacher_trajectory_graphs import reviewed_guided_decision_authority, canonical_json_sha256_hex
+    target = {'role':'assistant', 'content':'correct child'}
+    review = {'schema':'natlang.native-decision-approval/1','trajectory_id':'row',
+        'source_row_sha256':'a'*64,'decision_index':1,'target_sha256':canonical_json_sha256_hex(target),
+        'assistant_history_input_sha256':'b'*64}
+    row = {'target':target,'source_ref':{'trajectory_id':'row','source_row_sha256':'a'*64},
+        'decision':{'index':1},'collection_guidance':{'training_admission':False},
+        'training_admission':{'approved':True,'semantic_review':review}}
+    assert reviewed_guided_decision_authority(row,review_bound=True) == {
+        'guided_parent_review':True,'parent_trace_qualified':False,'assistant_history_input_sha256':'b'*64}
+    with pytest.raises(ValueError):reviewed_guided_decision_authority(row,review_bound=False)
+    for key,value in [('source_row_sha256','c'*64),('trajectory_id','other'),('decision_index',2),
+                      ('target_sha256','c'*64),('assistant_history_input_sha256',None),
+                      ('assistant_history_input_sha256','B'*64)]:
+        changed=copy.deepcopy(row);changed['training_admission']['semantic_review'][key]=value
+        with pytest.raises(ValueError):reviewed_guided_decision_authority(changed,review_bound=True)
+    changed=copy.deepcopy(row);changed['source_ref']['action_provenance']={'kind':'authored_reference_root_eval'}
+    with pytest.raises(ValueError):reviewed_guided_decision_authority(changed,review_bound=True)
+    changed=copy.deepcopy(row);changed['training_admission']['approved']=False
+    assert reviewed_guided_decision_authority(changed,review_bound=False)=={}
+    changed=copy.deepcopy(row);changed['collection_guidance']={}
+    assert reviewed_guided_decision_authority(changed,review_bound=False)=={}

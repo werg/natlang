@@ -340,6 +340,31 @@ def preceding_tranches(root, spool, tranche):
     return admitted, rejected
 
 
+def guided_static_root_keys(raw_rows):
+    """Identify only original unsampled reference roots for omission accounting."""
+    result = set()
+    for ident, row in raw_rows.items():
+        guidance = row.get('collection_guidance') or {}
+        if guidance.get('training_admission') is not False:
+            continue
+        root = guidance.get('root_action') or {}
+        for index, turn in enumerate(row['trajectory']):
+            provenance = turn.get('action_provenance') or {}
+            if (provenance.get('kind') == 'authored_reference_root_eval'
+                    and provenance.get('sampled') is False
+                    and root.get('kind') == 'authored_reference_eval' and root.get('sampled') is False
+                    and root.get('status') == 'finished'
+                    and all(provenance.get(k) == root.get(k) for k in
+                            ('source', 'source_program_id', 'code_sha256'))
+                    and provenance.get('source') == 'curriculum.reference.root'
+                    and provenance.get('source_program_id') == (row.get('task', {}).get('program_ir') or {}).get('id')
+                    and isinstance(provenance.get('code_sha256'), str)
+                    and len(provenance['code_sha256']) == 64
+                    and all(c in '0123456789abcdef' for c in provenance['code_sha256'])):
+                result.add((ident, index))
+    return result
+
+
 def materialization_partition(raw_rows, decision_keys, omissions, emitted_keys, deduplicated_keys=(),
                               *, partial_parent_rows=()):
     """Conserve every original action when a materializer holds whole source rows.
@@ -367,9 +392,12 @@ def materialization_partition(raw_rows, decision_keys, omissions, emitted_keys, 
     partial = set(partial_parent_rows)
     if not partial <= accepted:
         raise ValueError('partial parent evidence is absent from materialized source')
-    if any((ident, index) not in decisions for ident in accepted
+    static_roots = guided_static_root_keys(raw_rows)
+    if any((ident, index) not in decisions and (ident, index) not in static_roots for ident in accepted
            for index in range(len(raw_rows[ident]['trajectory']))):
         raise ValueError('materializer partially lost an accepted source trajectory')
+    if not static_roots <= omitted or static_roots & (emitted | deduplicated | decisions):
+        raise ValueError('authored static roots must remain exact non-target omissions')
     held_keys = {key for key in wanted if key[0] in held}
     if (not held_keys <= omitted or emitted & held_keys or deduplicated & held_keys
             or emitted & omitted or deduplicated & omitted or emitted & deduplicated
@@ -377,13 +405,16 @@ def materialization_partition(raw_rows, decision_keys, omissions, emitted_keys, 
         raise ValueError('materialization action partition does not conserve the full source')
     missing_reason = 'shared native materializer did not qualify this original decision'
     for omission in omissions:
-        if omission['source_row_id'] in held:
+        if omission['source_row_id'] in held or (omission['source_row_id'], omission['teacher_turn_index']) in static_roots:
             expected = {'source_row_id': omission['source_row_id'],
                         'teacher_turn_index': omission['teacher_turn_index'],
                         'reason': missing_reason, 'decision': {'reason': missing_reason}}
             if _exact(omission) != _exact(expected):
                 raise ValueError('held source action lacks its exact materializer omission')
-    return {'source_rows': len(raw_rows), 'materialized_source_rows': len(accepted - partial),
+    guided = {ident for ident in accepted if (raw_rows[ident].get('collection_guidance') or {}).get('training_admission') is False}
+    return {'source_rows': len(raw_rows), 'materialized_source_rows': len(accepted - partial - guided),
+            **({'guided_source_rows': sorted(guided), 'authored_static_root_actions': len(static_roots),
+                'guided_parent_traces_admitted': False} if guided else {}),
             **({'partial_source_rows': sorted(partial),
                 'partial_source_actions': sum(len(raw_rows[ident]['trajectory']) for ident in partial),
                 'partial_parent_tasks_qualified': False} if partial else {}),
@@ -506,8 +537,13 @@ def verify_teacher_model_actions(graphs, receipt, *, raw_rows, raw_row_shas,
         if (teacher['source_artifact_sha256'] != source_sha256
                 or teacher['source_row_sha256'] != row_sha or identifier != expected):
             raise ValueError('graph source SHA or source-bound profile identity mismatch')
-        if source_id in partial:
+        guided = (source_row.get('collection_guidance') or {}).get('training_admission') is False
+        if source_id in partial or guided:
             expected_decision = decision_keys[(source_id, turn)]
+            if guided and (expected_decision.get('guided_parent_review') is not True
+                    or expected_decision.get('parent_trace_qualified') is not False
+                    or (source_id, turn) in guided_static_root_keys({source_id: source_row})):
+                raise ValueError('guided child graph lacks its exact review or includes a static root')
             if (expected_decision.get('approved') is not True
                     or teacher.get('decision_admission') != expected_decision
                     or partial_tokenizer is None):
@@ -548,7 +584,8 @@ def verify_teacher_model_actions(graphs, receipt, *, raw_rows, raw_row_shas,
             if (row['nodes'] != masked['nodes']
                     or conversion.get('assistant_history_target_mask') != masked['conversion']['assistant_history_target_mask']):
                 raise ValueError('partial parent graph does not preserve the exact assistant-history loss mask')
-        elif teacher.get('decision_admission', {}).get('parent_quality_hold') is not None:
+        elif (teacher.get('decision_admission', {}).get('parent_quality_hold') is not None
+                or teacher.get('decision_admission', {}).get('guided_parent_review')):
             raise ValueError('partial parent graph has no current decision authority')
         groups = sorted(set(source_row['task']['program_ir']['source_groups']))
         if row['source_groups'] != groups or teacher['source_groups'] != groups or row['split'] != 'train':

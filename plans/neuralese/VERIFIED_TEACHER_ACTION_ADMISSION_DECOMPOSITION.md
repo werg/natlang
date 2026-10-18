@@ -30,3 +30,29 @@ Exact capture joins require a nonempty original invocation and lowercase 64-digi
 SHA-256 request/response hashes. Missing or malformed capture identity omits only
 that turn, while a conflicting bound invocation/response still rejects the input.
 This converter has no legacy missing-capture fallback.
+
+## Reviewed children of an authored reference root
+
+An authored reference root supplies collection guidance, not a sampled teacher
+answer. Its exact sampled children may become training targets after independent
+natural-language review of their actual instructions, response actions and
+captured host results. The existing per-decision review is the authority; passing
+the parent task or finishing a measurement window does not grant this approval.
+
+1. Keep the original source, authored-root hold, outcome and complete trajectory.
+   Select only exact sampled-child decisions through the existing native review.
+2. Bind each selected target and its original structured context to the review.
+   Reject ambiguous embedded chat markers using the existing input guard.
+3. Reuse the existing full-context renderer and assistant-history loss mask:
+   earlier assistant turns remain available as context, with zero target weight.
+4. Conserve every original action. An exact captured unsampled reference root may
+   appear only as its existing ordinary omission; missing sampled-child decisions
+   remain errors. Report guided-parent rows separately from fully materialized
+   sources and retain the unadmitted static-root obligations.
+5. Independently rerender each admitted graph in the final shared verifier and
+   check its target, full context, tokenizer, input guard and history mask.
+
+These are natural-language review and admission steps. Crisp helpers only join
+exact reviewed IDs and hashes, verify capture metadata, render masks, and check
+complete action conservation. Legacy default conversion is unchanged. This is
+new-data custody, with no executing-model prompt/runtime change or new samples.

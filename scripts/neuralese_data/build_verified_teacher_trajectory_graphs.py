@@ -692,6 +692,28 @@ def verify_original_row(row, original):
     return path
 
 
+def reviewed_guided_decision_authority(record, *, review_bound):
+    """Transport existing exact child review; never approve a decision here."""
+    admission = record.get('training_admission') or {}
+    guidance = record.get('collection_guidance') or {}
+    if guidance.get('training_admission') is not False or admission.get('approved') is not True:
+        return {}
+    reference, decision = record['source_ref'], record['decision']
+    review = admission.get('semantic_review') or {}
+    digest = review.get('assistant_history_input_sha256')
+    if (not review_bound or review.get('schema') != 'natlang.native-decision-approval/1'
+            or review.get('trajectory_id') != reference.get('trajectory_id')
+            or review.get('source_row_sha256') != reference.get('source_row_sha256')
+            or review.get('decision_index') != decision.get('index')
+            or review.get('target_sha256') != canonical_json_sha256_hex(record['target'])
+            or not isinstance(digest, str) or len(digest) != 64
+            or any(c not in '0123456789abcdef' for c in digest)
+            or (reference.get('action_provenance') or {}).get('kind') == 'authored_reference_root_eval'):
+        raise ValueError('guided child review lacks exact sampled target and structured input authority')
+    return {'guided_parent_review': True, 'parent_trace_qualified': False,
+            'assistant_history_input_sha256': digest}
+
+
 def teacher_decision_admissions(source, source_sha256, *, decision_review=None):
     """Reuse the native materializer, once per exact source/runtime for both ports."""
     if sha256_file(source) != source_sha256:
@@ -760,6 +782,7 @@ def teacher_decision_admissions(source, source_sha256, *, decision_review=None):
                 **({'assistant_history_input_sha256': reference['assistant_history_input_sha256']}
                    if reference.get('assistant_history_input_sha256') else {})}
                if reference.get('parent_quality_hold') else {}),
+            **reviewed_guided_decision_authority(record, review_bound=review_reference is not None),
             'materialized_decision_id': record['id'],
             'materialized_decision_sha256': canonical_json_sha256_hex(record)}
     return decisions, {'path': str(receipt_path), 'sha256': sha256_file(receipt_path),
@@ -1116,7 +1139,7 @@ def main():
                             "token_ids": token_ids, "supervised_suffix_start": boundary,
                             "source_twin_id": identifier, "source_record_ids": [row["id"], identifier]}
                 partial_guard = None
-                if decision.get('parent_quality_hold'):
+                if decision.get('parent_quality_hold') or decision.get('guided_parent_review'):
                     try:
                         partial_guard = reviewed_teacher_context_guard(turn, context, target, tools)
                         if canonical_json_sha256_hex(partial_guard) != decision.get('assistant_history_input_sha256'):
@@ -1129,7 +1152,7 @@ def main():
                         continue
                 graph = text_row_graph(row_data, source_tokenizer_fingerprint=source_fingerprint,
                     tokenizer=tokenizer, expanded_tokenizer_fingerprint=expanded_fingerprint,
-                    context_weight=.05, mask_assistant_history=bool(decision.get('parent_quality_hold')),
+                    context_weight=.05, mask_assistant_history=bool(decision.get('parent_quality_hold') or decision.get('guided_parent_review')),
                     assistant_history_guard=partial_guard)
                 graph["conversion"]["teacher_source"] = {
                     "schema": "natlang.static-teacher-turn-source/1",
