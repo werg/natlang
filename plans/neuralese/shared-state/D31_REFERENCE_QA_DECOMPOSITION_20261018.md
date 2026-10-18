@@ -41,3 +41,11 @@ records, protected hits or closure violations. Existing trajectory records are
 closure inputs only and are excluded from the new output. Bound preparation:
 `/home/werg/data/external-expansion/deepdive-reference-qa-v1/preparation.json`.
 Native lowering/rendering, admission and actual exposure remain separate work.
+
+All 3,209 items subsequently lowered through the shared native pipeline:
+803 cases, 8,024 decisions and zero omissions. The first Docker text-render
+attempt exposed an import bootstrap bug: direct script execution did not put
+the repository root on Python's module path, so the shared output-lease import
+failed before rendering. The common Docker wrapper now supplies the repository
+and shared training package roots explicitly. Reuse no failed render receipt;
+start a fresh policy-bound rendering with that corrected wrapper.

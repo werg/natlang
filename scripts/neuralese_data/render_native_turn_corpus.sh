@@ -36,6 +36,7 @@ docker run --rm --name "$NAME" --network none --user "$(id -u):$(id -g)" --memor
   -v "$NODE_BIN:/usr/local/bin/node:ro" \
   -v "$ZSTD_BIN:/usr/local/bin/zstd:ro" \
   -e HF_HUB_OFFLINE=1 -e TRANSFORMERS_OFFLINE=1 -e CUDA_VISIBLE_DEVICES= -e TOKENIZERS_PARALLELISM=false -e HOME=/tmp \
+  -e "PYTHONPATH=$REPO:$REPO/training/neuralese" \
   -e PYTHONDONTWRITEBYTECODE=1 \
   -v "$REPO:$REPO:ro" -v /mnt/external:/mnt/external:ro -v /home/werg/data:/home/werg/data:ro -v "$OUT:$OUT" \
   -w "$REPO" --entrypoint python3 natlang-neuralese:26.09 \
