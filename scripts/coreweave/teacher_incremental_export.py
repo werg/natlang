@@ -1041,24 +1041,12 @@ def _publisher_batch_runtime(publisher: dict, batch: int, read_file: Callable[[s
 
 
 def _guardian_lookahead_slots(state):
-    """Completed work retains custody without consuming the next live slot."""
-    completed=state.get('primary_completed_ahead',{})
-    if not isinstance(completed,dict):raise ValueError('completed guardian slots are malformed')
-    result={};expected=state.get('active_batch')
-    if expected is None and type(state.get('next_batch'))is int:expected=state['next_batch']-1
-    if completed and type(expected)is not int:raise ValueError('completed guardian slots lack their live predecessor')
-    for key,slot in sorted(completed.items(),key=lambda item:int(item[0])):
-        expected+=1
-        if (key!=str(expected)or not isinstance(slot,dict)or slot.get('batch')!=expected
-                or not isinstance(slot.get('boundary'),dict)):
-            raise ValueError('completed guardian slots have a gap or no boundary')
-        result[expected]=slot
-    slot=state.get('primary_prefetch')
-    if slot is not None:
-        if type(expected)is not int or not isinstance(slot,dict)or slot.get('batch')!=expected+1:
-            raise ValueError('live guardian slot differs from its ordered predecessor chain')
-        result[expected+1]=slot
-    return result
+    """Share the guardian's ordered active/completed source custody inventory."""
+    try:
+        from .teacher_generation_guardian import primary_ahead_slots
+    except ImportError:
+        from teacher_generation_guardian import primary_ahead_slots
+    return primary_ahead_slots(state)
 
 
 def discover_guardian_batch(publisher: dict, sandbox,
@@ -1106,6 +1094,8 @@ def discover_guardian_batch(publisher: dict, sandbox,
     if config_binding != {'path': guardian_ref['path'], 'sha256': guardian_ref['sha256'],
                           'bytes': guardian_ref['bytes']}:
         raise ValueError('guardian state does not bind the publisher config revision')
+    if state.get('primary_active_ahead')and guardian.get('primary_worker_capacity')is None:
+        raise ValueError('publisher active tails lack an explicit worker envelope')
     batch, owner = state.get('active_batch'), state.get('owner')
     slot=None
     if batch_slot is not None:

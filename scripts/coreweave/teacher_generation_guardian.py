@@ -456,7 +456,7 @@ def config_revision(folder, state, path, *, publish=True):
     raw=Path(path).read_bytes();config=json.loads(raw);current=binding(path)
     if state.get('config')==current: return config
     previous=state.get('config_value')
-    allowed={'task_runtime','server','model_id','feeder','queue_worker','node_bin','drain_file','teacher_identity','source_sequence','repair_parallel_batches','primary_parallel_batches','primary_tail_max_running','overlap_workers','overlap_feeder','collection_repo','collection_worker'}
+    allowed={'task_runtime','server','model_id','feeder','queue_worker','node_bin','drain_file','teacher_identity','source_sequence','repair_parallel_batches','primary_parallel_batches','primary_tail_max_running','primary_worker_capacity','overlap_workers','overlap_feeder','collection_repo','collection_worker'}
     changes={key for key in set(previous or {})|set(config) if (previous or {}).get(key)!=config.get(key)}
     if previous is not None and changes-allowed: raise ValueError('guardian root/ownership configuration changed; preserve and explicitly migrate this state')
     snapshot=folder/'config-history'/(current['sha256']+'.json');snapshot.parent.mkdir(parents=True,exist_ok=True)
@@ -490,10 +490,38 @@ def _primary_overlap_settings(config):
         feeder=config.get('overlap_feeder')
         if not isinstance(feeder,dict)or binding(feeder['path'])!=feeder:
             raise ValueError('overlap feeder lacks an exact source binding')
+    capacity=config.get('primary_worker_capacity')
+    if capacity is not None and (limit!=2 or type(capacity)is not int or capacity<workers):
+        raise ValueError('primary worker capacity needs an explicit positive overlap envelope')
     return limit,threshold,workers
 
 
-def primary_tail_frontier(root,batch,threshold):
+def primary_ahead_slots(state):
+    """One ordered custody inventory, including active tails and completed work."""
+    result={};expected=state.get('active_batch')
+    if expected is None and type(state.get('next_batch'))is int:expected=state['next_batch']-1
+    for name in ('primary_completed_ahead','primary_active_ahead'):
+        values=state.get(name,{})
+        if not isinstance(values,dict):raise ValueError('guardian ahead slots are malformed')
+        for key,slot in values.items():
+            if (not isinstance(slot,dict)or type(slot.get('batch'))is not int
+                    or key!=str(slot['batch'])or slot['batch']in result
+                    or (name=='primary_completed_ahead'and not isinstance(slot.get('boundary'),dict))):
+                raise ValueError('guardian ahead slot repeats a batch or loses its boundary')
+            result[slot['batch']]=slot
+    current=state.get('primary_prefetch')
+    if current is not None:
+        if not isinstance(current,dict)or type(current.get('batch'))is not int or current['batch']in result:
+            raise ValueError('guardian live slot repeats an owned batch')
+        result[current['batch']]=current
+    for batch in sorted(result):
+        if type(expected)is not int or batch!=expected+1:
+            raise ValueError('guardian ahead slots have a gap')
+        expected=batch
+    return {batch:result[batch]for batch in sorted(result)}
+
+
+def _primary_work_frontier(root,batch):
     """Observe immutable queue custody and actual worker journal capacity."""
     home=Path(root)/'evidence-collections-v2'/f'batch-{batch:04d}';queue=home/'queue.jsonl'
     if not queue.is_file():return None
@@ -526,13 +554,105 @@ def primary_tail_frontier(root,batch,threshold):
     # Static shard tails can leave pending keys behind a few live workers after
     # other workers exit. They retain those keys; the separate second batch
     # uses available serving capacity. Do not interpret startup as a tail.
-    if not finished or not remaining or len(active)>threshold:return None
     return {'schema':'natlang.teacher-primary-tail-capacity/2','batch':batch,
         'queue':before[str(queue)],'journals':[before[str(p)]for p in journals],
         'started_keys':sorted(started),'finished_keys':sorted(finished),
         'remaining_keys':sorted(remaining),'unstarted_keys':sorted(unstarted),
         'active_keys':sorted(active),
         'claim':'actual capacity observation only; no original completion or admission'}
+
+
+def primary_tail_frontier(root,batch,threshold):
+    value=_primary_work_frontier(root,batch)
+    if (value is None or not value['finished_keys']or not value['remaining_keys']
+            or len(value['active_keys'])>threshold):return None
+    return value
+
+
+PRIMARY_REFILL_POLICY = """Refill within the owned worker envelope.
+Keep every original live batch and its unstarted keys with its pinned owner.
+Observe completed work and a genuine tail. Count every unfinished key, bounded
+by that batch's pinned workers, including all live future slots. Reserve the
+next qualified source only when its full workers fit the explicitly declared
+envelope. Never grant capacity from unknown, torn or unsealed custody.
+"""
+
+
+def primary_refill_admission(observation,workers,capacity):
+    """Named scheduling stage; crisp arithmetic verifies the declared NL policy."""
+    if type(workers)is not int or workers<1 or type(capacity)is not int or capacity<workers:
+        raise ValueError('refill requires declared positive worker capacity')
+    if not observation or observation.get('schema')!='natlang.teacher-owned-worker-capacity/1':return None
+    demand=0;tails=[];batches=set()
+    for slot in observation['slots']:
+        count=slot['workers'];frontier=slot['frontier']
+        if type(count)is not int or count<1 or frontier is None:return None
+        if (type(slot['batch'])is not int or slot['batch']in batches
+                or frontier.get('batch')!=slot['batch']):raise ValueError('refill repeats or changes an owned batch')
+        batches.add(slot['batch'])
+        sets={name:set(frontier[name])for name in ('started_keys','finished_keys','remaining_keys','active_keys','unstarted_keys')}
+        if (any(len(sets[name])!=len(frontier[name])for name in sets)
+                or not sets['finished_keys']<=sets['started_keys']
+                or sets['active_keys']!=sets['started_keys']-sets['finished_keys']
+                or sets['unstarted_keys']&sets['started_keys']
+                or sets['remaining_keys']!=sets['active_keys']|sets['unstarted_keys']):
+            raise ValueError('refill frontier has inconsistent work partitions')
+        remaining=frontier['remaining_keys']
+        demand+=min(count,len(remaining))
+        if (frontier['finished_keys']and remaining
+                and len(frontier['active_keys'])<=observation['tail_max_running']):tails.append(slot['batch'])
+    if not tails or demand+workers>capacity:return None
+    return {'schema':'natlang.teacher-owned-worker-refill/1','policy':'refill-within-owned-worker-envelope',
+        'potential_workers':demand,'new_workers':workers,'worker_capacity':capacity,
+        'eligible_tail_batches':tails,'observation':observation,'training_admission':False}
+
+
+def primary_capacity_observation(folder,state,config):
+    """Authenticate exact owner/source/worker bounds before giving capacity credit."""
+    sequence=state.get('source_sequence')or{};declaration=config['source_sequence']
+    active=state.get('active_batch')
+    if type(active)is not int or not alive(state.get('owner')):return None
+    ahead=primary_ahead_slots(state);completed=state.get('primary_completed_ahead',{})
+    primary=(state.get('primary_launches')or{}).get(str(active),{})
+    slots=[dict(primary,batch=active,owner=state['owner'],feeder=primary.get('feeder',state.get('feeder',config['feeder'])))]+[
+        slot for batch,slot in ahead.items()if str(batch)not in completed]
+    observed=[]
+    for slot in slots:
+        owner=slot.get('owner');current=process(owner['pid'])if owner else None
+        if not current or not alive(owner):return None
+        feeder=slot['feeder'];path=feeder['path']if isinstance(feeder,dict)else feeder
+        if isinstance(feeder,dict)and binding(path)!=feeder:raise ValueError('owned refill feeder changed')
+        if str(path).encode()not in current['argv'][:5]:raise ValueError('refill owner no longer executes its exact feeder')
+        batch=slot['batch'];ref=sequence.get('started',{}).get(str(batch))
+        if ref is None:return None
+        started=_source_sequence_helpers()._json(ref,declaration)
+        home=Path(config['root'])/'evidence-collections-v2'/f'batch-{batch:04d}'
+        sealed=started['sealed']
+        if (started.get('batch')!=batch or any(sealed[name]!=binding(home/name)
+                for name in('source-cases.jsonl','queue.jsonl','teacher-source.json'))):
+            raise ValueError('refill source differs from actual sealed custody')
+        source=_source_sequence_helpers()._json(sealed['teacher-source.json'],declaration)
+        workers=source.get('concurrency')
+        if type(workers)is not int or workers<1:raise ValueError('refill lacks actual pinned source workers')
+        if slot.get('workers',workers)!=workers:raise ValueError('refill changed pinned batch workers')
+        frontier=_primary_work_frontier(config['root'],batch)
+        if frontier is None:return None
+        if frontier['queue']!=sealed['queue.jsonl']:raise ValueError('refill journal queue differs from source')
+        observed.append({'batch':batch,'workers':workers,'owner':owner,
+            'owner_argv_sha256':hashlib.sha256(b'\0'.join(current['argv'])).hexdigest(),
+            'started':ref,'frontier':frontier})
+    return {'schema':'natlang.teacher-owned-worker-capacity/1','slots':observed,
+        'tail_max_running':config.get('primary_tail_max_running',6)}
+
+
+def _capacity_still_current(observation):
+    for slot in observation['slots']:
+        owner=slot['owner'];current=process(owner['pid'])
+        if (not current or not alive(owner)
+                or hashlib.sha256(b'\0'.join(current['argv'])).hexdigest()!=slot['owner_argv_sha256']):return False
+        frontier=slot['frontier']
+        if any(binding(ref['path'])!=ref for ref in [frontier['queue'],*frontier['journals']]):return False
+    return True
 
 
 def _spawn_primary_prefetch(folder,state,config,slot,workers):
@@ -551,7 +671,8 @@ def _spawn_primary_prefetch(folder,state,config,slot,workers):
         if not current:continue
         is_feeder=any(Path(arg.decode(errors='replace')).name.startswith('feed-evidence-')
             or arg.decode(errors='replace')==slot['feeder']['path']for arg in current['argv'][:5])
-        if is_feeder and public_identity(current)!=state.get('owner'):
+        owners=[state.get('owner'),*[item.get('owner')for item in primary_ahead_slots(state).values()]]
+        if is_feeder and public_identity(current)not in owners:
             raise ValueError('unowned feeder prevents next-batch overlap')
     if binding(slot['source_configuration']['path'])!=slot['source_configuration']:
         raise ValueError('reserved immutable source configuration changed')
@@ -578,51 +699,72 @@ def _spawn_primary_prefetch(folder,state,config,slot,workers):
 
 
 def maintain_primary_prefetch(folder,state,config):
-    limit,threshold,workers=_primary_overlap_settings(config)
-    slot=state.get('primary_prefetch')
+    limit,threshold,workers=_primary_overlap_settings(config);capacity=config.get('primary_worker_capacity')
     if limit==1:
-        if slot or state.get('primary_completed_ahead'):raise ValueError('cannot disable overlap with an unreconciled next batch')
+        if primary_ahead_slots(state):raise ValueError('cannot disable overlap with an unreconciled next batch')
         return
-    if slot:
-        completed=state.get('primary_completed_ahead',{})
-        expected=state['active_batch']+len(completed)+1
-        if slot['batch']!=expected:
-            raise ValueError('prefetch slot is not the next ordered live worker slot')
+    if state.get('primary_active_ahead')and capacity is None:
+        raise ValueError('active future tails require their declared worker envelope')
+    completed=state.get('primary_completed_ahead',{})
+    for batch,slot in list(primary_ahead_slots(state).items()):
+        if str(batch)in completed:continue
         _spawn_primary_prefetch(folder,state,config,slot,slot['workers'])
         _source_sequence_helpers().observe_prefetched_source(folder,state,config)
         phase=Path(slot['phase_path'])
         if not alive(slot.get('owner'))and phase.is_file():
             value=json.loads(phase.read_text())
             if value.get('phase')=='batch_complete':
-                decision,entries=boundary(Path(config['root']),Path(folder),slot['batch'],phase_path=phase)
+                decision,entries=boundary(Path(config['root']),Path(folder),batch,phase_path=phase)
                 prepare_retry(Path(folder),decision,entries)
-                slot['boundary']=binding(Path(folder)/'boundaries'/f"batch-{slot['batch']:04d}.json")
+                slot['boundary']=binding(Path(folder)/'boundaries'/f'batch-{batch:04d}.json')
                 write(Path(folder)/'state.json',state)
                 _source_sequence_helpers().archive_completed_prefetch(folder,state,config,dict(slot))
-                slot=None
-        if slot:return
     if not alive(state.get('owner'))or Path(config['drain_file']).exists():return
-    tail=primary_tail_frontier(config['root'],state['active_batch'],threshold)
-    if tail is None:return
-    batch=state['active_batch']+len(state.get('primary_completed_ahead',{}))+1
+    current=state.get('primary_prefetch');admission=None
+    if capacity is None:
+        if current:return
+        tail=primary_tail_frontier(config['root'],state['active_batch'],threshold)
+        if tail is None:return
+    else:
+        # An interrupted reservation may precede the guardian slot write.
+        # Its pinned context survives a later configuration revision.
+        reserved=(state.get('source_sequence')or{}).get('prefetch')
+        if reserved and not current:
+            prior=_source_sequence_helpers()._json(reserved['intent'],config['source_sequence'])
+            workers=(prior.get('prefetch',{}).get('resource_refill')or{}).get('workers',workers)
+        observation=primary_capacity_observation(folder,state,config)
+        admission=primary_refill_admission(observation,workers,capacity)
+        if admission is None or not _capacity_still_current(observation):return
+        tail=next(item['frontier']for item in observation['slots']if item['batch']in admission['eligible_tail_batches'])
+        if current:_source_sequence_helpers().park_active_prefetch(folder,state,config,dict(current))
+        if not alive(state.get('owner')):return
+    ahead=primary_ahead_slots(state)
+    batch=max(ahead,default=state['active_batch'])+1
     pending=_source_sequence_helpers().prepare_prefetched_source(folder,state,config,batch)
     if pending is None:return
     declaration=config['source_sequence'];intent=_source_sequence_helpers()._json(pending['intent'],declaration)
-    slot={'batch':batch,'token':uuid.uuid4().hex,'owner':None,'feeder':config['overlap_feeder'],
-        'guardian_config':state['config_snapshot'],
-        'collection_context':{'repo':config['collection_repo'],'queue_worker':config['collection_worker'],
-            'node_bin':config['node_bin']},
-        'task_runtime':config['task_runtime'],'workers':workers,'source_configuration':intent['new_configuration'],
-        'selection_intent':pending['intent'],'tail_observation':tail,
-        'predecessor_owner':state['owner'],
+    preserved=intent['prefetch'].get('resource_refill')or{}
+    slot={'batch':batch,'token':uuid.uuid4().hex,'owner':None,
+        'feeder':preserved.get('feeder',config['overlap_feeder']),
+        'guardian_config':preserved.get('guardian_config',state['config_snapshot']),
+        'collection_context':preserved.get('collection_context',{'repo':config['collection_repo'],
+            'queue_worker':config['collection_worker'],'node_bin':config['node_bin']}),
+        'task_runtime':intent['prefetch']['task_runtime'],'workers':preserved.get('workers',workers),
+        'source_configuration':intent['new_configuration'],'selection_intent':pending['intent'],
+        'tail_observation':tail,'predecessor_owner':state['owner'],
         'phase_path':str(Path(config['root'])/'feeder-phases'/f'batch-{batch:04d}.json')}
+    if admission is not None:
+        if slot['workers']!=admission['new_workers']:raise ValueError('reserved workers differ from capacity admission')
+        raw=(json.dumps(admission,sort_keys=True,indent=2)+'\n').encode()
+        receipt=Path(folder)/'worker-capacity'/f"batch-{batch:04d}-{hashlib.sha256(raw).hexdigest()}.json"
+        _source_sequence_helpers()._immutable(receipt,raw);slot['capacity_admission']=binding(receipt)
     state['primary_prefetch']=slot;write(Path(folder)/'state.json',state)
-    _spawn_primary_prefetch(folder,state,config,slot,workers)
+    _spawn_primary_prefetch(folder,state,config,slot,slot['workers'])
 
 
 def adopt_primary_prefetch(folder,state,config):
     completed=state.get('primary_completed_ahead',{})
-    slot=completed.get(str(state['next_batch']))or state.get('primary_prefetch')
+    slot=primary_ahead_slots(state).get(state['next_batch'])
     if not slot:return False
     if slot['batch']!=state['next_batch']or state.get('owner')is not None:
         raise ValueError('prefetch adoption differs from actual primary closure')
@@ -636,6 +778,7 @@ def adopt_primary_prefetch(folder,state,config):
     state.setdefault('primary_launches',{})[str(slot['batch'])]=dict(slot)
     state.update(owner=slot.get('owner'),active_batch=slot['batch'],feeder=slot['feeder'],task_runtime=slot['task_runtime'])
     if str(slot['batch'])in completed:completed.pop(str(slot['batch']))
+    elif str(slot['batch'])in state.get('primary_active_ahead',{}):state['primary_active_ahead'].pop(str(slot['batch']))
     else:state.pop('primary_prefetch')
     write(Path(folder)/'state.json',state)
     return True
@@ -691,7 +834,7 @@ def run(config_path, *, external_transition=None, external_reconciliation=None, 
             time.sleep(5); continue
         launch_repair(folder, state, config)
         if adopt_primary_prefetch(folder,state,config):continue
-        if state.get('primary_prefetch'):
+        if primary_ahead_slots(state):
             raise ValueError('reserved next primary has not acquired an actual feeder owner')
         launch_feeder(folder, state, config, state['next_batch'])
 

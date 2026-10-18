@@ -6,9 +6,9 @@ import json
 from pathlib import Path
 import time
 try:
-    from .teacher_generation_guardian import binding, write, alive
+    from .teacher_generation_guardian import binding, write, alive, primary_ahead_slots
 except ImportError:
-    from teacher_generation_guardian import binding, write, alive
+    from teacher_generation_guardian import binding, write, alive, primary_ahead_slots
 
 
 def _read(reference, declaration):
@@ -588,21 +588,26 @@ def _prefetch_service_chain(folder,state,config,*,require_live=True):
     if not pending or pending['batch']!=state.get('active_batch')or (require_live and not alive(state.get('owner'))):
         raise ValueError('prefetch lacks its exact live predecessor selection')
     chain=[pending]
-    for key,slot in sorted(state.get('primary_completed_ahead',{}).items(),key=lambda item:int(item[0])):
-        batch=slot['batch']
-        if key!=str(batch)or batch!=chain[-1]['batch']+1 or alive(slot.get('owner')):
-            raise ValueError('completed prefetch chain has a gap or live owner')
+    completed=state.get('primary_completed_ahead',{});active=state.get('primary_active_ahead',{})
+    if active and config.get('primary_worker_capacity')is None:raise ValueError('active tails lack their worker envelope')
+    for batch,slot in primary_ahead_slots(state).items():
+        key=str(batch)
+        if key not in completed and key not in active:continue
+        if batch!=chain[-1]['batch']+1:raise ValueError('prefetch chain has a gap')
+        if key in completed and alive(slot.get('owner')):raise ValueError('completed prefetch still has a live owner')
+        if key in active and require_live and not alive(slot.get('owner')):raise ValueError('active prefetch lost its actual owner')
         reserved=sequence.get('prefetch_history',{}).get(key)
         if not reserved or reserved['batch']!=batch or reserved['intent']!=slot['selection_intent']:
             raise ValueError('completed prefetch lost its reservation')
-        reference=slot['boundary'];terminal=_json(reference,declaration)
-        if (Path(reference['path']).resolve()!=(Path(folder)/'boundaries'/f'batch-{batch:04d}.json').resolve()
-                or terminal.get('batch')!=batch):
-            raise ValueError('completed prefetch boundary differs')
-        started=_json(sequence['started'][key],declaration)
-        if any(terminal['bindings'].get(name)!=started['sealed'][name]for name in ('queue.jsonl','teacher-source.json')):
-            raise ValueError('completed prefetch boundary changed its sealed source')
-        _drained_boundary(folder,{**state,'last_boundary':reference},config,batch,terminal)
+        if key in completed:
+            reference=slot['boundary'];terminal=_json(reference,declaration)
+            if (Path(reference['path']).resolve()!=(Path(folder)/'boundaries'/f'batch-{batch:04d}.json').resolve()
+                    or terminal.get('batch')!=batch):
+                raise ValueError('completed prefetch boundary differs')
+            started=_json(sequence['started'][key],declaration)
+            if any(terminal['bindings'].get(name)!=started['sealed'][name]for name in ('queue.jsonl','teacher-source.json')):
+                raise ValueError('completed prefetch boundary changed its sealed source')
+            _drained_boundary(folder,{**state,'last_boundary':reference},config,batch,terminal)
         chain.append(reserved)
     for item in chain:
         batch=item['batch'];reference=sequence.get('started',{}).get(str(batch))
@@ -616,20 +621,39 @@ def _prefetch_service_chain(folder,state,config,*,require_live=True):
     return chain
 
 
+def park_active_prefetch(folder,state,config,slot):
+    """Retain an actual live tail without mislabelling it as completed."""
+    if config.get('primary_worker_capacity')is None or not alive(slot.get('owner')):
+        raise ValueError('active tail needs its declared envelope and actual owner')
+    sequence=state['source_sequence'];reserved=sequence.get('prefetch');key=str(slot['batch'])
+    if (not reserved or reserved['batch']!=slot['batch']or reserved['intent']!=slot['selection_intent']
+            or state.get('primary_prefetch')!=slot):raise ValueError('active tail lost its exact reservation')
+    history=sequence.setdefault('prefetch_history',{})
+    if key in history and history[key]!=reserved:raise ValueError('active reservation history changed')
+    history[key]=reserved;active=state.setdefault('primary_active_ahead',{})
+    if key in active and active[key]!=slot:raise ValueError('active tail custody changed')
+    active[key]=slot;sequence.pop('prefetch');state.pop('primary_prefetch')
+    _prefetch_service_chain(folder,state,config,require_live=False)
+    write(Path(folder)/'state.json',state)
+
+
 def archive_completed_prefetch(folder,state,config,slot):
-    """Retain actual completed work while releasing only its worker slot."""
-    sequence=state['source_sequence'];reserved=sequence.get('prefetch')
+    """Retain actual completed work while releasing only its worker capacity."""
+    sequence=state['source_sequence'];key=str(slot['batch']);active=state.get('primary_active_ahead',{})
+    reserved=sequence.get('prefetch')
+    if not reserved or reserved['batch']!=slot['batch']:reserved=sequence.get('prefetch_history',{}).get(key)
     if not reserved or reserved['batch']!=slot['batch']or reserved['intent']!=slot['selection_intent']:
         raise ValueError('completed prefetch lost its exact active reservation')
-    key=str(slot['batch']);history=sequence.setdefault('prefetch_history',{})
+    history=sequence.setdefault('prefetch_history',{})
     if key in history and history[key]!=reserved:raise ValueError('completed reservation history changed')
-    history[key]=reserved
-    completed=state.setdefault('primary_completed_ahead',{})
+    history[key]=reserved;completed=state.setdefault('primary_completed_ahead',{})
     if key in completed and completed[key]!=slot:raise ValueError('completed slot history changed')
+    if key in active:active.pop(key)
+    elif (state.get('primary_prefetch')or{}).get('batch')==slot['batch']:
+        sequence.pop('prefetch');state.pop('primary_prefetch')
+    else:raise ValueError('completed batch was not an owned live slot')
     completed[key]=slot
-    # Validate the whole proposed transition before publishing either removal.
     _prefetch_service_chain(folder,state,config,require_live=False)
-    sequence.pop('prefetch');state.pop('primary_prefetch')
     write(Path(folder)/'state.json',state)
 
 
@@ -680,6 +704,11 @@ def prepare_prefetched_source(folder,state,config,batch):
             **({'priority':priority}if priority is not None else{}),
             'prefetch':{'predecessor_started':predecessor,'predecessor_intent':pending['intent'],
                 'task_runtime':config['task_runtime'],'skipped_ordinals':skipped,
+                **({'resource_refill':{'guardian_config':state['config_snapshot'],
+                    'feeder':config['overlap_feeder'],'workers':config['overlap_workers'],
+                    'collection_context':{'repo':config['collection_repo'],
+                        'queue_worker':config['collection_worker'],'node_bin':config['node_bin']}}}
+                   if config.get('primary_worker_capacity')is not None else{}),
                 'selection_policy':{'priority_packets':plan['priority_reference'],
                     'context_deferrals':plan['deferral_reference']},
                 'claim':'conditional next selection; predecessor remains unfinished'}})
@@ -689,11 +718,15 @@ def prepare_prefetched_source(folder,state,config,batch):
 
 
 def observe_prefetched_source(folder,state,config):
-    sequence=state.get('source_sequence')or{};pending=sequence.get('prefetch')
-    if not pending:return None
-    root=Path(config['root'])/'evidence-collections-v2'/f"batch-{pending['batch']:04d}"
-    result=_prefetch_start(folder,sequence,config['source_sequence'],pending,root)
-    if result:write(Path(folder)/'state.json',state)
+    sequence=state.get('source_sequence')or{};pending=sequence.get('prefetch');result=None
+    values=[sequence.get('prefetch_history',{}).get(key)for key in state.get('primary_active_ahead',{})]
+    if pending is not None:values.append(pending)
+    for reserved in values:
+        if reserved is None:raise ValueError('active source slot lost its immutable reservation')
+        root=Path(config['root'])/'evidence-collections-v2'/f"batch-{reserved['batch']:04d}"
+        current=_prefetch_start(folder,sequence,config['source_sequence'],reserved,root)
+        if current:write(Path(folder)/'state.json',state)
+        if reserved is pending:result=current
     return result
 
 
