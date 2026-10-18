@@ -56,3 +56,18 @@ These are natural-language review and admission steps. Crisp helpers only join
 exact reviewed IDs and hashes, verify capture metadata, render masks, and check
 complete action conservation. Legacy default conversion is unchanged. This is
 new-data custody, with no executing-model prompt/runtime change or new samples.
+
+## Earlier reviewed tranche custody
+
+1. Require every earlier tranche to be accounted for by an admitted corpus or
+   its existing exact empty/rejected source proof.
+2. An admitted earlier view in the same explicit review namespace may account
+   for the original tranche only when its immutable validator covers the exact
+   complete original source bytes, row count and action count. A subset view or
+   another namespace cannot stand for the original source.
+3. Preserve all per-decision approvals, holds, static exclusions and duplicate
+   accounting in that validator. This closes collection custody; it does not
+   grant complete-parent or additional target admission.
+
+Crisp code verifies existing registered manifests, raw/view source hashes and
+complete validator counts; no new semantic selection policy is introduced.

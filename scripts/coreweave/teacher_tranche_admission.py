@@ -305,6 +305,37 @@ def admitted_predecessors(root, corpus_id):
     return rows
 
 
+def _reviewed_predecessor_source(root, spool, original, reviewed):
+    """Verify a registered same-namespace view accounts for the whole raw source."""
+    manifest = json.loads((Path(root) / 'training/corpus-manifests' /
+                           (reviewed.corpus_id + '.json')).read_bytes())
+    if manifest.get('id') != reviewed.corpus_id:
+        raise ValueError('reviewed predecessor manifest identity differs')
+    member = next(item for item in manifest['files'] if item['path'] == 'validation-proof.json')
+    validation = read_bound({**member, 'path': str(Path(root) / manifest['path'] / 'validation-proof.json')})
+    original_dir, reviewed_dir = original.admission(spool), reviewed.admission(spool)
+    source, selected = file_binding(original_dir / 'native-trajectories.jsonl'), file_binding(reviewed_dir / 'native-trajectories.jsonl')
+    canonical_ref = file_binding(original_dir / 'canonical-source-verification.json')
+    canonical = read_bound(canonical_ref)
+    partition = validation.get('materialization_partition') or {}
+    count, actions = canonical.get('rows'), canonical.get('teacher_action_turns')
+    if (canonical.get('status') != 'passed' or canonical.get('training_admission') is not False
+            or validation.get('status') != 'passed' or validation.get('training_admission') is not True
+            or any(type(value) is not int for value in (validation.get('source_rows'), partition.get('source_rows'),
+                validation.get('teacher_action_turns'), partition.get('source_actions')))
+            or type(count) is not int or count < 1
+            or type(actions) is not int or actions < count
+            or any(canonical.get('source', {}).get(k) != source[k] or selected[k] != source[k]
+                   or validation.get('source', {}).get(k) != source[k] for k in ('sha256', 'bytes'))
+            or validation.get('source_rows') != count or partition.get('source_rows') != count
+            or validation.get('teacher_action_turns') != actions or partition.get('source_actions') != actions
+            or validation.get('canonical_source_verification') != file_binding(reviewed_dir / 'canonical-source-verification.json')):
+        raise ValueError('reviewed predecessor does not cover exact complete original source')
+    if (file_binding(source['path']) != source or file_binding(selected['path']) != selected
+            or file_binding(canonical_ref['path']) != canonical_ref):
+        raise ValueError('reviewed predecessor source changed during validation')
+
+
 def preceding_tranches(root, spool, tranche):
     """Account for every earlier tranche in this batch, including all-rejected ones."""
     admitted = admitted_predecessors(root, tranche.corpus_id)
@@ -314,6 +345,11 @@ def preceding_tranches(root, spool, tranche):
         earlier = Tranche(tranche.batch, number, tranche.attempt)
         if earlier.corpus_id in identities:
             continue
+        if tranche.quality_view is not None:
+            reviewed = Tranche(tranche.batch, number, tranche.attempt, quality_view=tranche.quality_view)
+            if reviewed.corpus_id in identities:
+                _reviewed_predecessor_source(root, spool, earlier, reviewed)
+                continue
         directory = earlier.admission(spool)
         reference = file_binding(directory / 'canonical-source-verification.json')
         proof = read_bound(reference)

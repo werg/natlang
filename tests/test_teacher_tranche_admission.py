@@ -92,8 +92,8 @@ def test_changed_cases_and_remote_selection_hash_reject(tmp_path):
         packet_references(ready, collection)
 
 
-def corpus(root, batch, number):
-    cid = Tranche(batch, number).corpus_id
+def corpus(root, batch, number, quality_view=None):
+    cid = Tranche(batch, number, quality_view=quality_view).corpus_id
     folder = root / 'runs' / cid
     outputs = {}
     files = []
@@ -462,3 +462,41 @@ def test_guided_reference_root_omissions_conserve_sampled_children():
         with pytest.raises(ValueError):materialization_partition(changed, keys, omissions, [('row',1)])
     with pytest.raises(ValueError, match='static roots'):
         materialization_partition(raw, {('row',0),('row',1)}, [], [('row',0),('row',1)])
+
+
+def _reviewed_predecessor_fixture(root):
+    spool=root/'spool';original=Tranche(46,0);reviewed=Tranche(46,0,quality_view='reviewed-guided-child-v1')
+    entry=corpus(root,46,0,quality_view=reviewed.quality_view)
+    for ctx in(original,reviewed):
+        folder=ctx.admission(spool);folder.mkdir(parents=True,exist_ok=True)
+        source=folder/'native-trajectories.jsonl';source.write_text('{"id":"original"}\n')
+        put(folder/'canonical-source-verification.json',{'status':'passed','training_admission':False,'rows':1,'teacher_action_turns':2,'source':file_binding(source)})
+    v=root/entry['path']/'validation-proof.json';value=json.loads(v.read_text());value.update(source=file_binding(reviewed.admission(spool)/'native-trajectories.jsonl'),source_rows=1,teacher_action_turns=2,materialization_partition={'source_rows':1,'source_actions':2},canonical_source_verification=file_binding(reviewed.admission(spool)/'canonical-source-verification.json'));put(v,value)
+    m=root/'training/corpus-manifests'/f'{entry["id"]}.json';manifest=json.loads(m.read_text());manifest['files']=[{**file_binding(v),'path':'validation-proof.json'}if f['path']=='validation-proof.json'else f for f in manifest['files']];put(m,manifest);put(root/'training/neuralese_corpora.json',{'corpora':[entry]})
+    return spool,entry,original,reviewed
+
+
+def test_same_reviewed_namespace_closes_complete_raw_predecessor(tmp_path):
+    spool,entry,original,reviewed=_reviewed_predecessor_fixture(tmp_path)
+    admitted,rejected=preceding_tranches(tmp_path,spool,Tranche(46,1,quality_view=reviewed.quality_view))
+    assert [row['id']for row in admitted]==[entry['id']] and rejected==[]
+    # This closes exact collection custody only; default and unrelated review
+    # namespaces still require their original predecessor authority.
+    for view in(None,'another-review'):
+        with pytest.raises(ValueError,match='neither admitted nor exactly empty'):
+            preceding_tranches(tmp_path,spool,Tranche(46,1,quality_view=view))
+
+
+@pytest.mark.parametrize('tamper',['source','rows','actions','canonical','boolean-count'])
+def test_reviewed_predecessor_rejects_incomplete_or_wrong_source_even_with_rebound_manifest(tmp_path,tamper):
+    spool,entry,original,reviewed=_reviewed_predecessor_fixture(tmp_path)
+    v=tmp_path/entry['path']/'validation-proof.json';value=json.loads(v.read_text())
+    if tamper=='source':
+        p=reviewed.admission(spool)/'native-trajectories.jsonl';p.write_text('{"id":"subset"}\n');value['source']=file_binding(p)
+    elif tamper=='rows':value['source_rows']=value['materialization_partition']['source_rows']=2
+    elif tamper=='actions':value['teacher_action_turns']=value['materialization_partition']['source_actions']=3
+    elif tamper=='canonical':value['canonical_source_verification']=file_binding(original.admission(spool)/'canonical-source-verification.json')
+    else:value['source_rows']=value['materialization_partition']['source_rows']=True
+    put(v,value);m=tmp_path/'training/corpus-manifests'/f'{entry["id"]}.json';manifest=json.loads(m.read_text());manifest['files']=[{**file_binding(v),'path':'validation-proof.json'}if f['path']=='validation-proof.json'else f for f in manifest['files']];put(m,manifest)
+    with pytest.raises(ValueError,match='exact complete original source'):
+        preceding_tranches(tmp_path,spool,Tranche(46,1,quality_view=reviewed.quality_view))
