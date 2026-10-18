@@ -304,7 +304,19 @@ def test_streamed_trajectory_binding_rejects_changed_source(tmp_path, monkeypatc
         renderer.render_shard(job)
 
 
-def test_streamed_resume_preserves_old_group_receipt_and_records_mixed_renderer_ids(tmp_path):
+def _reviewed_legacy_dependency(monkeypatch):
+    # These tests exercise the approved historical transition, not an automatic
+    # waiver for whichever text renderer happens to be in the current checkout.
+    # New assistant-text receipts intentionally changed that renderer's bytes.
+    actual_file_sha = renderer.file_sha
+    dependency = renderer.ROOT / 'training/neuralese/natlang_neuralese/data/text_corpus.py'
+    monkeypatch.setattr(renderer, 'file_sha', lambda path:
+        renderer.LEGACY_SEARCH_TEXT_CORPUS_DEFAULT_PROFILE_TRANSITION['current_sha256']
+        if Path(path) == dependency else actual_file_sha(path))
+
+
+def test_streamed_resume_preserves_old_group_receipt_and_records_mixed_renderer_ids(tmp_path, monkeypatch):
+    _reviewed_legacy_dependency(monkeypatch)
     from scripts.neuralese_data.strip_generic_system_prompt import strip_row
     tokenizer = _CharacterChatTokenizer()
     renderer._G.clear()
@@ -533,6 +545,7 @@ def test_done_receipts_verify_output_checksums_without_rewriting_them(tmp_path):
 
 
 def test_resource_only_renderer_parent_continues_exact_trajectory_receipts(tmp_path, monkeypatch):
+    _reviewed_legacy_dependency(monkeypatch)
     from scripts.neuralese_data.strip_generic_system_prompt import strip_row
     renderer._G.clear()
     renderer._G.update({'tok': {'lfm25': _CharacterChatTokenizer()}, 'pieces': {},
@@ -600,7 +613,8 @@ def test_resource_only_renderer_parent_continues_exact_trajectory_receipts(tmp_p
         renderer._resource_parent_code_binding('f' * 64, job)
 
 
-def test_legacy_search_binding_matches_historical_equation_without_null_render_inputs(tmp_path):
+def test_legacy_search_binding_matches_historical_equation_without_null_render_inputs(tmp_path, monkeypatch):
+    _reviewed_legacy_dependency(monkeypatch)
     selected = tmp_path / 'selected.jsonl'
     selected.write_text('{}\n')
     source_sha = renderer.file_sha(selected)
@@ -635,6 +649,20 @@ def test_legacy_search_binding_matches_historical_equation_without_null_render_i
         ['program-b', 'program-a'], ('program-header', 'whole-trajectory'), True,
         renderer.LEGACY_SEARCH_CODE_BINDING, None)
     assert actual != current_equation
+
+
+def test_legacy_search_binding_rejects_unreviewed_text_dependency(tmp_path, monkeypatch):
+    actual_file_sha = renderer.file_sha
+    dependency = renderer.ROOT / 'training/neuralese/natlang_neuralese/data/text_corpus.py'
+    monkeypatch.setattr(renderer, 'file_sha', lambda path:
+        'f' * 64 if Path(path) == dependency else actual_file_sha(path))
+    job = (str(tmp_path / 'selected.jsonl'), str(tmp_path / 'out'), 'lfm25', {},
+           'fixture', set(), set(), False, None, ('whole-trajectory',), False, set())
+    with __import__('pytest').raises(ValueError, match='dependency differs.*text_corpus'):
+        renderer._legacy_render_job_binding(job, 'a' * 64, renderer.LEGACY_SEARCH_RENDERER_SHA256)
+    binding = renderer._resource_parent_code_binding(
+        renderer.SEARCH_RESOURCE_ONLY_PARENT_RENDERER_SHA256, job)
+    assert binding[str(renderer._LEGACY_REPO / dependency.relative_to(renderer.ROOT))] == 'f' * 64
 
 
 def test_bounded_render_jobs_cancel_outstanding_and_do_not_queue_entire_corpus():
