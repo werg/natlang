@@ -229,12 +229,18 @@ def test_marker_tokenizer_expansion_preserves_all_original_rows():
 
 
 @pytest.mark.parametrize('family', ['lfm', 'mellum'])
-def test_nested_export_keeps_intervening_import_aliases(family):
+def test_nested_export_keeps_intervening_import_aliases(family, monkeypatch):
     from types import SimpleNamespace
     from natlang_neuralese.model.shared_state import SharedStateModel, native_step, splice_block, capture_invocation_span
     port = tiny(family)
     vocab = port.embedding_weight.shape[0]
     model = SharedStateModel(port, tuple(range(vocab-4, vocab)), rank=4)
+    if family == 'lfm':
+        # The flat graph, invocation reference and incremental consumer must
+        # share finite-history arithmetic, including the default IEEE profile.
+        def separate_convolution(*args, **kwargs):
+            raise AssertionError('cached convolution diverged from graph arithmetic')
+        monkeypatch.setattr(torch.nn.functional, 'conv1d', separate_convolution)
     plan = compile_graph([
         Invocation('a', (2, 3, 4, 5), producing=((2, 4),)),
         Invocation('b', (6, 7, 8, 9), imports=(ImportSpan(2, 'a', 2, 4),), producing=((1, 3),)),

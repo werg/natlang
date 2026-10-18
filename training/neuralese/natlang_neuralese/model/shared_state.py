@@ -311,11 +311,9 @@ def forward_reference(port, plan: GraphPlan, adapter=None, *, embeddings=None, e
                         flags=plan.tensor(plan.history_stops(offset+local,width),device,torch.bool)[None,None]
                         data=torch.where(flags,data.detach(),data)
                     data = F.pad(data, (width-data.shape[-1], 0))
-                    if getattr(port, 'native_linear_precision', 'ieee') != 'ieee':
-                        parts.append(_finite_convolution(kernel, data.transpose(1, 2)[:, None], c[:, local:local+1]))
-                    else:
-                        conv = F.conv1d(data.to(c.dtype), kernel.weight, kernel.bias, groups=data.shape[1])
-                        parts.append(conv.transpose(1, 2) * c[:, local:local+1])
+                    # Precision selects GEMMs, not a different convolution
+                    # reduction from the layer-major graph's finite histories.
+                    parts.append(_finite_convolution(kernel, data.transpose(1, 2)[:, None], c[:, local:local+1]))
                 out = torch.cat(parts, dim=1)
             h = (actor_bank.execute(node.name,lambda:_finish(port,layer,h,out,attention))
                  if actor_bank is not None else _finish(port,layer,h,out,attention))
@@ -712,12 +710,8 @@ def native_step(model, ids, cache=None, *, producing=False):
             prefix = (gated_channels.new_zeros(1, gated_channels.shape[1], port.conv_window)
                       if previous is None else previous.window)
             full = torch.cat([prefix, gated_channels], dim=2)
-            if getattr(port, 'native_linear_precision', 'ieee') != 'ieee':
-                histories = full.unfold(2, layer.conv.conv.weight.shape[-1], 1).permute(0, 2, 3, 1)
-                out = _finite_convolution(layer.conv.conv, histories, c)
-            else:
-                out = F.conv1d(full.to(c.dtype), layer.conv.conv.weight, layer.conv.conv.bias,
-                               groups=gated_channels.shape[1]).transpose(1, 2) * c
+            histories = full.unfold(2, layer.conv.conv.weight.shape[-1], 1).permute(0, 2, 3, 1)
+            out = _finite_convolution(layer.conv.conv, histories, c)
             state = ConvState(full[:, :, -port.conv_window:])
         states.append(state)
         h = _finish(port, layer, h, out, attention)
