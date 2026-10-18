@@ -208286,6 +208286,200 @@
         "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0035-tranche0004",
         "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0035-tranche0005"
       ]
+    },
+    {
+      "admission": {
+        "approved_source_custody": true,
+        "capacity_boundary": "All source rows retained. Whole-trajectory render maximum is 2077 LFM tokens and 2158 Mellum tokens; verify actual native graph geometry at learner preparation/admission. No earned exposure is asserted.",
+        "geometry_audit": {
+          "bytes": 1548,
+          "path": "/home/werg/data/external-expansion/deepdive-reference-qa-native-v1/keep-whole-graphs-v1/geometry-audit.json",
+          "sha256": "6e9af983f3c3929b2cfa7b6311cf973130fbb4c284d9dedb159639c5ec3c12e1"
+        },
+        "models": {
+          "lfm25": {
+            "conversion": "static one-node graphs; whole-trajectory rows preserve all roles, weight assistant targets, downweight prompt/runtime-opening/tool context, and exclude failed assistant actions; no inferred native edges",
+            "graph_output": {
+              "bytes": 3124809,
+              "path": "/home/werg/data/external-expansion/deepdive-reference-qa-native-v1/keep-whole-graphs-v1/lfm25/train/native-graphs.jsonl.zst",
+              "rows": 4012,
+              "sha256": "9eb6fb3f818e4cee104ff452bb19cec88ff147f1375d5934e3d1bcceecf17e1d"
+            },
+            "model_id": "lfm2:f40d7a5bf651a03618ae8c06bda24a180e22fa79de964e55862c2c4984249da6",
+            "receipt": {
+              "bytes": 2238,
+              "path": "/home/werg/data/external-expansion/deepdive-reference-qa-native-v1/keep-whole-graphs-v1/lfm25/receipt.json",
+              "sha256": "38032930e55eeef6ce17ce2cd56144b76da6e31fab3c7cd13ceddb59fe0d7123"
+            },
+            "role_token_ids": [
+              64402,
+              64403,
+              64404,
+              64405
+            ],
+            "source": {
+              "path": "/home/werg/data/external-expansion/deepdive-reference-qa-render-v2/whole-trajectory/lfm25/text-data.jsonl.zst",
+              "rows": 4012,
+              "sha256": "e0243b0e62af239ad5190999fdc97bd126ec3606d99f43e1f5361d413f7eb3ef"
+            },
+            "tokenizer_fingerprint": "be949ec48f44e17b2b17e1131aeb1dab4262175ba20f9783ecd8e59c27a58105",
+            "whole_trajectory_supervision": {
+              "assistant_target_tokens": 540914,
+              "failed_assistant_tokens_masked": 0,
+              "rows": 4012,
+              "runtime_opening_assistant_tokens": 565980,
+              "runtime_opening_assistant_turns": 4012
+            }
+          },
+          "mellum21": {
+            "conversion": "static one-node graphs; whole-trajectory rows preserve all roles, weight assistant targets, downweight prompt/runtime-opening/tool context, and exclude failed assistant actions; no inferred native edges",
+            "graph_output": {
+              "bytes": 3075240,
+              "path": "/home/werg/data/external-expansion/deepdive-reference-qa-native-v1/keep-whole-graphs-v1/mellum21/train/native-graphs.jsonl.zst",
+              "rows": 4012,
+              "sha256": "46133d975b3ba7bb0cb5f4a0e64f0985452ae08b034deb7f6f8b2983952f23ac"
+            },
+            "model_id": "mellum:bc700045baee1c7ea1869675c38efedd59d9db09975ea0b38cff8db152d6148f",
+            "receipt": {
+              "bytes": 2249,
+              "path": "/home/werg/data/external-expansion/deepdive-reference-qa-native-v1/keep-whole-graphs-v1/mellum21/receipt.json",
+              "sha256": "f0f749e09b52acee0d5a0248355646103d628f57aa9fee079163162093a2e473"
+            },
+            "role_token_ids": [
+              98304,
+              98305,
+              98306,
+              98307
+            ],
+            "source": {
+              "path": "/home/werg/data/external-expansion/deepdive-reference-qa-render-v2/whole-trajectory/mellum21/text-data.jsonl.zst",
+              "rows": 4012,
+              "sha256": "2ca866dbe805967ea7ea090da0e6e5e8c0da5d60e857dd2f1284090a2b985a76"
+            },
+            "tokenizer_fingerprint": "fbf22d8773d09be802cb9977895067db36cdfba747fcb24b02ddbf1312d3778f",
+            "whole_trajectory_supervision": {
+              "assistant_target_tokens": 657817,
+              "failed_assistant_tokens_masked": 0,
+              "rows": 4012,
+              "runtime_opening_assistant_tokens": 628542,
+              "runtime_opening_assistant_turns": 4012
+            }
+          }
+        },
+        "omissions": {
+          "conversion": 0,
+          "failed_assistant_targets": 0,
+          "protected_hits": 0
+        },
+        "program_header_crosscheck": {
+          "program_header_rows_per_model": 8024,
+          "reason": "Whole-trajectory rows retain complete assistant/tool/context history; do not add duplicate per-decision views.",
+          "source_record_ids_equal": true,
+          "whole_trajectory_rows_per_model": 4012
+        },
+        "qa_source_admission": {
+          "approved": true,
+          "certificate_limit": "Static reference-answer plumbing only, not independently verified research execution, genuine communication training, RL or model lift",
+          "closure": {
+            "closure_violations": 0,
+            "exact_duplicates": 41,
+            "invalid": 0,
+            "manifest": {
+              "bytes": 3128,
+              "path": "/home/werg/data/external-expansion/deepdive-reference-qa-v1/joint-closed/manifest.json",
+              "sha256": "a54f4a62e9b9e84f4b1f61212c5a4f433eedb2a29a522a430acc378c57d9b525"
+            },
+            "new_reference_records": 3209,
+            "prior_rows_reappended": 0,
+            "prior_trajectory_records": 3016,
+            "protected": {
+              "bytes": 6460751,
+              "path": "/home/werg/natlang/data/neuralese/corpora/protected-bgkit-20261003/bgkit-benchmarks.protected.json",
+              "sha256": "585b21e7091adfbc4f851ef35b0b3c6da00f032fffe69a8b98816a567abad7bf"
+            },
+            "protected_hits": 0,
+            "qa_inputs": 3250
+          },
+          "literal_reference_fidelity": "Quoted think/tool-call text remains literal assistant content; template-altering rows explicitly rejected, actual source omissions zero",
+          "model_facing_measurement": "Pending approximately48 own-sandbox samples; tracked plans/MODEL_FACING_CHANGES.md",
+          "native": {
+            "cases": 803,
+            "decisions": 8024,
+            "items": 3209,
+            "omissions": {}
+          },
+          "policy": "Owner comprehensive adaptive training: include usable pinned source reference QA now with exact custody and protected question closure",
+          "qa_inputs": [
+            {
+              "bytes": 2499,
+              "path": "/home/werg/natlang/data/neuralese/external-expansion-20261014/D31/acquisition.json",
+              "sha256": "c19829269da9180bc6dfc71c38c0ca421ce203ef2e2b6bbc5c43f7c299bfe532"
+            },
+            {
+              "bytes": 1364161,
+              "path": "/home/werg/natlang/data/neuralese/external-expansion-20261014/D31/data/qa_rl-00000-of-00001.parquet",
+              "sha256": "cfde3734fb4367cc748fefb7ac6df034269a8f40f20bfa05c81e69eaea7eeadb"
+            },
+            {
+              "bytes": 600602,
+              "path": "/home/werg/natlang/data/neuralese/external-expansion-20261014/D31/data/qa_sft-00000-of-00001.parquet",
+              "sha256": "4265643ce84abb1149ba8366b89105db52e55d0619a242af7de7ecacd9064f02"
+            }
+          ],
+          "schema": "natlang.external-static-admission/1",
+          "source": "Pinned D31 qa_sft and qa_rl reference answers, not tool trajectories or on-policy rollouts",
+          "source_manifest": {
+            "bytes": 1364,
+            "path": "/home/werg/natlang/training/corpus-manifests/external-expansion-d31-source-20261014-v1.json",
+            "sha256": "c5ff86cd4455ae12638245e2e6a993c2dcb86c8900446024698d7a193fbc1d63"
+          },
+          "split": "All train after shared D31 question/task groups and protected closure",
+          "training_exposure": 0
+        },
+        "quality_boundary": "Static reference QA plumbing only; not independently verified research execution, tool success, on-policy generation, communication-foundation credit, RL credit, or model-quality claim.",
+        "render_corpus_id": "external-expansion-deepdive-reference-qa-native-20261018-v1-render",
+        "render_manifest": {
+          "bytes": 5076,
+          "path": "/home/werg/natlang/training/corpus-manifests/external-expansion-deepdive-reference-qa-native-20261018-v1-render.json",
+          "sha256": "78995019e4aec2a69ee8d16c4034161100b01c1ed2bd5f9adc4293cf048dd0f3"
+        },
+        "render_policy_binding": {
+          "bytes": 4544,
+          "path": "/home/werg/data/external-expansion/deepdive-reference-qa-render-v2/render-policy-binding.json",
+          "sha256": "79379eefba3746d25d9580756b25cc896cdfb918ebe5ba8eaca00d8878cdc6e3"
+        },
+        "schema": "natlang.d31-reference-qa-whole-trajectory-native-graphs/1",
+        "source_class": "static-reference-answer-supervision",
+        "source_corpus_id": "external-expansion-deepdive-reference-qa-native-20261018-v1",
+        "source_manifest": {
+          "bytes": 5076,
+          "path": "/home/werg/natlang/training/corpus-manifests/external-expansion-deepdive-reference-qa-native-20261018-v1-render.json",
+          "sha256": "78995019e4aec2a69ee8d16c4034161100b01c1ed2bd5f9adc4293cf048dd0f3"
+        },
+        "training_admission": true,
+        "training_exposure": 0,
+        "whole_trajectory_only": true
+      },
+      "derived_from": [
+        "external-expansion-deepdive-reference-qa-native-20261018-v1",
+        "external-expansion-deepdive-reference-qa-native-20261018-v1-render"
+      ],
+      "id": "external-expansion-deepdive-reference-qa-native-graphs-20261018-v1",
+      "include": [
+        "keep-whole-graphs-v1/admission-review.json",
+        "keep-whole-graphs-v1/geometry-audit.json",
+        "keep-whole-graphs-v1/lfm25/receipt.json",
+        "keep-whole-graphs-v1/lfm25/train/native-graphs.jsonl.zst",
+        "keep-whole-graphs-v1/mellum21/receipt.json",
+        "keep-whole-graphs-v1/mellum21/train/native-graphs.jsonl.zst"
+      ],
+      "license": "Apache-2.0 from pinned D31 acquisition card",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/external-expansion-deepdive-reference-qa-native-graphs-20261018-v1",
+      "source_class": "whole-trajectory-native-static-reference-qa-graphs",
+      "split": "train only; all 4012 whole trajectories per model inherit source closure; no held rows or render omissions",
+      "training_admission": true,
+      "training_admission_reason": "Existing D31 static reference QA source admission and exact source/renderer/whole-trajectory conversion bindings; static QA only, with training exposure unclaimed."
     }
   ],
   "coverage_backlog": [

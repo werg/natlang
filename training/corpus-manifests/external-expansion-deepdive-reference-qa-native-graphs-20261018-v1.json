@@ -1,0 +1,39 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "external-expansion-deepdive-reference-qa-native-graphs-20261018-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/external-expansion-deepdive-reference-qa-native-graphs-20261018-v1",
+  "files": [
+    {
+      "path": "keep-whole-graphs-v1/admission-review.json",
+      "bytes": 8364,
+      "sha256": "1fa04303c7c61ca7a95c51496073fc411fb9ee61a27563451ec9a290fb65a76a"
+    },
+    {
+      "path": "keep-whole-graphs-v1/geometry-audit.json",
+      "bytes": 1548,
+      "sha256": "6e9af983f3c3929b2cfa7b6311cf973130fbb4c284d9dedb159639c5ec3c12e1"
+    },
+    {
+      "path": "keep-whole-graphs-v1/lfm25/receipt.json",
+      "bytes": 2238,
+      "sha256": "38032930e55eeef6ce17ce2cd56144b76da6e31fab3c7cd13ceddb59fe0d7123"
+    },
+    {
+      "path": "keep-whole-graphs-v1/lfm25/train/native-graphs.jsonl.zst",
+      "bytes": 3124809,
+      "sha256": "9eb6fb3f818e4cee104ff452bb19cec88ff147f1375d5934e3d1bcceecf17e1d"
+    },
+    {
+      "path": "keep-whole-graphs-v1/mellum21/receipt.json",
+      "bytes": 2249,
+      "sha256": "f0f749e09b52acee0d5a0248355646103d628f57aa9fee079163162093a2e473"
+    },
+    {
+      "path": "keep-whole-graphs-v1/mellum21/train/native-graphs.jsonl.zst",
+      "bytes": 3075240,
+      "sha256": "46133d975b3ba7bb0cb5f4a0e64f0985452ae08b034deb7f6f8b2983952f23ac"
+    }
+  ],
+  "bytes": 6214448
+}
