@@ -22,3 +22,9 @@ remain authoritative. Both model lines use this same producer mechanism.
 Whole-trajectory chat-role conversion metadata remains ordinary for one-node,
 non-producing graphs. Exact filtering accepts both registered ordinary role
 interpretations; it preserves every retained byte and position weight.
+
+Historical ordinary partition producers b2a76d4140b1 and f5ac2ef6c056 retain
+the same one-node geometry and original audited row/proof chain. Their exact
+reviewed file hashes are accepted alongside 9282654e7427; each receipt must
+still bind its own exact producer. Other historical schemas need their own
+authenticated producer law and do not inherit this acceptance.

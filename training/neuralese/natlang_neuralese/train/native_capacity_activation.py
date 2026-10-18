@@ -7,7 +7,13 @@ import json
 
 SCHEMA = 'natlang.native-capacity-activation-geometry-part/1'
 # Reviewed ordinary_geometry producer; preference partitioning has another schema.
-_ORDINARY_PARTITION_VERIFIER = '9282654e7427f1435496ec863bc221222fcec2702ab6cc9115798f3fa0d45c09'
+_ORDINARY_PARTITION_VERIFIERS = frozenset({
+    '9282654e7427f1435496ec863bc221222fcec2702ab6cc9115798f3fa0d45c09',
+    # Historical ordinary-only producers preserve the same audited row bytes,
+    # all-row graph proof and one-node physical/KV geometry law.
+    'b2a76d4140b1c883245a1824d3446a4999b76fb86176eff1a6a2d8a5fd2071a7',
+    'f5ac2ef6c056bbb6d803549125de53a42eb0ae7cf9f4ae8c315d0acc47c7fc76',
+})
 
 
 def geometry_part(part, *, preparation, package):
@@ -56,9 +62,10 @@ def geometry_part(part, *, preparation, package):
     verifier = bound(part['partition_verifier'])
     audit = json.loads(bound(part['admission_audit']).read_text())
     samples = json.loads(bound(part['render_samples']).read_text())
-    if (part['partition_verifier']['sha256'] != _ORDINARY_PARTITION_VERIFIER
-            or hashlib.sha256(verifier.read_bytes()).hexdigest() != _ORDINARY_PARTITION_VERIFIER
-            or receipt['binding']['verifier_sha256'] != _ORDINARY_PARTITION_VERIFIER
+    producer_sha = part['partition_verifier']['sha256']
+    if (producer_sha not in _ORDINARY_PARTITION_VERIFIERS
+            or hashlib.sha256(verifier.read_bytes()).hexdigest() != producer_sha
+            or receipt['binding']['verifier_sha256'] != producer_sha
             or receipt['binding']['audit']['sha256'] != part['admission_audit']['sha256']
             or receipt['binding']['source_render_samples']['sha256'] != part['render_samples']['sha256']
             or audit.get('schema') != 'natlang.acquired-session-admission-audit/1'

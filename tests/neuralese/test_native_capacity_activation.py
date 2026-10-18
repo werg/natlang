@@ -249,3 +249,28 @@ def test_filtered_whole_trajectory_chat_role_graphs_preserve_original_weights_an
     value=json.loads(Path(result['path']).read_text());assert value['new_train_rows']==1
     proof=json.loads(Path(part['filter_proof']['path']).read_text());assert proof['old_rows']==2 and proof['new_rows']==1
     assert resident.geometry_from_evidence(source,0,result,package=package)=={'forward_tokens':3,'kv_slots':3}
+
+
+@pytest.mark.parametrize('receipt_matches',[True,False])
+def test_multiple_reviewed_producers_still_require_exact_receipted_producer(tmp_path,monkeypatch,receipt_matches):
+    from natlang_neuralese.train import native_capacity_activation as activation
+    source,part,package=fixture(tmp_path,monkeypatch)
+    producer=tmp_path/'reviewed-historical-producer.py'
+    producer.write_text('# separately reviewed ordinary producer fixture\n')
+    producer_ref=resident.binding(producer)
+    monkeypatch.setattr(activation,'_ORDINARY_PARTITION_VERIFIERS',
+        activation._ORDINARY_PARTITION_VERIFIERS|{producer_ref['sha256']})
+    part['partition_verifier']=producer_ref
+    receipt_path=Path(part['receipt']['path']);receipt=json.loads(receipt_path.read_text())
+    if receipt_matches:receipt['binding']['verifier_sha256']=producer_ref['sha256']
+    write(receipt_path,receipt);part['receipt']=resident.binding(receipt_path)
+    manifest_path=Path(part['registered_manifest']['path']);manifest=json.loads(manifest_path.read_text())
+    manifest['files']=[{**part['receipt'],'path':receipt_path.name,'bytes':receipt_path.stat().st_size}
+        if entry['path']==receipt_path.name else entry for entry in manifest['files']]
+    write(manifest_path,manifest);part['registered_manifest']=resident.binding(manifest_path)
+    if not receipt_matches:
+        with pytest.raises(ValueError,match='producer/audit chain'):
+            resident.prepare_whole_delta_geometry(source,[part],tmp_path/'bad.json',package=package)
+    else:
+        result=resident.prepare_whole_delta_geometry(source,[part],tmp_path/'report.json',package=package)
+        assert resident.geometry_from_evidence(source,0,result,package=package)=={'forward_tokens':4,'kv_slots':4}
