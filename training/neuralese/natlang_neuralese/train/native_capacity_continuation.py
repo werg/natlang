@@ -40,6 +40,7 @@ METADATA_CHANGES = {
     'train/native_readiness.py', 'train/native_resident.py',
     'train/native_source_preparation.py', 'data/native_source_tree.py',
     'rl/native_supervised.py', 'rl/production.py',
+    'common/ordered_json_sequence.py', 'train/native_capacity_continuation.py',
 }
 LOADER_IO_POLICY = 'native-resident-mmap-advice-v1'
 LOADER_IO_CHANGES = METADATA_CHANGES | {

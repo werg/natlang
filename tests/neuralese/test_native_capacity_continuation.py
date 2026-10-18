@@ -199,6 +199,7 @@ def test_metadata_chain_rejects_changed_optimizer_unbound_math_and_lost_reserves
 
 
 @pytest.mark.parametrize('name',['train/native_source_preparation.py','train/native_cohort_schedule.py','train/native_operation_report.py',
+    'common/ordered_json_sequence.py','train/native_capacity_continuation.py',
     'data/native_source_tree.py','data/native_sources.py','model/shared_state.py','train/optim.py','train/losses.py'])
 def test_metadata_helpers_require_review_and_leaf_parser_still_cannot_inherit(tmp_path,name):
     phase,old,new,review,_=metadata_chain(tmp_path)
