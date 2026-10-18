@@ -44,3 +44,28 @@ are unchanged. The known-unready list explicitly retains original row order.
 The original readonly attempt had no packet output, was stopped by its exact
 unit, and retained its mechanism/spec/headers for this assigned diagnosis. No
 catalog snapshot copy or source mutation is needed.
+
+## Reuse completed source work under unchanged extraction policy
+
+The named catalog stage decides whether existing source work remains valid:
+retain completed records when the exact extraction, protection and source laws
+are unchanged; audit affected sources when those laws or protected groups change.
+An unrelated converter CLI, rendering or cache edit is not a new extraction law.
+Never replace the declared source SHA or omit held and quality checks.
+
+1. Authenticate the selected protection functions and recursively referenced
+   module definitions/import bindings as normalized Python AST data. Bind the
+   shared identity mechanism itself and the existing external policy modules.
+2. Compare that scoped law independently from physical module provenance.
+   Physical source remains recorded; only an explicit reviewed transition may
+   migrate a historical whole-file authority to this scoped representation.
+3. Within one locked scan cycle, reuse a source SHA already computed for the
+   same device/inode/size/mtime/ctime. Check those facts before and after each
+   use. A changed source is rejected; a new cycle authenticates bytes again.
+4. Preserve all actual SQLite records, cursors, source identities, protected
+   group closure and row-quality decisions. Publish through the existing exact
+   authority checks and durability mechanism.
+
+These are exact equivalence and I/O mechanisms, not new data admission policy.
+The natural-language policy above retains useful completed work greedily while
+requiring a real audit when a relevant law changes.

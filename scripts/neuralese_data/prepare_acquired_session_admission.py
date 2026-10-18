@@ -139,8 +139,13 @@ def _source_closure_implementation_bindings():
         'jsonl_io': root / 'training/neuralese/natlang_neuralese/common/jsonio.py',
         'hashing': root / 'training/neuralese/natlang_neuralese/common/hashing.py',
     }
-    return {name: {'path': path.resolve(strict=True).relative_to(root).as_posix(), 'sha256': sha256_file_hex(path),
-                   'bytes': path.stat().st_size} for name, path in sorted(paths.items())}
+    from scripts.neuralese_data.source_policy_identity import raw_protection_policy
+    paths['source_policy_identity'] = root / 'scripts/neuralese_data/source_policy_identity.py'
+    result = {name: {'path': path.resolve(strict=True).relative_to(root).as_posix(), 'sha256': sha256_file_hex(path),
+                    'bytes': path.stat().st_size} for name, path in sorted(paths.items())}
+    result['current_protection'] = {'path': paths['current_protection'].relative_to(root).as_posix(),
+                                    'source_policy': raw_protection_policy(paths['current_protection'])}
+    return result
 
 
 def _source_closure_artifacts(path, manifest, *, use_cache=True):

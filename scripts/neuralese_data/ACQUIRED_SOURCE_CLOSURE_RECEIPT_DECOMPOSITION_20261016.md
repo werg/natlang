@@ -29,3 +29,15 @@ that shared closure.
 The receipt is explicit on the CLI so separate processes can share it. The
 default path remains the existing full verification behavior. Exact hashing
 is the freshness boundary; no path-only or process-local cache is accepted.
+
+The current-protection component now records the exact scoped AST law of
+`current_protection` and `file_rows`, including recursively referenced globals
+and import aliases. The shared identity helper remains a physical code-file
+dependency. Every other closure implementation and every protected/source
+artifact remains bound as before. An unrelated converter entry point, cache or
+renderer edit therefore does not change this protection law; a protection
+function, referenced constant/import or external policy change does. A legacy
+whole-file receipt requires an explicit independently reviewed transition before
+reuse under the scoped representation. Physical converter provenance remains
+available in the admission/conversion receipts; the semantic digest is named
+`policy_sha256` and is never presented as the SHA of a physical file.

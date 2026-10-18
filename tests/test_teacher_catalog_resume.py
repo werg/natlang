@@ -420,3 +420,79 @@ def test_remaining_withdrawn_debt_ignores_finished_audit_entries(tmp_path):
     path=tmp_path/'audit.json';path.write_text(json.dumps({'finished':12,'withdrawn':7}))
     assert mechanism.committed_audit_cursors({'affected_files':['withdrawn']},binding(path))=={'withdrawn':7}
     assert mechanism.committed_audit_cursors({'affected_files':['withdrawn']},None)=={}
+
+
+def test_one_authenticated_source_sha_per_stable_scan_cycle(tmp_path, monkeypatch):
+    db = catalog(); p = policy(); entry = write(tmp_path/'stable.jsonl', [row()])
+    original = mechanism.binding; calls = []
+    def counted(path):
+        calls.append(str(path)); return original(path)
+    monkeypatch.setattr(mechanism, 'binding', counted)
+    cycle = mechanism._SourceBindingCycle()
+    scan_file(db, p, entry, dict(held=set()), set(), binding_cycle=cycle)
+    scan_file(db, p, entry, dict(held=set()), set(), audit_cursor=1, binding_cycle=cycle)
+    assert calls == [entry['path']]
+    # A separate standalone call always authenticates bytes afresh.
+    scan_file(db, p, entry, dict(held=set()), set())
+    assert calls == [entry['path'], entry['path']]
+
+
+def test_same_cycle_rejects_same_size_mutation(tmp_path):
+    path = tmp_path/'a.jsonl'; path.write_text('abc')
+    cycle = mechanism._SourceBindingCycle(); cycle.authenticate(path)
+    path.write_text('xyz')
+    with pytest.raises(ValueError, match='source changed during scan cycle'):
+        cycle.authenticate(path)
+
+
+def test_source_mutated_during_first_hash_is_rejected(tmp_path, monkeypatch):
+    path = tmp_path/'a.jsonl'; path.write_text('abc'); original = mechanism.binding
+    def torn(path):
+        value = original(path); path.write_text('xyz'); return value
+    monkeypatch.setattr(mechanism, 'binding', torn)
+    with pytest.raises(ValueError, match='source changed while authenticating'):
+        mechanism._SourceBindingCycle().authenticate(path)
+
+
+def test_actual_scanner_scoped_identity_resolves():
+    assert len(mechanism.scanner_binding()['source_policy']['policy_sha256']) == 64
+
+
+def test_scoped_static_transition_requires_actual_unchanged_parent_source(live_catalog, monkeypatch):
+    from scripts.neuralese_data.source_policy_identity import raw_protection_policy
+    c = live_catalog; interrupted_audited_catalog(c, monkeypatch)
+    intent = json.loads((c.root/'adaptive-policy-inflight.json').read_text()); prior = mechanism.read(intent['authority'])
+    current = json.loads(json.dumps(prior)); current['current']['registry'] = binding(c.registry)
+    snapshot = c.root/'old-converter.py'
+    snapshot.write_text('def file_rows(path):\n return []\ndef current_protection(path):\n return file_rows(path)\n')
+    old = {**binding(snapshot), 'path': '/repo/scripts/neuralese_data/build_verified_teacher_trajectory_graphs.py'}
+    helper = Path(mechanism.__file__).resolve().parents[1]/'neuralese_data/source_policy_identity.py'
+    new = dict(path=old['path'], source_policy=raw_protection_policy(snapshot), identity_mechanism=binding(helper))
+    prior['static_guards'] = [old]; current['static_guards'] = [new]
+    audit = binding(c.root/('adaptive-audit-'+digest(mechanism.read(intent['authority']))+'.json'))
+    evidence = c.root/'scoped-transition.json'
+    transition = dict(schema='natlang.teacher-scoped-source-policy-transition/1', converter=dict(parent=old, current=new, parent_snapshot=binding(snapshot)))
+    evidence.write_text(json.dumps(transition))
+    target = c.root/'reuse-scoped.json'
+    def review():
+        target.write_text(json.dumps(dict(schema='natlang.teacher-catalog-audit-continuation/1', reviewed=True, reviewer='independent', evidence=[binding(evidence)], basis=mechanism.audit_reuse_basis(prior,current,old_intent=intent,old_audit=audit))))
+        return mechanism.reviewed_audit_cursors(binding(target),prior,current,intent,audit)
+    assert review()
+    snapshot.write_text(snapshot.read_text().replace('return []','return [1]'))
+    # Even a fully rebound evidence JSON cannot reinterpret the historical SHA.
+    transition['converter']['parent_snapshot'] = binding(snapshot); evidence.write_text(json.dumps(transition))
+    with pytest.raises(ValueError, match='protected AST evidence'):
+        review()
+
+
+def test_unrelated_scanner_provenance_change_does_not_reaudit(live_catalog, monkeypatch):
+    c = live_catalog; c.add(); c.run()
+    before = json.loads((c.root/'adaptive-catalog-state.json').read_text())
+    previous_rows = c.reason()
+    original = mechanism.scanner_file_binding()
+    monkeypatch.setattr(mechanism, 'scanner_file_binding', lambda: {**original, 'sha256': 'f'*64})
+    monkeypatch.setattr(mechanism, 'store_row', lambda *a, **k: pytest.fail('unrelated scanner provenance triggered JSON reaudit'))
+    after = c.run()
+    assert before['authority'] != after['authority']
+    assert mechanism.identical_raw_policy(mechanism.read(before['authority']), mechanism.read(after['authority']))
+    assert c.reason() == previous_rows

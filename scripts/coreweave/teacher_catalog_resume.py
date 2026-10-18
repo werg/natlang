@@ -30,8 +30,66 @@ _STATIC = ('scripts/source_review.py', 'scripts/neuralese_data/decision_holds.py
            'training/neuralese/natlang_neuralese/common/jsonio.py')
 
 
+
+def static_bindings(repo):
+    from scripts.neuralese_data.source_policy_identity import raw_protection_policy
+    values = []
+    for relative in _STATIC:
+        path = Path(repo) / relative
+        if relative == 'scripts/neuralese_data/build_verified_teacher_trajectory_graphs.py':
+            values.append({'path': str(path), 'source_policy': raw_protection_policy(path),
+                           'identity_mechanism': binding(Path(__file__).resolve().parents[1] / 'neuralese_data/source_policy_identity.py')})
+        else:
+            values.append(binding(path))
+    return values
+
+
+class _SourceBindingCycle:
+    """One locked scan cycle, one full SHA per unchanged physical source."""
+    def __init__(self):
+        self.values = {}
+
+    @staticmethod
+    def stamp(path):
+        s = path.stat()
+        return (s.st_dev, s.st_ino, s.st_size, s.st_mtime_ns, s.st_ctime_ns)
+
+    def authenticate(self, path):
+        key = str(path)
+        before = self.stamp(path)
+        cached = self.values.get(key)
+        if cached is not None:
+            if cached[0] != before:
+                raise ValueError('source changed during scan cycle: ' + key)
+            return dict(cached[1])
+        value = binding(path)
+        if self.stamp(path) != before:
+            raise ValueError('source changed while authenticating scan cycle: ' + key)
+        self.values[key] = (before, dict(value))
+        return value
+
+def scanner_file_binding():
+    return binding(Path(__file__))
+
+
+def scanner_binding():
+    from scripts.neuralese_data.source_policy_identity import scoped_python_policy
+    here = Path(__file__)
+    functions = ('load_policy', 'optimize_hold_lookup', 'store_row', 'scan_file',
+                 'discover_sources', 'changed_files')
+    dependencies = {
+        'source_bytes': scoped_python_policy(Path(binding.__code__.co_filename), ('binding',)),
+        'receipt_bytes': scoped_python_policy(Path(read.__code__.co_filename), ('read',)),
+        'source_storage': binding(Path(encode_body.__code__.co_filename)),
+    }
+    return {'path': str(here), 'source_policy': scoped_python_policy(here, functions),
+            'dependencies': dependencies}
+
+
 def selection_binding():
-    return dict(module=binding(Path(eligible_program_sql.__code__.co_filename)),
+    from scripts.neuralese_data.source_policy_identity import scoped_python_policy
+    return dict(module={'path': eligible_program_sql.__code__.co_filename,
+                        'source_policy': scoped_python_policy(Path(eligible_program_sql.__code__.co_filename), ('eligible_program_sql',))},
                 sql=eligible_program_sql())
 
 
@@ -164,7 +222,21 @@ def reviewed_audit_cursors(reference, prior, current, old_intent, old_audit):
                             and len(x['parent_ast_sha256']) == 64
                             and x['parent_ast_sha256'] == x.get('current_ast_sha256')
                             for x in functions.values()))
-        if not any(matching_transition(document) for document in documents):
+        def matching_scoped_transition(document):
+            if document.get('schema') != 'natlang.teacher-scoped-source-policy-transition/1':
+                return False
+            transition = document.get('converter', {})
+            if transition.get('parent') != old or transition.get('current') != new:
+                return False
+            snapshot = transition.get('parent_snapshot')
+            if not isinstance(snapshot, dict) or binding(Path(snapshot['path'])) != snapshot:
+                return False
+            if any(snapshot.get(k) != old.get(k) for k in ('sha256', 'bytes')):
+                return False
+            from scripts.neuralese_data.source_policy_identity import raw_protection_policy
+            actual = raw_protection_policy(Path(snapshot['path']))
+            return actual == new.get('source_policy') and binding(Path(new['identity_mechanism']['path'])) == new['identity_mechanism']
+        if not any(matching_scoped_transition(document) if "source_policy" in new else matching_transition(document) for document in documents):
             raise ValueError('converter policy continuation lacks exact protected AST evidence')
     return committed_audit_cursors(old_intent, old_audit)
 
@@ -233,9 +305,10 @@ def store_row(db, policy, path, line, row, protection, holds):
     db.execute('DELETE FROM omissions WHERE file=? AND line=?', (path, line))
 
 
-def scan_file(db, policy, entry, protection, holds, *, audit_cursor=None, audit_save=None, storage_root=None):
+def scan_file(db, policy, entry, protection, holds, *, audit_cursor=None, audit_save=None, storage_root=None, binding_cycle=None):
     path = Path(entry['path']); key = str(path)
-    before = binding(path)
+    binding_cycle = binding_cycle or _SourceBindingCycle()
+    before = binding_cycle.authenticate(path)
     expected = entry.get('expected_sha256')
     if expected and expected != before['sha256']:
         raise ValueError('declared source bytes changed: ' + key)
@@ -273,7 +346,7 @@ def scan_file(db, policy, entry, protection, holds, *, audit_cursor=None, audit_
             # row replacements; it cannot claim work not present in SQLite.
             if auditing:
                 audit_save(line)
-    if binding(path) != before:
+    if binding_cycle.authenticate(path) != before:
         db.rollback()
         raise ValueError('source changed during scan: ' + key)
     if auditing:
@@ -300,7 +373,7 @@ def resume(out, parent_inputs, parent_inventory, protection_path, *, legacy_stat
     hold_lookup = optimize_hold_lookup(policy, holds)
     registry = read(current['registry'])
     current_files, corpora = discover_sources(policy.REPO, registry, read(current['initial_selection']))
-    static = [binding(policy.REPO / p) for p in _STATIC]
+    static = static_bindings(policy.REPO)
     latest = out / 'adaptive-catalog-state.json'
     if latest.exists():
         prior_state = json.loads(latest.read_text())
@@ -320,7 +393,12 @@ def resume(out, parent_inputs, parent_inventory, protection_path, *, legacy_stat
                 raw = subprocess.check_output(['git', '-C', str(policy.REPO), 'show',
                                                legacy_static_baseline + ':' + relative])
                 import hashlib
-                if hashlib.sha256(raw).hexdigest() != item['sha256']:
+                if 'source_policy' in item:
+                    from scripts.neuralese_data.source_policy_identity import scoped_python_policy_bytes
+                    same = scoped_python_policy_bytes(raw, ('current_protection', 'file_rows')) == item['source_policy']
+                else:
+                    same = hashlib.sha256(raw).hexdigest() == item['sha256']
+                if not same:
                     raise ValueError('legacy static guard baseline differs: ' + relative)
             review = read(binding(Path(bootstrap_review)))
             expected = dict(parent_inputs=binding(Path(parent_inputs)), policy=parent['mechanism'],
@@ -336,7 +414,7 @@ def resume(out, parent_inputs, parent_inventory, protection_path, *, legacy_stat
                      selection_mechanism=selection_binding(),
                      decision_holds=current['decision_holds'], groups={k: sorted(v) for k,v in groups.items()},
                      source_population_sha256=digest(dict(files=current_files, corpora=corpora)),
-                     scanner=binding(Path(__file__)), hold_lookup=hold_lookup, parent_inputs=binding(Path(parent_inputs)),
+                     scanner=scanner_binding(), scanner_file=scanner_file_binding(), hold_lookup=hold_lookup, parent_inputs=binding(Path(parent_inputs)),
                      parent_inventory=binding(Path(parent_inventory)), legacy_static_baseline=legacy_static_baseline,
                      bootstrap_review=binding(Path(bootstrap_review)) if bootstrap_review else None)
     key = digest(authority)
@@ -388,6 +466,7 @@ def resume(out, parent_inputs, parent_inventory, protection_path, *, legacy_stat
                 'SELECT 1 FROM files WHERE path=? AND complete=1', (p,)).fetchone()}
             touched = affected | new_or_incomplete
             write_json_durable(inflight, dict(authority=authority_ref, affected_files=sorted(touched)))
+            binding_cycle = _SourceBindingCycle()
             for path in sorted(affected & by_path.keys()):
                 previous = db.execute('SELECT cursor FROM files WHERE path=?', (path,)).fetchone()
                 if not previous or previous[0] == 0:
@@ -395,17 +474,17 @@ def resume(out, parent_inputs, parent_inventory, protection_path, *, legacy_stat
                 def saved(cursor, path=path):
                     audit[path] = cursor; write_json_durable(audit_file, audit)
                 scan_file(db, policy, by_path[path], protection, holds,
-                          audit_cursor=audit.get(path, 0), audit_save=saved, storage_root=out)
+                          audit_cursor=audit.get(path, 0), audit_save=saved, storage_root=out, binding_cycle=binding_cycle)
             for entry in current_files:
                 policy.floor(out)
                 if not Path(entry['path']).is_file():
                     continue  # Explicit omission recorded below, never complete.
-                scan_file(db, policy, entry, protection, holds, storage_root=out)
+                scan_file(db, policy, entry, protection, holds, storage_root=out, binding_cycle=binding_cycle)
                 write_json_durable(out / 'adaptive-scan-progress.json', dict(last_file=entry['path'], authority=authority_ref))
             # A registry append during scanning does not discard any source
             # cursor. The next invocation discovers its new files.
             stable = (policy.inputs()[2] == current
-                      and [binding(policy.REPO / p) for p in _STATIC] == static)
+                      and static_bindings(policy.REPO) == static)
             result = dict(authority=authority_ref, population=inventory_ref,
                           authority_stable=stable, training_admission=False,
                           missing_sources=[f['path'] for f in current_files if not Path(f['path']).is_file()],
@@ -431,9 +510,12 @@ def export_candidates(out, state_reference):
     policy = load_policy(authority['current']['mechanism'])
     policy.PROTECTION = Path(authority['current']['protection']['path'])
     def current_authority():
-        return (policy.inputs()[2] == authority['current']
-                and [binding(policy.REPO / p) for p in _STATIC] == authority['static_guards']
-                and selection_binding() == authority['selection_mechanism'])
+        try:
+            return (policy.inputs()[2] == authority['current']
+                    and static_bindings(policy.REPO) == authority['static_guards']
+                    and selection_binding() == authority['selection_mechanism'])
+        except ValueError:
+            return False
     if not current_authority():
         raise ValueError('candidate publication authority changed; continue the existing catalog')
     key = state['authority']['sha256']
