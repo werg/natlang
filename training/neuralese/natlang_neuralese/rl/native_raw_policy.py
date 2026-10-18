@@ -63,7 +63,8 @@ def require_raw_training(state):
     return training
 
 
-def prepare_raw_policy(checkpoint, *, base, tokenizer_out, require_optimizer=True, verified_checkpoint=None):
+def prepare_raw_policy(checkpoint, *, base, tokenizer_out, require_optimizer=True, verified_checkpoint=None,
+                       checkpoint_control=None):
     import torch
     from transformers import AutoTokenizer
     from ..train.checkpoint_policy import CheckpointPolicy
@@ -71,7 +72,15 @@ def prepare_raw_policy(checkpoint, *, base, tokenizer_out, require_optimizer=Tru
     from ..model.shared_state import provision_role_tokenizer
     from ..data.text_corpus import tokenizer_fingerprint
     checkpoint = Path(checkpoint).resolve(strict=True)
-    if verified_checkpoint is None:
+    control = None
+    if checkpoint_control is not None:
+        if verified_checkpoint is not None:
+            raise ValueError('raw policy needs either a loaded full source or its explicit controls')
+        from ..model.native_checkpoint_control import read_checkpoint_control
+        from ..model.native_bundle import load_actor_view
+        control = read_checkpoint_control(checkpoint, checkpoint_control)
+        state = load_actor_view(checkpoint, control['actor_view'])
+    elif verified_checkpoint is None:
         state = CheckpointPolicy.load(checkpoint)
     else:
         reference,state=verified_checkpoint
@@ -80,7 +89,7 @@ def prepare_raw_policy(checkpoint, *, base, tokenizer_out, require_optimizer=Tru
             raise ValueError('reused raw checkpoint state belongs to another exact parent')
     if state.get('schema') != CHECKPOINT_SCHEMA:
         raise ValueError('raw native RL requires an actual single-model native checkpoint')
-    if require_optimizer:require_raw_training(state)
+    if require_optimizer and control is None:require_raw_training(state)
     config = state['model_config']
     interface = state['interface_state']
     embedding_keys = [key for key in state['backbone_state'] if key == 'embed_tokens.weight' or key.endswith('.embed_tokens.weight')]
@@ -109,6 +118,10 @@ def prepare_raw_policy(checkpoint, *, base, tokenizer_out, require_optimizer=Tru
     bind_history_reasoning(tokenizer, policy=config.get('history_reasoning_policy'), require_declared=True,
                            allow_transition=config.get('history_reasoning_policy') is not None)
     history_reasoning = dict(tokenizer.natlang_history_reasoning)
+    if control is not None and (identity != control['raw_policy']['native_identity']
+            or history_reasoning != control['raw_policy']['history_reasoning']
+            or config != control['model_config']):
+        raise ValueError('actual actor-view tensors/profile differ from full-source controls')
     roles = provision_role_tokenizer(tokenizer)
     if (tuple(roles) != tuple(config['marker_ids'])
             or tokenizer_fingerprint(tokenizer) != identity['tokenizer_fingerprint']):
@@ -130,4 +143,6 @@ def prepare_raw_policy(checkpoint, *, base, tokenizer_out, require_optimizer=Tru
             'tokenizer': str(tokenizer_out.resolve()), 'checkpoint': str(checkpoint),
             'history_reasoning': history_reasoning,
             'history_reasoning_binding': {'path': str(history_path.resolve()),
-                'sha256': sha256_file_hex_cached(history_path)}}
+                'sha256': sha256_file_hex_cached(history_path)},
+            **({'checkpoint_control': checkpoint_control, 'actor_view': control['actor_view']}
+               if control is not None else {})}

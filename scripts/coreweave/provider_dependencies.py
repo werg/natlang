@@ -39,11 +39,13 @@ def _readonly_file(path, roots):
     return path
 
 
-def dependency_closure(request, *, namespace='/work/native-production', readonly_input_roots=()):
+def dependency_closure(request, *, namespace='/work/native-production', readonly_input_roots=(),
+                       _checkpoint_payload=None):
     files, assets, active_configs, relocations = {}, {}, set(), {}
     consumed_adapters = set()
     consumed_checkpoints=set()
     consumed_payloads=set()
+    checkpoint_controls={}
     root = Path(namespace).absolute()
     readonly_roots = _readonly_roots(readonly_input_roots)
 
@@ -109,6 +111,30 @@ def dependency_closure(request, *, namespace='/work/native-production', readonly
         marker=(str(path.resolve()),files[str(path)]['sha256'],context)
         if marker in consumed_checkpoints:return
         consumed_checkpoints.add(marker)
+        control = checkpoint_controls.get(files[str(path)]['sha256'])
+        if control is not None and selected is None and not semantic_only:
+            from natlang_neuralese.model.native_checkpoint_control import read_checkpoint_control, checkpoint_control_dependencies
+            metadata = read_checkpoint_control(path, control)
+            # Different immutable verifier revisions conservatively take the
+            # unchanged full path. Corrupt explicitly bound artifacts reject.
+            if (metadata['dependency_producer']['sha256'] == sha256_file_hex_cached(__file__)
+                    and metadata['dependency_context'] == {'namespace': str(root),
+                        'readonly_input_roots': sorted(str(item) for item in readonly_roots)}):
+                for reference in checkpoint_control_dependencies(control, checkpoint=path):
+                    bound(reference)
+                for reference in metadata['dependencies']['files']:
+                    bound(reference)
+                for item in metadata['dependencies']['assets']:
+                    if item['kind'] == 'input-file':
+                        bound(item)
+                    elif item['kind'] == 'base':
+                        target = relocations.get(None, item['path'])
+                        asset(target, base=True, expected=item['inventory'])
+                    elif item['kind'] == 'task-runtime':
+                        asset(item['path'], expected=item['inventory'])
+                    else:
+                        raise ValueError('checkpoint control has an unknown consumed asset kind')
+                return
         decoded={}
         def load_once(child):
             from natlang_neuralese.train.checkpoint_policy import CheckpointPolicy
@@ -131,19 +157,24 @@ def dependency_closure(request, *, namespace='/work/native-production', readonly
                 # payloads stay on disk and are never restored into a model.
                 from natlang_neuralese.train.checkpoint_policy import CheckpointPolicy
                 state = load_once(child)
-                training_inputs(state)
-                training_inputs(state.get('training'))
-                training_inputs(state.get('shared_training'))
-                for participant in state.get('participants', {}).values():
-                    training_inputs(participant)
-                configs = [(state.get('participant',selected),state.get('model_config'))]
-                configs.extend((name,item.get('model_config')) for name,item in state.get('participants', {}).items()
-                               if selected is None or name==selected)
-                for name,declaration in configs:
-                    if declaration is not None:
-                        asset(relocations.get(name,declaration['base']), base=True, expected=declaration['base_inventory'])
+                checkpoint_payload(state, selected)
                 del state
             decoded.pop(str(child.resolve()),None)
+
+    def checkpoint_payload(state, selected=None):
+        # This exact traversal is shared by ordinary full decoding and the
+        # opt-in derivative producer's already-validated in-process object.
+        training_inputs(state)
+        training_inputs(state.get('training'))
+        training_inputs(state.get('shared_training'))
+        for participant in state.get('participants', {}).values():
+            training_inputs(participant)
+        configs = [(state.get('participant', selected), state.get('model_config'))]
+        configs.extend((name, item.get('model_config')) for name, item in state.get('participants', {}).items()
+                       if selected is None or name == selected)
+        for name, declaration in configs:
+            if declaration is not None:
+                asset(relocations.get(name, declaration['base']), base=True, expected=declaration['base_inventory'])
 
     def graphs(path):
         path = add(path)
@@ -208,6 +239,16 @@ def dependency_closure(request, *, namespace='/work/native-production', readonly
         if marker in active_configs:
             raise ValueError("provider consumed configuration contains a cycle")
         active_configs.add(marker)
+        controls=value.get('native_checkpoint_controls', {})
+        if not isinstance(controls,dict):
+            raise ValueError('native checkpoint controls must map full source SHA256 to explicit bindings')
+        import re
+        for digest, reference in controls.items():
+            if not isinstance(digest,str) or re.fullmatch('[0-9a-f]{64}',digest) is None:
+                raise ValueError('checkpoint control selector needs an exact full source SHA256')
+            if digest in checkpoint_controls and checkpoint_controls[digest]!=reference:
+                raise ValueError('checkpoint control selector has conflicting bound artifacts')
+            checkpoint_controls[digest]=reference
         if value.get('base'):
             relocations.setdefault(value.get('native_participant'),value['base'])
         for name,declaration in value.get('models',{}).items():
@@ -309,6 +350,10 @@ def dependency_closure(request, *, namespace='/work/native-production', readonly
         checkpoint(reference,semantic_only=True)
     if request.get('semantic_adapter'):
         semantic_adapter(request['semantic_adapter'])
+    if _checkpoint_payload is not None:
+        if request:
+            raise ValueError('in-process checkpoint payload is a producer-only dependency request')
+        checkpoint_payload(_checkpoint_payload)
     return {'files': list(files.values()), 'assets': list(assets.values())}
 
 

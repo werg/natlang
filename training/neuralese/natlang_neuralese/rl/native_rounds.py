@@ -139,6 +139,12 @@ def configure_provider(config,declaration,plan,binding,config_path,*,write=True)
     config['source_admission'] = declaration.get('source_admission')
     if declaration.get('task_source'):
         config['task_source'] = declaration['task_source']
+    if 'native_checkpoint_control_directory' in declaration:
+        directory = declaration['native_checkpoint_control_directory']
+        if (not isinstance(directory, str) or not Path(directory).is_absolute()
+                or '..' in Path(directory).parts or str(Path(directory).resolve()) != directory):
+            raise ValueError('checkpoint control publication needs an explicit canonical directory')
+        config['native_checkpoint_control_directory'] = directory
     if write:write_json_durable(config_path, config)
     return config
 

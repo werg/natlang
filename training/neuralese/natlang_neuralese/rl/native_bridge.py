@@ -34,13 +34,17 @@ def write_request(directory, *, kind, out, config=None, state=None, adapter=None
     request = {'schema': REQUEST_SCHEMA, 'kind': kind, 'out': str(Path(out).absolute()), 'device': device, 'attempt_id': uuid.uuid4().hex}
     if kind == 'round':
         config_value = json.loads(Path(config).read_text())
+        current = json.loads(Path(state).read_text()) if state and Path(state).exists() else {}
+        parent = binding(current.get('checkpoint', config_value['checkpoint']))
+        if config_value.get('native_checkpoint_control_directory') is not None:
+            from ..model.native_checkpoint_control import resolve_checkpoint_controls
+            config_value = resolve_checkpoint_controls(config_value, parent)
         config_copy = directory/('config-' + canonical_json_sha256_hex(config_value) + '.json')
         write_json_durable(config_copy, config_value)
         request['config'] = binding(config_copy)
         request['provider'] = config_value.get('provider')
-        current = json.loads(Path(state).read_text()) if state and Path(state).exists() else {}
         adapter = current.get('semantic_adapter', config_value.get('semantic_adapter'))
-        request['parent_checkpoint'] = binding(current.get('checkpoint', config_value['checkpoint']))
+        request['parent_checkpoint'] = parent
         if config_value.get('semantic_adapter'):
             request['native_participant'] = config_value['native_participant']
         else:

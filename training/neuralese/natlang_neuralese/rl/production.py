@@ -75,6 +75,8 @@ def validate_actor_receipts(receipts, *, policy_id, neuralese_server, expected_n
                 receipt.get('semantic_adapter_sha256') != expected_native['semantic_adapter_sha256']
                 or ('history_reasoning' in expected_native and
                     receipt.get('history_reasoning') != expected_native['history_reasoning'])
+                or (expected_native.get('actor_view') is not None and
+                    (receipt.get('actor_view') or {}).get('receipt') != expected_native['actor_view'])
                 for receipt in receipts.values()):
             raise ValueError('native RL actor differs from the requested shared participant or semantic adapter')
     if expected_coefficient is not None and any(receipt.get('coefficient_policy')!=expected_coefficient
@@ -295,6 +297,11 @@ def collect_with_actor(config, values, **kwargs):
         for key, value in values.items():
             part = part.replace('{' + key + '}', str(value))
         command.append(part)
+    view = (kwargs.get('expected_native') or {}).get('actor_view')
+    if view is not None:
+        if '--native-actor-view' in command or '--native-actor-view-sha256' in command:
+            raise ValueError('managed actor view must come from its exact selected full-source controls')
+        command += ['--native-actor-view', view['path'], '--native-actor-view-sha256', view['sha256']]
     from .grpo import Server
     from ..common.hashing import sha256_file_hex_cached
     with (Path(values['out']) / 'actor.log').open('a') as log:
@@ -511,6 +518,10 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
                 from ..common.jsonio import write_bytes_durable
                 write_bytes_durable(selected_path, ''.join(json.dumps(row) + '\n' for row in selected).encode('utf-8'))
             policy = sha256_file_hex(Path(state['checkpoint']))
+            if config.get('native_checkpoint_control_directory') is not None:
+                from ..model.native_checkpoint_control import resolve_checkpoint_controls
+                config = resolve_checkpoint_controls(config, {'path': state['checkpoint'],
+                    'sha256': policy, 'bytes': Path(state['checkpoint']).stat().st_size})
             values = {**{k: v for k, v in config.items() if isinstance(v, (str, int, float, list))},
                       'checkpoint': state['checkpoint'], 'policy_id': policy, 'out': str(round_dir),
                       'rollouts': str(round_dir / 'rollouts.jsonl'), 'mode': 'grpo',
@@ -540,8 +551,12 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
                     export['tokenizers'][config['native_participant']]['path'])
             elif config.get('native_state'):
                 from .native_raw_policy import prepare_raw_policy
+                controls = config.get('native_checkpoint_controls') or {}
+                if not isinstance(controls, dict):
+                    raise ValueError('raw checkpoint controls must be explicit full-source SHA256 selectors')
                 raw = prepare_raw_policy(state['checkpoint'], base=config['base'],
-                    tokenizer_out=Path(config['out'])/'actor-tokenizers'/policy)
+                    tokenizer_out=Path(config['out'])/'actor-tokenizers'/policy,
+                    **({'checkpoint_control': controls[policy]} if policy in controls else {}))
                 expected_native = raw
                 values['rl_tokenizer'] = raw['tokenizer']
                 if raw.get('history_reasoning') is not None:

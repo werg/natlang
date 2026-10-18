@@ -99,10 +99,8 @@ def write_actor_view(checkpoint, out, *, validated_state, decoded_source_stat=No
     return _file_binding(proof)
 
 
-def load_actor_view(checkpoint, reference):
-    """Verify an explicitly bound actor view while keeping full-source identity."""
-    from ..train.checkpoint_policy import CheckpointPolicy
-    from .native_model import CHECKPOINT_SCHEMA
+def _actor_view_files(checkpoint, reference):
+    """One exact file/receipt contract shared by transport and tensor loading."""
     if not isinstance(reference,dict) or set(reference) != {'path','sha256','bytes'}:
         raise ValueError('actor view needs an explicit exact receipt binding')
     if type(reference['bytes']) is not int or reference['bytes'] <= 0:
@@ -123,6 +121,14 @@ def load_actor_view(checkpoint, reference):
     view = resolve_composite_artifact(receipt['view'],proof,sibling=True)
     if view.stat().st_size != receipt['view']['bytes']:
         raise ValueError('actor view byte length differs from receipt')
+    return receipt, source, view
+
+
+def load_actor_view(checkpoint, reference):
+    """Verify an explicitly bound actor view while keeping full-source identity."""
+    from ..train.checkpoint_policy import CheckpointPolicy
+    from .native_model import CHECKPOINT_SCHEMA
+    receipt, source, view = _actor_view_files(checkpoint, reference)
     state = CheckpointPolicy.load(view)
     if (state.get('schema') != CHECKPOINT_SCHEMA or state.get('inference_only') is not True
             or state.get('optimizer_pruned') is not True or 'training' in state
@@ -138,13 +144,18 @@ def load_actor_view(checkpoint, reference):
     return state
 
 
-def actor_view_dependencies(reference):
+def actor_view_dependencies(reference, *, metadata_only=False, checkpoint=None):
     """Exact explicitly consumed proof/view closure; full source stays separate."""
     proof = Path(reference['path']).resolve(strict=True)
     if _file_binding(proof) != reference:
         raise ValueError('actor view receipt binding changed')
     receipt = json.loads(proof.read_text())
-    state = load_actor_view(receipt['source']['path'],reference)
+    if metadata_only:
+        # Dependency enumeration authenticates physical bytes. The actual
+        # actor/raw-policy consumer still performs the unchanged tensor gates.
+        _, source, view = _actor_view_files(checkpoint or receipt['source']['path'], reference)
+        return [reference, _file_binding(view), source]
+    state = load_actor_view(checkpoint or receipt['source']['path'],reference)
     return [reference,state['actor_view']['view'],state['actor_view']['source']]
 
 

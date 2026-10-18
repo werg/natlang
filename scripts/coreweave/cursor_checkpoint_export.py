@@ -89,6 +89,9 @@ def run_once(directory, role, *, observe, export):
         result['actor_view'] = chosen['actor_view']
     if chosen.get('actor_view_error') is not None:
         result['actor_view_error'] = chosen['actor_view_error']
+    for key in ('checkpoint_control', 'checkpoint_control_error'):
+        if chosen.get(key) is not None:
+            result[key] = chosen[key]
     if chosen.get('training_summary') is not None:
         result['training_summary'] = chosen['training_summary']
     save(paths['state'], result)
@@ -102,7 +105,8 @@ def run_once(directory, role, *, observe, export):
 def remote_code(*, role, root, known, last, extra, pin_directory, minimum_available_bytes,
                 actor_view_directory=None, actor_view_runtime=None,
                 actor_view_sidecar=None, actor_view_sidecar_sha256=None,
-                training_summary_spec=None, training_summary_runtime=None):
+                training_summary_spec=None, training_summary_runtime=None,
+                checkpoint_control_spec=None):
     source = REMOTE_SOURCE
     if bool(actor_view_directory) != bool(actor_view_runtime):
         raise ValueError('actor view export requires its directory and explicit runtime package')
@@ -110,6 +114,8 @@ def remote_code(*, role, root, known, last, extra, pin_directory, minimum_availa
         raise ValueError('actor view sidecar needs its exact SHA256')
     if actor_view_sidecar and (not actor_view_directory or not re.fullmatch(r'[0-9a-f]{64}',actor_view_sidecar_sha256)):
         raise ValueError('actor view sidecar needs its directory/runtime and lowercase SHA256')
+    if checkpoint_control_spec and not actor_view_directory:
+        raise ValueError('checkpoint controls require the same already-decoded source and actor view')
     if actor_view_directory:
         helper_loading = ("from natlang_neuralese.model import native_bundle as view_module\n    "
             +"if pathlib.Path(view_module.__file__).resolve()!=pathlib.Path("+repr(str(actor_view_runtime))+",'natlang_neuralese/model/native_bundle.py').resolve():raise ValueError('optional view helper origin differs')\n    ")
@@ -143,6 +149,55 @@ def remote_code(*, role, root, known, last, extra, pin_directory, minimum_availa
                                 '  del value,training;gc.collect()\n  temp.unlink()\n finally:')
         source = source.replace('    temp.unlink()\n   else:',
             '    actual_stat=target.stat();decoded_source_stat=(actual_stat.st_dev,actual_stat.st_ino,actual_stat.st_size,actual_stat.st_mtime_ns)\n    temp.unlink()\n   else:')
+        if checkpoint_control_spec:
+            source = ('def control_file_stat(path):\n s=path.stat();return '
+                      '(s.st_dev,s.st_ino,s.st_size,s.st_mtime_ns,s.st_ctime_ns)\n' + source)
+            marker='  with torch.serialization.safe_globals('
+            assert source.count(marker)==1
+            source=source.replace(marker,'  control_decoded_stat=control_file_stat(temp)\n'+marker)
+            marker="  training=value['training'];"
+            assert source.count(marker)==1
+            source=source.replace(marker,"  if control_file_stat(temp)!=control_decoded_stat:raise ValueError('full source changed across decode')\n"+marker)
+            marker='  if step>LAST:'
+            source=source.replace(marker,"  if control_file_stat(temp)!=control_decoded_stat:raise ValueError('decoded source changed before pin publication')\n"+marker)
+            marker='   else:os.replace(temp,target)'
+            assert source.count(marker)==1
+            source=source.replace(marker,"   else:\n    if control_file_stat(temp)!=control_decoded_stat:raise ValueError('decoded source changed before owned rename')\n    os.replace(temp,target)")
+            marker='    actual_stat=target.stat();decoded_source_stat='
+            assert source.count(marker)==1
+            source=source.replace(marker,"    if control_file_stat(temp)!=control_decoded_stat:raise ValueError('decoded source changed while comparing existing pin')\n"+marker)
+            marker='   pin_stat=target.stat();pin_signature='
+            assert source.count(marker)==1
+            source=source.replace(marker,"   control_pin_signature=control_file_stat(target)\n"+marker)
+            marker='   del value,training;gc.collect();break'
+            assert source.count(marker)==1
+            source=source.replace(marker,"   if control_file_stat(target)!=control_pin_signature:raise ValueError('validated pin changed during optional actor view extraction')\n"+marker)
+            # A small immutable specification binds the exact two producer
+            # modules. Neither arbitrary code nor an unverified saved object
+            # can be supplied through the serialized derivative itself.
+            control_code = '''
+   try:
+    import types,sys,hashlib
+    spec_ref=CONTROL_SPEC
+    spec_raw=pathlib.Path(spec_ref['path']).read_bytes()
+    if len(spec_raw)!=spec_ref['bytes'] or hashlib.sha256(spec_raw).hexdigest()!=spec_ref['sha256']:raise ValueError('checkpoint control specification differs')
+    control_spec=json.loads(spec_raw)
+    def bound_module(name,reference,package):
+     path=pathlib.Path(reference['path']);raw=path.read_bytes()
+     if len(raw)!=reference['bytes'] or hashlib.sha256(raw).hexdigest()!=reference['sha256']:raise ValueError('checkpoint control producer module differs')
+     module=types.ModuleType(name);module.__package__=package;module.__file__=str(path);sys.modules[name]=module
+     exec(compile(raw,str(path),'exec'),module.__dict__)
+     return module
+    control_module=bound_module('natlang_neuralese.model.checkpoint_control_producer_'+spec_ref['sha256'],control_spec['producer'],'natlang_neuralese.model')
+    if control_spec.get('hashing_sidecar') is not None:control_module.install_control_hashing(control_spec['hashing_sidecar'])
+    dependency_module=bound_module('checkpoint_control_dependency_producer_'+spec_ref['sha256'],control_spec['dependency_producer'],'')
+    if chosen.get('actor_view') is None:raise ValueError('checkpoint control needs a completed actual actor view')
+    chosen['checkpoint_control']=control_module.write_checkpoint_control(target,control_spec['directory'],validated_state=value,decoded_source_stat=control_pin_signature,actor_view=chosen['actor_view'],dependency_collector=dependency_module.dependency_closure,namespace=control_spec['namespace'],readonly_input_roots=control_spec.get('readonly_input_roots',[]))
+   except Exception as error:chosen['checkpoint_control_error']={'type':type(error).__name__,'reason':str(error)[:400]if isinstance(error,ValueError)else None,'fallback':'complete-checkpoint','assigned_repair':True}
+'''.replace('CONTROL_SPEC',repr(checkpoint_control_spec))
+            marker='   del value,training;gc.collect();break'
+            assert source.count(marker)==1
+            source=source.replace(marker,control_code+marker)
     summary_prelude=''
     if bool(training_summary_spec) != bool(training_summary_runtime):
         raise ValueError('training summary needs its bound specification and qualified runtime')
@@ -242,6 +297,7 @@ def main(argv=None):
     parser.add_argument('--actor-view-sidecar-sha256', help='exact SHA256 of the optional writer sidecar')
     parser.add_argument('--training-summary-spec', help='JSON immutable binding of declared cohort sources')
     parser.add_argument('--training-summary-runtime', type=pathlib.Path, help='qualified runtime training/neuralese directory')
+    parser.add_argument('--checkpoint-control-spec', help='JSON path/SHA/bytes binding of optional immutable checkpoint-control producer specification')
     parser.add_argument('--interval', type=float, default=120)
     parser.add_argument('--once', action='store_true')
     args = parser.parse_args(argv)
@@ -251,6 +307,8 @@ def main(argv=None):
         parser.error('optional actor view sidecar requires directory/runtime and its exact lowercase SHA256')
     if bool(args.training_summary_spec) != bool(args.training_summary_runtime):
         parser.error('training summary needs its specification and qualified runtime together')
+    if args.checkpoint_control_spec and not args.actor_view_directory:
+        parser.error('checkpoint controls need the existing actual actor-view extraction')
     summary=json.loads(args.training_summary_spec) if args.training_summary_spec else None
     command = json.loads(args.export_command)
     if not isinstance(command, list) or not command or any(not isinstance(x, str) for x in command):
@@ -270,6 +328,7 @@ def main(argv=None):
                            pin_directory=args.pin_directory, minimum_available_bytes=args.minimum_available_bytes,
                            actor_view_directory=args.actor_view_directory,actor_view_runtime=args.actor_view_runtime,
                            actor_view_sidecar=args.actor_view_sidecar,actor_view_sidecar_sha256=args.actor_view_sidecar_sha256,
+                           checkpoint_control_spec=json.loads(args.checkpoint_control_spec) if args.checkpoint_control_spec else None,
                            training_summary_spec=summary,training_summary_runtime=args.training_summary_runtime,**kwargs)
         code = recoverable_remote_code(code, role=args.role, root=args.root)
         result = cwctl.read_sandbox(args.sandbox_id, patience=60).exec(
