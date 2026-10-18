@@ -370,6 +370,19 @@ afterwards. The rules below are consequences of this one.
   caller's shell environment is forwarded into a ledger unit. Verify these
   environments before launching substantial jobs; repeated import/launcher
   failures are a shared operational bug to fix, not useful qualification.
+- For DGX administrative ownership guards requiring `os.pidfd_open`, use the
+  host `/usr/bin/python3`; the CoreWeave SDK venv lacks that API. Invoke SDK
+  operations through its venv as a subprocess when both capabilities are needed.
+  Compile the assembled remote Python body before transport, not only the
+  outer launcher. Honor each receipt's binding schema: compare path/SHA fields
+  explicitly and check declared byte counts against the actual file; a legacy
+  two-field binding is not unequal evidence merely because another includes bytes.
+- Reuse authenticated live parser/index caches for CPU preparation and isolated
+  consumer checks. Cache isolation is not an objective. Verify exact source,
+  tokenizer, role, parser-policy and entry identities before reuse; preserve
+  cold work only when no valid completed cache exists. Locate artifacts through
+  registries and bound manifests; do not leave unbounded content searches or
+  directory crawls running across the external disk after the answer is known.
 - On DGX every build, test and probe runs through the memory ledger
   (`scripts/memory_ledger.py run --unit <family>-<id> --budget-gb N -- ...`;
   units run asynchronously, so wait for the unit to finish and read its log).
