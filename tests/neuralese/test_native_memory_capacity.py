@@ -38,9 +38,70 @@ def test_actual_capacity_check_releases_gradients_and_preserves_full_state(famil
     assert all(parameter.grad is None for parameter in model.parameters())
     assert all(module.training==mode for module,mode in modes.items())
     assert hook_counts=={name:len(value._post_accumulate_grad_hooks or {}) for name,value in model.named_parameters()}
+    from natlang_neuralese.model.native_weight_carrier import active_cotangent_scope
+    assert active_cotangent_scope() is None
 
 
-@pytest.mark.parametrize('failure',['oom','nonfinite','exception'])
+@pytest.mark.parametrize('family',['lfm','mellum'])
+def test_capacity_observed_gradient_matches_production_shared_update(family,monkeypatch):
+    from contextlib import nullcontext
+    model=SharedStateModel(tiny(family),(58,59,60,61),rank=4)
+    if family=='mellum':
+        model.port.hf.natlang_precision='bf16'
+        for module in model.port.hf.modules():
+            experts=getattr(module,'experts',None)
+            if callable(getattr(experts,'make_latent',None)):experts.make_latent(quantize=False)
+    optimizer,_=make_native_optimizer(model,lr=3e-6,in_backward=True)
+    batch=examples()[:1]
+    observed={}
+    def capacity_observer(name,gradient):observed[name]=gradient.detach().clone()
+    before=copy.deepcopy(model.state_dict())
+    report=qualify_capacity(model,optimizer,batch,checkpoint_layers=True,chunk_tokens=3,
+        checkpoint_sha256='a'*64,source_binding={'path':'capacity-production-parity','sha256':'b'*64},
+        gradient_observer=capacity_observer)
+    assert report['passed'] and observed
+    assert_exact(before,model.state_dict())
+
+    # Keep the ordinary optimizer step after backward so this test can inspect
+    # its exact production gradients before the optimizer consumes them. The
+    # registered gated hooks remain inert outside their normal in-backward
+    # context and do not alter the tested forward/backward arithmetic.
+    production={}
+    original_step=optimizer.step
+    def capture_step(*args,**kwargs):
+        production.update({name:parameter.grad.detach().clone()
+            for name,parameter in optimizer._native_named_parameters if parameter.grad is not None})
+        return original_step(*args,**kwargs)
+    optimizer.step=capture_step
+    monkeypatch.setattr(optimizer.latent,'in_backward',lambda:nullcontext())
+    native_training_update(model,optimizer,batch,checkpoint_layers=True,chunk_tokens=3)
+    assert observed.keys()==production.keys()
+    for name in observed:torch.testing.assert_close(observed[name],production[name],rtol=0,atol=0,msg=name)
+
+
+def test_capacity_rejects_unscoped_low_precision_gradient_and_closes_scope(monkeypatch):
+    from natlang_neuralese.train import native_state_sft
+    from natlang_neuralese.model.native_weight_carrier import ParameterCotangentScope,active_cotangent_scope
+    model=SharedStateModel(tiny('mellum'),(58,59,60,61),rank=4)
+    model.port.hf.natlang_precision='bf16'
+    optimizer,_=make_native_optimizer(model,lr=3e-6,in_backward=True)
+    parameter=next(parameter for _,parameter in optimizer._native_named_parameters if parameter.ndim>=2)
+    parameter.data=parameter.detach().to(torch.bfloat16)
+    scopes=[];original_factory=ParameterCotangentScope.for_model.__func__
+    def capture_factory(cls,*args,**kwargs):
+        scope=original_factory(cls,*args,**kwargs);scopes.append(scope);return scope
+    monkeypatch.setattr(ParameterCotangentScope,'for_model',classmethod(capture_factory))
+    def bypass(*unused,**kwargs):return parameter.float().square().mean(),[]
+    monkeypatch.setattr(native_state_sft,'packed_graph_loss',bypass)
+    with pytest.raises(RuntimeError,match='bypassed the shared low-precision cotangent carrier'):
+        qualify_capacity(model,optimizer,examples()[:1],checkpoint_sha256='a'*64,source_binding={})
+    assert active_cotangent_scope() is None
+    assert len(scopes)==1 and scopes[0]._closed
+    assert not __import__('os').path.exists(scopes[0].directory)
+    assert all(value.grad is None for value in model.parameters())
+
+
+@pytest.mark.parametrize('failure',['oom','backward_oom','nonfinite','exception'])
 def test_capacity_failure_restores_hooks_backend_rng_and_existing_state(monkeypatch,failure):
     from natlang_neuralese.train import native_state_sft
     from test_native_backend_qualification import Backend
@@ -52,11 +113,19 @@ def test_capacity_failure_restores_hooks_backend_rng_and_existing_state(monkeypa
         assert backend.active
         torch.rand(3);random.random();backend.state['scale'][0]=99;backend.row_counts['calls']=100
         if failure=='oom':raise torch.cuda.OutOfMemoryError('injected target allocation failure')
+        if failure=='backward_oom':
+            parameter=next(parameter for parameter in model.parameters() if parameter.requires_grad)
+            class OOMBackward(torch.autograd.Function):
+                @staticmethod
+                def forward(ctx,value):return value.float().sum()
+                @staticmethod
+                def backward(ctx,gradient):raise torch.cuda.OutOfMemoryError('injected backward allocation failure')
+            return OOMBackward.apply(parameter),[]
         if failure=='nonfinite':return sum(p.sum() for p in model.parameters())*float('nan'),[]
         raise RuntimeError('injected kernel failure')
     monkeypatch.setattr(native_state_sft,'packed_graph_loss',bad)
     kwargs=dict(backend=backend,checkpoint_sha256='a'*64,source_binding={})
-    if failure=='oom':
+    if failure in ('oom','backward_oom'):
         result=qualify_capacity(model,optimizer,examples()[:1],**kwargs)
         assert not result['passed'] and result['cases'][0]['status']=='out_of_memory'
     else:
@@ -66,6 +135,8 @@ def test_capacity_failure_restores_hooks_backend_rng_and_existing_state(monkeypa
     assert backend.extra_state()==before and backend.row_counts==counts and backend.has_executed
     assert torch.equal(rng,torch.get_rng_state()) and python_rng==random.getstate()
     assert all(p.grad is None for p in model.parameters())
+    from natlang_neuralese.model.native_weight_carrier import active_cotangent_scope
+    assert active_cotangent_scope() is None
 
 
 @pytest.mark.parametrize('family',['lfm','mellum'])

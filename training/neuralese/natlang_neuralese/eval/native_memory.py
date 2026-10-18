@@ -100,6 +100,17 @@ def qualify_capacity(model, optimizer, cases, *, backend=None, checkpoint_layers
     def capture(parameter, *, name):
         gradient=parameter.grad
         if gradient is None:return
+        # A capacity proof must measure the same widened low-precision
+        # fan-in as native_training_update.  The post-accumulate observer runs
+        # after carrier anchors have contributed; a low-precision gradient
+        # with no carrier contribution would otherwise be cleared here and
+        # silently qualify a direct-weight arithmetic bypass.
+        from ..model.native_weight_carrier import active_cotangent_scope
+        cotangents=active_cotangent_scope()
+        if cotangents is not None and parameter.dtype in (torch.float16,torch.bfloat16):
+            entry=cotangents._entry_for(parameter)
+            if entry is None or entry['count']==0:
+                raise RuntimeError('capacity gradient bypassed the shared low-precision cotangent carrier: '+name)
         finite=bool(torch.isfinite(gradient).all())
         norm=float(torch.linalg.vector_norm(gradient,dtype=torch.float32))
         if not finite or not math.isfinite(norm):
@@ -124,14 +135,17 @@ def qualify_capacity(model, optimizer, cases, *, backend=None, checkpoint_layers
             started=time.monotonic()
             try:
                 with _HostPeak() as host:
-                    with backend.autocast() if backend is not None else contextlib.nullcontext():
-                        packing = ({'share_causal_prefixes':True}
-                            if getattr(model,'share_causal_prefixes',False) else {})
-                        if objective is not None:packing['objective']=objective
-                        loss,_=packed_graph_loss(model,batch,checkpoint_layers=checkpoint_layers,
-                            chunk_tokens=chunk_tokens,**packing)
-                    loss.backward()
-                    if device.type=='cuda':torch.cuda.synchronize(device)
+                    from ..model.native_weight_carrier import ParameterCotangentScope
+                    with ParameterCotangentScope.for_model(model,mode='vjp') as cotangents:
+                        with backend.autocast() if backend is not None else contextlib.nullcontext():
+                            packing = ({'share_causal_prefixes':True}
+                                if getattr(model,'share_causal_prefixes',False) else {})
+                            if objective is not None:packing['objective']=objective
+                            loss,_=packed_graph_loss(model,batch,checkpoint_layers=checkpoint_layers,
+                                chunk_tokens=chunk_tokens,**packing)
+                        loss.backward()
+                        cotangents.finish()
+                        if device.type=='cuda':torch.cuda.synchronize(device)
                 if not observed or not math.isfinite(float(loss.detach())):
                     raise FloatingPointError('capacity check has no actual finite gradient/loss')
                 row.update(status='passed',loss=float(loss.detach()),gradients=dict(observed),
