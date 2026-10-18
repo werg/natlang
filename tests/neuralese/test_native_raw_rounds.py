@@ -38,7 +38,8 @@ def fixture(tmp_path,monkeypatch):
             write_json_durable(state_path,state)
             if getattr(stop,'interrupt_after_policy',False):stop.requested=True
             return state
-        assert declaration['trainer_parameters']['refresh_at_checkpoint']
+        assert (not declaration['trainer_parameters']['refresh_at_checkpoint']
+            or declaration['trainer_parameters'].get('refresh_after_updates') is not None)
         assert declaration['trainer_parameters']['checkpoint_every']==250
         checkpoint=target/'learner/checkpoint.pt';checkpoint.parent.mkdir(parents=True,exist_ok=True)
         # Exact output slots are reused after controller restart.

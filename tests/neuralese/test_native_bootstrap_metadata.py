@@ -49,7 +49,7 @@ def test_unchanged_config_rechecks_sources_and_ownership_without_deserializing_p
     repaired=json.loads(path.read_text())
     assert repaired['seed_command']==['python','seed','{seed_trainer_args}']
     assert repaired['seed_trainer_parameters']['fp8_training']=='triton-experts'
-    assert repaired['seed_trainer_parameters']['refresh_at_checkpoint'] is True
+    assert repaired['seed_trainer_parameters']['refresh_at_checkpoint'] is False
     seed=Path(refs['train']['path']);original=seed.read_bytes();seed.write_text('changed graph bytes')
     with pytest.raises(ValueError,match='changed'):raw.configure_model(plan,declaration,handoff,out)
     assert len(calls)==3  # Changed graph bytes trigger the complete original verifier.
@@ -125,7 +125,7 @@ def test_seed_quantum_emits_full_backend_rates_and_explicit_objective_overrides(
         flag='--'+key.replace('_','-')
         assert flag in argv
         if value is not True:assert argv[argv.index(flag)+1]==str(value)
-    assert '--refresh-at-checkpoint' in argv
+    assert '--no-refresh-at-checkpoint' in argv
     assert argv[argv.index('--stage-id')+1]=='native_full_sft'
     assert config['trainer_parameters']==original
     assert config['learner_command']==['python','learner','{trainer_args}']
@@ -154,7 +154,7 @@ def test_seed_emitted_stage_initializes_actual_resident_and_mandatory_keeps_own_
     production.run_command(config['seed_command'],{
         'seed_trainer_args':stage_parameter_args(config['seed_trainer_parameters'])})
     args=build_parser().parse_args(emitted[0][3:])
-    assert args.stage_id=='sft' and args.refresh_at_checkpoint
+    assert args.stage_id=='sft' and not args.refresh_at_checkpoint
     resumed=resident.ResidentAdoption(args.resident_data_directory,stage_id=args.stage_id,
         recipe_binding=manager.recipe_binding,train=manager.train,held=manager.held,
         geometry_qualification=directory.parent.parent/'geometry-capacity.json')
@@ -228,3 +228,25 @@ def test_quantum_emitted_full_settings_pass_actual_trainer_early_validation(tmp_
     incompatible={'eval_every':10}
     with pytest.raises(ValueError,match='shorter held evaluation cadence'):
         raw._supervised_quantum({'supervised_quantum_updates':16},incompatible)
+
+
+def test_raw_storage_save_does_not_force_yield_or_change_real_trainer_arguments():
+    from natlang_neuralese.train.native_state_sft import build_parser
+    from natlang_neuralese.train.recipe import stage_parameter_args
+    original={'stage_id':'ordinary','epochs':3,'checkpoint_every':1000,
+        'checkpoint_seconds':3600,'refresh_at_checkpoint':True,'learning_rate':1e-5}
+    parameters=dict(original)
+    raw._supervised_quantum({'production_stage':'ordinary'},parameters)
+    assert parameters=={**original,'refresh_at_checkpoint':False}
+    args=build_parser().parse_args(['--native-graphs','train','--held-native-graphs','held',
+        '--out','learner',*stage_parameter_args(parameters)])
+    assert not args.refresh_at_checkpoint and args.refresh_after_updates is None
+    assert args.checkpoint_every==1000 and args.checkpoint_seconds==3600
+    assert args.epochs==3 and args.learning_rate==1e-5
+    # An independently explicit relative boundary remains available even when
+    # no controller override is supplied; it never turns a timed save into a yield.
+    parameters['refresh_after_updates']=750
+    raw._supervised_quantum({'production_stage':'ordinary'},parameters)
+    args=build_parser().parse_args(['--native-graphs','train','--held-native-graphs','held',
+        '--out','learner',*stage_parameter_args(parameters)])
+    assert args.refresh_after_updates==750 and not args.refresh_at_checkpoint

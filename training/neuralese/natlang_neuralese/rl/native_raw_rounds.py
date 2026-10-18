@@ -81,6 +81,9 @@ def _validate_stage_quanta(value):
 
 
 def _supervised_quantum(config,parameters):
+    # Storage checkpoints preserve progress; RAW scheduling yields only at an
+    # explicit relative quantum (or completed stage/supervisor interruption).
+    parameters['refresh_at_checkpoint']=False
     mapping=_validate_stage_quanta(config.get('supervised_stage_quantum_updates',{}))
     stage=parameters.get('stage_id',config.get('production_stage'))
     quantum=mapping.get(stage,config.get('supervised_quantum_updates'))
@@ -736,6 +739,7 @@ def _resident_configuration(config,state,source,checkpoint):
         else:config.pop(key,None)
     config['seed_trainer_parameters']={**refreshed['trainer_parameters'],
         'resident_data_directory':str(source),'refresh_at_checkpoint':True}
+    _supervised_quantum(config,config['seed_trainer_parameters'])
     return config
 
 
