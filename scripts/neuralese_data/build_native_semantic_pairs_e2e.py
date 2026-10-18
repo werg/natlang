@@ -358,6 +358,11 @@ def writer_payload(record, write_name, expected_sha):
     # authenticated receipt is carried beside the unchanged target bytes, so
     # it has no synthetic $write object to find in target.
     if not unique and isinstance((record.get('target') or {}).get('assistant_text_result'), dict):
+        from natlang_neuralese.train.write_sites import extract_write_sites
+        sites = [site for site in extract_write_sites(record)
+                 if site.source_kind == 'assistant-text-sidecar']
+        if len(sites) != 1 or sites[0].name != write_name or sites[0].source == '':
+            raise ValueError('assistant-text producer sidecar is invalid or names another writer event')
         _, sources = authenticated_context_writer_sources([record])
         sidecar = (record.get('target') or {}).get('assistant_text_result') or {}
         candidate = [item for item in sources.get(sidecar.get('block_id'), [])
@@ -386,17 +391,23 @@ def source_occurrences(writer_record, reader_record, write_name, body, expected_
     # do not infer a write from matching prose alone.
     text_result = (writer_record.get('target') or {}).get('assistant_text_result')
     if isinstance(text_result, dict):
+        from natlang_neuralese.train.write_sites import extract_write_sites
+        sites = [site for site in extract_write_sites(writer_record)
+                 if site.source_kind == 'assistant-text-sidecar']
         _, sources = authenticated_context_writer_sources([writer_record])
         candidates = [item for item in sources.get(text_result.get('block_id'), [])
                       if item.get('write_name') == write_name
                       and item.get('body') == body
                       and item.get('body_sha256') == expected_sha]
-        if len(candidates) == 1:
+        if len(sites) == 1 and sites[0].name == write_name and len(candidates) == 1:
             writers.append('/target/assistant_text_result')
-    block_id=write_name.removeprefix('soft-state:') if write_name.startswith('soft-state:') else None
+    suffix = write_name.removeprefix('soft-state:') if write_name.startswith('soft-state:') else None
+    block_id = suffix.split('@', 1)[0] if suffix else None
+    allow_unqualified_block = bool(suffix and '@' not in suffix)
     for pointer, value in _walk_paths(reader_record.get('messages') or [], '/messages'):
         if ((value.get('type')=='read' and value.get('name')==write_name and value.get('source')==body)
-                or (block_id and value.get('type')=='neuralese' and value.get('id')==block_id)):
+                or (allow_unqualified_block and block_id and value.get('type')=='neuralese'
+                    and value.get('id')==block_id)):
             readers.append(pointer)
     if len(writers) != 1 or not readers or sha256_bytes(body.encode()) != expected_sha:
         raise ValueError(f'communication occurrence is ambiguous or disagrees with payload SHA: writes={len(writers)} reads={len(readers)}')
@@ -406,10 +417,13 @@ def source_occurrences(writer_record, reader_record, write_name, body, expected_
 
 
 def reader_has_payload(record, write_name, body, expected_sha):
-    block_id=write_name.removeprefix('soft-state:') if write_name.startswith('soft-state:') else None
+    suffix = write_name.removeprefix('soft-state:') if write_name.startswith('soft-state:') else None
+    block_id = suffix.split('@', 1)[0] if suffix else None
+    allow_unqualified_block = bool(suffix and '@' not in suffix)
     matches = [value for value in _walk(record.get('messages') or [])
                if (value.get('type')=='read' and value.get('name')==write_name and value.get('source')==body)
-               or (block_id and value.get('type')=='neuralese' and value.get('id')==block_id)]
+               or (allow_unqualified_block and block_id and value.get('type')=='neuralese'
+                   and value.get('id')==block_id)]
     return bool(matches) and sha256_bytes(body.encode()) == expected_sha
 
 

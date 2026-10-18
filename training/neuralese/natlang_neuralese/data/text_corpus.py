@@ -11,15 +11,11 @@ from typing import Any, Iterable, Mapping
 from .context_refs import context_ref_count, typed_neuralese_ref_count
 from ..common.hashing import sha256_hex as _sha
 from ..common.jsonio import canonical_json_str as _canonical
+from ..train.write_sites import direct_result_event_name as _direct_result_event_name
 
 
 def _sha256_hex(value: Any) -> bool:
     return isinstance(value, str) and len(value) == 64 and all(ch in "0123456789abcdef" for ch in value)
-
-
-def _direct_result_event_name(block_id: str, trajectory_id: str, call_id: str, node: str) -> str:
-    event = _sha(json.dumps([trajectory_id, call_id, node], ensure_ascii=False, separators=(",", ":")).encode("utf-8"))[:12]
-    return f"soft-state:{block_id}@{event}"
 
 
 def _nonempty_string(value: Any) -> bool:
@@ -676,19 +672,33 @@ def _soft_writer_sources(records, source_hashes, *, preview_only=False,
                             or receipt.get("raw_assistant_text_sha256") != _sha(raw_assistant.encode("utf-8"))
                         or receipt.get("action_seq") is not None):
                     continue
+                # When the compiler sidecar is present, keep it and the
+                # materializer receipt as one exact writer event. Raw
+                # authenticated runtime records may precede that conversion
+                # sidecar; those remain indexable but cannot become a
+                # normalized pair producer until the sidecar exists.
+                if isinstance((record.get("target") or {}).get("assistant_text_result"), dict):
+                    try:
+                        from ..train.write_sites import extract_write_sites
+                        sidecar_sites = [site for site in extract_write_sites(record)
+                                         if site.source_kind == "assistant-text-sidecar"]
+                    except ValueError:
+                        continue
+                    if (len(sidecar_sites) != 1 or sidecar_sites[0].source != receipt.get("body_source")
+                            or sidecar_sites[0].name != _direct_result_event_name(
+                                receipt["block_id"], source_ref.get("trajectory_id"),
+                                receipt.get("writer_call_id"), receipt.get("writer_node"))):
+                        continue
             elif receipt.get("source") not in {"return_result", "eval-return", "eval-finish"}:
                 continue
-            assistant_text_edge = (receipt.get("source") == "assistant-text-return"
-                                   and ((record.get("target") or {}).get("assistant_text_result") or {}).get("block_id") == receipt["block_id"])
             add_source(receipt["block_id"], {"body": receipt["body_source"],
                     "writer_record_id": record.get("id"), "writer_record_sha256": source_hashes.get(record.get("id")),
                     "writer_source_row_sha256": source_ref.get("source_row_sha256"),
                     "writer_split": record.get("split"),
                     "writer_source_groups": sorted(set(g for g in (record.get("source_groups") or [])
                                                          if isinstance(g, str) and g)),
-                    "write_name": ("soft-state:" + receipt["block_id"] if assistant_text_edge else
-                                   _direct_result_event_name(receipt["block_id"], source_ref.get("trajectory_id"),
-                                                              receipt["writer_call_id"], receipt["writer_node"])
+                    "write_name": (_direct_result_event_name(receipt["block_id"], source_ref.get("trajectory_id"),
+                                                               receipt["writer_call_id"], receipt["writer_node"])
                                    if receipt.get("source_kind") == "typed-text-result"
                                    and receipt.get("source") in {"return_result", "assistant-text-return"}
                                    and receipt.get("body_source_basis") in {"exact-raw-model-result-string",

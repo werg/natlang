@@ -482,6 +482,20 @@ def test_assistant_text_return_survives_e2e_pair_render_and_native_graph_parse()
             'raw_assistant_text_sha256': hashlib.sha256(raw.encode()).hexdigest(),
             'request_sha256': 'c' * 64, 'raw_response_sha256': 'd' * 64}},
     }
+    from natlang_neuralese.train.write_sites import direct_result_event_name
+    import copy
+    writer_two = copy.deepcopy(writer)
+    writer_two['id'] = 'writer-text-result-two'
+    writer_two['source_ref']['invocation_id'] = 'writer-call-two'
+    writer_two['decision']['assistant']['typed_result_writes'][0].update({
+        'invocation_id': 'writer-call-two', 'writer_call_id': 'writer-call-two',
+        'writer_node': 'writer-call-two#write'})
+    writer_two['target']['assistant_text_result'].update({
+        'writer_call_id': 'writer-call-two', 'writer_node': 'writer-call-two#write'})
+    name = direct_result_event_name(block, 'trajectory-1', 'writer-call', 'writer-call#write')
+    name_two = direct_result_event_name(block, 'trajectory-1', 'writer-call-two', 'writer-call-two#write')
+    assert name != name_two
+
     reader = {
         'id': 'reader-after-text-result', 'split': 'train', 'source_groups': ['public-source'],
         'source_ref': {'trajectory_id': 'trajectory-1', 'invocation_id': 'reader-call',
@@ -489,34 +503,48 @@ def test_assistant_text_return_survives_e2e_pair_render_and_native_graph_parse()
         'training_admission': {'approved': True},
         'decision': {'training_approved': True, 'failed_action': False},
         'messages': [{'role': 'user', 'content': 'Use this value: '},
-                     {'role': 'assistant', 'content': [{'type': 'neuralese', 'id': block}]}],
+                     {'role': 'assistant', 'content': [{'type': 'read', 'name': name, 'source': body}]}],
         'target': {'role': 'assistant', 'content': 'The value is useful.'},
     }
-    name = 'soft-state:' + block
-    edge = {'write_name': name, 'body_sha256': body_sha, 'trajectory': 'trajectory-1',
-            'writer_record_id': writer['id'], 'reader_record_id': reader['id'], 'split': 'train'}
-    occurrence = builder.source_occurrences(writer, reader, name, body, body_sha)
-    assert occurrence['writer_json_pointer'] == '/target/assistant_text_result'
+    reader_two = copy.deepcopy(reader)
+    reader_two['id'] = 'reader-after-text-result-two'
+    reader_two['source_ref']['invocation_id'] = 'reader-call-two'
+    reader_two['messages'][1]['content'][0]['name'] = name_two
+    with pytest.raises(ValueError, match='communication occurrence is ambiguous'):
+        builder.source_occurrences(writer, reader_two, name, body, body_sha)
     tok = E2ETokenizer()
-    writer_row, reader_row = builder.normalized_pair_rows(
-        writer, reader, {}, tokenizer=tok, payload=body, occurrence=occurrence,
-        role_markers=ROLE_MARKERS, tokenizer_sha256='b' * 64, source_records=[writer, reader])
-    writer_span = builder.exact_marked_span(writer_row, tok, body,
-        open_marker=ROLE_MARKERS[0], close_marker=ROLE_MARKERS[1], expected_sha256=body_sha)
-    reader_spans = builder.exact_marked_spans(reader_row, tok, body,
-        open_marker=ROLE_MARKERS[2], close_marker=ROLE_MARKERS[3], expected_sha256=body_sha,
-        expected_count=len(occurrence['reader_json_pointers']))
-    view = builder.model_view(edge, writer_row, reader_row, writer, reader, tokenizer=tok,
-        source_fingerprint='b' * 64, expanded_fingerprint='b' * 64,
-        role_ids=tuple(tok.convert_tokens_to_ids(marker) for marker in ROLE_MARKERS),
-        communication_sha256='e' * 64, writer_span=writer_span, reader_span=reader_spans)
-    parsed = parse_graph(view['graph'], tokenizer_fingerprint='b' * 64)
-    producer, consumer = parsed.plan.invocations
-    assert producer.producing and consumer.imports
-    start, stop = producer.producing[0]
-    assert tok.decode(list(producer.token_ids[start:stop])) == body
-    assert writer['target']['content'] == raw
-    assert not writer['target'].get('tool_calls')
+    all_records = [writer, writer_two, reader, reader_two]
+    for selected_writer, selected_reader, event_name in (
+            (writer, reader, name), (writer_two, reader_two, name_two)):
+        edge = {'write_name': event_name, 'body_sha256': body_sha, 'trajectory': 'trajectory-1',
+                'writer_record_id': selected_writer['id'], 'reader_record_id': selected_reader['id'],
+                'split': 'train'}
+        occurrence = builder.source_occurrences(selected_writer, selected_reader, event_name, body, body_sha)
+        assert occurrence['writer_json_pointer'] == '/target/assistant_text_result'
+        writer_row, reader_row = builder.normalized_pair_rows(
+            selected_writer, selected_reader, {}, tokenizer=tok, payload=body, occurrence=occurrence,
+            role_markers=ROLE_MARKERS, tokenizer_sha256='b' * 64, source_records=all_records)
+        writer_span = builder.exact_marked_span(writer_row, tok, body,
+            open_marker=ROLE_MARKERS[0], close_marker=ROLE_MARKERS[1], expected_sha256=body_sha)
+        reader_spans = builder.exact_marked_spans(reader_row, tok, body,
+            open_marker=ROLE_MARKERS[2], close_marker=ROLE_MARKERS[3], expected_sha256=body_sha,
+            expected_count=len(occurrence['reader_json_pointers']))
+        view = builder.model_view(edge, writer_row, reader_row, selected_writer, selected_reader, tokenizer=tok,
+            source_fingerprint='b' * 64, expanded_fingerprint='b' * 64,
+            role_ids=tuple(tok.convert_tokens_to_ids(marker) for marker in ROLE_MARKERS),
+            communication_sha256='e' * 64, writer_span=writer_span, reader_span=reader_spans)
+        parsed = parse_graph(view['graph'], tokenizer_fingerprint='b' * 64)
+        producer, consumer = parsed.plan.invocations
+        assert producer.producing and consumer.imports
+        start, stop = producer.producing[0]
+        assert tok.decode(list(producer.token_ids[start:stop])) == body
+        assert selected_writer['target']['content'] == raw
+        assert not selected_writer['target'].get('tool_calls')
+
+    forged = copy.deepcopy(writer)
+    forged['target']['assistant_text_result']['body_start'] += 1
+    with pytest.raises(ValueError, match='invalid assistant-text-result writer sidecar'):
+        builder.source_occurrences(forged, reader, name, body, body_sha)
 
 
 def test_witnessed_pair_imports_every_exact_static_read_occurrence():

@@ -90,7 +90,8 @@ def test_compiler_assistant_text_sidecar_is_a_real_writer_without_tool_call():
     sites = extract_write_sites(record)
     assert len(sites) == 1 and sites[0].source_kind == "assistant-text-sidecar"
     assert sites[0].source == body and sites[0].value_path == ()
-    assert sites[0].name == "soft-state:" + block
+    from natlang_neuralese.train.write_sites import direct_result_event_name
+    assert sites[0].name == direct_result_event_name(block, "trajectory", "call", "call#write")
     assert handover_notes(record)[sites[0].name] == body
     assert native_writer_prefix(record, lambda messages, generation: "prefix:" + str(generation)) == "prefix:True"
     assert producer_text_target(record, {}, {})["content"] == raw

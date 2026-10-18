@@ -9,7 +9,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from typing import Any, Mapping
+import hashlib
 import json
+
+
+def direct_result_event_name(block_id: str, trajectory_id: str, call_id: str, node: str) -> str:
+    """Keep same-content writes distinct by their authenticated producer event."""
+    event = hashlib.sha256(json.dumps([trajectory_id, call_id, node], ensure_ascii=False,
+                                      separators=(",", ":")).encode("utf-8")).hexdigest()[:12]
+    return f"soft-state:{block_id}@{event}"
 
 
 @dataclass(frozen=True)
@@ -183,7 +191,8 @@ def extract_write_sites(record: Mapping[str, Any]) -> tuple[WriteSite, ...]:
         # This is a real assistant result, not a synthesized tool invocation.
         # The empty argument path tells the trajectory renderer to retain its
         # original natural-language prompt and final assistant text.
-        name = "soft-state:" + sidecar["block_id"]
+        name = direct_result_event_name(sidecar["block_id"], source_ref["trajectory_id"],
+                                        sidecar["writer_call_id"], sidecar["writer_node"])
         sites.append(WriteSite(
             tool="assistant-text-return", before_arguments={}, argument="content", value_path=(),
             name=name, descriptor={"name": name, "type": "Neuralese<string>",
