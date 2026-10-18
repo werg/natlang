@@ -13,6 +13,8 @@ SCHEMA = 'natlang.teacher-json-file-quality-continuation/1'
 AUTHORING_SCHEMA = 'natlang.teacher-executable-authoring-quality-continuation/1'
 AUTHORING_ALIAS_SCHEMA = 'natlang.teacher-source-grounded-authoring-quality-continuation/1'
 AUTHORING_REQUIREMENT_SCHEMA = 'natlang.teacher-authoring-construct-quality-continuation/1'
+AUTHORING_COMPILER_SCHEMA = 'natlang.teacher-authoring-compiler-quality-continuation/1'
+HISTORICAL_AUTHORING_RUNTIME = '43e248a84b6faba6e793181fe593796dc03c878b05199091d95e824408de7ed1'
 
 
 def file_verdict(row):
@@ -98,7 +100,11 @@ def verify_quality_continuation(row, original, original_binding):
     continuation = (continue_authoring_requirement_quality if schema == AUTHORING_REQUIREMENT_SCHEMA else
                     continue_authoring_alias_quality if schema == AUTHORING_ALIAS_SCHEMA else
                     continue_authoring_quality if schema == AUTHORING_SCHEMA else continue_quality)
-    expected = continuation(original, original_binding)
+    if schema == AUTHORING_COMPILER_SCHEMA:
+        expected = continue_authoring_compiler_quality(original, original_binding,
+            row['source_quality_continuation']['historical_runtime'])
+    else:
+        expected = continuation(original, original_binding)
     # Historical runtime identity records custody, never admission authority.
     # A current canonical comparator must independently reproduce the outcome.
     historical = row.get('source_quality_continuation', {}).get('verifier')
@@ -260,4 +266,75 @@ def continue_authoring_alias_quality(original, original_binding):
         'derived_spec_sha256':canonical_json_sha256_hex(derived_spec),
         'argument_aliases':derived_spec['argument_aliases'],
         'claim':'Source-derived child-oracle coverage and null-root accounting correction; original tests, expected results, files and captured trajectory unchanged'}
+    return result
+
+
+def historical_authoring_verdict(row, runtime_reference):
+    """Reproduce the exact captured generation epoch; arbitrary checkers are forbidden."""
+    from natlang_neuralese.common.runtime_inventory import task_runtime_inventory
+    if (not isinstance(runtime_reference, dict) or set(runtime_reference) != {'path','inventory_sha256'}
+        or runtime_reference['inventory_sha256'] != HISTORICAL_AUTHORING_RUNTIME):
+        raise ValueError('historical authoring runtime is not the captured compiler epoch')
+    runtime = Path(runtime_reference['path']).resolve(strict=True)
+    inventory = task_runtime_inventory(runtime)
+    if canonical_json_sha256_hex(inventory) != HISTORICAL_AUTHORING_RUNTIME:
+        raise ValueError('historical authoring runtime changed')
+    code = ('import {readFileSync} from "node:fs";'
+            'const {checkAuthoring}=await import(process.argv[1]);'
+            'const p=JSON.parse(readFileSync(0,"utf8"));'
+            'console.log(JSON.stringify(await checkAuthoring(p.files,p.spec)));')
+    payload = {'files': row['outcome']['files'], 'spec': row['task']['program_ir']['semantics']['authoring']}
+    completed = subprocess.run(['node','--input-type=module','-e',code,
+        (runtime/'dist/teacher/authoring.js').as_uri()],input=json.dumps(payload),
+        capture_output=True,text=True,check=True)
+    if task_runtime_inventory(runtime) != inventory:
+        raise ValueError('historical authoring runtime changed during execution')
+    return json.loads(completed.stdout)
+
+
+def continue_authoring_compiler_quality(original, original_binding, historical_runtime):
+    """Recover a reproduced compiler rejection only after every unchanged run passes."""
+    if 'source_quality_continuation' in original:
+        raise ValueError('compiler continuation requires original captured execution')
+    program=original['task']['program_ir'];semantics=program['semantics'];outcome=original['outcome']
+    spec=semantics.get('authoring');checks=outcome.get('checks');captured=outcome.get('authoring')
+    required={'seeded_failure_requirement','expected_status','honest_stop','effects','files','world','file_return_consistency','answer'}
+    runs=spec.get('runs')if isinstance(spec,dict)else None
+    marker='This `nl` expression was not compiled by the natlang compiler.'
+    problems=captured.get('problems')if isinstance(captured,dict)else None
+    if (isinstance(problems,list)and isinstance(spec,dict)
+        and (spec.get('requires')or {}).get('nl')is True
+        and problems[:1]==[str(spec.get('module'))+' creates no nl function']):
+        problems=problems[1:]
+    if (program.get('split')!='train' or not program.get('source_groups')
+        or 'expected'not in semantics or semantics['expected']is not None
+        or not isinstance(runs,list)or not runs
+        or any(not isinstance(run,dict)or not isinstance(run.get('args'),list)or 'expected'not in run for run in runs)
+        or not isinstance(outcome.get('files'),dict)or not outcome['files']
+        or outcome.get('status')!='done' or outcome.get('accepted')is not False
+        or outcome.get('oracle')!={'accepted':False,'level':'exact'}
+        or outcome.get('quality_pending',[])!=[] or outcome.get('rejection_reasons')!=['files']
+        or not isinstance(checks,dict)or not required<=set(checks)or checks.get('files')is not False
+        or any(v is not True for k,v in checks.items()if k!='files')
+        or not isinstance(captured,dict)or captured.get('ok')is not False
+        or captured.get('results')!=[None]*len(runs)
+        or not isinstance(problems,list)or len(problems)!=len(runs)
+        or any(not isinstance(problem,str)or not problem.startswith(f'run {i}: authoring_check: quiesced: error: The authored export failed: '+marker)for i,problem in enumerate(problems))):
+        raise ValueError('compiler continuation requires only captured raw-nl compiler failure')
+    legacy=historical_authoring_verdict(original,historical_runtime)
+    if canonical_json_sha256_hex(legacy)!=canonical_json_sha256_hex(captured):
+        raise ValueError('historical compiler verdict differs from captured execution')
+    verdict,verifier=authoring_verdict(original)
+    if (verdict.get('ok')is not True or verdict.get('problems')!=[]
+        or canonical_json_sha256_hex(verdict.get('results'))!=canonical_json_sha256_hex([run['expected']for run in runs])):
+        raise ValueError('fresh complete authoring compiler verification failed')
+    result=copy.deepcopy(original)
+    result['outcome'].update(accepted=True,authoring=verdict,rejection_reasons=[],
+        oracle={'accepted':True,'level':'exact','verdict':'executable-authoring-compiler/1'})
+    result['outcome']['checks']['files']=True
+    result['source_quality_continuation']={'schema':AUTHORING_COMPILER_SCHEMA,'original':original_binding,
+        'original_row_sha256':canonical_json_sha256_hex(original),'verifier':verifier,
+        'historical_runtime':copy.deepcopy(historical_runtime),'original_spec_sha256':canonical_json_sha256_hex(spec),
+        'comparator':{'kind':'typescript-authoring-compiler/1'},
+        'claim':'Reproduced historical compiler rejection; unchanged files and ALL exact original runs pass current compiler. Original actor, trajectory and targets unchanged.'}
     return result
