@@ -8,7 +8,9 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import time
+import uuid
 
 from ..common.jsonio import write_json_durable
 from .native_async import poll_latest, verified_export, verify_request, selected_ingest_export
@@ -155,6 +157,137 @@ def poll(config, *, observe=dispatch_evidence, ingest=poll_latest, available=Non
                   fetch_command=config['fetch_command'],device=config['device'],export_admission=admit)
 
 
+def pending_event(config):
+    """Inspect an existing request without checkpoint decoding or transfer."""
+    from .task_cadence import TaskEval
+    out=Path(config['out']);out.mkdir(parents=True,exist_ok=True)
+    with(out/'export-ingest.lock').open('a')as lock:
+        fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        path=out/'native-async-state.json'
+        prior=json.loads(path.read_text())if path.exists()else{}
+        active=prior.get('active')
+        if not active:
+            if prior.get('last_completed_sha256')and not any(key in prior for key in('fetching_export','sealing_request')):
+                selected=selected_ingest_export(config['export_state'],prior);receipt=verified_export(selected)
+                if receipt['role']!=config['role']:raise ValueError('native ingestion export role differs')
+                if selected['last_verified_step']<config['minimum_step']:
+                    return dict(event='native_eval_waiting_for_minimum_step',step=selected['last_verified_step'])
+                if receipt['identity']['sha256']==prior['last_completed_sha256']:
+                    return dict(event='native_eval_up_to_date',step=selected['last_verified_step'])
+            return None
+        if active.get('publication_pending'):return None
+        evaluator=TaskEval(active['spec'],Path(active['stage_out']),None,
+                           prompt_rendering=active['spec']['prompt_rendering'])
+        if evaluator.landed(active['step'])is None or Path(active['request']).exists():
+            return dict(event='native_eval_pending',active_step=active['step'],eligible=None)
+    return None
+
+
+def worker_state(unit, *, execute=subprocess.run):
+    result=execute(['systemctl','--user','show',unit,'-p','LoadState','-p','ActiveState','-p','Result','-p','ExecMainStatus','-p','MainPID'],
+                   capture_output=True,text=True)
+    values=dict(line.split('=',1)for line in result.stdout.splitlines()if '='in line)
+    if result.returncode and values.get('LoadState')!='not-found':
+        raise RuntimeError('cannot inspect ingestion worker unit')
+    if int(values.get('MainPID')or 0):
+        proc=Path('/proc')/values['MainPID']
+        try:
+            before=(proc/'stat').read_text().rsplit(')',1)[1].split()
+            argv=[value.decode()for value in(proc/'cmdline').read_bytes().split(b'\0')if value]
+            after=(proc/'stat').read_text().rsplit(')',1)[1].split()
+        except(FileNotFoundError,ProcessLookupError):return values
+        if before[19]==after[19]and after[0]not in('Z','X'):values['argv']=argv
+    from scripts.memory_ledger import STATE
+    ledger_path=Path(STATE)
+    ledger=json.loads(ledger_path.read_text())if ledger_path.exists()else{}
+    queued=ledger.get('waiting',{}).get(unit,{})
+    if queued.get('requeued'):
+        values['queued']=True;values['queued_argv']=queued['spec']['command']
+    claim=ledger.get('claims',{}).get(unit,{})
+    if claim and time.time()-claim['admitted']<30:
+        values['launch_pending']=True;values['claimed_argv']=claim['command']
+    return values
+
+
+def ledgered_poll(config, *, execute=subprocess.run, inspect=worker_state, sleep=time.sleep):
+    """One separately admitted transfer/sealing poll, recoverable by its owner."""
+    from ..common.hashing import canonical_json_sha256_hex
+    status=Path(config['status']);status.mkdir(parents=True,exist_ok=True)
+    options=config['transfer_ledger'];repo=Path(__file__).resolve().parents[4]
+    configuration={key:value for key,value in config.items()if key!='transfer_ledger'}
+    mechanism=binding(__file__)
+    identity=canonical_json_sha256_hex(dict(configuration=configuration,options=options,mechanism=mechanism))
+    intent_path=status/'ledger-poll.json';result_path=status/'ledger-poll-result.json'
+    config_path=status/'ledger-poll-config.json'
+    unit='native-eval-ingest-'+config['role']+'-'+hashlib.sha256(str(status.resolve()).encode()).hexdigest()[:12]+'.service'
+    if intent_path.exists():
+        intent=json.loads(intent_path.read_text())
+        if binding(config_path)!=intent['config']:raise ValueError('ingestion worker configuration changed')
+        document=json.loads(config_path.read_text())
+        expected=canonical_json_sha256_hex(dict(configuration=configuration,options=options,mechanism=document['mechanism']))
+        if intent['identity']!=expected or intent['unit']!=unit or document['configuration']!=configuration:
+            raise ValueError('existing ingestion worker configuration changed; reconcile its exact intent')
+    else:
+        token=uuid.uuid4().hex
+        write_json_durable(config_path,dict(configuration=configuration,result=str(result_path),token=token,
+                                           mechanism=mechanism))
+        intent=dict(identity=identity,unit=unit,config=binding(config_path),token=token)
+        write_json_durable(intent_path,intent)
+        document=json.loads(config_path.read_text())
+    def completed():
+        if not result_path.exists():return None
+        result=json.loads(result_path.read_text())
+        if (result.get('token')==intent['token']and result.get('configuration')==intent['config']
+                and result.get('mechanism')==document['mechanism']):return result['event']
+        return None
+    expected_argv=[sys.executable,'-m','natlang_neuralese.eval.native_async_service',
+                   '--ledger-poll-config',str(config_path),'--ledger-poll-sha256',intent['config']['sha256']]
+    def observed():
+        value=inspect(unit)
+        for key in('argv','queued_argv','claimed_argv'):
+            if value.get(key)is not None and value[key]!=expected_argv:
+                raise ValueError('live ingestion worker argv differs from its journaled owner')
+        return value
+    state=observed()
+    live=lambda value:bool(value.get('queued')or value.get('launch_pending')or value.get('ActiveState')in('active','activating','deactivating','reloading'))
+    if not live(state)and completed()is None:
+        if document['mechanism']!=mechanism:
+            # No old worker is running, and no authentic success exists.
+            # A fresh poll retries the durable protocol with the new code.
+            intent_path.unlink()
+            raise RuntimeError('unfinished ingestion worker mechanism changed; retry with current code')
+        # Rejoin the ledger's exact resumable worker after preemption. Only a
+        # terminal failure with no queued/relaunching owner gets a fresh poll.
+        execute([sys.executable,str(repo/'scripts/memory_ledger.py'),'run','--unit',unit,
+                 '--budget-gb',str(options['budget_gib']),'--reserve-gb',str(options['reserve_gib']),
+                 '--priority','low','--resumable','--wait','86400','--workdir',str(repo),
+                 '--env','PYTHONPATH='+str(repo/'training/neuralese')+os.pathsep+str(repo),
+                 '--',*expected_argv],check=True)
+        state=observed()
+    while live(state):
+        sleep(2);state=observed()
+    event=completed()
+    # A failed unit must not turn an old or absent result into success.
+    if state.get('Result')!='success'or state.get('ExecMainStatus')!='0'or event is None:
+        intent_path.unlink()
+        raise RuntimeError('admitted ingestion worker failed; durable transfer state retained')
+    intent_path.unlink()
+    return event
+
+
+def worker_poll(path, sha256):
+    path=Path(path)
+    if binding(path)['sha256']!=sha256:raise ValueError('ingestion worker config hash differs')
+    document=json.loads(path.read_text());configuration=document['configuration']
+    if document['mechanism']!=binding(__file__):raise ValueError('ingestion worker mechanism changed before execution')
+    with(Path(configuration['status'])/'ledger-worker.lock').open('a')as lock:
+        fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        event=poll(configuration)
+        if document['mechanism']!=binding(__file__):raise ValueError('ingestion worker mechanism changed during execution')
+        write_json_durable(document['result'],dict(token=document['token'],event=event,
+                            configuration=binding(path),mechanism=document['mechanism']))
+
+
 def run(config, *, every=60, max_polls=None):
     status=Path(config['status']);status.mkdir(parents=True,exist_ok=True)
     with(status/'service.lock').open('a')as lock:
@@ -166,7 +299,13 @@ def run(config, *, every=60, max_polls=None):
             # next checkpoint transfer. Publish that durable result on restart.
             latest=Path(config['out'])/'latest-result.json'
             if latest.exists():write_json_durable(status/'latest-result.json',json.loads(latest.read_text()))
-            try:event=poll(config)
+            try:
+                if config.get('transfer_ledger'):
+                    if(status/'ledger-poll.json').exists():event=ledgered_poll(config)
+                    else:
+                        event=pending_event(config)
+                        if event is None:event=ledgered_poll(config)
+                else:event=poll(config)
             except Exception as error:event=dict(event='native_eval_ingest_retry',error_type=type(error).__name__)
             if latest.exists():write_json_durable(status/'latest-result.json',json.loads(latest.read_text()))
             event=dict(at=time.time(),**event);write_json_durable(status/'status.json',event)
@@ -175,6 +314,12 @@ def run(config, *, every=60, max_polls=None):
 
 
 def main(argv=None):
+    argv=list(sys.argv[1:]if argv is None else argv)
+    if argv[:1]==['--ledger-poll-config']:
+        worker=argparse.ArgumentParser()
+        worker.add_argument('--ledger-poll-config',type=Path,required=True)
+        worker.add_argument('--ledger-poll-sha256',required=True)
+        args=worker.parse_args(argv);worker_poll(args.ledger_poll_config,args.ledger_poll_sha256);return
     parser=argparse.ArgumentParser(description=__doc__)
     for name in('export-state','out','spec','base','status'):parser.add_argument('--'+name,type=Path,required=True)
     parser.add_argument('--queue',type=Path,default=None);parser.add_argument('--role',choices=('lfm','mellum'),required=True)
@@ -182,14 +327,21 @@ def main(argv=None):
     parser.add_argument('--after-dispatch-state',type=Path);parser.add_argument('--after-dispatch-minimum-step',type=int,default=0)
     parser.add_argument('--after-dispatch-architecture',choices=('lfm2','lfm2_moe','maple','mellum'))
     parser.add_argument('--device',default='cuda');parser.add_argument('--every',type=float,default=60)
+    parser.add_argument('--transfer-budget-gib',type=float)
+    parser.add_argument('--transfer-reserve-gib',type=float,default=1)
     parser.add_argument('--fetch-command',nargs=argparse.REMAINDER,required=True)
     args=parser.parse_args(argv)
+    import math
+    if args.transfer_budget_gib is not None and(not math.isfinite(args.transfer_budget_gib)or args.transfer_budget_gib<=0
+            or not math.isfinite(args.transfer_reserve_gib)or args.transfer_reserve_gib<0):parser.error('invalid transfer ledger allocation')
     if not args.fetch_command or args.every<=0 or min(args.minimum_step,args.after_dispatch_minimum_step,args.disk_reserve_gib)<0:parser.error('invalid native ingestion limits/fetch command')
     if bool(args.after_dispatch_state)!=bool(args.after_dispatch_architecture):parser.error('dispatch dependency needs state and architecture')
     config={key:str(getattr(args,key).resolve())for key in('export_state','out','spec','base','status')}
     config.update(role=args.role,minimum_step=args.minimum_step,disk_reserve_bytes=args.disk_reserve_gib*(1<<30),
                   queue=str((args.queue or request_queue()).resolve()),fetch_command=args.fetch_command,device=args.device,
                   after_dispatch=(dict(state=str(args.after_dispatch_state.resolve()),minimum_step=args.after_dispatch_minimum_step,architecture=args.after_dispatch_architecture)if args.after_dispatch_state else None))
+    if args.transfer_budget_gib is not None:
+        config['transfer_ledger']=dict(budget_gib=args.transfer_budget_gib,reserve_gib=args.transfer_reserve_gib)
     run(config,every=args.every)
 
 
