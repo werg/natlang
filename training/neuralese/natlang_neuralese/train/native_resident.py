@@ -593,57 +593,59 @@ def _source03_bridge_geometry_part(part, *, preparation, package):
     maxima = {}
     parents = set()
     forward_sum = kv_sum = 0
-    raw_bridge = []
-    with open_jsonl_text(graph_path) as stream:
-        raw_bridge = list(stream)
-    if len(raw_bridge) != row_count:
-        raise ValueError('source03 bridge graph line count differs')
+    raw_digest = hashlib.sha256()
+    rows_seen = 0
     actual_limits = limits
-    for index, (line, side, covered, entry, indexed) in enumerate(zip(
-            raw_bridge, side_rows, coverage_rows, bridge_source.entries, bridge_entries, strict=True)):
-        graph = json.loads(line)
-        raw_sha = hashlib.sha256(line.encode('utf-8')).hexdigest()
-        old_index_at = side.get('old_fit_source_row')
-        prior = old_entries[old_index_at]
-        old_coverage_matches = old_rows.get(side.get('id'), [])
-        old_coverage_matches = [row for row in old_coverage_matches
-            if row.get('source_row') == old_index_at
-            and row.get('source_graph_sha256') == side.get('old_source_graph_sha256')
-            and row.get('source_row_bytes_sha256') == side.get('source_row_bytes_sha256')]
-        geometry = covered.get('geometry')
-        if (side.get('id') != entry.get('id') or side.get('id') != indexed.get('id')
-                or side.get('binding') != entry.get('binding') or side.get('binding') != indexed.get('binding')
-                or side.get('source_sha256') != old_key.get('source_sha256')
-                or raw_sha != side.get('source_row_bytes_sha256')
-                or canonical_json_sha256_hex(graph) != side.get('old_source_graph_sha256')
-                or old_raw_by_index[old_index_at] != (side.get('source_row_bytes_sha256'), side.get('old_source_graph_sha256'))
-                or prior.get('id') != side.get('id') or prior.get('binding') != side.get('binding')
-                or len(old_coverage_matches) != 1
-                or covered.get('schema') != 'natlang.d32-source03-aux-bridge-geometry-row/1'
-                or covered.get('bridge_row_index') != index or covered.get('id') != side.get('id')
-                or covered.get('binding') != side.get('binding')
-                or covered.get('source_graph_sha256') != side.get('old_source_graph_sha256')
-                or covered.get('source_row_bytes_sha256') != side.get('source_row_bytes_sha256')
-                or covered.get('old_row_index_binding') != prior.get('binding')
-                or covered.get('old_fit_coverage_row', {}).get('old_source_row_index') != old_index_at
-                or covered.get('old_fit_coverage_row', {}).get('source_sha256') != old_key.get('source_sha256')
-                or covered.get('old_fit_coverage_row', {}).get('coverage_sha256') != old_files['old-fit/coverage.jsonl']['sha256']
-                or old_coverage_matches[0].get('geometry') != geometry
-                or prior.get('forward_tokens') != old_coverage_matches[0].get('geometry', {}).get('forward_tokens')
-                or indexed.get('forward_tokens') != entry.get('forward_tokens')
-                or set(geometry or {}) != {'forward_tokens', 'kv_slots'}
-                or any(type(geometry[key]) is not int or geometry[key] <= 0 for key in geometry)
-                or geometry['forward_tokens'] != entry.get('forward_tokens')
-                or geometry['kv_slots'] != geometry['forward_tokens']
-                or any(geometry[key] > actual_limits[key] for key in geometry)):
-            raise ValueError('source03 bridge source/old-fit/coverage/geometry join differs at row ' + str(index))
-        parents.add(side.get('keep_parent_id'))
-        forward_sum += geometry['forward_tokens']
-        kv_sum += geometry['kv_slots']
-        descriptor = {'index': index, 'id': entry['id'], 'binding': entry['binding'], **geometry}
-        for key in geometry:
-            if key not in maxima or descriptor[key] > maxima[key][key]:
-                maxima[key] = descriptor
+    with open_jsonl_text(graph_path) as stream:
+        for index, (line, side, covered, entry, indexed) in enumerate(zip(
+                stream, side_rows, coverage_rows, bridge_source.entries, bridge_entries, strict=True)):
+            rows_seen += 1
+            raw_digest.update(line.encode('utf-8'))
+            graph = json.loads(line)
+            raw_sha = hashlib.sha256(line.encode('utf-8')).hexdigest()
+            old_index_at = side.get('old_fit_source_row')
+            prior = old_entries[old_index_at]
+            old_coverage_matches = old_rows.get(side.get('id'), [])
+            old_coverage_matches = [row for row in old_coverage_matches
+                if row.get('source_row') == old_index_at
+                and row.get('source_graph_sha256') == side.get('old_source_graph_sha256')
+                and row.get('source_row_bytes_sha256') == side.get('source_row_bytes_sha256')]
+            geometry = covered.get('geometry')
+            if (side.get('id') != entry.get('id') or side.get('id') != indexed.get('id')
+                    or side.get('binding') != entry.get('binding') or side.get('binding') != indexed.get('binding')
+                    or side.get('source_sha256') != old_key.get('source_sha256')
+                    or raw_sha != side.get('source_row_bytes_sha256')
+                    or canonical_json_sha256_hex(graph) != side.get('old_source_graph_sha256')
+                    or old_raw_by_index[old_index_at] != (side.get('source_row_bytes_sha256'), side.get('old_source_graph_sha256'))
+                    or prior.get('id') != side.get('id') or prior.get('binding') != side.get('binding')
+                    or len(old_coverage_matches) != 1
+                    or covered.get('schema') != 'natlang.d32-source03-aux-bridge-geometry-row/1'
+                    or covered.get('bridge_row_index') != index or covered.get('id') != side.get('id')
+                    or covered.get('binding') != side.get('binding')
+                    or covered.get('source_graph_sha256') != side.get('old_source_graph_sha256')
+                    or covered.get('source_row_bytes_sha256') != side.get('source_row_bytes_sha256')
+                    or covered.get('old_row_index_binding') != prior.get('binding')
+                    or covered.get('old_fit_coverage_row', {}).get('old_source_row_index') != old_index_at
+                    or covered.get('old_fit_coverage_row', {}).get('source_sha256') != old_key.get('source_sha256')
+                    or covered.get('old_fit_coverage_row', {}).get('coverage_sha256') != old_files['old-fit/coverage.jsonl']['sha256']
+                    or old_coverage_matches[0].get('geometry') != geometry
+                    or prior.get('forward_tokens') != old_coverage_matches[0].get('geometry', {}).get('forward_tokens')
+                    or indexed.get('forward_tokens') != entry.get('forward_tokens')
+                    or set(geometry or {}) != {'forward_tokens', 'kv_slots'}
+                    or any(type(geometry[key]) is not int or geometry[key] <= 0 for key in geometry)
+                    or geometry['forward_tokens'] != entry.get('forward_tokens')
+                    or geometry['kv_slots'] != geometry['forward_tokens']
+                    or any(geometry[key] > actual_limits[key] for key in geometry)):
+                raise ValueError('source03 bridge source/old-fit/coverage/geometry join differs at row ' + str(index))
+            parents.add(side.get('keep_parent_id'))
+            forward_sum += geometry['forward_tokens']
+            kv_sum += geometry['kv_slots']
+            descriptor = {'index': index, 'id': entry['id'], 'binding': entry['binding'], **geometry}
+            for key in geometry:
+                if key not in maxima or descriptor[key] > maxima[key][key]:
+                    maxima[key] = descriptor
+    if rows_seen != row_count:
+        raise ValueError('source03 bridge graph line count differs')
     if len(parents) != supplement.get('unique_keep_parents'):
         raise ValueError('source03 bridge unique KEEP-parent coverage count differs')
     if (forward_sum != supplement.get('forward_tokens_sum')
@@ -651,7 +653,7 @@ def _source03_bridge_geometry_part(part, *, preparation, package):
             or forward_sum != provenance.get('geometry_forward_tokens_sum')
             or kv_sum != provenance.get('geometry_kv_slots_sum')):
         raise ValueError('source03 bridge geometry totals differ from bound summaries')
-    if (hashlib.sha256(''.join(raw_bridge).encode('utf-8')).hexdigest()
+    if (raw_digest.hexdigest()
             != final_source.get('bridge_source', {}).get('raw_selected_rows_sha256')
             or hashlib.sha256(sidecar_path.read_bytes()).hexdigest()
             != final_source.get('row_binding_sidecar', {}).get('canonical_rows_sha256')

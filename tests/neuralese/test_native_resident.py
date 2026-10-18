@@ -948,6 +948,43 @@ def test_source03_bridge_geometry_is_verified_and_can_be_bridge_only_or_ordered_
             'forward_tokens':4 if with_ordinary else 3,'kv_slots':4 if with_ordinary else 3}
 
 
+def test_source03_bridge_graph_rows_are_consumed_as_a_single_pass_stream(tmp_path,monkeypatch):
+    from contextlib import contextmanager
+    from natlang_neuralese.common import jsonio
+
+    source,parts=source03_bridge_fixture(tmp_path,monkeypatch)
+    original_open=jsonio.open_jsonl_text
+    consumed=[]
+
+    class StreamingRows:
+        def __init__(self,rows):
+            self.rows=iter(rows)
+        def __iter__(self):
+            return self
+        def __next__(self):
+            row=next(self.rows)
+            consumed.append(row)
+            return row
+        def __length_hint__(self):
+            raise AssertionError('bridge graph stream must not be materialized')
+
+    @contextmanager
+    def open_with_stream_guard(path):
+        with original_open(path) as rows:
+            if Path(path).name=='00-fit.jsonl.zst' and Path(path).parent.name=='lfm25':
+                yield StreamingRows(rows)
+            else:
+                yield rows
+
+    monkeypatch.setattr(jsonio,'open_jsonl_text',open_with_stream_guard)
+    output=tmp_path/'streamed-geometry.json'
+    proof=resident.prepare_whole_delta_geometry(source,parts,output,package=Path(resident.__file__).parents[1])
+    assert len(consumed)==2
+    assert json.loads(output.read_text())['new_train_rows']==2
+    assert resident.geometry_from_evidence(source,0,proof,package=Path(resident.__file__).parents[1])=={
+        'forward_tokens':3,'kv_slots':3}
+
+
 @pytest.mark.parametrize('mutation',['interleaved','duplicate','coverage','missing-row','wrong-geometry','boolean-geometry',
                                     'wrong-policy','wrong-binding','old-source','old-geometry',
                                     'old-forward-tokens','invented-current-parser'])
