@@ -180,8 +180,10 @@ def _future_config(config,recipe_reference,recipe,checkpoint,lineage):
         else:future.pop(key,None)
     future['seed_trainer_parameters']=copy.deepcopy(future['trainer_parameters'])
     _supervised_quantum(future,future['seed_trainer_parameters'])
-    directory=foundation['parameters'].get('resident_data_directory')
-    if directory:future['resident_data_directory']=directory
+    directory=str(_bound(recipe_reference).parent/'resident-data')
+    if directory:
+        future['resident_data_directory']=directory
+        future['seed_trainer_parameters']['resident_data_directory']=directory
     else:future.pop('resident_data_directory',None)
     bind_recipe_lineage(future,lineage)
     return future

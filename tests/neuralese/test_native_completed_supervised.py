@@ -123,6 +123,8 @@ def test_configuration_changes_future_lr_only_and_does_not_repeat_completed_stag
     old=json.loads(config.read_text())
     adapt.configure(plan,p['models'][0],old['bootstrap_binding']['handoff'],config)
     future=json.loads(config.read_text())
+    assert future['seed_trainer_parameters']['resident_data_directory']==str(Path(value['recipe']['path']).parent/'resident-data')
+    assert future['resident_data_directory']==future['seed_trainer_parameters']['resident_data_directory']
     assert future['seed_trainer_parameters']['learning_rate']==new_lr
     assert future['supervised_stage_quantum_control']['plan']==adapt.binding(plan)
     assert before==((root/'cycle.json').read_bytes(),(root/'production/state.json').read_bytes())
