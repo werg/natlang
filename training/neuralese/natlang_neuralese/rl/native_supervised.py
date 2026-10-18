@@ -142,6 +142,9 @@ def continuation_config(config,stage,*,checkpoint,adapter,out):
     if adapter is not None:parameters.pop('communication_foundation',None)
     if stage['kind']!='native_offline_preference':
         parameters.pop('memory_qualification',None)  # ordinary CE uses its restored-parent qualification
+    if 'native_checkpoint_publication' in config:
+        from ..model.native_checkpoint_control import publication_trainer_parameters
+        parameters.update(publication_trainer_parameters(config['native_checkpoint_publication']))
     parameters['refresh_at_checkpoint']=True
     parameters['stage_id']=stage['id']
     parameters['recipe_binding']=native_recipe_binding(Path(config['production_recipe']),recipe_lineage(config))

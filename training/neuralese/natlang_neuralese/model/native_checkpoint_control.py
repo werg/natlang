@@ -74,7 +74,8 @@ def checked_file(reference):
     return path
 
 
-def read_checkpoint_control(checkpoint, reference, *, dependency_producer=None):
+def read_checkpoint_control(checkpoint, reference, *, dependency_producer=None,
+                            require_actor_view=True):
     """Authenticate an explicitly selected derivative; never deserialize training state."""
     path = checked_file(reference)
     value = json.loads(path.read_text())
@@ -94,14 +95,20 @@ def read_checkpoint_control(checkpoint, reference, *, dependency_producer=None):
         checked_file(value['hashing_sidecar'])
     if dependency_producer is not None and value['dependency_producer'] != _file_binding(dependency_producer):
         raise ValueError('checkpoint control dependency verifier changed')
-    from .native_bundle import ACTOR_VIEW_SCHEMA
-    view_path = checked_file(value['actor_view'])
-    view = json.loads(view_path.read_text())
-    if (view.get('schema') != ACTOR_VIEW_SCHEMA or view.get('training_resume') is not False
-            or view.get('step') != value['step'] or view.get('model_config') != value['model_config']
-            or any(view.get('source', {}).get(key) != source[key] for key in ('sha256', 'bytes'))):
-        raise ValueError('checkpoint controls changed their actual source-bound actor view')
-    checked_file(view['mechanism'])
+    if type(require_actor_view) is not bool:
+        raise ValueError('checkpoint control actor capability must be explicit')
+    if value.get('actor_view') is None:
+        if require_actor_view or value.get('publication_only') is not True:
+            raise ValueError('checkpoint controls have no qualified actor view')
+    else:
+        from .native_bundle import ACTOR_VIEW_SCHEMA
+        view_path = checked_file(value['actor_view'])
+        view = json.loads(view_path.read_text())
+        if (view.get('schema') != ACTOR_VIEW_SCHEMA or view.get('training_resume') is not False
+                or view.get('step') != value['step'] or view.get('model_config') != value['model_config']
+                or any(view.get('source', {}).get(key) != source[key] for key in ('sha256', 'bytes'))):
+            raise ValueError('checkpoint controls changed their actual source-bound actor view')
+        checked_file(view['mechanism'])
     raw = value['raw_policy']
     if (raw['native_identity']['checkpoint_sha256'] != source['sha256']
             or raw['native_identity']['tokenizer_fingerprint'] != value['model_config']['tokenizer_fingerprint']
@@ -120,6 +127,16 @@ def read_checkpoint_control(checkpoint, reference, *, dependency_producer=None):
         raise ValueError('checkpoint controls lack the exact consumed dependency closure')
     if not all(isinstance(closure[key], list) for key in ('files', 'assets')):
         raise ValueError('checkpoint control dependency inventories must be lists')
+    publication = value.get('publication')
+    if publication is not None:
+        parent = publication.get('parent_checkpoint_sha256')
+        if (publication.get('schema') != 'natlang.native-checkpoint-publication/1'
+                or publication.get('full_optimizer_rng_validated') is not True
+                or not isinstance(parent, str) or len(parent) != 64
+                or any(char not in '0123456789abcdef' for char in parent)):
+            raise ValueError('checkpoint controls lack exact saved continuation authority')
+    if value.get('publication_only') is True and publication is None:
+        raise ValueError('publication-only controls lack a saved parent continuation')
     return value
 
 
@@ -130,17 +147,34 @@ def checkpoint_control_dependencies(reference, *, checkpoint):
     if value.get('schema') != SCHEMA:
         raise ValueError('unsupported checkpoint control dependency schema')
     from .native_bundle import actor_view_dependencies
-    view = json.loads(checked_file(value['actor_view']).read_text())
-    view_dependencies = actor_view_dependencies(value['actor_view'], metadata_only=True,
-                                               checkpoint=checkpoint)
+    view = json.loads(checked_file(value['actor_view']).read_text()) if value.get('actor_view') else None
+    view_dependencies = (actor_view_dependencies(value['actor_view'], metadata_only=True,
+                                               checkpoint=checkpoint) if view else [])
     return [reference, value['producer'], value['dependency_producer'],
             *([value['hashing_sidecar']] if value.get('hashing_sidecar') is not None else []),
-            view['mechanism'], *value['tokenizer_files'],
+            *([view['mechanism']] if view else []), *value['tokenizer_files'],
             *view_dependencies[:2]]  # The already-bound actual full parent stays separate.
 
 
+def verify_checkpoint_publication(checkpoint, reference, parent, *, producer,
+                                  dependency_producer, namespace, readonly_input_roots=()):
+    """Verify selected publication metadata; return no resumable tensor state."""
+    value = read_checkpoint_control(checkpoint, reference, require_actor_view=False)
+    context = {'namespace': str(Path(namespace).absolute()),
+               'readonly_input_roots': sorted(readonly_input_roots)}
+    if (value['producer'] != producer or value['dependency_producer'] != dependency_producer
+            or value['dependency_context'] != context
+            or (value.get('publication') or {}).get('parent_checkpoint_sha256') != parent['sha256']):
+        raise ValueError('checkpoint publication changed its sealed producer/context/parent')
+    checked_file(producer)
+    checked_file(dependency_producer)
+    return {'checkpoint': value['source'], 'step': value['step'],
+            'native_identity': value['raw_policy']['native_identity'],
+            'control': reference, 'training_resume': False}
+
+
 def write_checkpoint_control(checkpoint, out, *, validated_state, decoded_source_stat,
-                             actor_view, dependency_collector,
+                             actor_view=None, dependency_collector, publication_only=False,
                              namespace='/work/native-production', readonly_input_roots=()):
     """Use only the actual already-loaded saved object; unsupported source forms return None."""
     from .native_model import CHECKPOINT_SCHEMA
@@ -152,6 +186,17 @@ def write_checkpoint_control(checkpoint, out, *, validated_state, decoded_source
             or source_stat(source_path) != tuple(decoded_source_stat)):
         raise ValueError('checkpoint control source differs from its verified full decode')
     training = require_raw_training(validated_state)
+    if type(publication_only) is not bool or (actor_view is None and not publication_only):
+        raise ValueError('controls without an actor view need explicit publication-only scope')
+    parent = ((training.get('options') or {}).get('continuation') or {}).get('checkpoint_sha256')
+    publication = None
+    if (isinstance(parent, str) and len(parent) == 64
+            and all(char in '0123456789abcdef' for char in parent)):
+        publication = {'schema': 'natlang.native-checkpoint-publication/1',
+                       'parent_checkpoint_sha256': parent,
+                       'full_optimizer_rng_validated': True}
+    elif publication_only:
+        raise ValueError('publication controls require the actual saved parent continuation')
     if not training.get('source_receipts'):
         raise ValueError('checkpoint control source has no saved source receipts')
     step = validated_state.get('step')
@@ -173,6 +218,7 @@ def write_checkpoint_control(checkpoint, out, *, validated_state, decoded_source
              'resumable_source': {'schema': training['schema'], 'global_step': step,
                  'optimizer_present': True, 'rng_present': True, 'source_receipts_present': True},
              'training_authority': 'full-source-only', 'actor_view': actor_view,
+             'publication_only': publication_only, 'publication': publication,
              'dependencies': dependencies,
              'dependency_context': {'namespace': str(Path(namespace).absolute()),
                                     'readonly_input_roots': sorted(readonly_input_roots)},
@@ -187,9 +233,86 @@ def write_checkpoint_control(checkpoint, out, *, validated_state, decoded_source
     path = out/(hashlib.sha256(content).hexdigest()+'.json')
     _durable_immutable(path, content)
     reference = _file_binding(path)
-    read_checkpoint_control(source_path, reference, dependency_producer=dependency_module.__file__)
+    read_checkpoint_control(source_path, reference, dependency_producer=dependency_module.__file__,
+                            require_actor_view=not publication_only)
     pointer = (json.dumps(reference, sort_keys=True, indent=2)+'\n').encode()
-    _durable_immutable(out/'control-current.json', pointer)
+    _durable_immutable(out/('publication-current.json' if publication_only else 'control-current.json'), pointer)
+    return reference
+
+
+def publication_selection(*, namespace='/work/native-production', readonly_input_roots=()):
+    """Seal the actual optional metadata producers before starting a learner."""
+    from scripts.coreweave import provider_dependencies
+    return {'schema': 'natlang.native-checkpoint-publication-selection/1',
+            'producer': _file_binding(__file__),
+            'dependency_producer': _file_binding(provider_dependencies.__file__),
+            'namespace': str(Path(namespace).absolute()),
+            'readonly_input_roots': sorted(str(Path(root).absolute()) for root in readonly_input_roots)}
+
+
+def validate_publication_selection(selection):
+    if (not isinstance(selection, dict)
+            or set(selection) != {'schema','producer','dependency_producer','namespace','readonly_input_roots'}
+            or selection['schema'] != 'natlang.native-checkpoint-publication-selection/1'
+            or not isinstance(selection['namespace'],str)
+            or not isinstance(selection['readonly_input_roots'],list)
+            or not all(isinstance(root,str) for root in selection['readonly_input_roots'])):
+        raise ValueError('checkpoint publication needs an exact sealed producer selection')
+    for root in [selection['namespace'], *selection['readonly_input_roots']]:
+        if not Path(root).is_absolute() or '..' in Path(root).parts:
+            raise ValueError('checkpoint publication context must use absolute declared roots')
+    checked_file(selection['producer']);checked_file(selection['dependency_producer'])
+    return selection
+
+
+
+def publication_trainer_parameters(selection):
+    """Derive the shared trainer invocation from its sealed producer selection."""
+    selection=validate_publication_selection(selection)
+    return dict(checkpoint_publication=True,
+        checkpoint_publication_namespace=selection['namespace'],
+        checkpoint_publication_readonly_input_roots=json.dumps(selection['readonly_input_roots']))
+
+def saved_publication_hook(*, namespace='/work/native-production', readonly_input_roots=()):
+    """Derive optional controls synchronously from the actual just-saved object."""
+    from scripts.coreweave import provider_dependencies
+    from ..common.jsonio import write_json_durable
+    selected=publication_selection(namespace=namespace,readonly_input_roots=readonly_input_roots)
+    def publish(checkpoint,state,event):
+        status=Path(checkpoint).parent/'checkpoint-publication-status.json'
+        try:
+            validate_publication_selection(selected)
+            ref=write_checkpoint_control(checkpoint,Path(checkpoint).parent/'checkpoint-controls',
+                validated_state=state,decoded_source_stat=source_stat(checkpoint),publication_only=True,
+                dependency_collector=provider_dependencies.dependency_closure,
+                namespace=namespace,readonly_input_roots=readonly_input_roots)
+            if ref is None:raise ValueError('checkpoint publication needs a full single-model native state')
+            value={'passed':True,'control':ref,'checkpoint':_file_binding(checkpoint)}
+        except Exception as error:
+            # No pointer is selected merely because derivation was requested.
+            # The full checkpoint stays authoritative; an invalid existing
+            # pointer still fails when the bridge explicitly selects it.
+            value={'passed':False,'error_type':type(error).__name__,'full_checkpoint_preserved':True}
+        event['checkpoint_publication']=value
+        try:write_json_durable(status,value)
+        except OSError as error:event['checkpoint_publication_status_error']=type(error).__name__
+    return publish
+
+
+def result_checkpoint_publication(config, checkpoint):
+    """Select only the explicitly authorized derivative inside learner output."""
+    selection=config.get('native_checkpoint_publication')
+    if selection is None:return None
+    validate_publication_selection(selection)
+    source=_file_binding(checkpoint['path'])
+    if any(source[key]!=checkpoint[key] for key in('sha256','bytes')):
+        raise ValueError('checkpoint publication selection changed its exact result source')
+    directory=Path(checkpoint['path']).absolute().parent/'checkpoint-controls'/source['sha256']
+    pointer=directory/'publication-current.json'
+    if not pointer.exists():return None
+    reference=json.loads(pointer.read_text())
+    if not checked_file(reference).is_relative_to(directory.resolve()):
+        raise ValueError('checkpoint publication pointer escaped its exact source directory')
     return reference
 
 

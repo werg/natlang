@@ -67,7 +67,7 @@ def publish_best(slot: Path, best: Path, receipt: dict | None = None, *, prune=F
 class CheckpointPolicy:
     def __init__(self, out_dir, *, every_steps: int = 0, every_seconds: float = 0, name: str = "checkpoint.pt",
                  best_name: str = "best-checkpoint.pt", final_name: str = "final-weights.pt",
-                 free_factor: float = 1.2, prune_best: bool = True):
+                 free_factor: float = 1.2, prune_best: bool = True, on_saved=None):
         self.out = Path(out_dir)
         self.out.mkdir(parents=True, exist_ok=True)
         self.cadence = Cadence(every_steps)
@@ -83,6 +83,7 @@ class CheckpointPolicy:
         self.free_factor = free_factor
         # Bests are selection/export copies (direct, QAT conversion): weights-only once offloaded (owner 2026-10-13).
         self.prune_best = prune_best
+        self.on_saved = on_saved
         self.best_metric: float | None = None
         self.events: list[dict] = []
         meta = self.out / "checkpoint-policy.json"
@@ -132,6 +133,8 @@ class CheckpointPolicy:
         ``metric`` (the evaluation of this write's step point) better than every earlier write's, the same file is
         also published as the best (``publish_best``); a stop write passes no metric."""
         event = self._write(state, self.slot)
+        if self.on_saved is not None:
+            self.on_saved(self.slot, state, event)
         self.last_saved_monotonic = time.monotonic()
         better = metric is not None and (self.best_metric is None or (
             metric > self.best_metric if higher_is_better else metric < self.best_metric))

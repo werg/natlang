@@ -11,7 +11,7 @@ import torch
 from natlang_neuralese.model.native_bundle import write_actor_view
 from natlang_neuralese.model.native_checkpoint_control import (
     _file_binding, source_stat, read_checkpoint_control, write_checkpoint_control,
-    resolve_checkpoint_controls)
+    resolve_checkpoint_controls, verify_checkpoint_publication)
 from natlang_neuralese.rl.native_raw_policy import prepare_raw_policy
 from natlang_neuralese.train.checkpoint_policy import CheckpointPolicy
 from natlang_neuralese.train.native_continuation import TRAINING_SCHEMA
@@ -64,6 +64,65 @@ def publish(parent, root):
     return write_checkpoint_control(path, root, validated_state=state,
         decoded_source_stat=source_stat(path), actor_view=view,
         dependency_collector=DEPENDENCIES.dependency_closure, **options)
+
+
+def publication_parent(parent):
+    path, state, _, options = parent
+    previous = _file_binding(path)
+    state = copy.deepcopy(state)
+    state['training']['options'] = {'continuation': {'checkpoint_sha256': previous['sha256']}}
+    state['step'] += 1
+    state['training']['global_step'] += 1
+    torch.save(state, path)
+    # This is the same object actually serialized, as in a synchronous save.
+    return path, state, previous, options
+
+
+def test_publication_from_actual_saved_object_needs_no_actor_copy_or_decode(parent, tmp_path, monkeypatch):
+    path, state, previous, options = publication_parent(parent)
+    def no_decode(*args, **kwargs):
+        raise AssertionError('publication must not deserialize the full checkpoint')
+    monkeypatch.setattr(CheckpointPolicy, 'load', no_decode)
+    ref = write_checkpoint_control(path, tmp_path/'publication', validated_state=state,
+        decoded_source_stat=source_stat(path), publication_only=True,
+        dependency_collector=DEPENDENCIES.dependency_closure, **options)
+    value = read_checkpoint_control(path, ref, require_actor_view=False)
+    assert value['actor_view'] is None
+    actual = verify_checkpoint_publication(path, ref, previous,
+        producer=value['producer'], dependency_producer=value['dependency_producer'], **options)
+    assert actual['checkpoint'] == _file_binding(path)
+    assert actual['step'] == 72 and actual['training_resume'] is False
+    assert not list((tmp_path/'publication').rglob('*.pt'))
+    with pytest.raises(ValueError, match='actor view'):
+        read_checkpoint_control(path, ref)
+    with pytest.raises(ValueError, match='actor view'):
+        prepare_raw_policy(path, base=state['model_config']['base'],
+            tokenizer_out=tmp_path/'invalid-actor', checkpoint_control=ref)
+
+
+@pytest.mark.parametrize('change', ['parent', 'producer', 'dependency_producer', 'namespace', 'readonly_input_roots'])
+def test_publication_rejects_rebound_authority(parent, tmp_path, change):
+    path, state, previous, options = publication_parent(parent)
+    ref = write_checkpoint_control(path, tmp_path/'publication', validated_state=state,
+        decoded_source_stat=source_stat(path), publication_only=True,
+        dependency_collector=DEPENDENCIES.dependency_closure, **options)
+    value = read_checkpoint_control(path, ref, require_actor_view=False)
+    args = dict(producer=value['producer'], dependency_producer=value['dependency_producer'], **options)
+    if change == 'parent': previous = {**previous, 'sha256': '0'*64}
+    elif change in ('producer', 'dependency_producer'):
+        args[change] = {**args[change], 'sha256': '0'*64}
+    elif change == 'namespace': args[change] = str(tmp_path/'another-owner')
+    else: args[change] = []
+    with pytest.raises(ValueError, match='sealed producer/context/parent'):
+        verify_checkpoint_publication(path, ref, previous, **args)
+
+
+def test_publication_requires_real_saved_continuation(parent, tmp_path):
+    path, state, _, options = parent
+    with pytest.raises(ValueError, match='saved parent continuation'):
+        write_checkpoint_control(path, tmp_path/'publication', validated_state=state,
+            decoded_source_stat=source_stat(path), publication_only=True,
+            dependency_collector=DEPENDENCIES.dependency_closure, **options)
 
 
 def test_actual_both_ports_prepare_without_full_decode_and_preserve_exact_closure(parent, tmp_path, monkeypatch):
@@ -352,3 +411,145 @@ def test_exporter_retains_pre_view_pin_witness_instead_of_resynthesizing_it(pare
             exec(compile(code, '<mutated-before-hook>', 'exec'), scope)
     finally: scope['remote_lock'].close()
     assert not (tmp_path/'controls').exists()
+
+
+def bridge_publication_fixture(parent, tmp_path, monkeypatch, *, fail_derivative=False, wrong_producer=False):
+    from natlang_neuralese.common.jsonio import write_json_durable
+    from natlang_neuralese.model import native_checkpoint_control as controls
+    from natlang_neuralese.rl import native_bridge as bridge, production
+    path,state,_,options=parent
+    out=tmp_path/'round';policy=CheckpointPolicy(out/'learner',prune_best=False,
+        on_saved=controls.saved_publication_hook(**options))
+    selected=controls.publication_selection(**options)
+    if wrong_producer:selected['producer']=selected['dependency_producer']
+    config=tmp_path/'round-config.json'
+    write_json_durable(config,dict(native_state=True,checkpoint=str(path),out=str(out),
+        native_checkpoint_publication=selected))
+    request=bridge.write_request(tmp_path/'requests',kind='round',out=out,config=config)
+    next_state=copy.deepcopy(state);next_state['step']+=1;next_state['training']['global_step']+=1
+    next_state['training']['options']={'continuation':{'checkpoint_sha256':bridge.binding(path)['sha256']}}
+    if fail_derivative:
+        def fail(*args,**kwargs):raise RuntimeError('assigned derivative failure')
+        monkeypatch.setattr(controls,'write_checkpoint_control',fail)
+    def learner(*args,**kwargs):
+        policy.save(next_state)
+        result=dict(checkpoint=str(policy.slot),phase='collect')
+        write_json_durable(out/'state.json',result)
+        return result
+    monkeypatch.setattr(production,'run',learner)
+    result_path=tmp_path/'round-result.json'
+    result=bridge.execute(request,result_path)
+    assert result['status']=='completed',result
+    return request,result_path,result,next_state,policy
+
+
+def test_actual_save_bridge_and_controller_publication_never_decodes_or_copies_actor(parent,tmp_path,monkeypatch):
+    from natlang_neuralese.rl import native_bridge as bridge
+    original=CheckpointPolicy.load
+    monkeypatch.setattr(CheckpointPolicy,'load',lambda *a,**kw:pytest.fail('full checkpoint decode on publication path'))
+    request,result_path,result,expected,policy=bridge_publication_fixture(parent,tmp_path,monkeypatch)
+    assert result.get('checkpoint_publication')
+    assert policy.events[-1]['checkpoint_publication']['passed']
+    assert bridge.verify_result(request,result_path)==result
+    assert not list(policy.out.rglob('actor-view.json'))
+    assert not list(policy.out.rglob('control-current.json'))  # actor selector never replaced
+    assert list(policy.out.rglob('publication-current.json'))
+    # A recovery caller requesting real optimizer/RNG receives the actual full
+    # state, even though normal metadata publication is already authenticated.
+    monkeypatch.setattr(CheckpointPolicy,'load',original)
+    actual,(reference,saved)=bridge.verify_result(request,result_path,return_raw_checkpoint=True)
+    assert actual==result and reference==result['checkpoint']
+    assert saved['training']['optimizer']['state']['actual_moment'].equal(expected['training']['optimizer']['state']['actual_moment'])
+    assert torch.equal(saved['training']['rng']['torch_rng'],expected['training']['rng']['torch_rng'])
+    assert saved['training']['rng']['python_rng']==expected['training']['rng']['python_rng']
+    assert saved['training']['rng']['cuda_rng']==expected['training']['rng']['cuda_rng']
+    assert saved['training']['sft_progress']==expected['training']['sft_progress']
+
+
+def test_optional_save_derivative_failure_preserves_full_fallback_and_optimizer(parent,tmp_path,monkeypatch):
+    from natlang_neuralese.rl import native_bridge as bridge
+    request,result_path,result,expected,policy=bridge_publication_fixture(parent,tmp_path,monkeypatch,fail_derivative=True)
+    assert not result.get('checkpoint_publication')
+    assert policy.events[-1]['checkpoint_publication']==dict(passed=False,error_type='RuntimeError',full_checkpoint_preserved=True)
+    _,(_,actual)=bridge.verify_result(request,result_path,return_raw_checkpoint=True)
+    assert actual['training']['optimizer']['state']['actual_moment'].equal(expected['training']['optimizer']['state']['actual_moment'])
+
+
+def test_actual_bridge_rejects_producer_only_authorized_by_result(parent,tmp_path,monkeypatch):
+    from natlang_neuralese.rl import native_bridge as bridge
+    request,result_path,result,_,_=bridge_publication_fixture(parent,tmp_path,monkeypatch,wrong_producer=True)
+    assert result.get('checkpoint_publication')
+    with pytest.raises(ValueError,match='sealed producer/context/parent'):
+        bridge.verify_result(request,result_path)
+
+
+def test_publication_selection_preserves_checkpoint_offload_alias(parent,tmp_path):
+    from natlang_neuralese.model import native_checkpoint_control as controls
+    path,state,previous,options=publication_parent(parent)
+    ref=write_checkpoint_control(path,path.parent/'checkpoint-controls',validated_state=state,
+        decoded_source_stat=source_stat(path),publication_only=True,
+        dependency_collector=DEPENDENCIES.dependency_closure,**options)
+    alias=path.parent/'offloaded-checkpoint.pt';alias.symlink_to(path)
+    selected=controls.result_checkpoint_publication(dict(native_checkpoint_publication=controls.publication_selection(**options)),
+        dict(path=str(alias),sha256=_file_binding(path)['sha256'],bytes=path.stat().st_size))
+    assert selected==ref
+
+
+@pytest.mark.parametrize('family',['lfm'])
+def test_real_trainer_cli_continuation_emits_publication_from_saved_state(tmp_path,family):
+    from test_native_serving_adapters import source
+    from natlang_neuralese.train import native_state_sft as trainer
+    from natlang_neuralese.model.native_model import load_native_model
+    from natlang_neuralese.rl.native_bridge import binding
+    base=tmp_path/'base';dtype=source(base,family)
+    _,_,_,config=load_native_model(base,device='cpu',dtype=dtype,rank=4)
+    paths={}
+    for split in('train','test'):
+        path=tmp_path/(split+'.jsonl')
+        dump={'schema':'natlang.neuralese-native-graph/1','id':split,'split':split,
+              'source_groups':[split],'tokenizer_fingerprint':config['tokenizer_fingerprint'],
+              'nodes':[{'name':'answer','token_ids':[4,5,6],'target_weights':[0,1,1]}]}
+        path.write_text(json.dumps(dump)+'\n');paths[split]=path
+    args=['--base',str(base),'--device','cpu','--dtype',str(dtype).removeprefix('torch.'),
+          '--rank','4','--native-graphs',str(paths['train']),'--held-native-graphs',str(paths['test']),
+          '--eval-every','100','--epochs','1']
+    seed=tmp_path/'seed';assert trainer.main([*args,'--out',str(seed)])==0
+    previous=binding(seed/'checkpoint.pt');out=tmp_path/'continued'
+    args[args.index('--epochs')+1]='2'
+    assert trainer.main([*args,'--continue-from',str(seed/'checkpoint.pt'),'--out',str(out),
+        '--checkpoint-publication','--checkpoint-publication-namespace',str(tmp_path),
+        '--checkpoint-publication-readonly-input-roots',json.dumps([str(ROOT)])])==0
+    status=json.loads((out/'checkpoint-publication-status.json').read_text());assert status['passed'],status
+    value=read_checkpoint_control(out/'checkpoint.pt',status['control'],require_actor_view=False)
+    assert value['publication']['parent_checkpoint_sha256']==previous['sha256']
+    saved=CheckpointPolicy.load(out/'checkpoint.pt')
+    assert saved['training']['exposure_counts']=={'train':2}and saved['training']['optimizer']
+    assert saved['step']==2 and value['step']==2
+
+
+def test_provider_publication_survives_actual_recipe_continuation_and_both_argv(tmp_path):
+    from natlang_neuralese.rl.native_rounds import configure_provider
+    from natlang_neuralese.rl.native_supervised import continuation_config
+    from natlang_neuralese.train.recipe import stage_parameter_args
+    from natlang_neuralese.model.native_checkpoint_control import publication_selection
+    from natlang_neuralese.common.hashing import sha256_file_hex
+    train=tmp_path/'train.jsonl';train.write_text('{}\n')
+    held=tmp_path/'held.jsonl';held.write_text('{}\n')
+    stage={'id':'full','kind':'native_state_sft','requires':[],
+        'inputs':{'native_graphs':'train','held_native_graphs':'held'},'parameters':{'epochs':2}}
+    recipe=tmp_path/'recipe.json'
+    recipe.write_text(json.dumps({'schema':'natlang.neuralese-training-recipe/1','id':'publication-fixture',
+        'input_bindings':{'train':{'path':str(train),'sha256':sha256_file_hex(train)},
+                          'held':{'path':str(held),'sha256':sha256_file_hex(held)}},'stages':[stage]}))
+    selection=publication_selection(namespace=str(tmp_path),readonly_input_roots=[str(ROOT)])
+    config={'production_recipe':str(recipe),'seed_command':['python','-m','natlang_neuralese.train.native_state_sft'],'trainer_parameters':{'learning_rate':0.001}}
+    configure_provider(config,{'native_checkpoint_publication':selection},{},{},tmp_path/'config.json',write=False)
+    assert 'seed_trainer_parameters' not in config
+    assert config['trainer_parameters']['learning_rate']==0.001
+    continued,_=continuation_config(config,stage,checkpoint='actual-parent.pt',adapter=None,out=tmp_path/'continued')
+    for key in ('trainer_parameters','seed_trainer_parameters'):
+        argv=stage_parameter_args(continued.get(key,continued['trainer_parameters']))
+        assert '--checkpoint-publication' in argv
+        assert argv[argv.index('--checkpoint-publication-namespace')+1]==str(tmp_path)
+        assert json.loads(argv[argv.index('--checkpoint-publication-readonly-input-roots')+1])==[str(ROOT)]
+    assert continued['native_checkpoint_publication']==selection

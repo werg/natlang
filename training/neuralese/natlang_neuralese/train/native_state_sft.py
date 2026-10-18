@@ -778,6 +778,9 @@ def build_parser():
     parser.add_argument('--held-eval-graphs', type=int, default=0)
     parser.add_argument('--checkpoint-every', type=int, default=0)
     parser.add_argument('--checkpoint-seconds', type=float, default=3600.)
+    parser.add_argument('--checkpoint-publication', action='store_true')
+    parser.add_argument('--checkpoint-publication-namespace', default='/work/native-production')
+    parser.add_argument('--checkpoint-publication-readonly-input-roots', default='[]')
     parser.add_argument('--checkpoint-input-offload', action=argparse.BooleanOptionalAction, default=None,
         help='store nonreentrant layer-checkpoint inputs on host RAM or explicit file storage; omission inherits the saved mode')
     parser.add_argument('--checkpoint-input-offload-directory', default=None,
@@ -857,6 +860,13 @@ def main(argv=None):
     random.seed(args.seed)
     policy = CheckpointPolicy(args.out, every_steps=args.checkpoint_every,
                               every_seconds=args.checkpoint_seconds, prune_best=False)
+    if args.checkpoint_publication:
+        from ..model.native_checkpoint_control import saved_publication_hook
+        roots=json.loads(args.checkpoint_publication_readonly_input_roots)
+        if not isinstance(roots,list) or not all(isinstance(root,str) for root in roots):
+            raise ValueError('checkpoint publication readonly roots must be a JSON string list')
+        policy.on_saved=saved_publication_hook(namespace=args.checkpoint_publication_namespace,
+                                               readonly_input_roots=roots)
     policy.install_signal_handlers()
     resume = None
     parent_continuation = False

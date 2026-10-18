@@ -150,7 +150,7 @@ def verify_result_inventory(request_path, result_path):
                 or any(c not in '0123456789abcdef'for c in item['sha256'])):
             raise ValueError('native bridge artifact inventory binding is invalid')
         paths.add(path)
-    for key in ('state', 'checkpoint', 'deployment'):
+    for key in ('state', 'checkpoint', 'deployment', 'checkpoint_publication'):
         if result.get(key) and Path(result[key]['path']).absolute() not in paths:
             raise ValueError('native bridge declared result is absent from fetched artifact inventory: ' + key)
     return request,result
@@ -163,8 +163,22 @@ def verify_result(request_path, result_path, *, return_raw_checkpoint=False):
         path=_bound(item)
         if path.stat().st_size!=item['bytes']:
             raise ValueError('native bridge artifact size changed')
-    for key in ('state','checkpoint','deployment'):
+    for key in ('state','checkpoint','deployment','checkpoint_publication'):
         if result.get(key):_bound(result[key])
+    publication=result.get('checkpoint_publication')
+    if publication:
+        if (request['kind']!='round' or request.get('native_actor_mode')!='raw-state'
+                or not result.get('checkpoint')):
+            raise ValueError('checkpoint publication requires its actual raw learner result')
+        config=json.loads(_bound(request['config']).read_text())
+        from ..model.native_checkpoint_control import validate_publication_selection,verify_checkpoint_publication
+        selected=validate_publication_selection(config.get('native_checkpoint_publication'))
+        verify_checkpoint_publication(_bound(result['checkpoint']),publication,request['parent_checkpoint'],
+            producer=selected['producer'],dependency_producer=selected['dependency_producer'],
+            namespace=selected['namespace'],readonly_input_roots=selected['readonly_input_roots'])
+    def raw_checkpoint():
+        if publication and not return_raw_checkpoint:return None
+        return verify_raw_checkpoint(result['checkpoint'],request['parent_checkpoint'])
     if request['kind'] == 'round' and result.get('state'):
         state = json.loads(_bound(result['state']).read_text())
         advanced=sha256_file_hex_cached(state['checkpoint']) != request['parent_checkpoint']['sha256']
@@ -173,7 +187,7 @@ def verify_result(request_path, result_path, *, return_raw_checkpoint=False):
             if (not raw or not result.get('checkpoint')
                     or sha256_file_hex_cached(state['checkpoint'])!=result['checkpoint']['sha256']):
                 raise ValueError('native bridge round state substituted its parent policy')
-            verified_raw=verify_raw_checkpoint(result['checkpoint'],request['parent_checkpoint'])
+            verified_raw=raw_checkpoint()
         if state.get('pending_native_checkpoint'):
             if (not result.get('checkpoint') or sha256_file_hex_cached(state['pending_native_checkpoint'])
                     != result['checkpoint']['sha256']):
@@ -184,7 +198,7 @@ def verify_result(request_path, result_path, *, return_raw_checkpoint=False):
                 or state['checkpoint'])
             if sha256_file_hex_cached(selected)!=result['checkpoint']['sha256']:
                 raise ValueError('raw bridge result lost its actual current/pending learner checkpoint')
-            if not advanced:verified_raw=verify_raw_checkpoint(result['checkpoint'],request['parent_checkpoint'])
+            if not advanced:verified_raw=raw_checkpoint()
     if request['kind'] == 'refresh' and result.get('deployment'):
         deployment = json.loads(_bound(result['deployment']).read_text())
         if (deployment.get('schema') != 'natlang.native-rl-deployment/1'
@@ -254,6 +268,10 @@ def execute(request_path, result_path, *, stop=None):
                 if sha256_file_hex_cached(current)!=request['parent_checkpoint']['sha256']:
                     result['checkpoint']=binding(current)
             result['phase'] = state['phase']
+            if result.get('checkpoint') and request.get('native_actor_mode')=='raw-state':
+                from ..model.native_checkpoint_control import result_checkpoint_publication
+                publication=result_checkpoint_publication(config,result['checkpoint'])
+                if publication is not None:result['checkpoint_publication']=publication
         else:
             from .native_refresh import refresh
             updates = {name: _bound(value) for name, value in request['updates'].items()}

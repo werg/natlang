@@ -145,6 +145,13 @@ def configure_provider(config,declaration,plan,binding,config_path,*,write=True)
                 or '..' in Path(directory).parts or str(Path(directory).resolve()) != directory):
             raise ValueError('checkpoint control publication needs an explicit canonical directory')
         config['native_checkpoint_control_directory'] = directory
+    if 'native_checkpoint_publication' in declaration:
+        from ..model.native_checkpoint_control import validate_publication_selection,publication_trainer_parameters
+        selection=validate_publication_selection(declaration['native_checkpoint_publication'])
+        config['native_checkpoint_publication']=selection
+        for key in ('trainer_parameters','seed_trainer_parameters'):
+            if key=='trainer_parameters' or key in config:
+                config.setdefault(key,{}).update(publication_trainer_parameters(selection))
     if write:write_json_durable(config_path, config)
     return config
 
