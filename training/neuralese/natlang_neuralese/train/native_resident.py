@@ -632,6 +632,7 @@ def _source03_bridge_geometry_part(part, *, preparation, package):
                 or prior.get('forward_tokens') != old_coverage_matches[0].get('geometry', {}).get('forward_tokens')
                 or indexed.get('forward_tokens') != entry.get('forward_tokens')
                 or set(geometry or {}) != {'forward_tokens', 'kv_slots'}
+                or any(type(geometry[key]) is not int or geometry[key] <= 0 for key in geometry)
                 or geometry['forward_tokens'] != entry.get('forward_tokens')
                 or geometry['kv_slots'] != geometry['forward_tokens']
                 or any(geometry[key] > actual_limits[key] for key in geometry)):
