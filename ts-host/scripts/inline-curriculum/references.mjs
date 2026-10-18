@@ -27,6 +27,8 @@ import { defaultToolSurfaceHash, executeProgram, expectedProvenance, programRow,
   from '../../dist/teacher/collector.js';
 import { TOOLS_PROMPT } from '../../dist/native/prompt.js';
 import { FAMILIES, buildRecords } from './families.mjs';
+import { createTextNeuraleseEmulation } from '../../dist/model/text-neuralese-emulation.js';
+import { scriptedTextReferenceDriver } from './text-reference-driver.mjs';
 
 const EVALUATION_SEEDS = new Set([102, 900]);
 const SYNTHETIC_REASONING = 'action-notes/1';
@@ -47,6 +49,10 @@ export async function referenceRow(record, index, options) {
   const expected = { ...expectedProvenance(record, options), synthetic_reasoning: options.authoredActionPlans ? ACTION_PLAN_VERSION : SYNTHETIC_REASONING,
     ...(options.authoredActionPlans ? { reasoning_supervision: 'authored-action-plan' } : {}) };
   const reference = referenceDriver(record), trajectory = [];
+  // Explicit offline source qualification only; default reference behavior is unchanged.
+  const textEmulation = options.textNeuraleseEmulation === true ? createTextNeuraleseEmulation({ width: 8 }) : null;
+  const standardLibrary = textEmulation ? await textEmulation.standardLibraryReady : null;
+  const send = textEmulation ? textEmulation.wrap(scriptedTextReferenceDriver(reference)) : reference;
   const driver = async request => {
     const last = request.messages.at(-1);
     // Reference replay must actually expose complete evidence, including runtime cut-off pages.
@@ -55,7 +61,7 @@ export async function referenceRow(record, index, options) {
     const nextPage = options.followCutoffPages && (['read_file','read_page'].includes(previous) ||
       options.followEvalCutoffPages && previous === 'eval') && last?.role === 'tool' ?
       /<<(?:cut off: \d+ of \d+ characters not shown|page \d+ of \d+ shown|full value: \d+ pages); (?:transcript\.entry\(\d+\)\.output holds all of it; )?read_page\("([a-z]+\d*)", (\d+)\) shows the (?:next part|first page)>>/.exec(String(last.content)) : null;
-    const response = nextPage ? {calls:[['read_page',{id:nextPage[1],page:Number(nextPage[2])}]],reasoning:'I read the next page of that output.'} : await reference(request);
+    const response = nextPage ? {calls:[['read_page',{id:nextPage[1],page:Number(nextPage[2])}]],reasoning:'I read the next page of that output.'} : await send(request);
     if (options.authoredActionPlans) {
       response.execution_plan = actionPlan(response.calls ?? []);
       response.reasoning = response.execution_plan;
@@ -74,8 +80,10 @@ export async function referenceRow(record, index, options) {
     trajectory.push(turn);
     return response;
   };
+  if (textEmulation) driver.neuralese = true;
   const runId = programRunId(index, expected);
-  const run = await executeProgram(record, driver, { ...options, runId });
+  const run = await executeProgram(record, driver, { ...options, runId,
+    ...(textEmulation ? { neuralese: textEmulation.runtime, neuraleseService: standardLibrary } : {}) });
   return programRow(record, options.modelId, runId, expected, run, trajectory);
 }
 

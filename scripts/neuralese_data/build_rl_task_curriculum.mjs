@@ -24,21 +24,33 @@ export const specs=[
 
 export async function buildScaffolds(runtime=resolve(repo,'ts-host')) {
  const {definitionProject}=await import(pathToFileURL(resolve(runtime,'dist/teacher/program.js')).href);
+ const {validateCurriculum}=await import(pathToFileURL(resolve(runtime,'dist/teacher/curriculum.js')).href);
  return specs.map(spec=>{
   const id='rl-execution-curriculum-20261016:'+spec.name;
   const project=definitionProject('task',{returns:spec.returns,instructions:spec.instructions});
   const root=spec.root??'return '+JSON.stringify(spec.expected)+';';
-  return {version:'natlang.program/2',id,kind:'lambda_source',family:'rl-execution-'+spec.level,
+  const children=spec.name==='private-writer-return'?[{match:'Return exactly the text violet river.',value:'violet river'}]:
+   spec.name==='private-writer-reader'?[{match:'Return exactly the text silver maple.',value:'<|neuralese|>silver maple<|/neuralese|>'},
+    {match:'Read the input note and return an exact copy of its text.',value:'silver maple'}]:
+   spec.name==='private-two-inputs'?[{match:'Return exactly the text north.',value:'<|neuralese|>north<|/neuralese|>'},
+    {match:'Return exactly the text lamp.',value:'<|neuralese|>lamp<|/neuralese|>'},
+    {match:'Return the first input text followed by one space and the second input text.',value:'north lamp'}]:[];
+  const record={version:'natlang.program/2',id,kind:'lambda_source',family:'rl-execution-'+spec.level,
    source:'natlang-authored-rl-execution-curriculum',split:'train',source_ids:[id],source_groups:[id],
    license:'project-generated',gold_sources:['independent-constructed-input-oracle'],
    semantics:{root:project.root,files:project.files,inputs:{},expected:spec.expected,operation:'exact'},
    curriculum:{version:'natlang.inline_curriculum/1',family:'rl-execution-'+spec.level,
-    reference:{root:[['eval',{code:root}]]},
+    family_version:1,shape:spec.name,variant:'base',pair_group:null,split_group:id,
+    slice:spec.root?'nested_scoped':'inline_placement',domain:'other',mode:'single_call',inline:'optional',
+    evidence:{world:[],retrieved:[],background:[]},assumptions:[],decisive:[],
+    plausible_actions:[],minimum_sequence:[],
+    reference:{root:[['eval',{code:root}],['reply',{text:'done'}]],...(children.length?{children}:{})},
     rl:{level:spec.level,family:spec.name,qualification:'pending-live-48'},
     ...(spec.root?{trajectory_contract:{version:'natlang.trajectory_contract/1',authored_root_eval:true,
      authored_root_sha256:sha(root),min_child_invocations:0,min_state_edges_from_children:0,min_iteration_steps:0}}:{})},
    generation:{method:'static task construction; no sampled trajectory',model_facing_qualification:'pending-live-48',
     reward:'existing exact task outcome; no communication-edge or node-count condition'}};
+  validateCurriculum(record);return record;
  });
 }
 

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { scriptedTextReferenceDriver } from './text-reference-driver.mjs';
 /** Replay authored worlds through the collector and preserve native action sidecars for review only. */
 import { createHash, randomUUID } from 'node:crypto';
 import { link, mkdir, open, readFile, readdir, unlink } from 'node:fs/promises';
@@ -82,37 +83,7 @@ for (const [index, record] of rows.entries()) {
   const standardLibrary = await textEmulation.standardLibraryReady;
   const reference = referenceDriver(record); reference.neuralese = true;
   const trajectory = [];
-  const readTextFromRenderedOpening = request => {
-    const strings = [];
-    const visit = value => {
-      if (typeof value === 'string') strings.push(value);
-      else if (Array.isArray(value)) value.forEach(visit);
-      else if (value && typeof value === 'object') Object.values(value).forEach(visit);
-    };
-    visit(request.messages ?? []);
-    for (const rendered of strings) {
-      const markerStart = rendered.indexOf('[[Neuralese text block id=');
-      if (markerStart < 0) continue;
-      const bodyStart = rendered.indexOf('; exact JSON string body=', markerStart);
-      if (bodyStart < 0) continue;
-      if (!rendered.slice(markerStart, bodyStart).includes('type=Neuralese<string>')) continue;
-      const valueStart = bodyStart + '; exact JSON string body='.length;
-      for (let close = rendered.indexOf(']]', valueStart); close >= 0; close = rendered.indexOf(']]', close + 2)) {
-        try {
-          const body = JSON.parse(rendered.slice(valueStart, close));
-          if (typeof body === 'string') return body;
-        } catch { /* A body may itself contain the display delimiter; try the next terminator. */ }
-      }
-    }
-    throw new Error('scripted typed read has no parseable visible exact JSON string body');
-  };
-  const scriptedSend = async request => {
-    const messages = JSON.stringify(request.messages ?? []);
-    if (messages.includes('This is a typed Neuralese read call.'))
-      return { calls: [['return_result', { status: 'success', value: readTextFromRenderedOpening(request) }]] };
-    return reference(request);
-  };
-  const wrappedDriver = textEmulation.wrap(scriptedSend);
+  const wrappedDriver = textEmulation.wrap(scriptedTextReferenceDriver(reference));
   const driver = async request => {
     const response = await wrappedDriver(request);
     // The deterministic authored reference is the source of these model-call

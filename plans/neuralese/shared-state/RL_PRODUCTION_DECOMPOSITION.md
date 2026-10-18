@@ -83,3 +83,42 @@ second. It adds the actual current base paths and task evaluator to both.
 Without that input, the existing one-curriculum behavior is preserved. The
 existing raw-row qualification gate still defers untrained expanded pairs to
 the last qualified semantic cohort, retaining every pending obligation.
+
+
+## Complete static execution-task source metadata (2026-10-18)
+
+The task policy stays: teach exact typed returns and composition, then measure
+both root modes with the existing actor. Static construction is crisp source
+plumbing, not sampled reasoning or a new task selector. Preserve each task's
+files, instructions, inputs, expected result and authored root code.
+
+1. Build the ordinary ProgramRecord using the existing definitionProject service.
+2. Declare its actual shared Curriculum schema: a single-call, optional-technique
+   task with its existing family/shape/split group. All facts are already visible
+   in the task, so there are no hidden decisive observations or required edits.
+   Arrays are real empty declarations, not an admission fallback for bad records.
+3. Declare the three private scaffolds' exact scripted child reference values
+   from the independently constructed original constants and child instructions.
+   Those source-only oracle witnesses never become model targets or prompts.
+   Finish the already computed staged root value through the existing reference
+   `reply done` directive; the old one-eval script stopped before result commit.
+   Preserve the first eval code byte-for-byte and every expected answer.
+4. Call the existing validateCurriculum before emitting each record. Test real
+   referenceRow -> unchanged admitRow for every task, including all private
+   writer/reader paths; reject changed answers. The old abbreviated descriptors
+   threw before admission and are not successful source qualifications.
+5. Emit a new immutable source representation/metadata-repair witness against the
+   historical repaired12 packet, retaining old failed receipts and pending-live-48
+   status. Actual teacher48/root-mode and native student transport remain separate.
+
+No default fields are injected into the admission verifier, no original oracle
+is weakened, and no historical task packet or training exposure is rewritten.
+
+Offline reference execution explicitly opts into the existing text-Neuralese
+transport for private writer/reader source contracts. `referenceRow` and the
+existing authored-world proof share one scripted typed-read adapter. The adapter
+returns the exact JSON string in one visible typed opening, preserves escaped
+content, and rejects missing or ambiguous openings. It delegates ordinary calls
+to the existing source reference driver. The default reference path and executing
+model prompts are unchanged. This is text-emulation source qualification with
+zero sampled model calls, never evidence of native KV transport qualification.
