@@ -1380,9 +1380,16 @@ def _render_code_binding():
 def _resource_parent_code_binding(parent_renderer_sha256, job=None):
     if parent_renderer_sha256 != SEARCH_RESOURCE_ONLY_PARENT_RENDERER_SHA256:
         raise ValueError('renderer parent SHA lacks the exact reviewed resource-only continuation')
-    binding = _render_code_binding()
-    renderer_path = str(Path(__file__).resolve())
-    text_corpus_path = str(ROOT / 'training/neuralese/natlang_neuralese/data/text_corpus.py')
+    current = _render_code_binding()
+    # Historical receipts bind canonical checkout labels even when this
+    # continuation executes from a frozen worktree.
+    paths = ('scripts/neuralese_data/render_native_turn_corpus.py',
+             'training/neuralese/natlang_neuralese/data/text_corpus.py',
+             'scripts/neuralese_data/strip_generic_system_prompt.py',
+             'scripts/neuralese_data/conversion_output_lease.py')
+    binding = {str(_LEGACY_REPO / path): current[str(ROOT / path)] for path in paths}
+    renderer_path = str(_LEGACY_REPO / paths[0])
+    text_corpus_path = str(_LEGACY_REPO / paths[1])
     binding[renderer_path] = parent_renderer_sha256
     # The active Search done receipts were created before the KEEP profile
     # integration, with the exact default-profile text-corpus dependency from

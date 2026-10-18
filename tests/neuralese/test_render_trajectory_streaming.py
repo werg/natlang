@@ -549,7 +549,7 @@ def test_resource_only_renderer_parent_continues_exact_trajectory_receipts(tmp_p
     job = (str(selected), str(out), 'lfm25', {}, 'fixture', set(), set(), False,
            None, ('whole-trajectory',), False, set(), None, input_binding, None, parent_sha)
     parent_code = renderer._resource_parent_code_binding(parent_sha, job)
-    text_corpus_path = str(renderer.ROOT / 'training/neuralese/natlang_neuralese/data/text_corpus.py')
+    text_corpus_path = str(renderer._LEGACY_REPO / 'training/neuralese/natlang_neuralese/data/text_corpus.py')
     assert parent_code[text_corpus_path] == renderer.LEGACY_SEARCH_TEXT_CORPUS_DEFAULT_PROFILE_TRANSITION[
         'historical_sha256']
     explicit_inputs = dict(input_binding)
