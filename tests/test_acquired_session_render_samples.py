@@ -2,7 +2,9 @@
 import copy
 import pytest
 from test_acquired_session_admission import admitted
-from scripts.neuralese_data.qualify_acquired_session_samples import compare_views
+from scripts.neuralese_data.qualify_acquired_session_samples import (
+    compare_views, declared_history_profile,
+)
 
 
 def test_both_production_tokenizer_views_match_exact_and_reject_changed_tokens_or_weights(admitted):
@@ -32,3 +34,21 @@ def test_final_registry_proposal_transports_exact_sample_artifact_without_writin
     assert actual['build']['source_render_samples']['sha256']==sha256_file_hex(sample)
     audit.write_text('changed')
     with pytest.raises(ValueError,match='cohort proposal'):proposal_with_samples(audit,sample)
+
+
+def test_sample_qualifier_uses_only_a_single_authenticated_history_profile():
+    assert declared_history_profile([
+        {'explicit_history_reasoning_policy': 'keep'},
+        {'explicit_history_reasoning_policy': 'keep'},
+    ]) == 'keep'
+    assert declared_history_profile([
+        {'explicit_history_reasoning_policy': None},
+        {'explicit_history_reasoning_policy': None},
+    ]) is None
+    with pytest.raises(ValueError, match='mixes incompatible'):
+        declared_history_profile([
+            {'explicit_history_reasoning_policy': 'keep'},
+            {'explicit_history_reasoning_policy': None},
+        ])
+    with pytest.raises(ValueError, match='unsupported'):
+        declared_history_profile([{'explicit_history_reasoning_policy': 'guess'}])

@@ -67,6 +67,18 @@ def recorded_runtime(receipt, ordinal):
     return (receipt.get('runtime') or {}).get('numerical_runtime')
 
 
+def declared_history_profile(conversion_receipts):
+    """Return the one profile authenticated by every model conversion receipt."""
+    profiles = {receipt.get('explicit_history_reasoning_policy')
+                for receipt in conversion_receipts}
+    if len(profiles) != 1:
+        raise ValueError('source sample cohort mixes incompatible history-rendering profiles')
+    profile = next(iter(profiles))
+    if profile not in (None, 'keep', 'last_turn_only'):
+        raise ValueError('source sample cohort declares an unsupported history-rendering profile')
+    return profile
+
+
 def qualify(audit_path, models, out, *, torch_threads=None):
     audit_path = Path(audit_path); before = sha256_file_hex(audit_path)
     audit = json.loads(audit_path.read_text())
@@ -82,14 +94,19 @@ def qualify(audit_path, models, out, *, torch_threads=None):
     if set(selected) != set(models): raise ValueError('both models need actual admitted positive source samples')
     reports = []
     for model, base in models.items():
-        prepared = prepare_tokenizer(base)
+        model_conversions = [item for item in audit['conversions'] if item['model'] == model]
+        authenticated_receipts = [json.loads(bound(item['receipt']['path'], item['receipt']).read_text())
+                                  for item in model_conversions]
+        profile = declared_history_profile(authenticated_receipts)
+        prepared = prepare_tokenizer(base, history_reasoning_policy=profile)
         picks = {proof['normalized_session_sha256']: proof for proof in selected[model].values()}
         picked_original_files = {proof['original_source']['sha256'] for proof in picks.values()}
         observed = {key: [] for key in picks}; original = {}; receipts = []; numerical = {}
-        for conversion in audit['conversions']:
-            if conversion['model'] != model: continue
+        for conversion in model_conversions:
             receipt_path = bound(conversion['receipt']['path'], conversion['receipt'])
             receipt = json.loads(receipt_path.read_text())
+            if receipt.get('explicit_history_reasoning_policy') != profile:
+                raise ValueError('source sample conversion profile changed after authentication')
             if receipt['prepared_tokenizer'] != prepared.binding:
                 raise ValueError('source-backed sample uses a different actual tokenizer/rendering configuration')
             export_path = bound(receipt['export_receipt']['path'], receipt['export_receipt'])
@@ -115,22 +132,25 @@ def qualify(audit_path, models, out, *, torch_threads=None):
             with conversion_threads(numerical[digest],torch_threads) as reference_runtime:
                 expected = list(session_graphs(value, prepared.tokenizer,
                     source_fingerprint=prepared.source_fingerprint,
-                    expanded_fingerprint=prepared.expanded_fingerprint, split=proof['split']))
+                    expanded_fingerprint=prepared.expanded_fingerprint, split=proof['split'],
+                    explicit_history_reasoning_policy=profile))
             views = compare_views(expected, observed[digest])
             reports.append({'model': model, 'selection': [kind for kind, selected_proof in selected[model].items()
                 if selected_proof['normalized_session_sha256'] == digest],
                 'normalized_session_sha256': digest, 'original_source': value['source_file'],
                 'original_source_row': value['source_row'], 'source_outcome': value['trajectory']['outcome'],
-                'tokenizer': prepared.binding, 'bindings': [r for r in receipts if r['normalized_session_sha256'] == digest],
+                'tokenizer': prepared.binding,
+                'declared_history_reasoning_profile': profile or 'backbone-default',
+                'bindings': [r for r in receipts if r['normalized_session_sha256'] == digest],
                 'exact_entire_graph_equal': True, 'views': views,
                 'recorded_conversion_numerical_runtime': numerical[digest],
                 'reference_numerical_runtime': reference_runtime,
                 'explicit_reference_thread_override': torch_threads})
         prepared.validate(base)
     if sha256_file_hex(audit_path) != before: raise ValueError('cohort audit changed during source-backed samples')
-    result = {'schema': 'natlang.acquired-session-source-render-samples/1', 'passed': True,
+    result = {'schema': 'natlang.acquired-session-source-render-samples/2', 'passed': True,
         'cohort_audit': {'path': str(audit_path), 'sha256': before}, 'samples': reports,
-        'scope': 'first-positive and largest whole-session positive per model; exact full graph/view rerender; '
+        'scope': 'first-positive and largest whole-session positive per model; exact full graph/view rerender under each authenticated profile; '
                  'not a full-cohort rerender, task oracle, native execution or student exposure qualification',
         'verifier_sha256': sha256_file_hex(__file__)}
     write_json_durable(out, result)
