@@ -328,3 +328,81 @@ def test_new_raw_cohort_deficits_keep_previous_semantic_membership_without_losin
         models[name]['raw_communication_rows'].update({entry['id']:{'binding':entry['binding'],'qualified':True} for entry in index.entries})
     selected,pending=qualified_refresh_config(source,config,models)
     assert selected==proposed and pending==[]
+
+
+@pytest.mark.parametrize('objective_continuation', [False, True])
+def test_actual_resume_drops_setup_metadata_before_next_update(tmp_path, monkeypatch, objective_continuation):
+    import weakref
+    from test_native_model import tiny_source
+    from natlang_neuralese.model.native_model import load_native_model
+    from natlang_neuralese.train import native_state_sft as trainer
+
+    base=tmp_path/'base';tiny_source(base)
+    _,_,_,config=load_native_model(base,dtype=torch.float32,rank=4)
+    fp=config['tokenizer_fingerprint']
+    source=tmp_path/'train.jsonl';held=tmp_path/'held.jsonl'
+    source.write_text(''.join(json.dumps(dict(graph(name),tokenizer_fingerprint=fp))+'\n' for name in ('a','b')))
+    held.write_text(json.dumps(dict(graph('held'),split='test',tokenizer_fingerprint=fp))+'\n')
+    out=tmp_path/'first'
+    args=['--base',str(base),'--dtype','float32','--rank','4','--device','cpu',
+        '--native-graphs',str(source),'--held-native-graphs',str(held),'--epochs','1',
+        '--stage-id','full','--eval-every','1','--out',str(out),
+        '--refresh-at-checkpoint','--checkpoint-every','1',
+        '--forward-atol','1e-4','--gradient-atol','1e-5']
+    assert trainer.main(args)==0
+    first=torch.load(out/'checkpoint.pt',weights_only=False)
+    assert sum(first['training']['exposure_counts'].values())==1
+    references=[]
+
+    class TrackedDict(dict):
+        def __deepcopy__(self,memo):
+            result={};memo[id(self)]=result
+            result.update((copy.deepcopy(k,memo),copy.deepcopy(v,memo)) for k,v in self.items())
+            return result
+
+    class TrackedList(list):
+        def __deepcopy__(self,memo):
+            result=[];memo[id(self)]=result
+            result.extend(copy.deepcopy(v,memo) for v in self)
+            return result
+
+    def track(frame,label):
+        frame=TrackedDict(frame);references.append((label,weakref.ref(frame)))
+        for key in ('source_row_bindings','held_row_bindings','exposure_counts','options','source_row_order','source_receipts'):
+            value=frame.get(key)
+            if isinstance(value,(dict,list)):
+                value=(TrackedDict if isinstance(value,dict)else TrackedList)(value)
+                frame[key]=value;references.append((label+'.'+key,weakref.ref(value)))
+        return frame
+
+    load=trainer.load_native_checkpoint
+    def tracked_load(*positional,**keywords):
+        model,tokenizer,roles,config,state=load(*positional,**keywords)
+        state['training']=track(state['training'],'decoded')
+        state['training']['sft_progress']={key:track(value,'historical.'+key)
+            for key,value in state['training'].get('sft_progress',{}).items()}
+        return model,tokenizer,roles,config,state
+    monkeypatch.setattr(trainer,'load_native_checkpoint',tracked_load)
+    restore=trainer.restore_sft_progress
+    def tracked_restore(*positional,**keywords):
+        frame=restore(*positional,**keywords)
+        return track(frame,'restored') if frame is not None else None
+    monkeypatch.setattr(trainer,'restore_sft_progress',tracked_restore)
+    update=trainer.native_training_update;observations=[]
+    def checked_update(*positional,**keywords):
+        assert references
+        alive=[name for name,ref in references if ref()is not None]
+        assert not alive, 'setup-only checkpoint metadata retained: '+', '.join(alive)
+        observations.append(True)
+        return update(*positional,**keywords)
+    monkeypatch.setattr(trainer,'native_training_update',checked_update)
+    resumed=out
+    if objective_continuation:
+        resumed=tmp_path/'continued';args[args.index('--out')+1]=str(resumed)
+        args+=['--continue-from',str(out/'checkpoint.pt'),'--objective-continuation']
+    assert trainer.main(args)==0
+    assert observations==[True]
+    final=torch.load(resumed/'checkpoint.pt',weights_only=False)
+    assert final['training']['global_step']==2
+    assert final['training']['exposure_counts']=={'a':1,'b':1}
+    assert final['training']['rng'] and final['training']['optimizer']

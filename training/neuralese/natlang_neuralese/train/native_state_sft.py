@@ -871,6 +871,7 @@ def main(argv=None):
                                                readonly_input_roots=roots)
     policy.install_signal_handlers()
     resume = None
+    state = parent_state = None
     parent_continuation = False
     shared_resume = None
     if args.continue_from and not policy.slot.exists():
@@ -885,7 +886,7 @@ def main(argv=None):
             raise ValueError('native SFT continuation lacks exact optimizer/schedule/RNG state')
         parent_continuation = not policy.slot.exists()
         if parent_continuation:
-            del parent_state
+            parent_state = None
     elif policy.slot.exists():
         model, tokenizer, roles, config, state = load_native_checkpoint(policy.slot, base=args.base,
                                                                          device=args.device)
@@ -1323,10 +1324,9 @@ def main(argv=None):
                 _retain_current_held_coverage(metrics,saved_training,held)
         restore_training_rng_state(resume['rng'], args.device)
         resume['optimizer'] = None
-        if 'state' in locals():
-            del state
-        if 'parent_state' in locals():
-            del parent_state
+        # Avoid locals(): its cached frame dictionary retains every setup
+        # reference even after the corresponding fast local is cleared.
+        state = parent_state = None
     transition_check = qualify_precision_transition(model, tokenizer, roles, config,
         previous_precision=previous_precision,
         previous_attention_precision=previous_attention_precision,
@@ -1460,6 +1460,16 @@ def main(argv=None):
     def foundation_pending():
         return bool(foundation_template and foundation_template['graphs'] and not foundation_missing and
                     foundation_template['cohort_sha256'] not in prior_foundations)
+    # Setup used independent decoded/restored frames to validate and restore
+    # the continuation. Their maps can be gigabytes; Python locals otherwise
+    # retain them throughout training and during the next owned save snapshot.
+    # All live state now belongs to the sources, optimizer, RNG, counters,
+    # checkpoint_options and carried_progress. Drop references, never mutate
+    # the predecessor or weaken snapshot ownership to reclaim this memory.
+    saved_training = resume = shared_resume = continuation_training = restored_frame = None
+    source_resume = foundation_frame = old_frame = old_options = None
+    old_counts = old_quotas = prior_bindings = prior_order = prior_held = None
+    old_source = origins = None
     try:
         while not policy.signaled and not foundation_pending():
             if resident is not None:
