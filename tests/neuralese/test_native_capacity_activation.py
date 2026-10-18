@@ -398,3 +398,38 @@ def test_represented_and_over_frontier_exclusions_preserve_both_original_obligat
     from natlang_neuralese.train.native_pending_sources import load_pending_sources
     pending = load_pending_sources(part['pending_obligations']['path'], tokenizer_fingerprint='tokenizer-sha')
     assert len(pending['rows']) == 3
+
+
+def test_represented_walk_keeps_historical_nested_manifest_path_sha_contract(tmp_path, monkeypatch):
+    selected, part, package, descriptor_path = represented_fixture(tmp_path, monkeypatch)
+    descriptor = json.loads(descriptor_path.read_text())
+    child = tmp_path/'historical-child.json'
+    write(child, {'schema':'natlang.native-graph-sources/1',
+        'sources':[{'kind':'native-graphs', **descriptor['prior_train']}]})
+    parent = tmp_path/'historical-parent.json'
+    write(parent, {'schema':'natlang.native-graph-sources/1',
+        'sources':[{'kind':'native-graphs', **resident.binding(child), 'bytes':1}]})
+    context_path = Path(part['resident_current']['path']); context = json.loads(context_path.read_text())
+    context['payload']['train'] = resident.binding(parent)
+    context['generation'] = resident.digest(context['payload'])
+    write(context_path, context); part['resident_current'] = resident.binding(context_path)
+    descriptor.update(prior_train=context['payload']['train'], prior_generation=context['generation'])
+    write(descriptor_path, descriptor); part['represented_prefix'] = resident.binding(descriptor_path)
+    resident.prepare_whole_delta_geometry(selected, [part], tmp_path/'accepted.json', package=package)
+    assert json.loads(parent.read_text())['sources'][0]['bytes'] == 1
+    assert child.stat().st_size != 1
+
+
+@pytest.mark.parametrize('reference', ['source', 'cache', 'descriptor'])
+def test_new_represented_descriptor_references_still_enforce_declared_physical_bytes(tmp_path, monkeypatch, reference):
+    selected, part, package, descriptor_path = represented_fixture(tmp_path, monkeypatch)
+    descriptor = json.loads(descriptor_path.read_text())
+    if reference == 'descriptor':
+        part['represented_prefix']['bytes'] = descriptor_path.stat().st_size + 1
+    else:
+        ref = descriptor['indexes'][0]['source' if reference == 'source' else 'witness']
+        if reference == 'cache':ref = ref['cache']
+        ref['bytes'] = Path(ref['path']).stat().st_size + 1
+        write(descriptor_path, descriptor); part['represented_prefix'] = resident.binding(descriptor_path)
+    with pytest.raises(ValueError, match='reference size changed'):
+        resident.prepare_whole_delta_geometry(selected, [part], tmp_path/'bad.json', package=package)

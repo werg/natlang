@@ -37,7 +37,9 @@ def _represented_prefix(part, payload, context, original, *, package):
     leaves = set()
 
     def visit(ref, kind='native-graphs', model=None, parents=()):
-        path = checked(ref).resolve()
+        # Existing source manifests authenticate path/SHA; optional child
+        # metadata is not a physical-size assertion in that historical law.
+        path = bound({'path':ref['path'], 'sha256':ref['sha256']}).resolve()
         if path in parents:
             raise ValueError('represented prefix manifest cycle')
         if path.suffix == '.json' and kind == 'native-graphs':
