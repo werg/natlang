@@ -1000,6 +1000,23 @@ def prepare_whole_delta_geometry(source, parts, output, *, package):
         provenance.extend(bridge_provenance)
     ordinary_parts = parts[len(bridge_parts):] if bridge_parts else parts
     for part in ordinary_parts:
+        if part.get('schema') == 'natlang.native-capacity-activation-geometry-part/1':
+            from .native_capacity_activation import geometry_part
+            activated, activated_maxima, activated_provenance, count = geometry_part(
+                part, preparation=preparation, package=package)
+            if offset + count > len(source):
+                raise ValueError('capacity activation exceeds the complete delta source')
+            strip = lambda entry: {k:v for k,v in entry.items() if k!='training_priority'}
+            if ([strip(v) for v in source.entries[offset:offset+count]]
+                    != [strip(v) for v in activated.entries]):
+                raise ValueError('capacity activation is not the exact ordered delta segment')
+            for key, descriptor in activated_maxima.items():
+                descriptor = {**descriptor, 'index':descriptor['index'] + offset}
+                if key not in maxima or descriptor[key] > maxima[key][key]:
+                    maxima[key] = descriptor
+            offset += count
+            provenance.extend(activated_provenance)
+            continue
         if part.get('schema') == _SOURCE03_BRIDGE_PART:
             raise ValueError('source03 bridge may appear only once at the delta prefix')
         if part.get('schema') == _D31_REFERENCE_QA_PART:
