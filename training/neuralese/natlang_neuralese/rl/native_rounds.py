@@ -159,6 +159,11 @@ def bridge_result(command, request, stop):
               'out': payload['out'], 'native_participant': payload.get('native_participant', ''),
               '_run_control': RunControl(stop), '_bridge_stop_file': stop_file,
               '_bridge_request': binding(request)}
+    # Only this known queue client is followed immediately by our complete
+    # semantic verifier. Avoid decoding the same full checkpoint in both.
+    if (isinstance(command, list) and command[1:3] == ['-m', 'natlang_neuralese.rl.native_bridge']
+            and '--queue' in command and '--defer-checkpoint-verification' not in command):
+        command = [*command, '--defer-checkpoint-verification']
     run_command(command, values)
     if not result.is_file():
         raise RuntimeError('provider bridge returned without draining its exact remote worker/result')

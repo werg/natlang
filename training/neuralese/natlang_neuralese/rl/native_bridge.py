@@ -264,7 +264,8 @@ def queued_requests(queue):
     return result
 
 
-def enqueue(request_path, result_path, queue, stop_file, *, stop=None):
+def enqueue(request_path, result_path, queue, stop_file, *, stop=None,
+            defer_checkpoint_verification=False):
     """Local filesystem IPC; an external owner performs provider execution."""
     import time
     from ..train.loop import StopSignal
@@ -294,6 +295,10 @@ def enqueue(request_path, result_path, queue, stop_file, *, stop=None):
             # The SDK owner must forward exact-PID TERM and drain checkpoints;
             # exiting this client early would orphan that remote update.
             time.sleep(.2)
+        if defer_checkpoint_verification:
+            # Only the transport envelope is established here. The invoking
+            # controller must still perform its existing complete verifier.
+            return verify_result_inventory(request_path, result_path)[1]
         return verify_result(request_path, result_path)
     finally:
         if owned:
@@ -307,6 +312,8 @@ def main(argv=None):
     parser.add_argument('--queue', type=Path)
     parser.add_argument('--stop-file', type=Path)
     parser.add_argument('--list-queue', action='store_true')
+    parser.add_argument('--defer-checkpoint-verification', action='store_true',
+        help='Queue transport only; invoking controller must fully verify the returned result')
     args = parser.parse_args(argv)
     if args.list_queue:
         if not args.queue:
@@ -317,7 +324,11 @@ def main(argv=None):
         parser.error('--request and --result are required')
     if args.queue and not args.stop_file:
         parser.error('--queue requires --stop-file')
-    result = enqueue(args.request, args.result, args.queue, args.stop_file) if args.queue else execute(args.request, args.result)
+    if args.defer_checkpoint_verification and not args.queue:
+        parser.error('--defer-checkpoint-verification requires --queue and a verifying controller')
+    result = (enqueue(args.request, args.result, args.queue, args.stop_file,
+        defer_checkpoint_verification=args.defer_checkpoint_verification)
+        if args.queue else execute(args.request, args.result))
     return 1 if result['status'] == 'failed' else 0
 
 
