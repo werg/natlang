@@ -190,6 +190,24 @@ def test_shared_materializer_cache_is_bound_to_input_runtime_and_output(tmp_path
     (repo / 'ts-host/dist/teacher/native-materializer.js').write_text('new actual policy')
     _, updated = converter.teacher_decision_admissions(source, digest)
     assert len(calls) == 2 and updated['path'] != proof['path']
+    review = tmp_path / 'decision-review.json'
+    review.write_text('{"schema":"natlang.native-decision-review/1","approvals":[]}')
+    _, reviewed = converter.teacher_decision_admissions(source, digest, decision_review=review)
+    assert len(calls) == 3 and reviewed['path'] != updated['path']
+    assert calls[-1][-2:] == ['--decision-review', str(review)]
+    assert converter.teacher_decision_admissions(source, digest, decision_review=review)[1] == reviewed
+    assert len(calls) == 3
+    review.write_text('{"schema":"natlang.native-decision-review/1","approvals":[],"revision":2}')
+    _, changed_review = converter.teacher_decision_admissions(source, digest, decision_review=review)
+    assert len(calls) == 4 and changed_review['path'] != reviewed['path']
+    def mutate_review(argv, **kwargs):
+        result = execute(argv, **kwargs)
+        review.write_text('{"changed_during_execution":true}')
+        return result
+    monkeypatch.setattr(converter.subprocess, 'run', mutate_review)
+    review.write_text('{"revision":3}')
+    with pytest.raises(ValueError, match='review changed during admission'):
+        converter.teacher_decision_admissions(source, digest, decision_review=review)
 
 
 @pytest.mark.parametrize('scope', ['held', 'quality', 'pending'])

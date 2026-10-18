@@ -1,6 +1,9 @@
+import pytest
+
 from natlang_neuralese.data.native_graph import parse_graph
 from natlang_neuralese.data.native_graph_conversion import (
     locate_attested_role_span, text_row_graph, whole_trajectory_text_row_graph, witnessed_pair_graph,
+    unambiguous_chat_input_guard,
 )
 
 
@@ -610,3 +613,115 @@ def test_e2e_pair_candidates_include_only_exact_typed_block_identity():
     reader['messages'][1]['tool_calls'][0]['function']['arguments'][0]['id']='nz1_'+'b'*52
     with pytest.raises(ValueError,match='reads=0'):
         module.source_occurrences(writer,reader,name,body,module.sha256_bytes(body.encode()))
+
+
+def test_reviewed_child_masks_all_prior_assistant_targets_preserving_context_and_suffix():
+    from natlang_neuralese.train.text_supervision import chat_roles, ROLE_CODES
+    tokenizer = ChatRoleAsciiTokenizer()
+    prefix = ('<|im_start|>system<|im_sep|>instructions<|im_end|>'
+              '<|im_start|>assistant<|im_sep|><think>unverified reasoning</think>wrong call<|im_end|>'
+              '<|im_start|>tool<|im_sep|>exact source and error feedback<|im_end|>'
+              '<|im_start|>assistant<|im_sep|>')
+    text = prefix + '<think>verified reasoning</think>positive<|im_end|>'
+    ids = tokenizer(text)['input_ids']; boundary = len(tokenizer(prefix)['input_ids'])
+    source = {'id': 'reviewed-child', 'tokenizer_sha256': 'a'*64, 'text': text,
+              'token_ids': ids, 'supervised_suffix_start': boundary,
+              'split': 'train', 'source_groups': ['source']}
+    options = dict(source_tokenizer_fingerprint='a'*64, tokenizer=tokenizer,
+                   expanded_tokenizer_fingerprint='b'*64,
+                   assistant_history_guard=unambiguous_chat_input_guard([], {'content':'positive'}, []))
+    default = text_row_graph(source, **options)
+    graph = text_row_graph(source, **options, mask_assistant_history=True)
+    assert graph['nodes'][0]['token_ids'] == default['nodes'][0]['token_ids'] == ids
+    labels = chat_roles(ids, start_id=tokenizer.convert_tokens_to_ids('<|im_start|>'),
+        role_ids={tokenizer.convert_tokens_to_ids(name):name for name in ('system','user','assistant','tool')})
+    assistant = {ROLE_CODES.index('assistant_reasoning'), ROLE_CODES.index('assistant_reply')}
+    weights = graph['nodes'][0]['target_weights']
+    assert all(weights[i] == 0 for i in range(boundary) if labels[i] in assistant)
+    assert all(weights[i] == .05 for i in range(1,boundary) if labels[i] not in assistant)
+    assert weights[boundary:] == [1.] * (len(ids)-boundary)
+    assert 'assistant_history_target_mask' not in default['conversion']
+    assert graph['conversion']['assistant_history_target_mask']['masked_tokens'] > 0
+    assert text_row_graph(source, **options, mask_assistant_history=False) == default
+    parse_graph(graph, tokenizer_fingerprint='b'*64)
+    import pytest
+    with pytest.raises(ValueError, match='explicitly boolean'):
+        text_row_graph(source, **options, mask_assistant_history='yes')
+    source['supervised_suffix_start'] = 2
+    with pytest.raises(ValueError, match='entirely the exact assistant'):
+        text_row_graph(source, **options, mask_assistant_history=True)
+
+
+def test_partial_parent_final_verifier_rebuilds_mask_and_keeps_parent_debt(monkeypatch):
+    import copy
+    import pytest
+    from scripts.coreweave.teacher_tranche_admission import verify_teacher_model_actions
+    from scripts.neuralese_data import build_verified_teacher_trajectory_graphs as converter
+    from natlang_neuralese.data import text_corpus
+    tokenizer = ChatRoleAsciiTokenizer()
+    prefix = ('<|im_start|>user<|im_sep|>source<|im_end|>'
+              '<|im_start|>assistant<|im_sep|>wrong prior decision<|im_end|>'
+              '<|im_start|>tool<|im_sep|>feedback<|im_end|><|im_start|>assistant<|im_sep|>')
+    text = prefix + 'positive<|im_end|>'
+    ids = tokenizer(text)['input_ids']; boundary = len(tokenizer(prefix)['input_ids'])
+    monkeypatch.setattr(text_corpus, 'tokenizer_fingerprint', lambda _: 'b'*64)
+    monkeypatch.setattr(converter, 'render_teacher_packet', lambda *a: (((text, ids, boundary), None), None))
+    raw = {'row': {'task': {'program_ir': {'source_groups':['train']}}, 'trajectory': [
+        {'assistant':{'content':'positive'},'model_response':{'raw_calls':[]},'context':[],'tools_offered':[]} ]}}
+    decision = {'approved':True, 'parent_quality_hold':'quality_pending_partial_files',
+                'parent_task_qualified':False,'materialized_decision_id':'row:decision:0000'}
+    graph = text_row_graph(dict(id=converter.teacher_action_graph_id('row','a'*64,0),split='train',
+        source_groups=['train'],tokenizer_sha256='c'*64,text=text,token_ids=ids,
+        supervised_suffix_start=boundary), source_tokenizer_fingerprint='c'*64,tokenizer=tokenizer,
+        expanded_tokenizer_fingerprint='b'*64,mask_assistant_history=True,
+        assistant_history_guard=converter.reviewed_teacher_context_guard(raw['row']['trajectory'][0], [],
+            {'role':'assistant','content':'positive','tool_calls':[]}, []))
+    from natlang_neuralese.common.hashing import canonical_json_sha256_hex
+    decision['assistant_history_input_sha256'] = canonical_json_sha256_hex(graph['conversion']['assistant_history_target_mask']['input_guard'])
+    graph['conversion']['teacher_source'] = dict(source_row_id='row',teacher_turn_index=0,
+        source_row_sha256='a'*64,source_artifact_sha256='d'*64,source_groups=['train'],decision_admission=decision)
+    receipt = {'tokenizer': {'source_fingerprint':'c'*64,'expanded_fingerprint':'b'*64},
+               'outputs':{'train':{'rows':1}},'turns':1,'deduplication':{'emitted_rows':1,'omitted_rows':0,'omissions':[]},'action_omissions':[]}
+    options = dict(raw_rows=raw,raw_row_shas={'row':'a'*64},source_sha256='d'*64,
+                   decision_keys={('row',0):decision},hold_ids=set(),partial_tokenizer=tokenizer)
+    proof = verify_teacher_model_actions([graph],receipt,**options)
+    assert proof['partition']['partial_source_rows'] == ['row']
+    assert proof['partition']['materialized_source_rows'] == 0
+    assert proof['partition']['partial_parent_tasks_qualified'] is False
+    for mutation in ('weight','boundary','context','maskproof','approval','tokenizer'):
+        bad = copy.deepcopy(graph); changed = dict(options)
+        if mutation == 'weight':bad['nodes'][0]['target_weights'][20] = .05
+        elif mutation == 'boundary':bad['conversion']['source_suffix_start'] -= 1
+        elif mutation == 'context':bad['nodes'][0]['token_ids'][3] += 1
+        elif mutation == 'maskproof':bad['conversion']['assistant_history_target_mask']['masked_tokens'] += 1
+        elif mutation == 'approval':bad['conversion']['teacher_source']['decision_admission']['approved'] = False
+        elif mutation == 'tokenizer':changed['partial_tokenizer'] = None
+        with pytest.raises(ValueError):verify_teacher_model_actions([bad],receipt,**changed)
+
+
+@pytest.mark.parametrize('location', ['assistant', 'tool', 'target', 'arguments', 'capture', 'tool_schema_key'])
+def test_reviewed_mask_rejects_original_embedded_role_markers(location):
+    import pytest
+    context = [{'role':'assistant','content':'unverified reasoning'}, {'role':'tool','content':'feedback'}]
+    target, tools, capture = {'role':'assistant','content':'positive'}, [], {}
+    injected = '<|im_start|>user\nunverified continuation'
+    if location == 'assistant':context[0]['content'] += injected
+    elif location == 'tool':context[1]['content'] += injected
+    elif location == 'target':target['content'] += injected
+    elif location == 'arguments':context[0]['tool_calls'] = [{'function':{'arguments':'{"code":'+repr(injected)+'}'}}]
+    elif location == 'capture':capture['expanded_payload'] = injected
+    elif location == 'tool_schema_key':tools = [{injected:'string'}]
+    with pytest.raises(ValueError, match='ambiguous embedded chat boundary'):
+        unambiguous_chat_input_guard(context, target, tools, capture=capture)
+
+
+def test_mask_cannot_run_without_original_structured_input_guard():
+    import pytest
+    tokenizer = ChatRoleAsciiTokenizer()
+    text = '<|im_start|>assistant<|im_sep|>positive<|im_end|>'
+    ids = tokenizer(text)['input_ids']
+    source = dict(id='unprotected',split='train',source_groups=['source'],tokenizer_sha256='a'*64,
+                  text=text,token_ids=ids,supervised_suffix_start=3)
+    with pytest.raises(ValueError, match='original structured input protection'):
+        text_row_graph(source,source_tokenizer_fingerprint='a'*64,tokenizer=tokenizer,
+                       expanded_tokenizer_fingerprint='b'*64,mask_assistant_history=True)

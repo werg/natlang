@@ -11,10 +11,10 @@ import { canonical } from '../dist/adaptation/identity.js';
 import { hexDigest } from '../dist/native/hash.js';
 import { fileDigest, jsonlRows } from './jsonl-stream.mjs';
 
-const {values, positionals: positional} = parseArgs({allowPositionals:true, options:{replace:{type:'boolean'}, 'direct-answers':{type:'boolean'}, 'decision-review':{type:'string'}, 'source-quality-review':{type:'string'}}});
+const {values, positionals: positional} = parseArgs({allowPositionals:true, options:{replace:{type:'boolean'}, 'direct-answers':{type:'boolean'}, 'pending-decisions':{type:'boolean'}, 'decision-review':{type:'string'}, 'source-quality-review':{type:'string'}}});
 const [inputPath, outputPath] = positional;
 if (!inputPath || !outputPath || positional.length !== 2) {
-  console.error('usage: node scripts/materialize-native-teacher.mjs INPUT.jsonl OUTPUT.jsonl [--replace] [--direct-answers] [--decision-review FILE] [--source-quality-review FILE]');
+  console.error('usage: node scripts/materialize-native-teacher.mjs INPUT.jsonl OUTPUT.jsonl [--replace] [--direct-answers] [--decision-review FILE] [--pending-decisions] [--source-quality-review FILE]');
   process.exit(2);
 }
 const input = resolve(inputPath), output = resolve(outputPath);
@@ -128,7 +128,7 @@ const staged = `${output}.building-${process.pid}-${randomUUID()}`;
 const authoredOutput = `${output}.authored-actions.jsonl`;
 const stagedAuthored = `${authoredOutput}.building-${process.pid}-${randomUUID()}`;
 const handle = await open(staged, 'wx');
-let authoredHandle, accepted = 0, rejected = 0, turns = 0, approvedTurns = 0, replayedTurns = 0, authoredActions = 0;
+let authoredHandle, accepted = 0, rejected = 0, partial = 0, turns = 0, approvedTurns = 0, replayedTurns = 0, authoredActions = 0;
 try { for await (const row of jsonlRows(input)) {
   seen.add(row.id);
   if (verifiedQualityReview) {
@@ -146,8 +146,9 @@ try { for await (const row of jsonlRows(input)) {
     }
   }
   const result = materializeNativeRows([row], { directAnswers: values['direct-answers'], decisionHolds: review?.holds, decisionApprovals: review?.approvals,
+    ...(values['pending-decisions'] ? { failedRuns: true, pendingDecisionCandidates: true } : {}),
     sourceQualityClearance: verifiedQualityReview });
-  accepted += result.acceptedRows; rejected += result.rejectedRows;
+  accepted += result.acceptedRows; rejected += result.rejectedRows; partial += result.partialRows ?? 0;
   for (const missed of result.unlinked)
     console.error(`  ${missed.id}: not used, ${missed.outcomes} action outcomes could not be linked to their decisions`);
   for (const turn of result.turns) {
@@ -200,6 +201,6 @@ if (values.replace) {
   if (authoredHandle) await unlink(stagedAuthored);
 }
 console.log(JSON.stringify({ output, ...(authoredActions ? { authored_actions_output: authoredOutput } : {}),
-  accepted_rows: accepted, rejected_rows: rejected, training_decisions: turns,
+  accepted_rows: accepted, rejected_rows: rejected, ...(partial ? { partial_rows: partial } : {}), training_decisions: turns,
   eligible_decisions: approvedTurns, replayed_context_decisions: replayedTurns,
   authored_actions_held: authoredActions }));

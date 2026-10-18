@@ -1526,3 +1526,39 @@ test('materialization preserves same-call provider-expanded read provenance with
   assert.equal(materializeNativeRows([wrongEvalReturnBody]).turns[0].source_ref.provider_expanded_read_contexts
     .find(item => item.block.id === noteId), undefined, 'eval-return body must match the graph write digest');
 });
+
+for (const quality of ['quality_pending_partial_files', 'quality_pending_partial_agreement']) {
+  test(`exact reviewed child of ${quality} cannot release accepted-parent siblings`, () => {
+    const row = nativeRow('partial-parent-' + quality);
+    row.outcome.files_check = { score: quality.endsWith('files') ? .5 : 1, failed: quality.endsWith('files') ? ['wrong sibling'] : [] };
+    row.outcome.oracle = { level: quality.endsWith('agreement') ? 'agreement' : 'exact', score: .5, accepted: true };
+    row.trajectory[0].invocation_id = 'child'; row.trajectory[1].invocation_id = 'root';
+    row.outcome.action_ledger[0].call_id = 'child'; row.outcome.action_ledger[1].call_id = 'root';
+    row.outcome.invocation_ledger = [{ invocation_id: 'child', parent_invocation_id: 'root' }];
+    assert.equal(materializeNativeRows([row], { directAnswers: true }).turns.length, 0);
+    const discovery = materializeNativeRows([row], { directAnswers: true, failedRuns: true, pendingDecisionCandidates: true });
+    assert.equal(discovery.acceptedRows, 0); assert.equal(discovery.partialRows, 1);
+    assert.equal(discovery.turns.length, 2);
+    assert.ok(discovery.turns.every(turn => !turn.training_admission.approved && !turn.trace_admission.admitted));
+    const approval = { schema: 'natlang.native-decision-approval/1', trajectory_id: row.id,
+      source_row_sha256: nativeRowDigest(row), decision_index: 0,
+      target_sha256: nativeDecisionTargetDigest(discovery.turns[0].target), review_sha256: 'a'.repeat(64),
+      parent_quality_hold: quality, assistant_history_input_sha256: 'c'.repeat(64), reason: 'Independent exact child result proof.', evidence: ['source and provider/host result proof'] };
+    const result = materializeNativeRows([row], { directAnswers: true, decisionApprovals: [approval] });
+    assert.equal(result.acceptedRows, 0); assert.equal(result.partialRows, 1);
+    assert.equal(result.turns[0].outcome.accepted, true, 'immutable historical outcome is retained');
+    assert.equal(result.turns[0].source_ref.parent_task_qualified, false);
+    assert.equal(result.turns[0].source_ref.parent_quality_hold, quality);
+    assert.equal(result.turns[0].training_admission.approved, true);
+    assert.equal(result.turns[0].trace_admission.admitted, true);
+    assert.equal(result.turns[1].training_admission.approved, false);
+    assert.equal(result.turns[1].trace_admission.admitted, false);
+    const noScope = { ...approval }; delete noScope.parent_quality_hold;
+    assert.equal(materializeNativeRows([row], { decisionApprovals: [noScope], failedRuns: true }).turns.length, 0);
+    for (const mutation of [{ ...approval, parent_quality_hold: 'unknown' }, { ...approval, target_sha256: 'b'.repeat(64) },
+                            { ...approval, assistant_history_input_sha256: undefined }])
+      assert.throws(() => materializeNativeRows([row], { decisionApprovals: [mutation] }), /hold mismatch|target or evidence mismatch/);
+    const rootApproval = { ...approval, decision_index: 1, target_sha256: nativeDecisionTargetDigest(discovery.turns[1].target) };
+    assert.ok(materializeNativeRows([row], { decisionApprovals: [rootApproval] }).turns.every(turn => !turn.training_admission.approved));
+  });
+}

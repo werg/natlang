@@ -329,7 +329,8 @@ def preceding_tranches(root, spool, tranche):
     return admitted, rejected
 
 
-def materialization_partition(raw_rows, decision_keys, omissions, emitted_keys, deduplicated_keys=()):
+def materialization_partition(raw_rows, decision_keys, omissions, emitted_keys, deduplicated_keys=(),
+                              *, partial_parent_rows=()):
     """Conserve every original action when a materializer holds whole source rows.
 
     This grants no decision approval: the existing materializer, converter and
@@ -352,6 +353,9 @@ def materialization_partition(raw_rows, decision_keys, omissions, emitted_keys, 
     omitted = keys((row.get('source_row_id'), row.get('teacher_turn_index')) for row in omissions)
     accepted = {ident for ident, _ in decisions}
     held = set(raw_rows) - accepted
+    partial = set(partial_parent_rows)
+    if not partial <= accepted:
+        raise ValueError('partial parent evidence is absent from materialized source')
     if any((ident, index) not in decisions for ident in accepted
            for index in range(len(raw_rows[ident]['trajectory']))):
         raise ValueError('materializer partially lost an accepted source trajectory')
@@ -368,7 +372,10 @@ def materialization_partition(raw_rows, decision_keys, omissions, emitted_keys, 
                         'reason': missing_reason, 'decision': {'reason': missing_reason}}
             if _exact(omission) != _exact(expected):
                 raise ValueError('held source action lacks its exact materializer omission')
-    return {'source_rows': len(raw_rows), 'materialized_source_rows': len(accepted),
+    return {'source_rows': len(raw_rows), 'materialized_source_rows': len(accepted - partial),
+            **({'partial_source_rows': sorted(partial),
+                'partial_source_actions': sum(len(raw_rows[ident]['trajectory']) for ident in partial),
+                'partial_parent_tasks_qualified': False} if partial else {}),
             'repair_source_rows': sorted(held), 'repair_source_actions': len(held_keys),
             'source_actions': len(wanted), 'emitted_actions': len(emitted),
             'deduplicated_actions': len(deduplicated),
@@ -388,12 +395,24 @@ def teacher_conversion_profile(receipt):
 
 
 def verify_teacher_model_actions(graphs, receipt, *, raw_rows, raw_row_shas,
-                                 source_sha256, decision_keys, hold_ids):
+                                 source_sha256, decision_keys, hold_ids, partial_tokenizer=None):
     """Shared original-action verifier used by the operational final admission."""
     from scripts.neuralese_data.build_verified_teacher_trajectory_graphs import teacher_action_graph_id
     profile = teacher_conversion_profile(receipt)
     if set(raw_rows) != set(raw_row_shas):
         raise ValueError('teacher graph source SHA inventory differs from its source rows')
+    partial = {}
+    if isinstance(decision_keys, dict):
+        for key, decision in decision_keys.items():
+            if isinstance(decision, dict) and decision.get('parent_quality_hold') is not None:
+                hold = decision['parent_quality_hold']
+                if (hold not in ('quality_pending_partial_files', 'quality_pending_partial_agreement')
+                        or decision.get('parent_task_qualified') is not False
+                        or key[0] not in raw_rows):
+                    raise ValueError('invalid partial-parent decision authority')
+                previous = partial.setdefault(key[0], hold)
+                if previous != hold:
+                    raise ValueError('partial-parent authority has conflicting holds')
     ids, targets, source_ids, emitted_keys = set(), set(), set(), []
     source_actions = sum(len(row['trajectory']) for row in raw_rows.values())
     for row in graphs:
@@ -411,6 +430,50 @@ def verify_teacher_model_actions(graphs, receipt, *, raw_rows, raw_row_shas,
         if (teacher['source_artifact_sha256'] != source_sha256
                 or teacher['source_row_sha256'] != row_sha or identifier != expected):
             raise ValueError('graph source SHA or source-bound profile identity mismatch')
+        if source_id in partial:
+            expected_decision = decision_keys[(source_id, turn)]
+            if (expected_decision.get('approved') is not True
+                    or teacher.get('decision_admission') != expected_decision
+                    or partial_tokenizer is None):
+                raise ValueError('partial parent graph lacks exact approved decision and tokenizer')
+            from natlang_neuralese.data.native_graph_conversion import text_row_graph
+            from scripts.neuralese_data.build_verified_teacher_trajectory_graphs import render_teacher_packet, reviewed_teacher_context_guard
+            from natlang_neuralese.data.text_corpus import tokenizer_fingerprint
+            if tokenizer_fingerprint(partial_tokenizer) != receipt['tokenizer']['expanded_fingerprint']:
+                raise ValueError('partial parent tokenizer differs from exact conversion identity')
+            captured = source_row['trajectory'][turn]
+            assistant = captured['assistant']
+            target_message = {'role': 'assistant', 'content': assistant.get('content', ''),
+                              'tool_calls': captured['model_response']['raw_calls']}
+            if assistant.get('reasoning'):
+                target_message['reasoning_content'] = assistant['reasoning']
+            input_guard = reviewed_teacher_context_guard(captured, captured['context'], target_message, captured['tools_offered'])
+            from natlang_neuralese.common.hashing import canonical_json_sha256_hex
+            if canonical_json_sha256_hex(input_guard) != expected_decision.get('assistant_history_input_sha256'):
+                raise ValueError('partial parent exact approval does not bind original structured input protection')
+            packet, omission = render_teacher_packet(partial_tokenizer, captured['context'],
+                target_message, captured['tools_offered'], captured)
+            if omission is not None:
+                raise ValueError('partial parent exact captured render is not qualified')
+            (rendered_text, rendered_ids, rendered_boundary), _ = packet
+            conversion = row['conversion']
+            node = row['nodes'][0]
+            ids_for_mask = node['token_ids']
+            text = partial_tokenizer.decode(ids_for_mask, skip_special_tokens=False)
+            if (text != rendered_text or ids_for_mask != rendered_ids
+                    or conversion['source_suffix_start'] != rendered_boundary):
+                raise ValueError('partial parent graph changed the captured full context or suffix')
+            masked = text_row_graph(dict(id=conversion['source_row_id'], split='train',
+                source_groups=row['source_groups'], tokenizer_sha256=receipt['tokenizer']['source_fingerprint'],
+                text=text, token_ids=ids_for_mask, supervised_suffix_start=conversion['source_suffix_start']),
+                source_tokenizer_fingerprint=receipt['tokenizer']['source_fingerprint'],
+                tokenizer=partial_tokenizer, expanded_tokenizer_fingerprint=row['tokenizer_fingerprint'],
+                context_weight=.05, mask_assistant_history=True, assistant_history_guard=input_guard)
+            if (row['nodes'] != masked['nodes']
+                    or conversion.get('assistant_history_target_mask') != masked['conversion']['assistant_history_target_mask']):
+                raise ValueError('partial parent graph does not preserve the exact assistant-history loss mask')
+        elif teacher.get('decision_admission', {}).get('parent_quality_hold') is not None:
+            raise ValueError('partial parent graph has no current decision authority')
         groups = sorted(set(source_row['task']['program_ir']['source_groups']))
         if row['source_groups'] != groups or teacher['source_groups'] != groups or row['split'] != 'train':
             raise ValueError('graph train/source groups differ from exact verified program')
@@ -437,7 +500,7 @@ def verify_teacher_model_actions(graphs, receipt, *, raw_rows, raw_row_shas,
     if len(deduplicated) != receipt['deduplication']['omitted_rows']:
         raise ValueError('teacher deduplication count differs from its exact action identities')
     partition = materialization_partition(raw_rows, decision_keys,
-        receipt['action_omissions'], emitted_keys, deduplicated)
+        receipt['action_omissions'], emitted_keys, deduplicated, partial_parent_rows=partial)
     # Preserve full raw-row identity in the cross-model join, even when IDs and
     # graph content legitimately differ between declared rendering profiles.
     eligible = {(source_id, raw_row_shas[source_id], turn)

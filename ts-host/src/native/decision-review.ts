@@ -11,6 +11,9 @@ export type NativeDecisionApproval = {
   review_sha256: string;
   reason: string;
   evidence: string[];
+  /** Exact child-only review; preserves the parent's quality hold and never releases siblings. */
+  parent_quality_hold?: 'quality_pending_partial_files' | 'quality_pending_partial_agreement';
+  assistant_history_input_sha256?: string;
   source_label_correction?: {
     evidence_sha256: string;
     item_id: string;
@@ -70,7 +73,11 @@ export function validNativeDecisionApproval(approval: unknown, expected: {
       (correction as Record<string, unknown>).actual_generated_value &&
     (correction as Record<string, unknown>).corrected_label !==
       (correction as Record<string, unknown>).original_annotation);
-  return correctionValid && value.schema === 'natlang.native-decision-approval/1' &&
+  const parentHoldValid = value.parent_quality_hold === undefined ||
+    ((value.parent_quality_hold === 'quality_pending_partial_files' ||
+      value.parent_quality_hold === 'quality_pending_partial_agreement') &&
+     typeof value.assistant_history_input_sha256 === 'string' && /^[a-f0-9]{64}$/.test(value.assistant_history_input_sha256));
+  return parentHoldValid && correctionValid && value.schema === 'natlang.native-decision-approval/1' &&
     value.trajectory_id === expected.trajectory_id && value.source_row_sha256 === expected.source_row_sha256 &&
     value.decision_index === expected.decision_index && value.target_sha256 === expected.target_sha256 &&
     [value.source_row_sha256, value.target_sha256, value.review_sha256].every(hash =>

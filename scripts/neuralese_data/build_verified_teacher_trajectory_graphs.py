@@ -692,7 +692,7 @@ def verify_original_row(row, original):
     return path
 
 
-def teacher_decision_admissions(source, source_sha256):
+def teacher_decision_admissions(source, source_sha256, *, decision_review=None):
     """Reuse the native materializer, once per exact source/runtime for both ports."""
     if sha256_file(source) != source_sha256:
         raise ValueError('teacher decision source differs from its immutable SHA-256')
@@ -704,6 +704,12 @@ def teacher_decision_admissions(source, source_sha256):
         raise ValueError('build the native teacher materializer before converting teacher graphs')
     runtime = {str(path.relative_to(repo)): sha256_file(path) for path in assets}
     identity = {'source_sha256': source_sha256, 'runtime': runtime, 'direct_answers': True}
+    review_reference = None
+    if decision_review is not None:
+        decision_review = Path(decision_review).resolve(strict=True)
+        review_reference = {'path': str(decision_review), 'sha256': sha256_file(decision_review),
+                            'bytes': decision_review.stat().st_size}
+        identity['decision_review'] = review_reference
     key = canonical_json_sha256_hex(identity)
     cache = Path(source).parent / 'decision-admission-cache'
     cache.mkdir(exist_ok=True)
@@ -714,10 +720,14 @@ def teacher_decision_admissions(source, source_sha256):
             with tempfile.TemporaryDirectory(prefix='.materializing-', dir=cache) as temporary:
                 staged = Path(temporary)
                 output = staged / 'decisions.jsonl'
-                completed = subprocess.run(['node', str(cli), str(Path(source).resolve()), str(output),
-                                            '--direct-answers'], capture_output=True, text=True)
+                command = ['node', str(cli), str(Path(source).resolve()), str(output), '--direct-answers']
+                if review_reference is not None:
+                    command += ['--decision-review', str(decision_review)]
+                completed = subprocess.run(command, capture_output=True, text=True)
                 if completed.returncode:
                     raise RuntimeError('native teacher materializer failed: ' + completed.stderr[-4000:])
+                if (review_reference is not None and sha256_file(decision_review) != review_reference['sha256']):
+                    raise ValueError('teacher decision review changed during admission')
                 if sha256_file(source) != source_sha256 or any(
                         sha256_file(repo / path) != digest for path, digest in runtime.items()):
                     raise ValueError('teacher source or materializer runtime changed during admission')
@@ -746,6 +756,10 @@ def teacher_decision_admissions(source, source_sha256):
             'reason': (record.get('training_admission') or {}).get('reason'),
             'invocation_id': reference.get('invocation_id'),
             'raw_response_sha256': decision.get('source_raw_response_sha256'),
+            **({'parent_quality_hold': reference['parent_quality_hold'], 'parent_task_qualified': False,
+                **({'assistant_history_input_sha256': reference['assistant_history_input_sha256']}
+                   if reference.get('assistant_history_input_sha256') else {})}
+               if reference.get('parent_quality_hold') else {}),
             'materialized_decision_id': record['id'],
             'materialized_decision_sha256': canonical_json_sha256_hex(record)}
     return decisions, {'path': str(receipt_path), 'sha256': sha256_file(receipt_path),
@@ -937,6 +951,17 @@ def render_teacher_packet(tokenizer, context, target, tools, turn=None):
                       'unresolved_scope': scope, 'unresolved_block_ids': block_ids}
 
 
+
+def reviewed_teacher_context_guard(turn, context, target, tools):
+    """Bind raw and actual expanded rendering inputs before role-based masking."""
+    from natlang_neuralese.data.native_graph_conversion import unambiguous_chat_input_guard
+    # The capture includes the original structured context and any source-bound
+    # expansion payloads. Check the resolved renderer input as well.
+    resolved, resolved_tools, _, omission = captured_text_emulation_context(turn, context, tools)
+    if omission is not None:
+        raise ValueError('reviewed context requires its exact source-bound expanded input')
+    return unambiguous_chat_input_guard(resolved, target, resolved_tools, capture=turn)
+
 def _content_index_policy_sha256():
     from scripts.neuralese_data.continue_native_source_indexes import POLICY_FILES
     package = Path(__file__).resolve().parents[2] / 'training/neuralese/natlang_neuralese'
@@ -1011,6 +1036,7 @@ def main():
     parser.add_argument("--source", type=Path, required=True)
     parser.add_argument('--scaffold-harvest', type=Path,
                         help='authenticate a separately harvested scaffold batch; never treats it as a standard Qwen batch')
+    parser.add_argument('--decision-review', type=Path, help='exact reviewed decisions; never promotes a held parent')
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--base-tokenizer", type=Path, required=True)
     parser.add_argument('--history-reasoning-policy', choices=('keep', 'last_turn_only'),
@@ -1024,7 +1050,7 @@ def main():
     if args.output.exists() and any(args.output.iterdir()):
         raise ValueError(f"refusing to overwrite nonempty output: {args.output}")
     binding = source_binding(args)
-    decisions, decision_proof = teacher_decision_admissions(args.source, binding['source_sha256'])
+    decisions, decision_proof = teacher_decision_admissions(args.source, binding['source_sha256'], decision_review=args.decision_review)
     tokenizer = AutoTokenizer.from_pretrained(str(args.base_tokenizer), trust_remote_code=False,
                                                local_files_only=True)
     from natlang_neuralese.serve.chat import bind_history_reasoning
@@ -1089,9 +1115,22 @@ def main():
                             "tokenizer_sha256": source_fingerprint, "text": text,
                             "token_ids": token_ids, "supervised_suffix_start": boundary,
                             "source_twin_id": identifier, "source_record_ids": [row["id"], identifier]}
+                partial_guard = None
+                if decision.get('parent_quality_hold'):
+                    try:
+                        partial_guard = reviewed_teacher_context_guard(turn, context, target, tools)
+                        if canonical_json_sha256_hex(partial_guard) != decision.get('assistant_history_input_sha256'):
+                            raise ValueError('reviewed assistant-history input guard differs from exact decision approval')
+                    except ValueError as error:
+                        if str(error) != 'ambiguous embedded chat boundary in reviewed context':
+                            raise
+                        action_omissions.append({'source_row_id': row['id'], 'teacher_turn_index': index,
+                            'reason': str(error), 'decision': decision})
+                        continue
                 graph = text_row_graph(row_data, source_tokenizer_fingerprint=source_fingerprint,
                     tokenizer=tokenizer, expanded_tokenizer_fingerprint=expanded_fingerprint,
-                    context_weight=.05)
+                    context_weight=.05, mask_assistant_history=bool(decision.get('parent_quality_hold')),
+                    assistant_history_guard=partial_guard)
                 graph["conversion"]["teacher_source"] = {
                     "schema": "natlang.static-teacher-turn-source/1",
                     "kind": "static-transformation",

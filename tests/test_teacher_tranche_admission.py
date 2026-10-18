@@ -350,3 +350,17 @@ def test_completed_source_detects_same_size_mtime_restored_mid_verification(tmp_
     monkeypatch.setattr(module, 'file_binding', binding)
     with pytest.raises(ValueError, match='changed during verification'):
         module.verify_completed_source_phase(reference, directory)
+
+
+def test_partial_parent_decisions_never_count_as_whole_accepted_sources():
+    raw, omitted = partition_fixture()
+    proof = materialization_partition(raw, [('good',0),('good',1)], omitted, [('good',0)],
+                                      partial_parent_rows=['good'])
+    assert proof['materialized_source_rows'] == 0
+    assert proof['partial_source_rows'] == ['good']
+    assert proof['partial_source_actions'] == 2
+    assert proof['partial_parent_tasks_qualified'] is False
+    assert proof['source_actions'] == proof['emitted_actions'] + proof['other_omitted_actions'] + proof['repair_source_actions']
+    with pytest.raises(ValueError, match='absent from materialized'):
+        materialization_partition(raw, [('good',0),('good',1)], omitted, [('good',0)],
+                                  partial_parent_rows=['held'])

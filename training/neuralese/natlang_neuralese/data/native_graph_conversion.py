@@ -48,9 +48,40 @@ def _validate_row(row: Mapping[str, Any], *, source_tokenizer_fingerprint: str,
     return ids, text, split, sorted(set(groups)), identifier
 
 
+
+_CHAT_BOUNDARIES = ('<|im_start|>', '<|im_sep|>', '<|im_end|>')
+
+
+def unambiguous_chat_input_guard(context, target, tools, *, capture=None):
+    """Reject content that could impersonate renderer-owned chat boundaries.
+
+    Inspect original structured inputs, including raw call argument strings and
+    captured expansions. No token-stream role inference can authenticate those
+    delimiters after rendering. This is an opt-in reviewed-target guard only.
+    """
+    def check(value):
+        if isinstance(value, str):
+            if any(marker in value for marker in _CHAT_BOUNDARIES):
+                raise ValueError('ambiguous embedded chat boundary in reviewed context')
+        elif isinstance(value, Mapping):
+            for key, item in value.items():
+                check(key)
+                check(item)
+        elif isinstance(value, (list, tuple)):
+            for item in value:
+                check(item)
+    values = dict(context=context, target=target, tools=tools, capture=capture)
+    check(values)
+    return {'schema': 'natlang.reviewed-chat-input-guard/1',
+            'policy': 'no-embedded-renderer-chat-boundaries',
+            'input_sha256': canonical_json_sha256_hex(values),
+            'forbidden_markers': list(_CHAT_BOUNDARIES)}
+
 def text_row_graph(row: Mapping[str, Any], *, source_tokenizer_fingerprint: str,
                    tokenizer, expanded_tokenizer_fingerprint: str,
-                   context_weight: float = 0.05) -> dict:
+                   context_weight: float = 0.05,
+                   mask_assistant_history: bool = False,
+                   assistant_history_guard: Mapping[str, Any] | None = None) -> dict:
     """Represent one complete serving-rendered invocation as a one-node graph.
 
     Prompt/history tokens receive the declared lower context weight, while the
@@ -65,6 +96,37 @@ def text_row_graph(row: Mapping[str, Any], *, source_tokenizer_fingerprint: str,
         tokenizer=tokenizer, expanded_tokenizer_fingerprint=expanded_tokenizer_fingerprint)
     boundary = row["supervised_suffix_start"]
     weights = [context_weight] * boundary + [1.] * (len(ids)-boundary)
+    if type(mask_assistant_history) is not bool:
+        raise ValueError('assistant history mask must be explicitly boolean')
+    mask_proof = None
+    if mask_assistant_history:
+        if (not isinstance(assistant_history_guard, Mapping)
+                or assistant_history_guard.get('schema') != 'natlang.reviewed-chat-input-guard/1'
+                or assistant_history_guard.get('policy') != 'no-embedded-renderer-chat-boundaries'
+                or assistant_history_guard.get('forbidden_markers') != list(_CHAT_BOUNDARIES)
+                or not re.fullmatch('[0-9a-f]{64}', str(assistant_history_guard.get('input_sha256', '')))):
+            raise ValueError('assistant history masking requires original structured input protection')
+        from ..train.text_supervision import ROLE_CODES, chat_roles
+        def role_token(value):
+            token = tokenizer.convert_tokens_to_ids(value)
+            if type(token) is not int or token == getattr(tokenizer, 'unk_token_id', None):
+                raise ValueError('assistant history masking needs exact chat role tokens')
+            return token
+        start_id = role_token('<|im_start|>')
+        role_ids = {role_token(role): role for role in ('system', 'user', 'assistant', 'tool')}
+        if len(role_ids) != 4 or start_id in role_ids or start_id not in ids:
+            raise ValueError('assistant history masking needs four distinct chat roles')
+        labels = chat_roles(ids, start_id=start_id, role_ids=role_ids)
+        assistant = {ROLE_CODES.index('assistant_reasoning'), ROLE_CODES.index('assistant_reply')}
+        if not all(label in assistant for label in labels[boundary:]):
+            raise ValueError('reviewed suffix must be entirely the exact assistant target')
+        masked = [index for index in range(boundary) if labels[index] in assistant]
+        for index in masked:
+            weights[index] = 0.
+        mask_proof = {'policy': 'all-prior-assistant-context-only/1',
+                      'input_guard': dict(assistant_history_guard),
+                      'masked_tokens': len(masked), 'suffix_start': boundary,
+                      'role_labels_sha256': hashlib.sha256(bytes(labels)).hexdigest()}
     weights[0] = 0.
     twin = row.get("source_twin_id") or row.get("source_record_ids") or [identifier]
     twin_id = canonical_json_sha256_hex(sorted(str(value) for value in twin))
@@ -82,6 +144,7 @@ def text_row_graph(row: Mapping[str, Any], *, source_tokenizer_fingerprint: str,
             "source_twin_id": twin_id, "source_tokenizer_fingerprint": source_tokenizer_fingerprint,
             "source_text_sha256": _sha_text(text), "source_suffix_start": boundary,
             "context_weight": context_weight,
+            **({"assistant_history_target_mask": mask_proof} if mask_proof else {}),
             "context_attestations": row.get("neuralese_context_attestations", [])},
     }
 
