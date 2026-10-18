@@ -183887,6 +183887,105 @@
           "requires_actual_capacity_certificate": true
         }
       }
+    },
+    {
+      "build": {
+        "audit": "admission-d32-source04-history-keep-v1/audit.json",
+        "audit_sha256": "88873fb772aea9632ae66d30795ce1e3e8f30fe903f026ad44a24b41ba8653cc",
+        "capacity_partition": {
+          "execution_qualified": false,
+          "full_cohort_is_additional_training_source": false,
+          "path": "capacity-source04/partition/receipt.json",
+          "sha256": "0f1e05741911662e6efda3c20947cd63d9e0da21876da932db8ca37d9010f708",
+          "source_corpus_id": "d32-source04-history-keep-v1"
+        },
+        "source_render_samples": {
+          "path": "admission-d32-source04-history-keep-v1/source-render-samples.json",
+          "sha256": "6937f356431d79b0124176f112458fbec75ae1ee7a57ecf43dd3b134d0fffa41"
+        }
+      },
+      "documents": {
+        "lfm25": {
+          "earned_graph_visits": 0,
+          "fit_held_graphs": 0,
+          "fit_train_graphs": 1552,
+          "fit_train_tokens": 48824599,
+          "pending_long_graphs": 232,
+          "pending_long_held_graphs": 0,
+          "pending_long_tokens": 24730480,
+          "source_eligible_graphs": 1784
+        },
+        "mellum21": {
+          "earned_graph_visits": 0,
+          "fit_held_graphs": 0,
+          "fit_train_graphs": 1577,
+          "fit_train_tokens": 58832212,
+          "pending_long_graphs": 207,
+          "pending_long_held_graphs": 0,
+          "pending_long_tokens": 25941569,
+          "source_eligible_graphs": 1784
+        }
+      },
+      "id": "d32-source04-history-keep-v1-capacity",
+      "include": [
+        "41d6e2bf55e8167181c74910346e38731121bced2445f43502001c18dc3ad188/lfm25/omissions.jsonl",
+        "41d6e2bf55e8167181c74910346e38731121bced2445f43502001c18dc3ad188/lfm25/receipt.json",
+        "41d6e2bf55e8167181c74910346e38731121bced2445f43502001c18dc3ad188/lfm25/resume-state.json",
+        "41d6e2bf55e8167181c74910346e38731121bced2445f43502001c18dc3ad188/lfm25/test/native-graphs.jsonl.zst",
+        "41d6e2bf55e8167181c74910346e38731121bced2445f43502001c18dc3ad188/lfm25/train/native-graphs.jsonl.zst",
+        "41d6e2bf55e8167181c74910346e38731121bced2445f43502001c18dc3ad188/mellum21/omissions.jsonl",
+        "41d6e2bf55e8167181c74910346e38731121bced2445f43502001c18dc3ad188/mellum21/receipt.json",
+        "41d6e2bf55e8167181c74910346e38731121bced2445f43502001c18dc3ad188/mellum21/resume-state.json",
+        "41d6e2bf55e8167181c74910346e38731121bced2445f43502001c18dc3ad188/mellum21/test/native-graphs.jsonl.zst",
+        "41d6e2bf55e8167181c74910346e38731121bced2445f43502001c18dc3ad188/mellum21/train/native-graphs.jsonl.zst",
+        "admission-d32-source04-history-keep-v1/audit.json",
+        "admission-d32-source04-history-keep-v1/lfm25-train-sources.json",
+        "admission-d32-source04-history-keep-v1/mellum21-train-sources.json",
+        "admission-d32-source04-history-keep-v1/row-proof.jsonl",
+        "admission-d32-source04-history-keep-v1/source-render-samples.json",
+        "capacity-source04/lfm25-pending-v2.json",
+        "capacity-source04/mellum21-pending-v2.json",
+        "capacity-source04/partition/files/coverage.jsonl",
+        "capacity-source04/partition/files/lfm25/test/fit.jsonl.zst",
+        "capacity-source04/partition/files/lfm25/test/remaining-long.jsonl.zst",
+        "capacity-source04/partition/files/lfm25/train/fit-sources.json",
+        "capacity-source04/partition/files/lfm25/train/fit.jsonl.zst",
+        "capacity-source04/partition/files/lfm25/train/remaining-long-sources.json",
+        "capacity-source04/partition/files/lfm25/train/remaining-long.jsonl.zst",
+        "capacity-source04/partition/files/mellum21/test/fit.jsonl.zst",
+        "capacity-source04/partition/files/mellum21/test/remaining-long.jsonl.zst",
+        "capacity-source04/partition/files/mellum21/train/fit-sources.json",
+        "capacity-source04/partition/files/mellum21/train/fit.jsonl.zst",
+        "capacity-source04/partition/files/mellum21/train/remaining-long-sources.json",
+        "capacity-source04/partition/files/mellum21/train/remaining-long.jsonl.zst",
+        "capacity-source04/partition/files/pending-sources.json",
+        "capacity-source04/partition/receipt.json"
+      ],
+      "license": "exact source license facts retained in each graph acquired_session provenance",
+      "owner": "dgx",
+      "path": "runs/acquired-connected-native-graphs-20261018-history-keep-v1/D32/source04",
+      "source_class": "capacity-partition-of-admitted-complete-acquired-native-sessions",
+      "split": "original source split and complete cross-source global held-group closure; no truncation",
+      "training_admission": true,
+      "training_admission_reason": "Unchanged source-curated rows; ONLY explicit fit entrypoints may train after actual capacity qualification. Full cohort is provenance, not an additional training source; long rows remain mandatory zero-credit obligations.",
+      "training_entrypoints": {
+        "lfm25": {
+          "execution_qualified": false,
+          "held_native_graphs": null,
+          "native_graphs": "capacity-source04/partition/files/lfm25/train/fit-sources.json",
+          "pending_held_native_graphs": null,
+          "pending_native_sources": "capacity-source04/lfm25-pending-v2.json",
+          "requires_actual_capacity_certificate": true
+        },
+        "mellum21": {
+          "execution_qualified": false,
+          "held_native_graphs": null,
+          "native_graphs": "capacity-source04/partition/files/mellum21/train/fit-sources.json",
+          "pending_held_native_graphs": null,
+          "pending_native_sources": "capacity-source04/mellum21-pending-v2.json",
+          "requires_actual_capacity_certificate": true
+        }
+      }
     }
   ],
   "coverage_backlog": [
