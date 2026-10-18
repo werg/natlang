@@ -15,6 +15,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from ..common.hashing import canonical_json_sha256_hex as digest, sha256_file_hex_cached as sha, sha256_file_hex
+from ..common.ordered_json_sequence import canonical_json_sequence_sha256_hex as entries_digest
 from ..common.jsonio import write_json_durable as write_json
 
 SCHEMA = 'natlang.native-resident-adoption/1'
@@ -95,7 +96,7 @@ def _source_witness(source, package=None):
            'kind': source.kind, 'pair_model': source.pair_model, 'role_ids': list(source.role_ids)}
     path = row_index.entry_path('native-graphs', digest(key))
     value = row_index.load(path)
-    if not value or value.get('key') != key or value.get('metadata_sha256') != digest(source.entries):
+    if not value or value.get('key') != key or value.get('metadata_sha256') != entries_digest(source.entries):
         raise ValueError('resident preparation requires the exact completed source index: ' + str(source.path))
     return [{'cache': binding(path), 'key': key, 'metadata_sha256': value['metadata_sha256']}]
 
@@ -109,7 +110,7 @@ def _check_indexes(witnesses):
         value = row_index.load(cache)
         if (not value or value.get('key') != witness['key']
                 or value.get('metadata_sha256') != witness['metadata_sha256']
-                or digest(value.get('entries')) != witness['metadata_sha256']):
+                or entries_digest(value.get('entries')) != witness['metadata_sha256']):
             raise ValueError('resident warmed source index changed')
 
 
@@ -277,7 +278,7 @@ def geometry_from_evidence(source, first, evidence, *, package, source_preparati
         start = len(prior_source)
     if (type(start) is not int or start != len(prior_entries) or len(covered) != expected_rows
             or covered.entries[:start] != prior_entries
-            or expected_entries is not None and digest(covered.entries) != expected_entries):
+            or expected_entries is not None and entries_digest(covered.entries) != expected_entries):
         raise ValueError('geometry evidence source prefix/count/metadata differs')
     _check_indexes(witnesses)
     recorded = {digest(w) for w in witnesses}
@@ -793,7 +794,7 @@ def _source03_bridge_geometry_part(part, *, preparation, package):
             and provenance.get('parser_policy_transition') == policy_transition
         )
     if (old_index.get('schema') != 'natlang.row-index/1' or not isinstance(old_entries, list)
-            or digest(old_entries) != old_index.get('metadata_sha256')
+            or entries_digest(old_entries) != old_index.get('metadata_sha256')
             or old_key.get('source_sha256') != old_files['old-fit/00-fit.jsonl.zst']['sha256']
             or old_key.get('tokenizer') != bridge_source.tokenizer_fingerprint
             or old_key.get('role_ids') != list(bridge_source.role_ids)
@@ -805,7 +806,7 @@ def _source03_bridge_geometry_part(part, *, preparation, package):
         bridge_index = pickle.load(stream)
     bridge_entries = bridge_index.get('entries')
     if (bridge_index.get('schema') != 'natlang.row-index/1' or bridge_index.get('key') != supplement.get('row_index_key')
-            or not isinstance(bridge_entries, list) or digest(bridge_entries) != supplement.get('row_index_entries_sha256')
+            or not isinstance(bridge_entries, list) or entries_digest(bridge_entries) != supplement.get('row_index_entries_sha256')
             or bridge_index.get('metadata_sha256') != supplement.get('row_index_entries_sha256')
             or bridge_entries != bridge_leaf_source.entries or len(bridge_entries) != supplement.get('rows')):
         raise ValueError('source03 bridge row-index differs from its exact current parser source')
@@ -1094,7 +1095,7 @@ def prepare_whole_delta_geometry(source, parts, output, *, package):
         offset+=expected;provenance.extend([part['receipt'],part['coverage']])
     if not parts or offset!=len(source):raise ValueError('delta geometry coverage omitted source rows')
     report={'schema':'natlang.native-whole-delta-geometry/1','passed':True,'source':binding(source.path),
-        'prior_train':None,'old_train_rows':0,'new_train_rows':len(source),'entries_sha256':digest(source.entries),
+        'prior_train':None,'old_train_rows':0,'new_train_rows':len(source),'entries_sha256':entries_digest(source.entries),
         'tokenizer_fingerprint':source.tokenizer_fingerprint,'role_ids':list(source.role_ids),
         'indexes':_source_witness(source,package),'provenance':provenance,'maxima':maxima}
     from uuid import uuid4
@@ -1236,7 +1237,7 @@ def _delta_payload(directory, previous, plan, proposed, stage_id, recipe_path,
         'geometry_qualification': capacity, 'geometry_identity': initial['geometry_identity'],
         'geometry': geometry,
         'delta_validation': {'schema': 'natlang.native-resident-delta-validation/1',
-            'source': delta_ref, 'rows': len(delta), 'entries_sha256': digest(
+            'source': delta_ref, 'rows': len(delta), 'entries_sha256': entries_digest(
                 [{**entry, 'training_priority':entry.get('training_priority',0)} for entry in delta.entries]),
             'prior_rows': rows, 'prior_held_rows': held_rows, 'prior_plan_sha256': digest(plan)}}
     if geometry_evidence:payload['geometry_evidence']=geometry_evidence
@@ -1327,8 +1328,8 @@ def prepare(directory, recipe_path, stage_id, *, tokenizer_fingerprint, role_ids
                 json.loads((directory/'initial.json').read_text())['recipe']),
             'tokenizer_fingerprint': tokenizer_fingerprint, 'role_ids': list(role_ids),
             'indexes': _source_witness(train, package) + _source_witness(held, package), 'rows': len(train),
-            'held_rows': len(held), 'held_entries_sha256': digest(held.entries),
-            'entries_sha256': digest(train.entries), 'geometry_qualification': capacity_binding,
+            'held_rows': len(held), 'held_entries_sha256': entries_digest(held.entries),
+            'entries_sha256': entries_digest(train.entries), 'geometry_qualification': capacity_binding,
             'geometry': geometry, 'geometry_identity': initial['geometry_identity']}
         if geometry_evidence:
             payload['geometry_evidence'] = geometry_evidence
@@ -1445,8 +1446,8 @@ class ResidentAdoption:
             source_preparation.retain(self.held)
             train = source_preparation.load(payload['train'], split='train')
             held = source_preparation.load(payload['held'], split='test')
-            full_validation = {'entries_sha256': digest(train.entries),
-                'held_entries_sha256': digest(held.entries)}
+            full_validation = {'entries_sha256': entries_digest(train.entries),
+                'held_entries_sha256': entries_digest(held.entries)}
             delta = payload.get('delta_validation')
             if delta is not None:
                 if (delta.get('schema') != 'natlang.native-resident-delta-validation/1'
@@ -1457,7 +1458,7 @@ class ResidentAdoption:
                     raise ValueError('resident delta predecessor contract changed')
                 suffix = source_preparation.load(delta['source'], split='train')
                 suffix_entries = [{**entry, 'training_priority':entry.get('training_priority',0)} for entry in suffix.entries]
-                if (len(suffix) != delta['rows'] or digest(suffix_entries) != delta['entries_sha256']
+                if (len(suffix) != delta['rows'] or entries_digest(suffix_entries) != delta['entries_sha256']
                         or train.entries[len(self.train):] != suffix_entries):
                     raise ValueError('resident delta suffix differs from prepared metadata')
             if (held.entries[:len(self.held.entries)] != self.held.entries or len(held) < len(self.held)
