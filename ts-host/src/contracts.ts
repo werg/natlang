@@ -73,7 +73,9 @@ export type ModelTurnDelta = { type: 'text'; text: string } | { type: 'reasoning
  * part of `ModelTurnRequest`, which is data (recorded, cloned, sent to workers). `onDelta` receives the turn's
  * deltas as they arrive; it must not throw (an observer never affects the turn) and is not awaited.
  */
-export type ModelTurnOptions = { onDelta?: (delta: ModelTurnDelta) => void };
+export type ModelTurnOptions = { onDelta?: (delta: ModelTurnDelta) => void;
+  /** Host-only structural result check, supplied only to drivers explicitly requesting it. Never model input. */
+  acceptsResult?: (value: unknown) => boolean };
 
 
 /**

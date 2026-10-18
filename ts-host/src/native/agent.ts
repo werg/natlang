@@ -90,7 +90,10 @@ export function modelTurnsSoFar(messages: readonly Record<string, unknown>[]): n
     !((message.tool_calls as { id?: string }[] | undefined) ?? []).some(call => String(call.id).startsWith('scope_'))).length;
 }
 
-export type NativeModelDriver = (request: ModelTurnRequest, signal?: AbortSignal, options?: ModelTurnOptions) => Promise<ModelTurn> | ModelTurn;
+export type NativeModelDriver = ((request: ModelTurnRequest, signal?: AbortSignal, options?: ModelTurnOptions) => Promise<ModelTurn> | ModelTurn) & {
+  /** Scripted host drivers may ask to route fixed answers by the actual native return contract. */
+  readonly requiresResultContract?: boolean };
+
 export type NativeReviewOptions = { driver?: NativeModelDriver; threshold?: number;
   scope?: 'values' | 'actions'; withdrawalPolicy?: 'caller' | 'retry';
   prompt?: 'baseline' | 'repeat_instructions' | 'checklist';
@@ -1230,7 +1233,18 @@ export class NativeToolAgent {
             value: session.lam.type.returns.kind === 'neuralese' ? 'write' as const : 'decode' as const } : undefined;
         if (template) session.runtime.trace.emit('template_readout', { call_id: callId, value: template.value });
         const observer = this.options.onDelta, turn = turns + 1;
-        const turnOptions: ModelTurnOptions | undefined = observer && { onDelta: delta => { streamed = true; observer(turn, delta); } };
+        const turnOptions: ModelTurnOptions | undefined = observer || this.driver.requiresResultContract ? {
+          ...(observer ? { onDelta: (delta: ModelTurnDelta) => { streamed = true; observer(turn, delta); } } : {}),
+          ...(this.driver.requiresResultContract ? { acceptsResult: (value: unknown): boolean => {
+            if (session.lam.type.kind !== 'lambda') return false;
+            try {
+              const type = session.lam.type.returns;
+              return !problems(coerce(value, type, session.env, 'return'), type, session.env, 'return').holes.length;
+            } catch (error) {
+              if (error instanceof Reject) return false;
+              throw error;
+            }
+          } } : {}) } : undefined;
         const turnRequest: ModelTurnRequest = { ...(callId ? { invocation_id: callId } : {}), ...(adapters.length ? { adapters } : {}),
           ...(template ? { template } : {}),
           ...(this.options.guidance && supportsNeuralese(this.driver) ? { guidance: this.options.guidance } : {}),

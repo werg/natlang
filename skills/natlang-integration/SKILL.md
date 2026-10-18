@@ -567,3 +567,5 @@ The opt-in profile changes model-visible history and needs its live executor
 comparison before production adoption.
 
 Compiler integration must distinguish erased ambient callable `nl` declarations from runtime shadows. Keep direct ambient typing attached to the existing built-in tag and its `.with` capture form; custom imports, initialized variables, function bodies, classes, and parameters remain independent bindings. Recheck every source-owned authoring run after a compiler repair, preserving the original captured verdict and source oracle.
+
+Scripted authoring drivers may request the native agent's host-only structural result-contract check through turn options. Route unchanged fixed oracle answers only when native coercion and complete-value checks accept their actual shape; do not parse model-facing signatures or infer semantic predicates from result types. An uncovered child must terminate with the existing no-answer outcome, preserving it as assigned harness repair and retaining all independent source-run checks.

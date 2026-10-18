@@ -9,7 +9,7 @@ import ts from 'typescript';
 import { withCallOf } from '../compiler/inline.js';
 import { createNatlangRuntime } from '../runtime/node.js';
 import { loadVirtualNatlang } from '../runtime/virtual-project.js';
-import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
+import type { ModelTurn, ModelTurnOptions, ModelTurnRequest } from '../contracts.js';
 import { openingText, type Message } from './opening.js';
 
 export type AuthoringSpec = {
@@ -100,7 +100,7 @@ async function runAuthoring(files: Record<string, string>, spec: AuthoringSpec, 
   const results: unknown[] = [];
   for (const [index, run] of spec.runs.entries()) {
     let staged = false;
-    const model = async (request: ModelTurnRequest): Promise<ModelTurn> => {
+    const model = Object.assign(async (request: ModelTurnRequest, _signal?: AbortSignal, options?: ModelTurnOptions): Promise<ModelTurn> => {
       const opening = String((request.messages[1] as { content?: unknown } | undefined)?.content ?? '');
       if (opening.startsWith(`You are inside this call: ${HARNESS}(`)) {
         // After the eval staged its result, a reply without a tool call returns it; a failed eval ends the call.
@@ -114,13 +114,14 @@ async function runAuthoring(files: Record<string, string>, spec: AuthoringSpec, 
       }
       const shown = openingText(request.messages as Message[]);
       const matches = [...(spec.oracle ?? []), ...(spec.argument_aliases ?? [])]
-        .filter(item => item.match.every(fragment => shown.includes(fragment)));
+        .filter(item => item.match.every(fragment => shown.includes(fragment)))
+        .filter(item => options?.acceptsResult?.(item.value) === true);
       const answer = matches[0];
       if (spec.argument_aliases && answer && matches.some(item => !isDeepStrictEqual(item.value, answer.value)))
         return { calls: [['return_result', { status: 'failed', reason: 'Conflicting source argument oracle answers.' }]] };
       return answer ? { calls: [['return_result', { status: 'success', value: answer.value }]] } :
         { calls: [['return_result', { status: 'failed', reason: 'The authoring oracle has no answer for this call.' }]] };
-    };
+    }, { requiresResultContract: true });
     const runtime = createNatlangRuntime({ model: model as never, seed: { mode: 'backend' } });
     try {
       const fn = loadVirtualNatlang(mounted, `${HARNESS}.nl`);

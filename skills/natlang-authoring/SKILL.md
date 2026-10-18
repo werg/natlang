@@ -552,3 +552,5 @@ The opt-in profile remains unmeasured until its live executor comparison is
 recorded.
 
 TypeScript ambient callable declarations of the built-in `nl` supply types and are erased; they do not replace its runtime tag. Real runtime bindings named `nl` still hide the built-in. If that shadow diagnostic appears, preserve the built-in and rename the runtime binding; do not create a replacement implementation.
+
+A scripted source oracle must answer a natural-language child with a value of that child's actual declared result type. Missing coverage is a harness repair, not evidence that the authored program is semantically wrong. Preserve the source task and independently execute all declared input cases; do not rewrite expected results or convert a string decision into a boolean to satisfy the checker.
