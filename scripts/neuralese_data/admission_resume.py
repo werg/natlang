@@ -76,11 +76,17 @@ def load_model_checkpoint(root, identity):
     """Return a complete cached verifier result or None on an identity miss."""
     root = Path(root)
     key, candidates = _checkpoint_paths(root, identity)
+    identity_bytes = canonical_json_bytes(identity)
     if len(candidates) > 1:
         raise ValueError('multiple acquired admission results exist for one exact model identity')
     for path in candidates:
         payload = json.loads(path.read_text(encoding='utf-8'))
-        if payload.get('schema') != SCHEMA or payload.get('identity') != identity:
+        # Identities are content-addressed as JSON.  In-memory tuples (for
+        # example decision_contract rows) serialize as arrays and reload as
+        # lists, so Python container equality would miss the exact checkpoint
+        # and needlessly recompute completed shards.
+        if (payload.get('schema') != SCHEMA
+                or canonical_json_bytes(payload.get('identity')) != identity_bytes):
             continue
         result = payload.get('result')
         result_sha = canonical_json_sha256_hex(result)
@@ -102,7 +108,8 @@ def save_model_checkpoint(root, identity, result):
         raise ValueError('conflicting acquired admission results exist for one exact model identity')
     if destination.exists():
         payload = json.loads(destination.read_text(encoding='utf-8'))
-        if payload.get('identity') != identity or payload.get('result') != result:
+        if (canonical_json_bytes(payload.get('identity')) != canonical_json_bytes(identity)
+                or canonical_json_bytes(payload.get('result')) != canonical_json_bytes(result)):
             raise ValueError('immutable acquired admission checkpoint path has different content')
         return destination
 

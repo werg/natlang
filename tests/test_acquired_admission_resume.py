@@ -1,9 +1,11 @@
 """Exact restart semantics for completed per-model admission checks."""
 
+import json
 import os
 
 import pytest
 
+from natlang_neuralese.common.jsonio import canonical_json_bytes
 from scripts.neuralese_data.admission_resume import (
     load_or_compute_model_checkpoint,
     load_model_checkpoint,
@@ -94,3 +96,27 @@ def test_checkpoint_content_address_and_atomic_immutability(tmp_path):
     path.write_text(text.replace('"graphs:train":1', '"graphs:train":2'))
     with pytest.raises(ValueError, match='content identity mismatch'):
         load_model_checkpoint(cache, current)
+
+
+def test_json_round_trip_preserves_tuple_based_identity_and_result_checkpoint(tmp_path):
+    source = tmp_path / 'source.zst'; source.write_bytes(b'source')
+    current = identity(source)
+    # decision_contract currently returns tuple rows, which JSON persists as
+    # arrays.  A later process reconstructs the same JSON identity as lists.
+    current['policy']['decision_holds'] = [('hold.jsonl', 'a' * 64, 17, 'decision-hold')]
+    result = {'groups': {'train': ('group-a', 'group-b')}}
+    cache = tmp_path / 'cache'
+    path = save_model_checkpoint(cache, current, result)
+    reloaded_identity = json.loads(canonical_json_bytes(current))
+
+    calls = []
+    loaded, loaded_path, reused = load_or_compute_model_checkpoint(
+        cache, reloaded_identity, lambda: calls.append('recomputed') or {'wrong': True})
+    assert reused is True
+    assert loaded_path == path
+    assert loaded == json.loads(canonical_json_bytes(result))
+    assert calls == []
+
+    # The original process-local tuple form must also see the same immutable
+    # JSON checkpoint and permit an idempotent save.
+    assert save_model_checkpoint(cache, current, result) == path
