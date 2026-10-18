@@ -16,3 +16,8 @@ source metadata used by that existing choice; it adds no scheduling policy.
 
 The bound production compatibility entry performs this same metadata edit in
 the frozen trainer. It does not replace numerical modules or grant new credit.
+
+A supervised retry's owned job directory and continuation output must resolve to
+one directory before writing its config or sealing a request. This crisp
+precondition prevents a fresh retry from starting an expensive restore into an
+older failed operation's learner directory. It changes no scheduling choice.

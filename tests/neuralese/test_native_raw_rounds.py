@@ -418,7 +418,7 @@ def test_completed_nonfoundation_stage_does_not_qualify_foundation(tmp_path,monk
         value=json.loads(path.read_text());value.update(completed=True,foundation_ready=False)
         write_json_durable(path,value);return result
     monkeypatch.setattr(native_rounds,'round_job',completed)
-    cursor={};continuation={'mandatory_sft_only':True,'out':str(directory/'ordinary'),
+    cursor={};continuation={'mandatory_sft_only':True,'out':str(directory/'ordinary-job'),
         'checkpoint':config['checkpoint'],'trainer_parameters':{'checkpoint_every':250,'refresh_at_checkpoint':True,'refresh_after_updates':250}}
     raw._supervised_job(continuation,directory/'ordinary-job',config,cursor,stop)
     assert 'foundation_qualified' not in cursor and 'readiness' not in cursor
@@ -507,3 +507,13 @@ def test_bad_stage_quanta_reject_before_worker_or_checkpoint_read(mapping):
     from natlang_neuralese.rl.native_raw_rounds import _supervised_quantum
     with pytest.raises(ValueError,match='stage quanta'):
         _supervised_quantum({'supervised_stage_quantum_updates':mapping},{'stage_id':'ordinary','eval_every':250})
+
+
+def test_supervised_retry_rejects_output_mismatch_before_config_or_request(tmp_path,monkeypatch):
+    continuation={'mandatory_sft_only':True,'out':str(tmp_path/'old-operation')}
+    def never(*args,**kwargs):raise AssertionError('mismatched output must reject before sealing a request')
+    monkeypatch.setattr(native_rounds,'round_job',never)
+    with pytest.raises(ValueError,match='owned job directory'):
+        raw._supervised_job(continuation,tmp_path/'fresh-retry',{}, {},SimpleNamespace(requested=False))
+    assert not(tmp_path/'fresh-retry').exists()
+    assert not(tmp_path/'old-operation').exists()

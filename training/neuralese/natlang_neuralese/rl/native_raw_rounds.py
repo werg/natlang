@@ -671,6 +671,8 @@ def student_cycle(plan_path,declaration,handoff,directory,*,stop):
 
 def _supervised_job(continuation,jobdir,config,cursor,stop):
     from .native_rounds import round_job
+    if Path(continuation['out']).resolve() != Path(jobdir).resolve():
+        raise ValueError('supervised operation configuration/output differs from its owned job directory')
     path=Path(jobdir)/'config.json';path.parent.mkdir(parents=True,exist_ok=True)
     write_json_durable(path,continuation)
     result=round_job(path,continuation,Path(jobdir)/'bridge',stop)
