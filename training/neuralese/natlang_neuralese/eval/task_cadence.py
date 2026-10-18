@@ -76,18 +76,27 @@ SCHEMA = 'natlang.in-run-task-eval/1'
 def wait_collectors(children, queues, launch, *, min_free_mib):
     """Resume only exact before-case disk pauses; keep the same actor/journals."""
     snapshots = [queue.read_bytes() for queue, _, _ in queues]
-    codes = []
-    for child, log in children:
-        try:
-            codes.append(child.wait())
-        finally:
-            log.close()
-    for index, (queue, journal, entries) in enumerate(queues):
-        while codes[index] == 75 and min_free_mib:
+    codes = [None] * len(children)
+    pending = set(range(len(children)))
+    running = set(pending)
+    while pending:
+        for index in sorted(pending):
+            queue, journal, entries = queues[index]
+            if index in running:
+                code = children[index][0].poll()
+                if code is None:
+                    continue
+                children[index][1].close()
+                running.remove(index)
+                codes[index] = code
+            if codes[index] != 75 or not min_free_mib:
+                pending.remove(index)
+                continue
             events = [json.loads(line) for line in journal.read_text().split('\n') if line.strip()]
             last = events[-1] if events else {}
             if last.get('event') != 'storage_pause':
-                break  # An operator drain also returns 75; never undo it.
+                pending.remove(index)  # Never undo an operator drain.
+                continue
             finished = {row['key'] for row in events if row.get('event') == 'finish'}
             remaining = [row['key'] for row in entries if row['key'] not in finished]
             if (queue.read_bytes() != snapshots[index]
@@ -95,15 +104,15 @@ def wait_collectors(children, queues, launch, *, min_free_mib):
                     or not remaining or last.get('key') != remaining[0]
                     or any(row.get('event') == 'start' and row.get('key') == last['key'] for row in events)):
                 raise ValueError('task evaluation storage pause does not match its exact unstarted queue')
-            while shutil.disk_usage(journal.parent).free // (1024 * 1024) < min_free_mib:
-                time.sleep(30)
+            if shutil.disk_usage(journal.parent).free // (1024 * 1024) < min_free_mib:
+                continue
             if queue.read_bytes() != snapshots[index]:
                 raise ValueError('task evaluation queue changed while waiting for disk headroom')
-            child, log = launch(queue, journal, entries)
-            try:
-                codes[index] = child.wait()
-            finally:
-                log.close()
+            children[index] = launch(queue, journal, entries)
+            codes[index] = None
+            running.add(index)
+        if pending:
+            time.sleep(0.2 if running else 30)
     return codes
 
 

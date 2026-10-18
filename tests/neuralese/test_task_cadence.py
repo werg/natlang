@@ -403,7 +403,7 @@ def test_storage_pause_resumes_only_unstarted_cases_with_same_journal(tmp_path, 
     monkeypatch.setattr(module.time, 'sleep', waits.append)
     class Child:
         def __init__(self, code): self.code = code
-        def wait(self): return self.code
+        def poll(self): return self.code
     def launch(q,j,rows):
         assert q==queue and j==journal and rows==entries
         assert journal.read_text().count('"event": "finish"')==1
@@ -413,7 +413,7 @@ def test_storage_pause_resumes_only_unstarted_cases_with_same_journal(tmp_path, 
         return Child(0), io.StringIO()
     assert module.wait_collectors([(Child(75),io.StringIO())],[(queue,journal,entries)],
         launch,min_free_mib=20)==[0]
-    assert launches==[queue] and waits==[30]
+    assert launches==[queue] and waits==[30, 0.2]
     assert journal.read_text().count('"event": "finish"')==2
 
 
@@ -430,7 +430,7 @@ def test_storage_resume_does_not_override_drains_or_started_cases(tmp_path,event
     events.append({'event':event,'key':'next','minimum_free_mib':floor})
     journal.write_text(''.join(json.dumps(row)+'\n' for row in events))
     class Child:
-        def wait(self): return 75
+        def poll(self): return 75
     def forbidden(*args): raise AssertionError('must not relaunch')
     args=([(Child(),io.StringIO())],[(queue,journal,entries)],forbidden)
     if raises:
@@ -438,3 +438,36 @@ def test_storage_resume_does_not_override_drains_or_started_cases(tmp_path,event
             wait_collectors(*args,min_free_mib=20)
     else:
         assert wait_collectors(*args,min_free_mib=20)==[75]
+
+
+def test_storage_worker_resumes_before_another_busy_worker_finishes(tmp_path, monkeypatch):
+    import io
+    import json
+    from types import SimpleNamespace
+    from natlang_neuralese.eval import task_cadence as module
+    queues=[]
+    for index in range(2):
+        queue,journal=tmp_path/f'queue{index}',tmp_path/f'journal{index}'
+        entries=[{'key':f'task{index}'}]
+        queue.write_text(json.dumps(entries[0])+'\n')
+        journal.write_text(json.dumps({'event':'storage_pause','key':f'task{index}',
+                                      'minimum_free_mib':20})+'\n')
+        queues.append((queue,journal,entries))
+    launched=[]
+    class Busy:
+        def poll(self): return 0 if launched else None
+        def wait(self): raise AssertionError('must not block behind the busy worker')
+    class Finished:
+        def __init__(self,code):self.code=code
+        def poll(self):return self.code
+    monkeypatch.setattr(module.shutil,'disk_usage',lambda _:SimpleNamespace(free=21*1024**2))
+    monkeypatch.setattr(module.time,'sleep',lambda _:None)
+    def launch(q,j,rows):
+        assert q==queues[1][0]
+        launched.append(q)
+        with j.open('a') as stream:stream.write(json.dumps({'event':'finish','key':'task1'})+'\n')
+        return Finished(0),io.StringIO()
+    logs=[io.StringIO(),io.StringIO()]
+    assert module.wait_collectors([(Busy(),logs[0]),(Finished(75),logs[1])],queues,launch,
+                                  min_free_mib=20)==[0,0]
+    assert launched==[queues[1][0]] and all(log.closed for log in logs)
