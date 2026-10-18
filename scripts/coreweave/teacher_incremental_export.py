@@ -211,10 +211,24 @@ def _teacher_source_binding(raw: bytes, *, batch: int, source_sha256: str) -> di
 
 
 def _execution_source(context: dict[str, bytes], entries: list[dict]) -> tuple[int, str]:
-    """Authenticate the existing student-root packet without collapsing repeats."""
+    """Authenticate the declared existing root transformation without collapsing repeats."""
     cases = _jsonl_rows(context['source-cases.jsonl'], 'sealed source cases')
     teacher = _json(context['teacher-source.json'], 'teacher source')
+    try:
+        from .teacher_source_sequence import collection_sampling, verify_collection_sampling
+    except ImportError:
+        from teacher_source_sequence import collection_sampling, verify_collection_sampling
+    configuration=teacher.get('source_provenance')or{}
+    sampling=collection_sampling(configuration)
+    sampling_entries=_jsonl_rows(context['queue.jsonl'],'original collection queue')if 'queue.jsonl'in context else entries
+    verify_collection_sampling(teacher,sampling_entries,configuration)
+    if 'collection_sampling'in configuration:
+        master={row['key']:row for row in sampling_entries}
+        if any({key:value for key,value in row.items()if key!='finish_event'}!=master.get(row.get('key'))for row in entries):
+            raise ValueError('collection tranche entry differs from its original complete queue')
     packet_present = 'packet.jsonl' in context or 'preparation.json' in context
+    if 'collection_sampling'in configuration and not packet_present:
+        raise ValueError('declared collection sampling lacks its executed preparation')
     if packet_present:
         if not {'packet.jsonl', 'preparation.json'} <= context.keys():
             raise ValueError('prepared execution needs packet and preparation bytes')
@@ -222,7 +236,7 @@ def _execution_source(context: dict[str, bytes], entries: list[dict]) -> tuple[i
         source_path = teacher.get('source_cases')
         if (not isinstance(source_path, str)
                 or preparation.get('schema') != 'natlang.task-rollout-preparation/1'
-                or preparation.get('root_mode') != 'student'
+                or preparation.get('root_mode') != sampling['root_mode']
                 or preparation.get('source_cases') != source_path
                 or preparation.get('source_sha256') != _sha(context['source-cases.jsonl'])
                 or preparation.get('packet_sha256') != _sha(context['packet.jsonl'])):
@@ -230,12 +244,13 @@ def _execution_source(context: dict[str, bytes], entries: list[dict]) -> tuple[i
         package = Path(__file__).resolve().parents[2] / 'training/neuralese'
         if str(package) not in sys.path:
             sys.path.insert(0, str(package))
-        from natlang_neuralese.common.task_roots import student_root_row
-        packet = _jsonl_rows(context['packet.jsonl'], 'executed student-root packet')
+        from natlang_neuralese.common.task_roots import student_root_row, authored_root_row
+        packet = _jsonl_rows(context['packet.jsonl'], 'executed root packet')
+        transform=authored_root_row if sampling['root_mode']=='authored'else student_root_row
         canonical = lambda rows: json.dumps(rows, sort_keys=True, ensure_ascii=False,
                                             separators=(',', ':'), allow_nan=False)
-        if canonical(packet) != canonical([student_root_row(row) for row in cases]):
-            raise ValueError('executed packet differs from the existing student-root transformation')
+        if canonical(packet) != canonical([transform(row) for row in cases]):
+            raise ValueError('executed packet differs from the declared existing root transformation')
         expected_source = str(Path(source_path).with_name('packet.jsonl'))
         executed_sha = _sha(context['packet.jsonl'])
     else:

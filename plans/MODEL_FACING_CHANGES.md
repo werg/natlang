@@ -1168,3 +1168,21 @@ source bytes and actor/runtime identities are bound in
 This closes the live sampling debt. Per-decision admission and actual student
 training exposure remain separate; this measurement claims neither student lift
 nor optimal teacher trajectories. No held inputs, answers or traces were used.
+
+
+## 2026-10-18: repaired RL curriculum root-mode measurement debt
+
+Still pending: two own-sandbox Qwen measurements of the repaired12 TRAIN tasks
+(`079b1279232f211294922265e88eca187066899a09360af84e43ace9e9b84dee`),
+48 actual trajectories per root mode (group4). The existing authored-root mode
+executes the authored reference root and samples children; whole-student-root
+mode samples root and children. These are distinct model-facing contexts.
+The old step7750 diagnostic stopped on the unrepaired source with only6 authored
+and3 student samples scored. Existing23 accepted Qwen student-root captures are
+retained but are not48 per mode. The generation supervisor owns both windows
+through the existing guardian, preserving active slots and exact source/actor/
+runtime/text-emulation receipts. See `plans/neuralese/RL_CURRICULUM_20261016.md`
+for the immutable reconciliation audits. Static reference qualification and queue
+preparation do not close this debt. Actual current student native-KV/hybrid-state
+transport qualification remains separately assigned to the student supervisor;
+teacher text-emulation measurements cannot substitute for it.

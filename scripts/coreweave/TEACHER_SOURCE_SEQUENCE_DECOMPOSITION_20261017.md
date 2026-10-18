@@ -94,3 +94,37 @@ bindings and cursor transitions; it neither invents completion nor chooses task
 content, alters model prompts, creates another feeder, or grants admission.
 
 The first priority policy must bind the exact actually observed ready prefix. Persist and re-authenticate every accepted policy; later observation growth cannot reinterpret the original prefix, and closed priority receipts require that retained history. A supervisor may extend the same explicitly bound original policy basis without shortening previously observed work.
+
+## Explicit per-source measurement sampling
+
+The supervisor declares which already-qualified TRAIN packet needs an authored-
+root or whole-student-root measurement and the number of independent samples.
+Serve that declaration through the existing ordered/fair source policy; this
+adds no source-ranking policy, feeder, engine or sandbox. Keep useful previously
+accepted captures and every active slot's original source/helper/runtime.
+
+1. Bind optional `collection_sampling={group, root_mode}` identically in the
+   immutable candidate and prepared packet. Group is an integer at least two;
+   root mode is exactly authored or student. Missing declarations preserve the
+   existing two-sample/student-root command and historical receipt shape.
+2. Exact sequence plumbing transports that declaration and its candidate and
+   prepared authority into the per-batch immutable source configuration. A changed
+   or one-sided declaration fails before reservation/launch. Started receipts
+   verify the declared complete case/sample partition, seeds and root mode.
+3. The single existing feeder invokes task_rollouts.prepare with these values.
+   It preserves the existing actor/runtime, temperature and text-emulation
+   declarations. Resume counts come from the sealed sampling law, never a
+   division by a presumed two repeats.
+4. The shared publisher verifies the existing authored_root_row or student_root_row
+   transformation, exact preparation bytes and complete sampling partition.
+   Unknown modes, forged declarations and changed private contracts fail closed.
+   Existing unannotated student-root sources retain their prior verification law.
+5. Actual completed/qualified 48-sample windows, decision admission and student
+   exposure are separate receipts. Teacher text emulation cannot qualify a
+   student's native KV/hybrid-state transport. Both current student diagnostic
+   modes remain explicitly assigned until their own real executor qualification.
+
+The crisp changes verify explicit declarations, queue arithmetic and durable
+custody only. Existing natural-language source policy and priorities stay above.
+Independent root review and actual queue/preparation/export/recovery tests precede
+future-only deployment; in-flight slots keep their original sealed authorities.

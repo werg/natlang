@@ -108,11 +108,64 @@ def _drained_boundary(folder, state, config, batch, terminal):
     return binding(receipt)
 
 
+def collection_sampling(configuration):
+    """Exact optional source declaration; legacy sources keep their sampler."""
+    if 'collection_sampling' not in configuration:
+        return {'group':2, 'root_mode':'student'}
+    value=configuration['collection_sampling']
+    if (not isinstance(value,dict) or set(value)!={'group','root_mode'}
+            or type(value['group'])is not int or value['group']<2
+            or value['root_mode'] not in ('student','authored')):
+        raise ValueError('source collection sampling declaration is malformed')
+    return dict(value)
+
+
+def _jsonl_entries(path):
+    return [json.loads(line)for line in Path(path).read_bytes().splitlines()if line]
+
+
+def verify_collection_sampling(source,entries,configuration):
+    """Authenticate new explicit windows without reinterpreting legacy queues."""
+    if 'collection_sampling' not in configuration:return
+    sampling=collection_sampling(configuration)
+    if (source.get('collection_sampling')!=sampling
+            or source.get('root_mode')!=sampling['root_mode']
+            or source.get('source_provenance')!=configuration):
+        raise ValueError('started collection sampling differs from its declared source')
+    rows=configuration.get('rows');seed=source.get('seed_base');group=sampling['group']
+    if type(rows)is not int or rows<1 or type(seed)is not int or len(entries)!=rows*group:
+        raise ValueError('collection queue differs from its declared sample count')
+    seen=set();keys=set()
+    for row in entries:
+        index=row.get('index');sample=row.get('sample')
+        if (not isinstance(row.get('key'),str)or not row['key']or row['key']in keys
+                or type(index)is not int or not 0<=index<rows
+                or type(sample)is not int or not 0<=sample<group
+                or (index,sample)in seen or type(row.get('group'))is not int or row['group']!=index
+                or type(row.get('count'))is not int or row['count']!=1
+                or type(row.get('seed'))is not int or row['seed']!=seed+1000*index+sample
+                or row.get('temperature')!=source.get('temperature')
+                or row.get('text_neuralese_emulation')is not True):
+            raise ValueError('collection queue changed its declared case/sample/seed partition')
+        seen.add((index,sample));keys.add(row['key'])
+
+
 def _packet(entry, declaration, *, allow_empty=False):
     candidate=_json(entry['candidate_packet'],declaration)
     prepared=_json(entry['qualified_packet'],declaration)
     qualification=_json(prepared['qualification'],declaration)
     inputs=_json(qualification['inputs'],declaration)
+    sampling_fields={}
+    if 'collection_sampling' in candidate or 'collection_sampling' in prepared:
+        if ('collection_sampling' not in candidate or 'collection_sampling' not in prepared
+                or candidate['collection_sampling']!=prepared['collection_sampling']):
+            raise ValueError('candidate and prepared collection sampling disagree')
+        if collection_sampling(candidate)!=collection_sampling(prepared):
+            raise ValueError('candidate and prepared collection sampling disagree')
+        sampling_fields={'collection_sampling':collection_sampling(candidate),
+            'collection_sampling_authority':{
+                'candidate_packet':_reference(entry['candidate_packet'],declaration),
+                'qualified_packet':_reference(entry['qualified_packet'],declaration)}}
     refs=prepared['references']
     selection=_json(refs['selection'],declaration)
     protection=_json(refs['global_protection_join'],declaration)
@@ -188,7 +241,7 @@ def _packet(entry, declaration, *, allow_empty=False):
             or any(row.get('version')!='natlang.program/2' or row.get('split')!='train'
                    or not row.get('source_groups') for row in programs)):
         raise ValueError('sequence packet program identity/count/split differs')
-    return {'cases':str(cases),'cases_sha256':refs['selected_cases']['sha256'],'rows':len(programs),
+    return {**sampling_fields,'cases':str(cases),'cases_sha256':refs['selected_cases']['sha256'],'rows':len(programs),
         'protected_selection':selection,'selection':_reference(refs['selection'],declaration),
         'global_protection_join':_reference(refs['global_protection_join'],declaration),
         'reference_qualification':_reference(prepared['qualification'],declaration),
@@ -221,6 +274,10 @@ def observe_source_sequence(folder, state, config):
     if (sealed['source-cases.jsonl']['sha256']!=pending['cases_sha256']
             or source.get('source_cases_sha256')!=pending['cases_sha256']):
         raise ValueError('sequence started batch differs from its declared packet')
+    intent=_json(pending['intent'],declaration)
+    configuration=_json(intent['new_configuration'],declaration)
+    if 'collection_sampling'in configuration:
+        verify_collection_sampling(source,_jsonl_entries(root/'queue.jsonl'),configuration)
     key=str(batch);started=sequence.setdefault('started',{})
     if key not in started:
         receipt=Path(folder)/'source-sequence/started'/f'batch-{batch:04d}.json'
@@ -572,6 +629,9 @@ def _prefetch_start(folder,sequence,declaration,pending,root):
             or source.get('source_cases_sha256')!=pending['cases_sha256']):
         raise ValueError('reserved batch differs from its immutable source')
     intent=_json(pending['intent'],declaration)
+    configuration=_json(intent['new_configuration'],declaration)
+    if 'collection_sampling'in configuration:
+        verify_collection_sampling(source,_jsonl_entries(root/'queue.jsonl'),configuration)
     if source.get('actual_task_runtime')!=intent['prefetch']['task_runtime']:
         raise ValueError('reserved feeder used a different task runtime')
     receipt=Path(folder)/'source-sequence/started'/f"batch-{pending['batch']:04d}.json"
