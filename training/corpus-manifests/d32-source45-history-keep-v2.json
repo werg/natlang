@@ -1,0 +1,168 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "d32-source45-history-keep-v2",
+  "owner": "dgx",
+  "path": "runs/acquired-connected-native-graphs-20261018-history-keep-v2/D32/source45",
+  "files": [
+    {
+      "path": "8b003352ae9be61b058aa031d6b5fbc56eee1ff7aabb794f4fefc79eb33a5906/lfm25/omissions.jsonl",
+      "bytes": 445008,
+      "sha256": "2ee5dd9e66e881a48d92ecdfcd98c07ae95c1d78778d721c371a96ff87c01f93",
+      "lines": 25
+    },
+    {
+      "path": "8b003352ae9be61b058aa031d6b5fbc56eee1ff7aabb794f4fefc79eb33a5906/lfm25/receipt.json",
+      "bytes": 25741,
+      "sha256": "88eeb9d8df2d9949bf3e6246f1d6362c8394b00052d39775fb7ff0d25ce27e76"
+    },
+    {
+      "path": "8b003352ae9be61b058aa031d6b5fbc56eee1ff7aabb794f4fefc79eb33a5906/lfm25/resume-state.json",
+      "bytes": 23692,
+      "sha256": "dbda5eff35ea05e754a7938c14e38995e0f01193141d158d4648c5c166a13071"
+    },
+    {
+      "path": "8b003352ae9be61b058aa031d6b5fbc56eee1ff7aabb794f4fefc79eb33a5906/lfm25/test/native-graphs.jsonl.zst",
+      "bytes": 468,
+      "sha256": "f8e48551bb7ffddd77a3461e11cd8333dc20ca70db90859a1c93690b8c8e9c1b"
+    },
+    {
+      "path": "8b003352ae9be61b058aa031d6b5fbc56eee1ff7aabb794f4fefc79eb33a5906/lfm25/train/native-graphs.jsonl.zst",
+      "bytes": 66723591,
+      "sha256": "415d87c8f69d7a1ac8df6af4487d6c89eb16bbfd499f904f5093b1562140fc07"
+    },
+    {
+      "path": "8b003352ae9be61b058aa031d6b5fbc56eee1ff7aabb794f4fefc79eb33a5906/mellum21/omissions.jsonl",
+      "bytes": 445008,
+      "sha256": "2ee5dd9e66e881a48d92ecdfcd98c07ae95c1d78778d721c371a96ff87c01f93",
+      "lines": 25
+    },
+    {
+      "path": "8b003352ae9be61b058aa031d6b5fbc56eee1ff7aabb794f4fefc79eb33a5906/mellum21/receipt.json",
+      "bytes": 25994,
+      "sha256": "3f46d06e33e4456793967c17f951a820b203a74e6dcc00c5631ae1c03d78714e"
+    },
+    {
+      "path": "8b003352ae9be61b058aa031d6b5fbc56eee1ff7aabb794f4fefc79eb33a5906/mellum21/resume-state.json",
+      "bytes": 23939,
+      "sha256": "3c3655a194a79bf8e2ec0228c03c29f9a7a29a9502d5a85890e2636b439b1a79"
+    },
+    {
+      "path": "8b003352ae9be61b058aa031d6b5fbc56eee1ff7aabb794f4fefc79eb33a5906/mellum21/test/native-graphs.jsonl.zst",
+      "bytes": 468,
+      "sha256": "f8e48551bb7ffddd77a3461e11cd8333dc20ca70db90859a1c93690b8c8e9c1b"
+    },
+    {
+      "path": "8b003352ae9be61b058aa031d6b5fbc56eee1ff7aabb794f4fefc79eb33a5906/mellum21/train/native-graphs.jsonl.zst",
+      "bytes": 66763370,
+      "sha256": "243c88a92933cb068b1745aaa30df0928be50432e29b77ac306ff35854979703"
+    },
+    {
+      "path": "admission-d32-source45-history-keep-v2/audit.json",
+      "bytes": 5516053,
+      "sha256": "169ef018da02c90746943e7cb8c74f8e3c3c9c2036f6a08ea511089803f73209"
+    },
+    {
+      "path": "admission-d32-source45-history-keep-v2/lfm25-train-sources.json",
+      "bytes": 355,
+      "sha256": "10ea36f90dddeef0ed5c21d8cd08a7d22d254187745a88b3de3accadd62e8122"
+    },
+    {
+      "path": "admission-d32-source45-history-keep-v2/mellum21-train-sources.json",
+      "bytes": 358,
+      "sha256": "41cebb35dec55d32118bd782218c23e979e350710e054c0403bd77d5c6750ccf"
+    },
+    {
+      "path": "admission-d32-source45-history-keep-v2/row-proof.jsonl",
+      "bytes": 3359956,
+      "sha256": "262c2d583c4f51e1260ea5abbe7f3f0516315d77a1a93f0e51627cc0fc534f93",
+      "lines": 3524
+    },
+    {
+      "path": "admission-d32-source45-history-keep-v2/source-render-samples.json",
+      "bytes": 18084,
+      "sha256": "5ed7f0b47a077f67122322cd1ba43d2b38bf05682918d29bbbb4f6695652e3a2"
+    },
+    {
+      "path": "capacity-source45-v2/limits.json",
+      "bytes": 117,
+      "sha256": "85b2310699d8369867839ea397e97d986082c27a0a6fb045c5376eba56aa049c"
+    },
+    {
+      "path": "capacity-source45-v2/partition/files/coverage.jsonl",
+      "bytes": 3016342,
+      "sha256": "8a6e344ef9d84d63e974a51b6547e38846954c47be0fc4e9ddc23cc514b6e9c1",
+      "lines": 3524
+    },
+    {
+      "path": "capacity-source45-v2/partition/files/lfm25/test/fit.jsonl.zst",
+      "bytes": 13,
+      "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+    },
+    {
+      "path": "capacity-source45-v2/partition/files/lfm25/test/remaining-long.jsonl.zst",
+      "bytes": 13,
+      "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+    },
+    {
+      "path": "capacity-source45-v2/partition/files/lfm25/train/fit-sources.json",
+      "bytes": 265,
+      "sha256": "867e1591854ff95784e694f60292b94f7bd22588638666739b4dcacd2207cfd0"
+    },
+    {
+      "path": "capacity-source45-v2/partition/files/lfm25/train/fit.jsonl.zst",
+      "bytes": 44965829,
+      "sha256": "514b9ca5f7612a5767fd499d7e794b3e8ae357589a7caf338b3b9f29468401b3"
+    },
+    {
+      "path": "capacity-source45-v2/partition/files/lfm25/train/remaining-long-sources.json",
+      "bytes": 276,
+      "sha256": "19837def308db64fb853d38802fb8f00370d21e723d10a51ce2fe5eac0f62c96"
+    },
+    {
+      "path": "capacity-source45-v2/partition/files/lfm25/train/remaining-long.jsonl.zst",
+      "bytes": 21563262,
+      "sha256": "c8b9273a630e3dfb667293ab9d3cfe0e6daf0c84c0f1115765c77aa9a8623007"
+    },
+    {
+      "path": "capacity-source45-v2/partition/files/mellum21/test/fit.jsonl.zst",
+      "bytes": 13,
+      "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+    },
+    {
+      "path": "capacity-source45-v2/partition/files/mellum21/test/remaining-long.jsonl.zst",
+      "bytes": 13,
+      "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+    },
+    {
+      "path": "capacity-source45-v2/partition/files/mellum21/train/fit-sources.json",
+      "bytes": 265,
+      "sha256": "e706844da4fede083343b60eeb3604943d54049c09b348278341d2d0b6216a06"
+    },
+    {
+      "path": "capacity-source45-v2/partition/files/mellum21/train/fit.jsonl.zst",
+      "bytes": 45167132,
+      "sha256": "1ae2f5d061e48c7aa35ed2ed8b5900443bb6a2171bd57003e2b969a940cb9069"
+    },
+    {
+      "path": "capacity-source45-v2/partition/files/mellum21/train/remaining-long-sources.json",
+      "bytes": 276,
+      "sha256": "bbd7796fc2ac866e80d0033f4b8def592ffc36fa36967607d2600e92bd9a3908"
+    },
+    {
+      "path": "capacity-source45-v2/partition/files/mellum21/train/remaining-long.jsonl.zst",
+      "bytes": 19630567,
+      "sha256": "cdb97171143928b39dba66fef1989b453eaa6396cfffae2dce379c2e2255a02b"
+    },
+    {
+      "path": "capacity-source45-v2/partition/files/pending-sources.json",
+      "bytes": 201164,
+      "sha256": "c8fcbabcf48309ddc36b78abeb92b0d42884212a0660cbbdb3fd9ae15f8d0eda"
+    },
+    {
+      "path": "capacity-source45-v2/partition/receipt.json",
+      "bytes": 6495,
+      "sha256": "cdf665bfa677b31025aed49148c815bce200de4eed2e1af3c34313c30844cb67"
+    }
+  ],
+  "bytes": 277924127
+}
