@@ -57,7 +57,7 @@ def fixture(tmp_path):
         'request_sha256':bridge.binding(request)['sha256'],'status':'completed','state':bridge.binding(job/'state.json'),
         'checkpoint':cp,'artifacts':bridge.inventory(job,exclude=[result])})
     plan=tmp_path/'global.json';write(plan,{'models':[{'model':'lfm','production_recipe':adapt.binding(recipe_path)}]})
-    config['runtime_binding']={'plan_sha256':adapt.binding(plan)['sha256'],'handoff':config['bootstrap_binding']['handoff']};write(config_path,config)
+    config['runtime_binding']={'plan_sha256':adapt.binding(plan)['sha256'],'handoff':config['bootstrap_binding']['handoff']};config['supervised_stage_quantum_control']={'plan':adapt.binding(plan),'updates':config['supervised_stage_quantum_updates']};write(config_path,config)
     controller={'pid':99999999,'start_ticks':'0','boot_id':'gone'}
     return root,config_path,request,result,controller,plan,recipe_path
 
@@ -124,6 +124,7 @@ def test_configuration_changes_future_lr_only_and_does_not_repeat_completed_stag
     adapt.configure(plan,p['models'][0],old['bootstrap_binding']['handoff'],config)
     future=json.loads(config.read_text())
     assert future['seed_trainer_parameters']['learning_rate']==new_lr
+    assert future['supervised_stage_quantum_control']['plan']==adapt.binding(plan)
     assert before==((root/'cycle.json').read_bytes(),(root/'production/state.json').read_bytes())
     assert json.loads((root/'cycle.json').read_text())['next_stage']==1
     adapt.configure(plan,p['models'][0],old['bootstrap_binding']['handoff'],config)

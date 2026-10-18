@@ -330,6 +330,12 @@ def configure(plan_path,declaration,bootstrap,config_path):
         raise ValueError('completed adaptation belongs to another controller/bootstrap')
     future['completed_supervised_adaptation']=reference
     future['runtime_binding']={'plan_sha256':binding(plan_path)['sha256'],'handoff':bootstrap}
+    for key in('supervised_quantum_control','supervised_stage_quantum_control'):
+        if key in future:
+            if (future[key].get('plan',{}).get('sha256')!=proof['old_global_plan']['sha256']
+                    or Path(future[key]['plan']['path']).resolve()!=Path(plan_path).resolve()):
+                raise ValueError('completed adaptation changed its declared scheduling authority')
+            future[key]={**future[key],'plan':binding(plan_path)}
     if prior==future:
         save(path.parent/'bootstrap-verification.json',plan_path,declaration,bootstrap,future)
         return path
