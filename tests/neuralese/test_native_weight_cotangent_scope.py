@@ -110,6 +110,72 @@ def test_vjp_unused_low_precision_parameter_without_gradient_remains_allowed(tmp
     assert used is not None and unused is None
 
 
+@pytest.mark.parametrize('mode', ['update', 'vjp'])
+def test_tied_bf16_embedding_and_readout_share_reference_cotangent(tmp_path, mode):
+    from natlang_neuralese.common.native_higher_order import reference_arithmetic
+
+    class TiedTable(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.embedding = nn.Embedding(9, 5, dtype=torch.bfloat16)
+            self.readout = nn.Linear(5, 9, bias=False, dtype=torch.bfloat16)
+            self.readout.weight = self.embedding.weight
+
+        def forward(self, ids):
+            return self.readout(self.embedding(ids))
+
+    torch.manual_seed(918)
+    model = TiedTable()
+    weight = model.embedding.weight
+    ids = torch.tensor([[1, 4, 1], [7, 4, 3]])
+    cotangent = torch.randn(2, 3, 9)
+
+    # Independent oracle: both lookup and projection use one FP32 cast node,
+    # then the accumulated derivative is cast to the stored BF16 parameter.
+    oracle_weight = weight.detach().float().requires_grad_(True)
+    oracle_hidden = torch.nn.functional.embedding(ids, oracle_weight)
+    oracle_logits = torch.nn.functional.linear(oracle_hidden.double(), oracle_weight.double()).float()
+    oracle_loss = (oracle_logits * cotangent).sum()
+    expected, = torch.autograd.grad(oracle_loss, (oracle_weight,))
+    expected = expected.to(weight.dtype)
+
+    with ParameterCotangentScope.for_model(model, mode=mode, directory=tmp_path) as scope:
+        with reference_arithmetic():
+            logits = model(ids)
+            loss = (logits * cotangent.to(logits)).sum()
+            if mode == 'update':
+                loss.backward()
+                scope.finish()
+                actual = weight.grad
+            else:
+                actual, = torch.autograd.grad(loss, (weight,))
+                scope.finish()
+    torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+
+
+def test_update_rejects_unwrapped_gradient_even_when_reference_route_exists(tmp_path):
+    from natlang_neuralese.common.native_higher_order import reference_arithmetic
+
+    class TiedTable(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.embedding = nn.Embedding(9, 5, dtype=torch.bfloat16)
+            self.readout = nn.Linear(5, 9, bias=False, dtype=torch.bfloat16)
+            self.readout.weight = self.embedding.weight
+
+        def forward(self, ids):
+            return self.readout(self.embedding(ids))
+
+    model = TiedTable()
+    weight = model.embedding.weight
+    with ParameterCotangentScope.for_model(model, mode='update', directory=tmp_path) as scope:
+        with reference_arithmetic():
+            loss = model(torch.tensor([[1, 4]])).sum() + weight.sum() * 0.01
+            loss.backward()
+            with pytest.raises(RuntimeError, match='bypassed cotangent carrier'):
+                scope.finish()
+
+
 def test_embedding_split_lookups_accumulate_selected_fp32_rows(tmp_path):
     model = nn.Sequential(nn.Embedding(11, 7).to(dtype=torch.bfloat16))
     model[0].padding_idx = 0

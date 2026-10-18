@@ -26,6 +26,8 @@ def _is_rms_norm_module(module):
 
 def _conv1d_carrier_forward(scope, module, original_forward):
     def forward(x):
+        if _reference_scope_active(scope):
+            return _reference_module_forward(scope, module, original_forward, x)
         weight_anchors = scope.anchors_for_weight(module.weight)
         bias_anchors = scope.anchors_for_weight(module.bias) if module.bias is not None else ()
         count = len(weight_anchors)
@@ -36,6 +38,8 @@ def _conv1d_carrier_forward(scope, module, original_forward):
 
 def _rms_norm_carrier_forward(scope, module, original_forward):
     def forward(x):
+        if _reference_scope_active(scope):
+            return _reference_module_forward(scope, module, original_forward, x)
         anchors = scope.anchors_for_weight(module.weight)
         eps = next((getattr(module, name) for name in ('variance_epsilon', 'eps', 'epsilon')
                     if hasattr(module, name)), None)
@@ -43,6 +47,32 @@ def _rms_norm_carrier_forward(scope, module, original_forward):
             raise RuntimeError(f'RMSNorm carrier cannot identify epsilon for {type(module).__qualname__}')
         return _TorchStoredRMSNorm.apply(x, module.weight, float(eps), module, original_forward, *anchors)
     return forward
+
+
+def _reference_scope_active(scope):
+    if active_cotangent_scope() is not scope:
+        return False
+    from ..common.native_higher_order import active_reference_arithmetic
+    return active_reference_arithmetic() is not None
+
+
+def _reference_module_forward(scope, module, original_forward, *args, **kwargs):
+    """Temporarily route selected low-precision module operands via shared casts."""
+    replacements, originals = {}, {}
+    for name in ('weight', 'bias'):
+        parameter = getattr(module, name, None)
+        if isinstance(parameter, torch.Tensor) and scope._entry_for(parameter) is not None:
+            value = scope.reference_parameter(parameter).to(dtype=parameter.dtype,
+                                                             device=parameter.device)
+            replacements[name] = value
+    try:
+        for name, value in replacements.items():
+            originals[name] = module._parameters[name]
+            module._parameters[name] = value
+        return original_forward(*args, **kwargs)
+    finally:
+        for name, value in originals.items():
+            module._parameters[name] = value
 
 
 def _embedding_carrier_forward(module):
@@ -63,6 +93,11 @@ def _lfm_causal_carrier_forward(scope, module, original_forward):
     if not callable(operation):
         raise RuntimeError('LFM short convolution has no callable causal_conv1d_fn')
     def dispatch(x, weight, bias=None, activation=None, **kwargs):
+        if _reference_scope_active(scope):
+            weight = scope.reference_parameter(weight).to(dtype=weight.dtype, device=weight.device)
+            if bias is not None:
+                bias = scope.reference_parameter(bias).to(dtype=bias.dtype, device=bias.device)
+            return operation(x, weight, bias, activation=activation, **kwargs)
         anchors = scope.anchors_for_weight(weight)
         if not anchors:
             return operation(x, weight, bias, activation=activation, **kwargs)
@@ -165,9 +200,6 @@ class ParameterCotangentScope:
                         self._module_changes.append(('forward', module, original))
                     elif (type(module).__name__ in _RMS_NORM_TYPES and isinstance(weight, torch.Tensor)
                           and id(weight) in selected):
-                        from ..common.native_higher_order import active_reference_arithmetic
-                        if active_reference_arithmetic() is not None:
-                            continue
                         original = module.forward
                         module.forward = _rms_norm_carrier_forward(self, module, original)
                         self._module_changes.append(('forward', module, original))
@@ -522,17 +554,35 @@ class ParameterCotangentScope:
         # A regular autograd edge is evidence that a use bypassed the shared
         # accumulator and would otherwise be rounded during BF16 fan-in.
         all_entries = [*self.entries.values(), *self._auxiliary_entries.values()]
-        bypasses = [entry['name'] for entry in self.entries.values()
-                    if (entry['parameter'].grad is not entry['initial_grad'] or
-                        entry['parameter'].grad is not None and
-                        entry['parameter'].grad._version != entry['initial_grad_version'])
-                    and not (entry['anchor_backward'] > 0 or
-                             entry.get('reference_cotangent') is not None)]
+        bypasses = []
+        for entry in self.entries.values():
+            parameter = entry['parameter']
+            gradient = parameter.grad
+            changed = (gradient is not entry['initial_grad'] or
+                       gradient is not None and gradient._version != entry['initial_grad_version'])
+            if not changed:
+                continue
+            reference = entry.get('reference_cotangent')
+            if self.mode == 'vjp' and entry['anchor_backward'] > 0:
+                continue
+            if self.mode == 'update' and reference is not None:
+                expected = reference.to(device=parameter.device, dtype=parameter.dtype)
+                if entry['initial_grad'] is not None:
+                    expected = entry['initial_grad'] + expected
+                if gradient is not None and torch.equal(gradient, expected):
+                    continue
+            bypasses.append(entry['name'])
         if bypasses:
             counts = {entry['name']: entry['count'] for entry in self.entries.values()
                       if entry['name'] in bypasses}
             raise RuntimeError('low-precision parameter gradient bypassed cotangent carrier: '
                                + ', '.join(f'{name} (carried={counts[name]})' for name in bypasses[:8]))
+        mixed_reference = [entry['name'] for entry in self.entries.values()
+                           if self.mode == 'vjp' and entry.get('reference_cotangent') is not None
+                           and entry['count']]
+        if mixed_reference:
+            raise RuntimeError('reference VJP mixed differentiable and file-backed cotangents: '
+                               + ', '.join(mixed_reference[:8]))
         missing = [entry['name'] for entry in all_entries
                    if entry['count'] and entry['anchor_backward'] == 0 and self.mode == 'vjp']
         if missing:
@@ -542,8 +592,12 @@ class ParameterCotangentScope:
             for entry in self.entries.values():
                 reference = entry.get('reference_cotangent')
                 if reference is not None:
-                    entry['parameter'].grad = reference.to(device=entry['parameter'].device,
-                                                           dtype=entry['parameter'].dtype)
+                    combined = reference
+                    if entry['count']:
+                        combined = combined + entry['accumulator'].to(device=reference.device,
+                                                                      dtype=torch.float32)
+                    entry['parameter'].grad = combined.to(device=entry['parameter'].device,
+                                                          dtype=entry['parameter'].dtype)
                 elif entry['count']:
                     entry['parameter'].grad = entry['accumulator'].to(device=entry['parameter'].device,
                                                                        dtype=entry['parameter'].dtype)
@@ -1015,6 +1069,11 @@ def stored_finite_convolution(histories, weight, bias, c):
     """Keep the native finite-history forward and widen its convolution dW."""
     from ..common.native_higher_order import active_reference_arithmetic
     if active_reference_arithmetic() is not None:
+        scope = active_cotangent_scope()
+        if scope is not None:
+            weight = scope.reference_parameter(weight)
+            if bias is not None:
+                bias = scope.reference_parameter(bias)
         out = (histories.contiguous().float() * weight[:, 0].T.float()[None, None]).sum(2)
         if bias is not None:
             out = out + bias.float()
@@ -1033,6 +1092,15 @@ def stored_finite_convolution(histories, weight, bias, c):
 def stored_embedding(indices, weight, *, padding_idx=None, max_norm=None, norm_type=2.0,
                      scale_grad_by_freq=False, sparse=False):
     """Keep exact lookup values and share low-precision embedding row gradients."""
+    from ..common.native_higher_order import active_reference_arithmetic
+    scope = active_cotangent_scope()
+    if active_reference_arithmetic() is not None and scope is not None:
+        if max_norm is not None:
+            raise RuntimeError('reference low-precision embedding does not support max_norm mutation')
+        if sparse:
+            raise RuntimeError('reference low-precision embedding requires the dense gradient contract')
+        weight = scope.reference_parameter(weight)
+        return F.embedding(indices, weight, padding_idx, None, norm_type, False, False)
     anchors = _scope_anchors(weight)
     if not anchors:
         return F.embedding(indices, weight, padding_idx, max_norm, norm_type,
