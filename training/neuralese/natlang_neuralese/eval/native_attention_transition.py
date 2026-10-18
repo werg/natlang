@@ -26,6 +26,9 @@ def transition_equivalence(report):
     worsen beyond the same declared absolute/relative numerical gates.
     """
     failures=[]
+    execution_setting=report.get('execution_setting','native_attention_precision')
+    if execution_setting not in('native_attention_precision','ffn_chunk_tokens'):
+        return {'passed':False,'failures':['unknown execution transition setting'],'readiness_qualified':False}
     def require(condition,reason):
         if not condition:failures.append(reason)
     def finite(value):return type(value)in(int,float)and math.isfinite(value)
@@ -41,6 +44,13 @@ def transition_equivalence(report):
     require(report.get('source_state_preserved')is True,'source state was not preserved')
     require(report.get('cross_mode_passed')is True,'complete cross-mode comparison failed')
     require(report.get('optimizer_updates')==0,'transition performed optimizer updates')
+    if execution_setting=='ffn_chunk_tokens':
+        counts=[report.get(key)for key in('previous_mode','candidate_mode')]
+        valid_counts=all(type(value)is int and value>=0 for value in counts)
+        require(valid_counts,'invalid FFN execution counts')
+        nodes=(report.get('case')or{}).get('invocations')or[]
+        require(valid_counts and bool(nodes)and len(nodes[0].get('token_ids',[]))>max(counts),
+                'FFN reference did not cross the selected chunk boundary')
     expected_case=report.get('case_sha256')
     require(expected_case==canonical_json_sha256_hex(report.get('case')),'transition case digest differs')
     require(old.get('case_sha256')==new.get('case_sha256')==expected_case,'cached case differs')
@@ -71,7 +81,7 @@ def transition_equivalence(report):
         complete=value.get('complete_gradient_qualification')or{}
         cfg=complete.get('model_config')or{}
         expected_mode=report.get('previous_mode'if label=='baseline'else'candidate_mode')
-        require(cfg.get('native_attention_precision','ieee')==expected_mode,'cached arithmetic identity differs: '+label)
+        require(cfg.get(execution_setting,0 if execution_setting=='ffn_chunk_tokens'else'ieee')==expected_mode,'cached arithmetic identity differs: '+label)
         require(complete.get('model_config_sha256')==canonical_json_sha256_hex(cfg),'cached model profile digest differs: '+label)
         require(complete.get('inventory_sha256')==canonical_json_sha256_hex(complete.get('inventory')),
                 'cached inventory digest differs: '+label)
@@ -86,7 +96,7 @@ def transition_equivalence(report):
         if 'training_backend_execution'in value:
             require(value['training_backend_execution'].get('passed')is True,'runtime backend did not execute: '+label)
     configs=[dict(value.get('model_config')or{})for value in(old,new)]
-    for cfg in configs:cfg.pop('native_attention_precision',None)
+    for cfg in configs:cfg.pop(execution_setting,None)
     require(configs[0]==configs[1],'transition changed another model setting')
     require(baseline.get('passed')is not True or candidate.get('passed')is True,'new failed cached runtime proof')
     require(old.get('passed')is not True or new.get('passed')is True,'new failed complete cached proof')
@@ -124,7 +134,7 @@ def transition_equivalence(report):
         require(finite(a)and finite(b)and min(a,b)>=0,'nonfinite cached runtime metric: '+key)
         if finite(a)and finite(b):
             require((a>gate or b<=gate)and b<=a+gate,'new/worse cached runtime failure: '+key)
-    return {'schema':'natlang.native-attention-transition-equivalence/1','passed':not failures,
+    return {'schema':('natlang.native-ffn-chunk-transition-equivalence/1'if execution_setting=='ffn_chunk_tokens'else'natlang.native-attention-transition-equivalence/1'),'passed':not failures,
             'failures':failures,'inherited_cached_reference_debt':not report.get('cached_reference_passed'),
             'readiness_qualified':False,'optimizer_updates':0}
 
@@ -152,7 +162,7 @@ def _channel_copies(model, named):
 
 def qualify_attention_transition(model, tokenizer, roles, config, *, optimizer,
         previous_mode, candidate_mode, checkpoint_sha256, forward_atol, gradient_atol,
-        gradient_rtol=1e-4, backend=None):
+        gradient_rtol=1e-4, backend=None, _execution_setting='native_attention_precision'):
     """Return cross-mode and cached-reference evidence as distinct conclusions."""
     named, gradient_roles = production_inventory(model, optimizer._native_named_parameters)
     source_named = named
@@ -160,10 +170,16 @@ def qualify_attention_transition(model, tokenizer, roles, config, *, optimizer,
         if getattr(child, '_armed', None) is not None or (getattr(child, '_hooks', []) and not getattr(child, '_gated', False)):
             raise ValueError('attention comparison requires an unarmed, gated update boundary')
     device = model.input_rows.device
-    original_mode = getattr(model, 'native_attention_precision', 'ieee')
-    if original_mode != getattr(model.port, 'native_attention_precision', 'ieee'):
+    if _execution_setting not in('native_attention_precision','ffn_chunk_tokens'):
+        raise ValueError('unknown execution transition setting')
+    ffn=_execution_setting=='ffn_chunk_tokens'
+    original_mode=getattr(model.port,'ffn_chunk_tokens',0)if ffn else getattr(model,'native_attention_precision','ieee')
+    had_ffn=hasattr(model.port,'ffn_chunk_tokens')
+    if ffn and any(type(value)is not int or value<0 for value in(original_mode,previous_mode,candidate_mode)):
+        raise ValueError('FFN transition requires nonnegative actual token chunk counts')
+    if not ffn and original_mode != getattr(model.port,'native_attention_precision','ieee'):
         raise ValueError('model and port attention modes disagree')
-    if config.get('native_attention_precision', 'ieee') != original_mode:
+    if config.get(_execution_setting,0 if ffn else'ieee')!=original_mode:
         raise ValueError('attention comparison configuration differs from live model')
     source_parameters={id(p):p for p in model.parameters()};source_parameters.update({id(p):p for _,p in named})
     versions = {key:p._version for key,p in source_parameters.items()}
@@ -187,21 +203,23 @@ def qualify_attention_transition(model, tokenizer, roles, config, *, optimizer,
             backend.restore_extra_state(copy.deepcopy(extra))
 
     def select(mode):
-        set_native_attention_precision(model, mode)
+        if ffn:model.port.ffn_chunk_tokens=mode
+        else:set_native_attention_precision(model,mode)
         reset()
 
     def reference_report(mode):
         select(mode)
-        selected_config={**config,'native_attention_precision':mode}
+        selected_config={**config,_execution_setting:mode}
+        probe={'minimum_source_tokens':max(previous_mode,candidate_mode)+1}if ffn else{}
         if backend is not None:
             from .native_backend import qualify_training_backend
             checked=qualify_training_backend(model,tokenizer,roles,selected_config,backend=backend,
                 checkpoint_sha256=checkpoint_sha256,forward_atol=forward_atol,gradient_atol=gradient_atol,
-                gradient_rtol=gradient_rtol,device=device,gradient_parameters=named,raise_on_failed=False)
+                gradient_rtol=gradient_rtol,device=device,gradient_parameters=named,raise_on_failed=False,**probe)
             return checked['runtime_reference']
         return qualify_existing(model,tokenizer,roles,selected_config,
             checkpoint_sha256=checkpoint_sha256,forward_atol=forward_atol,gradient_atol=gradient_atol,
-            gradient_rtol=gradient_rtol,gradient_parameters=named,before_graph=reset)
+            gradient_rtol=gradient_rtol,gradient_parameters=named,before_graph=reset,**probe)
 
     try:
         model.eval()
@@ -255,7 +273,8 @@ def qualify_attention_transition(model, tokenizer, roles, config, *, optimizer,
                 comparisons[execution] = comparison
                 del outputs, old_hidden, new_hidden, old_loss, old_inputs
             candidate = reference_report(candidate_mode)
-            result = dict(schema='natlang.native-attention-transition-complete/1',
+            result = dict(schema=('natlang.native-ffn-chunk-transition-complete/1'if ffn else'natlang.native-attention-transition-complete/1'),
+                **({'execution_setting':_execution_setting}if ffn else{}),
                 parent_checkpoint_sha256=checkpoint_sha256, previous_mode=previous_mode,
                 candidate_mode=candidate_mode, case=case, case_sha256=canonical_json_sha256_hex(case),
                 roles=gradient_roles, cross_mode=comparisons,channel_copy_bytes=channel_copy_bytes,
@@ -267,7 +286,10 @@ def qualify_attention_transition(model, tokenizer, roles, config, *, optimizer,
                 elapsed_seconds=time.monotonic()-started)
             result['passed'] = result['cross_mode_passed'] and result['cached_reference_passed']
     finally:
-        set_native_attention_precision(model, original_mode)
+        if ffn:
+            if had_ffn:model.port.ffn_chunk_tokens=original_mode
+            elif hasattr(model.port,'ffn_chunk_tokens'):delattr(model.port,'ffn_chunk_tokens')
+        else:set_native_attention_precision(model,original_mode)
         model.port.checkpoint_layers = checkpointing
         for module, training in modes.items(): module.training = training
         restore_error=None
@@ -291,3 +313,13 @@ def qualify_attention_transition(model, tokenizer, roles, config, *, optimizer,
     result['source_state_preserved'] = True
     result['transition_equivalence']=transition_equivalence(result)
     return result
+
+
+def qualify_ffn_chunk_transition(model,tokenizer,roles,config,*,optimizer,previous_chunk_tokens,
+        candidate_chunk_tokens,checkpoint_sha256,forward_atol,gradient_atol,gradient_rtol=1e-4,backend=None):
+    """Reuse the complete unchanged-state graph/cached execution verifier for FFN workspace."""
+    actual=getattr(model.port,'ffn_chunk_tokens',0)
+    return qualify_attention_transition(model,tokenizer,roles,{**config,'ffn_chunk_tokens':actual},
+        optimizer=optimizer,previous_mode=previous_chunk_tokens,candidate_mode=candidate_chunk_tokens,
+        checkpoint_sha256=checkpoint_sha256,forward_atol=forward_atol,gradient_atol=gradient_atol,
+        gradient_rtol=gradient_rtol,backend=backend,_execution_setting='ffn_chunk_tokens')

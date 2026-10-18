@@ -10,7 +10,7 @@ from ..train.loop import capture_training_rng_state, restore_training_rng_state
 
 def qualify_training_backend(model, tokenizer, roles, config, *, backend,
                              checkpoint_sha256, forward_atol, gradient_atol, device,
-                             gradient_parameters=None,raise_on_failed=True,gradient_rtol=1e-4):
+                             gradient_parameters=None,raise_on_failed=True,gradient_rtol=1e-4,minimum_source_tokens=0):
     if backend is None:
         raise ValueError('training backend qualification requires an enabled backend')
     if forward_atol is None or gradient_atol is None:
@@ -23,6 +23,7 @@ def qualify_training_backend(model, tokenizer, roles, config, *, backend,
         # native_modules deliberately disables FP8 and cannot qualify its execution.
         with backend.autocast():
             options={'gradient_rtol':gradient_rtol}
+            if minimum_source_tokens:options['minimum_source_tokens']=minimum_source_tokens
             if gradient_parameters is not None:
                 options.update(gradient_parameters=gradient_parameters,
                     before_graph=lambda:backend.restore_extra_state(copy.deepcopy(extra)))
