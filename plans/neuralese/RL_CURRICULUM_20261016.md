@@ -217,4 +217,25 @@ each mode for actual sampled provider replies. If it has none, drain only that
 new source's exact workers, preserve the same attempted key and investigate;
 other useful source slots continue. Static literal execution, reference-driver
 responses and generated queue entries never count as sampled model trajectories.
-Both live windows and current student native-KV qualification remain pending.
+The authored window completed in genuine GEN batch46; the student-root window
+and current student native-KV qualification remain pending.
+
+The immutable captured-window audit
+`/home/werg/data/dgxops/teacher195-authored48-captured-window-v2-1792354330623558657-20261018.json`
+(SHA-256 `27b3aa7b33cb5fa7998face05133333d941184c6bd7b8b47bee9a5c51b9fc89e`)
+records all48 original keys, seeds and output SHA bindings: three private-child
+cases×16, 48 accepted unchanged oracle outcomes and177 genuine sampled provider
+turns. Actor `ef1e653cff3d05d9076051885346ea08e6d550c610cf9153fe48eefb2aa4be28`
+is the self-hosted Qwen teacher; task runtime is the declared-callback24c snapshot,
+not a trained student checkpoint. Batch46 teacher-source SHA is
+`3bb0b45a5c59b46f27f2985f2b8156baa822c222eec732b5e77e1958898cd243`.
+
+The first audit incorrectly required a tool call in every trajectory and found
+only43. Its five apparent gaps were genuine direct scalar replies with captured
+request/response identities. The corrected audit applies the existing shared
+`admitted_teacher_turn` payload law: tool calls or nonempty assistant text,
+excluding every authored reference-root action marked sampled:false. Across the
+window,17 sampled turns are scalar replies. The false first audit remains
+preserved; no sample was regenerated or replaced. This closes authored teacher
+text-execution measurement only. Training admission, exposure and actual student
+native-KV/hybrid-state qualification remain separate.

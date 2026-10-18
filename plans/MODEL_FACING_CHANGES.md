@@ -1172,8 +1172,8 @@ nor optimal teacher trajectories. No held inputs, answers or traces were used.
 
 ## 2026-10-18: repaired RL curriculum root-mode measurement debt
 
-Still pending: two own-sandbox Qwen measurements of the repaired12 TRAIN tasks
-(`079b1279232f211294922265e88eca187066899a09360af84e43ace9e9b84dee`),
+Own-sandbox Qwen measurements use the schema-repaired12 TRAIN tasks
+(`88358421bcb0c44253e0b3ac68f4c71b29f0cc287c9da8ee5caad30aa04d8dc1`),
 48 actual trajectories per root mode: three private-child authored tasks×16
 and all12 student-root tasks×4. Nine literal authored roots are static proofs
 with zero model calls and never count as live measurements. The authored-root mode
@@ -1188,3 +1188,14 @@ for the immutable reconciliation audits. Static reference qualification and queu
 preparation do not close this debt. Actual current student native-KV/hybrid-state
 transport qualification remains separately assigned to the student supervisor;
 teacher text-emulation measurements cannot substitute for it.
+
+Authored measurement completed in batch46: all48 original trajectories contain
+genuine sampled provider replies and all48 unchanged task oracles accepted.
+The exact audit is
+`/home/werg/data/dgxops/teacher195-authored48-captured-window-v2-1792354330623558657-20261018.json`,
+SHA-256 `27b3aa7b33cb5fa7998face05133333d941184c6bd7b8b47bee9a5c51b9fc89e`.
+It excludes scripted reference-root actions and retains scalar text replies as
+well as tool calls, following existing provider-capture semantics. The first
+43/48 audit was a tool-only checker error and remains preserved. Student-root
+12×4 measurement is still pending; neither this teacher measurement nor its
+48 accepted outcomes grants training admission or student native-KV qualification.
