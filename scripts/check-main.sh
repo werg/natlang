@@ -23,8 +23,13 @@ set -u
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 # A linked worktree has no venv of its own: use the main checkout's.
 MAIN=$(cd "$ROOT" && cd "$(git rev-parse --git-common-dir)/.." && pwd)
-# Nor its own node packages: npm installs them at the workspace root and in ts-host, so link the main checkout's
-# (one missing level leaves e.g. undici or @wllama unresolved and reads as TS2307/TS7006 errors).
+# Share installed third-party packages with linked worktrees while keeping
+# workspace package links pointed at the checkout under test. A single root
+# node_modules symlink resolves @natlang/* to the wrong source revision.
+python3 "$ROOT/scripts/prepare_check_main_node_modules.py" "$ROOT" "$MAIN"
+# The ts-host and application installs contain their third-party dependencies;
+# link those trees when the worktree does not already have its own install.
+# (One missing level leaves e.g. undici or @wllama unresolved and reads as TS2307/TS7006 errors.)
 # The bundled applications (applications/*) install their own from their lockfiles (scripts/setup_dev.sh).
 for dir in . ts-host $(cd "$MAIN" && ls -d applications/*/ 2>/dev/null | sed 's#/$##'); do
   if [ ! -e "$ROOT/$dir/node_modules" ] && [ -d "$MAIN/$dir/node_modules" ] && [ -d "$ROOT/$dir" ]; then
