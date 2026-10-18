@@ -195,6 +195,45 @@ def test_the_guard_walks_again_after_a_pause_when_the_last_walk_freed_little(mon
     assert [round(t - started[0]) for t in started] == [0, 2100]  # done at the next check, then 1800 s
 
 
+@pytest.mark.parametrize('physical_gb,available_gb,expected', [
+    (1, 58, [1000, 1062, 1124]),  # cached files block CUDA despite ample admission headroom
+    (1, 9, [1000]),             # real memory pressure retains the poor-walk backoff
+    (12, 58, [1000]),           # ordinary physical headroom retains the poor-walk backoff
+])
+def test_guard_retries_cache_reclaim_for_cuda_without_overlapping_or_spinning(
+        monkeypatch, tmp_path, physical_gb, available_gb, expected):
+    monkeypatch.setattr(ledger, 'STATE', str(tmp_path / 'ledger.json'))
+    monkeypatch.setattr(ledger, 'CHECKPOINT_WRITES', str(tmp_path / 'no-writes'))
+    monkeypatch.setattr(ledger, 'mem_free', lambda: physical_gb * GIB)
+    monkeypatch.setattr(ledger, 'mem_available', lambda: available_gb * GIB)
+    monkeypatch.setattr(ledger, 'reclaimable', lambda: (available_gb - physical_gb) * GIB)
+    monkeypatch.setattr(ledger, 'gpu_usage', lambda: {})
+    monkeypatch.setattr(ledger, 'cuda_free_bytes', lambda: None)
+    clock = {'now': 1000}
+    monkeypatch.setattr(ledger.time, 'time', lambda: clock['now'])
+    started = []
+
+    class Walk:
+        def __init__(self, *_args, **_kwargs):
+            self.at = clock['now']
+            started.append(self.at)
+        def poll(self):
+            return 0 if clock['now'] >= self.at + 2 else None
+        def communicate(self):
+            return '{"free_before_gb":1,"free_after_gb":1.1}', None
+
+    monkeypatch.setattr(ledger.subprocess, 'Popen', Walk)
+    def sleep(_):
+        clock['now'] += 2
+        if clock['now'] > 1130:
+            raise StopIteration
+    monkeypatch.setattr(ledger.time, 'sleep', sleep)
+    args = type('Args', (), {'floor_gb': 8, 'overshoot': 1.15, 'interval': 2, 'once': False})()
+    with pytest.raises(StopIteration):
+        ledger.guard(args)
+    assert started == expected
+
+
 def test_a_held_budget_counts_in_full_however_long_the_job_has_run(monkeypatch):
     # The warm-up grows to more sequence passes on its own schedule and checks MemFree before each update.
     monkeypatch.setattr(ledger, 'mem_available', lambda: 30 * GIB)

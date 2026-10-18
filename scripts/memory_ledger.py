@@ -1070,17 +1070,20 @@ def guard(args):
     stopped = {}
     pending = {}  # unit -> {'deadline', 'container'}: graceful stops in progress
     warned = {}  # head -> time of its last 'cannot fit' event
-    next_release, release, release_started = 0, None, 0
+    next_release, retry_release, release, release_started = 0, 0, None, 0
     while True:
         # CUDA allocates only from MemFree, and the warm-up's memory preflight refuses an update when MemFree is
         # short: release clean page cache well above the floor, one walk at a time, at idle I/O priority, and only
         # when there is cache worth dropping (MemFree is also short when jobs simply use it). A walk takes minutes on
-        # the external disk: after one that freed little, wait half an hour before the next.
+        # the external disk: after one that freed little, normally wait half an hour. If physical free memory
+        # falls below the floor while available memory remains ample, CUDA cannot use that cache: retry after
+        # the usual successful-release pause instead. Never overlap walks or shorten a stuck walk's recovery.
         if release is not None and release.poll() is None and time.time() - release_started > 2 * RELEASE_SECONDS:
             # Stuck (uncommitted I/O on a slow disk): abandon it. The kill is best effort, and its lock lapses by itself.
             with contextlib.suppress(OSError):
                 release.kill()
             next_release = time.time() + 300
+            retry_release = next_release
             release = None
         if release is not None and release.poll() is not None:
             try:
@@ -1089,8 +1092,12 @@ def guard(args):
             except (ValueError, AttributeError):
                 gained = 0
             next_release = time.time() + (60 if gained >= GIB else 1800)
+            retry_release = time.time() + 60
             release = None
-        if mem_free() < 2 * floor and reclaimable() >= 2 * GIB and release is None and time.time() >= next_release:
+        physical_free = mem_free()
+        urgent_cache = physical_free < floor and mem_available() >= 2 * floor
+        release_due = time.time() >= next_release or (urgent_cache and time.time() >= retry_release)
+        if physical_free < 2 * floor and reclaimable() >= 2 * GIB and release is None and release_due:
             idle = ['ionice', '-c3'] if shutil.which('ionice') else []
             # Its own transient unit: the release balloons anonymous memory a GiB at a time, which inside the
             # guard's 256 MB cgroup got the guard itself OOM-killed (2026-10-09 22:04).
