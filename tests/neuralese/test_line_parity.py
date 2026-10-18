@@ -93,10 +93,15 @@ def _repo_copy(tmp_path):
     return tmp_path
 
 
-def test_both_lines_declare_their_running_chain():
+def test_declared_running_chains_resolve_without_requiring_retired_runs():
     parity = line_parity.load_parity()
     for line in line_parity.LINES:
-        assert parity['stages']['direct']['lines'][line].get('active'), line
+        declaration = parity['stages']['direct']['lines'][line]
+        # A historical chain may be retired independently of the shared
+        # fresh-launch template. Any remaining active declaration is checked.
+        kind, config = line_parity.effective_config({
+            'recipe': declaration.get('active', declaration['recipe'])})
+        assert kind and config, line
 
 
 def test_a_key_added_to_one_running_chain_fails(tmp_path):

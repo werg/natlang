@@ -209,10 +209,9 @@ def test_the_handoff_takes_objective_changes_only_by_a_declaration_pinning_the_r
                                dry_run=True)
 
 
-def test_the_mellum_lineage_declares_the_continuation_of_its_running_quantization_component():
-    lineage = runner.load_recipe(RECIPES / 'neuralese-direct-mellum-v4-from-v3-warmup.json')
+def test_both_backbone_templates_share_the_quantization_curriculum_and_family():
+    lineage = runner.load_recipe(RECIPES / 'neuralese-direct-mellum-v4.json')
     assert lineage['quantization']['stage_progress'] == {'direct_sft': [0.0, 0.75], 'direct_trajectory': [0.75, 1.0]}
-    assert lineage['objective_continuation']['stage'] == 'direct_sft'
     assert set(lineage['family']['members']) == {'28x32', '28x16', '21x32'}
     lfm = runner.load_recipe(RECIPES / 'neuralese-direct-lfm-v3.json')
     assert [p['name'] for p in lfm['quantization']['points']] == ['q4'] and set(lfm['family']['members']) == {

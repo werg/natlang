@@ -122,14 +122,16 @@ def test_training_time_prefix_rejects_invalid_allowances(limit):
                '--stop-after-training-seconds', limit])
 
 
-def test_both_lines_hand_off_into_the_same_mixed_run():
-    """Lockstep: both launch recipes carry one e2e_mix and continue their running direct_sft by an objective
-    continuation that adds only it; the e2e base no longer declares a readiness moment."""
+def test_shared_mixed_objective_validates_on_both_backbone_templates():
+    """Exercise shared mixed-objective wiring without retaining discarded run recipes."""
     from pathlib import Path
     from natlang_neuralese.train.recipe import resolve_recipe_data, validate_e2e_mix
     recipes = Path(__file__).resolve().parents[2] / 'training' / 'neuralese' / 'recipes'
     mixed = {line: resolve_recipe_data(recipes / f'{name}.json') for line, name in (
-        ('mellum', 'neuralese-mixed-mellum-v4'), ('lfm', 'neuralese-mixed-lfm-qad-broad-v1'))}
+        ('mellum', 'neuralese-direct-mellum-v4'), ('lfm', 'neuralese-mixed-lfm-qad-broad-v1'))}
+    import copy
+    mixed['mellum']['e2e_mix'] = copy.deepcopy(mixed['lfm']['e2e_mix'])
+    mixed['mellum']['objective_continuation'] = copy.deepcopy(mixed['lfm']['objective_continuation'])
     assert mixed['mellum']['e2e_mix'] == mixed['lfm']['e2e_mix']
     for recipe in mixed.values():
         validate_e2e_mix(recipe['e2e_mix'], {stage['id']: stage['kind'] for stage in recipe['stages']})

@@ -576,9 +576,8 @@ def test_a_continued_direct_phase_binds_both_sidecars_and_the_plan_check_require
         load_recipe(tmp_path / 'declared.json')
 
 
-def test_union_r2_three_phase_recipes_and_the_mellum_resume_from_the_v3_warm_up():
-    """neuralese-direct-v3 (2026-10-12): union r2, warm-up -> program header -> whole trajectory; Mellum's resume
-    replaces its warm-up with the finished v3 warm-up as direct_sft's declared continuation inputs."""
+def test_three_phase_templates_and_synthetic_completed_warmup_continuation(tmp_path):
+    """Completed-stage continuation needs no retained obsolete production parent."""
     from natlang_neuralese.train.recipe import direct_phase_predecessor, load_recipe, stage_quantization
     for name in ('neuralese-direct-v3.json', 'neuralese-direct-mellum-v4.json', 'neuralese-direct-lfm-v3.json'):
         recipe = load_recipe(RECIPES / name)
@@ -588,7 +587,17 @@ def test_union_r2_three_phase_recipes_and_the_mellum_resume_from_the_v3_warm_up(
         assert 'natlang-target-union-20261011-r2/full/' in bindings['direct_text']['path']
         assert all('natlang-target-union-20261011-r3' in bindings[name]['path']
                    for name in ('direct_text_program_header', 'direct_text_trajectory'))
-    resume = load_recipe(RECIPES / 'neuralese-direct-mellum-v4-from-v3-warmup.json')
+    template = load_recipe(RECIPES / 'neuralese-direct-mellum-v4.json')
+    template['stages'] = template['stages'][1:]
+    template['input_bindings'].pop('direct_text')
+    template['stages'][0]['requires'] = []
+    for key in ('continue_from', 'continue_identity', 'continue_monitor_reference'):
+        name = 'synthetic_' + key
+        template['input_bindings'][name] = {'path': name + '.pt', 'sha256': '0' * 64}
+        template['stages'][0]['inputs'][key] = name
+    synthetic = tmp_path / 'completed-warmup.json'
+    synthetic.write_text(json.dumps(template))
+    resume = load_recipe(synthetic)
     first, second = resume['stages']
     assert first['id'] == 'direct_sft' and first['requires'] == [] and direct_phase_predecessor(resume, first) is None
     assert {'continue_from', 'continue_identity', 'continue_monitor_reference'} <= set(first['inputs'])

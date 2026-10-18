@@ -12,7 +12,7 @@
   "direct": {
    "base": {"recipe": "neuralese-direct-v3"},
    "lines": {
-    "mellum": {"recipe": "neuralese-direct-mellum-v4", "active": "neuralese-direct-mellum-v4-from-v3-warmup"},
+    "mellum": {"recipe": "neuralese-direct-mellum-v4"},
     "lfm": {"recipe": "neuralese-direct-lfm-v3", "active": "neuralese-direct-lfm-qad-broad-20261013-v1-context-recovery-identity-fix"}
    }
   },
@@ -26,10 +26,6 @@
   }
  },
  "line_specific": [
-  {"stage": "direct", "lines": ["mellum"], "key": "stages.direct_warmup", "recipe": "neuralese-direct-mellum-v4-from-v3-warmup", "date": "2026-10-13", "expires": "2026-10-27",
-   "reason": "historical one-off: Mellum's completed warm-up (runs/neuralese-direct-mellum-20261011/run-v3/direct_warmup, 333 updates, 0.5 epoch) used the 4962 full-prompt set (3,258 train documents, Mellum twin) while LFM's warm-up uses the union r2 full rendering (66k train documents). coordinator decision 2026-10-12 (agreed by Pop, pop-86dc): the finished warm-up is not redone; Mellum continues into neuralese-direct-mellum-v4's direct_sft and direct_trajectory on union r2. Not backbone-inherent and not a precedent: the parity recipe neuralese-direct-mellum-v4 keeps the r2 warm-up for the next fresh launch."},
-  {"stage": "direct", "lines": ["mellum"], "key": "objective_continuation", "recipe": "neuralese-direct-mellum-v4-from-v3-warmup", "date": "2026-10-13", "expires": "2026-10-27",
-   "reason": "historical one-off: Mellum v4's direct_sft trained curriculum 0 to about 0.03 on the earlier allocation (direct_sft [0, 0.35]) and moves to the shared one (direct_sft [0, 0.75]) by an objective continuation at its next --handoff, from its value at that update; the shared nested-family objective joins there (ramp from 0.05, so from zero). A fresh parity launch runs both from update 0. owner decision 2026-10-12 (REVIEW_20261012 rec. 4: QAT ramps the stages actually reach, nested family reinstated in the running lineage, no restart). Shared mechanism (recipe objective_continuation, direct_sft.objective_continuation); a running LFM lineage without a curriculum takes it the same way, its curriculum then starting at its handoff update"},
   {"stage": "direct", "lines": ["lfm"], "keys": ["stages.direct_warmup.parameters.epochs", "stages.direct_warmup.derived.supervision"], "recipe": "neuralese-direct-lfm-qad-broad-20261013-v1-context-recovery-identity-fix", "date": "2026-10-13", "expires": "2026-10-27",
    "reason": "historical one-off: the LFM QAD broad lineage's completed warm-up ran 0.015 epoch (~400 updates; Pop: matching the owner-shortened earlier warm-up) against the shared base's 0.5; finished, not redone. Open for the coordinator: whether the shared base's next fresh launch keeps 0.5 for both lines"},
   {"stage": "direct", "lines": ["lfm"], "key": "stages.direct_sft.parameters.merge_prefix_rows", "recipe": "neuralese-direct-lfm-qad-broad-20261013-v1-context-recovery-identity-fix", "date": "2026-10-13", "expires": "2026-10-20",
@@ -99,8 +95,6 @@
    "reason": "an asynchronous task evaluation loads a second model copy beside training, which fits neither Mellum's run (~96 of 121 GB unified memory) nor Pop's 8 GiB discrete GPU, so both lines evaluate synchronously (plans/neuralese/DECISIONS.md \"Asynchronous in-run task evaluation\"); the base keeps async for a machine with room"},
   {"stage": "direct", "lines": ["lfm"], "key": "parameters.task_eval.workers", "kind": "fit-only",
    "reason": "Pop runs 4 task-eval workers next to its training on the 8 GiB GPU (measured-task-eval handoff); DGX runs the shared 8"},
-  {"stage": "direct", "lines": ["mellum"], "key": "parameters.task_eval_every", "kind": "fit-only",
-   "reason": "Mellum's synchronous task evaluation (worst case ~5,000 s at ~40 s/update) every 1600 updates stays under 8% of wall time (~1.35 evaluations a day); without the key the task evaluation follows eval_every"},
   {"stage": "direct", "lines": ["lfm"], "key": "runtime.cuda_allocator_config", "kind": "fit-only",
    "reason": "PyTorch's expandable segments against fragmentation on Pop's 8 GiB discrete GPU; allocator only, same math"},
   {"stage": "e2e", "lines": ["lfm"], "key": "parameters.backbone_lr", "kind": "backbone-inherent",

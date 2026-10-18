@@ -15,7 +15,7 @@ from natlang_neuralese.train.optim import PortMuonAdamW, latent_entries, latent_
 from natlang_neuralese.train.quantization import Quantization
 from natlang_neuralese.train.recipe import resolve_recipe_data, stage_quantization
 
-RECIPE = Path(__file__).parents[2] / 'training' / 'neuralese' / 'recipes' / 'neuralese-direct-mellum-v4-from-v3-warmup.json'
+RECIPE = Path(__file__).parents[2] / 'training' / 'neuralese' / 'recipes' / 'neuralese-direct-mellum-v4.json'
 LAYERS = 4
 
 
