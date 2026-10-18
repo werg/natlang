@@ -1,0 +1,6 @@
+# Already represented whole pending rows
+
+1. Existing ordinary capacity activation remains the admission policy and exact verifier. An original pending row can be omitted from a new source view when it is over the measured frontier or already represented with the exact same identity, row binding, split and indexed class in the bound current train prefix. All original pending obligations remain.
+2. Crisp verification walks only the authenticated current manifest DAG, preserving declared native/pair kind and model. It validates supplied completed leaf indexes through the existing resident source-witness mechanism, using exact current package/tokenizer/roles and cached entries. It derives represented IDs from those entries; an exclusion list is not authority. No graph parser or full-prefix materialization is needed.
+3. Existing raw-byte, graph, topology, ordering, filter and continued-index checks apply to both omission reasons. Only whole rows are removed.
+4. Tests exercise actual geometry production, exact prior presence, binding/class mismatch, wrong source/split/policy/key, stale context, and unsupported exclusion; active runtime copies remain immutable.

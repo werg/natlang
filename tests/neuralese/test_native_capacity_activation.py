@@ -274,3 +274,127 @@ def test_multiple_reviewed_producers_still_require_exact_receipted_producer(tmp_
     else:
         result=resident.prepare_whole_delta_geometry(source,[part],tmp_path/'report.json',package=package)
         assert resident.geometry_from_evidence(source,0,result,package=package)=={'forward_tokens':4,'kv_slots':4}
+
+
+def represented_fixture(tmp_path, monkeypatch, *, mixed=False):
+    from natlang_neuralese.data.native_sources import NativeGraphSource
+    from scripts.neuralese_data.withdraw_native_graph_targets import filter_source, continue_filtered_index
+    if mixed:
+        original_builder = ordinary_coverage_part
+        def three_rows(root, kind):
+            source, part = original_builder(root, kind)
+            leaf = source.children[0].path
+            graphs = [json.loads(line) for line in leaf.read_text().splitlines()]
+            third = json.loads(json.dumps(graphs[0])); third['id'] = 'third'
+            graphs.append(third)
+            leaf.write_text(''.join(json.dumps(row)+'\n' for row in graphs))
+            manifest = json.loads(source.path.read_text())
+            manifest['sources'][0].update(resident.binding(leaf)); write(source.path, manifest)
+            source = type(source)(source.path, 'tokenizer-sha', required_split='train')
+            coverage = Path(part['coverage']['path'])
+            coverage.write_text(''.join(json.dumps({'id':entry['id'], 'model':'fixture', 'split':'train',
+                'partition':'fit', 'disposition':'fit', 'partition_row_index':index,
+                'geometry':{'forward_tokens':entry['forward_tokens'], 'kv_slots':entry['forward_tokens']}})+'\n'
+                for index, entry in enumerate(source.entries)))
+            receipt_path = Path(part['receipt']['path']); receipt = json.loads(receipt_path.read_text())
+            receipt['counts']['fixture']['train:fit']['rows'] = 3
+            receipt['files'] = [{**resident.binding(receipt_path.parent/v['path']), 'path':v['path'],
+                'bytes':(receipt_path.parent/v['path']).stat().st_size} for v in receipt['files']]
+            write(receipt_path, receipt)
+            part.update(source=resident.binding(source.path), coverage=resident.binding(coverage), receipt=resident.binding(receipt_path))
+            return source, part
+        monkeypatch.setitem(globals(), 'ordinary_coverage_part', three_rows)
+    _, part, package = fixture(tmp_path, monkeypatch, filtered=True)
+    context_path = Path(part['resident_current']['path'])
+    context = json.loads(context_path.read_text())
+    certificate_path = Path(context['payload']['geometry_qualification']['path'])
+    certificate = json.loads(certificate_path.read_text())
+    certificate['limits'] = {'forward_tokens':3 if mixed else 4, 'kv_slots':4}
+    write(certificate_path, certificate)
+    context['payload']['geometry_qualification'] = resident.binding(certificate_path)
+    original = NativeGraphSource(part['original_source']['path'], 'tokenizer-sha', required_split='train')
+    leaf = original.children[0].path
+    prior_path = tmp_path/'prior.jsonl'
+    prior_path.write_bytes(leaf.read_bytes().splitlines(keepends=True)[0])
+    prior = NativeGraphSource(prior_path, 'tokenizer-sha', required_split='train')
+    context['payload']['train'] = resident.binding(prior_path)
+    context['generation'] = resident.digest(context['payload'])
+    write(context_path, context)
+    part['resident_current'] = resident.binding(context_path)
+    descriptor_path = tmp_path/'represented.json'
+    descriptor = {'schema':'natlang.native-capacity-represented-prefix/1',
+        'prior_generation':context['generation'], 'prior_train':context['payload']['train'],
+        'indexes':[{'source':resident.binding(prior_path), 'kind':'native-graphs',
+                    'witness':resident._source_witness(prior, package)[0]}]}
+    write(descriptor_path, descriptor)
+    part['represented_prefix'] = resident.binding(descriptor_path)
+    selected_path = tmp_path/'missing.jsonl'
+    proof = filter_source(leaf, selected_path, [{**entry, 'source_sha256':sha256_file_hex(leaf)}
+                          for entry in original.entries[:2 if mixed else 1]],
+                          source_sha256=sha256_file_hex(leaf))
+    witness = part['original_index']
+    continue_filtered_index(witness['cache']['path'], proof, index_sha256=witness['cache']['sha256'],
+                            metadata_sha256=witness['metadata_sha256'])
+    proof_path = tmp_path/'represented-filter.json'
+    write(proof_path, proof)
+    part.update(source=resident.binding(selected_path), filter_proof=resident.binding(proof_path))
+    selected = NativeGraphSource(selected_path, 'tokenizer-sha', required_split='train')
+    return selected, part, package, descriptor_path
+
+
+def test_exact_prior_index_can_exclude_represented_whole_row_without_losing_pending(tmp_path, monkeypatch):
+    selected, part, package, _ = represented_fixture(tmp_path, monkeypatch)
+    from natlang_neuralese.train.native_capacity_activation import geometry_part
+    from natlang_neuralese.train.native_source_preparation import NativeSourcePreparation
+    actual, maxima, provenance, count = geometry_part(part,
+        preparation=NativeSourcePreparation('tokenizer-sha', ()), package=package)
+    assert actual.entries == selected.entries and count == 1
+    assert maxima['forward_tokens']['forward_tokens'] == 4
+    assert part['represented_prefix'] in provenance
+    from natlang_neuralese.train.native_pending_sources import load_pending_sources
+    pending = load_pending_sources(part['pending_obligations']['path'], tokenizer_fingerprint='tokenizer-sha')
+    assert len(pending['rows']) == 2
+
+
+@pytest.mark.parametrize('bad', ['generation', 'train', 'unrelated-leaf', 'split', 'policy',
+                                  'missing-index', 'corrupt-cache', 'binding', 'class'])
+def test_represented_exclusion_needs_exact_current_source_and_indexed_row(tmp_path, monkeypatch, bad):
+    selected, part, package, descriptor_path = represented_fixture(tmp_path, monkeypatch)
+    descriptor = json.loads(descriptor_path.read_text())
+    item = descriptor['indexes'][0]
+    if bad == 'generation':
+        descriptor['prior_generation'] = '0'*64
+    elif bad == 'train':
+        descriptor['prior_train'] = part['original_source']
+    elif bad == 'unrelated-leaf':
+        item['source'] = part['source']
+    elif bad in ('split', 'policy'):
+        item['witness']['key']['split' if bad == 'split' else 'policy_sha256'] = 'test' if bad == 'split' else '0'*64
+    elif bad == 'missing-index':
+        descriptor['indexes'] = []
+    else:
+        path = Path(item['witness']['cache']['path'])
+        if bad == 'corrupt-cache':
+            path.write_bytes(b'corrupted')
+        else:
+            cached = pickle.loads(path.read_bytes())
+            cached['entries'][0]['binding' if bad == 'binding' else 'communication'] = '0'*64 if bad == 'binding' else True
+            cached['metadata_sha256'] = resident.digest(cached['entries'])
+            path.write_bytes(pickle.dumps(cached))
+            item['witness'].update(cache=resident.binding(path), metadata_sha256=cached['metadata_sha256'])
+    write(descriptor_path, descriptor)
+    part['represented_prefix'] = resident.binding(descriptor_path)
+    with pytest.raises(ValueError):
+        resident.prepare_whole_delta_geometry(selected, [part], tmp_path/'bad.json', package=package)
+    assert not(tmp_path/'bad.json').exists()
+
+
+def test_represented_and_over_frontier_exclusions_preserve_both_original_obligations(tmp_path, monkeypatch):
+    selected, part, package, _ = represented_fixture(tmp_path, monkeypatch, mixed=True)
+    output = tmp_path/'mixed.json'
+    resident.prepare_whole_delta_geometry(selected, [part], output, package=package)
+    assert [entry['id'] for entry in selected.entries] == ['third']
+    assert json.loads(output.read_text())['new_train_rows'] == 1
+    from natlang_neuralese.train.native_pending_sources import load_pending_sources
+    pending = load_pending_sources(part['pending_obligations']['path'], tokenizer_fingerprint='tokenizer-sha')
+    assert len(pending['rows']) == 3

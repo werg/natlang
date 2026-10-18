@@ -16,6 +16,80 @@ _ORDINARY_PARTITION_VERIFIERS = frozenset({
 })
 
 
+def _represented_prefix(part, payload, context, original, *, package):
+    """Prove positive presence through current leaves and completed indexes only."""
+    if 'represented_prefix' not in part:
+        return {}
+    from types import SimpleNamespace
+    from .native_resident import bound, binding, _source_witness
+
+    def checked(ref):
+        path = bound(ref)
+        if 'bytes' in ref and path.stat().st_size != ref['bytes']:
+            raise ValueError('represented prefix reference size changed')
+        return path
+
+    descriptor = json.loads(checked(part['represented_prefix']).read_text())
+    if (descriptor.get('schema') != 'natlang.native-capacity-represented-prefix/1'
+            or descriptor.get('prior_generation') != context['generation']
+            or descriptor.get('prior_train') != payload['train']):
+        raise ValueError('represented prefix differs from bound current training source')
+    leaves = set()
+
+    def visit(ref, kind='native-graphs', model=None, parents=()):
+        path = checked(ref).resolve()
+        if path in parents:
+            raise ValueError('represented prefix manifest cycle')
+        if path.suffix == '.json' and kind == 'native-graphs':
+            manifest = json.loads(path.read_text())
+            if manifest.get('schema') != 'natlang.native-graph-sources/1' or not manifest.get('sources'):
+                raise ValueError('represented prefix has an invalid source manifest')
+            for child in manifest['sources']:
+                child_kind = child.get('kind')
+                if child_kind not in ('native-graphs', 'semantic-pairs'):
+                    raise ValueError('represented prefix source kind is not declared')
+                child_model = child.get('model') if child_kind == 'semantic-pairs' else None
+                if child_kind == 'semantic-pairs' and not isinstance(child_model, str):
+                    raise ValueError('represented prefix pair source needs its exact model')
+                child = dict(child)
+                child_path = Path(child['path'])
+                child['path'] = str(child_path if child_path.is_absolute() else path.parent / child_path)
+                visit(child, child_kind, child_model, (*parents, path))
+        else:
+            leaves.add((str(path), ref['sha256'], kind, model))
+
+    visit(payload['train'])
+    candidates = {entry['id']: entry for entry in original.entries}
+    represented, seen = {}, set()
+    strip = lambda entry: {key: value for key, value in entry.items() if key != 'training_priority'}
+    for item in descriptor['indexes']:
+        source, witness = item['source'], item['witness']
+        path = checked(source).resolve()
+        kind, model = item['kind'], item.get('model')
+        identity = (str(path), source['sha256'], kind, model)
+        if identity not in leaves or identity in seen:
+            raise ValueError('represented prefix index is not a unique current source leaf')
+        seen.add(identity)
+        cache = checked(witness['cache'])
+        cached = pickle.loads(cache.read_bytes())
+        indexed = SimpleNamespace(path=path, kind=kind, pair_model=model,
+            file_sha256=source['sha256'], tokenizer_fingerprint=original.tokenizer_fingerprint,
+            required_split='train', role_ids=original.role_ids, entries=cached['entries'])
+        actual = _source_witness(indexed, package)[0]
+        if (actual['key'] != witness['key'] or actual['metadata_sha256'] != witness['metadata_sha256']
+                or actual['cache'] != binding(cache) or cached.get('key') != actual['key']):
+            raise ValueError('represented prefix index differs from exact current parser contract')
+        for entry in cached['entries']:
+            if entry['id'] not in candidates:
+                continue
+            if strip(entry) != strip(candidates[entry['id']]):
+                raise ValueError('represented prefix row changed binding or indexed class')
+            if entry['id'] in represented:
+                raise ValueError('represented prefix repeats a graph identity')
+            represented[entry['id']] = entry
+    return represented
+
+
 def geometry_part(part, *, preparation, package):
     from .native_resident import bound, binding, code_inventory, geometry_capacity, digest, _source_witness, SCHEMA as resident_schema
     context = json.loads(bound(part['resident_current']).read_text())
@@ -112,6 +186,7 @@ def geometry_part(part, *, preparation, package):
             or [row['partition_row_index'] for row in rows] != list(range(expected))
             or len({row['id'] for row in rows}) != expected):
         raise ValueError('capacity activation remaining-long coverage is incomplete')
+    represented = _represented_prefix(part, payload, context, original, package=package)
     kept = []
     source_positions = set()
     for row, entry in zip(rows, original.entries, strict=True):
@@ -140,7 +215,7 @@ def geometry_part(part, *, preparation, package):
                 or geometry['forward_tokens'] != entry['forward_tokens']
                 or geometry['kv_slots'] != geometry['forward_tokens']):
             raise ValueError('capacity activation ordinary coverage geometry differs')
-        if all(geometry[key] <= limits[key] for key in limits):
+        if all(geometry[key] <= limits[key] for key in limits) and entry['id'] not in represented:
             kept.append((row, entry))
     if not kept:
         raise ValueError('capacity activation has no whole fitting rows')
@@ -150,6 +225,8 @@ def geometry_part(part, *, preparation, package):
         raise ValueError('capacity activation source must contain all and only fitting whole rows')
     provenance = [part['registered_manifest'], part['receipt'], part['coverage'], part['original_source'], part['resident_current'], part['pending_obligations'], part['partition_verifier'],
                   part['admission_audit'], part['render_samples'], part['row_proof']]
+    if 'represented_prefix' in part:
+        provenance.append(part['represented_prefix'])
     if len(kept) != expected:
         # The existing exact filter verifies raw-byte retention and projects the
         # authenticated original FCB index; no graph is cropped or re-rendered.
@@ -176,10 +253,11 @@ def geometry_part(part, *, preparation, package):
         from scripts.neuralese_data.withdraw_native_graph_targets import _raw
         removed = {row['id']: row for row in proof['removed']}
         excluded = {row['id']: entry for row, entry in zip(rows, original.entries, strict=True)
-                    if not all(row['geometry'][key] <= limits[key] for key in limits)}
+                    if (not all(row['geometry'][key] <= limits[key] for key in limits)
+                        or entry['id'] in represented)}
         if (set(removed) != set(excluded)
                 or any(removed[k]['binding'] != excluded[k]['binding'] for k in removed)):
-            raise ValueError('capacity activation may exclude only over-frontier whole rows')
+            raise ValueError('capacity activation may exclude only over-frontier or authenticated represented whole rows')
         retained_digest = hashlib.sha256()
         covered_rows = {row['id']: row for row in rows}
         raw_seen = set()
