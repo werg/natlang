@@ -364,3 +364,41 @@ def test_partial_parent_decisions_never_count_as_whole_accepted_sources():
     with pytest.raises(ValueError, match='absent from materialized'):
         materialization_partition(raw, [('good',0),('good',1)], omitted, [('good',0)],
                                   partial_parent_rows=['held'])
+
+
+def test_default_materializer_continuation_requires_all_decision_bytes_and_typed_summary(tmp_path):
+    from scripts.coreweave.teacher_tranche_admission import verify_default_materializer_continuation
+    root=tmp_path/'runtime'; root.mkdir(); asset=root/'materializer.js'; asset.write_text('current implementation')
+    source=tmp_path/'source.jsonl'; source.write_text('{"original":true}\n')
+    source_ref=file_binding(source)
+    summary={'output':'decisions.jsonl','eligible_decisions':1,'rejected_rows':2,'accepted_rows':1}
+    refs=[]
+    for name in ('old','current'):
+        folder=tmp_path/name; folder.mkdir(); output=folder/'decisions.jsonl'; output.write_text('{"id":"original-target"}\n')
+        receipt={'schema':'natlang.verified-teacher-decision-materialization/1',
+                 'identity':{'source_sha256':source_ref['sha256'],'direct_answers':True,
+                             'runtime':{'materializer.js':file_binding(asset)['sha256']}},
+                 'output_sha256':file_binding(output)['sha256'],'summary':summary}
+        put(folder/'receipt.json',receipt); refs.append(file_binding(folder/'receipt.json'))
+    proof=verify_default_materializer_continuation(*refs,source_reference=source_ref,current_repository=root)
+    assert proof['decision_bytes_identical'] is True and proof['training_admission'] is False
+    old_bytes=Path(refs[0]['path']).read_bytes()
+    def check():
+        return verify_default_materializer_continuation(refs[0],file_binding(Path(refs[1]['path'])),
+            source_reference=source_ref,current_repository=root)
+    current=Path(refs[1]['path']); original=json.loads(current.read_bytes())
+    for mutation in ('summary','summary_type','review','source','output','runtime'):
+        value=json.loads(json.dumps(original))
+        if mutation=='summary':value['summary']['rejected_rows']=3
+        elif mutation=='summary_type':value['summary']['eligible_decisions']=1.0
+        elif mutation=='review':value['identity']['decision_review']={'sha256':'a'*64}
+        elif mutation=='source':value['identity']['source_sha256']='a'*64
+        elif mutation=='output':value['output_sha256']='a'*64
+        elif mutation=='runtime':value['identity']['runtime']['materializer.js']='a'*64
+        put(current,value)
+        with pytest.raises(ValueError):check()
+    put(current,original)
+    (current.parent/'decisions.jsonl').write_text('{"id":"different-target"}\n')
+    value=json.loads(current.read_bytes());value['output_sha256']=file_binding(current.parent/'decisions.jsonl')['sha256'];put(current,value)
+    with pytest.raises(ValueError,match='every original decision'):check()
+    assert Path(refs[0]['path']).read_bytes()==old_bytes

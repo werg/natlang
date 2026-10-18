@@ -574,3 +574,55 @@ def classify_materializer_holds(raw_rows, held_ids, *, policy_root=None):
         result[ident]={'quality_reason':reason,'policy_bindings':bindings,'files_check':outcome.get('files_check'),
             'oracle':outcome.get('oracle'),'assigned_use':assigned}
     return result
+
+
+def verify_default_materializer_continuation(historical_reference, current_reference, *,
+                                            source_reference, current_repository):
+    """Authenticate exact default decision bytes across an explicit runtime change.
+
+    Original conversion custody stays historical. This only proves that fresh
+    current materialization yields every identical decision and complete summary;
+    source/protection/graph/corpus admission checks remain independently required.
+    """
+    source_path = Path(source_reference['path'])
+    if file_binding(source_path) != source_reference:
+        raise ValueError('materializer continuation source changed')
+    historical, current = read_bound(historical_reference), read_bound(current_reference)
+    identities = []
+    outputs = []
+    for reference, receipt in ((historical_reference, historical), (current_reference, current)):
+        identity = receipt.get('identity') or {}
+        if (receipt.get('schema') != 'natlang.verified-teacher-decision-materialization/1'
+                or set(identity) != {'source_sha256', 'runtime', 'direct_answers'}
+                or identity.get('source_sha256') != source_reference['sha256']
+                or identity.get('direct_answers') is not True
+                or not isinstance(identity.get('runtime'), dict) or not identity['runtime']
+                or not isinstance(receipt.get('summary'), dict)
+                or receipt['summary'].get('output') != 'decisions.jsonl'):
+            raise ValueError('materializer continuation requires exact default source/runtime custody')
+        output = file_binding(Path(reference['path']).parent / 'decisions.jsonl')
+        if output['sha256'] != receipt.get('output_sha256'):
+            raise ValueError('materializer continuation decision output changed')
+        identities.append(identity)
+        outputs.append(output)
+    if (outputs[0]['sha256'] != outputs[1]['sha256'] or outputs[0]['bytes'] != outputs[1]['bytes']
+            or _exact(historical['summary']) != _exact(current['summary'])):
+        raise ValueError('current materializer does not reproduce every original decision and complete typed summary')
+    root = Path(current_repository).resolve(strict=True)
+    runtime_bindings = []
+    for name, digest in identities[1]['runtime'].items():
+        path = (root / name).resolve(strict=True)
+        if (Path(name).is_absolute() or not path.is_relative_to(root)
+                or file_binding(path)['sha256'] != digest):
+            raise ValueError('current materializer runtime does not match its exact receipt')
+        runtime_bindings.append(file_binding(path))
+    if (any(file_binding(value['path']) != value for value in [*runtime_bindings, *outputs])
+            or file_binding(source_path) != source_reference
+            or read_bound(historical_reference) != historical or read_bound(current_reference) != current):
+        raise ValueError('materializer continuation inputs changed during verification')
+    return {'schema': 'natlang.teacher-default-materializer-continuation/1',
+            'source': source_reference, 'historical_materialization': historical_reference,
+            'current_materialization': current_reference, 'historical_decisions': outputs[0],
+            'current_decisions': outputs[1], 'complete_summary': current['summary'],
+            'decision_bytes_identical': True, 'training_admission': False,
+            'historical_conversion_unchanged': True}
