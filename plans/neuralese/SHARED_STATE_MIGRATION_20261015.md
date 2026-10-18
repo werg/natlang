@@ -439,7 +439,7 @@ the inspected requests. Preserve held separation and use distinct nonheld tasks
 to improve tool-error recovery, API indexing and typed returns while useful
 production training continues.
 
-### Production continuation (current at 2026-10-18 16:45 UTC)
+### Production continuation (current at 2026-10-18 17:34 UTC)
 
 Mellum's retained R18 diagnostic collection stopped at 14:13 UTC with zero RAW
 updates. Its completed TRAIN and protected HELD partials, evidence and native
@@ -465,7 +465,7 @@ was waived. Ordinary maximum-row backward and R19 SGD remain pending.
 Completed actor/cache parity was reused only under the verified comparator-only
 delta. Useful R18 ordinary diagnostic training has resumed from that exact
 parent while the complete cotangent repair is implemented and independently
-reviewed. Actual step22,353 / ordinary21,337 represents 423 earned updates;
+reviewed. Actual step22,666 / ordinary21,650 represents 736 earned updates;
 these do not qualify R19 or finish the communication foundation. Full step22,016
 is privately backed up with independent GET SHA-256
 `a0c02d4ad4e57e7facc8e41b99931acae3fe827dab37ce4e5e6886d284d2b1ec`.
@@ -474,27 +474,49 @@ real bitwise writer fixture qualified old R18 dependencies with the explicit
 `b3cf1af2` sidecar, and the cursor configuration was corrected. The actual
 22,016 view was then extracted and bitwise verified without model construction;
 its exact receipt was attached under the cursor observation lease, preserving
-the full private receipt and the existing publisher. View private verification
-remains pending; no inference-readiness claim precedes it.
+the full private receipt and the existing publisher. The 24,308,806,125-byte
+view subsequently passed private independent GET verification at 16:53 UTC,
+SHA-256 `094dbfe76f945e579044bc6df8d97dad347b625626a7526d371d9d075c8ba5b7`.
+The 4,100-row continuation was actually adopted; a further 4,285 verified rows
+are being prepared for incremental admission. Neither addition implies exposure.
 
 LFM continues R19 training. The 384-row teacher continuation was adopted at
 14,588 and followed by actual optimizer updates. Communication
 exposure remains incomplete (21,500 / 107,766 at the latest recorded boundary).
-A safe loader-only update is staged for the 4,012-row static QA append
-and an explicit ordinary 137,052-token maximum-row backward check. Exact
+The loader-only update restored the earned full 14,841 parent and passed all
+three actual whole-graph backward and exact numerical-reference checks: the
+94,236-token ordinary frontier, 86,285 forward / 157,075 KV communication
+frontier, and authentic 137,052-token ordinary row. All 150 named gradients
+were present in each check, with zero qualification optimizer updates. The
+owned candidate actually adopted all 4,012 QA rows at the saved 14,841 boundary
+and reached 14,858 with 17 subsequent optimizer updates. Genuine communication
+exposure reached 21,853 / 107,766, including 21,853 / 26,312 foundation rows.
+QA rows are ordinary examples and do not earn communication credit. The
+resident capacity authority still names the previous 94,236 / 157,075 frontier;
+long-row live admission needs an explicit continuation despite the real new
+backward PASS. Exact
 source-bound maximum rows inspected for both students and source16 repairs are
 single-node graphs with no edges; the earlier 500k policy case alone does not
 qualify their ordinary capacity admission. Complete source rows remain pending
-rather than clipped or silently lost. The first save request did not stop the
-old learner, which continued earning updates; its signal-handler routing is
-being investigated before launching another optimizer. The protected step14,123
+rather than clipped or silently lost. The first USR1 save request did not reach the installed Python handler,
+although kernel and CPython handler mappings were correct. One exact-owner
+cooperative TERM reached that same handler; full 14,841 state was saved and
+the old learner exited normally before its replacement launched. Signal
+delivery remains an implementation investigation, not grounds to repeat
+interruptions of the new learner. The protected step14,123
 task evaluation actually completed at 0/16: twelve repetitions, one invalid
 action, one budget exhaustion, two semantic mismatches and no infrastructure
 errors. Thirteen retained partial traces contain 179 reasoning-bearing turns
 out of231, so the older absence-of-reasoning symptom cannot explain this result.
 This is unresolved task-quality debt, not a behavioral improvement claim.
 
-Source03's scanner still owes consumer adoption. Its optional CPU pause guard
+Source03's original private consumer check has now produced its completed
+proof. The proposed scanner retirement correctly stopped before sending any
+signal when it found that proof; no replacement scan was launched. The exact
+24,968 bridge graphs still need current-prefix admission and actual exposure.
+All 185 TRAIN and 14 HELD row indexes were verified under the selected cache
+root; the earlier nine supposedly missing entries were semantic pairs queried
+with incorrect cache keys. Its optional CPU pause guard
 now persists STOP intent before signaling and lets either peer complete the
 intent and resume safely. Seven actual process/fault tests and independent
 review preceded deployment; both replacement peers have the verified new
