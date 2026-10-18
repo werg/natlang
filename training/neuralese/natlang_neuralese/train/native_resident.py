@@ -514,17 +514,48 @@ def _source03_bridge_geometry_part(part, *, preparation, package):
         old_index = pickle.load(stream)
     old_entries = old_index.get('entries')
     old_key = old_index.get('key')
-    policy_transition = supplement.get('parser_policy_transition', {})
-    old_components = policy_transition.get('old_components', {})
-    new_components = policy_transition.get('new_components', {})
-    component_names = set(old_components)
+    policy_transition = supplement.get('parser_policy_transition')
     expected_component_names = {
         'data/native_sources.py', 'data/native_graph_schema.py', 'model/native_graph_plan.py',
         'data/native_pair_schema.py', 'common/row_index.py', 'common/jsonio.py', 'common/hashing.py',
     }
     from ..common.hashing import sha256_file_hex
     package = Path(package).resolve(strict=True)
-    actual_new_components = {name: sha256_file_hex(package / name) for name in expected_component_names}
+    actual_components = {name: sha256_file_hex(package / name) for name in expected_component_names}
+    current_policy = digest(actual_components)
+    if policy_transition is not None and not isinstance(policy_transition, dict):
+        raise ValueError('source03 bridge parser-policy transition is malformed')
+    if policy_transition is None:
+        # The original v1 bridge was indexed by the then-current parser. It is
+        # reusable only when the actual consumer package has exactly that same
+        # seven-file policy; there is no implicit runtime transition.
+        supplement_key = supplement.get('row_index_key')
+        provenance_key = provenance.get('source_row_index_key')
+        policy_ok = (
+            isinstance(old_key, dict) and isinstance(supplement_key, dict) and isinstance(provenance_key, dict)
+            and old_key.get('policy_sha256') == current_policy
+            and supplement_key.get('policy_sha256') == current_policy
+            and provenance_key.get('policy_sha256') == current_policy
+            and provenance.get('parser_policy_transition') is None
+        )
+    else:
+        old_components = policy_transition.get('old_components', {})
+        new_components = policy_transition.get('new_components', {})
+        component_names = set(old_components)
+        policy_ok = (
+            old_key.get('policy_sha256') == policy_transition.get('old_policy_sha256')
+            and policy_transition.get('new_policy_sha256') == supplement.get('row_index_key', {}).get('policy_sha256')
+            and policy_transition.get('changed_components') == ['common/hashing.py']
+            and component_names == expected_component_names
+            and component_names == set(new_components)
+            and new_components == actual_components
+            and set(policy_transition.get('unchanged_parser_components', [])) == component_names - {'common/hashing.py'}
+            and all(old_components[name] == new_components[name] for name in component_names - {'common/hashing.py'})
+            and old_components.get('common/hashing.py') != new_components.get('common/hashing.py')
+            and digest(old_components) == policy_transition.get('old_policy_sha256')
+            and digest(new_components) == policy_transition.get('new_policy_sha256')
+            and provenance.get('parser_policy_transition') == policy_transition
+        )
     if (old_index.get('schema') != 'natlang.row-index/1' or not isinstance(old_entries, list)
             or digest(old_entries) != old_index.get('metadata_sha256')
             or old_key.get('source_sha256') != old_files['old-fit/00-fit.jsonl.zst']['sha256']
@@ -532,17 +563,7 @@ def _source03_bridge_geometry_part(part, *, preparation, package):
             or old_key.get('role_ids') != list(bridge_source.role_ids)
             or old_key.get('kind') != 'native-graphs' or old_key.get('split') != 'train'
             or old_key.get('pair_model') is not None
-            or old_key.get('policy_sha256') != policy_transition.get('old_policy_sha256')
-            or policy_transition.get('new_policy_sha256') != supplement.get('row_index_key', {}).get('policy_sha256')
-            or policy_transition.get('changed_components') != ['common/hashing.py']
-            or component_names != expected_component_names
-            or component_names != set(new_components)
-            or new_components != actual_new_components
-            or set(policy_transition.get('unchanged_parser_components', [])) != component_names - {'common/hashing.py'}
-            or any(old_components[name] != new_components[name] for name in component_names - {'common/hashing.py'})
-            or old_components.get('common/hashing.py') == new_components.get('common/hashing.py')
-            or digest(old_components) != policy_transition.get('old_policy_sha256')
-            or digest(new_components) != policy_transition.get('new_policy_sha256')):
+            or not policy_ok):
         raise ValueError('source03 bridge old row index contract differs')
     with index_path.open('rb') as stream:
         bridge_index = pickle.load(stream)

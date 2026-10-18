@@ -684,7 +684,8 @@ def ordinary_coverage_part(tmp_path,kind):
 def source03_bridge_fixture(tmp_path, monkeypatch, *, with_ordinary=False,
                             old_geometry_override=None, old_forward_override=None,
                             invented_current_component=False, boolean_geometry=False,
-                            omit_keep_coverage_bytes=False, wrong_final_keep_coverage_sha=False):
+                            omit_keep_coverage_bytes=False, wrong_final_keep_coverage_sha=False,
+                            legacy_fcb=False):
     import hashlib
     import pickle
     import subprocess
@@ -746,6 +747,13 @@ def source03_bridge_fixture(tmp_path, monkeypatch, *, with_ordinary=False,
     current_components={name:sha256_file_hex(package/name) for name in names}
     old_components=dict(current_components);old_components['common/hashing.py']='a'*64
     policy_old=canonical_json_sha256_hex(old_components);policy_new=canonical_json_sha256_hex(current_components)
+    transition={'old_policy_sha256':policy_old,'new_policy_sha256':policy_new,
+        'changed_components':['common/hashing.py'],'old_components':old_components,
+        'new_components':current_components,'unchanged_parser_components':[n for n in names if n!='common/hashing.py']}
+    if legacy_fcb:
+        old_components=dict(current_components)
+        policy_old=policy_new=canonical_json_sha256_hex(current_components)
+        transition=None
     def key_for(source,policy):
         return {'source_sha256':source.file_sha256,'tokenizer':tokenizer,'split':'train',
             'policy_sha256':policy,'kind':'native-graphs','pair_model':None,'role_ids':roles}
@@ -782,6 +790,8 @@ def source03_bridge_fixture(tmp_path, monkeypatch, *, with_ordinary=False,
         'geometry_forward_tokens_sum':6,'geometry_kv_slots_sum':6,'join_mapping_sha256':join['mapping_sha256'],
         'matched_old_fit_graph_sha':2,'rows':2,'source_row_index_key':bridge_key,
         'training_admission':False,'training_exposure':0,'unique_keep_parents':2}
+    if transition is not None:
+        provenance['parser_policy_transition']=transition
     provenance_path=old/'provenance.json';write_json(provenance_path,provenance)
     def ref(path):return {'path':str(path),'sha256':sha256_file_hex(path),'bytes':path.stat().st_size}
     fit_sources=model/'fit-sources.json';write_json(fit_sources,{'schema':'natlang.native-graph-sources/1',
@@ -811,11 +821,10 @@ def source03_bridge_fixture(tmp_path, monkeypatch, *, with_ordinary=False,
         'old_source_row_index':ref(old_index),'join_report':ref(join_path),'join_mapping_sha256':join['mapping_sha256'],
         'coverage':ref(coverage),'source_row_index':ref(bridge_index),'row_index_key':bridge_key,
         'row_index_entries_sha256':canonical_json_sha256_hex(bridge_source.entries),
-        'parser_policy_transition':{'old_policy_sha256':policy_old,'new_policy_sha256':policy_new,
-            'changed_components':['common/hashing.py'],'old_components':old_components,
-            'new_components':current_components,'unchanged_parser_components':[n for n in names if n!='common/hashing.py']},
         'rows':2,'forward_tokens_sum':6,'kv_slots_sum':6,'unique_keep_parents':2,
         'training_admission':False,'training_exposure':0}
+    if transition is not None:
+        supplement['parser_policy_transition']=transition
     supplement_path=coverage.parent/'supplement.json';write_json(supplement_path,supplement)
     # The verifier resolves the staged technical package by sibling names, while
     # each embedded reference retains its original source-host path and digest.
@@ -950,6 +959,27 @@ def test_source03_bridge_geometry_is_verified_and_can_be_bridge_only_or_ordered_
             parts[0]['source'],parts[0]['corpus_manifest'],parts[0]['supplement'],parts[0]['old_join_provenance']]
         assert resident.geometry_from_evidence(source,0,proof,package=Path(resident.__file__).parents[1])=={
             'forward_tokens':4 if with_ordinary else 3,'kv_slots':4 if with_ordinary else 3}
+
+
+def test_source03_bridge_v1_requires_exact_current_fcb_policy(tmp_path,monkeypatch):
+    source,parts=source03_bridge_fixture(tmp_path,monkeypatch,legacy_fcb=True)
+    output=tmp_path/'legacy-fcb-geometry.json'
+    proof=resident.prepare_whole_delta_geometry(source,parts,output,package=Path(resident.__file__).parents[1])
+    assert json.loads(output.read_text())['new_train_rows']==2
+    assert resident.geometry_from_evidence(source,0,proof,package=Path(resident.__file__).parents[1])=={
+        'forward_tokens':3,'kv_slots':3}
+
+
+def test_source03_bridge_v1_rejects_a_different_parser_package(tmp_path,monkeypatch):
+    import shutil
+    source,parts=source03_bridge_fixture(tmp_path,monkeypatch,legacy_fcb=True)
+    actual=Path(resident.__file__).parents[1]
+    different=tmp_path/'different-parser-package';shutil.copytree(actual,different)
+    (different/'common/hashing.py').write_bytes((different/'common/hashing.py').read_bytes()+b'\n# changed\n')
+    output=tmp_path/'rejected-fcb-geometry.json'
+    with pytest.raises(ValueError,match='old row index contract'):
+        resident.prepare_whole_delta_geometry(source,parts,output,package=different)
+    assert not output.exists()
 
 
 def test_source03_bridge_accepts_registered_keep_coverage_sha_without_redundant_bytes(tmp_path,monkeypatch):
