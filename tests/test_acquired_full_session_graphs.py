@@ -189,6 +189,8 @@ def test_runtime_resume_fingerprint_is_independent_of_checkout_path(tmp_path):
         'scripts/neuralese_data/conversion_output_lease.py',
         'scripts/neuralese_data/splits.py',
         'scripts/neuralese_data/acquired_session_render_pending_continuation_20261017.json',
+        'scripts/neuralese_data/acquired_session_syntax_repair.py',
+        'scripts/neuralese_data/acquired_session_syntax_repair_continuation_20261018.json',
         'training/neuralese/natlang_neuralese/model/native_model.py']
     for root in (first,second):
         for name in names:
@@ -207,7 +209,8 @@ def test_render_pending_runtime_continuation_preserves_old_builder_only_prefix()
     current={'source':{'sha256':'a'*64,'sessions':500},'chunk_sessions':50,
         'runtime':{'files':current_runtime['files'],'fingerprint':current_runtime['fingerprint']}}
     parent=copy.deepcopy(current)
-    del parent['runtime']['files']['render_pending_continuation']
+    for name in ('render_pending_continuation','source_syntax_repair','syntax_repair_continuation'):
+        del parent['runtime']['files'][name]
     parent['runtime']['files']['builder']['sha256']=(
         'cf4346e17dcc2c9f4770e2d8fb142cf597563e6551b8d51329c5c224ba5aaf1b')
     parent['runtime']['fingerprint']=canonical_json_sha256_hex(parent['runtime']['files'])
@@ -218,6 +221,11 @@ def test_render_pending_runtime_continuation_preserves_old_builder_only_prefix()
     changed['runtime']['fingerprint']=canonical_json_sha256_hex(changed['runtime']['files'])
     with pytest.raises(ValueError,match='renderer dependency'):
         prove_render_pending_runtime_continuation(changed,current,350)
+    changed_repair=copy.deepcopy(current)
+    changed_repair['runtime']['files']['source_syntax_repair']['sha256']='c'*64
+    changed_repair['runtime']['fingerprint']=canonical_json_sha256_hex(changed_repair['runtime']['files'])
+    with pytest.raises(ValueError,match='syntax-repair continuation proof'):
+        prove_render_pending_runtime_continuation(parent,changed_repair,350)
 
 
 def test_old_shard_binding_is_accepted_only_inside_its_proven_prefix(tmp_path):

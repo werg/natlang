@@ -34,6 +34,10 @@ _SESSION_GRAPH_CONTINUATION_DELTA = ('pre-render source-argument validation and 
 _SESSION_GRAPH_PREVALIDATION_PARENT_BUILDER_SHA256 = 'cf4346e17dcc2c9f4770e2d8fb142cf597563e6551b8d51329c5c224ba5aaf1b'
 _SESSION_GRAPH_CONTINUATION_PROOF = Path(__file__).resolve().with_name(
     'acquired_session_render_pending_continuation_20261017.json')
+_SESSION_GRAPH_SYNTAX_CONTINUATION_PROOF = Path(__file__).resolve().with_name(
+    'acquired_session_syntax_repair_continuation_20261018.json')
+_SESSION_GRAPH_SYNTAX_REPAIR_SHA256 = '9d3c01af212df13cac480ab764d2ab432756af43071e0a6bc57a2d7d750b9f09'
+_SESSION_GRAPH_PRE_SYNTAX_BUILDER_SHA256 = '6aec2eb57f3f6a6b2f6e4a3455b304a0a957d942f3aacd0d05dc5e70d4552797'
 
 
 def sessions(path):
@@ -121,6 +125,8 @@ def runtime_bindings(root=None):
             'acquired_session_render_pending_continuation_20261017.json',
         'source_syntax_repair': root / 'scripts' / 'neuralese_data' /
             'acquired_session_syntax_repair.py',
+        'syntax_repair_continuation': root / 'scripts' / 'neuralese_data' /
+            'acquired_session_syntax_repair_continuation_20261018.json',
     }
     # Identity follows the logical runtime files and their bytes, not checkout
     # location. Keep observed paths as receipt metadata outside the fingerprint.
@@ -137,7 +143,9 @@ def prove_render_pending_runtime_continuation(parent_binding, current_binding, p
     old_runtime = parent_binding.get('runtime', {})
     new_runtime = current_binding.get('runtime', {})
     old_files, new_files = old_runtime.get('files', {}), new_runtime.get('files', {})
-    if set(old_files) | {'render_pending_continuation'} != set(new_files) or 'builder' not in old_files:
+    added_runtime_files = {'render_pending_continuation', 'source_syntax_repair',
+                           'syntax_repair_continuation'}
+    if set(old_files) | added_runtime_files != set(new_files) or 'builder' not in old_files:
         raise ValueError('runtime continuation changes the declared dependency set')
     if old_files['builder'].get('sha256') != _SESSION_GRAPH_PREVALIDATION_PARENT_BUILDER_SHA256:
         raise ValueError('runtime continuation parent builder is not the reviewed renderer')
@@ -152,10 +160,26 @@ def prove_render_pending_runtime_continuation(parent_binding, current_binding, p
     if (new_files['render_pending_continuation'].get('sha256') != hashlib.sha256(proof_bytes).hexdigest()
             or proof != {'schema': 'natlang.acquired-session-render-pending-runtime-continuation-proof/1',
                 'parent_builder_sha256': _SESSION_GRAPH_PREVALIDATION_PARENT_BUILDER_SHA256,
-                'current_builder_sha256': new_files['builder'].get('sha256'),
+                'current_builder_sha256': _SESSION_GRAPH_PRE_SYNTAX_BUILDER_SHA256,
                 'session_graph_renderer_ast_sha256': _SESSION_GRAPH_RENDER_AST_SHA256,
                 'allowed_delta': _SESSION_GRAPH_CONTINUATION_DELTA}):
         raise ValueError('runtime continuation proof does not bind the exact code transition')
+    syntax_proof_path = _SESSION_GRAPH_SYNTAX_CONTINUATION_PROOF
+    try:
+        syntax_proof_bytes = syntax_proof_path.read_bytes()
+        syntax_proof = json.loads(syntax_proof_bytes)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError('syntax-repair runtime continuation proof is absent or invalid') from exc
+    if (new_files['syntax_repair_continuation'].get('sha256') !=
+            hashlib.sha256(syntax_proof_bytes).hexdigest()
+            or new_files['source_syntax_repair'].get('sha256') != _SESSION_GRAPH_SYNTAX_REPAIR_SHA256
+            or syntax_proof != {
+                'schema': 'natlang.acquired-session-syntax-repair-runtime-continuation-proof/1',
+                'parent_builder_sha256': _SESSION_GRAPH_PRE_SYNTAX_BUILDER_SHA256,
+                'current_builder_sha256': new_files['builder'].get('sha256'),
+                'source_syntax_repair_sha256': _SESSION_GRAPH_SYNTAX_REPAIR_SHA256,
+                'allowed_delta': 'optional source-bound syntax-repair views; ordinary source rows retain exact renderer output and IDs'}):
+        raise ValueError('syntax-repair continuation proof does not bind the exact code transition')
     if old_runtime.get('fingerprint') != canonical_json_sha256_hex(old_files):
         raise ValueError('runtime continuation parent fingerprint is invalid')
     if new_runtime.get('fingerprint') != canonical_json_sha256_hex(new_files):
@@ -175,6 +199,48 @@ def prove_render_pending_runtime_continuation(parent_binding, current_binding, p
         isinstance(node, ast.Expr) and isinstance(node.value, ast.Call)
         and isinstance(node.value.func, ast.Name)
         and node.value.func.id == 'prevalidate_session_tool_arguments')]
+    # The separately pinned syntax-repair transition adds a guarded derived-view
+    # identity and provenance field. Remove only those exact additions before
+    # comparing the legacy whole-session renderer AST.
+    repair_assignment = ast.parse("repair_view = value.get('source_syntax_repair')").body[0]
+    repair_id_suffix = ast.parse("identifier += ':source-syntax-repair:' + repair_view['repair_view_sha256']").body[0]
+    repair_guard = ast.parse("if repair_view is not None:\n    pass").body[0]
+    repair_expansion = ast.parse(
+        "{**({'source_syntax_repair': repair_view} if repair_view is not None else {})}").body[0].value
+    found_assignment = found_suffix = found_guard = 0
+    filtered = []
+    for node in function.body:
+        if ast.dump(node, include_attributes=False) == ast.dump(repair_assignment, include_attributes=False):
+            found_assignment += 1
+            continue
+        if ast.dump(node, include_attributes=False) == ast.dump(repair_id_suffix, include_attributes=False):
+            found_suffix += 1
+            continue
+        if (isinstance(node, ast.If) and ast.dump(node.test, include_attributes=False) ==
+                ast.dump(repair_guard.test, include_attributes=False)):
+            found_guard += 1
+            found_suffix += sum(ast.dump(child, include_attributes=False) ==
+                ast.dump(repair_id_suffix, include_attributes=False) for child in ast.walk(node))
+            continue
+        filtered.append(node)
+    function.body = filtered
+    found_provenance = 0
+    for node in ast.walk(function):
+        if isinstance(node, ast.Dict):
+            kept = []
+            for key, value in zip(node.keys, node.values):
+                if (isinstance(key, ast.Constant) and key.value == 'source_syntax_repair'
+                        and isinstance(value, ast.Name) and value.id == 'repair_view'):
+                    found_provenance += 1
+                elif (key is None and ast.dump(value, include_attributes=False) ==
+                        ast.dump(repair_expansion.values[0], include_attributes=False)):
+                    found_provenance += 1
+                else:
+                    kept.append((key, value))
+            node.keys = [key for key, _ in kept]
+            node.values = [value for _, value in kept]
+    if found_assignment != 1 or found_suffix != 1 or found_guard != 1 or found_provenance != 2:
+        raise ValueError('syntax-repair renderer delta no longer has the reviewed guarded shape')
     render_ast_sha = hashlib.sha256(ast.dump(function, include_attributes=False).encode()).hexdigest()
     if render_ast_sha != _SESSION_GRAPH_RENDER_AST_SHA256:
         raise ValueError('runtime continuation changed the whole-session graph renderer')
