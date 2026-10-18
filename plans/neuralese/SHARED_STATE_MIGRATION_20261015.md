@@ -380,8 +380,18 @@ A bounded manifest-DAG inventory of LFM's active generation
 `bc070eca8347495118120c8ff761ca9bdf85f1ce993c45399eea6b85342750b9`
 verified all four Search 86–89 candidate leaves already present at the exact
 candidate paths and SHA-256 values. Do not append those 6,741 rows again on LFM.
-This is physical source inclusion, not a new exposure claim. Mellum inclusion
-is checked separately. Local exact evidence is
+This is physical source inclusion, not a new exposure claim. A separate
+Mellum step-21,930 resident snapshot audit at generation
+`8ce08d536928bcdbf2f09e7631f8914b1f3b79fa2d15a52bd58d507083a558b7`
+also verifies all four exact Search 86–89 leaves. Neither model needs another
+6,741-row append. Exact Mellum evidence is
+`/home/werg/data/dgxops/root-mellum-search86-89-leaf-inventory-result-20261018.json`.
+The subsequent source comparison found an actual Mellum teacher backlog:
+153 + 57 + 618 + 319 graphs (1,147 total) were excluded from the newer unions
+and never appended by the recorded Mellum preparer. Include these with the
+other ready teacher data in the next coherent continuation, with final exact
+ID/content deduplication against the current prefix; absence of matching
+compressed-file hashes alone does not establish row absence. Local exact evidence is
 `/home/werg/data/dgxops/root-search86-89-leaf-inventory-result-20261018.json`.
 
 Teacher additions 1,000, 1,052 and 465 rows have actually been adopted on LFM
