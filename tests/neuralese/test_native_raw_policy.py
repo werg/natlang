@@ -210,3 +210,52 @@ def test_all_correct_ordinary_native_batch_updates_policy_without_semantic_refre
     assert calls==[('learn','rft',str(parent)),('publish','rft',str(current))]
     assert state['checkpoint']==str(current) and state['trained_task_ids']==['ordinary']
     assert state['trained_target_tokens']==2 and not state.get('pending_native_checkpoint')
+
+@pytest.mark.parametrize('family',['lfm','mellum'])
+def test_sampled_actor_profile_overrides_future_seed_profile_in_actual_stage_cli(tmp_path,monkeypatch,family):
+    import json
+    from transformers import AutoTokenizer
+    from test_native_serving_adapters import engine_fixture
+    from natlang_neuralese.rl import production,native_stage
+    from natlang_neuralese.rl.native_raw_policy import bind_saved_history_reasoning
+    from natlang_neuralese.train.recipe import stage_parameter_args
+    engine=engine_fixture(tmp_path,family,service_template=True)
+    model,config=engine.shared_model,engine.model_config
+    checkpoint=tmp_path/'parent.pt'
+    torch.save({'schema':CHECKPOINT_SCHEMA,'model_config':config,**model_state(model),
+                'training':parent_training()},checkpoint)
+    actual=prepare_raw_policy(checkpoint,base=config['base'],tokenizer_out=tmp_path/'actor-tokenizer')
+    sampled=actual['history_reasoning']['policy']
+    future='keep' if sampled=='last_turn_only' else 'last_turn_only'
+    parameters={'learning_rate':3e-6,'history_reasoning_policy':future}
+    original=parameters.copy()
+    rl_args=production.native_policy_trainer_args(parameters,actual)
+    seed_args=stage_parameter_args(parameters)
+    assert parameters==original
+    assert seed_args[seed_args.index('--history-reasoning-policy')+1]==future
+    assert rl_args[rl_args.index('--history-reasoning-policy')+1]==sampled
+    seen={}
+    def admit(args,trainer):
+        seen.update(profile=args.history_reasoning_policy,sha=args.history_reasoning_binding_sha256,
+                    path=args.history_reasoning_binding_path,trainer=trainer)
+        tokenizer=AutoTokenizer.from_pretrained(actual['tokenizer'],local_files_only=True)
+        return bind_saved_history_reasoning(tokenizer,tokenizer_path=actual['tokenizer'],
+            checkpoint_sha256=actual['native_identity']['checkpoint_sha256'],
+            tokenizer_fingerprint=actual['native_identity']['tokenizer_fingerprint'],
+            expected_history_reasoning_policy=args.history_reasoning_policy,
+            expected_binding_sha256=args.history_reasoning_binding_sha256,
+            expected_binding_path=args.history_reasoning_binding_path)
+    monkeypatch.setattr(native_stage,'_admit_and_train',admit)
+    command=['--rollouts',str(tmp_path/'rollouts.jsonl'),'--rl-tokenizer',actual['tokenizer'],
+        '--continue-from',str(checkpoint),'--held-native-graphs',str(tmp_path/'held.jsonl'),
+        '--out',str(tmp_path/'learner')]
+    assert native_stage.main(command+rl_args)==actual['history_reasoning']
+    assert seen['sha']==actual['history_reasoning_binding']['sha256']
+    assert seen['trainer']==['--learning-rate','3e-06']
+    with pytest.raises(ValueError,match='differs from checkpoint profile'):
+        native_stage.main(command+seed_args)
+    tampered=json.loads(Path(actual['history_reasoning_binding']['path']).read_text())
+    tampered['history_reasoning']['policy']=future
+    Path(actual['history_reasoning_binding']['path']).write_text(json.dumps(tampered))
+    with pytest.raises(ValueError,match='authenticated checkpoint control'):
+        native_stage.main(command+rl_args)

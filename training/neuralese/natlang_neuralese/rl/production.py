@@ -21,6 +21,28 @@ from ..common.paths import root
 from .task_rollouts import prepare, score
 
 
+def native_policy_trainer_args(parameters, expected_native):
+    """Bind sampled-policy admission independently of future ordinary rendering."""
+    from ..train.recipe import stage_parameter_args
+    actual = dict(parameters)
+    for key in ('history_reasoning_policy', 'history_reasoning_binding_path',
+                'history_reasoning_binding_sha256'):
+        actual.pop(key, None)
+    profile = expected_native.get('history_reasoning')
+    if profile is not None:
+        actual['history_reasoning_policy'] = profile['policy']
+    elif expected_native.get('history_reasoning_policy') is not None:
+        actual['history_reasoning_policy'] = expected_native['history_reasoning_policy']
+    sidecar = expected_native.get('history_reasoning_binding')
+    if sidecar is not None:
+        actual['history_reasoning_binding_path'] = sidecar['path']
+        actual['history_reasoning_binding_sha256'] = sidecar['sha256']
+    elif expected_native.get('history_reasoning_binding_sha256') is not None:
+        actual['history_reasoning_binding_path'] = expected_native['history_reasoning_binding_path']
+        actual['history_reasoning_binding_sha256'] = expected_native['history_reasoning_binding_sha256']
+    return stage_parameter_args(actual)
+
+
 def validate_actor_receipts(receipts, *, policy_id, neuralese_server, expected_native=None, expected_coefficient=None):
     """Attest native and legacy actors explicitly, without projected-head aliases."""
     import re
@@ -532,7 +554,8 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
                 else:
                     values.pop('history_reasoning_binding_path', None)
                     values.pop('history_reasoning_binding_sha256', None)
-            values['trainer_args'] = stage_parameter_args(config.get('trainer_parameters', {}))
+            values['trainer_args'] = (native_policy_trainer_args(config.get('trainer_parameters', {}), expected_native)
+                if expected_native is not None else stage_parameter_args(config.get('trainer_parameters', {})))
             values['seed_trainer_args']=stage_parameter_args(config.get('seed_trainer_parameters',config.get('trainer_parameters',{})))
             if config.get('coefficient_policy'):
                 policy_path=Path(state.get('coefficient_policy',config['coefficient_policy'])).resolve(strict=True)
