@@ -571,7 +571,7 @@ def primary_tail_frontier(root,batch,threshold):
 
 PRIMARY_REFILL_POLICY = """Refill within the owned worker envelope.
 Keep every original live batch and its unstarted keys with its pinned owner.
-Observe completed work and a genuine tail. Count every unfinished key, bounded
+Observe completed work in an unfinished batch. Count every unfinished key, bounded
 by that batch's pinned workers, including all live future slots. Reserve the
 next qualified source only when its full workers fit the explicitly declared
 envelope. Never grant capacity from unknown, torn or unsealed custody.
@@ -599,8 +599,10 @@ def primary_refill_admission(observation,workers,capacity):
             raise ValueError('refill frontier has inconsistent work partitions')
         remaining=frontier['remaining_keys']
         demand+=min(count,len(remaining))
-        if (frontier['finished_keys']and remaining
-                and len(frontier['active_keys'])<=observation['tail_max_running']):tails.append(slot['batch'])
+        # In explicit-envelope mode the exact unfinished-worker sum is the
+        # admission bound. The legacy low-water mark must not add idle time
+        # after useful capacity has already become available.
+        if frontier['finished_keys']and remaining:tails.append(slot['batch'])
     if not tails or demand+workers>capacity:return None
     return {'schema':'natlang.teacher-owned-worker-refill/1','policy':'refill-within-owned-worker-envelope',
         'potential_workers':demand,'new_workers':workers,'worker_capacity':capacity,

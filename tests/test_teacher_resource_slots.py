@@ -12,7 +12,7 @@ from scripts.coreweave import teacher_incremental_export as export
 from test_teacher_source_sequence import setup, put
 
 
-def pool(tmp_path,monkeypatch,*,ahead=3):
+def pool(tmp_path,monkeypatch,*,ahead=3,work_items=8,active_count=1,unstarted=1):
     folder,state,config=setup(tmp_path,packet_count=9)
     feeder=tmp_path/'feed-evidence-owned.py';feeder.write_text('# owned feeder\n')
     worker=tmp_path/'run_bonsai_queue.py';worker.write_text('# owned worker\n')
@@ -33,14 +33,14 @@ def pool(tmp_path,monkeypatch,*,ahead=3):
         value=seq._json(configuration,config['source_sequence'])
         home=Path(config['root'])/'evidence-collections-v2'/f'batch-{batch:04d}';home.mkdir()
         (home/'source-cases.jsonl').write_bytes(Path(value['cases']).read_bytes())
-        rows=[{'key':f'{batch}-{i}'}for i in range(8)]
+        rows=[{'key':f'{batch}-{i}'}for i in range(work_items)]
         (home/'queue.jsonl').write_text(''.join(json.dumps(row)+'\n'for row in rows))
         put(home/'teacher-source.json',{'batch':batch,'source_cases_sha256':value['cases_sha256'],
             'actual_task_runtime':config['task_runtime'],'concurrency':workers})
         events=[]
-        for row in rows[:7]:
+        for i,row in enumerate(rows[:work_items-unstarted]):
             events.append({'event':'start','key':row['key']})
-            if row!=rows[6]:events.append({'event':'finish','key':row['key']})
+            if i<work_items-unstarted-active_count:events.append({'event':'finish','key':row['key']})
         (home/'journal-worker-0.jsonl').write_text(''.join(json.dumps(row)+'\n'for row in events))
         return home
 
@@ -217,3 +217,28 @@ def test_actual_publisher_preserves_live_tail_and_later_completed_publication(ta
     assert live['batch']==23 and live['queue_path'].endswith('batch-0023/queue.jsonl')
     terminal=export.discover_guardian_batch(publisher,sandbox,remote.__getitem__,batch_slot=24)
     assert terminal['verified_owner_transition'] and terminal['closed_boundaries']==[later['boundary']]
+
+
+def test_explicit_capacity_refills_before_legacy_low_water_mark(tmp_path,monkeypatch):
+    folder,state,config,owners=pool(tmp_path,monkeypatch,ahead=0,work_items=16,active_count=8,unstarted=0)
+    original=copy.deepcopy(state['source_sequence']['pending'])
+    assert g.primary_tail_frontier(config['root'],22,6)is None
+    observation=g.primary_capacity_observation(folder,state,config)
+    decision=g.primary_refill_admission(observation,24,48)
+    assert decision['potential_workers']==8 and decision['new_workers']==24
+    assert g.primary_refill_admission(observation,24,31)is None
+    spawned=[]
+    monkeypatch.setattr(g,'_spawn_primary_prefetch',lambda *args:spawned.append(args[3]['batch']))
+    g.maintain_primary_prefetch(folder,state,config)
+    assert spawned==[23] and state['primary_prefetch']['batch']==23
+    assert state['source_sequence']['pending']==original and not state['source_sequence'].get('closed')
+    proof=json.loads(Path(state['primary_prefetch']['capacity_admission']['path']).read_bytes())
+    assert proof['potential_workers']+proof['new_workers']==32<=proof['worker_capacity']==48
+
+
+def test_absent_worker_envelope_preserves_legacy_low_water_mark(tmp_path,monkeypatch):
+    folder,state,config,_=pool(tmp_path,monkeypatch,ahead=0,work_items=16,active_count=8,unstarted=0)
+    config.pop('primary_worker_capacity')
+    monkeypatch.setattr(g,'_spawn_primary_prefetch',lambda *args:pytest.fail('Legacy mode must retain its old low-water rule'))
+    g.maintain_primary_prefetch(folder,state,config)
+    assert not state.get('primary_prefetch') and not state['source_sequence'].get('prefetch')

@@ -1,6 +1,14 @@
 # Refill useful teacher capacity while preserving live tails
 
 Named natural-language scheduling stage: **refill within the owned worker envelope**.
+Operational refinement (2026-10-18): when an explicit worker envelope is present,
+completed work plus enough remaining worker capacity triggers refill; do not also
+require the legacy six-active-job low-water mark. At 11:00–11:01 UTC the teacher
+had zero waiting requests, seven to eight running requests and 47–59% KV usage,
+while the bounded worker arithmetic already permitted the next qualified packet.
+Keep the six-job rule only for the historical mode without an explicit envelope.
+The existing engine continues to schedule queued inference; no model-facing text,
+source selection, task budget, current worker or actor identity changes.
 The supervisor's policy is: keep every started batch and assigned key with its
 actual owner; when completed work leaves serving capacity unused, reserve the next
 qualified TRAIN packet if the potential root workers across all owned unfinished
