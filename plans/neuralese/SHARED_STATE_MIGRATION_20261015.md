@@ -354,3 +354,44 @@ distinct source-index09 corpus is converted and has passed source protection
 and sample qualification; capacity partition and registration remain pending. The 48-entry inventory map, stage receipts and
 learner exposure remain separate. Live changing frontiers are in the DGX coord
 status and operations receipts, not inferred from historical stage counts.
+
+
+### Production follow-through (2026-10-18 13:33 UTC)
+
+LFM has cut over to current-parent-qualified stable R19 shared execution and is
+training; Mellum's exact 21,930 parent remains in retained whole-graph RL
+collection/recovery before its R19 transition. LFM's communication exposure was
+21,067 / 107,766 at step 14,251: neither comprehensive recipe completion nor
+cross-model VAE readiness is established. Current live frontiers remain in the
+DGX coordination status.
+
+All 48 D32 sources are registered and staged on both training sandboxes,
+superseding the earlier index-09 registration obligation. Registration and
+staging do not establish consumer adoption or training exposure. The source03
+bridge still owes actual consumer closure/adoption. New static D31 reference QA
+has 4,012 ordinary whole-trajectory graphs per model, staged with explicit
+geometry and unknown execution outcome; these do not earn communication credit.
+Its old-consumer check exposed a real full-entry JSON-hash memory allocation
+failure. Shared fix `c5cca7373` preserves the exact canonical array digest with
+bounded temporary memory; explicit metadata-only runtime overlays and the
+prepared consumer request are being used to finish admission.
+
+A bounded manifest-DAG inventory of LFM's active generation
+`bc070eca8347495118120c8ff761ca9bdf85f1ce993c45399eea6b85342750b9`
+verified all four Search 86–89 candidate leaves already present at the exact
+candidate paths and SHA-256 values. Do not append those 6,741 rows again on LFM.
+This is physical source inclusion, not a new exposure claim. Mellum inclusion
+is checked separately. Local exact evidence is
+`/home/werg/data/dgxops/root-search86-89-leaf-inventory-result-20261018.json`.
+
+Teacher additions 1,000, 1,052 and 465 rows have actually been adopted on LFM
+without resetting optimizer or previous exposure. Batch38/tranche0 adds another
+824 LFM / 823 Mellum registered graphs after exact per-model deduplication;
+consumer admission and measured visits remain separate obligations. Protected
+quality evidence remains weak: the actual step-13,951 LFM partial oracle score
+has zero successes among 13 terminal cases, with seven repetitions, two invalid
+actions and four semantic mismatches; three cases remain unresolved. This does
+not qualify the current model or establish improvement. Feedback is present in
+the inspected requests. Preserve held separation and use distinct nonheld tasks
+to improve tool-error recovery, API indexing and typed returns while useful
+production training continues.
