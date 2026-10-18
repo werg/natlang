@@ -46,6 +46,26 @@ def test_incremental_member_requires_one_exact_projected_export_and_lists_pendin
         {**selected[0],'source_sha256':'f'*64}])
 
 
+def test_syntax_repair_member_is_scoped_to_exact_projected_parent():
+    from scripts.neuralese_data.prepare_acquired_session_admission import source_member_scope
+    declared=[{'path':'/projection/parent/export.json','sha256':'a'*64,'source_sha256':'b'*64},
+              {'path':'/projection/sibling/export.json','sha256':'c'*64,'source_sha256':'d'*64}]
+    selected={'path':'/derived/export.json','sha256':'e'*64,'source_sha256':'f'*64,
+        'source_syntax_repair':{
+            'child_export':{'path':'/derived/export.json','sha256':'e'*64},
+            'child_source':{'path':'/derived/full-trajectories.jsonl.zst','sha256':'f'*64},
+            'parent_export':{'path':'/projection/parent/export.json','sha256':'a'*64},
+            'parent_source':{'path':'/projection/parent/full-trajectories.jsonl.zst','sha256':'b'*64},
+            'repair_manifest':{'path':'/derived/repair-manifest.json','sha256':'1'*64}}}
+    scope=source_member_scope({'normalized_export_bindings':declared},[selected])
+    assert scope['kind']=='complete-normalized-source-syntax-repair-member'
+    assert scope['selected_exports'][0]['derived_from']==declared[0]
+    assert scope['pending_export_count']==1
+    selected['source_syntax_repair']['parent_export']['sha256']='9'*64
+    with pytest.raises(ValueError,match='projected parent'):
+        source_member_scope({'normalized_export_bindings':declared},[selected])
+
+
 def test_incremental_member_accepts_declared_complete_trajectory_without_broadening_other_sources():
     from scripts.neuralese_data.prepare_acquired_session_admission import incremental_member_source_kind
     d13={'contract':{'source':{'path':'qwen35-cooperdata/agent_traj.json'},

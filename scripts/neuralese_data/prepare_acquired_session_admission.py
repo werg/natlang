@@ -292,17 +292,42 @@ def source_member_scope(projection, selected_bindings):
     by_content = {}
     for item in declared:
         by_content.setdefault((item.get('sha256'), item.get('source_sha256')), []).append(item)
-    selected_content = {(item.get('sha256'), item.get('source_sha256')) for item in selected_bindings}
-    if len(selected_bindings) != 1 or len(selected_content) != 1 or len(by_content.get(next(iter(selected_content)), [])) != 1:
+    if len(selected_bindings) != 1:
         raise ValueError('incremental member must be one exact export bound by the global projection')
-    selected = next(iter(selected_content))
-    return {'kind': 'complete-normalized-source-member', 'selected_exports': [
-            {'path': item['path'], 'sha256': item['sha256'], 'source_sha256': item['source_sha256']}
-            for item in by_content[selected]],
+    selected_item = selected_bindings[0]
+    selected_content = {(selected_item.get('sha256'), selected_item.get('source_sha256'))}
+    if len(by_content.get(next(iter(selected_content)), [])) == 1:
+        selected = next(iter(selected_content))
+        selected_rows = [{'path': item['path'], 'sha256': item['sha256'], 'source_sha256': item['source_sha256']}
+            for item in by_content[selected]]
+        scope_kind = 'complete-normalized-source-member'
+        selected_pair = selected
+    elif isinstance(selected_item.get('source_syntax_repair'), dict):
+        repair = selected_item['source_syntax_repair']
+        parent_export = repair.get('parent_export', {})
+        parent_source = repair.get('parent_source', {})
+        parent_pair = (parent_export.get('sha256'), parent_source.get('sha256'))
+        if len(by_content.get(parent_pair, [])) != 1:
+            raise ValueError('syntax-repair child does not bind one exact projected parent export')
+        if (selected_item.get('path') != repair.get('child_export', {}).get('path')
+                or selected_item.get('sha256') != repair.get('child_export', {}).get('sha256')
+                or selected_item.get('source_sha256') != repair.get('child_source', {}).get('sha256')
+                or not isinstance(repair.get('repair_manifest', {}).get('sha256'), str)):
+            raise ValueError('syntax-repair child export/source/manifest binding is incomplete')
+        parent_rows = [{'path': item['path'], 'sha256': item['sha256'], 'source_sha256': item['source_sha256']}
+            for item in by_content[parent_pair]]
+        selected_rows = [{'path': selected_item['path'], 'sha256': selected_item['sha256'],
+            'source_sha256': selected_item['source_sha256'], 'derived_from': parent_rows[0],
+            'repair_manifest_sha256': repair['repair_manifest']['sha256']}]
+        scope_kind = 'complete-normalized-source-syntax-repair-member'
+        selected_pair = parent_pair
+    else:
+        raise ValueError('incremental member must be one exact export bound by the global projection')
+    return {'kind': scope_kind, 'selected_exports': selected_rows,
         'global_export_bindings_sha256': canonical_json_sha256_hex(declared),
         'pending_exports': [
             {'path': item['path'], 'sha256': item['sha256'], 'source_sha256': item['source_sha256']}
-            for item in declared if (item.get('sha256'), item.get('source_sha256')) != selected],
+            for item in declared if (item.get('sha256'), item.get('source_sha256')) != selected_pair],
         'pending_export_count': len(declared) - 1}
 
 
@@ -340,6 +365,8 @@ def verify_graph_source(graph, value, *, protection, held_sources, fingerprint,
         'source_lineage': trajectory['lineage'], 'source_license': trajectory['license'],
         'admission_class': 'source-curated-third-party-SFT', 'oracle_verified': False,
         'native_execution_verified': False, 'observed_actor_state_exchange': False, 'truncated': False}
+    if 'source_syntax_repair' in value:
+        expected['source_syntax_repair'] = value['source_syntax_repair']
     if any(provenance.get(key) != item for key, item in expected.items()):
         raise ValueError('native graph lost its exact original session/target provenance')
     if explicit_history_reasoning_policy is not None:
@@ -356,6 +383,9 @@ def verify_graph_source(graph, value, *, protection, held_sources, fingerprint,
             trajectory['split'] != 'train' and split != 'test') or graph.get('split') != split:
         raise ValueError('native graph violates global source-declared held closure')
     base = source_occurrence(value)
+    repair_view = value.get('source_syntax_repair')
+    if repair_view is not None:
+        base += ':source-syntax-repair:' + repair_view['repair_view_sha256']
     if explicit_history_reasoning_policy is not None:
         base += ':history-reasoning:' + explicit_history_reasoning_policy
     view = provenance.get('view')
@@ -471,12 +501,13 @@ def native_conversion_directory(native_root, export_path, export, model):
 
 def _admission_verifier_files():
     """Exact Python modules whose code can change the cached conversion verdict."""
+    from scripts.neuralese_data.acquired_session_syntax_repair import verify_derived_repair_export
     functions = (sessions, source_target_ids, completed_shards, session_exclusion,
                  prevalidate_session_tool_arguments, prove_render_pending_runtime_continuation,
                  current_protection, load_decision_holds, parse_graph, tokenizer_inventory,
                  write_json_durable, sha256_file_hex_cached, RequestError,
                  decision_contract, verify_graph_source, _prevalidate_source_for_conversion,
-                 load_model_checkpoint, load_or_compute_model_checkpoint,
+                 verify_derived_repair_export, load_model_checkpoint, load_or_compute_model_checkpoint,
                  model_checkpoint_identity, save_model_checkpoint)
     paths = {Path(__file__).resolve()}
     for function in functions:
@@ -926,8 +957,20 @@ def main(argv=None):
         export = json.loads(export_path.read_text())
         source_path = export_path.parent / 'full-trajectories.jsonl.zst'
         projection = json.loads(args.protection.read_text())
-        member_scope = source_member_scope(projection, [{'path': str(export_path.resolve()),
-            'sha256': sha256_file_hex(export_path), 'source_sha256': sha256_file_hex(source_path)}])
+        selected_binding = {'path': str(export_path.resolve()),
+            'sha256': sha256_file_hex(export_path), 'source_sha256': sha256_file_hex(source_path)}
+        syntax_contract = export.get('contract', {}).get('source_syntax_repair')
+        if syntax_contract is not None:
+            from scripts.neuralese_data.acquired_session_syntax_repair import verify_derived_repair_export
+            syntax_verification = verify_derived_repair_export(export_path, export, source_path)
+            selected_binding['source_syntax_repair'] = {
+                'child_export': {'path': str(export_path.resolve()), 'sha256': selected_binding['sha256']},
+                'child_source': {'path': str(source_path.resolve()), 'sha256': selected_binding['source_sha256']},
+                'parent_export': syntax_contract['parent_export'],
+                'parent_source': syntax_contract['parent_source'],
+                'repair_manifest': syntax_contract['repair_manifest'],
+                'verification': syntax_verification}
+        member_scope = source_member_scope(projection, [selected_binding])
         if incremental_member_source_kind(export) is None:
             raise ValueError('incremental member needs an exact released SFT or single-row complete-trajectory contract')
     held_ids, decision_bindings = load_decision_holds(sorted((ROOT / 'training/decision-holds').glob('*.jsonl')))

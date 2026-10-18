@@ -119,6 +119,8 @@ def runtime_bindings(root=None):
         'split_group_closure': root / 'scripts' / 'neuralese_data' / 'splits.py',
         'render_pending_continuation': root / 'scripts' / 'neuralese_data' /
             'acquired_session_render_pending_continuation_20261017.json',
+        'source_syntax_repair': root / 'scripts' / 'neuralese_data' /
+            'acquired_session_syntax_repair.py',
     }
     # Identity follows the logical runtime files and their bytes, not checkout
     # location. Keep observed paths as receipt metadata outside the fingerprint.
@@ -327,6 +329,14 @@ def session_graphs(value, tokenizer, *, source_fingerprint, expanded_fingerprint
         raise ValueError('source session has no assistant targets')
     occurrence = canonical_json_sha256_hex([value['source_file']['sha256'], value['source_row']])
     identifier = trajectory['id'] + ':source-occurrence:' + occurrence
+    repair_view = value.get('source_syntax_repair')
+    if repair_view is not None:
+        if (not isinstance(repair_view, dict)
+                or repair_view.get('schema') != 'natlang.acquired-session-syntax-repair-view/1'
+                or repair_view.get('repair_class') != 'source-syntax-repair-best-effort'
+                or not isinstance(repair_view.get('repair_view_sha256'), str)):
+            raise ValueError('derived source session has an invalid syntax-repair identity')
+        identifier += ':source-syntax-repair:' + repair_view['repair_view_sha256']
     if explicit_history_reasoning_policy is not None:
         if explicit_history_reasoning_policy != history_policy:
             raise ValueError('explicit source rendering profile differs from its prepared tokenizer')
@@ -371,6 +381,7 @@ def session_graphs(value, tokenizer, *, source_fingerprint, expanded_fingerprint
         'admission_class': 'source-curated-third-party-SFT', 'oracle_verified': False,
         'native_execution_verified': False, 'observed_actor_state_exchange': False,
         'history_reasoning': tokenizer.natlang_history_reasoning,
+        **({'source_syntax_repair': repair_view} if repair_view is not None else {}),
         'reasoning_coverage_probe': 'per-assistant-unique-sentinel/full-serving-render/1',
         'reasoning_coverage': reasoning_coverage,
         'whole_view_reasoning_assistant_ordinals': [ordinal for ordinal, index in enumerate(assistants)
@@ -531,6 +542,8 @@ def _convert(args, prepared):
     held = closed['held']
     if source_rows != export.get('complete_sessions'):
         raise ValueError('normalized source row count differs from its complete export receipt')
+    from scripts.neuralese_data.acquired_session_syntax_repair import verify_derived_repair_export
+    repair_binding = verify_derived_repair_export(args.export_receipt, export, source)
     if (args.output / 'receipt.json').exists():
         raise ValueError('completed graph output is immutable; use its bound receipt')
     runtime = runtime_bindings()
@@ -543,6 +556,8 @@ def _convert(args, prepared):
         'runtime': {'files': runtime['files'], 'fingerprint': runtime['fingerprint']},
         'chunk_sessions': args.chunk_sessions,
         'held_group_closure_sha256': canonical_json_sha256_hex(sorted(held))}
+    if repair_binding is not None:
+        binding['source_syntax_repair'] = repair_binding
     if prepared_profile is not None:
         binding['explicit_history_reasoning_policy'] = prepared_profile
     shard_root = args.output / 'session-shards'
