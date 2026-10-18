@@ -1,6 +1,7 @@
 """A current policy owns moments/RNG; its carried stage owns the finite cohort."""
 import copy
 import json
+from pathlib import Path
 
 import pytest
 import torch
@@ -116,3 +117,106 @@ def test_fresh_incomplete_foundation_stays_strict(tmp_path):
     foundation=SimpleNamespace(entries=train.entries[:1])
     with pytest.raises(ValueError,match='entire currently declared communication cohort'):
         verify_initial_foundation_cohort(train,foundation)
+
+
+def test_inherited_foundation_requalifies_after_completed_new_source_boundary(tmp_path, monkeypatch):
+    """A fixed earned cohort gets one fresh proof after new supervised work."""
+    from natlang_neuralese.eval import native_backend, native_state, task_cadence
+    from natlang_neuralese.serve import engine as engine_module, store as store_module
+    from natlang_neuralese.train.native_state_sft import _foundation_readiness_boundary
+
+    cohort={'complete':True,'cohort_sha256':'a'*64}
+    prior={cohort['cohort_sha256']}
+    assert not _foundation_readiness_boundary(cohort,prior,completed=False,
+        new_optimizer_updates=1,policy_operation=False,signaled=False)
+    assert not _foundation_readiness_boundary(cohort,prior,completed=True,
+        new_optimizer_updates=0,policy_operation=False,signaled=False)
+    assert not _foundation_readiness_boundary(cohort,prior,completed=True,
+        new_optimizer_updates=1,policy_operation=True,signaled=False)
+    assert _foundation_readiness_boundary(cohort,prior,completed=False,
+        new_optimizer_updates=0,policy_operation=False,signaled=False,refresh_requested=True)
+    assert _foundation_readiness_boundary(cohort,prior,completed=True,
+        new_optimizer_updates=1,policy_operation=False,signaled=False)
+
+    calls=[]
+    def qualify(model,tokenizer,roles,model_config,**kwargs):
+        checkpoint_sha=kwargs['checkpoint_sha256'];calls.append(checkpoint_sha)
+        identity=trainer.native_identity(model,model_config,checkpoint_sha256=checkpoint_sha)
+        return {'passed':True,'native_identity':identity,'backbone_optimizer_tested':True,
+                'backbone_optimizer_updates':kwargs['backbone_optimizer_updates']}
+    monkeypatch.setattr(native_backend,'qualify_complete_runtime',qualify)
+
+    class FakeEngine:
+        native_state_enabled=False
+        def __init__(self,*args,**kwargs): self.__dict__.update(kwargs)
+
+    class FakeTaskEval:
+        def __init__(self,spec,out,engine,*,prompt_rendering): self.engine=engine
+        def cadence(self,step,*,final): return {'run':'fixture','step':step,'eligible':True,'passed':True}
+
+    monkeypatch.setattr(engine_module,'Engine',FakeEngine)
+    monkeypatch.setattr(store_module,'TensorStore',lambda:object())
+    monkeypatch.setattr(task_cadence,'TaskEval',FakeTaskEval)
+    monkeypatch.setattr(native_state,'task_execution_receipt',lambda summary,identity,*,checkpoint_sha256:{
+        'schema':'natlang.native-task-execution-receipt/1','passed':True,'complete':True,
+        'eligible':True,'native_identity':identity})
+
+    base=tmp_path/'base';tiny_source(base)
+    _,_,roles,config=load_native_model(base,dtype=torch.float32,rank=4)
+    fp=config['tokenizer_fingerprint']
+    old_pair=authenticated_pair('foundation',roles=roles.ids,fingerprint=fp)
+    original=tmp_path/'original';original.mkdir()
+    original_manifest=source_manifest(original,[dict(graph('ordinary-a'),tokenizer_fingerprint=fp)],[old_pair])
+    held=tmp_path/'held.jsonl'
+    held.write_text(json.dumps(dict(graph('held'),split='test',tokenizer_fingerprint=fp))+'\n')
+    packet=tmp_path/'packet.jsonl';packet.write_text('{}\n')
+    task_spec=json.dumps({'packet':{'path':str(packet),'sha256':'0'*64},'cases':[0]})
+    first_out=tmp_path/'first'
+    args=['--base',str(base),'--dtype','float32','--rank','4','--device','cpu',
+        '--native-graphs',str(original_manifest),'--foundation-native-graphs',str(original_manifest),
+        '--communication-foundation','--held-native-graphs',str(held),'--epochs','1',
+        '--stage-id','full','--eval-every','1','--task-eval',task_spec,'--out',str(first_out),
+        '--forward-atol','1e-4','--gradient-atol','1e-5','--checkpoint-every','1']
+    assert trainer.main(args)==0
+    first=torch.load(first_out/'checkpoint.pt',weights_only=False)
+    first_report=json.loads((first_out/'report.json').read_text())
+    cohort_sha=first_report['communication_foundation']['cohort_sha256']
+    frame=collect_sft_progress(first['training'])
+    frame['full']['completed_foundations']=[cohort_sha]
+    first['training']['sft_progress']=frame
+    parent=tmp_path/'parent.pt';torch.save(first,parent)
+
+    expanded=tmp_path/'expanded';expanded.mkdir()
+    ordinary_a=expanded/'ordinary-a.jsonl'
+    pairs=expanded/'foundation-pair.jsonl'
+    ordinary_b=expanded/'ordinary-b.jsonl'
+    ordinary_a.write_bytes((original/'ordinary.jsonl').read_bytes())
+    pairs.write_bytes((original/'pairs.jsonl').read_bytes())
+    ordinary_b.write_text(json.dumps(dict(graph('ordinary-b'),tokenizer_fingerprint=fp))+'\n')
+    from natlang_neuralese.common.hashing import sha256_file_hex
+    expanded_manifest=expanded/'source.json'
+    expanded_manifest.write_text(json.dumps({'schema':'natlang.native-graph-sources/1','sources':[
+        {'kind':'native-graphs','path':ordinary_a.name,'sha256':sha256_file_hex(ordinary_a)},
+        {'kind':'semantic-pairs','path':pairs.name,'sha256':sha256_file_hex(pairs),'model':'lfm'},
+        {'kind':'native-graphs','path':ordinary_b.name,'sha256':sha256_file_hex(ordinary_b)}]}))
+    resumed=tmp_path/'resumed'
+    continued=list(args)
+    continued[continued.index('--native-graphs')+1]=str(expanded_manifest)
+    continued[continued.index('--out')+1]=str(resumed)
+    continued += ['--continue-from',str(parent),'--objective-continuation',
+                  '--continued-native-graphs',str(original_manifest),'--refresh-at-checkpoint',
+                  '--refresh-after-updates','1','--refresh-foundation-readiness']
+    before=len(calls)
+    assert trainer.main(continued)==0
+    report=json.loads((resumed/'report.json').read_text())
+    receipt=json.loads((resumed/'native-training-receipt.json').read_text())
+    assert report['communication_foundation']['cohort_sha256']==cohort_sha
+    assert report['foundation_ready'] is True and receipt['foundation_ready'] is True
+    assert report['completed'] is False
+    assert report['mandatory_sft']['complete'] is False
+    assert report['mandatory_sft']['remaining_graph_visits'] > 0
+    assert report['continuation_boundary']['new_optimizer_updates']==1
+    runtime=json.loads(Path(report['runtime_certificate']['path']).read_text())
+    assert runtime['native_identity']['checkpoint_sha256']==report['checkpoint_sha256']
+    assert len(calls)-before==1  # one terminal qualification, not one per checkpoint/update
+    assert calls[-1]==report['checkpoint_sha256']

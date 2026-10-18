@@ -735,6 +735,8 @@ def build_parser():
         help='balance positive-priority source cohorts using actual completed indexed graph token exposure')
     parser.add_argument('--communication-foundation', action=argparse.BooleanOptionalAction, default=False,
         help='pause at the complete admitted communication cohort with mandatory ordinary credits retained')
+    parser.add_argument('--refresh-foundation-readiness', action=argparse.BooleanOptionalAction, default=False,
+        help='at an explicitly owned stage boundary, recheck an already earned finite cohort on current weights')
     parser.add_argument('--held-native-graphs', type=Path, required=True)
     parser.add_argument('--continued-native-graphs', type=Path)
     parser.add_argument('--continued-held-native-graphs', type=Path)
@@ -823,6 +825,26 @@ def configure_ffn_chunk_tokens(port, requested, saved_training):
         raise ValueError('ffn-chunk-tokens must be a nonnegative integer')
     port.ffn_chunk_tokens=value
     return value
+
+
+def _foundation_readiness_boundary(foundation, prior_foundations, *, completed,
+                                  new_optimizer_updates, policy_operation, signaled,
+                                  refresh_requested=False):
+    """Select a first, completed-continuation, or explicitly owned stage check."""
+    if not foundation or foundation.get('complete') is not True or signaled:
+        return False
+    cohort = foundation.get('cohort_sha256')
+    if not cohort:
+        return False
+    if cohort not in prior_foundations:
+        return True
+    if refresh_requested and not policy_operation:
+        return True
+    # An earned finite cohort can be re-certified on newer weights after a
+    # complete supervised continuation. Partial refresh checkpoints and
+    # operational stops carry the old cohort unchanged without repeating the
+    # full task/runtime qualification.
+    return bool(completed and new_optimizer_updates > 0 and not policy_operation)
 
 
 def main(argv=None):
@@ -1058,6 +1080,8 @@ def main(argv=None):
         raise ValueError('foundation scheduling requires the exact declared foundation source')
     if args.communication_foundation and args.foundation_native_graphs is None:
         raise ValueError('communication foundation requires its complete declared admitted source manifest')
+    if args.refresh_foundation_readiness and not args.communication_foundation:
+        raise ValueError('foundation-readiness refresh requires its exact declared communication cohort')
     if args.communication_foundation:
         from .native_continuation import verify_initial_foundation_cohort
         foundation_frame = carried_progress.get(args.stage_id or 'native-graph-ce') or {}
@@ -1707,8 +1731,10 @@ def main(argv=None):
     completed = (completed and (policy_operation or metrics.get('held', {}).get('scope') == 'full')
                  and metrics.get('held', {}).get('source_sha256') == held.file_sha256)
     foundation = foundation_exposure() if args.communication_foundation else None
-    foundation_boundary = bool(foundation and foundation['complete'] and
-                              foundation['cohort_sha256'] not in prior_foundations and not policy.signaled)
+    foundation_boundary = _foundation_readiness_boundary(foundation, prior_foundations,
+        completed=completed, new_optimizer_updates=step-resumed_step,
+        policy_operation=policy_operation, signaled=policy.signaled,
+        refresh_requested=args.refresh_foundation_readiness)
     # A continuation may inherit a completed checkpoint made before task
     # summaries were checkpointed. At the same final weights, make one real
     # cadence call; do not reuse an unbound log row or enter final_at's retry

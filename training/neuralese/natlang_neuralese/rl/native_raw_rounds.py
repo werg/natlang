@@ -662,6 +662,7 @@ def student_cycle(plan_path,declaration,handoff,directory,*,stop):
         continuation,_=continuation_config(config,foundation[0],checkpoint=str(_bound(checkpoint)),adapter=None,out=jobdir)
         _supervised_quantum(config,continuation['trainer_parameters'])
         continuation['trainer_parameters']['communication_foundation']=True
+        continuation['trainer_parameters']['refresh_foundation_readiness']=True
         if config.get('resident_data_directory'):
             continuation['trainer_parameters']['resident_data_directory']=config['resident_data_directory']
         continuation['raw_foundation_qualification']=True

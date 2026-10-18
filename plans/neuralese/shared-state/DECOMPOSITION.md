@@ -348,3 +348,5 @@ claim of lift on the other student.
 Rate selection is the supervisor's measured adaptive policy. Slot identities,
 state migration, group splitting, validation and recipe plumbing are crisp
 mechanisms; they do not select a new training policy or discard old history.
+
+- [Inherited communication-foundation readiness refresh](INHERITED_FOUNDATION_READINESS_DECOMPOSITION.md) preserves a finite earned cohort while rechecking current weights only after a completed continuation with new optimizer work.

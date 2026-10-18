@@ -73,6 +73,8 @@ def test_raw_policy_publish_stop_restart_does_not_recollect_and_interleaves_same
     later=[value for kind,value in calls if kind=='sft'][2:]
     assert later[0]['trainer_parameters']['communication_foundation'] is False
     assert later[-1]['trainer_parameters']['communication_foundation'] is True
+    assert later[-1]['trainer_parameters']['refresh_foundation_readiness'] is True
+    assert 'refresh_foundation_readiness' not in later[0]['trainer_parameters']
     assert result['cycle']==2 and [kind for kind,_ in calls].count('rl')==2
 
 
