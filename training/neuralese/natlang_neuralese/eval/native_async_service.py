@@ -209,6 +209,18 @@ def worker_state(unit, *, execute=subprocess.run):
     return values
 
 
+def _publish_latest_result(config):
+    """Expose durable feedback independently of the next checkpoint transfer."""
+    source=Path(config['out'])/'latest-result.json'
+    target=Path(config['status'])/'latest-result.json'
+    if source.exists():
+        value=json.loads(source.read_text())
+        try:prior=json.loads(target.read_text())
+        except (OSError,json.JSONDecodeError,UnicodeDecodeError):prior=None
+        if prior!=value:
+            write_json_durable(target,value)
+
+
 def ledgered_poll(config, *, execute=subprocess.run, inspect=worker_state, sleep=time.sleep):
     """One separately admitted transfer/sealing poll, recoverable by its owner."""
     from ..common.hashing import canonical_json_sha256_hex
@@ -265,6 +277,7 @@ def ledgered_poll(config, *, execute=subprocess.run, inspect=worker_state, sleep
                  '--',*expected_argv],check=True)
         state=observed()
     while live(state):
+        _publish_latest_result(config)
         sleep(2);state=observed()
     event=completed()
     # A failed unit must not turn an old or absent result into success.
@@ -297,8 +310,7 @@ def run(config, *, every=60, max_polls=None):
         while max_polls is None or count<max_polls:
             # A prior poll may have drained a result before blocking in the
             # next checkpoint transfer. Publish that durable result on restart.
-            latest=Path(config['out'])/'latest-result.json'
-            if latest.exists():write_json_durable(status/'latest-result.json',json.loads(latest.read_text()))
+            _publish_latest_result(config)
             try:
                 if config.get('transfer_ledger'):
                     if(status/'ledger-poll.json').exists():event=ledgered_poll(config)
@@ -307,7 +319,7 @@ def run(config, *, every=60, max_polls=None):
                         if event is None:event=ledgered_poll(config)
                 else:event=poll(config)
             except Exception as error:event=dict(event='native_eval_ingest_retry',error_type=type(error).__name__)
-            if latest.exists():write_json_durable(status/'latest-result.json',json.loads(latest.read_text()))
+            _publish_latest_result(config)
             event=dict(at=time.time(),**event);write_json_durable(status/'status.json',event)
             print(json.dumps(event),flush=True);count+=1
             if max_polls is None or count<max_polls:time.sleep(every)

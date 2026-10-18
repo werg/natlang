@@ -121,6 +121,47 @@ def test_restart_after_finished_result_does_not_launch_again(tmp_path):
     assert service.ledgered_poll(c,execute=lambda *a,**kw:pytest.fail('duplicate worker'),inspect=lambda _:dict(ActiveState='inactive',Result='success',ExecMainStatus='0'))==event
 
 
+def test_completed_quality_is_published_while_next_transfer_still_runs(tmp_path):
+    c=ledger_config(tmp_path);journal_intent(c)
+    historical=dict(step=20515,checkpoint_sha256='a'*64,historical=True,qualifies_current_weights=False,
+        result=dict(task_successes=10,complete=False))
+    dump(Path(c['out'])/'latest-result.json',historical)
+    dump(Path(c['status'])/'latest-result.json',dict(step=20513))
+    event=dict(event='native_eval_enqueued',step=21477)
+    states=iter([dict(ActiveState='active'),dict(ActiveState='active'),
+        dict(ActiveState='inactive',Result='success',ExecMainStatus='0')])
+    calls=[]
+    def sleep(_):
+        assert json.loads((Path(c['status'])/'latest-result.json').read_text())==historical
+        calls.append(True)
+        if len(calls)==1:
+            historical['step']=20516
+            dump(Path(c['out'])/'latest-result.json',historical)
+        else:write_worker_result(c,event)
+    assert service.ledgered_poll(c,execute=lambda *a,**kw:pytest.fail('duplicate transfer'),
+        inspect=lambda _:next(states),sleep=sleep)==event
+    assert len(calls)==2
+    assert json.loads((Path(c['status'])/'latest-result.json').read_text())==historical
+
+
+@pytest.mark.parametrize('corrupt',[b'{"step":',b'\xff'])
+def test_valid_durable_quality_repairs_corrupt_status_mirror(tmp_path,corrupt):
+    c=ledger_config(tmp_path);Path(c['status']).mkdir()
+    target=Path(c['status'])/'latest-result.json';target.write_bytes(corrupt)
+    value=dict(step=20515,historical=True,qualifies_current_weights=False)
+    dump(Path(c['out'])/'latest-result.json',value)
+    service._publish_latest_result(c)
+    assert json.loads(target.read_text())==value
+
+
+def test_corrupt_canonical_quality_never_overwrites_good_status(tmp_path):
+    c=ledger_config(tmp_path);Path(c['out']).mkdir()
+    (Path(c['out'])/'latest-result.json').write_text('{')
+    target=dump(Path(c['status'])/'latest-result.json',dict(step=20513));before=target.read_bytes()
+    with pytest.raises(json.JSONDecodeError):service._publish_latest_result(c)
+    assert target.read_bytes()==before
+
+
 def test_rejoins_preempted_worker_and_waits_through_relaunch_gap(tmp_path):
     c=ledger_config(tmp_path);journal_intent(c);event=dict(event='native_eval_pending',active_step=7)
     # Queue custody precedes termination; claim custody precedes relaunch.
