@@ -131,6 +131,8 @@ def test_exception_restores_channel_objects_modes_rng_and_backend(monkeypatch):
     assert all(dict(model.named_parameters())[name]is p and p._version==versions[id(p)]for name,p in params.items())
     assert torch.equal(torch.get_rng_state(),rng)and backend.state=={'scale':[3]}and not backend.active
     assert model.training and not model.adapter.training and not model.port.checkpoint_layers
+    from natlang_neuralese.model.native_weight_carrier import active_cotangent_scope
+    assert active_cotangent_scope() is None
 
 
 def test_original_backbone_write_is_not_excused_as_channel_roundtrip(monkeypatch):

@@ -261,9 +261,14 @@ def qualify_attention_transition(model, tokenizer, roles, config, *, optimizer,
                     return forward(candidate_mode,'candidate')
                 with backend.autocast()if backend is not None else contextlib.nullcontext():
                     old_loss,old_inputs,old_scope=forward(previous_mode,'old')
-                    comparison=compare_complete_gradients(old_loss,None,named,old_inputs,None,
-                        atol=gradient_atol,rtol=gradient_rtol,cached_factory=candidate_forward,
-                        flat_cotangent_scope=old_scope)
+                    try:
+                        comparison=compare_complete_gradients(old_loss,None,named,old_inputs,None,
+                            atol=gradient_atol,rtol=gradient_rtol,cached_factory=candidate_forward,
+                            flat_cotangent_scope=old_scope)
+                    finally:
+                        # Keep ownership at the caller too: a substituted or
+                        # failing comparator need not reach its own cleanup.
+                        old_scope.close()
                 after=backend.collect_row_counts()if backend is not None else {}
                 def execution_evidence(first,last):
                     delta={key:last.get(key,0)-first.get(key,0)for key in last}
