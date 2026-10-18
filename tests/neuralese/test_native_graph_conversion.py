@@ -338,6 +338,86 @@ def test_witnessed_pair_encodes_roles_import_and_model_neutral_payload_alignment
     assert graph['source_pairing']['consumed_occurrences'][0]['payload_sha256'] == hashlib.sha256(payload.encode()).hexdigest()
 
 
+def test_actual_compiler_reader_and_writer_names_close_through_python_pair_builder():
+    """Exercise emitted TS records, not a hand-built read name, through native graph parsing."""
+    import json
+    import os
+    import shutil
+    import subprocess
+    from pathlib import Path
+    from scripts.neuralese_data.build_native_semantic_pairs_e2e import (
+        exact_marked_span, exact_marked_spans, source_occurrences, writer_payload,
+    )
+    from natlang_neuralese.data.native_graph import parse_graph
+    from natlang_neuralese.model.shared_state import ROLE_MARKERS
+    from natlang_neuralese.train.write_sites import direct_result_event_name
+
+    class PairTokenizer(RoleAsciiTokenizer):
+        markers = ROLE_MARKERS
+        marker_ids = (1001, 1002, 1003, 1004)
+
+        def convert_tokens_to_ids(self, marker):
+            return self.marker_ids[self.markers.index(marker)]
+    tokenizer = PairTokenizer()
+
+    repo = Path(__file__).parents[2]
+    fixture_path = repo / 'ts-host/test/fixtures/neuralese-v83-soft-edges-minimal.json'
+    fixture = json.loads(fixture_path.read_text())
+    edge = fixture['proof']['edges'][0]
+    node = shutil.which('node') or '/home/werg/.local/share/natlang-dev/node-v24.0.1-linux-arm64/bin/node'
+    script = r"""
+      import fs from 'node:fs';
+      import { convertTrajectory } from './dist/compiler/neuralese-conversion.js';
+      const fixture = JSON.parse(fs.readFileSync(0, 'utf8'));
+      const edge = fixture.proof.edges[0];
+      const producer = fixture.actions.find(x => x.record.id === edge.writer_record_id).record;
+      const reader = fixture.actions.find(x => x.record.id === edge.reader_record_id).record;
+      process.stdout.write(JSON.stringify({edge, producer: convertTrajectory(producer,
+        {softStateEdges: fixture.proof}).record, reader: convertTrajectory(reader,
+        {softStateEdges: fixture.proof}).record}));
+    """
+    completed = subprocess.run([node, '--input-type=module', '-e', script], cwd=repo / 'ts-host',
+        input=json.dumps(fixture), text=True, capture_output=True, check=True,
+        env={**os.environ, 'NODE_NO_WARNINGS': '1'})
+    output = json.loads(completed.stdout)
+    edge, writer, reader = output['edge'], output['producer'], output['reader']
+    write_name = json.loads(writer['target']['tool_calls'][0]['function']['arguments'])['value']['$write']['name']
+    assert write_name == direct_result_event_name(edge['block_id'], fixture['proof']['source']['trajectory_id'],
+        edge['writer_call_id'], edge['writer_node'])
+    body = writer_payload(writer, write_name, edge['body_sha256'])
+    occurrence = source_occurrences(writer, reader, write_name, body, edge['body_sha256'])
+    assert occurrence['reader_json_pointers']
+    assert occurrence['writer_json_pointer'].endswith('/$write')
+    read_parts = [part for message in reader['messages'] if isinstance(message.get('content'), list)
+                  for part in message['content'] if part.get('type') == 'read']
+    assert len(read_parts) == 1
+    assert read_parts[0]['name'] == write_name
+    writer_text = f'prefix{ROLE_MARKERS[0]}{body}{ROLE_MARKERS[1]}suffix'
+    reader_text = f'context{ROLE_MARKERS[2]}{body}{ROLE_MARKERS[3]}answer'
+    writer_encoding = tokenizer(writer_text, return_offsets_mapping=True)
+    reader_encoding = tokenizer(reader_text, return_offsets_mapping=True)
+    writer_row = {**row(writer['id'], writer_text, boundary=len(tokenizer('prefix' + ROLE_MARKERS[0])['input_ids'])),
+        'token_ids': writer_encoding['input_ids'], 'token_offsets': writer_encoding['offset_mapping'],
+        'tokenizer_sha256': 'b' * 64}
+    reader_row = {**row(reader['id'], reader_text, boundary=len(reader_encoding['input_ids']) - len(tokenizer('answer')['input_ids'])),
+        'token_ids': reader_encoding['input_ids'], 'token_offsets': reader_encoding['offset_mapping'],
+        'tokenizer_sha256': 'b' * 64}
+    graph = witnessed_pair_graph(writer_row, reader_row, source_tokenizer=tokenizer,
+        source_tokenizer_fingerprint='b' * 64, expanded_tokenizer_fingerprint='b' * 64,
+        role_ids=tuple(tokenizer.marker_ids),
+        writer_span=exact_marked_span(writer_row, tokenizer, body,
+            open_marker=ROLE_MARKERS[0], close_marker=ROLE_MARKERS[1], expected_sha256=edge['body_sha256']),
+        reader_span=exact_marked_spans(reader_row, tokenizer, body,
+            open_marker=ROLE_MARKERS[2], close_marker=ROLE_MARKERS[3], expected_sha256=edge['body_sha256'],
+            expected_count=len(occurrence['reader_json_pointers'])),
+        payload_sha256=edge['body_sha256'], source_span_id=write_name, edge_id='compiler-edge',
+        chain_id=fixture['proof']['source']['trajectory_id'])
+    parsed = parse_graph(graph, tokenizer_fingerprint='b' * 64)
+    assert len(parsed.plan.invocations) == 2
+    assert parsed.plan.invocations[0].producing
+    assert parsed.plan.invocations[1].imports
+
+
 def test_witnessed_pair_rejects_mismatched_payload_and_cross_split():
     import hashlib
     from pytest import raises

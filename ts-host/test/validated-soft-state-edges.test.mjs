@@ -17,7 +17,9 @@ test('validated V83 text-stand-in graph edges convert into exact native writes a
     const targetArgs = JSON.parse(written.target.tool_calls[0].function.arguments);
     assert.equal(targetArgs.status, 'success');
     assert.deepEqual(targetArgs.value.$write, {
-      name: `soft-state:${edge.block_id}`, type: 'Neuralese<string>', source: edge.body_source,
+      name: `soft-state:${edge.block_id}@${createHash('sha256').update(JSON.stringify([
+        fixture.proof.source.trajectory_id, edge.writer_call_id, edge.writer_node])).digest('hex').slice(0, 12)}`,
+      type: 'Neuralese<string>', source: edge.body_source,
     });
     assert.equal(written.neuralese_conversion.soft_state_edges[0].raw_marker_value,
       `<|neuralese|>${edge.body_source}<|/neuralese|>`, 'the exact producer marker remains provenance');
@@ -28,10 +30,31 @@ test('validated V83 text-stand-in graph edges convert into exact native writes a
     const scope = read.messages.find(message => message.role === 'tool' && message.tool_call_id === 'scope_0');
     const reads = scope.content.filter(part => part.type === 'read');
     assert.equal(reads.length, 1);
-    assert.deepEqual(reads[0], { type: 'read', name: `soft-state:${edge.block_id}`, source: edge.body_source });
+    assert.deepEqual(reads[0], { type: 'read', name: targetArgs.value.$write.name, source: edge.body_source });
     assert.equal(read.neuralese_conversion.soft_state_edges[0].role, 'reader');
     assert.equal(read.neuralese_conversion.soft_state_edges[0].learned_vectors, false);
   }
+});
+
+test('validated writer and reader endpoints share an event identity distinct from another event', () => {
+  const edge = fixture.proof.edges[0];
+  const sameContentOtherEvent = { ...edge, writer_call_id: `${edge.writer_call_id}:later`,
+    writer_node: `${edge.writer_node}:later` };
+  const firstName = `soft-state:${edge.block_id}@${createHash('sha256').update(JSON.stringify([
+    fixture.proof.source.trajectory_id, edge.writer_call_id, edge.writer_node])).digest('hex').slice(0, 12)}`;
+  const secondName = `soft-state:${edge.block_id}@${createHash('sha256').update(JSON.stringify([
+    fixture.proof.source.trajectory_id, sameContentOtherEvent.writer_call_id,
+    sameContentOtherEvent.writer_node])).digest('hex').slice(0, 12)}`;
+  assert.notEqual(firstName, secondName);
+  assert.equal(firstName, JSON.parse(convertTrajectory(
+    fixture.actions.find(item => item.role === 'producer' && item.record.id === edge.writer_record_id).record,
+    { softStateEdges: fixture.proof }).record.target.tool_calls[0].function.arguments).value.$write.name);
+  const reader = fixture.actions.find(item => item.role === 'consumer' && item.record.id === edge.reader_record_id).record;
+  const convertedReader = convertTrajectory(reader, { softStateEdges: fixture.proof }).record;
+  const scope = convertedReader.messages.find(message => message.role === 'tool' && message.tool_call_id === 'scope_0');
+  assert.deepEqual(scope.content.filter(part => part.type === 'read'), [
+    { type: 'read', name: firstName, source: edge.body_source },
+  ]);
 });
 
 test('validated edge conversion rejects mismatched block identities and body digests', () => {

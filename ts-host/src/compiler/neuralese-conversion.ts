@@ -892,7 +892,8 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
     rest(text.slice(last));
     return parts;
   };
-  const blockName = (edge: ValidatedSoftStateEdge) => `soft-state:${edge.block_id}`;
+  const blockName = (edge: ValidatedSoftStateEdge) => directTypedResultEventName(
+    edge.block_id, trajectoryId, edge.writer_call_id, edge.writer_node);
   const assistantTextResultProof = (edge: ValidatedSoftStateEdge): AssistantTextResultProof | undefined => {
     if (edge.writer_record_id !== rowId) return;
     const assistant = (decision?.assistant as Record<string, unknown> | undefined) ?? {};
