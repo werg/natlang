@@ -106,6 +106,26 @@ class RunControl:
                 pass
 
 
+def _run_collector(command, log, control, *, shutdown_grace=30.):
+    """Drain exactly this collector's session before partial custody can run."""
+    import os
+    from scripts.coreweave.teacher_engine_guard import session_process, cleanup_session
+    process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT,
+                               start_new_session=True)
+    owner = session_process(process.pid)
+    if owner is None or owner['session'] != process.pid or owner['pgid'] != process.pid:
+        # Popen's unreaped leader retains its birth/session identity even on
+        # immediate exit; losing it here means ownership cannot be established.
+        process.kill()
+        process.wait()
+        raise RuntimeError('collector lost its exact owned session identity')
+    owner['guard'] = session_process(os.getpid())
+    try:
+        return process.wait() if control is None else control.wait(process)
+    finally:
+        cleanup_session(owner, process, shutdown_grace, session_only=True)
+
+
 def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, workers=4,
             root_mode='student', runtime=None, seed_base=700000, neuralese_server=True,
             case_seconds=600, max_model_requests=128, max_turns=160, control=None, expected_native=None, coefficient_policy=None):
@@ -166,6 +186,19 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
     runtime = Path(runtime or root('repo') / 'ts-host')
     if not (runtime / 'dist/teacher/cli.js').is_file():
         raise FileNotFoundError('RL requires the built natlang collector runtime')
+    native_custody = all(actor.get('communication') == 'native-state' for actor in actors.values())
+    def retained_artifacts(*, restore=False):
+        if native_custody:
+            from .native_partial_custody import retain_partial_artifacts
+            if actor_receipts() != actors:
+                raise ValueError('RL actor policy changed before retained artifact custody')
+            retain_partial_artifacts(entries, out, policy_id=policy_id, binding=binding,
+                                     servers=[Server(url) for url in endpoints], restore=restore)
+            if actor_receipts() != actors:
+                raise ValueError('RL actor policy changed during retained artifact custody')
+    # A partial response is not usable without its exact communication inputs.
+    # Authenticate and hydrate the full archive before any collector can replay.
+    retained_artifacts(restore=True)
     def worker(index):
         queue = directory / f'queue-{index}.jsonl'
         journal = directory / f'journal-{index}.jsonl'
@@ -179,14 +212,21 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
         if neuralese_server:
             command.append('--neuralese-server')
         with (directory / f'worker-{index}.log').open('a') as log:
-            if control is None:
-                code = subprocess.run(command, stdout=log, stderr=subprocess.STDOUT).returncode
-            else:
-                process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT)
-                code = control.wait(process)
+            code = _run_collector(command, log, control)
         return {'worker': index, 'returncode': code, 'journal': str(journal)}
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        results = list(pool.map(worker, range(workers)))
+    try:
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            results = list(pool.map(worker, range(workers)))
+    except BaseException as collection_error:
+        try:
+            retained_artifacts()
+        except Exception as custody_error:
+            raise collection_error from custody_error
+        raise
+    else:
+        # This also runs after cooperative interruption, before the caller can
+        # retire the actor and lose newly produced, unscored partial artifacts.
+        retained_artifacts()
     (out / 'journal.jsonl').write_text(''.join(Path(r['journal']).read_text()
         for r in results if Path(r['journal']).exists()))
     (out / 'queue.jsonl').write_text(''.join(json.dumps(e) + '\n' for e in entries))

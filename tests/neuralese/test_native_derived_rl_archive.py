@@ -1,6 +1,7 @@
 """Real optimized-state observations keep exact ancestry through RL admission."""
 import copy
 import json
+from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
@@ -9,7 +10,7 @@ import torch
 from test_native_serving_adapters import engine_fixture
 from natlang_neuralese.model.native_artifact import NativeTensorArtifact,encode_native_tensor_artifact
 from natlang_neuralese.model.native_state_derivation import state_values,optimize_state
-from natlang_neuralese.serve.store import TensorStore,encode_native_state
+from natlang_neuralese.serve.store import TensorStore,encode_native_state,native_state_id
 from natlang_neuralese.serve.engine import GenerationRequest
 from natlang_neuralese.rl.graph_replay import save_bundle,restore_bundle,NativeBundleStore
 from natlang_neuralese.rl.native_replay import prepare_objective,NativePolicyObjective
@@ -41,6 +42,18 @@ def test_actual_rl_external_optimized_state_archive_restore_and_objective(tmp_pa
     reader=NativeBundleStore(bundle,policy_id=engine.checkpoint_sha256)
     assert torch.equal(reader.state(ident).tensors()[name],engine.store.get_native_state(ident).block.tensors()[name])
     assert reader._records.get() is None,'decoded episode KV must not accumulate across objective calls'
+    # A new content ID authenticates bytes, not their claimed optimizer history.
+    # Reject invalid derived state before replacing the prior usable manifest.
+    previous_manifest=bundle.read_bytes()
+    valid=engine.store.get_native_state(ident).block
+    forged=replace(valid,derivation={**valid.derivation,'step':valid.derivation['step']+1})
+    forged_id=native_state_id(forged);forged_bytes=encode_native_state(forged)
+    with pytest.raises(ValueError):
+        save_bundle([{'native_input':forged_id}],bundle.parent,policy_id=engine.checkpoint_sha256,
+            fetch=lambda key:forged_bytes if key==forged_id else fetch(key))
+    assert bundle.read_bytes()==previous_manifest
+    assert torch.equal(NativeBundleStore(bundle,policy_id=engine.checkpoint_sha256).state(ident).tensors()[name],
+                       valid.tensors()[name])
     messages=[{'role':'user','content':[{'type':'text','text':'t4 '},{'type':'native_state','id':ident},{'type':'text','text':' t7'}]}]
     episodes=[];engine.start()
     try:

@@ -52,7 +52,7 @@ def same(a,b):
     return bool(a and b and all(a[key]==b[key]for key in('pid','start_ticks','boot_id')))
 
 
-def session_members(owner):
+def session_members(owner, *, session_only=False):
     guard=owner['guard'];actual=session_process(guard['pid'])
     if not same(actual,guard):raise RuntimeError('engine guard identity changed')
     table={}
@@ -61,7 +61,7 @@ def session_members(owner):
             current=session_process(root.name)
             if current and current['state']not in('Z','X'):table[current['pid']]=current
     leader=session_process(owner['pid']);session_valid=leader is None or same(leader,owner)
-    selected={guard['pid']}
+    selected=set() if session_only else {guard['pid']}
     selected.update(pid for pid,current in table.items()if session_valid and current['session']==owner['pid']
         and current['boot_id']==owner['boot_id']and int(current['start_ticks'])>=int(owner['start_ticks']))
     while True:
@@ -86,11 +86,11 @@ def signal_members(owner,members,signum):
             except ProcessLookupError:pass
 
 
-def cleanup_session(owner,child,grace):
+def cleanup_session(owner,child,grace,*,session_only=False):
     """Stop every live owned-session descendant even after its leader exits."""
     started=time.monotonic();observed={};sent=set();escalated=False
     while True:
-        members=session_members(owner)
+        members=session_members(owner,session_only=session_only)
         for item in members:observed[(item['pid'],item['start_ticks'])]=item
         if not members:break
         if time.monotonic()-started>=grace:
@@ -101,12 +101,23 @@ def cleanup_session(owner,child,grace):
             sent.update((item['pid'],item['start_ticks'])for item in fresh)
         time.sleep(.02)
     code=child.wait();reaped=0
-    while True:
-        try:
-            pid,_=os.waitpid(-1,os.WNOHANG)
-            if not pid:break
-            reaped+=1
-        except ChildProcessError:break
+    if session_only:
+        # Concurrent collectors share a parent. Reap only observed owned
+        # descendants, never another worker's Popen child/status.
+        for expected in observed.values():
+            actual=session_process(expected['pid'])
+            if expected['pid']==owner['pid'] or not same(actual,expected):continue
+            try:
+                pid,_=os.waitpid(expected['pid'],os.WNOHANG)
+                reaped+=bool(pid)
+            except ChildProcessError:pass
+    else:
+        while True:
+            try:
+                pid,_=os.waitpid(-1,os.WNOHANG)
+                if not pid:break
+                reaped+=1
+            except ChildProcessError:break
     return {'group_gone':True,'reaped_orphans':reaped,'observed_members':list(observed.values()),
         'sigkill_required':escalated,'leader_returncode':code}
 

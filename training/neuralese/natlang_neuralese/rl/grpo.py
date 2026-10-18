@@ -91,9 +91,10 @@ class Server:
         with urllib.request.urlopen(self.base + path, timeout=self.timeout) as response:
             return response.read()
 
-    def put_bytes(self, path: str, data: bytes) -> dict:
+    def put_bytes(self, path: str, data: bytes, *, owner: str | None = None) -> dict:
         request = urllib.request.Request(self.base + path, data=data, method="PUT",
-                                         headers={"content-type": "application/octet-stream"})
+                                         headers={"content-type": "application/octet-stream",
+                                                  **({'x-natlang-owner': owner} if owner else {})})
         with urllib.request.urlopen(request, timeout=self.timeout) as response:
             return json.loads(response.read())
 

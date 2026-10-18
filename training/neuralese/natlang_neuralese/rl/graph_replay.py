@@ -38,7 +38,7 @@ def verified_bundle_path(manifest_path, block_id, *, policy_id, manifest=None):
     """Authenticate one archived member without materializing its payload."""
     from ..common.hashing import sha256_file_hex_cached
     manifest_path = Path(manifest_path)
-    if not manifest_path.exists():
+    if not manifest_path.exists() and manifest is None:
         return None
     manifest = json.loads(manifest_path.read_text()) if manifest is None else manifest
     if manifest.get('schema') != 'natlang.rl-block-bundle/1' or manifest.get('policy_id') != policy_id:
@@ -63,7 +63,7 @@ class NativeBundleStore:
     """Read-only exact artifact view for the shared native provenance verifier."""
     def __init__(self,path,*,policy_id,manifest=None):
         import copy,contextvars
-        self.path=Path(path).resolve(strict=True);self.policy_id=policy_id
+        self.path=Path(path).resolve(strict=manifest is None);self.policy_id=policy_id
         self.manifest=copy.deepcopy(json.loads(self.path.read_text()) if manifest is None else manifest)
         if self.manifest.get('schema')!='natlang.rl-block-bundle/1' or self.manifest.get('policy_id')!=policy_id:
             raise ValueError('native archive belongs to a different exact actor policy')
@@ -112,11 +112,14 @@ class NativeBundleStore:
             if token is not None:self._records.reset(token)
 
 
-def save_bundle(rollouts, out, *, policy_id, fetch):
+def save_bundle(rollouts, out, *, policy_id, fetch, manifest_fields=None):
     """Fetch recursively referenced blocks with Server.get_bytes or a local store."""
     from ..serve.store import decode_block, decode_native_state
     from ..model.native_artifact import decode_native_tensor_artifact, native_tensor_dependencies
     from ..model.state_block import native_state_dependencies
+    if manifest_fields is not None and (not isinstance(manifest_fields, dict)
+            or {'schema', 'policy_id', 'blocks'} & manifest_fields.keys()):
+        raise ValueError('RL bundle metadata cannot replace its exact archive authority')
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
     pending = set(block_ids(rollouts))
@@ -155,11 +158,14 @@ def save_bundle(rollouts, out, *, policy_id, fetch):
         elif not tensor:
             pending.update(set(block_ids(block.producer)) - entries.keys())
     manifest = {'schema': 'natlang.rl-block-bundle/1', 'policy_id': policy_id, 'blocks': entries}
+    manifest.update(manifest_fields or {})
     destination = out / 'manifest.json'
-    write_json_durable(destination, manifest)
     reader=NativeBundleStore(destination,policy_id=policy_id,manifest=manifest)
     for ident,record in entries.items():
         if record['format']=='native-state':reader.state(ident)
+    # A self-consistent content ID is not proof of a valid derived state. Keep
+    # the previous published manifest intact until all derivations validate.
+    write_json_durable(destination, manifest)
     return manifest
 
 
