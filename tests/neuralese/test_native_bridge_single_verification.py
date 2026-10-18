@@ -52,7 +52,8 @@ def command(tmp_path):
 def old_cli_environment(tmp_path):
     """Real child import path whose historical bridge rejects any invocation."""
     root=tmp_path/'historical-pythonpath'
-    actual=Path(bridge.__file__).resolve().parents[1]
+    from natlang_neuralese.common import hashing
+    actual=Path(hashing.__file__).resolve().parents[1]
     package=root/'natlang_neuralese';package.mkdir(parents=True)
     (package/'__init__.py').write_text('__path__.append('+repr(str(actual))+')\n')
     rl=package/'rl';rl.mkdir()

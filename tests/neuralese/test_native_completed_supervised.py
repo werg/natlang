@@ -290,7 +290,8 @@ def test_release_follows_real_fresh_resident_append_after_completed_adaptation(t
     write(historical/'handoff.json',{'intent':adapt.binding(historical/'intent.json'),
         'terminal':refs['terminal'],'checkpoint':refs['checkpoint']})
     handoff=adapt.binding(historical/'handoff.json')
-    root,config,global_plan,proof=prepared(tmp_path,runtime_package=Path(adapt.__file__).parents[1],
+    from natlang_neuralese.data import native_sources
+    root,config,global_plan,proof=prepared(tmp_path,runtime_package=Path(native_sources.__file__).parents[1],
         old_declaration_overrides={'runtime':str(runtime),'cases':adapt.binding(cases)},bootstrap_handoff=handoff)
     declaration,value=release_declaration(proof)
     from natlang_neuralese.rl import native_bootstrap_metadata
