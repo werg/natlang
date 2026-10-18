@@ -297,6 +297,81 @@ def test_worker_journal_aggregation_checks_exact_24_way_partition_and_trailing_a
         aggregate_worker_journals(master,altered,worker_journals)
 
 
+@pytest.mark.parametrize('fault', [None, 'foreign-key', 'missing-read', 'master-changed'])
+def test_guardian_worker_collection_preserves_exact_prefixes_and_rejects_bad_inputs(tmp_path, monkeypatch, fault):
+    from scripts.coreweave import teacher_incremental_export as module
+    rows, _, _, _, _, _ = _fixture()
+    remote = {}
+    queue_paths, journal_paths = [], {}
+    for i, row in enumerate(rows):
+        qp, jp = f'/batch/queue-worker-{i}.jsonl', f'/batch/journal-worker-{i}.jsonl'
+        queue_paths.append(qp)
+        journal_paths[Path(jp).name] = jp
+        remote[qp] = json.dumps(row).encode() + b'\n'
+        event = {'event': 'start', 'key': row['key']}
+        if fault == 'foreign-key' and i == 1:
+            event['key'] = rows[0]['key']
+        remote[jp] = json.dumps(event).encode() + b'\n'
+        if i == 1:
+            remote[jp] += b'{"event":"finish"'  # Unfinished append remains excluded.
+    queue = b''.join(remote[path] for path in queue_paths)
+    remote['/batch/queue.jsonl'] = queue + (b' ' if fault == 'master-changed' else b'')
+    if fault == 'missing-read':
+        del remote[journal_paths['journal-worker-1.jsonl']]
+    identity = {'teacher_source_sha256': 'a' * 64}
+    active = {'batch': 42, 'directory': str(tmp_path / 'batch42'),
+        'queue_path': '/batch/queue.jsonl', 'queue_sha256': hashlib.sha256(queue).hexdigest(),
+        'journal_path': '/unused', 'worker_queue_paths': queue_paths,
+        'worker_journal_paths': journal_paths, 'guardian_state_sha256': 'b' * 64,
+        'source_sequence_started_sha256': 'c' * 64, 'context_paths': {}, 'chunk_size': 32}
+    publisher = {'sandbox_id': 'sid', 'exporter_path': '/unused', 'role': 'bulk'}
+    monkeypatch.setattr(module, '_validate_live_identity', lambda *_args: identity)
+    exports = []
+    monkeypatch.setattr(module, 'export_finished_tranches', lambda **kw: exports.append(kw) or {'ok': True})
+    closed = []
+    def export_closed(*_args, **_kwargs):
+        closed.append(True)
+        return []
+
+    results, captured = [], []
+    for parallel in [False, True]:
+        exports.clear()
+        closed.clear()
+        reads, batches = [], []
+        def reader(path):
+            reads.append(path)
+            return remote[path]
+        if parallel:
+            def read_many(paths):
+                batches.append(list(paths))
+                # Deliberately return reversed insertion order: reconstruction
+                # must follow sealed worker order, not completion/map order.
+                return {path: reader(path) for path in reversed(paths)}
+            reader.read_many = read_many
+        if fault:
+            with pytest.raises((ValueError, KeyError)):
+                module._export_discovered_guardian_batch(active, {}, publisher, b'publisher',
+                    object(), reader, export_closed)
+            assert exports == [] and closed == []
+            if fault == 'master-changed':
+                assert reads == ['/batch/queue.jsonl'] and batches == []
+            continue
+        result = module._export_discovered_guardian_batch(active, {}, publisher, b'publisher',
+            object(), reader, export_closed)
+        assert len(exports) == 1 and closed == [True]
+        captured.append((exports[0]['queue_snapshot'], exports[0]['journal_snapshot']))
+        assert captured[-1][0] == queue
+        assert [json.loads(line)['key'] for line in captured[-1][1].splitlines()] == [r['key'] for r in rows]
+        if parallel:
+            assert batches == [[*queue_paths, *journal_paths.values()]]
+        else:
+            assert batches == []
+        assert result['training_admission'] is False and result['exposure'] is False
+        results.append({key: result[key] for key in ['active_identity', 'journal_sha256', 'completed_outputs_sha256', 'result']})
+    if not fault:
+        assert captured[0] == captured[1] and results[0] == results[1]
+
+
 def test_guardian_publisher_resumes_tuple_frontier_and_flushes_idle_partial(tmp_path, monkeypatch):
     from types import SimpleNamespace
     import time

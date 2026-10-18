@@ -1750,8 +1750,10 @@ def _export_discovered_guardian_batch(active,prior,publisher,publisher_raw,sandb
     if _sha(queue_snapshot) != active['queue_sha256']:
         raise ValueError('active queue changed after guardian discovery')
     if active['worker_queue_paths']:
-        worker_queues = [(Path(path).name, reader(path)) for path in active['worker_queue_paths']]
-        worker_journals = [(name, reader(path) if path is not None else None)
+        snapshots = _read_tranche_files(reader, [*active['worker_queue_paths'],
+            *(path for path in active['worker_journal_paths'].values() if path is not None)])
+        worker_queues = [(Path(path).name, snapshots[path]) for path in active['worker_queue_paths']]
+        worker_journals = [(name, snapshots[path] if path is not None else None)
             for name, path in active['worker_journal_paths'].items()]
         journal_snapshot = aggregate_worker_journals(queue_snapshot, worker_queues, worker_journals)
     else:

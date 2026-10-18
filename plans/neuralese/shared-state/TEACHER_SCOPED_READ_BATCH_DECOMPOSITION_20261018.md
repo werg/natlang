@@ -20,3 +20,12 @@ generation continued. There is no new model-facing instruction or source.
 5. Check overlapping bounded reads, identical sealed members and member order,
    failure before publication, and exact sealed-tranche continuation. Adopt a
    reviewed immutable publisher successor only at its normal idle boundary.
+
+The first live successor exposed another transport bottleneck: discovery still
+read 24 worker queues and 24 worker journals serially for each active batch.
+Collect these selected paths through the same bounded scoped reader, then
+reconstruct their original queue and journal ordering. Keep the master queue
+digest check before collection and the exact worker partition, identity and
+incomplete-journal-append checks after collection. Journals remain individual
+captured prefixes, as before; concurrent reads do not assert a common snapshot.
+If collection fails, do not aggregate, export or advance the publisher state.
