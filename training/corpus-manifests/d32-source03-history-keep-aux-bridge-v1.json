@@ -1,0 +1,35 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "d32-source03-history-keep-aux-bridge-v1",
+  "owner": "dgx",
+  "path": "runs/acquired-connected-native-graphs-20261018-history-keep-v1/D32/source03-aux-bridge",
+  "files": [
+    {
+      "path": "lfm25/00-fit.jsonl.zst",
+      "bytes": 29641159,
+      "sha256": "434f71d11cf935ea9cb64bca8a538122bfd56520fb04598546ba83105c8a0f8c"
+    },
+    {
+      "path": "lfm25/bridge-evidence-final.json",
+      "bytes": 2803,
+      "sha256": "6e4cd6d0b42e01320a030b5070d79aafd627817681f1873f8971fb17c526da2d"
+    },
+    {
+      "path": "lfm25/bridge-row-bindings.jsonl",
+      "bytes": 24954773,
+      "sha256": "5fd2f6846abae64483c9345b6780851076359c12fefa6fb5ab19bc67e85bc0ff",
+      "lines": 24968
+    },
+    {
+      "path": "lfm25/fit-sources.json",
+      "bytes": 299,
+      "sha256": "909f23649119ed23f29dad6eb69ba14de07fe40d9772c079b049486371b4b547"
+    },
+    {
+      "path": "lfm25/registration-audit.json",
+      "bytes": 655,
+      "sha256": "17ec05a9ffb79130427314c3662db131a051b90ee22b82ac381906c85d28e508"
+    }
+  ],
+  "bytes": 54599689
+}

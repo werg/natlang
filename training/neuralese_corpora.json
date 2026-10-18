@@ -187068,6 +187068,37 @@
         "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0028-tranche0000",
         "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0028-tranche0001"
       ]
+    },
+    {
+      "build": {
+        "audit": "lfm25/registration-audit.json",
+        "audit_sha256": "17ec05a9ffb79130427314c3662db131a051b90ee22b82ac381906c85d28e508"
+      },
+      "documents": {
+        "lfm25": {
+          "auxiliary_reasoning_graphs:train": 24968,
+          "graphs:train": 24968,
+          "max_row_tokens": 94231,
+          "positive_sessions": 227,
+          "tokens:test": 0,
+          "tokens:train": 1292637683
+        }
+      },
+      "id": "d32-source03-history-keep-aux-bridge-v1",
+      "include": [
+        "lfm25/00-fit.jsonl.zst",
+        "lfm25/fit-sources.json",
+        "lfm25/bridge-row-bindings.jsonl",
+        "lfm25/bridge-evidence-final.json",
+        "lfm25/registration-audit.json"
+      ],
+      "license": "exact source license facts retained in each graph acquired_session provenance",
+      "owner": "dgx",
+      "path": "runs/acquired-connected-native-graphs-20261018-history-keep-v1/D32/source03-aux-bridge",
+      "source_class": "source-curated-d32-history-keep-fit-bridge",
+      "split": "original D32 train fit rows; exact source03 auxiliary fit rows matched to capacity-pending history-KEEP parents; no held/evaluation rows",
+      "training_admission": true,
+      "training_admission_reason": "Bound reusable subset of the already admitted source03 LFM fit view. Preserves 24,968 exact old auxiliary rows for 227 KEEP parents whose complete history views remain capacity-pending; source lineage, row bindings and raw bytes are in the included bridge proof. Registration does not append a recipe source or claim exposure."
     }
   ],
   "coverage_backlog": [
