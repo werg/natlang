@@ -492,10 +492,14 @@ def _source03_bridge_geometry_part(part, *, preparation, package):
         actual = join_artifacts.get(report_name, {})
         if actual.get('sha256') != reference.get('sha256') or actual.get('bytes') != reference.get('bytes'):
             raise ValueError('source03 bridge join report artifact differs: ' + report_name)
-    if (join_artifacts.get('keep_coverage', {}).get('sha256')
-            != final_source.get('keep_coverage', {}).get('sha256')
-            or join_artifacts.get('keep_coverage', {}).get('bytes')
-            != final_source.get('keep_coverage', {}).get('bytes')):
+    join_keep_coverage = join_artifacts.get('keep_coverage', {})
+    final_keep_coverage = final_source.get('keep_coverage', {})
+    # The registered bridge evidence binds the current KEEP coverage by SHA,
+    # while the separately staged old-join report also records its byte count.
+    # Older final-evidence receipts legitimately omit that redundant count.
+    if (join_keep_coverage.get('sha256') != final_keep_coverage.get('sha256')
+            or ('bytes' in final_keep_coverage
+                and join_keep_coverage.get('bytes') != final_keep_coverage.get('bytes'))):
         raise ValueError('source03 bridge current KEEP coverage binding differs')
     if (provenance.get('geometry_forward_tokens_sum') != supplement.get('forward_tokens_sum')
             or provenance.get('geometry_kv_slots_sum') != supplement.get('kv_slots_sum')

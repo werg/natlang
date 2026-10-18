@@ -683,7 +683,8 @@ def ordinary_coverage_part(tmp_path,kind):
 
 def source03_bridge_fixture(tmp_path, monkeypatch, *, with_ordinary=False,
                             old_geometry_override=None, old_forward_override=None,
-                            invented_current_component=False, boolean_geometry=False):
+                            invented_current_component=False, boolean_geometry=False,
+                            omit_keep_coverage_bytes=False, wrong_final_keep_coverage_sha=False):
     import hashlib
     import pickle
     import subprocess
@@ -785,10 +786,13 @@ def source03_bridge_fixture(tmp_path, monkeypatch, *, with_ordinary=False,
     def ref(path):return {'path':str(path),'sha256':sha256_file_hex(path),'bytes':path.stat().st_size}
     fit_sources=model/'fit-sources.json';write_json(fit_sources,{'schema':'natlang.native-graph-sources/1',
         'sources':[{'kind':'native-graphs',**resident.binding(bridge_leaf)}]})
+    keep_coverage_binding=artifact(keep_coverage)
+    if omit_keep_coverage_bytes:keep_coverage_binding.pop('bytes')
+    if wrong_final_keep_coverage_sha:keep_coverage_binding['sha256']='f'*64
     evidence=model/'bridge-evidence-final.json';write_json(evidence,{'schema':'natlang.d32-history-keep-aux-bridge-final/1',
         'source03':{'rows':2,'unique_keep_parents':2,'training_admission':False,'training_exposure':0,
             'old_fit_source':artifact(old_leaf),'old_coverage':artifact(old_coverage),'old_row_index':artifact(old_index),
-            'keep_coverage':artifact(keep_coverage),
+            'keep_coverage':keep_coverage_binding,
             'bridge_source':{**artifact(bridge_leaf),'raw_selected_rows_sha256':hashlib.sha256(raw_graphs).hexdigest()},
             'row_binding_sidecar':{**artifact(sidecar),'canonical_rows_sha256':hashlib.sha256(sidecar.read_bytes()).hexdigest()},
             'keep_pending_parent_ids_sha256':resident.digest(['parent-0','parent-1'])}})
@@ -946,6 +950,24 @@ def test_source03_bridge_geometry_is_verified_and_can_be_bridge_only_or_ordered_
             parts[0]['source'],parts[0]['corpus_manifest'],parts[0]['supplement'],parts[0]['old_join_provenance']]
         assert resident.geometry_from_evidence(source,0,proof,package=Path(resident.__file__).parents[1])=={
             'forward_tokens':4 if with_ordinary else 3,'kv_slots':4 if with_ordinary else 3}
+
+
+def test_source03_bridge_accepts_registered_keep_coverage_sha_without_redundant_bytes(tmp_path,monkeypatch):
+    source,parts=source03_bridge_fixture(tmp_path,monkeypatch,omit_keep_coverage_bytes=True)
+    output=tmp_path/'geometry.json'
+    proof=resident.prepare_whole_delta_geometry(source,parts,output,package=Path(resident.__file__).parents[1])
+    assert json.loads(output.read_text())['new_train_rows']==2
+    assert resident.geometry_from_evidence(source,0,proof,package=Path(resident.__file__).parents[1])=={
+        'forward_tokens':3,'kv_slots':3}
+
+
+def test_source03_bridge_still_rejects_different_keep_coverage_sha(tmp_path,monkeypatch):
+    source,parts=source03_bridge_fixture(tmp_path,monkeypatch,omit_keep_coverage_bytes=True,
+        wrong_final_keep_coverage_sha=True)
+    output=tmp_path/'geometry.json'
+    with pytest.raises(ValueError,match='current KEEP coverage binding differs'):
+        resident.prepare_whole_delta_geometry(source,parts,output,package=Path(resident.__file__).parents[1])
+    assert not output.exists()
 
 
 def test_source03_bridge_graph_rows_are_consumed_as_a_single_pass_stream(tmp_path,monkeypatch):
