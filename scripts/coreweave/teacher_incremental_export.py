@@ -915,12 +915,25 @@ def export_final_boundary(*, batch: int, queue_path: str, exported_keys: list[st
                                   receipt_path=receipt_path)
 
 
+def _sandbox_boot_read(sandbox):
+    """Read the virtual kernel file through the existing process transport."""
+    return sandbox.exec(['cat', '/proc/sys/kernel/random/boot_id'],
+                        timeout_seconds=30).result(timeout=45)
+
+
 def scoped_sdk_session(sandbox_id: str, *, timeout: int = 180):
     """Bind one scoped provider session and its read-only file reader."""
     cwctl = _cwctl_module()
     sandbox = cwctl.read_sandbox(sandbox_id, patience=60)
 
     def read(path: str) -> bytes:
+        if path == '/proc/sys/kernel/random/boot_id':
+            boot = _sandbox_boot_read(sandbox)
+            if boot.returncode != 0:
+                raise OSError(f'could not read active teacher boot identity: {boot.stderr}')
+            if not boot.stdout.strip():
+                raise OSError('active teacher boot identity read was empty')
+            return boot.stdout.encode()
         result = sandbox.read_file(path).result(timeout=timeout)
         return result if isinstance(result, bytes) else bytes(result)
 
@@ -952,7 +965,7 @@ def _validate_live_identity(config: dict, sandbox, read_file: Callable[[str], by
                 'runtime_path'}
     if not isinstance(expected, dict) or not required <= set(expected):
         raise ValueError('continuous poll config needs exact boot, source, actor, runtime and config bindings')
-    boot = sandbox.exec(['cat', '/proc/sys/kernel/random/boot_id'], timeout_seconds=30).result(timeout=45)
+    boot = _sandbox_boot_read(sandbox)
     if boot.returncode != 0:
         raise OSError(f'could not read active teacher boot identity: {boot.stderr}')
     boot_id = boot.stdout.strip()
@@ -1142,7 +1155,7 @@ def discover_guardian_batch(publisher: dict, sandbox,
         raise ValueError('automatic publisher lacks exact guardian and spool authority')
     if type(publisher['anchor_batch']) is not int or type(publisher['chunk_size']) is not int:
         raise ValueError('publisher anchor and chunk size must be integers')
-    boot = sandbox.exec(['cat', '/proc/sys/kernel/random/boot_id'], timeout_seconds=30).result(timeout=45)
+    boot = _sandbox_boot_read(sandbox)
     if boot.returncode != 0 or boot.stdout.strip() != publisher['sandbox_boot_id']:
         raise ValueError('replacement teacher boot differs from publisher authority')
 
