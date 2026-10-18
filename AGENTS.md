@@ -251,6 +251,9 @@ differences from a known-good path. Record what was ruled out and how.
   `scripts/sync_training_corpora.py`. Copies, availability, and successful schema
   checks do not grant training admission. Keep split/source/quality decisions
   explicit. Register omissions and required conversions rather than losing them.
+  Reconcile coverage against every entry of the exact upstream inventory, with
+  explicit member/index bindings; sequential directory labels are not a coverage
+  proof. Keep conversion, admission, staging and actual learner exposure separate.
 - Licenses (owner, 2026-10-10): every dataset and model license is acceptable,
   including the most restrictive. Include them; record license provenance as a
   fact, but never omit or hold data for license review, and do not ask the owner.

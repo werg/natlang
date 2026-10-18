@@ -246,7 +246,7 @@ denial is not completion. Independent review and actual trained-weight
 training/inference/transport qualification remain required.
 
 Pop is closed; DGX supervises all remaining work. The dedicated generation
-sandbox `dadd0462-0175-470d-b1ee-4d52edfe110e` runs the stronger self-hosted
+sandbox `78530f71-08fc-4f57-ace9-7fbad64aeeb8` runs the stronger self-hosted
 Qwen3.8-Flash-Next NVFP4 teacher on SM120. Current batches bind the actual NVIDIA
 actor and serving runtime in their collection receipts. Mellum and
 LFM are students, not generation teachers. Qwen V6 and the disjoint Big2
@@ -296,3 +296,44 @@ The shared source-host role mechanism now explicitly partitions raw optimizer ow
 This is implemented and locally tested scheduling/transport, **not a cloud deployment or VAE-readiness claim**. Both actual fixed 26,312-graph communication foundations remain incomplete. Complete full-parameter communication-gradient qualification is also unresolved: the actual LFM 9478 diagnostic still fails the strict checks despite small relative errors. Legacy channel-only evidence cannot grant full-backbone readiness. No shared-space VAE training or qualification is earned by this change. Useful student SGD continues while those concrete prerequisites are repaired.
 
 The implementation and exact mechanism/policy boundary are documented in [SOURCE_HOST_ROLE_RENDEZVOUS_DECOMPOSITION_20261017.md](shared-state/SOURCE_HOST_ROLE_RENDEZVOUS_DECOMPOSITION_20261017.md). Focused checks include the unchanged real both-port RL→SFT→RL restore/update path, full readiness rejection cases, independent portable checkpoint copying and actual semantic loading through original legacy recipe/launch/exit guards. Deployment remains with the cloud owner after independent composition review.
+
+
+### October 18 production supervision
+
+Both shared-state students continue useful work; the complete recipe and both
+26,312-graph communication foundations remain unfinished. LFM resumed exact
+step 13,228 after its standalone hourly refresh caused an unattended stop. Only
+the automatic refresh-exit flag was removed; periodic saves and supervisor stop,
+tweak and exact continuation remain available. Actual step 13,246 / GPU 95% was
+observed at 07:55 UTC. Mellum completed 250 DPO updates and then 461 ordinary updates
+to 21,226, published a verified full parent and inference view, and is collecting
+fresh whole-graph RL trajectories on that checkpoint. These counters are not
+whole-recipe completion or current-weight task qualification.
+
+The stable R19 execution repair and actor-view restoration are implemented and
+have focused checks. Current-parent complete communication-gradient, actor/cache
+parity and whole-policy memory checks still precede cutover. Historical LFM 9478
+FFN-boundary evidence does not replace those checks. Source-only deployment is
+not successful training; no VAE readiness is earned. New ordinary data is being
+prepared independently of this qualification so it need not wait for long RL
+backward checks. The staged source03 bridge remains an explicit communication
+consumer obligation. Whole over-limit rows remain available for measured
+capacity expansion rather than clipping or permanent exclusion.
+
+The teacher guardian now releases completed lookahead capacity while retaining
+ordered source custody (fe9c4a924). Both the guardian and private publisher were
+restored, with closed batches 33/34 independently fetched and verified. Completed
+48-task callback measurement produced 47 strict-positive trajectories; the other
+original result is rejected, not relabeled. A shared evaluator fix
+(3b73b3764) resumes disk-paused workers independently of busy workers; LFM's same
+protected request is retrying with all eight workers active. Captured-context
+omissions now require the renderer's exact original-capture proof (794f52ab5),
+allowing the independently usable 265/model batch33 decisions without waiving
+its five omitted actions.
+
+Exact D32 inventory reconciliation found a missing normalized member, index 9;
+early directory labels were one-based before switching to index labels. Its
+distinct source-index09 corpus is converted and has passed source protection
+and sample qualification; capacity partition and registration remain pending. The 48-entry inventory map, stage receipts and
+learner exposure remain separate. Live changing frontiers are in the DGX coord
+status and operations receipts, not inferred from historical stage counts.
