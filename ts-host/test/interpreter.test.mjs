@@ -461,10 +461,32 @@ test('a failed eval reports the service calls it already made, whoever built the
   assert.equal(revision, 26);
 });
 
-test('tool-call markup in a reply is never taken as a string result', () => {
+test('tool-call markup in a reply is never taken as a string result', async () => {
   const { session, lam } = open({ type: '() => string', instructions: 'Say something.' });
-  assert.equal(session.acceptTextResult('</parameter>\n</function>\n</tool_call>'), false);
-  assert.equal(session.acceptTextResult('A plain answer.'), true); assert.equal(lam.return, 'A plain answer.');
+  assert.equal(await session.acceptTextResult('</parameter>\n</function>\n</tool_call>'), false);
+  assert.equal(await session.acceptTextResult('<|tool_call_start|>[return_result()]<|tool_call_end|>'), false,
+    'LFM tool-call markup must not be accepted as plain result text');
+  assert.equal(await session.acceptTextResult('A plain answer.'), true); assert.equal(lam.return, 'A plain answer.');
+});
+
+test('a plain final reply is materialized at a declared Neuralese<string> boundary', async () => {
+  const block = 'nz1_aaaaaaaaaaaaaaaaaaaa';
+  const writes = [];
+  const meta = { id: block, type: 'Neuralese<string>', dialect: 'test', length: 2, truncated: false };
+  const { lam, session } = open({ type: '() => Neuralese<string>', instructions: 'Return the answer.' }, {
+    neuralese: {
+      store: { has: async id => id === block, peek: id => id === block ? meta : undefined },
+      port: { dialect: 'test', write: async (text, options) => { writes.push({ text, options }); return meta; } },
+    },
+  });
+  assert.equal(await session.acceptTextResult('\n\nsilver maple\n'), true);
+  assert.equal(lam.return.$neuralese.id, block);
+  assert.equal(session.finish(), true);
+  assert.deepEqual(writes.map(write => write.text), ['silver maple']);
+  const event = session.runtime.trace.events.find(item => item.kind === 'block_write');
+  assert.equal(event.source, 'assistant-text-return');
+  assert.equal(event.source_kind, 'typed-text-result');
+  assert.equal(event.text_body_sha256, 'c5c97c8bcbe9a5816b6c7481c60ed95f8ba1191e09b90043e26dcf34634cdd58');
 });
 
 test('an object keyed by data is stored as a dictionary that later evals can extend', async () => {
@@ -1537,17 +1559,17 @@ test('a service scoped to a function is usable in its calls only, and named else
   assert.match(seen.asked, /60\.4/);
 });
 
-test('a reply that is only a JSON value of the declared type is the result; prose is not', () => {
+test('a reply that is only a JSON value of the declared type is the result; prose is not', async () => {
   const record = open({ type: '() => { verdict: "entailed" | "unknown" }', instructions: 'Judge.' });
-  assert.equal(record.session.acceptTextResult('\n\n{\n  "verdict": "unknown"\n}'), true);
+  assert.equal(await record.session.acceptTextResult('\n\n{\n  "verdict": "unknown"\n}'), true);
   assert.deepEqual(record.lam.return, { verdict: 'unknown' });
   const fenced = open({ type: '() => number[]', instructions: 'List.' });
-  assert.equal(fenced.session.acceptTextResult('```json\n[1, 2]\n```'), true); assert.deepEqual(fenced.lam.return, [1, 2]);
+  assert.equal(await fenced.session.acceptTextResult('```json\n[1, 2]\n```'), true); assert.deepEqual(fenced.lam.return, [1, 2]);
   const number = open({ type: '() => number', instructions: 'Count.' });
-  assert.equal(number.session.acceptTextResult('The total is 1523.'), false, 'prose is a reply');
-  assert.equal(number.session.acceptTextResult('1523'), true); assert.equal(number.lam.return, 1523);
+  assert.equal(await number.session.acceptTextResult('The total is 1523.'), false, 'prose is a reply');
+  assert.equal(await number.session.acceptTextResult('1523'), true); assert.equal(number.lam.return, 1523);
   const wrong = open({ type: '() => { verdict: "entailed" | "unknown" }', instructions: 'Judge.' });
-  assert.equal(wrong.session.acceptTextResult('{"verdict": "maybe"}'), false, 'a value of another type is not the result');
+  assert.equal(await wrong.session.acceptTextResult('{"verdict": "maybe"}'), false, 'a value of another type is not the result');
 });
 
 

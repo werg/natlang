@@ -35,6 +35,7 @@ import { readNeuraleseForCurrentTask } from '../neuralese/combinators.js';
 import { undeclaredServiceType } from './introspection.js';
 import { NATIVE_TOOL_SCHEMA } from './tool-surface.js';
 import { returnErrorText, returnValueRejection, type ReturnErrorText } from './return-errors.js';
+import { TOOL_MARKUP } from './tool-markup.js';
 
 /** Services the invocation kernel provides to an interpreter run. */
 export type NativeRuntimeHooks = {
@@ -1173,15 +1174,25 @@ export class NativeSession {
   }
 
   /**
-   * A final reply's text as the result, for a call whose return type accepts that text (a string, or one of
-   * a union's string members). A bare "done" is never a result: it asks for the staged value.
+   * A final reply's text as the result when the declared return type accepts it. Neuralese<string> text goes through
+   * the typed block writer; a bare "done" asks for the already staged value.
    */
-  acceptTextResult(text: string): boolean {
+  async acceptTextResult(text: string): Promise<boolean> {
     const answer = text.trim();
     if (this.lam.type.kind !== 'lambda' || this.lam.return !== MISSING || !answer || /^done[.!]?$/i.test(answer)) return false;
     // Tool-call markup is a failed tool call, never the answer.
-    if (/<tool_call>|<\/tool_call>|<function=|<\/function>|<parameter=|<\/parameter>/.test(answer)) return false;
+    if (TOOL_MARKUP.test(answer)) return false;
     let value: Value;
+    const returnType = this.lam.type.returns;
+    const resolvedReturn = this.env.resolve(returnType);
+    const element = resolvedReturn.kind === 'neuralese' ? this.env.resolve(resolvedReturn.element) : undefined;
+    if (resolvedReturn.kind === 'neuralese' && element?.kind === 'prim' && element.name === 'string') {
+      try {
+        value = await this.coerceReturn(answer, 'assistant-text-return');
+        this.lam.return = value;
+        return true;
+      } catch { return false; }
+    }
     try { value = coerce(answer, this.lam.type.returns, this.env, 'return'); } catch { value = MISSING; }
     if (typeof value === 'string') { this.lam.return = value; return true; }
     // Any other result may be written as JSON: a reply that is nothing but a value of the declared type (optionally
@@ -1275,7 +1286,7 @@ export class NativeSession {
     return this.callableCache.tree;
   }
 
-  private async writeNeuraleseResult(text: string, wanted: Type, source: 'return_result' | 'eval-return' | 'eval-finish',
+  private async writeNeuraleseResult(text: string, wanted: Type, source: 'return_result' | 'eval-return' | 'eval-finish' | 'assistant-text-return',
     sourceKind: 'typed-text-result' | 'typed-json-result' | 'typed-text-result-field', resultPath?: (string | number)[]): Promise<Value> {
     const callId = this.runtime.currentCallId ?? this.runtime.options.runId;
     const sourceEvent = [...this.runtime.trace.events].reverse().find(event =>
@@ -1288,7 +1299,7 @@ export class NativeSession {
   }
 
   /** Materialize plain text or validated JSON only when the declared Neuralese element type makes that representation exact. */
-  private async coerceReturn(value: unknown, source: 'return_result' | 'eval-return' | 'eval-finish',
+  private async coerceReturn(value: unknown, source: 'return_result' | 'eval-return' | 'eval-finish' | 'assistant-text-return',
     parseJsonFallback = false): Promise<Value> {
     const wanted = this.env.resolve(this.lam.type.kind === 'lambda' ? this.lam.type.returns : parseType('null'));
     const element = wanted.kind === 'neuralese' ? this.env.resolve(wanted.element) : undefined;

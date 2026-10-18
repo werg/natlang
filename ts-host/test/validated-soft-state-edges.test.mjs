@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
@@ -42,4 +43,37 @@ test('validated edge conversion rejects mismatched block identities and body dig
   const wrongBody = structuredClone(fixture.proof);
   wrongBody.edges[0].body_sha256 = '0'.repeat(64);
   assert.throws(() => convertTrajectory(consumer, { softStateEdges: wrongBody }), /proof body digest mismatch/);
+});
+
+test('assistant text writer retains exact target and lowers only an authenticated body sidecar', () => {
+  const edge = fixture.proof.edges[0];
+  const original = fixture.actions.find(item => item.role === 'producer' && item.record.id === edge.writer_record_id).record;
+  const raw = `\n\n${edge.body_source}\n`;
+  const row = fixture.proof.source.source_row_sha256;
+  const request = 'c'.repeat(64), response = 'd'.repeat(64);
+  const record = structuredClone(original);
+  record.source_ref = { ...record.source_ref, invocation_id: edge.writer_call_id,
+    source_row_sha256: row };
+  record.target = { role: 'assistant', content: raw };
+  record.decision = { index: edge.writer_decision_index, source_raw_response_sha256: response,
+    assistant: { content: raw, typed_result_writes: [{
+      schema: 'natlang.typed-result-write/1', source: 'assistant-text-return',
+      source_kind: 'typed-text-result', result_type: 'Neuralese<string>', result_path: ['return'],
+      invocation_id: edge.writer_call_id, writer_call_id: edge.writer_call_id, writer_node: edge.writer_node,
+      block_id: edge.block_id, source_row_sha256: row, body_source: edge.body_source,
+      body_sha256: edge.body_sha256, raw_assistant_text_sha256: createHash('sha256').update(raw).digest('hex'),
+      body_start: Array.from(raw).length - Array.from(raw.trimStart()).length,
+      body_end: Array.from(raw).length - Array.from(raw.trimStart()).length + Array.from(edge.body_source).length,
+      request_sha256: request, raw_response_sha256: response,
+    }] } };
+  const converted = convertTrajectory(record, { softStateEdges: fixture.proof }).record;
+  assert.equal(converted.target.content, raw);
+  assert.equal(converted.target.tool_calls, undefined, 'assistant result must not become a synthetic tool call');
+  const proof = converted.target.assistant_text_result;
+  assert.equal(proof.body_source, edge.body_source);
+  assert.equal(raw.slice(proof.body_start, proof.body_end), edge.body_source);
+  assert.equal(proof.request_sha256, request);
+  assert.throws(() => convertTrajectory({ ...record, decision: { ...record.decision,
+    assistant: { ...record.decision.assistant, typed_result_writes: [] } } }, { softStateEdges: fixture.proof }),
+  /lacks one exact terminal writer receipt/);
 });

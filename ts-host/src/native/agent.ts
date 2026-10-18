@@ -1329,7 +1329,7 @@ export class NativeToolAgent {
       if (!response.calls?.length) {
         // A reply without a tool call ends the turn: it returns the staged result, or, for a string-typed
         // call with nothing staged, the reply's text is the result.
-        if (!response.truncated) session.acceptTextResult(response.text ?? '');
+        if (!response.truncated) await session.acceptTextResult(response.text ?? '');
         const missing = this.missing(session);
         if (!response.truncated && exactEmptyEos && missing) {
           consecutiveEmptyEosWithoutResult++;

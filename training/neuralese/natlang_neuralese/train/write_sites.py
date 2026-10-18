@@ -131,10 +131,66 @@ def extract_write_sites_from_calls(calls: Any) -> tuple[WriteSite, ...]:
 
 
 def extract_write_sites(record: Mapping[str, Any]) -> tuple[WriteSite, ...]:
-    """Return target writers from JSON marker values and validated inline sites."""
+    """Return target writers from JSON markers and compiler-attested text sites."""
     target = record.get("target") or {}
-    return tuple(replace(site, schema=argument_schema(record, site.tool, site.argument, site.value_path))
-                 for site in extract_write_sites_from_calls(target.get("tool_calls") or []))
+    sites = [replace(site, schema=argument_schema(record, site.tool, site.argument, site.value_path))
+             for site in extract_write_sites_from_calls(target.get("tool_calls") or [])]
+    sidecar = target.get("assistant_text_result")
+    if sidecar is not None:
+        import hashlib
+        import re
+        source_ref = record.get("source_ref") or {}
+        decision = record.get("decision") or {}
+        assistant = decision.get("assistant") or {}
+        receipts = [item for item in assistant.get("typed_result_writes", []) or []
+                    if isinstance(item, Mapping) and item.get("source") == "assistant-text-return"
+                    and item.get("source_kind") == "typed-text-result"]
+        raw = target.get("content")
+        if (not isinstance(sidecar, Mapping) or sidecar.get("schema") != "natlang.assistant-text-result-write/1"
+                or target.get("role") != "assistant" or target.get("tool_calls")
+                or not isinstance(raw, str) or not isinstance(sidecar.get("body_source"), str)
+                or type(sidecar.get("body_start")) is not int or type(sidecar.get("body_end")) is not int
+                or sidecar["body_start"] < 0 or sidecar["body_end"] < sidecar["body_start"]
+                or raw[sidecar["body_start"] : sidecar["body_end"]] != sidecar["body_source"]
+                or hashlib.sha256(raw.encode("utf-8")).hexdigest() != sidecar.get("raw_assistant_text_sha256")
+                or hashlib.sha256(sidecar["body_source"].encode("utf-8")).hexdigest() != sidecar.get("body_sha256")
+                or sidecar.get("source_row_sha256") != source_ref.get("source_row_sha256")
+                or sidecar.get("writer_call_id") != source_ref.get("invocation_id")
+                or not re.fullmatch(r"[0-9a-f]{64}", str(source_ref.get("source_row_sha256")))
+                or not isinstance(source_ref.get("trajectory_id"), str)
+                or not isinstance(sidecar.get("writer_node"), str)
+                or not isinstance(sidecar.get("block_id"), str) or not sidecar["block_id"].startswith("nz1_")
+                or not re.fullmatch(r"[0-9a-f]{64}", str(sidecar.get("request_sha256")))
+                or not re.fullmatch(r"[0-9a-f]{64}", str(sidecar.get("raw_response_sha256")))):
+            raise ValueError("invalid assistant-text-result writer sidecar")
+        if (assistant.get("content") != raw or len(receipts) != 1
+                or receipts[0].get("result_type") != "Neuralese<string>"
+                or receipts[0].get("result_path") != ["return"]
+                or receipts[0].get("invocation_id") != sidecar.get("writer_call_id")
+                or receipts[0].get("writer_call_id") != sidecar.get("writer_call_id")
+                or receipts[0].get("writer_node") != sidecar.get("writer_node")
+                or receipts[0].get("block_id") != sidecar.get("block_id")
+                or receipts[0].get("source_row_sha256") != sidecar.get("source_row_sha256")
+                or receipts[0].get("body_source") != sidecar.get("body_source")
+                or receipts[0].get("body_sha256") != sidecar.get("body_sha256")
+                or receipts[0].get("body_start") != sidecar.get("body_start")
+                or receipts[0].get("body_end") != sidecar.get("body_end")
+                or receipts[0].get("raw_assistant_text_sha256") != sidecar.get("raw_assistant_text_sha256")
+                or receipts[0].get("request_sha256") != sidecar.get("request_sha256")
+                or receipts[0].get("raw_response_sha256") != sidecar.get("raw_response_sha256")
+                or decision.get("source_raw_response_sha256") != sidecar.get("raw_response_sha256")):
+            raise ValueError("assistant-text-result sidecar is not bound to its materializer receipt")
+        # This is a real assistant result, not a synthesized tool invocation.
+        # The empty argument path tells the trajectory renderer to retain its
+        # original natural-language prompt and final assistant text.
+        name = "soft-state:" + sidecar["block_id"]
+        sites.append(WriteSite(
+            tool="assistant-text-return", before_arguments={}, argument="content", value_path=(),
+            name=name, descriptor={"name": name, "type": "Neuralese<string>",
+                                   "source": sidecar["body_source"]},
+            source_kind="assistant-text-sidecar", arguments={}, inline_prefix=None,
+            source_span=(sidecar["body_start"], sidecar["body_end"])))
+    return tuple(sites)
 
 
 def argument_schema(record: Mapping[str, Any], tool_name: str | None, argument: str,

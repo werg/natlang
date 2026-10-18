@@ -8,6 +8,7 @@
 import type { DecisionScorer, ModelContentPart, ModelTurn, ModelTurnDelta, ModelTurnOptions, ModelTurnRequest } from '../contracts.js';
 import { nativeProtocolFailure } from '../native/native-protocol.js';
 import { runtimePartsToText, type RuntimeContentPart } from '../native/neuralese.js';
+import { TOOL_MARKUP } from '../native/tool-markup.js';
 
 type Json = Record<string, unknown>;
 /** Streamed chunks (`chat.completion.chunk`), or a single complete `chat.completion` body. */
@@ -56,7 +57,7 @@ export type ChatCompletionOptions = {
 };
 
 /** Tool-call markup (Qwen-style XML or <tool_call> tags, LFM2's pythonic call markers) left in a reply's text. */
-export const TOOL_MARKUP = /<tool_call>|<\/tool_call>|<function=|<\/function>|<parameter=|<\/parameter>|<\|tool_call_start\|>|<\|tool_call_end\|>/;
+export { TOOL_MARKUP } from '../native/tool-markup.js';
 class LeakedCall extends Error {}
 
 /**

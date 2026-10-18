@@ -161,6 +161,21 @@ export type ValidatedSoftStateEdge = {
   body_sha256: string;
   body_source: string;
 };
+
+type AssistantTextResultProof = {
+  schema: 'natlang.assistant-text-result-write/1';
+  block_id: string;
+  writer_call_id: string;
+  writer_node: string;
+  source_row_sha256: string;
+  body_sha256: string;
+  body_source: string;
+  body_start: number;
+  body_end: number;
+  raw_assistant_text_sha256: string;
+  request_sha256: string;
+  raw_response_sha256: string;
+};
 export type ValidatedSoftStateEdgeSet = {
   schema: 'natlang.validated-runtime-soft-state-edges/1';
   status: 'passed';
@@ -878,6 +893,38 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
     return parts;
   };
   const blockName = (edge: ValidatedSoftStateEdge) => `soft-state:${edge.block_id}`;
+  const assistantTextResultProof = (edge: ValidatedSoftStateEdge): AssistantTextResultProof | undefined => {
+    if (edge.writer_record_id !== rowId) return;
+    const assistant = (decision?.assistant as Record<string, unknown> | undefined) ?? {};
+    const target = record.target as (Message & Record<string, unknown>) | undefined;
+    const raw = assistant.content;
+    const receipts = assistant.typed_result_writes as Record<string, unknown>[] | undefined;
+    if (!target || target.role !== 'assistant' || target.tool_calls?.length || typeof raw !== 'string' ||
+        target.content !== raw || raw.trim() !== edge.body_source) return;
+    const receipt = receipts?.filter(item => item.schema === 'natlang.typed-result-write/1' &&
+      item.source === 'assistant-text-return' && item.source_kind === 'typed-text-result' &&
+      item.result_type === 'Neuralese<string>' && item.result_path instanceof Array &&
+      item.result_path.length === 1 && item.result_path[0] === 'return' &&
+      item.invocation_id === edge.writer_call_id && item.writer_call_id === edge.writer_call_id &&
+      item.writer_node === edge.writer_node && item.block_id === edge.block_id &&
+      item.source_row_sha256 === sourceRef?.source_row_sha256 && item.body_source === edge.body_source &&
+      item.body_sha256 === edge.body_sha256 && item.raw_assistant_text_sha256 === createHash('sha256').update(raw).digest('hex') &&
+      item.raw_response_sha256 === decision?.source_raw_response_sha256);
+    const bodyStart = receipt?.[0]?.body_start;
+    const bodyEnd = receipt?.[0]?.body_end;
+    if (!receipt || receipt.length !== 1 || typeof bodyStart !== 'number' || typeof bodyEnd !== 'number' ||
+        !Number.isSafeInteger(bodyStart) || !Number.isSafeInteger(bodyEnd) ||
+        bodyStart < 0 || bodyEnd < bodyStart || Array.from(raw).slice(bodyStart, bodyEnd).join('') !== edge.body_source ||
+        !/^[0-9a-f]{64}$/.test(String(receipt[0]!.request_sha256)) ||
+        !/^[0-9a-f]{64}$/.test(String(receipt[0]!.raw_response_sha256)))
+      throw new Error(`soft-state assistant-text producer lacks one exact terminal writer receipt for ${rowId}`);
+    return { schema: 'natlang.assistant-text-result-write/1', block_id: edge.block_id,
+      writer_call_id: edge.writer_call_id, writer_node: edge.writer_node,
+      source_row_sha256: String(sourceRef?.source_row_sha256), body_sha256: edge.body_sha256,
+      body_source: edge.body_source, body_start: bodyStart, body_end: bodyEnd,
+      raw_assistant_text_sha256: createHash('sha256').update(raw).digest('hex'),
+      request_sha256: String(receipt[0]!.request_sha256), raw_response_sha256: String(receipt[0]!.raw_response_sha256) };
+  };
   const markerBody = (edge: ValidatedSoftStateEdge) => {
     if (edge.writer_record_id !== rowId) return undefined;
     const calls = record.target?.tool_calls ?? [];
@@ -1511,7 +1558,11 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
       natlang_external_context_input: true })));
   }
   const messages = hydratedMessages.map(convertMessage);
-  const target = record.target ? convertMessage(record.target, record.messages.length) : undefined;
+  const target = record.target ? convertMessage(record.target, record.messages.length) as Message & Record<string, unknown> : undefined;
+  const assistantTextProof = writerEdges.length && softEdgeForRecord ? assistantTextResultProof(softEdgeForRecord) : undefined;
+  if (target && writerEdges.length && softEdgeForRecord) {
+    if (assistantTextProof) target.assistant_text_result = assistantTextProof;
+  }
   const softStateMetadata = softEdgeForRecord ? [{
     schema: 'natlang.text-neuralese-standin-feature-conversion/1',
     role: writerEdges.length ? 'writer' : 'reader',
@@ -1521,7 +1572,7 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
     argument: softEdgeForRecord.consumer_argument,
     expected_type: softEdgeForRecord.expected_type,
     body_sha256: softEdgeForRecord.body_sha256,
-    ...(writerEdges.length ? { raw_marker_value: markerBody(softEdgeForRecord)?.rawMarker } : {}),
+    ...(writerEdges.length ? { raw_marker_value: assistantTextProof ? record.target?.content : markerBody(softEdgeForRecord)?.rawMarker } : {}),
     transport_mode: options.softStateEdges?.source.transport_mode,
     learned_vectors: false,
     qualification_certificate: false,

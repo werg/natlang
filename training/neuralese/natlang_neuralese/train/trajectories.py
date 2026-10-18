@@ -338,6 +338,8 @@ def write_site_arguments(record: dict, name: str | None = None) -> dict:
     if len(matches)!=1:
         if len(matches)>1:raise ValueError('writer name is ambiguous in target')
         raise ValueError('writer arguments are absent')
+    if matches[0].source_kind == 'assistant-text-sidecar':
+        return {}
     return dict(matches[0].arguments)
 
 
@@ -449,6 +451,9 @@ def handover_notes(record: dict) -> dict[str, str]:
                  (isinstance((call.get("function") or {}).get("arguments"), str) and
                   '"$write"' in call["function"]["arguments"])]
         for site in extract_write_sites_from_calls(calls):
+            remember(site.name, site.source)
+    for site in extract_write_sites(record):
+        if site.source_kind == 'assistant-text-sidecar':
             remember(site.name, site.source)
     return notes
 
@@ -626,6 +631,10 @@ def native_writer_prefix(record, apply_template, *, value_type=None):
     """Actual template reply through the chosen argument and any preceding eval code."""
     from ..serve.chat import write_reply,write_value_text
     call,before,argument,name=write_site(record)
+    if call == 'assistant-text-return':
+        # No tool call exists for an assistant-level typed return. Train from
+        # the exact preceding conversation with an open assistant generation.
+        return apply_template(record['messages'], True)
     value_type=value_type or write_value_type(record)
     path=write_value_path(record,name)
     arguments=write_site_arguments(record,name) if len(path)>1 else before
@@ -1476,6 +1485,11 @@ def main(argv=None, embed=None):
         if args.writer_length_policy == 'source-text' or source is None:
             return source
         if name not in native_sources:
+            site = next((item for item in extract_write_sites(producer)
+                         if item.name == name and item.source_kind == 'assistant-text-sidecar'), None)
+            if site is not None:
+                native_sources[name] = site.source
+                return native_sources[name]
             from ..serve.chat import write_value_text
             tool, before, argument, own = write_site(producer)
             if own != name:

@@ -402,6 +402,66 @@ test('eval-return typed writer is attached to its source action only when later 
     'the status-only completion helper is not retagged as the writer');
 });
 
+test('a terminal plain-text Neuralese return has a graph-bound receipt without a synthetic tool call', () => {
+  const row = nativeRow('assistant-text-neuralese-result');
+  const invocationId = 'typed-text-final-call', block = `nz1_${'f'.repeat(32)}`;
+  const body = 'silver maple', bodySha = createHash('sha256').update(body).digest('hex');
+  const turnNode = `${invocationId}#turn1`;
+  row.outcome.action_ledger = [];
+  row.outcome.execution_graph = [
+    { kind: 'model_turn', seq: 5, call_id: invocationId, node: turnNode, turn: 1,
+      inputs: [{ node: `call:${invocationId}`, port: 'invocation' }] },
+    { kind: 'block_write', seq: 6, call_id: invocationId, block, node: `${invocationId}#6`, turn: turnNode,
+      inputs: [{ node: turnNode, port: 'result-source' }], truncated: false, result_type: 'Neuralese<string>',
+      text_body_sha256: bodySha, source_kind: 'typed-text-result', source: 'assistant-text-return',
+      marker_context: 'return-result' },
+  ];
+  row.outcome.invocation_ledger = [{ invocation_id: invocationId,
+    inline_instruction_site: { returns: { natlang: 'Neuralese<string>' } },
+    host_result: { kind: 'host_capture', capture_kind: 'invocation_output', call_id: invocationId,
+      complete: true, result_type: 'Neuralese<string>', value: { $neuralese: { id: block, type: 'Neuralese<string>' } },
+      value_sha256: createHash('sha256').update(JSON.stringify({ $neuralese: { id: block, type: 'Neuralese<string>' } })).digest('hex') } }];
+  row.trajectory = [{ phase: 'action', invocation_id: invocationId, context: [system, opening], tools_offered: schema,
+    assistant: { content: `\n\n${body}\n`, reasoning: 'The requested answer is a short phrase.', calls: [] },
+    model_response: { raw_calls: [], text: `\n\n${body}\n` }, request_sha256: '1'.repeat(64),
+    raw_response_sha256: '2'.repeat(64) }];
+  const turn = materializeNativeRows([row], { directAnswers: true }).turns[0];
+  assert.ok(turn);
+  assert.equal(turn.decision.failed_action, false);
+  assert.deepEqual(turn.decision.assistant.calls, [], 'the target remains the sampled assistant text');
+  assert.equal(turn.decision.assistant.typed_result_writes[0].source, 'assistant-text-return');
+  assert.equal(turn.decision.assistant.typed_result_writes[0].body_source, body);
+
+  const broken = [
+    row => { row.outcome.execution_graph[1].turn = 'other-turn'; },
+    row => { row.outcome.execution_graph[1].text_body_sha256 = 'f'.repeat(64); },
+    row => { row.outcome.invocation_ledger[0].host_result.value.$neuralese.id = `nz1_${'e'.repeat(32)}`;
+      row.outcome.invocation_ledger[0].host_result.value_sha256 = createHash('sha256')
+        .update(JSON.stringify(row.outcome.invocation_ledger[0].host_result.value)).digest('hex'); },
+  ];
+  for (const mutate of broken) {
+    const copy = JSON.parse(JSON.stringify(row)); mutate(copy);
+    const failed = materializeNativeRows([copy], { directAnswers: true }).turns[0];
+    assert.equal(failed?.decision.assistant.typed_result_writes, undefined,
+      'tampered turn, body or captured block cannot establish a typed text write');
+  }
+});
+
+test('a no-call reply followed by another same-invocation turn is not classified as clean', () => {
+  const row = nativeRow('continued-no-call-is-not-clean'), invocationId = 'continued-without-result';
+  row.outcome.action_ledger = [];
+  row.trajectory = [
+    { phase: 'action', invocation_id: invocationId, context: [system, opening], tools_offered: schema,
+      assistant: { content: 'silver maple', reasoning: null, calls: [] }, model_response: { raw_calls: [] } },
+    { phase: 'action', invocation_id: invocationId, context: [system, opening,
+      { role: 'assistant', content: 'silver maple' }, { role: 'user', content: 'There is no result yet.' }], tools_offered: schema,
+      assistant: { content: '', reasoning: 'I will finish the result.', calls: [secondCall] }, model_response: { raw_calls: [] } },
+  ];
+  const turns = materializeNativeRows([row], { directAnswers: true }).turns;
+  assert.equal(turns[0]?.decision.failed_action, true);
+  assert.equal(turns[0]?.training_admission.approved, false);
+});
+
 test('direct and failed-run exports cannot bypass source-review or retired-contract holds', () => {
   for (const curriculum of [
     { family: 'folio_batch', shape: 'story337' },

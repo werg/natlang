@@ -1,8 +1,11 @@
 import hashlib
 import json
 
-from natlang_neuralese.data.text_corpus import gold_text_preview_rows, gold_text_rows
+from natlang_neuralese.data.text_corpus import (authenticated_context_writer_sources,
+                                                gold_text_preview_rows, gold_text_rows)
 from natlang_neuralese.data.context_refs import context_ref_count, typed_neuralese_ref_count
+from natlang_neuralese.train.write_sites import extract_write_sites
+from natlang_neuralese.train.trajectories import handover_notes, native_writer_prefix, producer_text_target
 
 
 def test_shared_context_occurrence_counter_matches_typed_marker_and_read_contract():
@@ -13,6 +16,95 @@ def test_shared_context_occurrence_counter_matches_typed_marker_and_read_contrac
     assert typed_neuralese_ref_count(value, block_id) == 1
     assert context_ref_count(value, block_id, "soft-state:" + block_id) == 2
     assert context_ref_count(value, block_id, "soft-state:wrong") == 1
+
+
+def test_terminal_assistant_typed_text_receipt_is_an_authenticated_writer_source():
+    body = "silver maple"
+    body_sha = hashlib.sha256(body.encode()).hexdigest()
+    raw_text = "\n\n" + body + "\n"
+    source_row = "a" * 64
+    block_id = "nz1_" + "b" * 52
+    writer = {
+        "id": "typed-text-writer", "split": "train", "source_groups": ["public-train"],
+        "source_ref": {"trajectory_id": "teacher46-public", "source_row_sha256": source_row,
+                       "invocation_id": "teacher46-call"},
+        "training_admission": {"approved": True},
+        "decision": {"training_approved": True, "failed_action": False,
+            "assistant": {"content": raw_text, "calls": [], "typed_result_writes": [{
+                "schema": "natlang.typed-result-write/1", "trajectory_id": "teacher46-public",
+                "source_row_sha256": source_row, "invocation_id": "teacher46-call",
+                "writer_call_id": "teacher46-call", "writer_node": "teacher46-call#write",
+                "block_id": block_id, "source_kind": "typed-text-result", "source": "assistant-text-return",
+                "result_type": "Neuralese<string>", "result_path": ["return"], "action_seq": None,
+                "request_sha256": "c" * 64, "raw_response_sha256": "d" * 64,
+                "body_sha256": body_sha, "body_source": body,
+                "body_source_basis": "trimmed-exact-assistant-final-text",
+                "body_start": len(raw_text) - len(raw_text.lstrip()),
+                "body_end": len(raw_text) - len(raw_text.lstrip()) + len(body),
+                "raw_assistant_text_sha256": hashlib.sha256(raw_text.encode()).hexdigest()}]}}
+    }
+    _, sources = authenticated_context_writer_sources([writer])
+    assert sources[block_id][0]["body"] == body
+    assert sources[block_id][0]["write_name"].startswith("soft-state:")
+
+    forged = json.loads(json.dumps(writer))
+    forged["decision"]["assistant"]["typed_result_writes"][0]["body_source"] = "changed"
+    _, rejected_sources = authenticated_context_writer_sources([forged])
+    assert block_id not in rejected_sources
+
+
+def test_compiler_assistant_text_sidecar_is_a_real_writer_without_tool_call():
+    body = "silver 🌿 maple"
+    raw = "\n\n" + body + "\n"
+    row = "a" * 64
+    block = "nz1_" + "b" * 52
+    start = len(raw) - len(raw.lstrip())
+    record = {
+        "id": "writer", "source_ref": {"trajectory_id": "trajectory", "invocation_id": "call",
+                                           "source_row_sha256": row},
+        "split": "train", "source_groups": ["public-train"],
+        "training_admission": {"approved": True},
+        "messages": [{"role": "user", "content": "Return the value."}],
+        "decision": {"training_approved": True, "failed_action": False,
+                     "source_raw_response_sha256": "d" * 64,
+                     "assistant": {"content": raw, "typed_result_writes": [{
+                         "schema": "natlang.typed-result-write/1",
+                         "source": "assistant-text-return", "source_kind": "typed-text-result",
+                         "result_type": "Neuralese<string>", "result_path": ["return"],
+                         "invocation_id": "call", "writer_call_id": "call", "writer_node": "call#write",
+                         "block_id": block, "source_row_sha256": row, "body_source": body,
+                         "body_sha256": hashlib.sha256(body.encode()).hexdigest(),
+                         "raw_assistant_text_sha256": hashlib.sha256(raw.encode()).hexdigest(),
+                         "body_source_basis": "trimmed-exact-assistant-final-text",
+                         "body_start": start, "body_end": start + len(body),
+                         "request_sha256": "c" * 64, "raw_response_sha256": "d" * 64}] }},
+        "target": {"role": "assistant", "content": raw,
+                   "assistant_text_result": {
+                       "schema": "natlang.assistant-text-result-write/1", "block_id": block,
+                       "writer_call_id": "call", "writer_node": "call#write", "source_row_sha256": row,
+                       "body_sha256": hashlib.sha256(body.encode()).hexdigest(), "body_source": body,
+                       "body_start": start, "body_end": start + len(body),
+                       "raw_assistant_text_sha256": hashlib.sha256(raw.encode()).hexdigest(),
+                       "request_sha256": "c" * 64, "raw_response_sha256": "d" * 64}},
+    }
+    sites = extract_write_sites(record)
+    assert len(sites) == 1 and sites[0].source_kind == "assistant-text-sidecar"
+    assert sites[0].source == body and sites[0].value_path == ()
+    assert sites[0].name == "soft-state:" + block
+    assert handover_notes(record)[sites[0].name] == body
+    assert native_writer_prefix(record, lambda messages, generation: "prefix:" + str(generation)) == "prefix:True"
+    assert producer_text_target(record, {}, {})["content"] == raw
+    _, writer_sources = authenticated_context_writer_sources([record])
+    assert writer_sources[block][0]["write_name"] == sites[0].name
+    for field, value in (("body_end", start + len(body) + 1), ("raw_assistant_text_sha256", "0" * 64)):
+        forged = json.loads(json.dumps(record))
+        forged["target"]["assistant_text_result"][field] = value
+        try:
+            extract_write_sites(forged)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"tampered assistant text sidecar accepted: {field}")
 
 
 class _Backend:

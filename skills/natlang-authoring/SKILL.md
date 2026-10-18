@@ -555,6 +555,8 @@ TypeScript ambient callable declarations of the built-in `nl` supply types and a
 
 A scripted source oracle must answer a natural-language child with a value of that child's actual declared result type. Missing coverage is a harness repair, not evidence that the authored program is semantically wrong. Preserve the source task and independently execute all declared input cases; do not rewrite expected results or convert a string decision into a boolean to satisfy the checker.
 
+For a function declared to return `Neuralese<string>`, a final assistant text reply is the exact text value. The runtime writes it through the configured Neuralese writer and returns the resulting typed reference. Intermediate text that leaves the invocation without a result is incomplete; finish the same invocation with a typed value instead of treating that text as success.
+
 
 A checked inline callable with an explicit or contextual parameter signature
 keeps that boundary when used as a JavaScript callback. `array.map(judge)`

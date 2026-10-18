@@ -592,3 +592,5 @@ the source has no records. Preserve reserved service bindings and return the
 declared result type after completing the original task. The fresh TRAIN
 `tool-contract-recovery` profile measures this behavior through the existing
 self-hosted teacher; it does not change ordinary runtime or compiler semantics.
+
+When the declared result is `Neuralese<string>`, route a terminal plain-text assistant reply through the existing typed Neuralese writer before completing the invocation. Keep the target as the original assistant text and bind the writer receipt to that exact model turn, body hash, and captured invocation result. A no-call reply followed by another turn in the same invocation is not a completed result.

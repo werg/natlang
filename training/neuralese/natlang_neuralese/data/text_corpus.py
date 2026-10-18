@@ -644,9 +644,12 @@ def _soft_writer_sources(records, source_hashes, *, preview_only=False,
                         add_write({"name": write.name, "type": write.type, "source": write.source}, record)
 
         source_ref = record.get("source_ref") or {}
-        for call in ((decision.get("assistant") or {}).get("calls") or []):
-            for receipt in ((call.get("outcome") or {}).get("typed_result_writes") or []):
-                if (not isinstance(receipt, dict)
+        assistant_decision = decision.get("assistant") or {}
+        typed_writes = list(assistant_decision.get("typed_result_writes") or [])
+        for call in (assistant_decision.get("calls") or []):
+            typed_writes.extend((call.get("outcome") or {}).get("typed_result_writes") or [])
+        for receipt in typed_writes:
+            if (not isinstance(receipt, dict)
                         or receipt.get("schema") != "natlang.typed-result-write/1"
                         or receipt.get("invocation_id") != source_ref.get("invocation_id")
                         or receipt.get("source_row_sha256") != source_ref.get("source_row_sha256")
@@ -660,18 +663,36 @@ def _soft_writer_sources(records, source_hashes, *, preview_only=False,
                         or _sha(receipt["body_source"].encode("utf-8")) != receipt["body_sha256"]
                         or not isinstance(receipt.get("result_path"), list)
                         or not receipt["result_path"] or receipt["result_path"][0] != "return"):
+                continue
+            if receipt.get("source") == "assistant-text-return":
+                raw_assistant = assistant_decision.get("content", "")
+                start, end = receipt.get("body_start"), receipt.get("body_end")
+                if (receipt.get("body_source_basis") != "trimmed-exact-assistant-final-text"
+                        or type(start) is not int or type(end) is not int or start < 0 or end < start
+                        or not isinstance(raw_assistant, str) or raw_assistant[start:end] != receipt.get("body_source")
+                        or not _sha256_hex(receipt.get("request_sha256"))
+                        or not _sha256_hex(receipt.get("raw_response_sha256"))
+                        or not _sha256_hex(receipt.get("raw_assistant_text_sha256"))
+                            or receipt.get("raw_assistant_text_sha256") != _sha(raw_assistant.encode("utf-8"))
+                        or receipt.get("action_seq") is not None):
                     continue
-                add_source(receipt["block_id"], {"body": receipt["body_source"],
+            elif receipt.get("source") not in {"return_result", "eval-return", "eval-finish"}:
+                continue
+            assistant_text_edge = (receipt.get("source") == "assistant-text-return"
+                                   and ((record.get("target") or {}).get("assistant_text_result") or {}).get("block_id") == receipt["block_id"])
+            add_source(receipt["block_id"], {"body": receipt["body_source"],
                     "writer_record_id": record.get("id"), "writer_record_sha256": source_hashes.get(record.get("id")),
                     "writer_source_row_sha256": source_ref.get("source_row_sha256"),
                     "writer_split": record.get("split"),
                     "writer_source_groups": sorted(set(g for g in (record.get("source_groups") or [])
                                                          if isinstance(g, str) and g)),
-                    "write_name": (_direct_result_event_name(receipt["block_id"], source_ref.get("trajectory_id"),
+                    "write_name": ("soft-state:" + receipt["block_id"] if assistant_text_edge else
+                                   _direct_result_event_name(receipt["block_id"], source_ref.get("trajectory_id"),
                                                               receipt["writer_call_id"], receipt["writer_node"])
                                    if receipt.get("source_kind") == "typed-text-result"
-                                   and receipt.get("source") == "return_result"
-                                   and receipt.get("body_source_basis") == "exact-raw-model-result-string"
+                                   and receipt.get("source") in {"return_result", "assistant-text-return"}
+                                   and receipt.get("body_source_basis") in {"exact-raw-model-result-string",
+                                                                          "trimmed-exact-assistant-final-text"}
                                    else "soft-state:" + receipt["block_id"]),
                     "body_sha256": receipt["body_sha256"],
                     "writer_invocation_id": receipt["invocation_id"], "writer_write_node": receipt["writer_node"],

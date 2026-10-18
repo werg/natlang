@@ -399,6 +399,126 @@ def test_e2e_pair_occurrence_binds_structural_write_and_exact_read_not_text_sear
     assert repeated['transform'] == 'static-shared-producer-multi-read'
 
 
+def test_assistant_text_return_survives_e2e_pair_render_and_native_graph_parse():
+    """Exercise the production pair renderer without inventing a tool call."""
+    import hashlib
+    import importlib.util
+    import json
+    from pathlib import Path
+    from natlang_neuralese.model.shared_state import ROLE_MARKERS
+
+    class E2ETokenizer(ChatRoleAsciiTokenizer):
+        all_special_tokens = list(ChatRoleAsciiTokenizer.special) + list(ROLE_MARKERS)
+
+        def __call__(self, text, *, add_special_tokens=False, return_offsets_mapping=False,
+                     split_special_tokens=False):
+            ids, offsets, position = [], [], 0
+            specials = tuple(sorted((*self.special, *ROLE_MARKERS), key=len, reverse=True))
+            special_ids = dict(self.token_ids)
+            special_ids.update({marker: 3000 + index for index, marker in enumerate(ROLE_MARKERS)})
+            while position < len(text):
+                marker = next((item for item in specials if text.startswith(item, position)), None)
+                if marker is None:
+                    ids.append(ord(text[position])); offsets.append((position, position + 1)); position += 1
+                else:
+                    ids.append(special_ids[marker]); offsets.append((position, position + len(marker)))
+                    position += len(marker)
+            result = {'input_ids': ids}
+            if return_offsets_mapping:
+                result['offset_mapping'] = offsets
+            return result
+
+        def apply_chat_template(self, messages, *, add_generation_prompt=False, **_kwargs):
+            rendered = []
+            for message in messages:
+                rendered.extend((f"<|{message['role']}|>", message.get('content') or '', '<|end|>'))
+            if add_generation_prompt:
+                rendered.append('<|assistant|>')
+            return ''.join(rendered)
+
+        def convert_tokens_to_ids(self, token):
+            if token in ROLE_MARKERS:
+                return 3000 + ROLE_MARKERS.index(token)
+            return super().convert_tokens_to_ids(token)
+
+        def decode(self, ids, skip_special_tokens=False):
+            reverse = {value: key for key, value in self.token_ids.items()}
+            reverse.update({3000 + index: marker for index, marker in enumerate(ROLE_MARKERS)})
+            return ''.join(reverse[value] if value in reverse else chr(value) for value in ids)
+
+    builder_path = Path(__file__).parents[2] / 'scripts/neuralese_data/build_native_semantic_pairs_e2e.py'
+    spec = importlib.util.spec_from_file_location('typed_text_e2e_builder', builder_path)
+    builder = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(builder)
+
+    body = 'silver 🌿 maple'
+    raw = '\n\n' + body + '\n'
+    row_sha = 'a' * 64
+    block = 'nz1_' + 'b' * 52
+    body_sha = hashlib.sha256(body.encode()).hexdigest()
+    writer = {
+        'id': 'writer-text-result', 'split': 'train', 'source_groups': ['public-source'],
+        'source_ref': {'trajectory_id': 'trajectory-1', 'invocation_id': 'writer-call',
+                       'source_row_sha256': row_sha},
+        'training_admission': {'approved': True},
+        'messages': [{'role': 'user', 'content': 'Return the shared value.'}],
+        'decision': {'training_approved': True, 'failed_action': False,
+            'source_raw_response_sha256': 'd' * 64,
+            'assistant': {'content': raw, 'typed_result_writes': [{
+                'schema': 'natlang.typed-result-write/1', 'source': 'assistant-text-return',
+                'source_kind': 'typed-text-result', 'result_type': 'Neuralese<string>',
+                'result_path': ['return'], 'invocation_id': 'writer-call',
+                'writer_call_id': 'writer-call', 'writer_node': 'writer-call#write',
+                'block_id': block, 'source_row_sha256': row_sha, 'body_source': body,
+                'body_sha256': body_sha, 'raw_assistant_text_sha256': hashlib.sha256(raw.encode()).hexdigest(),
+                'body_source_basis': 'trimmed-exact-assistant-final-text', 'body_start': 2,
+                'body_end': 2 + len(body), 'request_sha256': 'c' * 64,
+                'raw_response_sha256': 'd' * 64, 'action_seq': None}] }},
+        'target': {'role': 'assistant', 'content': raw, 'assistant_text_result': {
+            'schema': 'natlang.assistant-text-result-write/1', 'block_id': block,
+            'writer_call_id': 'writer-call', 'writer_node': 'writer-call#write',
+            'source_row_sha256': row_sha, 'body_sha256': body_sha, 'body_source': body,
+            'body_start': 2, 'body_end': 2 + len(body),
+            'raw_assistant_text_sha256': hashlib.sha256(raw.encode()).hexdigest(),
+            'request_sha256': 'c' * 64, 'raw_response_sha256': 'd' * 64}},
+    }
+    reader = {
+        'id': 'reader-after-text-result', 'split': 'train', 'source_groups': ['public-source'],
+        'source_ref': {'trajectory_id': 'trajectory-1', 'invocation_id': 'reader-call',
+                       'source_row_sha256': row_sha},
+        'training_admission': {'approved': True},
+        'decision': {'training_approved': True, 'failed_action': False},
+        'messages': [{'role': 'user', 'content': 'Use this value: '},
+                     {'role': 'assistant', 'content': [{'type': 'neuralese', 'id': block}]}],
+        'target': {'role': 'assistant', 'content': 'The value is useful.'},
+    }
+    name = 'soft-state:' + block
+    edge = {'write_name': name, 'body_sha256': body_sha, 'trajectory': 'trajectory-1',
+            'writer_record_id': writer['id'], 'reader_record_id': reader['id'], 'split': 'train'}
+    occurrence = builder.source_occurrences(writer, reader, name, body, body_sha)
+    assert occurrence['writer_json_pointer'] == '/target/assistant_text_result'
+    tok = E2ETokenizer()
+    writer_row, reader_row = builder.normalized_pair_rows(
+        writer, reader, {}, tokenizer=tok, payload=body, occurrence=occurrence,
+        role_markers=ROLE_MARKERS, tokenizer_sha256='b' * 64, source_records=[writer, reader])
+    writer_span = builder.exact_marked_span(writer_row, tok, body,
+        open_marker=ROLE_MARKERS[0], close_marker=ROLE_MARKERS[1], expected_sha256=body_sha)
+    reader_spans = builder.exact_marked_spans(reader_row, tok, body,
+        open_marker=ROLE_MARKERS[2], close_marker=ROLE_MARKERS[3], expected_sha256=body_sha,
+        expected_count=len(occurrence['reader_json_pointers']))
+    view = builder.model_view(edge, writer_row, reader_row, writer, reader, tokenizer=tok,
+        source_fingerprint='b' * 64, expanded_fingerprint='b' * 64,
+        role_ids=tuple(tok.convert_tokens_to_ids(marker) for marker in ROLE_MARKERS),
+        communication_sha256='e' * 64, writer_span=writer_span, reader_span=reader_spans)
+    parsed = parse_graph(view['graph'], tokenizer_fingerprint='b' * 64)
+    producer, consumer = parsed.plan.invocations
+    assert producer.producing and consumer.imports
+    start, stop = producer.producing[0]
+    assert tok.decode(list(producer.token_ids[start:stop])) == body
+    assert writer['target']['content'] == raw
+    assert not writer['target'].get('tool_calls')
+
+
 def test_witnessed_pair_imports_every_exact_static_read_occurrence():
     import hashlib
     tok = RoleAsciiTokenizer()

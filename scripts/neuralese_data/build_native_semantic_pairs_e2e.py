@@ -354,6 +354,18 @@ def writer_payload(record, write_name, expected_sha):
             body = write.get('source')
             if isinstance(body, str): found.append(body)
     unique = set(found)
+    # A terminal Neuralese<string> return is an assistant-text producer.  Its
+    # authenticated receipt is carried beside the unchanged target bytes, so
+    # it has no synthetic $write object to find in target.
+    if not unique and isinstance((record.get('target') or {}).get('assistant_text_result'), dict):
+        _, sources = authenticated_context_writer_sources([record])
+        sidecar = (record.get('target') or {}).get('assistant_text_result') or {}
+        candidate = [item for item in sources.get(sidecar.get('block_id'), [])
+                     if item.get('write_name') == write_name
+                     and item.get('body_sha256') == expected_sha]
+        if len(candidate) == 1:
+            found.append(candidate[0].get('body'))
+            unique = set(found)
     if len(unique) != 1:
         raise ValueError(f'writer target has {len(unique)} exact values for {write_name}')
     body = next(iter(unique))
@@ -370,6 +382,17 @@ def source_occurrences(writer_record, reader_record, write_name, body, expected_
         write = value.get('$write') if isinstance(value, dict) else None
         if isinstance(write, dict) and write.get('name') == write_name and write.get('source') == body:
             writers.append(pointer + '/$write')
+    # Bind the new producer form to the materializer's typed-result receipt;
+    # do not infer a write from matching prose alone.
+    text_result = (writer_record.get('target') or {}).get('assistant_text_result')
+    if isinstance(text_result, dict):
+        _, sources = authenticated_context_writer_sources([writer_record])
+        candidates = [item for item in sources.get(text_result.get('block_id'), [])
+                      if item.get('write_name') == write_name
+                      and item.get('body') == body
+                      and item.get('body_sha256') == expected_sha]
+        if len(candidates) == 1:
+            writers.append('/target/assistant_text_result')
     block_id=write_name.removeprefix('soft-state:') if write_name.startswith('soft-state:') else None
     for pointer, value in _walk_paths(reader_record.get('messages') or [], '/messages'):
         if ((value.get('type')=='read' and value.get('name')==write_name and value.get('source')==body)

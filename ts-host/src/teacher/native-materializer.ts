@@ -813,6 +813,60 @@ function typedResultActionProof(modelArguments: unknown, actionArguments: unknow
   return receipts.length ? receipts : undefined;
 }
 
+/** Prove a final plain-text Neuralese<string> return without inventing a tool call. */
+function typedTextReplyProof(source: Dict, assistant: Dict, row: NativeRow,
+  invocationId: string | undefined): Dict[] | undefined {
+  if (!invocationId || (assistant.calls as unknown[] | undefined)?.length || typeof assistant.content !== 'string' ||
+      !assistant.content.trim()) return;
+  const response = source.model_response && typeof source.model_response === 'object' ? source.model_response as Dict : {};
+  if (!Array.isArray(response.raw_calls) || response.raw_calls.length !== 0 || typeof response.text !== 'string' ||
+      typeof source.request_sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(source.request_sha256) ||
+      typeof source.raw_response_sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(source.raw_response_sha256) ||
+      source.truncated === true || response.truncated === true ||
+      response.text !== assistant.content) return;
+  const instructionSites = Array.isArray(row.outcome.invocation_ledger) ? row.outcome.invocation_ledger as Dict[] : [];
+  const sites = instructionSites.filter(item => item.invocation_id === invocationId &&
+    (item.inline_instruction_site as Dict | undefined)?.returns &&
+    ((item.inline_instruction_site as Dict).returns as Dict).natlang === 'Neuralese<string>');
+  if (sites.length !== 1) return;
+  const host = sites[0]!.host_result as Dict | undefined;
+  const ref = neuraleseReference(host?.value);
+  if (host?.kind !== 'host_capture' || host.capture_kind !== 'invocation_output' || host.call_id !== invocationId ||
+      host.complete !== true || host.result_type !== 'Neuralese<string>' || !ref || ref.type !== 'Neuralese<string>' ||
+      host.value_sha256 !== hexDigest(JSON.stringify(host.value)) ||
+      (typeof host.bytes === 'number' && host.bytes !== new TextEncoder().encode(JSON.stringify(host.value)).byteLength)) return;
+  const graph = Array.isArray(row.outcome.execution_graph) ? row.outcome.execution_graph as Dict[] : [];
+  const sameInvocationSteps = (row.trajectory as Dict[]).filter(step => step.invocation_id === invocationId);
+  const sourceTurn = sameInvocationSteps.indexOf(source) + 1;
+  if (sourceTurn <= 0 || sourceTurn !== sameInvocationSteps.length) return;
+  const turns = graph.filter(event => event.kind === 'model_turn' && event.call_id === invocationId &&
+    event.turn === sourceTurn && typeof event.node === 'string');
+  if (turns.length !== 1 || !Number.isSafeInteger(turns[0]!.seq)) return;
+  const turn = turns[0]!;
+  const body = assistant.content.trim();
+  const rawCodePoints = Array.from(assistant.content);
+  const bodyStart = rawCodePoints.length - Array.from(assistant.content.trimStart()).length;
+  const bodyEnd = bodyStart + Array.from(body).length;
+  const writers = graph.filter(event => event.kind === 'block_write' && event.call_id === invocationId &&
+    event.turn === turn.node && event.source === 'assistant-text-return' && event.source_kind === 'typed-text-result' &&
+    event.marker_context === 'return-result' && event.result_type === 'Neuralese<string>' && event.truncated === false &&
+    event.block === ref.id && event.text_body_sha256 === hexDigest(body) && Number.isSafeInteger(event.seq) &&
+    Number(event.seq) > Number(turn.seq));
+  if (writers.length !== 1) return;
+  const writer = writers[0]!;
+  if (!Array.isArray(writer.inputs) || !writer.inputs.some(input => input && typeof input === 'object' &&
+      (input as Dict).node === turn.node && (input as Dict).port === 'result-source')) return;
+  return [{ schema: 'natlang.typed-result-write/1', trajectory_id: row.id,
+    source_row_sha256: nativeRowDigest(row), invocation_id: invocationId, writer_call_id: invocationId,
+    writer_node: writer.node, block_id: ref.id, source_kind: 'typed-text-result', source: 'assistant-text-return',
+    marker_context: 'return-result', result_type: 'Neuralese<string>', result_path: ['return'],
+    model_turn_node: turn.node, writer_event_seq: writer.seq, action_seq: null,
+    body_sha256: hexDigest(body), body_source: body, body_source_basis: 'trimmed-exact-assistant-final-text',
+    body_start: bodyStart, body_end: bodyEnd,
+    raw_assistant_text_sha256: hexDigest(assistant.content),
+    request_sha256: source.request_sha256, raw_response_sha256: source.raw_response_sha256 }];
+}
+
 /** Bind a nonterminal eval-return writer to the later status-only completion of
  * that exact staged value in the same invocation. The terminal context must show
  * the staged result produced by this eval event as the latest staged candidate. */
@@ -1791,7 +1845,10 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
       const skill = calls.length ? calls.map(call => String(call.source_tool)).join('+') : 'reply';
       const badStatuses = new Set(['rejected', 'refused', 'error', 'not_executed', 'not_recorded']);
       const fromStudentPrefix = replayedTurns.has(index);
-      const ranCleanly = calls.every(call =>
+      const typedTextWrites = typedTextReplyProof(source, assistant, row, invocation);
+      const continuedWithoutResult = calls.length === 0 && !!invocation && !typedTextWrites?.length &&
+        (row.trajectory as Dict[]).slice(index + 1).some(step => step.invocation_id === invocation);
+      const ranCleanly = !continuedWithoutResult && calls.every(call =>
         !badStatuses.has(String(record(call.outcome, 'call outcome').status)) &&
         !(record(call.outcome, 'call outcome').diagnostics as unknown[] ?? [])
           .some(code => String(code).startsWith('coerced-') ||
@@ -1812,7 +1869,7 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
         typeof call.arguments === 'object' && call.arguments !== null &&
         Object.hasOwn(call.arguments, 'status') && (call.arguments as Dict).status !== 'success');
       // A decision that failed: an action the runtime rejected, refused or that raised, or an attempt the checker refused.
-      const failedAction = nonSuccessTerminal || refusedAttempt || calls.some(call =>
+      const failedAction = nonSuccessTerminal || refusedAttempt || continuedWithoutResult || calls.some(call =>
         ['rejected', 'refused', 'error'].includes(String(record(call.outcome, 'call outcome').status)));
       for (const call of calls) earlier.set(signature(call), resultOf(call));
       // An answer given without reasoning towards it (a scripted conclusion behind a one-line note) teaches a reasoning
@@ -1973,6 +2030,7 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
           tool_schemas: offered,
           assistant: { content: assistant.content ?? '', reasoning: authoredRootAction ? null : retainedReasoning,
             execution_plan: authoredRootAction ? null : executionPlan,
+            ...(typedTextWrites?.length ? { typed_result_writes: structuredClone(typedTextWrites) } : {}),
             calls },
           failed_action: failedAction,
           training_approved: decisionApproved,

@@ -1,5 +1,16 @@
 # Model-facing changes and their measurement
 
+### 2026-10-18 — terminal Neuralese text results are written as typed values
+
+A final assistant text reply to a function declared as `Neuralese<string>` is
+now routed through the configured typed writer and completes the invocation.
+The reply remains the sampled assistant target; the runtime records a body-hash
+and model-turn-bound write receipt. An intermediate no-call turn without a
+staged result remains incomplete. Measurement debt: compare the prior recovery
+turn with the direct typed-text return in 48 own-model teacher turns before
+production adoption, checking exact result equality, writer receipts, and
+follow-up invocation behavior. No measurement has been run yet.
+
 ### 2026-10-17 — optional compact native actors retain full training authority
 
 An explicitly selected compact actor view rejects service optimizer updates
