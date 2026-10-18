@@ -135,6 +135,9 @@ def configure_model(plan_path,declaration,handoff,out):
         owner={'plan_sha256':sha256_file_hex_cached(plan_path),'handoff':handoff}
         if prior.get('runtime_binding',prior.get('bootstrap_binding'))==owner and unchanged(verification,plan_path,declaration,handoff,prior):
             return path
+        if declaration.get('completed_supervised_adaptation'):
+            from .native_completed_supervised import configure
+            return configure(plan_path,declaration,handoff,path)
         if declaration.get('runtime_handoff'):
             from .native_runtime_handoff import configure_runtime_handoff
             return configure_runtime_handoff(plan_path,declaration,handoff,path)
@@ -659,6 +662,11 @@ def _supervised_job(continuation,jobdir,config,cursor,stop):
     write_json_durable(path,continuation)
     result=round_job(path,continuation,Path(jobdir)/'bridge',stop)
     if stop.requested:return
+    _publish_supervised_result(continuation,jobdir,config,cursor,result)
+
+
+def _publish_supervised_result(continuation,jobdir,config,cursor,result):
+    """Publish the same already authenticated result in live and recovered paths."""
     pending=result.get('pending_native_checkpoint')
     if not pending:raise RuntimeError('raw supervised quantum returned no exact drained checkpoint')
     checkpoint=binding(pending);report_path=Path(pending).parent/'native-training-receipt.json'

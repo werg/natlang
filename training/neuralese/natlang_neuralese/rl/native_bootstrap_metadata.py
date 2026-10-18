@@ -93,6 +93,13 @@ def evidence(plan_path,declaration,handoff,config):
                 packages['later_'+key]=code_inventory(Path(transition[key]))
                 if packages['later_'+key]!=transition[key.replace('_package','_code')]:
                     raise ValueError('later runtime proof package identity changed')
+    adaptation=declaration.get('completed_supervised_adaptation')
+    if adaptation:
+        from .native_completed_supervised import verify
+        proof=verify(adaptation)
+        for key in('consumption','old_plan','future_plan','lineage_handoff','future_config','old_config','old_global_plan','recipe'):
+            add(proof[key])
+        add(adaptation)
     cursor_path=Path(config['out']).parent/'cycle.json'
     if cursor_path.exists():
         cursor=json.loads(cursor_path.read_text())

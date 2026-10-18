@@ -93,6 +93,7 @@ def verify_raw_checkpoint(reference,parent):
             or training.get('schema')!=TRAINING_SCHEMA or not training.get('optimizer') or not training.get('rng')
             or (training.get('options') or {}).get('continuation',{}).get('checkpoint_sha256')!=parent['sha256']):
         raise ValueError('raw bridge learner lacks its exact parent/full optimizer/RNG continuation')
+    return state
 
 
 def verify_result_inventory(request_path, result_path):
@@ -130,8 +131,9 @@ def verify_result_inventory(request_path, result_path):
     return request,result
 
 
-def verify_result(request_path, result_path):
+def verify_result(request_path, result_path, *, return_raw_checkpoint=False):
     request,result=verify_result_inventory(request_path,result_path)
+    verified_raw=None
     for item in result['artifacts']:
         path=_bound(item)
         if path.stat().st_size!=item['bytes']:
@@ -146,7 +148,7 @@ def verify_result(request_path, result_path):
             if (not raw or not result.get('checkpoint')
                     or sha256_file_hex_cached(state['checkpoint'])!=result['checkpoint']['sha256']):
                 raise ValueError('native bridge round state substituted its parent policy')
-            verify_raw_checkpoint(result['checkpoint'],request['parent_checkpoint'])
+            verified_raw=verify_raw_checkpoint(result['checkpoint'],request['parent_checkpoint'])
         if state.get('pending_native_checkpoint'):
             if (not result.get('checkpoint') or sha256_file_hex_cached(state['pending_native_checkpoint'])
                     != result['checkpoint']['sha256']):
@@ -157,7 +159,7 @@ def verify_result(request_path, result_path):
                 or state['checkpoint'])
             if sha256_file_hex_cached(selected)!=result['checkpoint']['sha256']:
                 raise ValueError('raw bridge result lost its actual current/pending learner checkpoint')
-            if not advanced:verify_raw_checkpoint(result['checkpoint'],request['parent_checkpoint'])
+            if not advanced:verified_raw=verify_raw_checkpoint(result['checkpoint'],request['parent_checkpoint'])
     if request['kind'] == 'refresh' and result.get('deployment'):
         deployment = json.loads(_bound(result['deployment']).read_text())
         if (deployment.get('schema') != 'natlang.native-rl-deployment/1'
@@ -168,6 +170,9 @@ def verify_result(request_path, result_path):
         if deployment['checkpoint'] != result.get('checkpoint'):
             raise ValueError('native bridge semantic deployment checkpoint differs from its result')
         _bound(deployment['semantic_adapter'])
+    if return_raw_checkpoint:
+        if verified_raw is None:raise ValueError('completed raw checkpoint verification was not performed')
+        return result,(result['checkpoint'],verified_raw)
     return result
 
 
