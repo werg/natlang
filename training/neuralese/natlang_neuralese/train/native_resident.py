@@ -1231,8 +1231,45 @@ def _delta_payload(directory, previous, plan, proposed, stage_id, recipe_path,
     if type(rows) is not int or rows < 1 or type(held_rows) is not int or held_rows < 1:
         raise ValueError('resident delta preparation lacks authenticated prior row counts')
     from .native_source_preparation import NativeSourcePreparation
-    preparation = NativeSourcePreparation(tokenizer_fingerprint, role_ids)
+    if previous and (previous['payload'].get('train') != prior_ref
+                     or previous['payload'].get('held') != held_ref):
+        raise ValueError('resident delta source prefix differs from the committed generation')
+    # Reuse the exact FCB indexes from the prior learner load. A missing old
+    # index is a preparation error, never a reason to rescan the whole prefix.
+    preparation = NativeSourcePreparation(tokenizer_fingerprint, role_ids, cache_only=True)
+    old = preparation.load(prior_ref, split='train')
+    old_held = preparation.load(held_ref, split='test')
+    if len(old) != rows or len(old_held) != held_rows:
+        raise ValueError('resident delta authenticated prior counts differ from cached source rows')
+    preparation.cache_only = False
     delta = preparation.load(delta_ref, split='train')
+    overlap = old.bindings.keys() & delta.bindings.keys()
+    if overlap:
+        repeated = sorted(key for key in overlap if old.bindings[key] == delta.bindings[key])
+        conflicting = sorted(key for key in overlap if old.bindings[key] != delta.bindings[key])
+        if repeated:
+            raise ValueError('resident delta repeats an already represented row identity: ' + ', '.join(repeated[:8]))
+        raise ValueError('resident delta conflicts with an existing row identity: ' + ', '.join(conflicting[:8]))
+    held_overlap = old_held.bindings.keys() & delta.bindings.keys()
+    if held_overlap:
+        raise ValueError('resident delta repeats a protected held row identity: '
+                         + ', '.join(sorted(held_overlap)[:8]))
+    if delta.groups & old_held.groups:
+        raise ValueError('resident delta overlaps protected held source groups')
+    # Assemble the proposed manifest from the same authenticated leaf indexes
+    # and apply the same ordered-prefix and obligation checks as actual poll.
+    preparation.cache_only = True
+    train = preparation.load(train_ref, split='train')
+    if (train.entries[:len(old.entries)] != old.entries
+            or train.entries[len(old.entries):] != [
+                {**entry, 'training_priority': entry.get('training_priority', 0)}
+                for entry in delta.entries]):
+        raise ValueError('resident delta does not preserve the exact prior row order and bindings')
+    if train.groups & old_held.groups:
+        raise ValueError('resident training prefix overlaps protected held source groups')
+    declarations = pending_declarations(proposed, stage_id, tokenizer_fingerprint)
+    validate_source_obligations(proposed, stage_id, train, declarations,
+        initial.get('withdrawal_history') or ())
     capacity = initial.get('geometry_qualification')
     if not capacity:
         raise ValueError('resident delta append needs explicit geometry qualification')
@@ -1250,7 +1287,8 @@ def _delta_payload(directory, previous, plan, proposed, stage_id, recipe_path,
         'train': train_ref, 'prior_train': prior_ref, 'held': held_ref, 'prior_held': held_ref,
         'prior_recipe': previous['payload']['prior_recipe'] if previous else initial['recipe'],
         'tokenizer_fingerprint': tokenizer_fingerprint, 'role_ids': list(role_ids),
-        'indexes': _source_witness(delta, package), 'rows': rows + len(delta), 'held_rows': held_rows,
+        'indexes': _source_witness(train, package) + _source_witness(old_held, package),
+        'rows': len(train), 'held_rows': len(old_held),
         'geometry_qualification': capacity, 'geometry_identity': initial['geometry_identity'],
         'geometry': geometry,
         'delta_validation': {'schema': 'natlang.native-resident-delta-validation/1',
@@ -1494,6 +1532,13 @@ class ResidentAdoption:
             validate_source_obligations(payload['plan'], self.stage_id, train, declarations,
                 self.withdrawal_history)
             with locked(self.directory):
+                current_pointer = self.directory / 'pending.json'
+                if not current_pointer.exists():
+                    raise ValueError('resident pending request was withdrawn before commit')
+                latest_request = json.loads(current_pointer.read_text())
+                if latest_request != request:
+                    raise ValueError('resident pending request changed before commit')
+                bound(latest_request)
                 actual = current(self.directory)
                 generation = actual['generation'] if actual else digest(json.loads(
                     (self.directory.parent/'recipe-plan.json').read_text()))

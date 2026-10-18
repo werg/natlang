@@ -460,19 +460,20 @@ def delta_fixture(tmp_path, monkeypatch, *, duplicate=False):
 def test_delta_prepare_loads_only_new_graphs_then_retained_learner_validates_and_resumes(tmp_path, monkeypatch):
     paths,directory,manager,recipe,delta,wrapper=delta_fixture(tmp_path,monkeypatch)
     old_train, old_held = manager.train, manager.held
-    original=NativeGraphSource.__init__;opened=[]
-    def track(self,path,*args,**kwargs):
-        opened.append(Path(path).resolve())
-        assert Path(path).resolve() not in {old_train.path.resolve(), old_held.path.resolve(),
-            old_train.children[0].path.resolve()}
-        return original(self,path,*args,**kwargs)
-    monkeypatch.setattr(NativeGraphSource,'__init__',track)
+    original=NativeGraphSource._parse;parsed=[]
+    def track(self,row):
+        parsed.append(Path(self.path).resolve())
+        return original(self,row)
+    monkeypatch.setattr(NativeGraphSource,'_parse',track)
     request=resident.prepare(directory,recipe,'sft',tokenizer_fingerprint='tokenizer-sha',
         role_ids=(),delta_sources={'train':resident.binding(delta)})
     payload=json.loads(resident.bound(request).read_text())['payload']
     assert 'entries_sha256' not in payload and 'held_entries_sha256' not in payload
     assert payload['delta_validation']['prior_rows']==2 and payload['rows']==3
-    assert set(opened)=={delta.resolve()}
+    # The explicit new source is parsed once for validation and again by the
+    # exact geometry reader; neither pass touches the prior or held leaf.
+    assert parsed==[delta.resolve(),delta.resolve()]
+    assert len(payload['indexes'])==3  # old, delta and held leaves, all FCB-bound
     with pytest.raises(ValueError,match='not a full-source'):
         resident.geometry_from_evidence(manager.train,0,request,package=manager.package)
     train,held=manager.poll(9)
@@ -488,14 +489,113 @@ def test_delta_prepare_loads_only_new_graphs_then_retained_learner_validates_and
     assert resident.recover(directory)['generation']==committed['generation']
 
 
-def test_delta_duplicate_old_identity_is_rejected_by_actual_union_without_credit(tmp_path,monkeypatch):
+def test_delta_exact_duplicate_identity_is_rejected_before_publication(tmp_path,monkeypatch):
     _,directory,manager,recipe,delta,_=delta_fixture(tmp_path,monkeypatch,duplicate=True)
+    with pytest.raises(ValueError,match='repeats an already represented row identity'):
+        resident.prepare(directory,recipe,'sft',tokenizer_fingerprint='tokenizer-sha',role_ids=(),
+            delta_sources={'train':resident.binding(delta)})
+    assert resident.current(directory)is None
+    assert not (directory/'pending.json').exists()
+    assert [row['id']for row in manager.train.entries]==['a','b']
+
+
+def test_delta_conflicting_same_id_is_rejected_before_publication(tmp_path,monkeypatch):
+    _,directory,manager,recipe,delta,wrapper=delta_fixture(tmp_path,monkeypatch)
+    changed=graph('a');changed['nodes'][0]['target_weights']=[0,.25,1]
+    delta.write_text(json.dumps(changed)+'\n')
+    value=json.loads(wrapper.read_text());value['sources'][1]={'kind':'native-graphs',**resident.binding(delta)}
+    write_json(wrapper,value)
+    value=json.loads(recipe.read_text());value['input_bindings']['train']=resident.binding(wrapper)
+    write_json(recipe,value)
+    with pytest.raises(ValueError,match='conflicts with an existing row identity'):
+        resident.prepare(directory,recipe,'sft',tokenizer_fingerprint='tokenizer-sha',role_ids=(),
+            delta_sources={'train':resident.binding(delta)})
+    assert resident.current(directory)is None and not (directory/'pending.json').exists()
+    assert manager.train.ordered_ids()==['a','b']
+
+
+def test_delta_prior_prefix_preflight_fails_closed_without_warm_index(tmp_path,monkeypatch):
+    paths,directory,manager,recipe,delta,_=delta_fixture(tmp_path,monkeypatch)
+    witness,=resident._source_witness(manager.train.children[0],manager.package)
+    Path(witness['cache']['path']).unlink()
+    original=NativeGraphSource._parse
+    def forbid_old_parse(self,row):
+        if Path(self.path).resolve()==paths['old'].resolve():
+            raise AssertionError('missing prior index must not trigger a full-source reparse')
+        return original(self,row)
+    monkeypatch.setattr(NativeGraphSource,'_parse',forbid_old_parse)
+    with pytest.raises(ValueError,match='exact completed source index'):
+        resident.prepare(directory,recipe,'sft',tokenizer_fingerprint='tokenizer-sha',role_ids=(),
+            delta_sources={'train':resident.binding(delta)})
+    assert not (directory/'pending.json').exists()
+
+
+def test_delta_prior_prefix_does_not_fall_back_if_index_disappears_after_preflight(tmp_path,monkeypatch):
+    paths,directory,manager,recipe,delta,_=delta_fixture(tmp_path,monkeypatch)
+    witness,=resident._source_witness(manager.train.children[0],manager.package)
+    cache=Path(witness['cache']['path'])
+    from natlang_neuralese.common import row_index
+    original_load=row_index.load
+    removed=False
+    def remove_after_preflight(path):
+        nonlocal removed
+        value=original_load(path)
+        if Path(path)==cache and not removed:
+            removed=True
+            cache.unlink()
+        return value
+    monkeypatch.setattr(row_index,'load',remove_after_preflight)
+    with pytest.raises(ValueError,match='disappeared before cache-only load'):
+        resident.prepare(directory,recipe,'sft',tokenizer_fingerprint='tokenizer-sha',role_ids=(),
+            delta_sources={'train':resident.binding(delta)})
+    assert removed and paths['old'].is_file()
+    assert not (directory/'pending.json').exists()
+
+
+def test_delta_rejects_held_row_identity_even_with_forged_disjoint_group(tmp_path,monkeypatch):
+    _,directory,manager,recipe,delta,wrapper=delta_fixture(tmp_path,monkeypatch)
+    row=graph('held');row.update(split='train',tokenizer_fingerprint='tokenizer-sha',source_groups=['forged-new-group'])
+    delta.write_text(json.dumps(row)+'\n')
+    value=json.loads(wrapper.read_text());value['sources'][1]={'kind':'native-graphs',**resident.binding(delta)}
+    write_json(wrapper,value)
+    value=json.loads(recipe.read_text());value['input_bindings']['train']=resident.binding(wrapper);write_json(recipe,value)
+    with pytest.raises(ValueError,match='repeats a protected held row identity'):
+        resident.prepare(directory,recipe,'sft',tokenizer_fingerprint='tokenizer-sha',role_ids=(),
+            delta_sources={'train':resident.binding(delta)})
+    assert manager.held.ordered_ids()==['held']
+    assert resident.current(directory)is None and not (directory/'pending.json').exists()
+
+
+@pytest.mark.parametrize('mutation',['withdraw','replace'])
+def test_pending_request_change_cannot_commit_after_validation(tmp_path,monkeypatch,mutation):
+    from contextlib import contextmanager
+
+    _,directory,manager,recipe,delta,_=delta_fixture(tmp_path,monkeypatch)
     resident.prepare(directory,recipe,'sft',tokenizer_fingerprint='tokenizer-sha',role_ids=(),
         delta_sources={'train':resident.binding(delta)})
+    original_locked=resident.locked
+    @contextmanager
+    def withdraw_while_holding_commit_lock(path):
+        with original_locked(path):
+            if Path(path)==directory:
+                pointer=directory/'pending.json'
+                if mutation=='withdraw':
+                    pointer.unlink()
+                else:
+                    write_json(pointer,{'path':'replaced-request.json','sha256':'0'*64})
+            yield
+    monkeypatch.setattr(resident,'locked',withdraw_while_holding_commit_lock)
     assert manager.poll(9)is None
     assert resident.current(directory)is None
-    assert [row['id']for row in manager.train.entries]==['a','b']
-    assert list((directory/'rejections').glob('*.json'))
+    if mutation=='withdraw':
+        assert not (directory/'pending.json').exists()
+    else:
+        assert json.loads((directory/'pending.json').read_text())=={
+            'path':'replaced-request.json','sha256':'0'*64}
+    errors=[json.loads(path.read_text()) for path in(directory/'rejections').glob('*.json')]
+    expected='withdrawn before commit' if mutation=='withdraw' else 'changed before commit'
+    assert len(errors)==1 and expected in errors[0]['error']
+    assert manager.train.ordered_ids()==['a','b']
 
 
 @pytest.mark.parametrize('change',['priority','held','suffix','source'])
@@ -536,16 +636,15 @@ def test_delta_geometry_limit_and_lost_prior_index_fail_closed(tmp_path,monkeypa
 
 
 
-def test_delta_helper_defers_full_held_separation_to_actual_resident(tmp_path,monkeypatch):
+def test_delta_preparation_rejects_held_group_overlap_before_publication(tmp_path,monkeypatch):
     paths,directory,manager,recipe,delta,wrapper=delta_fixture(tmp_path,monkeypatch)
     row=json.loads(delta.read_text());row['source_groups']=['source-held'];delta.write_text(json.dumps(row)+'\n')
     value=json.loads(wrapper.read_text());value['sources'][1]={'kind':'native-graphs',**resident.binding(delta)};write_json(wrapper,value)
     value=json.loads(recipe.read_text());value['input_bindings']['train']=resident.binding(wrapper);write_json(recipe,value)
-    resident.prepare(directory,recipe,'sft',tokenizer_fingerprint='tokenizer-sha',role_ids=(),
-        delta_sources={'train':resident.binding(delta)})
-    assert manager.poll(9)is None and resident.current(directory)is None
-    errors=[json.loads(p.read_text())['error']for p in(directory/'rejections').glob('*.json')]
-    assert errors and 'protected append'in errors[0]
+    with pytest.raises(ValueError,match='overlaps protected held source groups'):
+        resident.prepare(directory,recipe,'sft',tokenizer_fingerprint='tokenizer-sha',role_ids=(),
+            delta_sources={'train':resident.binding(delta)})
+    assert resident.current(directory)is None and not (directory/'pending.json').exists()
 
 
 @pytest.mark.parametrize('explicit_side',['certificate','actual'])

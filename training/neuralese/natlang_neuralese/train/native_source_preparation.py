@@ -4,11 +4,12 @@ from ..common.hashing import sha256_file_hex_cached
 
 
 class NativeSourcePreparation:
-    def __init__(self, tokenizer_fingerprint, role_ids):
+    def __init__(self, tokenizer_fingerprint, role_ids, *, cache_only=False):
         from ..data.native_sources import NativeGraphSource
         self.source_type = NativeGraphSource
         self.tokenizer_fingerprint = tokenizer_fingerprint
         self.role_ids = tuple(role_ids)
+        self.cache_only = bool(cache_only)
         self.sources = {}
         self.loaded_roots = 0
         self.reused_roots = 0
@@ -67,6 +68,25 @@ class NativeSourcePreparation:
             entry['groups'] = self._group_bundles[key]
         source.groups = {self._group_strings.setdefault(value, value) for value in source.groups}
 
+    def _require_cached_leaf(self, path, source_sha256, split, pair_model):
+        """Fail closed unless the existing parser-policy-bound leaf index is warm."""
+        from ..common import row_index
+        from ..common.hashing import canonical_json_sha256_hex
+        package = Path(__file__).resolve().parents[1]
+        names = ('data/native_sources.py', 'data/native_graph_schema.py', 'model/native_graph_plan.py',
+                 'data/native_pair_schema.py', 'common/row_index.py', 'common/jsonio.py', 'common/hashing.py')
+        policy = canonical_json_sha256_hex({name: sha256_file_hex_cached(package/name) for name in names})
+        key = {'source_sha256': source_sha256, 'tokenizer': self.tokenizer_fingerprint,
+               'split': split, 'policy_sha256': policy,
+               'kind': 'semantic-pairs' if pair_model is not None else 'native-graphs',
+               'pair_model': pair_model, 'role_ids': list(self.role_ids)}
+        cache = row_index.entry_path('native-graphs', canonical_json_sha256_hex(key))
+        value = row_index.load(cache)
+        if (not value or value.get('key') != key or not isinstance(value.get('entries'), list)
+                or not value['entries']
+                or value.get('metadata_sha256') != canonical_json_sha256_hex(value['entries'])):
+            raise ValueError('resident prefix integrity requires the exact completed source index: ' + str(path))
+
     def _load_child(self, path, fingerprint, *, required_split, pair_model, role_ids, _parents):
         if fingerprint != self.tokenizer_fingerprint or tuple(role_ids) != self.role_ids:
             raise ValueError('preparation child changed tokenizer or role contract')
@@ -88,6 +108,8 @@ class NativeSourcePreparation:
             self.reused_roots += not bool(_parents)
             self.reused_sources += 1
             return source
+        if self.cache_only and not (path.suffix == '.json' and pair_model is None):
+            self._require_cached_leaf(path, binding['sha256'], split, pair_model)
         if path.suffix == '.json' and pair_model is None:
             from ..data.native_source_tree import initialize_manifest
             source = self.source_type.__new__(self.source_type)
@@ -96,7 +118,18 @@ class NativeSourcePreparation:
             source.tokenizer_fingerprint, source.required_split = self.tokenizer_fingerprint, split
             initialize_manifest(source, _parents, load_child=self._load_child)
         else:
-            source = self.source_type(path, self.tokenizer_fingerprint, required_split=split,
+            source_type = self.source_type
+            if self.cache_only:
+                # Close the check/use window: the unchanged loader may not
+                # fall back to streaming the complete source if the index is
+                # removed after preflight. This subclass changes no parser
+                # bytes, cache key, or accepted cached metadata.
+                class CacheOnlyNativeGraphSource(source_type):
+                    def _parse(self, row):
+                        raise ValueError('resident prefix source index disappeared before cache-only load: '
+                                         + str(path))
+                source_type = CacheOnlyNativeGraphSource
+            source = source_type(path, self.tokenizer_fingerprint, required_split=split,
                                       pair_model=pair_model, role_ids=self.role_ids, _parents=_parents)
             self._intern_groups(source)
         if source.file_sha256 != binding['sha256']:
