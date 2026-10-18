@@ -44,3 +44,7 @@ generation authority; the publisher does not start or stop collectors.
 
 These are crisp process-custody and immutable-byte verifiers. There is no new
 generation selection policy, prompt, actor identity field, or training admission.
+
+## Natural feeder preparation and completed-phase grace
+
+A valid live feeder may be between its durable process launch and publication of the collecting worker table, or between publication of its completed phase and guardian closure. Treat only those exact known phases as a non-exporting wait after rechecking the same boot/config/process ownership. Keep all source/worker/runtime validation for collecting phases. A different live birth, unknown phase, changed config or unauthenticated advancement remains fatal. This is custody plumbing; no model-facing behavior, generation, admission or timeout policy changes.

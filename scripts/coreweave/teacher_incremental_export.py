@@ -1160,6 +1160,41 @@ except (FileNotFoundError,ProcessLookupError):
                 'guardian_state_sha256': _sha(fresh_raw), 'sandbox_id': publisher['sandbox_id'],
                 'closed_boundaries': list(refs.values()), 'verified_owner_transition': boundary_ref is not None}
 
+    phase_path=f"{publisher['generation_root']}/feed-evidence-phase.json"
+    try:phase_raw=read_file(phase_path)
+    except (KeyError,FileNotFoundError)as error:
+        if batch!=publisher['anchor_batch']and not(state.get('source_sequence')or{}).get('started',{}).get(str(batch)):
+            raise ValueError('non-anchor batch lacks its guardian source-sequence started receipt')from error
+        raise
+    phase=_json(phase_raw,'live teacher feed phase')
+    preparing=phase.get('phase')=='waiting_strong_server_ready'and phase.get('batch')is None
+    previous_complete=(phase.get('phase')=='batch_complete'and phase.get('batch')==batch-1)
+    current_complete=(phase.get('phase')=='batch_complete'and phase.get('batch')==batch)
+    if preparing or previous_complete or current_complete:
+        fresh_raw=read_file(f'{control}/state.json');fresh=_json(fresh_raw,'guardian phase transition state')
+        if (read_file('/proc/sys/kernel/random/boot_id').decode().strip()!=publisher['sandbox_boot_id']
+                or read_file(guardian_ref['path'])!=guardian_raw
+                or fresh.get('schema')!=state['schema']or fresh.get('config')!=config_binding):
+            raise ValueError('guardian preparation changed boot or config authority')
+        if fresh.get('owner')!=owner or fresh.get('active_batch')!=batch:
+            fresh,fresh_raw,reference=_closed_guardian_transition(
+                publisher,guardian_raw,state,batch,read_file,owner_exited=False)
+            refs={r['path']:r for r in closed_boundaries}
+            if reference is not None:refs[reference['path']]=reference
+            return {'draining':True,'batch':batch,'guardian_state':fresh,
+                'guardian_state_sha256':_sha(fresh_raw),'sandbox_id':publisher['sandbox_id'],
+                'closed_boundaries':list(refs.values()),'verified_owner_transition':reference is not None}
+        if previous_complete:
+            ref=fresh.get('last_boundary')
+            if (not isinstance(ref,dict)or ref.get('path')!=f'{control}/boundaries/batch-{batch-1:04d}.json'):
+                raise ValueError('new feeder preparation lacks its actual predecessor boundary')
+            data=read_file(ref['path'])
+            if len(data)!=ref.get('bytes')or _sha(data)!=ref.get('sha256')or _json(data,'preparation predecessor boundary').get('batch')!=batch-1:
+                raise ValueError('new feeder preparation predecessor changed')
+        return {'draining':True,'preparing':not current_complete,'batch':batch,'guardian_state':fresh,
+            'guardian_state_sha256':_sha(fresh_raw),'sandbox_id':publisher['sandbox_id'],
+            'closed_boundaries':closed_boundaries,'verified_owner_transition':False}
+
     source_root = f"{publisher['generation_root']}/evidence-collections-v2/batch-{batch:04d}"
     cases_path = f'{source_root}/source-cases.jsonl'
     queue_path = f'{source_root}/queue.jsonl'
@@ -1215,9 +1250,6 @@ except (FileNotFoundError,ProcessLookupError):
         raise ValueError('publisher runtime differs from active guardian config')
     if teacher.get('actual_task_runtime') != runtime:
         raise ValueError('teacher source runtime differs from active guardian config')
-    phase_path = f"{publisher['generation_root']}/feed-evidence-phase.json"
-    phase_raw = read_file(phase_path)
-    phase = _json(phase_raw, 'live teacher feed phase')
     worker_count = phase.get('worker_count')
     if phase.get('batch') != batch or type(worker_count) is not int or worker_count < 1:
         raise ValueError('live feed phase does not bind active batch and worker count')
@@ -1615,7 +1647,7 @@ def run_guardian_export_service(publisher_path: Path, *, poll_seconds: float = 1
                     'at': time.time(), 'publisher_sha256': _sha(publisher_raw),
                     'active': False, 'draining_batch': active['batch'],
                     'guardian_state_sha256': active['guardian_state_sha256'],
-                    'reason': 'feeder boundary complete; waiting for guardian last_boundary publication',
+                    'reason': ('authenticated feeder preparation; no new export custody'if active.get('preparing')else'feeder boundary complete; waiting for guardian last_boundary publication'),
                     'closed_exports_this_poll': closed,
                     'training_admission': False, 'exposure': False}
             else:

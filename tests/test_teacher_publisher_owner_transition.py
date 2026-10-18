@@ -137,3 +137,62 @@ def test_wrong_birth_remains_fatal_even_with_completed_phase(monkeypatch):
     publisher, sandbox, reader, _ = transition_fixture(monkeypatch, probe_mode='wrong_birth',mutation='complete_pending')
     with pytest.raises(ValueError, match='PID/start/boot/argv/batch differs'):
         discover_guardian_batch(publisher,sandbox,reader)
+
+
+@pytest.mark.parametrize('phase',[{'phase':'waiting_strong_server_ready'},
+    {'phase':'batch_complete','batch':26}])
+def test_exact_live_owner_phase_grace_grants_no_source_or_export_custody(monkeypatch,phase):
+    publisher,sandbox,reader,_=transition_fixture(monkeypatch,mutation='complete_pending')
+    original=sandbox.exec
+    def execute(argv,**kwargs):
+        if argv[0]=='cat':return original(argv,**kwargs)
+        return SimpleNamespace(result=lambda **_:SimpleNamespace(returncode=0,
+            stdout=json.dumps({'valid':True,'identity':{'pid':1}}),stderr=''))
+    sandbox.exec=execute
+    def read(path):
+        if path.endswith('/feed-evidence-phase.json'):return json.dumps(phase).encode()
+        if '/evidence-collections-v2/'in path:pytest.fail('preparation grants no source/row read')
+        return reader(path)
+    result=discover_guardian_batch(publisher,sandbox,read)
+    assert result['draining']and not result['verified_owner_transition']
+    assert 'queue_path'not in result and 'identity'not in result
+
+
+@pytest.mark.parametrize('mutation',['config','new_boot'])
+def test_live_preparation_does_not_waive_owner_or_config_transition(monkeypatch,mutation):
+    publisher,sandbox,reader,_=transition_fixture(monkeypatch,mutation=mutation)
+    original=sandbox.exec
+    sandbox.exec=lambda argv,**kwargs:(original(argv,**kwargs)if argv[0]=='cat'else
+        SimpleNamespace(result=lambda **_:SimpleNamespace(returncode=0,stdout=json.dumps({'valid':True}),stderr='')))
+    def read(path):
+        if path.endswith('/feed-evidence-phase.json'):return json.dumps({'phase':'waiting_strong_server_ready'}).encode()
+        return reader(path)
+    with pytest.raises(ValueError):discover_guardian_batch(publisher,sandbox,read)
+
+
+def test_bad_live_birth_is_fatal_before_preparation_grace(monkeypatch):
+    publisher,sandbox,reader,_=transition_fixture(monkeypatch,probe_mode='wrong_birth',mutation='complete_pending')
+    def read(path):
+        if path.endswith('/feed-evidence-phase.json'):return json.dumps({'phase':'waiting_strong_server_ready'}).encode()
+        return reader(path)
+    with pytest.raises(ValueError,match='PID/start/boot'):discover_guardian_batch(publisher,sandbox,read)
+
+
+@pytest.mark.parametrize('tamper',[False,True])
+def test_next_live_preparation_requires_exact_previous_boundary(monkeypatch,tamper):
+    publisher,sandbox,reader,reference=transition_fixture(monkeypatch,mutation='complete_pending')
+    original=sandbox.exec
+    sandbox.exec=lambda argv,**kwargs:(original(argv,**kwargs)if argv[0]=='cat'else
+        SimpleNamespace(result=lambda **_:SimpleNamespace(returncode=0,stdout=json.dumps({'valid':True}),stderr='')))
+    def read(path):
+        raw=reader(path)
+        if path.endswith('/state.json'):
+            value=json.loads(raw);value.update(active_batch=27,next_batch=27,last_boundary=reference)
+            if tamper:value['last_boundary']={**reference,'sha256':'0'*64}
+            return json.dumps(value).encode()
+        return raw
+    if tamper:
+        with pytest.raises(ValueError,match='predecessor changed'):discover_guardian_batch(publisher,sandbox,read)
+    else:
+        result=discover_guardian_batch(publisher,sandbox,read)
+        assert result['preparing']and result['batch']==27 and 'queue_path'not in result
