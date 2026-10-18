@@ -71,6 +71,45 @@ def test_unwrapped_low_precision_parameter_use_fails_closed(tmp_path):
     assert not scope.entries and not scope._auxiliary_entries and not scope._effective_routes
 
 
+def test_vjp_rejects_direct_low_precision_gradient_without_any_carrier(tmp_path):
+    from natlang_neuralese.model.native_weight_carrier import active_cotangent_scope
+
+    layer, _, _, _, _ = _case()
+    weight = layer.weight
+    original_forward = layer.forward.__func__
+    original_grad = torch.full_like(weight, 3)
+    weight.grad = original_grad
+    scratch = None
+    with ParameterCotangentScope.for_model(layer, mode='vjp', directory=tmp_path) as scope:
+        scratch = Path(scope.directory)
+        with pytest.raises(RuntimeError, match='gradient arrived without a cotangent carrier'):
+            torch.autograd.grad((weight * 2).sum(), (weight,))
+    assert active_cotangent_scope() is None
+    assert layer.forward.__func__ is original_forward
+    assert weight.grad is original_grad and torch.equal(weight.grad, torch.full_like(weight, 3))
+    assert scratch is not None and not scratch.exists()
+
+
+def test_vjp_unused_low_precision_parameter_without_gradient_remains_allowed(tmp_path):
+    class PartlyUsed(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.used = nn.Linear(7, 5, bias=False).to(dtype=torch.bfloat16)
+            self.unused = nn.Linear(7, 5, bias=False).to(dtype=torch.bfloat16)
+
+        def forward(self, x):
+            return self.used(x)
+
+    model = PartlyUsed()
+    x = torch.randn(2, 7, dtype=torch.bfloat16)
+    with ParameterCotangentScope.for_model(model, mode='vjp', directory=tmp_path) as scope:
+        used, unused = torch.autograd.grad(model(x).float().sum(),
+                                           (model.used.weight, model.unused.weight),
+                                           allow_unused=True)
+        scope.finish()
+    assert used is not None and unused is None
+
+
 def test_embedding_split_lookups_accumulate_selected_fp32_rows(tmp_path):
     model = nn.Sequential(nn.Embedding(11, 7).to(dtype=torch.bfloat16))
     model[0].padding_idx = 0

@@ -1,0 +1,5 @@
+# VJP cotangent bypass guard
+
+The VJP cotangent scope registers every selected trainable low-precision parameter and installs a gradient hook. For any parameter that receives a VJP, the hook must see at least one contribution from the shared FP32 carrier, then compare the returned gradient with the accumulated carrier value. A gradient with zero carrier contributions is a bypass and fails closed; a parameter with no gradient remains unused and is allowed. The crisp hook is required because PyTorch invokes it at the exact parameter-gradient boundary. No-scope execution and explicit reference-arithmetic paths keep their existing behavior.
+
+Validation uses one real BF16 `nn.Linear`: a direct weight VJP is rejected with zero contributions, a normal wrapped-module VJP still passes, and an unused registered parameter returns `None` without triggering the hook. The failure path must restore module identity, clear the active scope, preserve any pre-existing `.grad`, and remove scratch storage.

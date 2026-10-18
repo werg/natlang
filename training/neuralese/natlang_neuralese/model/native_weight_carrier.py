@@ -179,10 +179,13 @@ class ParameterCotangentScope:
         return self
 
     def _audit_vjp_gradient(self, entry, gradient):
-        if entry['count']:
-            expected = entry['accumulator'].to(device=gradient.device, dtype=gradient.dtype)
-            if not torch.equal(gradient, expected):
-                raise RuntimeError(f"low-precision parameter gradient included an uncarried path: {entry['name']}")
+        if not entry['count']:
+            raise RuntimeError(
+                f"low-precision parameter gradient arrived without a cotangent carrier: {entry['name']}"
+            )
+        expected = entry['accumulator'].to(device=gradient.device, dtype=gradient.dtype)
+        if not torch.equal(gradient, expected):
+            raise RuntimeError(f"low-precision parameter gradient included an uncarried path: {entry['name']}")
         return gradient
 
     @classmethod
