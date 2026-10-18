@@ -313,6 +313,7 @@ def _source03_bridge_geometry_part(part, *, preparation, package):
     """Verify one source03 bridge using its staged source and old-fit custody."""
     import hashlib
     import pickle
+    import re
     from ..common.jsonio import open_jsonl_text
     from ..common.hashing import canonical_json_sha256_hex
 
@@ -692,7 +693,19 @@ def _source03_bridge_geometry_part(part, *, preparation, package):
                     or geometry['kv_slots'] != geometry['forward_tokens']
                     or any(geometry[key] > actual_limits[key] for key in geometry)):
                 raise ValueError('source03 bridge source/old-fit/coverage/geometry join differs at row ' + str(index))
-            parents.add(side.get('keep_parent_id'))
+            # The producer's pending-parent digest is over the unsuffixed
+            # source-session ID recovered from each old auxiliary graph ID.
+            # `keep_parent_id` is a different identity: the new whole-history
+            # graph ID carries the explicit KEEP profile suffix. Bind those
+            # two names before hashing the historical parent set.
+            auxiliary_id = side.get('id')
+            match = re.fullmatch(r'(.+):reasoning-turn:[0-9]+', auxiliary_id) if isinstance(auxiliary_id, str) else None
+            if match is None:
+                raise ValueError('source03 bridge auxiliary graph ID has no exact reasoning-turn parent')
+            source_parent_id = match.group(1)
+            if side.get('keep_parent_id') != source_parent_id + ':history-reasoning:keep':
+                raise ValueError('source03 bridge KEEP parent ID does not bind the auxiliary source parent')
+            parents.add(source_parent_id)
             forward_sum += geometry['forward_tokens']
             kv_sum += geometry['kv_slots']
             descriptor = {'index': index, 'id': entry['id'], 'binding': entry['binding'], **geometry}
@@ -708,12 +721,13 @@ def _source03_bridge_geometry_part(part, *, preparation, package):
             or forward_sum != provenance.get('geometry_forward_tokens_sum')
             or kv_sum != provenance.get('geometry_kv_slots_sum')):
         raise ValueError('source03 bridge geometry totals differ from bound summaries')
-    if (raw_digest.hexdigest()
-            != final_source.get('bridge_source', {}).get('raw_selected_rows_sha256')
-            or hashlib.sha256(sidecar_path.read_bytes()).hexdigest()
-            != final_source.get('row_binding_sidecar', {}).get('canonical_rows_sha256')
-            or digest(sorted(parents)) != final_source.get('keep_pending_parent_ids_sha256')):
-        raise ValueError('source03 bridge final ordered-row/source custody digest differs')
+    if raw_digest.hexdigest() != final_source.get('bridge_source', {}).get('raw_selected_rows_sha256'):
+        raise ValueError('source03 bridge final ordered raw-source digest differs')
+    if (hashlib.sha256(sidecar_path.read_bytes()).hexdigest()
+            != final_source.get('row_binding_sidecar', {}).get('canonical_rows_sha256')):
+        raise ValueError('source03 bridge final row-binding sidecar digest differs')
+    if digest(sorted(parents)) != final_source.get('keep_pending_parent_ids_sha256'):
+        raise ValueError('source03 bridge final unsuffixed pending-parent digest differs')
     return bridge_source, maxima, [part['source'], part['corpus_manifest'], part['supplement'],
         part['old_join_provenance']], row_count
 

@@ -686,7 +686,8 @@ def source03_bridge_fixture(tmp_path, monkeypatch, *, with_ordinary=False,
                             invented_current_component=False, boolean_geometry=False,
                             omit_keep_coverage_bytes=False, wrong_final_keep_coverage_sha=False,
                             legacy_fcb=False, source_ordinals=None,
-                            old_coverage_mutation=None):
+                            old_coverage_mutation=None, wrong_keep_parent=False,
+                            malformed_auxiliary_id=False, wrong_pending_parent_digest=False):
     import hashlib
     import pickle
     import subprocess
@@ -696,7 +697,8 @@ def source03_bridge_fixture(tmp_path, monkeypatch, *, with_ordinary=False,
     monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE', str(tmp_path/'cache'))
     tokenizer='tokenizer-sha';roles=[64402,64403,64404,64405]
     base=tmp_path/'base';model=base/'lfm25';model.mkdir(parents=True)
-    graphs=[graph('bridge-a'),graph('bridge-b')]
+    graphs=[graph('parent-0' if malformed_auxiliary_id else 'parent-0:reasoning-turn:0'),
+            graph('parent-1' if malformed_auxiliary_id else 'parent-1:reasoning-turn:1')]
     source_ordinals = source_ordinals or list(range(len(graphs)))
     assert len(source_ordinals) == len(graphs)
     if boolean_geometry:
@@ -718,7 +720,9 @@ def source03_bridge_fixture(tmp_path, monkeypatch, *, with_ordinary=False,
     for i,(row,entry) in enumerate(zip(graphs,bridge_source.entries,strict=True)):
         line=(json.dumps(row,separators=(',',':'))+'\n').encode()
         raw_sha=hashlib.sha256(line).hexdigest();graph_sha=canonical_json_sha256_hex(row)
-        side={'id':entry['id'],'binding':entry['binding'],'keep_parent_id':'parent-'+str(i),
+        parent_id='parent-'+str(i)
+        keep_parent_id=('wrong-parent-'+str(i) if wrong_keep_parent else parent_id) + ':history-reasoning:keep'
+        side={'id':entry['id'],'binding':entry['binding'],'keep_parent_id':keep_parent_id,
             'keep_partition':'remaining-long','keep_source_graph_sha256':'1'*64,
             'keep_source_row_bytes_sha256':'2'*64,'old_fit_source_row':source_ordinals[i],
             'old_source_graph_sha256':graph_sha,'source_row_bytes_sha256':raw_sha,
@@ -820,7 +824,8 @@ def source03_bridge_fixture(tmp_path, monkeypatch, *, with_ordinary=False,
             'keep_coverage':keep_coverage_binding,
             'bridge_source':{**artifact(bridge_leaf),'raw_selected_rows_sha256':hashlib.sha256(raw_graphs).hexdigest()},
             'row_binding_sidecar':{**artifact(sidecar),'canonical_rows_sha256':hashlib.sha256(sidecar.read_bytes()).hexdigest()},
-            'keep_pending_parent_ids_sha256':resident.digest(['parent-0','parent-1'])}})
+            'keep_pending_parent_ids_sha256':resident.digest(
+                ['parent-0','parent-1'] if not wrong_pending_parent_digest else ['parent-0','parent-elsewhere'])}})
     registration=model/'registration-audit.json';write_json(registration,{'schema':'natlang.d32-history-keep-aux-bridge-registration/1',
         'training_admission':False,'training_exposure':0})
     manifest=tmp_path/'corpus-manifest.json'
@@ -1010,6 +1015,25 @@ def test_source03_bridge_rejects_duplicate_historical_coordinate_across_distinct
     source,parts=source03_bridge_fixture(tmp_path,monkeypatch,source_ordinals=[7,7])
     output=tmp_path/'rejected-duplicate-original-coordinate.json'
     with pytest.raises(ValueError,match='historical source coordinate'):
+        resident.prepare_whole_delta_geometry(source,parts,output,package=Path(resident.__file__).parents[1])
+    assert not output.exists()
+
+
+@pytest.mark.parametrize('mutation',['wrong-keep-parent','malformed-auxiliary-id'])
+def test_source03_bridge_binds_keep_parent_to_exact_auxiliary_source_id(tmp_path,monkeypatch,mutation):
+    source,parts=source03_bridge_fixture(tmp_path,monkeypatch,
+        wrong_keep_parent=mutation=='wrong-keep-parent',
+        malformed_auxiliary_id=mutation=='malformed-auxiliary-id')
+    output=tmp_path/'rejected-parent-binding.json'
+    with pytest.raises(ValueError,match='(KEEP parent ID|reasoning-turn parent)'):
+        resident.prepare_whole_delta_geometry(source,parts,output,package=Path(resident.__file__).parents[1])
+    assert not output.exists()
+
+
+def test_source03_bridge_rejects_wrong_pending_parent_digest_after_valid_parent_joins(tmp_path,monkeypatch):
+    source,parts=source03_bridge_fixture(tmp_path,monkeypatch,wrong_pending_parent_digest=True)
+    output=tmp_path/'rejected-pending-parent-digest.json'
+    with pytest.raises(ValueError,match='final unsuffixed pending-parent digest'):
         resident.prepare_whole_delta_geometry(source,parts,output,package=Path(resident.__file__).parents[1])
     assert not output.exists()
 
