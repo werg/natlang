@@ -199589,6 +199589,990 @@
         "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0030-tranche0001-quality-reviewed-source-child-oracle-v1",
         "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0030-tranche0002-quality-reviewed-source-child-oracle-v1"
       ]
+    },
+    {
+      "id": "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0032-tranche0000-quality-exact-child-v1",
+      "owner": "dgx",
+      "path": "runs/qwen-verified-positive-native-graphs-20261017-recovery7853-batch0032-tranche0000-quality-exact-child-v1",
+      "include": [
+        "lfm25/receipt.json",
+        "lfm25/train/native-graphs.jsonl.zst",
+        "lfm25/test/native-graphs.jsonl.zst",
+        "mellum21/receipt.json",
+        "mellum21/train/native-graphs.jsonl.zst",
+        "mellum21/test/native-graphs.jsonl.zst",
+        "validation-proof.json",
+        "decision-hold-closure-proof.json"
+      ],
+      "source_class": "verified-strong-teacher-exact-child-decision-native-full-context-masked-history-SFT-graphs",
+      "training_admission": true,
+      "training_admission_reason": "Exact independently reviewed child sentiment targets passed current original source/oracle/global protection, typed captured child/host proof, original full-context rerender, assistant-history loss mask, source-bound decision identity and complete BOTH action accounting. Original partial parents and all unapproved siblings remain unqualified.",
+      "admission": "77 LF and 77 Mellum exact child targets; every original source action is emitted, deduplicated or explicitly omitted. No parent task success or exposure is inferred.",
+      "derived_from": [],
+      "source_binding": {
+        "source": {
+          "bytes": 13668800,
+          "path": "/mnt/external/natlang-development-data/teacher-incremental-7853-standard-20261017/admission/batch-0032/tranche-0000/native-trajectories.jsonl",
+          "sha256": "0aa73a91da1fb671b4fc64e2bce954608ff18276797faa7610bba6a16644b135"
+        },
+        "transfer_receipt": {
+          "bytes": 16329,
+          "path": "/mnt/external/natlang-development-data/teacher-incremental-7853-standard-20261017/admission/batch-0032/tranche-0000/transfer-receipt.json",
+          "sha256": "500bfa001c01f4e2d36cb120b53ca205ee743b3cbde553b723d23ffb4f8b4f1b"
+        },
+        "batch_source_bindings": {
+          "bytes": 1625,
+          "path": "/mnt/external/natlang-development-data/teacher-incremental-7853-standard-20261017/admission/batch-0032/tranche-0000/batch-source-bindings.json",
+          "sha256": "5bef75bd7cbcfcc97ca3fef61ab2f6726bfcc15a30243340921749574c3edf2a"
+        },
+        "canonical_source_verification": {
+          "bytes": 2514,
+          "path": "/mnt/external/natlang-development-data/teacher-incremental-7853-standard-20261017/admission/batch-0032/tranche-0000/canonical-source-verification.json",
+          "sha256": "1e9d37961f9a49eaaa5cf860a9ae4d0c256bc24e7f434c0c97f53d535188a437"
+        },
+        "current_protection": {
+          "bytes": 5469555,
+          "path": "/home/werg/data/dgxops/acquired-connected-source-protection-20261017-d13-d14-d32-v3/protection-manifest.json",
+          "sha256": "f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349"
+        },
+        "current_global_source_closure": {
+          "bytes": 13910008,
+          "path": "/home/werg/data/dgxops/acquired-connected-source-protection-20261017-d13-d14-d32-v3/closure-receipt-full-20261018-source-syntax-repair-v1.json",
+          "sha256": "dfc481d46df236909140a6a0d2c92e1d05a8e32110913dcdfe6ab952c9d846e9"
+        },
+        "closure_code_transition": {
+          "bytes": 9777,
+          "path": "/home/werg/data/dgxops/acquired-connected-source-protection-20261017-d13-d14-d32-v3/closure-code-transition-source-syntax-repair-v1.json",
+          "sha256": "5143fc6d3a0548a2aec7ad584b59a0c62626b62c275f211545435db065cc1fa2"
+        },
+        "decision_hold_closure": {
+          "bytes": 1750,
+          "path": "/home/werg/natlang/runs/qwen-verified-positive-native-graphs-20261017-recovery7853-batch0032-tranche0000-quality-exact-child-v1/decision-hold-closure-proof.json",
+          "sha256": "7a6a8e6945f9aeaba301ae591f8c9c5aa100262a65c76e09a368ff368f9f95ce"
+        },
+        "raw_source": {
+          "path": "/mnt/external/natlang-development-data/teacher-incremental-7853-standard-20261017/admission-recovery/batch-0032/tranche-0000/restored/context/source-cases.jsonl",
+          "sha256": "10a483d389d62cd1a463d0d0893fe74c1cc75972f185a4ddc23d93dc95011f2e"
+        },
+        "execution_packet": {
+          "path": "/mnt/external/natlang-development-data/teacher-incremental-7853-standard-20261017/admission-recovery/batch-0032/tranche-0000/restored/context/packet.jsonl",
+          "sha256": "d17b0383f8d1bbeaadc346c340fa05ac459ee0405a4e4fd96ecc7e2cfe0ac11c"
+        },
+        "actor": {
+          "bytes": 8930,
+          "path": "/work/datajobs/teacher-guarded-recovery-20261017/generation-epoch/teacher-serving-actor.json",
+          "sha256": "ef1e653cff3d05d9076051885346ea08e6d550c610cf9153fe48eefb2aa4be28"
+        },
+        "execution_identity": {
+          "bytes": 587,
+          "path": "/work/datajobs/teacher-guarded-recovery-20261017/generation-epoch/teacher-execution-identity.json",
+          "sha256": "15f338095d146a8057894e0a8df46376111333250cf63c74f0bc3c7f71326729"
+        },
+        "exact_child_review": {
+          "bytes": 122013,
+          "path": "/mnt/external/natlang-development-data/teacher32-guarded-child-materialized-review-20261018/source-0-decision-review.json",
+          "sha256": "a9bd912c2118826a2629f068365233ca352d02473d76d2dedaffa5718324120a"
+        },
+        "structured_input_protection": {
+          "bytes": 149369,
+          "path": "/home/werg/data/dgxops/teacher32-exact-sentiment-child-mask-validation-20261018/proof.json",
+          "sha256": "f5122c6e0f91fce02f389ff3722c8f299cc1944e8fa2bba2b4c74d1e71bdad53"
+        },
+        "independent_semantic_review": {
+          "bytes": 2675,
+          "path": "/home/werg/data/dgxops/teacher32-exact-sentiment-child-review-20261018/root-template-semantic-review.json",
+          "sha256": "5b54b23b1d461bb13bae069816ae997f137a5e41d7dc0d2db38de09634cbad2e"
+        },
+        "historical_parent_nonadmission": {
+          "bytes": 9444,
+          "path": "/home/werg/data/dgxops/teacher32-exact-sentiment-child-review-20261018/held-source-assignment.json",
+          "sha256": "9b357d1456c22ac694ed1e900d7f49607b47ef9158cf7c5e7697d9a2b774d9fa"
+        },
+        "materialization_partition": {
+          "deduplicated_actions": 0,
+          "emitted_actions": 77,
+          "materialized_source_rows": 0,
+          "other_omitted_actions": 106,
+          "partial_parent_repairs": [
+            {
+              "actions": 38,
+              "assigned_use": {
+                "consumer": "/home/werg/data/dgxops/teacher32-exact-sentiment-child-review-20261018/exact-child-source-review.json",
+                "operator": "/home/werg/data/dgxops/audit-teacher32-full-held-source-assignment-20261018.py",
+                "purpose": "Exact captured sentiment child source/oracle/criterion review through existing decision-level approval and full-context loss mask; retain independently verified correct child actions only after independent review. No blanket parent release or new blind generation."
+              },
+              "files_check": {
+                "accepted": true,
+                "errors": [],
+                "failed": [],
+                "items": 1,
+                "passed": 1,
+                "pending": [],
+                "quality_version": 3,
+                "score": 1
+              },
+              "historical_parent_nonadmission": {
+                "bytes": 9444,
+                "path": "/home/werg/data/dgxops/teacher32-exact-sentiment-child-review-20261018/held-source-assignment.json",
+                "sha256": "9b357d1456c22ac694ed1e900d7f49607b47ef9158cf7c5e7697d9a2b774d9fa"
+              },
+              "id": "teacher-program:344c343d83fe692f4d37",
+              "only_exact_child_targets_approved": true,
+              "oracle": {
+                "accepted": true,
+                "level": "agreement",
+                "score": 0.9333333333333333
+              },
+              "policy_bindings": [
+                {
+                  "bytes": 9306,
+                  "path": "/home/werg/natlang/ts-host/src/teacher/curriculum-policy.ts",
+                  "sha256": "945af140dd29d7c4e57d31efa787bde8d3e5a3cbb99ef59b63432a707bbddbc6"
+                },
+                {
+                  "bytes": 8276,
+                  "path": "/home/werg/natlang/ts-host/dist/teacher/curriculum-policy.js",
+                  "sha256": "38cbecaffbddab07c6532a8190dced9fbd4c8c1a2000731f38b33d1aa875c757"
+                }
+              ],
+              "program_id": "inline-curriculum:sst-full-context-v1:fd133b549ec95bf23cdbd190:ownteacher-repair-v1",
+              "quality_reason": "quality_pending_partial_agreement",
+              "raw_row_sha256": "b5d8fffbe0750c075e0f5aa5978aa937a9cd44cf3101a5b66ac217bcd64f9af2",
+              "whole_parent_released": false
+            },
+            {
+              "actions": 42,
+              "assigned_use": {
+                "consumer": "/home/werg/data/dgxops/teacher32-exact-sentiment-child-review-20261018/exact-child-source-review.json",
+                "operator": "/home/werg/data/dgxops/audit-teacher32-full-held-source-assignment-20261018.py",
+                "purpose": "Exact captured sentiment child source/oracle/criterion review through existing decision-level approval and full-context loss mask; retain independently verified correct child actions only after independent review. No blanket parent release or new blind generation."
+              },
+              "files_check": {
+                "accepted": true,
+                "errors": [],
+                "failed": [],
+                "items": 1,
+                "passed": 1,
+                "pending": [],
+                "quality_version": 3,
+                "score": 1
+              },
+              "historical_parent_nonadmission": {
+                "bytes": 9444,
+                "path": "/home/werg/data/dgxops/teacher32-exact-sentiment-child-review-20261018/held-source-assignment.json",
+                "sha256": "9b357d1456c22ac694ed1e900d7f49607b47ef9158cf7c5e7697d9a2b774d9fa"
+              },
+              "id": "teacher-program:7359edd96ef715bff3c7",
+              "only_exact_child_targets_approved": true,
+              "oracle": {
+                "accepted": true,
+                "level": "agreement",
+                "score": 0.9166666666666666
+              },
+              "policy_bindings": [
+                {
+                  "bytes": 9306,
+                  "path": "/home/werg/natlang/ts-host/src/teacher/curriculum-policy.ts",
+                  "sha256": "945af140dd29d7c4e57d31efa787bde8d3e5a3cbb99ef59b63432a707bbddbc6"
+                },
+                {
+                  "bytes": 8276,
+                  "path": "/home/werg/natlang/ts-host/dist/teacher/curriculum-policy.js",
+                  "sha256": "38cbecaffbddab07c6532a8190dced9fbd4c8c1a2000731f38b33d1aa875c757"
+                }
+              ],
+              "program_id": "inline-curriculum:sst-full-context-v1:252e6d2acd1b672e358285b3:ownteacher-repair-v1",
+              "quality_reason": "quality_pending_partial_agreement",
+              "raw_row_sha256": "95de19aa6e6b13b718cb3ac4eba3bee1932d89e1f684ce0f0ef2de08d8e34dbf",
+              "whole_parent_released": false
+            },
+            {
+              "actions": 33,
+              "assigned_use": {
+                "consumer": "/home/werg/data/dgxops/teacher32-exact-sentiment-child-review-20261018/exact-child-source-review.json",
+                "operator": "/home/werg/data/dgxops/audit-teacher32-full-held-source-assignment-20261018.py",
+                "purpose": "Exact captured sentiment child source/oracle/criterion review through existing decision-level approval and full-context loss mask; retain independently verified correct child actions only after independent review. No blanket parent release or new blind generation."
+              },
+              "files_check": {
+                "accepted": true,
+                "errors": [],
+                "failed": [
+                  "inbox/6ede0ce8918fa0ee.md"
+                ],
+                "items": 15,
+                "passed": 14,
+                "pending": [],
+                "quality_version": 3,
+                "score": 0.9333333333333333
+              },
+              "historical_parent_nonadmission": {
+                "bytes": 9444,
+                "path": "/home/werg/data/dgxops/teacher32-exact-sentiment-child-review-20261018/held-source-assignment.json",
+                "sha256": "9b357d1456c22ac694ed1e900d7f49607b47ef9158cf7c5e7697d9a2b774d9fa"
+              },
+              "id": "teacher-program:8751d656e2a1ae0a4bbb",
+              "only_exact_child_targets_approved": true,
+              "oracle": {
+                "accepted": true,
+                "level": "exact"
+              },
+              "policy_bindings": [
+                {
+                  "bytes": 9306,
+                  "path": "/home/werg/natlang/ts-host/src/teacher/curriculum-policy.ts",
+                  "sha256": "945af140dd29d7c4e57d31efa787bde8d3e5a3cbb99ef59b63432a707bbddbc6"
+                },
+                {
+                  "bytes": 8276,
+                  "path": "/home/werg/natlang/ts-host/dist/teacher/curriculum-policy.js",
+                  "sha256": "38cbecaffbddab07c6532a8190dced9fbd4c8c1a2000731f38b33d1aa875c757"
+                }
+              ],
+              "program_id": "inline-curriculum:sst-full-context-v1:36300545af9cf4822235e6c6:ownteacher-repair-v1",
+              "quality_reason": "quality_pending_partial_files",
+              "raw_row_sha256": "e034305f84737333bc63cf29dc17131780e92b255a2438d14236468af52e3993",
+              "whole_parent_released": false
+            },
+            {
+              "actions": 26,
+              "assigned_use": {
+                "consumer": "/home/werg/data/dgxops/teacher32-exact-sentiment-child-review-20261018/exact-child-source-review.json",
+                "operator": "/home/werg/data/dgxops/audit-teacher32-full-held-source-assignment-20261018.py",
+                "purpose": "Exact captured sentiment child source/oracle/criterion review through existing decision-level approval and full-context loss mask; retain independently verified correct child actions only after independent review. No blanket parent release or new blind generation."
+              },
+              "files_check": {
+                "accepted": true,
+                "errors": [],
+                "failed": [],
+                "items": 1,
+                "passed": 1,
+                "pending": [],
+                "quality_version": 3,
+                "score": 1
+              },
+              "historical_parent_nonadmission": {
+                "bytes": 9444,
+                "path": "/home/werg/data/dgxops/teacher32-exact-sentiment-child-review-20261018/held-source-assignment.json",
+                "sha256": "9b357d1456c22ac694ed1e900d7f49607b47ef9158cf7c5e7697d9a2b774d9fa"
+              },
+              "id": "teacher-program:a38145516707b4fa0ad4",
+              "only_exact_child_targets_approved": true,
+              "oracle": {
+                "accepted": true,
+                "level": "agreement",
+                "score": 0.9333333333333333
+              },
+              "policy_bindings": [
+                {
+                  "bytes": 9306,
+                  "path": "/home/werg/natlang/ts-host/src/teacher/curriculum-policy.ts",
+                  "sha256": "945af140dd29d7c4e57d31efa787bde8d3e5a3cbb99ef59b63432a707bbddbc6"
+                },
+                {
+                  "bytes": 8276,
+                  "path": "/home/werg/natlang/ts-host/dist/teacher/curriculum-policy.js",
+                  "sha256": "38cbecaffbddab07c6532a8190dced9fbd4c8c1a2000731f38b33d1aa875c757"
+                }
+              ],
+              "program_id": "inline-curriculum:sst-full-context-v1:fd133b549ec95bf23cdbd190:ownteacher-repair-v1",
+              "quality_reason": "quality_pending_partial_agreement",
+              "raw_row_sha256": "36d151e4e90469359a03cce590c352a07cdba27f78f96301f51e102f770627ac",
+              "whole_parent_released": false
+            },
+            {
+              "actions": 44,
+              "assigned_use": {
+                "consumer": "/home/werg/data/dgxops/teacher32-exact-sentiment-child-review-20261018/exact-child-source-review.json",
+                "operator": "/home/werg/data/dgxops/audit-teacher32-full-held-source-assignment-20261018.py",
+                "purpose": "Exact captured sentiment child source/oracle/criterion review through existing decision-level approval and full-context loss mask; retain independently verified correct child actions only after independent review. No blanket parent release or new blind generation."
+              },
+              "files_check": {
+                "accepted": true,
+                "errors": [],
+                "failed": [
+                  "inbox/6ede0ce8918fa0ee.md"
+                ],
+                "items": 15,
+                "passed": 14,
+                "pending": [],
+                "quality_version": 3,
+                "score": 0.9333333333333333
+              },
+              "historical_parent_nonadmission": {
+                "bytes": 9444,
+                "path": "/home/werg/data/dgxops/teacher32-exact-sentiment-child-review-20261018/held-source-assignment.json",
+                "sha256": "9b357d1456c22ac694ed1e900d7f49607b47ef9158cf7c5e7697d9a2b774d9fa"
+              },
+              "id": "teacher-program:f479cc8c93e4c92095a1",
+              "only_exact_child_targets_approved": true,
+              "oracle": {
+                "accepted": true,
+                "level": "exact"
+              },
+              "policy_bindings": [
+                {
+                  "bytes": 9306,
+                  "path": "/home/werg/natlang/ts-host/src/teacher/curriculum-policy.ts",
+                  "sha256": "945af140dd29d7c4e57d31efa787bde8d3e5a3cbb99ef59b63432a707bbddbc6"
+                },
+                {
+                  "bytes": 8276,
+                  "path": "/home/werg/natlang/ts-host/dist/teacher/curriculum-policy.js",
+                  "sha256": "38cbecaffbddab07c6532a8190dced9fbd4c8c1a2000731f38b33d1aa875c757"
+                }
+              ],
+              "program_id": "inline-curriculum:sst-full-context-v1:36300545af9cf4822235e6c6:ownteacher-repair-v1",
+              "quality_reason": "quality_pending_partial_files",
+              "raw_row_sha256": "8200716a406fdb0c3321f82137bdfd91cbcfe3d24756546a76e2ddb736f54878",
+              "whole_parent_released": false
+            }
+          ],
+          "partial_parent_tasks_qualified": false,
+          "partial_source_actions": 183,
+          "partial_source_rows": [
+            "teacher-program:344c343d83fe692f4d37",
+            "teacher-program:7359edd96ef715bff3c7",
+            "teacher-program:8751d656e2a1ae0a4bbb",
+            "teacher-program:a38145516707b4fa0ad4",
+            "teacher-program:f479cc8c93e4c92095a1"
+          ],
+          "repair_source_actions": 0,
+          "repair_source_rows": [],
+          "repair_sources": [],
+          "source_actions": 183,
+          "source_rows": 5,
+          "training_admission": false
+        },
+        "models": {
+          "lfm25": {
+            "action_accounting": {
+              "converted_eligible_actions": 77,
+              "materializer_approved_actions": 77,
+              "omitted_actions": 106,
+              "post_materializer_rejections": [],
+              "source_actions": 183
+            },
+            "action_omissions": 106,
+            "decision_admission": {
+              "output_sha256": "2fd36899254682ee7e655b818c1395fb9be0b1148beff955bcc324d2a3d66714",
+              "path": "/mnt/external/natlang-development-data/teacher-incremental-7853-standard-20261017/admission/batch-0032/tranche-0000/decision-admission-cache/1d4601e7a211c3ada49c5239be49dfbfcc982ab146eb8406edcf4d78e2a05c96/receipt.json",
+              "sha256": "502b2395713e518ca119b8eab8bf2d256881463f1fe5d9a079b7df0a59109daa",
+              "summary": {
+                "accepted_rows": 0,
+                "authored_actions_held": 0,
+                "eligible_decisions": 77,
+                "output": "decisions.jsonl",
+                "partial_rows": 5,
+                "rejected_rows": 0,
+                "replayed_context_decisions": 0,
+                "training_decisions": 183
+              }
+            },
+            "eligible_turns": 77,
+            "exact_dedup_omissions": 0,
+            "expanded_tokenizer_fingerprint": "be949ec48f44e17b2b17e1131aeb1dab4262175ba20f9783ecd8e59c27a58105",
+            "explicit_history_reasoning_policy": "keep",
+            "materialization_partition": {
+              "deduplicated_actions": 0,
+              "emitted_actions": 77,
+              "materialized_source_rows": 0,
+              "other_omitted_actions": 106,
+              "partial_parent_repairs": [
+                {
+                  "actions": 38,
+                  "assigned_use": {
+                    "consumer": "/home/werg/data/dgxops/teacher32-exact-sentiment-child-review-20261018/exact-child-source-review.json",
+                    "operator": "/home/werg/data/dgxops/audit-teacher32-full-held-source-assignment-20261018.py",
+                    "purpose": "Exact captured sentiment child source/oracle/criterion review through existing decision-level approval and full-context loss mask; retain independently verified correct child actions only after independent review. No blanket parent release or new blind generation."
+                  },
+                  "files_check": {
+                    "accepted": true,
+                    "errors": [],
+                    "failed": [],
+                    "items": 1,
+                    "passed": 1,
+                    "pending": [],
+                    "quality_version": 3,
+                    "score": 1
+                  },
+                  "historical_parent_nonadmission": {
+                    "bytes": 9444,
+                    "path": "/home/werg/data/dgxops/teacher32-exact-sentiment-child-review-20261018/held-source-assignment.json",
+                    "sha256": "9b357d1456c22ac694ed1e900d7f49607b47ef9158cf7c5e7697d9a2b774d9fa"
+                  },
+                  "id": "teacher-program:344c343d83fe692f4d37",
+                  "only_exact_child_targets_approved": true,
+                  "oracle": {
+                    "accepted": true,
+                    "level": "agreement",
+                    "score": 0.9333333333333333
+                  },
+                  "policy_bindings": [
+                    {
+                      "bytes": 9306,
+                      "path": "/home/werg/natlang/ts-host/src/teacher/curriculum-policy.ts",
+                      "sha256": "945af140dd29d7c4e57d31efa787bde8d3e5a3cbb99ef59b63432a707bbddbc6"
+                    },
+                    {
+                      "bytes": 8276,
+                      "path": "/home/werg/natlang/ts-host/dist/teacher/curriculum-policy.js",
+                      "sha256": "38cbecaffbddab07c6532a8190dced9fbd4c8c1a2000731f38b33d1aa875c757"
+                    }
+                  ],
+                  "program_id": "inline-curriculum:sst-full-context-v1:fd133b549ec95bf23cdbd190:ownteacher-repair-v1",
+                  "quality_reason": "quality_pending_partial_agreement",
+                  "raw_row_sha256": "b5d8fffbe0750c075e0f5aa5978aa937a9cd44cf3101a5b66ac217bcd64f9af2",
+                  "whole_parent_released": false
+                },
+                {
+                  "actions": 42,
+                  "assigned_use": {
+                    "consumer": "/home/werg/data/dgxops/teacher32-exact-sentiment-child-review-20261018/exact-child-source-review.json",
+                    "operator": "/home/werg/data/dgxops/audit-teacher32-full-held-source-assignment-20261018.py",
+                    "purpose": "Exact captured sentiment child source/oracle/criterion review through existing decision-level approval and full-context loss mask; retain independently verified correct child actions only after independent review. No blanket parent release or new blind generation."
+                  },
+                  "files_check": {
+                    "accepted": true,
+                    "errors": [],
+                    "failed": [],
+                    "items": 1,
+                    "passed": 1,
+                    "pending": [],
+                    "quality_version": 3,
+                    "score": 1
+                  },
+                  "historical_parent_nonadmission": {
+                    "bytes": 9444,
+                    "path": "/home/werg/data/dgxops/teacher32-exact-sentiment-child-review-20261018/held-source-assignment.json",
+                    "sha256": "9b357d1456c22ac694ed1e900d7f49607b47ef9158cf7c5e7697d9a2b774d9fa"
+                  },
+                  "id": "teacher-program:7359edd96ef715bff3c7",
+                  "only_exact_child_targets_approved": true,
+                  "oracle": {
+                    "accepted": true,
+                    "level": "agreement",
+                    "score": 0.9166666666666666
+                  },
+                  "policy_bindings": [
+                    {
+                      "bytes": 9306,
+                      "path": "/home/werg/natlang/ts-host/src/teacher/curriculum-policy.ts",
+                      "sha256": "945af140dd29d7c4e57d31efa787bde8d3e5a3cbb99ef59b63432a707bbddbc6"
+                    },
+                    {
+                      "bytes": 8276,
+                      "path": "/home/werg/natlang/ts-host/dist/teacher/curriculum-policy.js",
+                      "sha256": "38cbecaffbddab07c6532a8190dced9fbd4c8c1a2000731f38b33d1aa875c757"
+                    }
+                  ],
+                  "program_id": "inline-curriculum:sst-full-context-v1:252e6d2acd1b672e358285b3:ownteacher-repair-v1",
+                  "quality_reason": "quality_pending_partial_agreement",
+                  "raw_row_sha256": "95de19aa6e6b13b718cb3ac4eba3bee1932d89e1f684ce0f0ef2de08d8e34dbf",
+                  "whole_parent_released": false
+                },
+                {
+                  "actions": 33,
+                  "assigned_use": {
+                    "consumer": "/home/werg/data/dgxops/teacher32-exact-sentiment-child-review-20261018/exact-child-source-review.json",
+                    "operator": "/home/werg/data/dgxops/audit-teacher32-full-held-source-assignment-20261018.py",
+                    "purpose": "Exact captured sentiment child source/oracle/criterion review through existing decision-level approval and full-context loss mask; retain independently verified correct child actions only after independent review. No blanket parent release or new blind generation."
+                  },
+                  "files_check": {
+                    "accepted": true,
+                    "errors": [],
+                    "failed": [
+                      "inbox/6ede0ce8918fa0ee.md"
+                    ],
+                    "items": 15,
+                    "passed": 14,
+                    "pending": [],
+                    "quality_version": 3,
+                    "score": 0.9333333333333333
+                  },
+                  "historical_parent_nonadmission": {
+                    "bytes": 9444,
+                    "path": "/home/werg/data/dgxops/teacher32-exact-sentiment-child-review-20261018/held-source-assignment.json",
+                    "sha256": "9b357d1456c22ac694ed1e900d7f49607b47ef9158cf7c5e7697d9a2b774d9fa"
+                  },
+                  "id": "teacher-program:8751d656e2a1ae0a4bbb",
+                  "only_exact_child_targets_approved": true,
+                  "oracle": {
+                    "accepted": true,
+                    "level": "exact"
+                  },
+                  "policy_bindings": [
+                    {
+                      "bytes": 9306,
+                      "path": "/home/werg/natlang/ts-host/src/teacher/curriculum-policy.ts",
+                      "sha256": "945af140dd29d7c4e57d31efa787bde8d3e5a3cbb99ef59b63432a707bbddbc6"
+                    },
+                    {
+                      "bytes": 8276,
+                      "path": "/home/werg/natlang/ts-host/dist/teacher/curriculum-policy.js",
+                      "sha256": "38cbecaffbddab07c6532a8190dced9fbd4c8c1a2000731f38b33d1aa875c757"
+                    }
+                  ],
+                  "program_id": "inline-curriculum:sst-full-context-v1:36300545af9cf4822235e6c6:ownteacher-repair-v1",
+                  "quality_reason": "quality_pending_partial_files",
+                  "raw_row_sha256": "e034305f84737333bc63cf29dc17131780e92b255a2438d14236468af52e3993",
+                  "whole_parent_released": false
+                },
+                {
+                  "actions": 26,
+                  "assigned_use": {
+                    "consumer": "/home/werg/data/dgxops/teacher32-exact-sentiment-child-review-20261018/exact-child-source-review.json",
+                    "operator": "/home/werg/data/dgxops/audit-teacher32-full-held-source-assignment-20261018.py",
+                    "purpose": "Exact captured sentiment child source/oracle/criterion review through existing decision-level approval and full-context loss mask; retain independently verified correct child actions only after independent review. No blanket parent release or new blind generation."
+                  },
+                  "files_check": {
+                    "accepted": true,
+                    "errors": [],
+                    "failed": [],
+                    "items": 1,
+                    "passed": 1,
+                    "pending": [],
+                    "quality_version": 3,
+                    "score": 1
+                  },
+                  "historical_parent_nonadmission": {
+                    "bytes": 9444,
+                    "path": "/home/werg/data/dgxops/teacher32-exact-sentiment-child-review-20261018/held-source-assignment.json",
+                    "sha256": "9b357d1456c22ac694ed1e900d7f49607b47ef9158cf7c5e7697d9a2b774d9fa"
+                  },
+                  "id": "teacher-program:a38145516707b4fa0ad4",
+                  "only_exact_child_targets_approved": true,
+                  "oracle": {
+                    "accepted": true,
+                    "level": "agreement",
+                    "score": 0.9333333333333333
+                  },
+                  "policy_bindings": [
+                    {
+                      "bytes": 9306,
+                      "path": "/home/werg/natlang/ts-host/src/teacher/curriculum-policy.ts",
+                      "sha256": "945af140dd29d7c4e57d31efa787bde8d3e5a3cbb99ef59b63432a707bbddbc6"
+                    },
+                    {
+                      "bytes": 8276,
+                      "path": "/home/werg/natlang/ts-host/dist/teacher/curriculum-policy.js",
+                      "sha256": "38cbecaffbddab07c6532a8190dced9fbd4c8c1a2000731f38b33d1aa875c757"
+                    }
+                  ],
+                  "program_id": "inline-curriculum:sst-full-context-v1:fd133b549ec95bf23cdbd190:ownteacher-repair-v1",
+                  "quality_reason": "quality_pending_partial_agreement",
+                  "raw_row_sha256": "36d151e4e90469359a03cce590c352a07cdba27f78f96301f51e102f770627ac",
+                  "whole_parent_released": false
+                },
+                {
+                  "actions": 44,
+                  "assigned_use": {
+                    "consumer": "/home/werg/data/dgxops/teacher32-exact-sentiment-child-review-20261018/exact-child-source-review.json",
+                    "operator": "/home/werg/data/dgxops/audit-teacher32-full-held-source-assignment-20261018.py",
+                    "purpose": "Exact captured sentiment child source/oracle/criterion review through existing decision-level approval and full-context loss mask; retain independently verified correct child actions only after independent review. No blanket parent release or new blind generation."
+                  },
+                  "files_check": {
+                    "accepted": true,
+                    "errors": [],
+                    "failed": [
+                      "inbox/6ede0ce8918fa0ee.md"
+                    ],
+                    "items": 15,
+                    "passed": 14,
+                    "pending": [],
+                    "quality_version": 3,
+                    "score": 0.9333333333333333
+                  },
+                  "historical_parent_nonadmission": {
+                    "bytes": 9444,
+                    "path": "/home/werg/data/dgxops/teacher32-exact-sentiment-child-review-20261018/held-source-assignment.json",
+                    "sha256": "9b357d1456c22ac694ed1e900d7f49607b47ef9158cf7c5e7697d9a2b774d9fa"
+                  },
+                  "id": "teacher-program:f479cc8c93e4c92095a1",
+                  "only_exact_child_targets_approved": true,
+                  "oracle": {
+                    "accepted": true,
+                    "level": "exact"
+                  },
+                  "policy_bindings": [
+                    {
+                      "bytes": 9306,
+                      "path": "/home/werg/natlang/ts-host/src/teacher/curriculum-policy.ts",
+                      "sha256": "945af140dd29d7c4e57d31efa787bde8d3e5a3cbb99ef59b63432a707bbddbc6"
+                    },
+                    {
+                      "bytes": 8276,
+                      "path": "/home/werg/natlang/ts-host/dist/teacher/curriculum-policy.js",
+                      "sha256": "38cbecaffbddab07c6532a8190dced9fbd4c8c1a2000731f38b33d1aa875c757"
+                    }
+                  ],
+                  "program_id": "inline-curriculum:sst-full-context-v1:36300545af9cf4822235e6c6:ownteacher-repair-v1",
+                  "quality_reason": "quality_pending_partial_files",
+                  "raw_row_sha256": "8200716a406fdb0c3321f82137bdfd91cbcfe3d24756546a76e2ddb736f54878",
+                  "whole_parent_released": false
+                }
+              ],
+              "partial_parent_tasks_qualified": false,
+              "partial_source_actions": 183,
+              "partial_source_rows": [
+                "teacher-program:344c343d83fe692f4d37",
+                "teacher-program:7359edd96ef715bff3c7",
+                "teacher-program:8751d656e2a1ae0a4bbb",
+                "teacher-program:a38145516707b4fa0ad4",
+                "teacher-program:f479cc8c93e4c92095a1"
+              ],
+              "repair_source_actions": 0,
+              "repair_source_rows": [],
+              "repair_sources": [],
+              "source_actions": 183,
+              "source_rows": 5,
+              "training_admission": false
+            },
+            "outputs": {
+              "test": {
+                "bytes": 13,
+                "max_row_tokens": 0,
+                "path": "/home/werg/natlang/runs/qwen-verified-positive-native-graphs-20261017-recovery7853-batch0032-tranche0000-quality-exact-child-v1/lfm25/test/native-graphs.jsonl.zst",
+                "rows": 0,
+                "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c",
+                "tokens": 0
+              },
+              "train": {
+                "bytes": 83061,
+                "max_row_tokens": 12421,
+                "path": "/home/werg/natlang/runs/qwen-verified-positive-native-graphs-20261017-recovery7853-batch0032-tranche0000-quality-exact-child-v1/lfm25/train/native-graphs.jsonl.zst",
+                "rows": 77,
+                "sha256": "f540123406864346ea2944ceca600c0007f0d85ae6bf7c597bab24489cd690a4",
+                "tokens": 700005
+              }
+            },
+            "receipt": {
+              "bytes": 138216,
+              "path": "/home/werg/natlang/runs/qwen-verified-positive-native-graphs-20261017-recovery7853-batch0032-tranche0000-quality-exact-child-v1/lfm25/receipt.json",
+              "sha256": "61fad00baffc47e7aaa5b7c29eed21c354be2234c89f0f35c8e10976b92ea290"
+            },
+            "source_rows": 5
+          },
+          "mellum21": {
+            "action_accounting": {
+              "converted_eligible_actions": 77,
+              "materializer_approved_actions": 77,
+              "omitted_actions": 106,
+              "post_materializer_rejections": [],
+              "source_actions": 183
+            },
+            "action_omissions": 106,
+            "decision_admission": {
+              "output_sha256": "2fd36899254682ee7e655b818c1395fb9be0b1148beff955bcc324d2a3d66714",
+              "path": "/mnt/external/natlang-development-data/teacher-incremental-7853-standard-20261017/admission/batch-0032/tranche-0000/decision-admission-cache/1d4601e7a211c3ada49c5239be49dfbfcc982ab146eb8406edcf4d78e2a05c96/receipt.json",
+              "sha256": "502b2395713e518ca119b8eab8bf2d256881463f1fe5d9a079b7df0a59109daa",
+              "summary": {
+                "accepted_rows": 0,
+                "authored_actions_held": 0,
+                "eligible_decisions": 77,
+                "output": "decisions.jsonl",
+                "partial_rows": 5,
+                "rejected_rows": 0,
+                "replayed_context_decisions": 0,
+                "training_decisions": 183
+              }
+            },
+            "eligible_turns": 77,
+            "exact_dedup_omissions": 0,
+            "expanded_tokenizer_fingerprint": "fbf22d8773d09be802cb9977895067db36cdfba747fcb24b02ddbf1312d3778f",
+            "explicit_history_reasoning_policy": null,
+            "materialization_partition": {
+              "deduplicated_actions": 0,
+              "emitted_actions": 77,
+              "materialized_source_rows": 0,
+              "other_omitted_actions": 106,
+              "partial_parent_repairs": [
+                {
+                  "actions": 38,
+                  "assigned_use": {
+                    "consumer": "/home/werg/data/dgxops/teacher32-exact-sentiment-child-review-20261018/exact-child-source-review.json",
+                    "operator": "/home/werg/data/dgxops/audit-teacher32-full-held-source-assignment-20261018.py",
+                    "purpose": "Exact captured sentiment child source/oracle/criterion review through existing decision-level approval and full-context loss mask; retain independently verified correct child actions only after independent review. No blanket parent release or new blind generation."
+                  },
+                  "files_check": {
+                    "accepted": true,
+                    "errors": [],
+                    "failed": [],
+                    "items": 1,
+                    "passed": 1,
+                    "pending": [],
+                    "quality_version": 3,
+                    "score": 1
+                  },
+                  "historical_parent_nonadmission": {
+                    "bytes": 9444,
+                    "path": "/home/werg/data/dgxops/teacher32-exact-sentiment-child-review-20261018/held-source-assignment.json",
+                    "sha256": "9b357d1456c22ac694ed1e900d7f49607b47ef9158cf7c5e7697d9a2b774d9fa"
+                  },
+                  "id": "teacher-program:344c343d83fe692f4d37",
+                  "only_exact_child_targets_approved": true,
+                  "oracle": {
+                    "accepted": true,
+                    "level": "agreement",
+                    "score": 0.9333333333333333
+                  },
+                  "policy_bindings": [
+                    {
+                      "bytes": 9306,
+                      "path": "/home/werg/natlang/ts-host/src/teacher/curriculum-policy.ts",
+                      "sha256": "945af140dd29d7c4e57d31efa787bde8d3e5a3cbb99ef59b63432a707bbddbc6"
+                    },
+                    {
+                      "bytes": 8276,
+                      "path": "/home/werg/natlang/ts-host/dist/teacher/curriculum-policy.js",
+                      "sha256": "38cbecaffbddab07c6532a8190dced9fbd4c8c1a2000731f38b33d1aa875c757"
+                    }
+                  ],
+                  "program_id": "inline-curriculum:sst-full-context-v1:fd133b549ec95bf23cdbd190:ownteacher-repair-v1",
+                  "quality_reason": "quality_pending_partial_agreement",
+                  "raw_row_sha256": "b5d8fffbe0750c075e0f5aa5978aa937a9cd44cf3101a5b66ac217bcd64f9af2",
+                  "whole_parent_released": false
+                },
+                {
+                  "actions": 42,
+                  "assigned_use": {
+                    "consumer": "/home/werg/data/dgxops/teacher32-exact-sentiment-child-review-20261018/exact-child-source-review.json",
+                    "operator": "/home/werg/data/dgxops/audit-teacher32-full-held-source-assignment-20261018.py",
+                    "purpose": "Exact captured sentiment child source/oracle/criterion review through existing decision-level approval and full-context loss mask; retain independently verified correct child actions only after independent review. No blanket parent release or new blind generation."
+                  },
+                  "files_check": {
+                    "accepted": true,
+                    "errors": [],
+                    "failed": [],
+                    "items": 1,
+                    "passed": 1,
+                    "pending": [],
+                    "quality_version": 3,
+                    "score": 1
+                  },
+                  "historical_parent_nonadmission": {
+                    "bytes": 9444,
+                    "path": "/home/werg/data/dgxops/teacher32-exact-sentiment-child-review-20261018/held-source-assignment.json",
+                    "sha256": "9b357d1456c22ac694ed1e900d7f49607b47ef9158cf7c5e7697d9a2b774d9fa"
+                  },
+                  "id": "teacher-program:7359edd96ef715bff3c7",
+                  "only_exact_child_targets_approved": true,
+                  "oracle": {
+                    "accepted": true,
+                    "level": "agreement",
+                    "score": 0.9166666666666666
+                  },
+                  "policy_bindings": [
+                    {
+                      "bytes": 9306,
+                      "path": "/home/werg/natlang/ts-host/src/teacher/curriculum-policy.ts",
+                      "sha256": "945af140dd29d7c4e57d31efa787bde8d3e5a3cbb99ef59b63432a707bbddbc6"
+                    },
+                    {
+                      "bytes": 8276,
+                      "path": "/home/werg/natlang/ts-host/dist/teacher/curriculum-policy.js",
+                      "sha256": "38cbecaffbddab07c6532a8190dced9fbd4c8c1a2000731f38b33d1aa875c757"
+                    }
+                  ],
+                  "program_id": "inline-curriculum:sst-full-context-v1:252e6d2acd1b672e358285b3:ownteacher-repair-v1",
+                  "quality_reason": "quality_pending_partial_agreement",
+                  "raw_row_sha256": "95de19aa6e6b13b718cb3ac4eba3bee1932d89e1f684ce0f0ef2de08d8e34dbf",
+                  "whole_parent_released": false
+                },
+                {
+                  "actions": 33,
+                  "assigned_use": {
+                    "consumer": "/home/werg/data/dgxops/teacher32-exact-sentiment-child-review-20261018/exact-child-source-review.json",
+                    "operator": "/home/werg/data/dgxops/audit-teacher32-full-held-source-assignment-20261018.py",
+                    "purpose": "Exact captured sentiment child source/oracle/criterion review through existing decision-level approval and full-context loss mask; retain independently verified correct child actions only after independent review. No blanket parent release or new blind generation."
+                  },
+                  "files_check": {
+                    "accepted": true,
+                    "errors": [],
+                    "failed": [
+                      "inbox/6ede0ce8918fa0ee.md"
+                    ],
+                    "items": 15,
+                    "passed": 14,
+                    "pending": [],
+                    "quality_version": 3,
+                    "score": 0.9333333333333333
+                  },
+                  "historical_parent_nonadmission": {
+                    "bytes": 9444,
+                    "path": "/home/werg/data/dgxops/teacher32-exact-sentiment-child-review-20261018/held-source-assignment.json",
+                    "sha256": "9b357d1456c22ac694ed1e900d7f49607b47ef9158cf7c5e7697d9a2b774d9fa"
+                  },
+                  "id": "teacher-program:8751d656e2a1ae0a4bbb",
+                  "only_exact_child_targets_approved": true,
+                  "oracle": {
+                    "accepted": true,
+                    "level": "exact"
+                  },
+                  "policy_bindings": [
+                    {
+                      "bytes": 9306,
+                      "path": "/home/werg/natlang/ts-host/src/teacher/curriculum-policy.ts",
+                      "sha256": "945af140dd29d7c4e57d31efa787bde8d3e5a3cbb99ef59b63432a707bbddbc6"
+                    },
+                    {
+                      "bytes": 8276,
+                      "path": "/home/werg/natlang/ts-host/dist/teacher/curriculum-policy.js",
+                      "sha256": "38cbecaffbddab07c6532a8190dced9fbd4c8c1a2000731f38b33d1aa875c757"
+                    }
+                  ],
+                  "program_id": "inline-curriculum:sst-full-context-v1:36300545af9cf4822235e6c6:ownteacher-repair-v1",
+                  "quality_reason": "quality_pending_partial_files",
+                  "raw_row_sha256": "e034305f84737333bc63cf29dc17131780e92b255a2438d14236468af52e3993",
+                  "whole_parent_released": false
+                },
+                {
+                  "actions": 26,
+                  "assigned_use": {
+                    "consumer": "/home/werg/data/dgxops/teacher32-exact-sentiment-child-review-20261018/exact-child-source-review.json",
+                    "operator": "/home/werg/data/dgxops/audit-teacher32-full-held-source-assignment-20261018.py",
+                    "purpose": "Exact captured sentiment child source/oracle/criterion review through existing decision-level approval and full-context loss mask; retain independently verified correct child actions only after independent review. No blanket parent release or new blind generation."
+                  },
+                  "files_check": {
+                    "accepted": true,
+                    "errors": [],
+                    "failed": [],
+                    "items": 1,
+                    "passed": 1,
+                    "pending": [],
+                    "quality_version": 3,
+                    "score": 1
+                  },
+                  "historical_parent_nonadmission": {
+                    "bytes": 9444,
+                    "path": "/home/werg/data/dgxops/teacher32-exact-sentiment-child-review-20261018/held-source-assignment.json",
+                    "sha256": "9b357d1456c22ac694ed1e900d7f49607b47ef9158cf7c5e7697d9a2b774d9fa"
+                  },
+                  "id": "teacher-program:a38145516707b4fa0ad4",
+                  "only_exact_child_targets_approved": true,
+                  "oracle": {
+                    "accepted": true,
+                    "level": "agreement",
+                    "score": 0.9333333333333333
+                  },
+                  "policy_bindings": [
+                    {
+                      "bytes": 9306,
+                      "path": "/home/werg/natlang/ts-host/src/teacher/curriculum-policy.ts",
+                      "sha256": "945af140dd29d7c4e57d31efa787bde8d3e5a3cbb99ef59b63432a707bbddbc6"
+                    },
+                    {
+                      "bytes": 8276,
+                      "path": "/home/werg/natlang/ts-host/dist/teacher/curriculum-policy.js",
+                      "sha256": "38cbecaffbddab07c6532a8190dced9fbd4c8c1a2000731f38b33d1aa875c757"
+                    }
+                  ],
+                  "program_id": "inline-curriculum:sst-full-context-v1:fd133b549ec95bf23cdbd190:ownteacher-repair-v1",
+                  "quality_reason": "quality_pending_partial_agreement",
+                  "raw_row_sha256": "36d151e4e90469359a03cce590c352a07cdba27f78f96301f51e102f770627ac",
+                  "whole_parent_released": false
+                },
+                {
+                  "actions": 44,
+                  "assigned_use": {
+                    "consumer": "/home/werg/data/dgxops/teacher32-exact-sentiment-child-review-20261018/exact-child-source-review.json",
+                    "operator": "/home/werg/data/dgxops/audit-teacher32-full-held-source-assignment-20261018.py",
+                    "purpose": "Exact captured sentiment child source/oracle/criterion review through existing decision-level approval and full-context loss mask; retain independently verified correct child actions only after independent review. No blanket parent release or new blind generation."
+                  },
+                  "files_check": {
+                    "accepted": true,
+                    "errors": [],
+                    "failed": [
+                      "inbox/6ede0ce8918fa0ee.md"
+                    ],
+                    "items": 15,
+                    "passed": 14,
+                    "pending": [],
+                    "quality_version": 3,
+                    "score": 0.9333333333333333
+                  },
+                  "historical_parent_nonadmission": {
+                    "bytes": 9444,
+                    "path": "/home/werg/data/dgxops/teacher32-exact-sentiment-child-review-20261018/held-source-assignment.json",
+                    "sha256": "9b357d1456c22ac694ed1e900d7f49607b47ef9158cf7c5e7697d9a2b774d9fa"
+                  },
+                  "id": "teacher-program:f479cc8c93e4c92095a1",
+                  "only_exact_child_targets_approved": true,
+                  "oracle": {
+                    "accepted": true,
+                    "level": "exact"
+                  },
+                  "policy_bindings": [
+                    {
+                      "bytes": 9306,
+                      "path": "/home/werg/natlang/ts-host/src/teacher/curriculum-policy.ts",
+                      "sha256": "945af140dd29d7c4e57d31efa787bde8d3e5a3cbb99ef59b63432a707bbddbc6"
+                    },
+                    {
+                      "bytes": 8276,
+                      "path": "/home/werg/natlang/ts-host/dist/teacher/curriculum-policy.js",
+                      "sha256": "38cbecaffbddab07c6532a8190dced9fbd4c8c1a2000731f38b33d1aa875c757"
+                    }
+                  ],
+                  "program_id": "inline-curriculum:sst-full-context-v1:36300545af9cf4822235e6c6:ownteacher-repair-v1",
+                  "quality_reason": "quality_pending_partial_files",
+                  "raw_row_sha256": "8200716a406fdb0c3321f82137bdfd91cbcfe3d24756546a76e2ddb736f54878",
+                  "whole_parent_released": false
+                }
+              ],
+              "partial_parent_tasks_qualified": false,
+              "partial_source_actions": 183,
+              "partial_source_rows": [
+                "teacher-program:344c343d83fe692f4d37",
+                "teacher-program:7359edd96ef715bff3c7",
+                "teacher-program:8751d656e2a1ae0a4bbb",
+                "teacher-program:a38145516707b4fa0ad4",
+                "teacher-program:f479cc8c93e4c92095a1"
+              ],
+              "repair_source_actions": 0,
+              "repair_source_rows": [],
+              "repair_sources": [],
+              "source_actions": 183,
+              "source_rows": 5,
+              "training_admission": false
+            },
+            "outputs": {
+              "test": {
+                "bytes": 13,
+                "max_row_tokens": 0,
+                "path": "/home/werg/natlang/runs/qwen-verified-positive-native-graphs-20261017-recovery7853-batch0032-tranche0000-quality-exact-child-v1/mellum21/test/native-graphs.jsonl.zst",
+                "rows": 0,
+                "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c",
+                "tokens": 0
+              },
+              "train": {
+                "bytes": 80047,
+                "max_row_tokens": 12372,
+                "path": "/home/werg/natlang/runs/qwen-verified-positive-native-graphs-20261017-recovery7853-batch0032-tranche0000-quality-exact-child-v1/mellum21/train/native-graphs.jsonl.zst",
+                "rows": 77,
+                "sha256": "910496fcaa18c1d07cc0bf562ba841258083964257c434718c817c4fa5f4cc06",
+                "tokens": 698438
+              }
+            },
+            "receipt": {
+              "bytes": 138426,
+              "path": "/home/werg/natlang/runs/qwen-verified-positive-native-graphs-20261017-recovery7853-batch0032-tranche0000-quality-exact-child-v1/mellum21/receipt.json",
+              "sha256": "197eea0f343054cb05507e861e25879f5f96bea38b4bf0541544d682962d8b7b"
+            },
+            "source_rows": 5
+          }
+        },
+        "quality_view": "exact-child-v1",
+        "validation_proof": {
+          "path": "/home/werg/natlang/runs/qwen-verified-positive-native-graphs-20261017-recovery7853-batch0032-tranche0000-quality-exact-child-v1/validation-proof.json",
+          "sha256": "7baa9f37ca9f2543dbbeee98b0fba78a4230aeadef6eb5bb3dbf047ce7bb75a9",
+          "bytes": 48284
+        },
+        "batch": 32,
+        "tranche": 0
+      },
+      "license_provenance": "Project-collected exact trajectories from the pinned self-hosted Qwen3.8-Flash-Next-NVFP4 base teacher; primary source provenance retained. Licenses recorded as facts.",
+      "split": "Train-only; empty test views. Current global held/quality/pending and decision protection enforced.",
+      "note": "Full captured trajectory context retained with all earlier assistant target weights zero for these partial-parent graphs; only exact approved child target receives assistant loss. Not student on-policy data or authentic communication graphs. Zero exposure until recorded by training."
     }
   ],
   "coverage_backlog": [
