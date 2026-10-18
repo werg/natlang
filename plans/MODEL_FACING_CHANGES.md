@@ -1174,7 +1174,9 @@ nor optimal teacher trajectories. No held inputs, answers or traces were used.
 
 Still pending: two own-sandbox Qwen measurements of the repaired12 TRAIN tasks
 (`079b1279232f211294922265e88eca187066899a09360af84e43ace9e9b84dee`),
-48 actual trajectories per root mode (group4). The existing authored-root mode
+48 actual trajectories per root mode: three private-child authored tasks×16
+and all12 student-root tasks×4. Nine literal authored roots are static proofs
+with zero model calls and never count as live measurements. The authored-root mode
 executes the authored reference root and samples children; whole-student-root
 mode samples root and children. These are distinct model-facing contexts.
 The old step7750 diagnostic stopped on the unrepaired source with only6 authored

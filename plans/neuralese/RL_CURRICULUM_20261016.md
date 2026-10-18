@@ -77,7 +77,7 @@ All exact expected outcomes use existing verifiers. Every private trajectory
 contract sets minimum edges/nodes/iterations to zero: communication is exercised
 by the diagnostic scaffold, never required by the reward.
 
-For the 12-by-4 live window, retain the three private authored-root contracts.
+For live measurement, retain the three private authored-root contracts.
 Converting them to student-root mode removes the fixed communication exercise
 and cannot qualify native-return transport. Production student-root collection
 may use any correct solution; it has no mandatory private calls. A project
@@ -103,9 +103,11 @@ rerun its old source/runtime blindly. Retain its exact traces only for the
 assigned historical native-return/runtime investigation.
 
 Current obligations are separately assigned: the generation supervisor must
-serve the repaired12 TRAIN cases through the existing Qwen guardian/feeder as
-explicit group4 authored and group4 student packets, recording actual48 outcomes
-per mode plus source, actor, runtime and text-emulation provenance. The student
+serve two explicit packets through the existing Qwen guardian/feeder: the three
+private-child authored roots with group16, and all12 whole-student roots with
+group4. Each requires48 actual sampled trajectories plus source, actor, runtime
+and text-emulation provenance. The nine authored literal roots make zero model
+calls and remain static proofs, not live measurements. The student
 supervisor must separately qualify actual native positional-KV/hybrid-state
 execution at a warranted current-checkpoint boundary. Qwen text emulation cannot
 qualify student native state transport. Full48 scored results are still pending;
@@ -194,3 +196,25 @@ Keep those useful accepted captures and provenance. They are not the missing
 The same audit finds actual selected samples for77 of the128 admitted task IDs
 in registered views; this is not a complete-attempt or all-positive claim.
 Original negative grades in reviewed source views remain unchanged.
+
+
+## Current source schema and meaningful live windows (2026-10-18)
+
+The historical079b repaired12 descriptor was incomplete and failed shared
+`validateCurriculum`/admission metadata before any model call. Retain its failed
+reference receipts. The current88358421 source adds complete schema and scripted
+reference witnesses while preserving every original task, oracle, root eval,
+source/group/split and pending-live-48 field. Its exact metadata-repair witness is
+`/home/werg/data/dgxops/rl-curriculum-schema-repaired-teacher-both-roots-v3-20261018/source-metadata-repair-witness.json`
+(SHA-25634ee27c90586f0257c214a0b2e06d527c8a06b193a4afa0b3e96b06f99b2e0d8).
+All12 passed current scripted text-reference execution and unchanged admission
+with zero model calls. The authored subset keeps only the three original private
+roots, byte-for-byte, with a separate current protected qualification.
+
+Measure authored3×16 and student12×4 through the existing exact full queues,
+shards, journals and resume protocol. Inspect the first finished captured key of
+each mode for actual sampled provider replies. If it has none, drain only that
+new source's exact workers, preserve the same attempted key and investigate;
+other useful source slots continue. Static literal execution, reference-driver
+responses and generated queue entries never count as sampled model trajectories.
+Both live windows and current student native-KV qualification remain pending.
