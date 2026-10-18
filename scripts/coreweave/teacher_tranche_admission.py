@@ -400,7 +400,7 @@ def verify_teacher_action_accounting(raw_rows, decision_keys, receipt, summary):
     A rendering omission needs its own exact renderer proof; it cannot pass this
     non-rendering verifier merely because a receipt declares a lower count.
     """
-    from scripts.neuralese_data.build_verified_teacher_trajectory_graphs import admitted_teacher_turn
+    from scripts.neuralese_data.build_verified_teacher_trajectory_graphs import admitted_teacher_turn, captured_text_emulation_context
     if not isinstance(decision_keys, dict):
         raise ValueError('action accounting requires exact materialized decisions')
     wanted = {(ident, index) for ident, row in raw_rows.items()
@@ -423,11 +423,16 @@ def verify_teacher_action_accounting(raw_rows, decision_keys, receipt, summary):
         for index, turn in enumerate(row['trajectory']):
             accepted, decision = admitted_teacher_turn(row, index, turn, decision_keys)
             key = (ident, index)
+            render_omission = None
             if accepted:
+                _, _, _, render_omission = captured_text_emulation_context(
+                    turn, turn.get('context'), turn.get('tools_offered'))
+            if accepted and render_omission is None:
                 eligible.add(key)
             else:
                 expected = {'source_row_id': ident, 'teacher_turn_index': index,
-                            'reason': decision.get('reason'), 'decision': decision}
+                            **(render_omission if render_omission is not None else {'reason': decision.get('reason')}),
+                            'decision': decision}
                 rejected[key] = expected
                 if decision_keys.get(key, {}).get('approved') is True:
                     filtered.append(expected)
