@@ -166,7 +166,21 @@ def _prune_run(role, declaration, root, apply, api, policy_binding, claim):
     selected = candidates(role, state, files, protected)
     if view is not None:
         if view['last_verified_step']>state['last_verified_step']:
-            raise ValueError('inference pointer is ahead of verified full recovery')
+            # Progress/cohort decoding may deliberately lag a separately
+            # exported full checkpoint. Verify that exact private parent; do
+            # not advance or reinterpret the decoded progress authority.
+            parent=view['inference_source']
+            full=(view.get('derivation')or{}).get('full_private_receipt')
+            expected={'sha256':parent['training_checkpoint_sha256'],
+                      'bytes':parent['training_checkpoint_bytes']}
+            if (not isinstance(full,dict)or full.get('run')!=declaration['run']
+                    or full.get('identity')!=expected
+                    or full.get('name')!=f"{role}/{expected['sha256']}/{role}-native-checkpoint-step-{parent['step']}.pt"):
+                raise ValueError('inference pointer is ahead without an exact verified private full parent')
+            # Reuse the existing receipt/readback/listing verifier. Its
+            # candidate list is intentionally discarded: the full-checkpoint
+            # pruning frontier remains the decoded recovery state's frontier.
+            candidates(role,{'last_verified_step':parent['step'],'receipt':full},files,protected)
         if (view['last_verified_step']==state['last_verified_step'] and
                 view['inference_source']['training_checkpoint_sha256']!=state['receipt']['identity']['sha256']):
             raise ValueError('inference pointer and full recovery disagree at the same step')

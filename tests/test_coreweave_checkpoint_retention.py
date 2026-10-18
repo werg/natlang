@@ -182,3 +182,33 @@ def test_mismatched_valid_dependency_receipts_fail_closed(tmp_path,damage):
     policy.write_text(json.dumps(declaration))
     with pytest.raises(ValueError):retention.tick(policy,tmp_path/'journal',apply=True,api=api,ownership_directory=tmp_path/'owners')
     assert not deleted
+
+
+@pytest.mark.parametrize('damage',[None,'missing_receipt','readback','run','identity','name','missing_object','size'])
+def test_ahead_inference_requires_exact_private_parent_without_advancing_full_frontier(tmp_path,damage):
+    name,files,deleted,api,policy,view,receipts,parent=with_inference_views(tmp_path)
+    state_path=tmp_path/'state.json';before=state_path.read_bytes()
+    full=json.loads(before)['receipt'];full['name']=name(4)
+    advanced={'last_verified_step':4,'receipt':receipts[4],'inference_source':parent(4),
+              'derivation':{'full_private_receipt':full}}
+    if damage=='missing_receipt':advanced.pop('derivation')
+    if damage=='readback':full['independent_verification']['sha256']='f'*64
+    if damage=='run':full['run']='foreign/run'
+    if damage=='identity':full['identity']={**full['identity'],'sha256':'f'*64}
+    if damage=='name':full['name']=name(3)
+    if damage=='missing_object':del files[name(4)]
+    if damage=='size':files[name(4)].size+=1
+    view.write_text(json.dumps(advanced))
+    invoke=lambda:retention.tick(policy,tmp_path/'journal',apply=True,api=api,ownership_directory=tmp_path/'owners')
+    if damage:
+        with pytest.raises(ValueError):invoke()
+        assert not deleted
+    else:
+        assert invoke()[0]['verified_latest_step']==3
+        assert set(deleted)=={name(1),receipts[1]['name'],receipts[2]['name'],receipts[3]['name']}
+        assert name(3)in files and name(4)in files and receipts[4]['name']in files
+        intent=json.loads(next((tmp_path/'journal').glob('*-intent-*.json')).read_text())
+        assert intent['verified_export_state']['last_verified_step']==3
+        assert intent['verified_inference_export_state']==advanced
+        assert name(4)in intent['protected_files']
+    assert state_path.read_bytes()==before

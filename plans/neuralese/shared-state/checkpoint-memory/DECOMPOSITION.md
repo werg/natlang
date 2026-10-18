@@ -30,3 +30,16 @@ not assumed safe. A controlled recovery may lose explicitly counted unsaved
 updates; the existing verified full checkpoint and actual admitted source state
 remain authoritative. Do not inject code into the running learner or claim an
 unperformed final save.
+# Independently published inference parents
+
+The owner retention policy keeps active recovery and quality dependencies while
+pruning superseded private exports. The exact artifact verifier may accept an
+inference pointer newer than the decoded progress-summary pointer only when its
+embedded full-parent receipt has independent private readback, the same run,
+exact parent SHA/size/step, and a matching currently listed private object.
+This is crisp custody verification, not a new retention policy or training
+completion decision. The decoded progress pointer and its recovery parent stay
+unchanged; inference cleanup uses its own verified frontier and preserves every
+declared active or quality dependency. Missing or contradictory parent evidence
+prevents deletions.
+
