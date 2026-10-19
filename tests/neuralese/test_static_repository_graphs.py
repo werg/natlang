@@ -150,3 +150,34 @@ def test_tiny_parquet_main_preserves_distinct_newlines_and_durable_accounting(tm
     assert receipt['source']==binding(source) and receipt['acquisition']==binding(acquisition)
     for split in ('train','test'):
         assert receipt['outputs'][split]['sha256']==binding(output/split/'native-graphs.jsonl.zst')['sha256']
+    from scripts.neuralese_data.prepare_static_repository_admission import prepare, verify_audit
+    from scripts.neuralese_data.partition_acquired_native_capacity import partition
+    admission = tmp_path/'admission'
+    audit = prepare([output/'receipt.json'], {'lfm25':tmp_path/'tokenizer'}, protection, admission)
+    assert audit['by_model']['lfm25'] == receipt['counts']
+    assert verify_audit(admission/'audit.json') == audit
+    capacity = partition(admission/'audit.json', admission/'source-render-samples.json',
+                         {'lfm25':{'forward_tokens':1, 'kv_slots':1}}, tmp_path/'capacity')
+    assert capacity['counts']['lfm25']['train:remaining-long']['rows'] == 2
+    assert capacity['counts']['lfm25']['test:remaining-long']['rows'] == 1
+    assert capacity['counts']['lfm25']['train:fit']['rows'] == 0
+    obligations = json.loads((tmp_path/'capacity/files/pending-sources.json').read_text())
+    assert len(obligations['rows']) == 2 and all(row['required_visits']==1 for row in obligations['rows'])
+    # Even a freshly rebound conversion receipt cannot authorize altered targets.
+    from scripts.neuralese_data.build_native_graph_text_corpus import GraphWriter
+    train[0]['nodes'][0]['token_ids'][0] += 1
+    writer = GraphWriter(output/'train/native-graphs.jsonl.zst')
+    for graph in train:
+        writer.write(graph)
+    receipt['outputs']['train'] = writer.finish()
+    (output/'receipt.json').write_text(json.dumps(receipt))
+    with pytest.raises(ValueError, match='evidence binding changed'):
+        verify_audit(admission/'audit.json')
+    with pytest.raises(ValueError, match='differs from exact replay'):
+        prepare([output/'receipt.json'], {'lfm25':tmp_path/'tokenizer'}, protection, tmp_path/'altered-admission')
+
+
+def test_static_replay_compares_json_types_not_python_numeric_equality():
+    from scripts.neuralese_data.prepare_static_repository_admission import next_exact
+    with pytest.raises(ValueError, match='differs from exact replay'):
+        next_exact(iter([{'token':True}]), {'token':1})

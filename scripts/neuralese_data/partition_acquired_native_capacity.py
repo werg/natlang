@@ -228,7 +228,12 @@ def partition(audit_path,samples_path,limits,out):
     samples_binding={'path':str(samples_path),'sha256':sha256_file_hex(samples_path)}
     audit=json.loads(audit_path.read_text());sample=json.loads(samples_path.read_text())
     sample_audit=sample.get('cohort_audit',{})
-    if (audit.get('schema')!='natlang.acquired-session-admission-audit/1' or audit.get('status')!='passed'
+    static = audit.get('schema') == 'natlang.static-repository-admission-audit/1'
+    if static:
+        from scripts.neuralese_data.prepare_static_repository_admission import verify_audit
+        if verify_audit(audit_path) != audit or sample.get('all_rows') is not True or sample.get('static_source_replay') is not True:
+            raise ValueError('static partition requires authenticated complete source fidelity replay')
+    if (audit.get('schema') not in {'natlang.acquired-session-admission-audit/1', 'natlang.static-repository-admission-audit/1'} or audit.get('status')!='passed'
             or sample.get('passed') is not True or sample_audit.get('sha256')!=audit_binding['sha256']
             or not sample_audit.get('path') or Path(sample_audit['path']).resolve()!=audit_path):
         raise ValueError('capacity partition needs its complete source audit and bound source render samples')
@@ -321,6 +326,8 @@ def partition(audit_path,samples_path,limits,out):
             for path in sorted(files.rglob('*')) if path.is_file()]
         if sha256_file_hex(audit_path)!=audit_binding['sha256'] or sha256_file_hex(samples_path)!=samples_binding['sha256']:
             raise ValueError('source evidence changed during capacity partition')
+        if static:
+            verify_audit(audit_path)
         for item in source_bindings:bound(item['path'],item)
         receipt={'schema':'natlang.acquired-native-capacity-partition/1','binding':binding,
             'source_bindings':source_bindings,

@@ -31,3 +31,12 @@ Crisp helpers verify source byte identities, types, source checksums, exact grou
 closure, token decoding, durable output and accounting. The natural-language
 policy above decides source use; these helpers introduce no learned policy or
 outside generation service. One source adapter serves both student models.
+
+Admission continues through an exact verifier of the completed conversion. Replay
+each NEW source row through the same source validator, protected component join,
+original tokenizer and shared text graph renderer. Compare the complete graph,
+row proof, pending reason, split and duplicate accounting. Authenticate all input
+and output bindings before and after this replay. This is static source fidelity,
+not an execution or semantic answer verdict. The existing ordinary capacity
+partition consumes the resulting distinct static audit and preserves whole long
+rows as explicit executable obligations. Previously admitted corpora are not read.
