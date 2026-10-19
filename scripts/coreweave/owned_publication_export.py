@@ -195,6 +195,11 @@ def owner_remote_code(pointer_path, *, role, known_generation=None, known_sha256
                       known_step=-1, production_root='/work/native-production',
                       control_root='/work/native-production/control'):
     """Observe whatever exact learner the supervisor has most recently selected."""
+    # The source is serialized and executed on the remote machine. Never embed
+    # a host-side PosixPath repr (which is not defined in that source).
+    pointer_path = str(pointer_path)
+    production_root = str(production_root)
+    control_root = str(control_root)
     helper_source = inspect.getsource(verify_owner_pointer)
     command_helper = inspect.getsource(verify_owned_publication_command)
     from natlang_neuralese.rl import native_publication_owner

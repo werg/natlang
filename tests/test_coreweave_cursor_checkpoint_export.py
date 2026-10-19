@@ -348,8 +348,10 @@ def test_current_owner_cli_builds_remote_control_root_without_path_alias(tmp_pat
 
 def test_remote_owner_observer_code_compiles_and_waits_for_first_owner(tmp_path):
     from scripts.coreweave.owned_publication_export import owner_remote_code
-    code=owner_remote_code(str(tmp_path/'control'/'lfm-current-owner.json'),role='lfm',
-        production_root=str(tmp_path),control_root=str(tmp_path/'control'))
+    # The exporter passes pathlib paths from argparse. The observer source is
+    # serialized for execution remotely, where PosixPath is not defined.
+    code=owner_remote_code(tmp_path/'control'/'lfm-current-owner.json',role='lfm',
+        production_root=tmp_path,control_root=tmp_path/'control')
     compile(code,'remote-owner-observer','exec')
     result=subprocess.run([sys.executable,'-c',code],capture_output=True,text=True,check=True)
     assert json.loads(result.stdout)=={'owner':None,'chosen':None,'observations':{}}
