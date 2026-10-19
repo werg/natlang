@@ -7,6 +7,7 @@ from __future__ import annotations
 import fcntl
 import json
 import os
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 import time
@@ -261,6 +262,271 @@ def _supervised_stage_inventory(recipe,foundation_id):
 
 
 _OWNED_RESTORE_OBSERVER_SHA256='7b1f69d53cd7a8690e3d32940337c6c56f040fca8c0ad2b2dfee93d431c63e9e'
+
+
+def import_current_owner_checkpoint(config_path,cursor_path,selected_checkpoint,saved_state,authority,out,*,recovery_reason=None,owned_controller_fd=None):
+    """Publish an already-loaded current-owner checkpoint into the existing RAW recipe.
+
+    This is a checkpoint import, not a trainer handoff or readiness claim.  The
+    in-process entry supplies the exact checkpoint/state pair it already owns;
+    this function never deserializes a checkpoint.  Only the two current
+    checkpoint references and checkpoint-specific readiness markers change.
+    """
+    import contextlib
+    from ..common.hashing import canonical_json_sha256_hex as digest
+    from ..train.native_resident import code_inventory,owner_alive
+    from .native_raw_handoff import observe,process_argv,same_process
+
+    def publication(state,cursor,selected):
+        next_state=_published_checkpoint_state(state,selected)
+        next_state.pop('readiness',None)
+        next_cursor={**cursor,'current_checkpoint':selected}
+        next_cursor.pop('readiness',None);next_cursor.pop('foundation_qualified',None)
+        return next_state,next_cursor
+
+    def validate_intent(value,request,paths):
+        if (not isinstance(value,dict) or value.get('schema')!='natlang.native-raw-current-owner-import/1'
+                or value.get('request')!=request or value.get('whole_recipe_completed') is not False
+                or digest(value.get('authority'))!=request.get('authority_sha256')
+                or value.get('selected_checkpoint')!=selected or value.get('selected_global_step')!=global_step
+                or value.get('recovery_reason')!=recovery_reason
+                or set(value.get('before',{}))!=set(paths) or set(value.get('snapshots',{}))!=set(paths)
+                or set(value.get('candidates',{}))!=set(paths)):
+            raise ValueError('current-owner import durable intent changed its exact request or parent')
+        originals={}
+        for name,path in paths.items():
+            before=value['before'][name];snapshot=value['snapshots'][name]
+            if (before.get('path')!=str(path)
+                    or Path(snapshot['path']).resolve()!=directory/('original-'+name+'.json')
+                    or Path(value['candidates'][name]['path']).resolve()!=directory/('candidate-'+name+'.json')):
+                raise ValueError('current-owner import intent substituted its transaction artifact paths')
+            snap_path=_bound(snapshot)
+            if binding(snap_path)['sha256']!=before.get('sha256'):
+                raise ValueError('current-owner import snapshot does not preserve its exact predecessor')
+            originals[name]=json.loads(snap_path.read_text())
+        if not isinstance(originals['state'],dict) or not isinstance(originals['cursor'],dict):
+            raise ValueError('current-owner import predecessor snapshots are malformed')
+        expected=publication(originals['state'],originals['cursor'],selected)
+        for name,value_expected in zip(('state','cursor'),expected):
+            candidate=_bound(value['candidates'][name])
+            if json.loads(candidate.read_text())!=value_expected:
+                raise ValueError('current-owner import candidate changed fields outside its narrow pointer update')
+        current_before=binding(originals['state']['checkpoint'])
+        if value.get('current_checkpoint')!=current_before:
+            raise ValueError('current-owner import intent lost its exact predecessor checkpoint binding')
+        return value
+
+    def verify_controller_fd(fd,path):
+        if type(fd)is not int or fd<0:raise ValueError('current-owner import controller descriptor is invalid')
+        if not path.is_file() or not os.path.isfile(f'/proc/self/fd/{fd}'):
+            raise ValueError('current-owner import descriptor is not the existing canonical controller lock')
+        opened=os.fstat(fd);actual=path.stat()
+        if opened.st_dev!=actual.st_dev or opened.st_ino!=actual.st_ino:
+            raise ValueError('current-owner import descriptor is not the existing canonical controller lock')
+        info=Path('/proc/self/fdinfo',str(fd)).read_text().splitlines()
+        locks=[line for line in info if line.startswith('lock:') and 'FLOCK' in line]
+        if len(locks)!=1 or 'WRITE' not in locks[0]:
+            raise ValueError('current-owner import descriptor does not hold the existing exclusive controller lease')
+
+    config_path=Path(config_path).resolve(strict=True);cursor_path=Path(cursor_path).resolve(strict=True)
+    out=Path(out).resolve();config=json.loads(config_path.read_text())
+    root=config_path.parent;state_path=Path(config['out']).resolve()/'state.json'
+    if cursor_path!=root/'cycle.json' or Path(config['out']).resolve().parent!=root:
+        raise ValueError('current-owner import lost its exact raw controller namespace')
+    required={'schema','owner','wrapper','process_argv','config','package','wrapper_configuration',
+        'effective_argv_file','effective_argv_binding','selected_checkpoint','saved_state'}
+    if not isinstance(authority,dict) or set(authority)!=required or authority.get('schema')!='natlang.native-raw-current-owner/2':
+        raise ValueError('current-owner import needs the complete explicit in-process authority')
+    captured_process_argv=authority['process_argv']
+    if not isinstance(captured_process_argv,list) or not captured_process_argv or any(type(x)is not str for x in captured_process_argv):
+        raise ValueError('current-owner import process argv must be an exact string vector')
+    if binding(config_path)!=authority['config']:
+        raise ValueError('current-owner import configuration changed after owner capture')
+    owner=authority['owner']
+    observed=observe(owner.get('pid')) if isinstance(owner,dict) else None
+    if not same_process(owner,observed) or observed.get('argv_hex')!=owner.get('argv_hex'):
+        raise ValueError('current-owner process identity changed after capture')
+    if process_argv(observed)!=captured_process_argv:
+        raise ValueError('current-owner process argv differs from the live wrapper')
+    script=next((Path(value).resolve() for value in captured_process_argv if value.endswith('.py') and Path(value).is_file()),None)
+    if script is None or binding(script)!=authority['wrapper']:
+        raise ValueError('current-owner wrapper bytes differ from the live entry')
+    gate_spec_path=_bound(authority['wrapper_configuration'])
+    if binding(gate_spec_path)!=authority['wrapper_configuration']:
+        raise ValueError('current-owner wrapper gate specification changed after capture')
+    gate_spec=json.loads(gate_spec_path.read_text())
+    if gate_spec.get('effective_trainer_argv')!=authority['effective_argv_binding']:
+        raise ValueError('current-owner gate specification does not bind its serialized trainer arguments')
+    args_path=_bound(authority['effective_argv_binding'])
+    trainer_args=json.loads(args_path.read_text())
+    if not isinstance(trainer_args,list) or any(type(x)is not str for x in trainer_args):
+        raise ValueError('current-owner serialized trainer arguments are malformed')
+    if gate_spec.get('trainer_arguments')!=trainer_args:
+        raise ValueError('current-owner gate specification arguments differ from the serialized argument list')
+    effective_path=_bound(authority['effective_argv_file'])
+    effective_argv=json.loads(effective_path.read_text())
+    expected_effective=[sys.executable,'-u','-m','natlang_neuralese.train.native_state_sft',*trainer_args]
+    if effective_argv!=expected_effective:
+        raise ValueError('current-owner serialized effective trainer command differs from the gate-bound arguments')
+    package=Path(authority['package']['path']).resolve(strict=True)
+    if authority['package'].keys()!={'path','code'} or package!=Path(__file__).resolve().parents[1]:
+        raise ValueError('current-owner package is not the exact package running this import')
+    if code_inventory(package)!=authority['package']['code']:
+        raise ValueError('current-owner installed package inventory changed')
+    runtime_root=Path(gate_spec.get('runtime','')).resolve(strict=True)
+    runtime_package=runtime_root/'training/neuralese/natlang_neuralese'
+    if (runtime_package.resolve()!=package
+            or gate_spec.get('runtime_code_sha256')!=digest(code_inventory(runtime_package))):
+        raise ValueError('current-owner gate specification does not bind the running runtime package')
+    selected=authority['selected_checkpoint']
+    if selected_checkpoint!=selected:
+        raise ValueError('current-owner selected checkpoint argument differs from its authority binding')
+    selected_path=_bound(selected)
+    if selected.get('bytes')!=selected_path.stat().st_size:
+        raise ValueError('current-owner full checkpoint byte binding changed')
+    summary=authority['saved_state']
+    if (not isinstance(summary,dict) or set(summary)!={'checkpoint','global_step','model_id'}
+            or summary['checkpoint']!=selected):
+        raise ValueError('current-owner saved-state summary is not bound to its selected full checkpoint')
+    training=saved_state.get('training') if isinstance(saved_state,dict) else None
+    model=saved_state.get('model_config') if isinstance(saved_state,dict) else None
+    global_step=(training.get('global_step',training.get('step')) if isinstance(training,dict) else None)
+    model_id=(model.get('architecture','')+':'+model.get('base_inventory_sha256','') if isinstance(model,dict) else None)
+    if type(global_step)is not int or type(summary['global_step'])is not int or global_step!=summary['global_step'] or model_id!=summary['model_id']:
+        raise ValueError('current-owner loaded state differs from its checkpoint identity summary')
+    if config.get('raw_model_id')!=model_id:
+        raise ValueError('current-owner checkpoint belongs to another RAW student/base')
+    from .native_raw_policy import require_raw_training
+    require_raw_training(saved_state)
+    def parent_matches(reference):
+        return (isinstance(reference,dict) and {'path','sha256'}<=set(reference)
+            and set(reference)<={'path','sha256','bytes'}
+            and reference['path']==selected.get('path') and reference['sha256']==selected.get('sha256')
+            and ('bytes' not in reference or reference['bytes']==selected.get('bytes')))
+    def verify_execution_bindings():
+        live=observe(owner.get('pid'))
+        if not same_process(owner,live) or live.get('argv_hex')!=owner.get('argv_hex') or process_argv(live)!=captured_process_argv:
+            raise ValueError('current-owner process changed during import')
+        if (binding(config_path)!=authority['config'] or binding(script)!=authority['wrapper']
+                or binding(gate_spec_path)!=authority['wrapper_configuration']
+                or binding(args_path)!=authority['effective_argv_binding']
+                or binding(effective_path)!=authority['effective_argv_file']
+                or code_inventory(package)!=authority['package']['code']
+                or digest(code_inventory(runtime_package))!=gate_spec.get('runtime_code_sha256')):
+            raise ValueError('current-owner execution bindings changed during import')
+        latest_gate=json.loads(gate_spec_path.read_text())
+        latest_args=json.loads(args_path.read_text())
+        latest_command=json.loads(effective_path.read_text())
+        if (latest_gate.get('effective_trainer_argv')!=authority['effective_argv_binding']
+                or latest_gate.get('trainer_arguments')!=latest_args
+                or latest_command!=[sys.executable,'-u','-m','natlang_neuralese.train.native_state_sft',*latest_args]
+                or not parent_matches(latest_gate.get('parent'))):
+            raise ValueError('current-owner trainer command or selected parent changed during import')
+    # The configured arguments are already prepared before checkpoint decoding.
+    # Bind their continuation target and output to the exact selected checkpoint
+    # and RAW namespace instead of trusting a self-consistent command file.
+    gate_parent=gate_spec.get('parent')
+    if (trainer_args.count('--continue-from')!=1 or trainer_args.count('--out')!=1
+            or trainer_args.count('--stage-id')!=1
+            or Path(trainer_args[trainer_args.index('--continue-from')+1]).resolve()!=Path(selected_path).resolve()
+            or Path(trainer_args[trainer_args.index('--out')+1]).resolve()!=gate_spec_path.parent/'learner'
+            or not parent_matches(gate_parent)
+            or gate_spec.get('out')!=trainer_args[trainer_args.index('--out')+1]
+            or gate_spec.get('stage_id')!=trainer_args[trainer_args.index('--stage-id')+1]):
+        raise ValueError('current-owner effective trainer is not the selected RAW continuation')
+    request={'config':binding(config_path),'selected_checkpoint':selected,
+        'authority_sha256':digest(authority),'recovery_reason':recovery_reason}
+    def same_semantics(prior):
+        return all(prior.get(key)==request.get(key) for key in ('config','selected_checkpoint','recovery_reason'))
+    directory=out.parent/(out.stem+'-current-owner-import');intent_path=directory/'intent.json'
+    paths={'state':state_path,'cursor':cursor_path}
+    controller_lock=root.parent/'controller.lock';locks={Path(config['out']).resolve()/'controller.lock'}
+    if owned_controller_fd is None:locks.add(controller_lock)
+    with contextlib.ExitStack() as stack:
+        if owned_controller_fd is not None:
+            verify_controller_fd(owned_controller_fd,controller_lock)
+        for lock_path in sorted(locks):
+            lock_path.parent.mkdir(parents=True,exist_ok=True)
+            lease=stack.enter_context(lock_path.open('a'))
+            fcntl.flock(lease,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        if out.exists():
+            committed=json.loads(out.read_text())
+            if committed.get('schema')!='natlang.native-raw-current-owner-import/1':
+                raise ValueError('current-owner import receipt has an unsupported schema')
+            if Path(_bound(committed['intent']))!=intent_path.resolve():
+                raise ValueError('current-owner import receipt points outside its durable intent')
+            stored_intent=json.loads(_bound(committed['intent']).read_text());stored_request=stored_intent.get('request')
+            if (not same_semantics(stored_request or {}) or committed.get('request_sha256')!=digest(stored_request)):
+                raise ValueError('current-owner import retry changed its exact transaction semantics')
+            prior_intent=validate_intent(stored_intent,stored_request,paths)
+            if committed.get('published_checkpoint')!=selected or committed.get('whole_recipe_completed') is not False or committed.get('readiness_granted') is not False:
+                raise ValueError('current-owner import receipt changed its durable request')
+            resumed_authority=committed.get('resumed_by_authority')
+            if (resumed_authority is None) != (committed.get('resumed_by_authority_sha256') is None):
+                raise ValueError('current-owner import recovery receipt omitted its resumer authority')
+            if resumed_authority is not None and digest(resumed_authority)!=committed['resumed_by_authority_sha256']:
+                raise ValueError('current-owner import resumer authority digest changed')
+            return binding(out)
+        if intent_path.exists():
+            intent=json.loads(intent_path.read_text());stored_request=intent.get('request')
+            if not same_semantics(stored_request or {}):
+                raise ValueError('current-owner import intent belongs to another checkpoint decision')
+            resumed=(stored_request!=request)
+            if resumed:
+                prior_authority=intent.get('authority') or {}
+                if owner_alive(prior_authority.get('owner') or {}):
+                    raise ValueError('current-owner import original owner is still alive; transaction cannot be taken over')
+            intent=validate_intent(intent,stored_request,paths)
+        else:
+            if binding(config_path)!=request['config']:
+                raise ValueError('current-owner import config changed before transaction')
+            state=json.loads(state_path.read_text());cursor=json.loads(cursor_path.read_text())
+            if state.get('phase')!='collect' or any(state.get(key) is not None for key in ('pending_native_checkpoint','pending_native_round_dir')):
+                raise ValueError('current-owner import cannot bypass an active sealed RAW operation')
+            if cursor.get('pending_rl_round') is not None:
+                raise ValueError('current-owner import cannot bypass a pending sealed RAW round')
+            if (cursor.get('current_checkpoint') is None
+                    or {key:cursor['current_checkpoint'].get(key) for key in ('path','sha256')}!=binding(state['checkpoint'])):
+                raise ValueError('current-owner import requires the same existing state and cursor checkpoint')
+            current=binding(state['checkpoint'])
+            same_checkpoint={key:selected.get(key) for key in ('path','sha256')}==current
+            if not same_checkpoint and (not isinstance(recovery_reason,str) or not recovery_reason.strip()):
+                raise ValueError('selecting a different checkpoint requires an explicit supervised recovery reason')
+            if same_checkpoint and recovery_reason is not None:
+                raise ValueError('recovery reason is reserved for an explicit checkpoint replacement')
+            next_state,next_cursor=publication(state,cursor,selected)
+            before={name:binding(path) for name,path in paths.items()}
+            directory.mkdir(parents=True,exist_ok=True);snapshots={};candidates={}
+            for name,path in paths.items():
+                snapshot=directory/('original-'+name+'.json');write_bytes_durable(snapshot,_bound(before[name]).read_bytes());snapshots[name]=binding(snapshot)
+            for name,value in (('state',next_state),('cursor',next_cursor)):
+                candidate=directory/('candidate-'+name+'.json');write_json_durable(candidate,value);candidates[name]=binding(candidate)
+            if any(binding(path)!=before[name] for name,path in paths.items()):
+                raise ValueError('current-owner controller changed before import intent')
+            intent={'schema':'natlang.native-raw-current-owner-import/1','request':request,'authority':authority,'before':before,
+                'snapshots':snapshots,'candidates':candidates,'current_checkpoint':current,
+                'selected_checkpoint':selected,'selected_global_step':global_step,
+                'recovery_reason':recovery_reason,'whole_recipe_completed':False}
+            write_json_durable(intent_path,intent)
+            intent=validate_intent(intent,request,paths)
+        if binding(config_path)!=request['config']:
+            raise ValueError('current-owner import config changed during transaction')
+        verify_execution_bindings()
+        for name,path in paths.items():
+            actual=binding(path);candidate=intent['candidates'][name]
+            if actual['sha256']!=candidate['sha256'] and actual!=intent['before'][name]:
+                raise ValueError('current-owner import found an unknown controller successor')
+        for name,path in paths.items():
+            candidate=intent['candidates'][name]
+            if binding(path)['sha256']!=candidate['sha256']:
+                write_bytes_durable(path,_bound(candidate).read_bytes())
+        receipt={'schema':intent['schema'],'request_sha256':digest(intent['request']),'intent':binding(intent_path),
+            'published_checkpoint':selected,'selected_global_step':global_step,
+            'whole_recipe_completed':False,'readiness_granted':False,
+            **({'resumed_by_authority':authority,
+                'resumed_by_authority_sha256':request['authority_sha256']} if intent['request']!=request else {})}
+        write_json_durable(out,receipt)
+    return binding(out)
 
 
 def _owned_training_invocation(argv,parent,*,parent_bytes=None):
