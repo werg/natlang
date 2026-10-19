@@ -7,6 +7,15 @@ from ..common.hashing import canonical_json_sha256_hex
 SCHEMA='natlang.native-complete-communication-gradients/1'
 
 
+def _existing_grad(tensor):
+    # Reading .grad on an ordinary nonleaf emits a warning, even though it is
+    # necessarily empty. Retained nonleaf grads remain part of the preservation
+    # contract.
+    if not tensor.is_leaf and not tensor.retains_grad:
+        return None
+    return tensor.grad
+
+
 def gradient_metrics(actual,expected,*,atol,rtol):
     if actual.shape!=expected.shape or actual.dtype!=expected.dtype:
         return {'passed':False,'reason':'gradient geometry or dtype differs'}
@@ -21,6 +30,83 @@ def gradient_metrics(actual,expected,*,atol,rtol):
         'shape':list(actual.shape),'dtype':str(actual.dtype),
         'relative_l2':relative,'cosine':cosine,'reference_l2':float(bn),
         'actual_l2':float(an),'mismatched_elements':bad,'elements':a.numel(),'atol':atol,'rtol':rtol}
+
+
+def _backward_gradients_to_cpu(loss, names, parameters, input_tensor=None, *, on_gradient=None):
+    """Run one backward and drain completed leaf gradients to CPU immediately.
+
+    ``autograd.grad`` returns a tuple that keeps every parameter derivative on
+    the accelerator until the whole backward has completed. Post-accumulate
+    hooks instead transfer one completed leaf at a time and clear the temporary
+    ``.grad`` before autograd reaches the next leaf. Existing parameter grad
+    objects are borrowed only for the duration of backward and restored exactly.
+    """
+    names = tuple(names)
+    parameters = tuple(parameters)
+    if len(names) != len(parameters) or len({id(p) for p in parameters}) != len(parameters):
+        raise ValueError('streamed gradient targets need unique names and parameters')
+    if any(not isinstance(p, torch.Tensor) or not p.requires_grad or not p.is_leaf for p in parameters):
+        raise ValueError('streamed parameter gradient targets must be distinct trainable leaves')
+    if input_tensor is not None and (not isinstance(input_tensor, torch.Tensor) or not input_tensor.requires_grad):
+        raise ValueError('streamed explicit input target must require gradients')
+
+    if on_gradient is not None and not callable(on_gradient):
+        raise TypeError('streamed gradient observer must be callable')
+    result = {name: None for name in names} if on_gradient is None else {}
+    if input_tensor is not None:
+        if on_gradient is None:
+            result['input_embeddings'] = None
+    saved = [(parameter, parameter.grad,
+              None if parameter.grad is None else parameter.grad._version)
+             for parameter in parameters]
+    previous_input_grad = None if input_tensor is None else _existing_grad(input_tensor)
+    saved_input = (previous_input_grad,
+                   None if previous_input_grad is None else previous_input_grad._version)
+    hooks = []
+    try:
+        for parameter, _, _ in saved:
+            parameter.grad = None
+        if input_tensor is not None:
+            input_tensor.grad = None
+
+        if input_tensor is not None:
+            def capture_input(gradient):
+                value = gradient.detach().to(device='cpu')
+                if on_gradient is None:
+                    result['input_embeddings'] = value
+                else:
+                    on_gradient('input_embeddings', value)
+                return gradient
+            hooks.append(input_tensor.register_hook(capture_input))
+
+        for name, parameter in zip(names, parameters):
+            def capture_parameter(_leaf, *, name=name, parameter=parameter):
+                gradient = parameter.grad
+                if gradient is None:
+                    raise RuntimeError(f'autograd completed {name} without a leaf gradient')
+                value = gradient.detach().to(device='cpu')
+                if on_gradient is None:
+                    result[name] = value
+                else:
+                    on_gradient(name, value)
+                parameter.grad = None
+            hooks.append(parameter.register_post_accumulate_grad_hook(capture_parameter))
+
+        targets=parameters+((input_tensor,) if input_tensor is not None else ())
+        torch.autograd.backward(loss, inputs=targets)
+    finally:
+        for hook in hooks:
+            hook.remove()
+        for parameter, previous, version in saved:
+            parameter.grad = previous
+            if parameter.grad is not previous or (previous is not None and previous._version != version):
+                raise RuntimeError('streamed complete-gradient comparison changed a prior parameter .grad')
+        if input_tensor is not None:
+            previous, version = saved_input
+            input_tensor.grad = previous
+            if input_tensor.grad is not previous or (previous is not None and previous._version != version):
+                raise RuntimeError('streamed complete-gradient comparison changed a prior input .grad')
+    return result
 
 
 def compare_complete_gradients(flat_loss,cached_loss,named,flat_inputs,cached_inputs,*,atol,rtol,cached_factory=None,gradient_observer=None,
@@ -40,9 +126,12 @@ def _compare_complete_gradients(flat_loss,cached_loss,named,flat_inputs,cached_i
                                 flat_cotangent_scope=None):
     """Release each CPU flat derivative as its complete cached counterpart arrives.
 
-    autograd.grad never accumulates parameter.grad or invokes post-accumulate
-    optimizer hooks. Cached partial derivatives/activations still need memory;
-    the recorded bytes describe retained comparison tensors, not a peak claim.
+    A single backward drains complete leaf derivatives as they arrive. Any
+    pre-existing post-accumulate hooks also run; production qualification calls
+    this outside the optimizer's gated in-backward update context, so optimizer
+    hooks are disarmed while finite-gradient checks remain active. Cached
+    activations still need memory; the recorded bytes describe retained
+    comparison tensors, not a peak claim.
     Exact CPU observer pairs and metrics avoid retaining a second full gradient
     inventory on the GPU beside the actual cached VJP and restored optimizer.
     """
@@ -50,7 +139,8 @@ def _compare_complete_gradients(flat_loss,cached_loss,named,flat_inputs,cached_i
         raise ValueError('complete gradient comparison needs finite nonnegative gates')
     named=list(named)
     has_inputs=flat_inputs is not None
-    names=(["input_embeddings"] if has_inputs else [])+[name for name,_ in named]
+    parameter_names=[name for name,_ in named]
+    names=(["input_embeddings"] if has_inputs else [])+parameter_names
     parameters=[value for _,value in named]
     if (len(names)!=len(set(names))or len(parameters)!=len({id(p)for p in parameters})
             or any(not isinstance(name,str)or not name for name,_ in named)
@@ -61,16 +151,18 @@ def _compare_complete_gradients(flat_loss,cached_loss,named,flat_inputs,cached_i
     if (flat_inputs is None) != (cached_inputs is None) and cached_factory is None:
         raise ValueError('complete gradient comparison must agree on explicit input presence')
     old_grads={id(p):(p.grad,None if p.grad is None else p.grad._version)for p in parameters}
-    flat_values=((flat_inputs,) if has_inputs else ())+tuple(parameters)
+    old_input_value=None if flat_inputs is None else _existing_grad(flat_inputs)
+    old_input_grad=(old_input_value,None if old_input_value is None else old_input_value._version)
+    cached_input_grad=None
     try:
-        flat=torch.autograd.grad(flat_loss,flat_values,allow_unused=True)
+        flat=_backward_gradients_to_cpu(flat_loss,
+            (name for name,_ in named),parameters,flat_inputs if has_inputs else None)
         if flat_cotangent_scope is not None:
             flat_cotangent_scope.finish()
     finally:
         if flat_cotangent_scope is not None:
             flat_cotangent_scope.close()
-    waiting={name:None if value is None else value.detach().to('cpu')
-             for name,value in zip(names,flat)}
+    waiting=flat
     del flat
     cached_cotangent_scope=None
     if cached_factory is not None:
@@ -79,50 +171,53 @@ def _compare_complete_gradients(flat_loss,cached_loss,named,flat_inputs,cached_i
             cached_loss,cached_inputs,cached_cotangent_scope=produced
         else:
             cached_loss,cached_inputs=produced
+    cached_input_value=None if cached_inputs is None else _existing_grad(cached_inputs)
+    cached_input_grad=(cached_input_value,None if cached_input_value is None else cached_input_value._version)
     if (cached_inputs is not None) != has_inputs:
         if cached_cotangent_scope is not None:cached_cotangent_scope.close()
         raise ValueError('complete gradient comparison changed explicit input presence')
-    cached_values=((cached_inputs,) if has_inputs else ())+tuple(parameters)
     retained=sum(g.numel()*g.element_size()for g in waiting.values()if g is not None)
-    remaining=retained;max_pair=0;comparisons={};hooks=[]
-    def hook(name):
-        def compare(value):
-            nonlocal remaining,max_pair
-            previous=waiting.pop(name)
-            current=value.detach().to('cpu')
-            if gradient_observer is not None:gradient_observer(name,previous,current)
-            if previous is None:comparisons[name]={'passed':False,'reason':'cached-only derivative'}
-            else:
-                count=previous.numel()*previous.element_size();remaining-=count
-                max_pair=max(max_pair,count+value.numel()*value.element_size())
-                comparisons[name]=gradient_metrics(current,previous,atol=atol,rtol=rtol)
-            return value
-        return compare
+    max_pair=0;comparisons={}
     try:
-        for name,value in zip(names,cached_values):hooks.append(value.register_hook(hook(name)))
-        current=torch.autograd.grad(cached_loss,cached_values,allow_unused=True)
+        seen=set()
+        def compare_one(name, value):
+            nonlocal max_pair
+            if name not in waiting or name in seen:
+                raise RuntimeError('cached backward emitted an unknown or duplicate gradient target: '+name)
+            seen.add(name)
+            previous=waiting.pop(name)
+            if gradient_observer is not None:gradient_observer(name,previous,value)
+            if previous is None and value is None:
+                comparisons[name]={'passed':True,'unused':True}
+            elif previous is None:
+                comparisons[name]={'passed':False,'reason':'cached-only derivative'}
+            elif value is None:
+                comparisons[name]={'passed':False,'reason':'flat-only or missing cached derivative'}
+            else:
+                count=previous.numel()*previous.element_size()
+                max_pair=max(max_pair,count+value.numel()*value.element_size())
+                comparisons[name]=gradient_metrics(value,previous,atol=atol,rtol=rtol)
+        _backward_gradients_to_cpu(cached_loss, parameter_names, parameters,
+            cached_inputs if has_inputs else None, on_gradient=compare_one)
         if cached_cotangent_scope is not None:
             cached_cotangent_scope.finish()
-        for name,value in zip(names,current):
-            if name in waiting:
-                previous=waiting.pop(name)
-                if gradient_observer is not None:
-                    gradient_observer(name,previous,None if value is None else value.detach().to('cpu'))
-                comparisons[name]=({'passed':True,'unused':True}if previous is None and value is None else
-                    {'passed':False,'reason':'flat-only or missing cached derivative'})
-        del current
+        for name in tuple(waiting):
+            compare_one(name, None)
     except BaseException:
         if gradient_observer is not None and callable(getattr(gradient_observer,'abort',None)):
             gradient_observer.abort()
         raise
     finally:
-        for item in hooks:item.remove()
         waiting.clear()
         if cached_cotangent_scope is not None:
             cached_cotangent_scope.close()
     if gradient_observer is not None and callable(getattr(gradient_observer,'finish',None)):
         gradient_observer.finish()
-    preserved=all(p.grad is old_grads[id(p)][0]and(p.grad is None or p.grad._version==old_grads[id(p)][1])for p in parameters)
+    preserved=(all(p.grad is old_grads[id(p)][0]and(p.grad is None or p.grad._version==old_grads[id(p)][1])for p in parameters)
+        and (flat_inputs is None or (_existing_grad(flat_inputs) is old_input_grad[0]
+            and (old_input_grad[0] is None or old_input_grad[0]._version==old_input_grad[1])))
+        and (cached_inputs is None or (_existing_grad(cached_inputs) is cached_input_grad[0]
+            and (cached_input_grad[0] is None or cached_input_grad[0]._version==cached_input_grad[1]))) )
     inventory=[{'name':name,'shape':list(value.shape),'dtype':str(value.dtype)}for name,value in named]
     return {'schema':SCHEMA,'passed':preserved and all(row['passed']for row in comparisons.values()),
         'inventory':inventory,'inventory_sha256':canonical_json_sha256_hex(inventory),
@@ -130,7 +225,10 @@ def _compare_complete_gradients(flat_loss,cached_loss,named,flat_inputs,cached_i
         'comparisons':comparisons,'parameter_grads_preserved':preserved,
         'retained_flat_gradient_bytes':retained,'largest_live_comparison_pair_bytes':max_pair,
         'retained_flat_gradient_device':'cpu','retained_flat_gradient_cuda_bytes':0,
-        'memory_scope':'CPU reference and pair tensors only; cached VJP gradients and activations additional',
+        'cached_gradient_collection':'single backward; each completed leaf gradient copied to CPU, compared, then released',
+        'retained_cached_gradient_map_bytes':0,
+        'retained_cached_gradient_device':'none',
+        'memory_scope':'the utility retains the flat CPU reference map and no cached result map; an external gradient observer may retain its own CPU snapshots, while live per-leaf backward gradients and saved activations remain additional',
         'optimizer_updates':0,'atol':atol,'rtol':rtol}
 
 
