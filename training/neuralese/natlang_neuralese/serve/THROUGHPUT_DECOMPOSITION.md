@@ -50,3 +50,11 @@ can be allocated without a redundant zero fill. Grouped expert padding and all
 training/backward allocations retain their existing zero initialization. Poisoned
 allocation, storage-cast/adapter parity, both-port captures and exact gradient
 checks qualify these crisp changes before another full-size timing window.
+
+Mellum's dense routed experts use the same qualified row-tile mechanism. A true
+inference call with at most 16 real routed pairs can use 16-row expert padding;
+keep expert IDs, stable per-expert pair order, routing weights, weighted combine,
+storage casts and invalid-row zero fill unchanged. Reuse one tile selector for
+ordinary linear rows and routed expert pairs. All training/adjoint Plans retain
+64-row blocks. Qualify actual 2304/1792/top8/64-expert synthetic geometry and real
+both-port native captures before any 12B/cloud performance claim.

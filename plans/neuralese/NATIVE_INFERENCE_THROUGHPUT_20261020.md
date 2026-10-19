@@ -149,3 +149,30 @@ was103 seconds and ledger peak8.9GiB; it exited after measurement. Evidence is
 `fullsize-launch-report.json`. Four-way ctx/direct × zero/empty microprobes are
 retained as `linear-split-probe.json`; they did not isolate a stable readout
 regression. No full12B Mellum throughput or task-quality result is claimed.
+
+
+## Routed expert inference followup
+
+Dense routed experts now share the same inference row-tile selector as ordinary
+linears. With at most 16 real routed pairs, true inference uses 16-row blocks;
+ordinary no-grad, training and adjoint calls retain 64. Expert IDs, stable pair
+ordering, routing weights, storage arithmetic, zero-padded invalid rows and FP32
+weighted combination are unchanged.
+
+Seven CUDA checks pass: F32/BF16 with and without activation clamping require
+bitwise output and every input/expert/routing-weight gradient equality against
+64 rows, including repeated expert contributions. Actual Mellum dimensions
+(64 experts, hidden 2304, intermediate 1792, top 8) match exactly for one and two
+tokens. Both canonical ports retain exact adapted producer/consumer captures.
+The real gradient-enabled path remains 64 rows; the gradient check additionally
+forces the smaller tile to validate the shared kernel arithmetic.
+
+The synthetic expert-only probe is `moe-tile-probe.json`, without a 12B model
+load. Its three one-token timing pairs (64→16 rows) were 1.54→2.59, 2.55→1.81
+and 2.67→1.63 ms; two-token pairs were 4.90→2.88, 4.50→3.62 and 3.82→4.38 ms.
+Shared-load variability remains substantial. These measurements establish
+plausible saved padded work, not a universal speedup, full Mellum throughput,
+cloud qualification or task-quality result. No cloud processes were changed.
+The 32 existing shared CUDA checks and quick 22/TS checks also pass after this
+shared-selector change (39 focused CUDA checks total). Root owns integrated
+broad-suite validation; none was duplicated here.
