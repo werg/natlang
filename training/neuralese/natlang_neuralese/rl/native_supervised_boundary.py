@@ -52,6 +52,33 @@ def _validate(old,new):
             if max(spec['cases'])>=len(rows)or any(rows[i].get('split')!='test'for i in spec['cases']):
                 raise ValueError('supervised boundary task cases must remain protected held data')
 
+
+def _task_runtime(request,recipe):
+    reference=request.get('task_runtime')
+    if reference is None:return None
+    if not isinstance(reference,dict)or set(reference)!={'path','inventory_sha256'}:
+        raise ValueError('supervised boundary task runtime needs an exact inventory binding')
+    if not isinstance(reference['path'],str):
+        raise ValueError('supervised boundary task runtime must be an absolute directory')
+    path=Path(reference['path'])
+    if not path.is_absolute()or '..'in path.parts:
+        raise ValueError('supervised boundary task runtime must be absolute')
+    from ..common.runtime_inventory import task_runtime_inventory
+    if digest(task_runtime_inventory(path))!=reference['inventory_sha256']:
+        raise ValueError('supervised boundary task runtime inventory changed')
+    from ..train.recipe import effective_stage_parameters
+    from ..eval.task_cadence import parse_task_eval,require_native_transport
+    tasks=[effective_stage_parameters(stage,[],recipe).get('task_eval')for stage in recipe['stages']]
+    specs=[require_native_transport(parse_task_eval(task))for task in tasks if task]
+    if not specs or any(not isinstance(spec.get('runtime'),str)or Path(spec['runtime']).resolve()!=path.resolve()for spec in specs):
+        raise ValueError('supervised boundary task evaluators and collector runtime differ')
+    return str(path)
+
+def _check_task_runtime_intent(request,intent):
+    runtime=_task_runtime(request,intent['new_plan']['recipe'])
+    if runtime is not None and intent['new_config'].get('runtime')!=runtime:
+        raise ValueError('supervised boundary task runtime commit changed')
+
 def _immutable(path,value):
     if path.exists():
         if json.loads(path.read_text())!=value:raise ValueError('supervised boundary immutable intent changed')
@@ -80,6 +107,7 @@ def _finish(config_path,cursor_path,intent_path,*,plan_path,declaration,handoff)
     if code_inventory(Path(request['package']['path']))!=request['package']['code']:
         raise ValueError('supervised boundary Python package changed')
     _validate(intent.get('source_plan',intent['old_plan'])['recipe'],intent['new_plan']['recipe'])
+    _check_task_runtime_intent(request,intent)
     config=json.loads(config_path.read_text());cursor=json.loads(cursor_path.read_text())
     if config not in (intent['old_config'],intent['new_config']) or cursor not in(intent['old_cursor'],intent['new_cursor']):
         raise ValueError('supervised boundary compare-and-swap changed')
@@ -105,6 +133,7 @@ def recover_configuration(config_path,plan_path,declaration,handoff):
     if code_inventory(Path(request['package']['path']))!=request['package']['code']:
         raise ValueError('supervised boundary recovery Python package changed')
     _validate(intent.get('source_plan',intent['old_plan'])['recipe'],intent['new_plan']['recipe'])
+    _check_task_runtime_intent(request,intent)
     cursor_path=config_path.parent/'cycle.json';completed=intent_path.parent/'completed.json'
     if completed.exists():
         receipt=json.loads(completed.read_text());_read(receipt['request'])
@@ -186,6 +215,8 @@ def apply(plan_path,declaration,handoff,config,cursor,directory):
     if stage_inputs!=source_plan['stage_inputs']:raise ValueError('supervised boundary cannot substitute source inputs')
     root=directory/'boundary-continuations'/reference['sha256'];root.mkdir(parents=True,exist_ok=True)
     new_config=copy.deepcopy(config);new_config['production_recipe']=request['recipe']['path'];new_config['resident_data_directory']=str(root/'resident-data')
+    task_runtime=_task_runtime(request,new)
+    if task_runtime is not None:new_config['runtime']=task_runtime
     from .native_supervised import bind_recipe_lineage,continuation_config
     bind_recipe_lineage(new_config,old_plan['recipe_sha256'])
     stage=next(row for row in new['stages']if row['id']==config['production_stage'])
