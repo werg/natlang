@@ -69,6 +69,54 @@ def test_fixed_linear_modes_preserve_row_batching_and_master_gradient(mode):
         torch.testing.assert_close(dw, expected, atol=2e-5, rtol=2e-4)
 
 
+@pytest.mark.skipif(not torch.cuda.is_available(), reason='CUDA native arithmetic')
+def test_single_expert_linear_elides_index_fill_without_changing_any_matrix_result():
+    """The shared one-expert route must match the old explicit expert-0 plan exactly.
+
+    This covers forward, input-gradient, and weight-gradient GEMMs. The profile
+    showed one CUDA int-fill per grouped dense launch; the explicit-plan side
+    below retains that old routing representation as a numeric reference.
+    """
+    from types import SimpleNamespace
+    import triton
+    from natlang_neuralese.maple.fused_moe import (
+        INVARIANT_BLOCK, _dense_mm, invariant_linear, invariant_weight_gradient,
+    )
+
+    torch.manual_seed(119)
+    x = torch.randn(137, 192, device='cuda', dtype=torch.float32)
+    weight = torch.randn(320, 192, device='cuda', dtype=torch.float32)
+    output_adjoint = torch.randn(137, 320, device='cuda', dtype=torch.float32)
+    expected_plan = SimpleNamespace(
+        size=x.shape[0], blocks=triton.cdiv(x.shape[0], INVARIANT_BLOCK),
+        block=INVARIANT_BLOCK,
+        block_expert=torch.zeros(triton.cdiv(x.shape[0], INVARIANT_BLOCK),
+                                 dtype=torch.int32, device='cuda'),
+    )
+
+    actual_output = invariant_linear(x, weight)
+    explicit_output = _dense_mm(x, None, weight[None], expected_plan, transpose=False)
+    assert torch.equal(actual_output, explicit_output)
+
+    x_for_grad = x.detach().requires_grad_(True)
+    w_for_grad = weight.detach().requires_grad_(True)
+    actual = torch.autograd.grad((invariant_linear(x_for_grad, w_for_grad,
+                                                  forward_storage_dtype=torch.float32) * output_adjoint).sum(),
+                                 (x_for_grad, w_for_grad))
+    expected_dx = _dense_mm(output_adjoint, None, weight[None], expected_plan, transpose=True)
+    weight_plan = SimpleNamespace(
+        size=weight.shape[0], blocks=triton.cdiv(weight.shape[0], INVARIANT_BLOCK),
+        block=INVARIANT_BLOCK,
+        block_expert=torch.zeros(triton.cdiv(weight.shape[0], INVARIANT_BLOCK),
+                                 dtype=torch.int32, device='cuda'),
+    )
+    expected_dw = _dense_mm(output_adjoint.T.contiguous(), None, x.T[None], weight_plan,
+                            transpose=False, output_dtype=torch.float32)
+    assert torch.equal(actual[0], expected_dx)
+    assert torch.equal(actual[1], expected_dw)
+    assert torch.equal(invariant_weight_gradient(x, output_adjoint), expected_dw)
+
+
 @pytest.mark.skipif(not torch.cuda.is_available(), reason='CUDA native graph precision')
 @pytest.mark.parametrize('family', ['lfm', 'mellum'])
 @pytest.mark.parametrize('mode', ['tf32', 'bf16', 'bf16x6'])

@@ -395,13 +395,17 @@ INVARIANT_BLOCK = 64  # rows per expert block, fixed: the tile, and so each row'
 @triton.jit
 def _grouped_dense_mm(a_ptr, rows_ptr, w_ptr, out_ptr, block_expert_ptr,
                       P, N, K, stride_am, stride_ak, stride_we, stride_inner, stride_outer, stride_om, stride_on,
-                      HAS_ROWS: tl.constexpr, INNER_CONTIGUOUS: tl.constexpr, DOT_PRECISION: tl.constexpr,
+                      HAS_ROWS: tl.constexpr, SINGLE_EXPERT: tl.constexpr,
+                      INNER_CONTIGUOUS: tl.constexpr, DOT_PRECISION: tl.constexpr,
                       BM: tl.constexpr, BN: tl.constexpr, BK: tl.constexpr):
     """out[m, n] = sum_k A[row(m), k] * W_e[inner=k, outer=n] for the block's expert e, the k loop in one fixed
     order. ``INNER_CONTIGUOUS``: load weight tiles [BN, BK] along k (the forward of a [N, K] weight)."""
     pid_m = tl.program_id(0)
     pid_n = tl.program_id(1)
-    expert = tl.load(block_expert_ptr + pid_m)
+    # Token-local invariant linears and their weight-gradient products always
+    # use one matrix. Their former all-zero expert-index tensor caused one
+    # CUDA fill launch per GEMM; static specialization removes that launch.
+    expert = 0 if SINGLE_EXPERT else tl.load(block_expert_ptr + pid_m)
     if expert < 0:
         return
     offs_m = pid_m * BM + tl.arange(0, BM)
@@ -444,7 +448,8 @@ def _grouped_dense_mm(a_ptr, rows_ptr, w_ptr, out_ptr, block_expert_ptr,
              mask=(offs_m[:, None] < P) & n_mask[None, :])
 
 
-def _dense_mm(a, rows, weight, plan: Plan, transpose: bool, *, precision="ieee", output_dtype=None) -> torch.Tensor:
+def _dense_mm(a, rows, weight, plan: Plan, transpose: bool, *, precision="ieee", output_dtype=None,
+              single_expert=False) -> torch.Tensor:
     """Grouped A @ W_eᵀ (W_e = weight[e], [N, K]) or, transposed, A @ W_e (the input gradient), with one fixed tile."""
     E, R, C = weight.shape
     N, K = (R, C) if not transpose else (C, R)
@@ -458,10 +463,16 @@ def _dense_mm(a, rows, weight, plan: Plan, transpose: bool, *, precision="ieee",
     if a.dtype == torch.float32 and precision in {"tf32", "tf32x3", "bf16x6"}:
         BN, BK, tuning = 128, 32, dict(num_warps=4, num_stages=3)
     grid = (plan.blocks, triton.cdiv(N, BN))
+    # For the one-matrix path `a` is a valid device pointer but is never read
+    # as an expert-index array: SINGLE_EXPERT is compile-time true. This keeps
+    # the multi-expert routing ABI untouched and avoids allocating a dummy
+    # integer tensor for every linear backward.
+    block_expert = a if single_expert else plan.block_expert
     _grouped_dense_mm[grid](
-        a, rows if rows is not None else a, weight, out, plan.block_expert,
+        a, rows if rows is not None else a, weight, out, block_expert,
         plan.size, N, K, a.stride(0), a.stride(1), weight.stride(0), inner, outer, out.stride(0), out.stride(1),
-        HAS_ROWS=rows is not None, INNER_CONTIGUOUS=not transpose, DOT_PRECISION=dot_precision, BM=plan.block, BN=BN, BK=BK, **tuning)
+        HAS_ROWS=rows is not None, SINGLE_EXPERT=single_expert, INNER_CONTIGUOUS=not transpose,
+        DOT_PRECISION=dot_precision, BM=plan.block, BN=BN, BK=BK, **tuning)
     return out
 
 
@@ -558,11 +569,9 @@ def invariant_weight_gradient(x, grad):
     if x.dtype != grad.dtype:
         x, grad = x.float(), grad.float()
     rows = grad.shape[1]
-    plan = SimpleNamespace(size=rows, blocks=triton.cdiv(rows, INVARIANT_BLOCK), block=INVARIANT_BLOCK,
-                           block_expert=torch.zeros(triton.cdiv(rows, INVARIANT_BLOCK), dtype=torch.int32,
-                                                    device=grad.device))
+    plan = SimpleNamespace(size=rows, blocks=triton.cdiv(rows, INVARIANT_BLOCK), block=INVARIANT_BLOCK)
     return _dense_mm(grad.T.contiguous(), None, x.T[None], plan, transpose=False,
-                     precision='ieee', output_dtype=torch.float32)
+                     precision='ieee', output_dtype=torch.float32, single_expert=True)
 
 
 class _InvariantLinear(torch.autograd.Function):
@@ -581,10 +590,9 @@ class _InvariantLinear(torch.autograd.Function):
         ctx.save_for_backward(x, w)
         ctx.precision = precision
         rows = x.shape[0]
-        plan = SimpleNamespace(size=rows, blocks=triton.cdiv(rows, INVARIANT_BLOCK), block=INVARIANT_BLOCK,
-                               block_expert=torch.zeros(triton.cdiv(rows, INVARIANT_BLOCK), dtype=torch.int32,
-                                                        device=x.device))
-        return _dense_mm(x.contiguous(), None, w[None], plan, transpose=False, precision=precision)
+        plan = SimpleNamespace(size=rows, blocks=triton.cdiv(rows, INVARIANT_BLOCK), block=INVARIANT_BLOCK)
+        return _dense_mm(x.contiguous(), None, w[None], plan, transpose=False, precision=precision,
+                         single_expert=True)
 
     @staticmethod
     def backward(ctx, grad):
@@ -595,15 +603,14 @@ class _InvariantLinear(torch.autograd.Function):
         # by definition and keep the shared matrix-product path.
         rows = grad.shape[0]
         plan = SimpleNamespace(size=rows, blocks=triton.cdiv(rows, INVARIANT_BLOCK), block=INVARIANT_BLOCK,
-                               block_expert=torch.zeros(triton.cdiv(rows, INVARIANT_BLOCK), dtype=torch.int32,
-                                                        device=grad.device))
+                               )
         # BF16-forward uses a FP32 straight-through adjoint through rounded
         # operands. Rounding incoming state adjoints again made an identical
         # flat/cached forward acquire branch-dependent backward discontinuities.
         backward_w = w.to(torch.bfloat16).float() if w.dtype == torch.float32 and ctx.precision == 'bf16' else w
         backward_precision = 'ieee' if ctx.precision == 'bf16' else ctx.precision
         dx = _dense_mm(grad.contiguous(), None, backward_w[None], plan, transpose=True,
-            precision=backward_precision) if ctx.needs_input_grad[0] else None
+            precision=backward_precision, single_expert=True) if ctx.needs_input_grad[0] else None
         dw = None
         if ctx.needs_input_grad[1]:
             from ..model.native_gradient_partitions import reduce_parameter_rows

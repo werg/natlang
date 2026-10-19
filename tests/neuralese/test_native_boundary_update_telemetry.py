@@ -35,6 +35,60 @@ def test_actual_targets_include_prompt_weight_but_not_forced_or_masked_boundarie
 
 
 @pytest.mark.parametrize('family', ['lfm', 'mellum'])
+def test_training_loss_omits_unused_accuracy_without_changing_loss_or_gradients(family):
+    """The update path may skip diagnostic argmax/sync work; its loss is identical."""
+    from natlang_neuralese.train.native_state_sft import packed_graph_loss
+
+    model = SharedStateModel(tiny(family), (58, 59, 60, 61), rank=4)
+    examples = [parse_graph(graph('sync-a'), tokenizer_fingerprint='tokenizer-sha'),
+                parse_graph(graph('sync-b'), tokenizer_fingerprint='tokenizer-sha')]
+    parameters = tuple(parameter for parameter in model.parameters() if parameter.requires_grad)
+
+    full_loss, full_details = packed_graph_loss(model, examples, checkpoint_layers=False,
+                                                 chunk_tokens=2, collect_accuracy=True)
+    full_gradients = torch.autograd.grad(full_loss, parameters)
+    fast_loss, fast_details = packed_graph_loss(model, examples, checkpoint_layers=False,
+                                                 chunk_tokens=2, collect_accuracy=False)
+    fast_gradients = torch.autograd.grad(fast_loss, parameters)
+
+    assert torch.equal(full_loss, fast_loss)
+    assert [item['weight'] for item in full_details] == [item['weight'] for item in fast_details]
+    assert all(item['accuracy'] is not None for item in full_details)
+    assert all(item['accuracy'] is None for item in fast_details)
+    assert all(torch.equal(a, b) for a, b in zip(full_gradients, fast_gradients))
+
+
+@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+@pytest.mark.parametrize('shared_prefixes', [False, True])
+def test_loss_chunk_gather_once_matches_legacy_all_parameter_gradients(family, shared_prefixes, monkeypatch):
+    from natlang_neuralese.train import native_state_sft as trainer
+
+    model = SharedStateModel(tiny(family), (58, 59, 60, 61), rank=4)
+    rows = [graph('gather-a'), graph('gather-b')]
+    rows[0]['nodes'][0].update(token_ids=[1, 4, 5, 6], target_weights=[0, 1, 1, 1])
+    rows[1]['nodes'][0].update(token_ids=[1, 4, 5, 7], target_weights=[0, 1, 1, 1])
+    examples = [parse_graph(row, tokenizer_fingerprint='tokenizer-sha') for row in rows]
+    parameters = tuple(parameter for parameter in model.parameters() if parameter.requires_grad)
+    gather = trainer._loss_query_state_chunks
+
+    torch.manual_seed(317)
+    optimized, _ = trainer.packed_graph_loss(model, examples, checkpoint_layers=True,
+        chunk_tokens=2, share_causal_prefixes=shared_prefixes, collect_accuracy=False)
+    optimized_gradients = torch.autograd.grad(optimized, parameters)
+
+    def old_chunk_gathers(hidden, query_ids, chunk_tokens, *, unique_queries):
+        return gather(hidden, query_ids, chunk_tokens, unique_queries=False)
+
+    monkeypatch.setattr(trainer, '_loss_query_state_chunks', old_chunk_gathers)
+    torch.manual_seed(317)
+    legacy, _ = trainer.packed_graph_loss(model, examples, checkpoint_layers=True,
+        chunk_tokens=2, share_causal_prefixes=shared_prefixes, collect_accuracy=False)
+    legacy_gradients = torch.autograd.grad(legacy, parameters)
+    assert torch.equal(optimized, legacy)
+    assert all(torch.equal(a, b) for a, b in zip(optimized_gradients, legacy_gradients))
+
+
+@pytest.mark.parametrize('family', ['lfm', 'mellum'])
 def test_directions_distinguish_descent_ascent_momentum_and_missing_gradient(family):
     model = SharedStateModel(tiny(family), (58,59,60,61), rank=4)
     parameter = model.input_rows

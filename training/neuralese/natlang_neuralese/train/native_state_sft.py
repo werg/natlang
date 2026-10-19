@@ -320,11 +320,13 @@ def native_training_update(model, optimizer, batch, *, backend=None, checkpoint_
                 with backend.autocast():
                     loss, details = packed_graph_loss(model, batch,
                         checkpoint_layers=checkpoint_layers, chunk_tokens=chunk_tokens,
-                        objective=objective, share_causal_prefixes=getattr(model, 'share_causal_prefixes', False))
+                        objective=objective, share_causal_prefixes=getattr(model, 'share_causal_prefixes', False),
+                        collect_accuracy=False)
             else:
                 loss, details = packed_graph_loss(model, batch,
                     checkpoint_layers=checkpoint_layers, chunk_tokens=chunk_tokens,
-                    objective=objective, share_causal_prefixes=getattr(model, 'share_causal_prefixes', False))
+                    objective=objective, share_causal_prefixes=getattr(model, 'share_causal_prefixes', False),
+                    collect_accuracy=False)
             loss.backward()
             cotangents.finish()
         if optimizer.latent is not None:
@@ -374,8 +376,20 @@ def sparse_row_updates(model, before):
     return result
 
 
+def _loss_query_state_chunks(hidden, query_ids, chunk_tokens, *, unique_queries):
+    """Gather a graph's loss states once when its physical query rows are distinct.
+
+    Repeated indices retain the old per-chunk indexing path, whose scatter-add
+    accumulation order is part of the gradient law for shared physical rows.
+    """
+    if unique_queries:
+        return hidden.index_select(0, query_ids).split(chunk_tokens)
+    return tuple(hidden[query_ids[start:start + chunk_tokens]]
+                 for start in range(0, query_ids.numel(), chunk_tokens))
+
+
 def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=128, objective=None,
-                      share_causal_prefixes=False):
+                      share_causal_prefixes=False, collect_accuracy=True):
     """One backbone graph forward for a minibatch; mean the original per-graph losses."""
     import torch.nn.functional as F
     from torch.utils.checkpoint import checkpoint
@@ -414,7 +428,7 @@ def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=1
             raise FloatingPointError('native policy objective must return a finite scalar loss')
         return loss, details
     hidden = result['h_final'][0]
-    losses, details = [], []
+    losses, details, detail_weights, detail_accuracies = [], [], [], []
     boundary_ids = set((*getattr(model, 'marker_ids', ()), *getattr(model, 'token_override_ids', ())))
     for graph_index, example in enumerate(examples):
         queries, targets, weights = [], [], []
@@ -436,27 +450,52 @@ def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=1
         query_ids = torch.tensor(queries, device=hidden.device)
         target_ids = torch.tensor(targets, device=hidden.device)
         token_weights = torch.tensor(weights, device=hidden.device, dtype=torch.float32)
+        state_chunks = _loss_query_state_chunks(hidden, query_ids, chunk_tokens,
+                                                unique_queries=len(set(queries)) == len(queries))
+        target_chunks = target_ids.split(chunk_tokens)
+        weight_chunks = token_weights.split(chunk_tokens)
         total = hidden.new_zeros((), dtype=torch.float32)
-        correct = hidden.new_zeros((), dtype=torch.float32)
-        for start in range(0, len(queries), chunk_tokens):
-            stop = start + chunk_tokens
-            def loss_chunk(states, labels, selected):
+        correct = hidden.new_zeros((), dtype=torch.float32) if collect_accuracy else None
+        for states, labels, selected in zip(state_chunks, target_chunks, weight_chunks):
+            def loss_chunk(states, labels, selected, *, measure_accuracy):
                 logits = model.logits(states)
                 ce = F.cross_entropy(logits.float(), labels, reduction='none')
-                return ((ce * selected).sum(),
-                        ((logits.argmax(-1) == labels).float() * selected).sum())
-            chunk_loss, chunk_correct = checkpoint(loss_chunk, hidden[query_ids[start:stop]],
-                target_ids[start:stop], token_weights[start:stop], use_reentrant=False)
+                loss_sum = (ce * selected).sum()
+                if not measure_accuracy:
+                    return loss_sum
+                return loss_sum, ((logits.argmax(-1) == labels).float() * selected).sum()
+            chunk = checkpoint(loss_chunk, states, labels, selected, measure_accuracy=collect_accuracy,
+                use_reentrant=False)
+            if collect_accuracy:
+                chunk_loss, chunk_correct = chunk
+                correct = correct + chunk_correct
+            else:
+                chunk_loss = chunk
             total = total + chunk_loss
-            correct = correct + chunk_correct
         denominator = token_weights.sum()
         losses.append(total / denominator)
-        details.append({'weight': float(denominator.detach()),
+        detail_weights.append(denominator.detach())
+        if collect_accuracy:
+            detail_accuracies.append((correct / denominator).detach())
+        details.append({'weight': None,
                         'boundary_targets': boundary_targets,
                         'supervised_tokens': len(queries),
                         'packed_physical_tokens': plan.token_count,
                         'original_physical_tokens': sum(item.plan.token_count for item in examples),
-                        'accuracy': float((correct / denominator).detach())})
+                        'accuracy': None})
+    # Resolve per-graph scalars in one host transfer. Calling float(tensor)
+    # inside the graph loop inserted a device synchronization for every graph
+    # (and again for its accuracy), serializing the otherwise asynchronous
+    # backbone forward. Training does not consume per-graph accuracy, so its
+    # ordinary path reads only the denominators needed for boundary telemetry.
+    if collect_accuracy:
+        metrics = torch.stack((torch.stack(detail_weights), torch.stack(detail_accuracies)), dim=1)
+        host_metrics = metrics.detach().cpu().tolist()
+    else:
+        host_weights = torch.stack(detail_weights).detach().cpu().tolist()
+        host_metrics = [(weight, None) for weight in host_weights]
+    for detail, (weight, accuracy) in zip(details, host_metrics):
+        detail['weight'], detail['accuracy'] = float(weight), None if accuracy is None else float(accuracy)
     return torch.stack(losses).mean(), details
 
 
