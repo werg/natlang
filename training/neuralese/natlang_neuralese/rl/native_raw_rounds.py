@@ -135,6 +135,9 @@ def configure_model(plan_path,declaration,handoff,out,*,verified_handoff=None):
     from .native_bootstrap_metadata import unchanged,save
     if path.exists():
         prior=json.loads(path.read_text())
+        if prior.get('supervised_boundary_configuration'):
+            from .native_supervised_boundary import recover_configuration
+            if recover_configuration(path,plan_path,declaration,handoff):return path
         if prior.get('runtime_handoff') and not declaration.get('runtime_handoff'):
             raise ValueError('raw continuation cannot discard its later runtime authority')
         owner={'plan_sha256':sha256_file_hex_cached(plan_path),'handoff':handoff}
@@ -1534,11 +1537,17 @@ def student_cycle(plan_path,declaration,handoff,directory,*,stop):
         if stop.requested:return cursor
         cursor=completed_raw_cursor(config,cursor,result)
         write_json_durable(cursor_path,cursor)
-    recipe=resolve_recipe_data(config['production_recipe'])
-    stages=_supervised_stage_inventory(recipe,config['production_stage'])
-    foundation=[stage for stage in stages if stage['id']==config['production_stage']]
-    for index in range(cursor.get('next_stage',0),len(stages)):
+    while True:
         if stop.requested:return cursor
+        from .native_supervised_boundary import apply as apply_boundary
+        sealed=_sealed_supervised_request(work/'supervised'/f"{cursor.get('next_stage',0):03d}")
+        if sealed is None:
+            config,cursor=apply_boundary(plan_path,declaration,handoff,config,cursor,directory)
+        recipe=resolve_recipe_data(config['production_recipe'])
+        stages=_supervised_stage_inventory(recipe,config['production_stage'])
+        foundation=[stage for stage in stages if stage['id']==config['production_stage']]
+        index=cursor.get('next_stage',0)
+        if index>=len(stages):break
         stage=stages[index];checkpoint=_current_checkpoint(config)
         jobdir=work/'supervised'/f'{index:03d}'
         continuation,sources=continuation_config(config,stage,checkpoint=str(_bound(checkpoint)),adapter=None,out=jobdir)
@@ -1557,7 +1566,7 @@ def student_cycle(plan_path,declaration,handoff,directory,*,stop):
         export={'models':{'raw':{'mandatory_sft':_progress(checkpoint)}}}
         pending=stage_pending(export,'raw',stage['id'],sources,parameters.get('epochs',1),
             objective=continuation.get('offline_objective_binding'))
-        if pending or is_foundation:
+        if pending or is_foundation or sealed is not None:
             _supervised_job(continuation,jobdir,config,cursor,stop)
             if stop.requested:return cursor
         cursor.update(next_stage=index+1,current_checkpoint=_current_checkpoint(config))
@@ -1583,13 +1592,36 @@ def student_cycle(plan_path,declaration,handoff,directory,*,stop):
     return cursor
 
 
+def _sealed_supervised_request(jobdir):
+    """An issued bridge request fixes its operation even after its state advances."""
+    from .native_bridge import read_request
+    paths=sorted((Path(jobdir)/'bridge').glob('*.request.json'))
+    if not paths:return None
+    if len(paths)!=1:raise ValueError('supervised operation has ambiguous sealed requests')
+    request=read_request(paths[0])
+    if request['kind']!='round' or Path(request['out']).resolve()!=Path(jobdir).resolve():
+        raise ValueError('sealed supervised operation changed its output/kind')
+    original=json.loads(_bound(request['config']).read_text())
+    if json.loads((Path(jobdir)/'config.json').read_text())!=original:
+        raise ValueError('sealed supervised operation configuration changed')
+    return paths[0],original
+
+
 def _supervised_job(continuation,jobdir,config,cursor,stop):
-    from .native_rounds import round_job
+    from .native_rounds import round_job,bridge_result
     if Path(continuation['out']).resolve() != Path(jobdir).resolve():
         raise ValueError('supervised operation configuration/output differs from its owned job directory')
-    path=Path(jobdir)/'config.json';path.parent.mkdir(parents=True,exist_ok=True)
-    write_json_durable(path,continuation)
-    result=round_job(path,continuation,Path(jobdir)/'bridge',stop)
+    sealed=_sealed_supervised_request(jobdir)
+    if sealed is not None:
+        request,continuation=sealed
+        result=bridge_result(continuation['round_command'],request,stop)
+        if stop.requested:return
+        if not result.get('state'):raise RuntimeError('sealed supervised operation returned no durable state')
+        result=json.loads(_bound(result['state']).read_text())
+    else:
+        path=Path(jobdir)/'config.json';path.parent.mkdir(parents=True,exist_ok=True)
+        write_json_durable(path,continuation)
+        result=round_job(path,continuation,Path(jobdir)/'bridge',stop)
     if stop.requested:return
     _publish_supervised_result(continuation,jobdir,config,cursor,result)
 
@@ -1693,6 +1725,8 @@ def _release_requirement(declaration,value,*,verified_handoff=None):
     # A later handoff explicitly retired this exact historical generation.
     # Keep the cursor receipt, but never reinterpret it as the new live plan.
     if transition_handoff is not None and reference==retired_cursor:return requirement
+    from .native_supervised_boundary import release_requirement
+    requirement=release_requirement(requirement,value)
     return _resident_release_requirement(requirement,value,transition=transition)
 
 

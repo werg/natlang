@@ -105,6 +105,8 @@ def evidence(plan_path,declaration,handoff,config):
         cursor=json.loads(cursor_path.read_text())
         if cursor.get('resident_current'):
             value=json.loads(add(cursor['resident_current']).read_text());plan(value['payload']['plan'])
+    from .native_supervised_boundary import dependencies
+    for reference in dependencies(config):add(reference)
     from ..common.runtime_inventory import task_runtime_inventory
     from ..train.recipe import native_recipe_binding
     from .native_supervised import recipe_lineage
