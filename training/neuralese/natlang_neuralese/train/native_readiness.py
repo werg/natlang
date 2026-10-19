@@ -178,6 +178,15 @@ def validate_ready(path, requirement):
             'communication_foundation': receipt.get('communication_foundation')}
 
 
+def _manage_raw_bootstrap(config):
+    value = config.get('manage_raw_bootstrap', True)
+    if type(value) is not bool:
+        raise ValueError('manage_raw_bootstrap must be an explicit boolean')
+    if not value and not config.get('raw_rl_bootstrap'):
+        raise ValueError('external RAW ownership requires its bound release plan')
+    return value
+
+
 def _role_local_released(config):
     if not config.get('raw_rl_bootstrap'):return False
     from ..rl.native_role_release import local_released
@@ -518,6 +527,7 @@ def _run(config_path, *, once=False, stop):
             interval = config.get('poll_seconds', 60)
             if type(interval) not in (int, float) or not 0 < interval <= 60:
                 raise ValueError('shared-stage readiness must be checked at least once per minute')
+            manage_raw = _manage_raw_bootstrap(config)
             ready, pending = ready_participants(config)
             curriculum = (json.loads(Path(config['curriculum']).read_text()) if config.get('curriculum') else {})
             if curriculum.get('pairs') and curriculum.get('held_pairs'):
@@ -547,7 +557,7 @@ def _run(config_path, *, once=False, stop):
                 'participants': signature, 'curriculum': curriculum_signature})
             participants = out/'participants.json'
             retry_ready = retry is None or time.time() >= retry['next_retry_at']
-            if (child is None and len(ready)<2 and config.get('raw_rl_bootstrap') and not last_success
+            if (manage_raw and child is None and len(ready)<2 and config.get('raw_rl_bootstrap') and not last_success
                     and not semantic_publication and not once and not stop.requested and retry_ready
                     and not _role_local_released(config)):
                 try:
@@ -639,6 +649,7 @@ def _run(config_path, *, once=False, stop):
                     except OSError as error:
                         retry = _retry_failure(retry, 'native-semantic', execution_signature, interval, error=error)
             state = {'schema': 'natlang.native-shared-controller-state/1', 'ready_models': len(ready),
+                     'manage_raw_bootstrap': manage_raw,
                      'pending': pending, 'participants': str(participants) if len(ready) >= 2 else None,
                      'child_pid': child.pid if child else None, 'child_kind': child_kind,
                      'child_ownership': launch if child else None,
