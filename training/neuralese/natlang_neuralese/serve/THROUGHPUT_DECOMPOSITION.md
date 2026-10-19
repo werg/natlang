@@ -1,0 +1,29 @@
+# Native inference throughput
+
+Policy remains the existing natlang program's choice of calls and communication.
+`advanceNativeInvocation(state, sampledAction) -> invocationState` is exact crisp
+execution: token sampling, positional KV/hybrid updates, authenticated native
+captures, and full episode provenance retain the existing contracts.
+
+1. Profile the actual shared prefill/decode mechanisms before choosing work.
+2. Reuse immutable one-query block geometry while rebinding exact causal/window
+   bounds and real sequence lengths. This is exact kernel plumbing, not another
+   attention algorithm; preserve chronological partial-block accumulation.
+3. Ordinary-token inference can omit a known-zero low-rank residual only when
+   autograd is disabled. Training/reference gradient and optimizer contracts stay
+   unchanged; producer inputs still use the trained transform.
+4. Execute a known forced ordinary template prefix as one native prefill chunk,
+   retaining every forced input/action coordinate and actual hybrid-state result.
+5. Validate both model ports against the previous cached execution, including
+   imported producer state, window boundaries, captures and gradients. Measure
+   the trained actor only in a bounded owner-coordinated local window.
+
+No new prompt, reward, scheduling policy, distribution or communication format
+is introduced. No projection fallback, fabricated cache, recursive graph replay,
+cloud allocation or unmeasured production throughput claim is permitted.
+
+Current validated implementation: steps2–3 only. Template-prefix batching in
+step4 remains an assigned followup: a focused CUDA check found a small difference
+already after the first LFM convolution/FFN layer; CPU both-port checks were
+exact. The existing sequential prefix is retained pending localization and
+appropriate actual-actor qualification; no tolerance was widened.

@@ -7,6 +7,7 @@ of the same layer's gated inputs. Source private context is never imported.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 import torch
 from torch import nn
 import torch.nn.functional as F
@@ -395,9 +396,45 @@ def native_causal_mask(batch, head, q, kv, starts, ends, query_count):
     return valid & (kv >= starts[safe_q]) & (kv <= ends[safe_q])
 
 
+@lru_cache(maxsize=64)
+def _decode_block_geometry(device, key_blocks, first, last):
+    """Immutable one-query block indices only; never cache invocation bounds.
+
+    Successive decode positions normally share this geometry for 128 tokens.
+    The finite LRU bounds GPU metadata retention across contexts/devices.
+    """
+    from torch.nn.attention.flex_attention import BlockMask
+    selected = list(range(first, last+1))
+    remaining = list(range(first)) + list(range(last+1, key_blocks))
+    counts = torch.tensor([[[len(selected)]]], dtype=torch.int32, device=device)
+    indices = torch.tensor([[[selected+remaining]]], dtype=torch.int32, device=device)
+    return BlockMask.from_kv_blocks(counts, indices, BLOCK_SIZE=128)
+
+
+def _decode_block_mask(plan, device, window):
+    from torch.nn.attention.flex_attention import BlockMask
+    end = plan.query_positions[0]
+    start = max(0, end-window+1) if window is not None else 0
+    key_blocks = (plan.key_count+127)//128
+    geometry = _decode_block_geometry(torch.device(device), key_blocks, start//128, min(end//128,key_blocks-1))
+    # A device fill avoids blocking one-element host-to-device tensor copies.
+    starts = torch.full((1,), start, dtype=torch.long, device=device)
+    ends = torch.full((1,), end, dtype=torch.long, device=device)
+    def mask_mod(batch, head, q, kv):
+        return native_causal_mask(batch, head, q, kv, starts, ends, 1)
+    mask = BlockMask((1, plan.key_count), geometry.kv_num_blocks, geometry.kv_indices,
+        None, None, geometry.q_num_blocks, geometry.q_indices, None, None,
+        geometry.BLOCK_SIZE, mask_mod)
+    mask._natlang_bounds = (starts, ends)
+    return mask
+
+
 def graph_block_mask(plan, device, window=None):
     """Sparse 128-token geometry without allocating a token-by-token matrix."""
     from torch.nn.attention.flex_attention import BlockMask
+    if (isinstance(plan, AttentionLayout) and plan.token_count == 1
+            and not torch.is_grad_enabled() and 0 <= plan.query_positions[0] < plan.key_count):
+        return _decode_block_mask(plan, device, window)
     if isinstance(plan, GraphPlan):
         plan, _ = query_workspace(plan)
     starts, ends = plan.bounds(device, window)
@@ -746,7 +783,9 @@ def native_step(model, ids, cache=None, *, producing=False):
         return {'h_final': raw, 'cache': cache, 'token_ids': ids[0], 'embeddings': raw[0],
                 'positions': positions, 'layers': tuple(layers)}
     mask = torch.full(ids.shape, producing, device=ids.device, dtype=torch.bool) if isinstance(producing, bool) else producing
-    h = model.adapter(raw, mask)
+    # Keep training's explicit zero gradients (and momentum/decay semantics).
+    # Ordinary inference has no adapter contribution and needs no two GEMMs.
+    h = raw if producing is False and not torch.is_grad_enabled() else model.adapter(raw, mask)
     states, captures = [], []
     masks = {}
     rotary_tables = {}
