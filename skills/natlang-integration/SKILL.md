@@ -485,6 +485,13 @@ Neuralese through a typed natlang call and return its actual answer text; an
 internal artifact ID is not the answer. Explicit Neuralese returns retain the
 original block. Literal text that merely spells a marker remains literal.
 
+For an inferred assistant completion containing native-state parts, the runtime
+uses the function's declared result type: compatible Neuralese results retain
+the typed reference, while ordinary results materialize each part's authenticated
+stored text in order and then use the normal exact return checker. Mixed text
+and state parts preserve their order. This rule does not change explicit
+`return_result` calls or weaken type validation.
+
 For a decision-objective `neuralese-grad-term` or native objective validation
 error, provide finite numeric rewards or nonnegative finite probabilities with
 positive total mass, exactly one entry per declared option. Keep the recorded

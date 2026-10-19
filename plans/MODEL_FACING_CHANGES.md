@@ -1210,3 +1210,13 @@ well as tool calls, following existing provider-capture semantics. The first
 43/48 audit was a tool-only checker error and remains preserved. Student-root
 12×4 measurement is still pending; neither this teacher measurement nor its
 48 accepted outcomes grants training admission or student native-KV qualification.
+
+## 2026-10-19: typed native-state assistant completion decoding
+
+The runtime interprets assistant completions containing native-state parts
+against the declared function return type. A compatible Neuralese result keeps
+its state reference; an ordinary result materializes authenticated stored text,
+preserving mixed text/state order, before the existing return checker. Explicit
+`return_result` calls and type checks are unchanged. This repairs a concrete
+runtime failure without changing prompt wording. Measure this behavior on the
+next own-teacher window; no live measurement has been completed for this update.

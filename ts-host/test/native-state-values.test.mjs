@@ -106,6 +106,50 @@ test('typed child return reaches parent as native-state content without writing 
   assert.ok(!JSON.stringify(imports).includes(artifact.metadata.text), 'the producer text is not flattened into the parent prompt');
 });
 
+test('assistant native completion is decoded against the declared return type', async () => {
+  const store = new MemoryNeuraleseStore(), neuralese = runtimeFor(store);
+  const makeDriver = async text => {
+    const artifact = await store.putNativeState({ ...nativeStateFixture(), metadata: {
+      ...nativeStateFixture().metadata, text,
+    } });
+    const marker = neuraleseSentinel(artifact.id);
+    const parts = [{ type: 'native_state', id: artifact.id }];
+    const driver = Object.assign(async () => ({ text: marker, calls: [], raw_response: {
+      choices: [{ message: { role: 'assistant', content: parts } }],
+    } }), { neuralese: true });
+    return { driver, artifact, marker };
+  };
+  const run = async (type, sourceText, expected) => {
+    const { driver, artifact } = await makeDriver(sourceText);
+    const session = open({ type: `() => ${type}`, instructions: 'Return the requested value.' }, { neuralese }).session;
+    await new NativeToolAgent(driver, { maxTurns: 2, neuralese }).run(session);
+    assert.deepEqual(session.lam.return, expected);
+    return artifact;
+  };
+
+  await run('string', 'ordinary text result', 'ordinary text result');
+  await run('number', '42', 42);
+  await run('{ count: number; label: string }', '{"count":7,"label":"ready"}', { count: 7, label: 'ready' });
+
+  const native = await makeDriver('soft memo');
+  const softSession = open({ type: '() => Neuralese<string>', instructions: 'Return the requested soft value.' },
+    { neuralese }).session;
+  await new NativeToolAgent(native.driver, { maxTurns: 2, neuralese }).run(softSession);
+  assert.equal(softSession.lam.return.$neuralese.id, native.artifact.id);
+
+  const mixedArtifact = await store.putNativeState({ ...nativeStateFixture(), metadata: {
+    ...nativeStateFixture().metadata, text: 'middle',
+  } });
+  const mixedParts = [{ type: 'text', text: 'before ' }, { type: 'native_state', id: mixedArtifact.id },
+    { type: 'text', text: ' after' }];
+  const mixedDriver = Object.assign(async () => ({ text: partsToText(mixedParts), calls: [], raw_response: {
+    choices: [{ message: { role: 'assistant', content: mixedParts } }],
+  } }), { neuralese: true });
+  const mixedSession = open({ type: '() => string', instructions: 'Return the requested text.' }, { neuralese }).session;
+  await new NativeToolAgent(mixedDriver, { maxTurns: 2, neuralese }).run(mixedSession);
+  assert.equal(mixedSession.lam.return, 'before middle after');
+});
+
 test('native typed artifacts survive file/OPFS restart, pin lifecycle, .nz and compiled-import adoption', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'natlang-native-store-'));
   const { storage } = fakeOpfs();
@@ -346,8 +390,10 @@ for (const format of ['native_state', 'neuralese']) for (const channel of ['tool
       const driver = neuraleseServerModelTurn({ endpoint, model: 'exact-protocol-fixture', store });
       const invocation = open({ type: '() => string', instructions: 'Return actual answer text.' }, { neuralese }).session;
       await new NativeToolAgent(driver, { maxTurns: 2, neuralese }).run(invocation);
-      assert.equal(invocation.lam.return, 'actual HTTP answer'); assert.equal(requests.length, 2);
-      assert.match(JSON.stringify(requests[1].messages), /type-mismatch/);
+      const assistantNativeText = format === 'native_state' && channel === 'assistant';
+      assert.equal(invocation.lam.return, assistantNativeText ? 'the balance is 42' : 'actual HTTP answer');
+      assert.equal(requests.length, assistantNativeText ? 1 : 2);
+      if (!assistantNativeText) assert.match(JSON.stringify(requests[1].messages), /type-mismatch/);
       const child = open({ type: '() => Neuralese<string>', instructions: 'Return the produced value.' }, { neuralese }).session;
       requests.length = 0;
       await new NativeToolAgent(driver, { maxTurns: 1, neuralese }).run(child);
@@ -357,9 +403,11 @@ for (const format of ['native_state', 'neuralese']) for (const channel of ['tool
           requests.length = 0;
           const target = open({ type: '() => string', instructions: 'Return actual answer text.' }, { neuralese }).session;
           await new NativeToolAgent(driver, { maxTurns: 2, neuralese }).run(target);
-          assert.equal(target.lam.return, replyMode === 'literal' ? neuraleseSentinel(artifact.id) : 'actual HTTP answer');
-          assert.equal(requests.length, replyMode === 'literal' ? 1 : 2);
-          if (replyMode === 'mixed') assert.match(JSON.stringify(requests[1].messages), /type-mismatch/);
+          const mixedNativeText = format === 'native_state' && replyMode === 'mixed';
+          assert.equal(target.lam.return, replyMode === 'literal' ? neuraleseSentinel(artifact.id) : mixedNativeText ?
+            '<|neuralese|>literal text<|/neuralese|> the balance is 42' : 'actual HTTP answer');
+          assert.equal(requests.length, replyMode === 'literal' || mixedNativeText ? 1 : 2);
+          if (replyMode === 'mixed' && !mixedNativeText) assert.match(JSON.stringify(requests[1].messages), /type-mismatch/);
           assert.equal(incidentalWrites, 0, 'sourced text runs must not create an incidental producer');
         }
       }
