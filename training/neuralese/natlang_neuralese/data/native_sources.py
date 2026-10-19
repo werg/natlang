@@ -82,11 +82,11 @@ class NativeGraphSource:
                 raise ValueError(f'{self.path}: expected {required_split} rows, got {example.split!r} in {example.id}')
             if example.id in self.bindings:
                 raise ValueError(f'{self.path}: duplicate example id {example.id!r}')
+            from .native_graph_schema import communication_classification
             visits = {'id': example.id, 'groups': example.source_groups, 'binding': binding,
                       'supervised_tokens': sum(weight > 0 for weight in example.target_weights),
                       'forward_tokens': example.plan.token_count,
-                      'communication': self.kind == 'semantic-pairs' and
-                          row['models'][self.pair_model]['export']['stop'] > row['models'][self.pair_model]['export']['start']}
+                      **communication_classification(example)}
             self.entries.append(visits)
             self.bindings[example.id] = binding
             self.groups.update(example.source_groups)

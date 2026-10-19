@@ -21,7 +21,7 @@ class NativeGraphExample:
     external_states: dict = field(default_factory=dict)
 
 
-def parse_graph(row, *, tokenizer_fingerprint):
+def _graph_fields(row, *, tokenizer_fingerprint):
     """Validate actual token supervision and graph references before any update."""
     if row.get('schema') != SCHEMA:
         raise ValueError('native graph schema is required; legacy projected records need explicit conversion')
@@ -59,8 +59,52 @@ def parse_graph(row, *, tokenizer_fingerprint):
             or type(binding.get('token_count')) is not int or binding['token_count'] < 0
             for name, binding in external.items())):
         raise ValueError('native graph external states need exact content IDs and nonnegative token counts')
+    return nodes, tuple(weights), external
+
+
+def parse_graph(row, *, tokenizer_fingerprint):
+    """Validate and compile a graph for actual execution."""
+    nodes, weights, external = _graph_fields(row, tokenizer_fingerprint=tokenizer_fingerprint)
     plan = compile_graph(nodes, external_sizes={name: binding['token_count'] for name, binding in external.items()})
-    return NativeGraphExample(row['id'], row['split'], tuple(groups), tokenizer_fingerprint,
-                              plan, tuple(weights), external)
+    return NativeGraphExample(row['id'], row['split'], tuple(row['source_groups']),
+                              tokenizer_fingerprint, plan, weights, external)
+
+
+def indexed_graph_metadata(row, *, tokenizer_fingerprint):
+    """Normalize an already authenticated indexed row without expanding KV positions.
+
+    This is only a cache-migration seam: callers must compare its exact row binding
+    with the previously validated execution index before using any classification.
+    It deliberately does not grant graph admission or replace compile_graph.
+    """
+    from types import SimpleNamespace
+    nodes, weights, external = _graph_fields(row, tokenizer_fingerprint=tokenizer_fingerprint)
+    plan = SimpleNamespace(invocations=tuple(nodes), external_names=tuple(external),
+                           external_sizes=tuple(value['token_count'] for value in external.values()))
+    return NativeGraphExample(row['id'], row['split'], tuple(row['source_groups']),
+                              tokenizer_fingerprint, plan, weights, external)
+
+
+def communication_classification(example):
+    """Classify actual supervised state consumption, independent of source format.
+
+    A local producer and consumer qualify separately from imported external state.
+    Merely containing markers or a forced token does not train consumption.
+    """
+    internal = external = False
+    names = {node.name for node in example.plan.invocations}
+    offset = 0
+    for node in example.plan.invocations:
+        weights = example.target_weights[offset:offset + len(node.token_ids)]
+        for edge in node.imports:
+            if edge.stop <= edge.start or not any(weight > 0 for weight in weights[edge.at + 1:]):
+                continue
+            if edge.source in names:
+                internal = True
+            elif edge.source in example.external_states:
+                external = True
+        offset += len(node.token_ids)
+    return {'communication': internal or external, 'producer_consumer': internal,
+            'external_state_consumption': external}
 
 

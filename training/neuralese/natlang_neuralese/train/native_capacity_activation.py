@@ -92,15 +92,9 @@ def _represented_prefix(part, payload, context, original, *, package):
     return represented
 
 
-def geometry_part(part, *, preparation, package):
-    from .native_resident import bound, binding, code_inventory, geometry_capacity, digest, _source_witness, SCHEMA as resident_schema
-    context = json.loads(bound(part['resident_current']).read_text())
-    payload = context['payload']
-    if (context.get('schema') != resident_schema or context.get('generation') != digest(payload)
-            or payload['plan']['code'] != code_inventory(package)):
-        raise ValueError('capacity activation runtime differs from its bound resident generation')
-    limits = geometry_capacity(payload['geometry_qualification'],
-        identity=payload['geometry_identity'], code=payload['plan']['code'])
+def ordinary_partition_proof(part):
+    """Authenticate the shared ordinary-only producer law, without graph parsing."""
+    from .native_resident import bound
     receipt_path = bound(part['receipt'])
     registered_path = bound(part['registered_manifest'])
     registered = json.loads(registered_path.read_text())
@@ -161,6 +155,21 @@ def geometry_part(part, *, preparation, package):
 
     original_path = member(part['original_source'])
     coverage_path = member(part['coverage'])
+    return receipt, proofs, original_path, coverage_path
+
+
+def geometry_part(part, *, preparation, package):
+    from .native_resident import bound, binding, code_inventory, geometry_capacity, digest, _source_witness, SCHEMA as resident_schema
+    context = json.loads(bound(part['resident_current']).read_text())
+    payload = context['payload']
+    if (context.get('schema') != resident_schema or context.get('generation') != digest(payload)
+            or payload['plan']['code'] != code_inventory(package)):
+        raise ValueError('capacity activation runtime differs from its bound resident generation')
+    limits = geometry_capacity(payload['geometry_qualification'],
+        identity=payload['geometry_identity'], code=payload['plan']['code'])
+    receipt, proofs, original_path, coverage_path = ordinary_partition_proof(part)
+    receipt_path = bound(part['receipt'])
+    model = part['model']
     if (original_path != receipt_path.parent / receipt['manifests'][model + ':train:remaining-long']
             or coverage_path != receipt_path.parent / receipt['coverage']):
         raise ValueError('capacity activation lost original remaining-long disposition')

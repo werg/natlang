@@ -740,6 +740,8 @@ def build_parser():
         help='while the exact declared foundation is pending, communication batches per priority ordinary batch')
     parser.add_argument('--urgent-cohort-fairness', action=argparse.BooleanOptionalAction, default=False,
         help='balance positive-priority source cohorts using actual completed indexed graph token exposure')
+    parser.add_argument('--source-classification-migration', type=Path,
+        help='explicit source-bound index/progress classification continuation')
     parser.add_argument('--communication-foundation', action=argparse.BooleanOptionalAction, default=False,
         help='pause at the complete admitted communication cohort with mandatory ordinary credits retained')
     parser.add_argument('--refresh-foundation-readiness', action=argparse.BooleanOptionalAction, default=False,
@@ -1102,7 +1104,12 @@ def main(argv=None):
     from .native_pending_sources import load_pending_sources
     checkpoint_options['_pending_native_source_declarations'] = [
         load_pending_sources(path, tokenizer_fingerprint=fingerprint) for path in args.pending_native_sources]
+    checkpoint_options['source_classification_history'] = list((saved_training.get('options') or {}).get('source_classification_history') or [])
     checkpoint_options['_communication_ids']=[entry['id'] for entry in train.entries if entry.get('communication')]
+    checkpoint_options['_producer_consumer_ids'] = [entry['id'] for entry in train.entries
+        if entry.get('producer_consumer', entry.get('communication', False))]
+    checkpoint_options['_external_state_consumption_ids'] = [entry['id'] for entry in train.entries
+        if entry.get('external_state_consumption')]
     foundation_source = (NativeGraphSource(args.foundation_native_graphs, fingerprint,
                                            required_split='train', role_ids=roles.ids)
                          if args.foundation_native_graphs else train)
@@ -1162,6 +1169,19 @@ def main(argv=None):
     if restored_frame is not None:
         resume = restored_frame
         restored_progress = True
+    from .native_source_classification import (migration_classes, reclassify_progress,
+                                               require_explicit_reclassification)
+    class_migration = (migration_classes(args.source_classification_migration, train)
+                       if args.source_classification_migration else {})
+    require_explicit_reclassification(carried_progress, train.entries, class_migration)
+    if class_migration:
+        carried_progress = reclassify_progress(carried_progress, class_migration)
+        if resume is not None:
+            resume = reclassify_progress({'active': resume}, class_migration)['active']
+        proof_sha = sha256_file_hex_cached(args.source_classification_migration)
+        if not any(item['proof_sha256'] == proof_sha for item in checkpoint_options['source_classification_history']):
+            checkpoint_options['source_classification_history'].append(
+                {'proof_sha256': proof_sha, 'graph_visits_created': 0})
     if args.withdrawn_native_graphs:
         if resume is None:
             raise ValueError('native withdrawal needs the actual checkpoint and exact predecessor source')
@@ -1524,6 +1544,7 @@ def main(argv=None):
     # All live state now belongs to the sources, optimizer, RNG, counters,
     # checkpoint_options and carried_progress. Drop references, never mutate
     # the predecessor or weaken snapshot ownership to reclaim this memory.
+    saved_options = class_migration = None
     saved_training = resume = shared_resume = continuation_training = restored_frame = None
     source_resume = foundation_frame = old_frame = old_options = None
     old_counts = old_quotas = prior_bindings = prior_order = prior_held = None
@@ -1557,6 +1578,10 @@ def main(argv=None):
                     checkpoint_options.update(native_graphs=str(train.path), held_native_graphs=str(held.path), recipe_binding=args.recipe_binding,
                         resident_adoption={'generation': resident.generation, 'history': resident.state['history']})
                     checkpoint_options['_communication_ids'] = [entry['id'] for entry in train.entries if entry.get('communication')]
+                    checkpoint_options['_producer_consumer_ids'] = [entry['id'] for entry in train.entries
+                        if entry.get('producer_consumer', entry.get('communication', False))]
+                    checkpoint_options['_external_state_consumption_ids'] = [entry['id'] for entry in train.entries
+                        if entry.get('external_state_consumption')]
                     checkpoint_options['_pending_native_source_declarations'] = resident.pending_declarations
                     args.pending_native_sources = [Path(item['binding']['path']) for item in resident.pending_declarations]
                     checkpoint_options['pending_native_sources'] = [str(path) for path in args.pending_native_sources]

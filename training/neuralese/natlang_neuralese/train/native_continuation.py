@@ -251,7 +251,7 @@ def verify_initial_foundation_cohort(train, foundation, *, already_declared=Fals
     if already_declared:
         return  # Later admitted rows remain mandatory without moving this finite cohort.
     rows = lambda source: {entry['id']: entry['binding'] for entry in source.entries
-                           if entry.get('communication')}
+                           if entry.get('producer_consumer', entry.get('communication', False))}
     expected, actual = rows(train), rows(foundation)
     if not expected or actual != expected:
         raise ValueError('initial communication foundation must bind the entire currently declared communication cohort')
@@ -263,7 +263,7 @@ def communication_foundation(source,counts,*,epochs,trained_bindings):
     quotas=required_visits(source.ordered_ids(),epochs)
     rows={}
     for entry in source.entries:
-        if not entry.get('communication'):continue
+        if not entry.get('producer_consumer', entry.get('communication', False)):continue
         key=entry['id']
         compatible=trained_bindings.get(key)==entry['binding']
         rows[key]={'binding':entry['binding'],'required_visits':quotas[key],
@@ -285,7 +285,8 @@ def raw_communication_rows(progress):
     for frame in progress.values():
         quotas=frame.get('required_visits') or {}
         counts=frame.get('exposure_counts') or {}
-        for key in (frame.get('options') or {}).get('_communication_ids',[]):
+        options = frame.get('options') or {}
+        for key in options.get('_producer_consumer_ids', options.get('_communication_ids', [])):
             binding=frame['source_row_bindings'][key]
             previous=rows.get(key)
             if previous and previous['binding']!=binding:
