@@ -589,6 +589,7 @@ class ParameterCotangentScope:
             'row_indices': row_indices, 'starts': starts, 'counts': counts,
             'anchors': tuple(anchors),
             'pair_count': int(pair_count), 'invocation_index': partitions.invocation_index,
+            'invocation_namespace': partitions.invocation_namespace,
             'chunk_offset': partitions.chunk_offset, 'chunk_length': partitions.lengths[0],
             'invocation_length': partitions.invocation_length,
             'sequence': self._expert_chunk_sequence,
@@ -613,7 +614,10 @@ class ParameterCotangentScope:
             records = bucket['records']
             by_invocation = {}
             for record in records:
-                by_invocation.setdefault(record['invocation_index'], []).append(record)
+                invocation = (record['invocation_namespace'], record['invocation_index'])
+                if invocation[0] is None:
+                    raise RuntimeError('deferred expert chunk has no forward-call provenance')
+                by_invocation.setdefault(invocation, []).append(record)
             for invocation in sorted(by_invocation, reverse=True):
                 grouped = {}
                 for record in by_invocation[invocation]:

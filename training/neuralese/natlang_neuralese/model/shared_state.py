@@ -84,7 +84,7 @@ def _actor_layer_inputs(bank,groups,port,layer,h,attention):
     if bank is None:
         return _layer_inputs(port,layer,h,attention)
     merged=None
-    for name,rows,subset in groups:
+    for name,rows,subset,_invocation_index in groups:
         from .native_gradient_partitions import gradient_partitions
         with gradient_partitions(subset):
             values=bank.execute(name,lambda:_layer_inputs(port,layer,h.index_select(1,rows),attention))
@@ -95,12 +95,20 @@ def _actor_layer_inputs(bank,groups,port,layer,h,attention):
     return tuple(merged)
 
 
-def _actor_finish(bank,groups,port,layer,h,out,attention):
+def _actor_finish(bank,groups,port,layer,h,out,attention,*,layer_index=None):
+    from .native_gradient_partitions import GradientPartitions, active_gradient_partitions, gradient_partitions
+    parent=active_gradient_partitions()
     if bank is None:
+        if parent is not None and parent.invocation_namespace is not None and layer_index is not None:
+            with gradient_partitions(GradientPartitions(
+                    parent.lengths, invocation_namespace=parent.invocation_namespace+(layer_index,))):
+                return _finish(port,layer,h,out,attention)
         return _finish(port,layer,h,out,attention)
     result=torch.zeros_like(h)
-    for name,rows,subset in groups:
-        from .native_gradient_partitions import gradient_partitions
+    for name,rows,subset,invocation_index in groups:
+        if parent is not None and parent.invocation_namespace is not None and layer_index is not None:
+            subset=GradientPartitions((rows.numel(),), invocation_index=invocation_index,
+                invocation_namespace=parent.invocation_namespace+(layer_index,))
         with gradient_partitions(subset):
             value=bank.execute(name,lambda:_finish(port,layer,h.index_select(1,rows),out.index_select(2 if attention else 1,rows),attention))
         result=result.index_copy(1,rows,value)
@@ -159,8 +167,9 @@ def _fp32_kv_cotangents(port, tensor):
 
 def forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None = None, *, embeddings=None, external_blocks=None, external_identity=None, retain_states=True):
     """One layer-major graph traversal with immutable reduction provenance."""
-    from .native_gradient_partitions import GradientPartitions, gradient_partitions
-    partitions = GradientPartitions(tuple(len(node.token_ids) for node in plan.invocations))
+    from .native_gradient_partitions import GradientPartitions, gradient_partitions, new_gradient_namespace
+    partitions = GradientPartitions(tuple(len(node.token_ids) for node in plan.invocations),
+        invocation_namespace=new_gradient_namespace())
     with gradient_partitions(partitions):
         return _forward_graph(port, plan, adapter, embeddings=embeddings,
             external_blocks=external_blocks, external_identity=external_identity, retain_states=retain_states)
@@ -190,8 +199,9 @@ def _forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None 
         # shared-base accumulator order (and can change BF16 gradients after
         # prior microbatches). Keep invocation order, with each token once.
         actor_groups=tuple((node.name,torch.arange(offset,offset+len(node.token_ids),device=device),
-                            GradientPartitions((len(node.token_ids),)))
-            for node,offset in zip(plan.invocations,plan.offsets) if node.token_ids)
+                            GradientPartitions((len(node.token_ids),)),invocation_index)
+            for invocation_index,(node,offset) in enumerate(zip(plan.invocations,plan.offsets))
+            if node.token_ids)
     if plan.token_count == 0:
         state = tuple(tuple(torch.cat([item[i][j] for item in external], dim=2 if port.is_attention(i) else 1)
                             for j in range(2 if port.is_attention(i) else 1)) for i in range(port.num_layers))
@@ -250,7 +260,8 @@ def _forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None 
                     gated = torch.cat([gated, *imported], dim=1)
                 captured = (gated,)
                 out = _convolve(layer, gated, c, plan, range(plan.token_count), index=convolution_index)
-            updated = _actor_finish(actor_bank,actor_groups,port,layer,value,out,attention)
+            updated = _actor_finish(actor_bank,actor_groups,port,layer,value,out,attention,
+                                    layer_index=index)
             return (updated, *captured) if retain_states else (updated,)
 
         if checkpointed:

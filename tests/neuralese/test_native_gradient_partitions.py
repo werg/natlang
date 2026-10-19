@@ -361,6 +361,124 @@ def test_deferred_expert_chunks_flush_before_next_microbatch_accumulation():
     assert torch.equal(down.grad, actual_down.to(down.dtype))
 
 
+@pytest.mark.parametrize('checkpointed', [False, True])
+def test_shared_expert_forward_frames_survive_checkpoint_recompute(checkpointed):
+    from torch.utils.checkpoint import checkpoint
+    from natlang_neuralese.maple.fp8_experts import GroupedLinear
+    from natlang_neuralese.model.native_gradient_partitions import (
+        GradientPartitions, gradient_partitions, new_gradient_namespace, token_local_chunks)
+
+    # torch._grouped_mm requires its matrix strides to be 16-byte aligned.
+    # Every coordinate receives the same scalar product, keeping the midpoint
+    # ordering witness while exercising the real grouped-linear backward.
+    weight = torch.nn.Parameter(torch.zeros((1, 16, 16), dtype=torch.bfloat16))
+    operands = ((1.0, 1.0), (2.0**-12, 2.0**-12), (2.0**-12, 2.0**-12))
+    with ParameterCotangentScope([('tied_expert', weight)], mode='vjp',
+                                 accumulator_backend='cpu_file') as scope:
+        outputs = []
+        frame_runs = []
+        for invocation, (value, cotangent) in enumerate(operands):
+            x = torch.full((1, 1, 16), value, dtype=torch.bfloat16, requires_grad=True)
+            # The outer context models one graph forward frame. The actor's
+            # invocation index is local to that frame; its namespace must stay
+            # captured when checkpoint() later recomputes the first forward.
+            frame = GradientPartitions((1,), invocation_namespace=new_gradient_namespace())
+            with gradient_partitions(frame):
+                provenance = GradientPartitions((1,), invocation_index=invocation,
+                    invocation_namespace=frame.invocation_namespace+(0, invocation))
+                runs = []
+
+                def project(rows):
+                    offsets = torch.tensor([rows.shape[0]], dtype=torch.int32)
+                    return GroupedLinear.apply(rows, weight, offsets, False,
+                                               *scope.anchors_for_weight(weight))
+
+                def execute(current, captured_provenance=provenance, captured_runs=runs):
+                    captured_runs.append(captured_provenance.invocation_namespace)
+                    with gradient_partitions(captured_provenance):
+                        return token_local_chunks(current, 1, lambda part: project(part[0])[None]).squeeze(0)
+
+                output = checkpoint(execute, x, use_reentrant=False) if checkpointed and invocation == 0 else execute(x)
+                frame_runs.append((provenance.invocation_namespace, runs))
+            outputs.append(output)
+        returned, = torch.autograd.grad(tuple(outputs), (weight,), grad_outputs=tuple(
+            torch.full_like(output, cotangent) for output, (_, cotangent) in zip(outputs, operands)))
+        actual = scope.entries[id(weight)]['accumulator'].clone()
+        scope.finish()
+    expected = torch.tensor(0.0, dtype=torch.float32)
+    for value, cotangent in reversed(operands):
+        expected = expected + torch.tensor(value, dtype=torch.float32) * torch.tensor(cotangent, dtype=torch.float32)
+    expected_full = expected.expand_as(actual).clone()
+    assert len({frame for frame, _runs in frame_runs}) == len(operands)
+    for index, (frame, runs) in enumerate(frame_runs):
+        assert runs and all(observed == frame for observed in runs)
+        assert len(runs) >= (2 if checkpointed and index == 0 else 1)
+    assert torch.equal(actual, expected_full)
+    assert torch.equal(returned, expected_full.to(weight.dtype))
+
+
+@pytest.mark.parametrize('checkpointed', [False, True])
+def test_shared_expert_actor_groups_keep_frame_and_invocation_order(monkeypatch, checkpointed):
+    from torch.utils.checkpoint import checkpoint
+    from natlang_neuralese.maple.fp8_experts import GroupedLinear
+    from natlang_neuralese.model import shared_state
+    from natlang_neuralese.model.native_adapters import capture_native_checkpoint_execution
+    from natlang_neuralese.model.native_gradient_partitions import (
+        GradientPartitions, gradient_partitions, new_gradient_namespace, token_local_chunks)
+
+    class Bank:
+        def execute(self, _name, callback):
+            return callback()
+
+    weight = torch.nn.Parameter(torch.zeros((1, 16, 16), dtype=torch.bfloat16))
+    def finish(_port, _layer, h, _out, _attention):
+        def project(rows):
+            offsets = torch.tensor([rows.shape[0]], dtype=torch.int32)
+            return GroupedLinear.apply(rows, weight, offsets, False,
+                                       *scope.anchors_for_weight(weight))
+        return token_local_chunks(h, 1, lambda part: project(part[0])[None])
+    monkeypatch.setattr(shared_state, '_finish', finish)
+    bank = Bank()
+    operands = ((1.0, 1.0), (2.0**-12, 2.0**-12), (2.0**-12, 2.0**-12))
+    with ParameterCotangentScope([('tied_expert', weight)], mode='vjp',
+                                 accumulator_backend='cpu_file') as scope:
+        outputs = []
+        frame_runs = []
+        for frame_index, (value, cotangent) in enumerate(operands):
+            x = torch.full((1, 2, 16), value, dtype=torch.bfloat16, requires_grad=True)
+            groups = tuple((name, torch.tensor([row]), GradientPartitions((1,)), row)
+                           for row, name in enumerate(('actor-a', 'actor-b')))
+            frame = GradientPartitions((1, 1), invocation_namespace=new_gradient_namespace())
+            runs = []
+
+            def execute(current, captured_frame=frame, captured_groups=groups, captured_runs=runs):
+                captured_runs.append(captured_frame.invocation_namespace)
+                with gradient_partitions(captured_frame):
+                    return shared_state._actor_finish(bank, captured_groups, None, None,
+                        current, current, False, layer_index=0)
+
+            with gradient_partitions(frame):
+                captured = capture_native_checkpoint_execution(execute)
+                output = checkpoint(captured, x, use_reentrant=False) if checkpointed and frame_index == 0 else captured(x)
+            frame_runs.append((frame.invocation_namespace, runs))
+            outputs.append(output)
+        returned, = torch.autograd.grad(tuple(outputs), (weight,), grad_outputs=tuple(
+            torch.full_like(output, cotangent) for output, (_, cotangent) in zip(outputs, operands)))
+        actual = scope.entries[id(weight)]['accumulator'].clone()
+        scope.finish()
+    expected = torch.tensor(0.0, dtype=torch.float32)
+    for value, cotangent in reversed(operands):
+        for _actor_index in (1, 0):
+            expected = expected + torch.tensor(value, dtype=torch.float32) * torch.tensor(cotangent, dtype=torch.float32)
+    expected_full = expected.expand_as(actual).clone()
+    assert len({frame for frame, _runs in frame_runs}) == len(operands)
+    for index, (frame, runs) in enumerate(frame_runs):
+        assert runs and all(observed == frame for observed in runs)
+        assert len(runs) >= (2 if checkpointed and index == 0 else 1)
+    assert torch.equal(actual, expected_full)
+    assert torch.equal(returned, expected_full.to(weight.dtype))
+
+
 
 @pytest.mark.parametrize('family', ['lfm', 'mellum'])
 @pytest.mark.parametrize('device', ['cpu', 'cuda'])

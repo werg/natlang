@@ -9,8 +9,10 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 from functools import wraps
+from itertools import count
 
 _ACTIVE = ContextVar('natlang_graph_gradient_partitions', default=None)
+_FRAME_IDS = count()
 
 
 @dataclass(frozen=True)
@@ -20,18 +22,27 @@ class GradientPartitions:
     invocation_index: int | None = None
     chunk_offset: int | None = None
     invocation_length: int | None = None
+    invocation_namespace: tuple[int, ...] | None = None
 
     def __post_init__(self):
         if any(type(n) is not int or n < 0 for n in self.lengths):
             raise ValueError('gradient partition lengths must be nonnegative integers')
-        metadata = (self.invocation_index, self.chunk_offset, self.invocation_length)
-        if any(value is not None for value in metadata):
-            if any(type(value) is not int or value < 0 for value in metadata):
-                raise ValueError('chunk provenance requires nonnegative integer invocation, offset, and length')
+        if self.invocation_index is not None and (
+                type(self.invocation_index) is not int or self.invocation_index < 0):
+            raise ValueError('invocation index must be a nonnegative integer')
+        chunk_metadata = (self.chunk_offset, self.invocation_length)
+        if any(value is not None for value in chunk_metadata):
+            if (self.invocation_index is None or
+                    any(type(value) is not int or value < 0 for value in chunk_metadata)):
+                raise ValueError('chunk provenance requires an invocation index, offset, and length')
             if len(self.lengths) != 1 or sum(self.lengths) != self.lengths[0]:
                 raise ValueError('one FFN chunk must belong to exactly one physical invocation')
             if self.chunk_offset + self.lengths[0] > self.invocation_length:
                 raise ValueError('FFN chunk escapes its parent invocation')
+        if self.invocation_namespace is not None and (
+                not isinstance(self.invocation_namespace, tuple) or not self.invocation_namespace or
+                any(type(value) is not int or value < 0 for value in self.invocation_namespace)):
+            raise ValueError('chunk invocation namespace must be a nonempty tuple of nonnegative integers')
 
     @property
     def token_count(self):
@@ -50,6 +61,11 @@ class GradientPartitions:
 
 def active_gradient_partitions():
     return _ACTIVE.get()
+
+
+def new_gradient_namespace():
+    """Allocate one immutable forward-frame identity before checkpointing."""
+    return (next(_FRAME_IDS),)
 
 
 @contextmanager
@@ -111,6 +127,10 @@ def token_local_chunks(h, chunk_tokens, callback):
     if h.ndim != 3 or h.shape[0] != 1:
         raise RuntimeError('graph FFN chunks lost their token axis')
     sections = token_slices(partitions, h.shape[1], reverse=False)
+    # Actor-specific execution and separate forward calls can reuse the same
+    # local invocation index. Give this chunking call a process-local order
+    # key so those distinct invocations remain distinct at a shared anchor.
+    namespace = partitions.invocation_namespace or (next(_FRAME_IDS),)
     outputs = []
     for invocation_index, section in enumerate(sections):
         count = section.stop - section.start
@@ -118,7 +138,10 @@ def token_local_chunks(h, chunk_tokens, callback):
         for start in range(section.start, section.stop, width):
             part = h[:, start:min(start + width, section.stop)]
             with gradient_partitions(GradientPartitions(
-                    (part.shape[1],), invocation_index=invocation_index,
-                    chunk_offset=start - section.start, invocation_length=count)):
+                    (part.shape[1],),
+                    invocation_index=(partitions.invocation_index if partitions.invocation_index is not None
+                                      else invocation_index),
+                    chunk_offset=start - section.start, invocation_length=count,
+                    invocation_namespace=namespace)):
                 outputs.append(callback(part))
     return torch.cat(outputs, dim=1) if outputs else h
