@@ -44,3 +44,24 @@ def test_controller_checks_readiness_but_only_owned_mode_launches_raw(tmp_path,m
     else:
         assert launches==([(['real-raw'],'native-raw-rl')] if manage else [])
         assert not (tmp_path/'out'/'participants.json').exists()
+
+
+def test_external_raw_release_autoseals_through_real_role_protocol(tmp_path,monkeypatch):
+    from test_native_role_release import fixture,exchange
+    from natlang_neuralese.rl import native_role_release as roles,native_raw_rounds as raw
+    rows=fixture(tmp_path,monkeypatch);left,right=rows['lfm'],rows['mellum']
+    exchange(left,right)
+    # The external RAW owner has exited; no explicit seal_local or owned child
+    # completion is invoked. ready_participants must seal the actual dead owner.
+    config={**right['config'],'schema':'natlang.native-shared-stage-controller/1',
+            'manage_raw_bootstrap':False,'command':['semantic','{participants}','{out}']}
+    ready,pending=m.ready_participants(config)
+    assert ready==[] and all(row['semantic_assets_required']for row in pending)
+    reference,proof=roles._status(right['plan']['role_exchange'],'mellum')
+    assert proof['kind']=='released' and proof['optimizer_released']is True
+    assert proof['raw_state']['source']==roles.binding(right['state_path'])
+    request=roles.semantic_request(right['plan'])
+    assets={row['receipt']['model_id']:raw.binding(row['receipt']['checkpoint']['path'])for row in rows.values()}
+    roles.install_assets(right['plan_path'],request,assets)
+    ready,pending=m.ready_participants(config)
+    assert len(ready)==2 and not pending
