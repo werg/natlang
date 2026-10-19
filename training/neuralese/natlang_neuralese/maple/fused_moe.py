@@ -448,6 +448,42 @@ def _grouped_dense_mm(a_ptr, rows_ptr, w_ptr, out_ptr, block_expert_ptr,
              mask=(offs_m[:, None] < P) & n_mask[None, :])
 
 
+@triton.jit
+def _ordered_dense_weight_gradient(grad_ptr, x_ptr, offsets_ptr, counts_ptr, accumulator_ptr,
+                                   N, K, RECORDS,
+                                   stride_acc_n, stride_acc_k,
+                                   BM: tl.constexpr, BN: tl.constexpr, BK: tl.constexpr,
+                                   DOT_PRECISION: tl.constexpr):
+    """Fold exact per-invocation dW GEMMs into an existing FP32 accumulator."""
+    pid_n = tl.program_id(0)
+    pid_k = tl.program_id(1)
+    offs_n = pid_n * BM + tl.arange(0, BM)
+    offs_k = pid_k * BN + tl.arange(0, BN)
+    n_mask = offs_n < N
+    k_mask = offs_k < K
+    running = tl.load(accumulator_ptr + offs_n[:, None] * stride_acc_n + offs_k[None, :] * stride_acc_k,
+                      mask=n_mask[:, None] & k_mask[None, :], other=0.0)
+    for record in range(RECORDS):
+        start = tl.load(offsets_ptr + record)
+        rows = tl.load(counts_ptr + record)
+        contribution = tl.zeros((BM, BN), dtype=tl.float32)
+        for row_start in range(0, rows, BK):
+            row = row_start + tl.arange(0, BK)
+            row_mask = row < rows
+            grad_qn = tl.load(grad_ptr + (start + row[:, None]) * N + offs_n[None, :],
+                              mask=row_mask[:, None] & n_mask[None, :], other=0.0)
+            x_qk = tl.load(x_ptr + (start + row[:, None]) * K + offs_k[None, :],
+                           mask=row_mask[:, None] & k_mask[None, :], other=0.0)
+            if DOT_PRECISION == "ieee":
+                contribution += tl.dot(tl.trans(grad_qn), x_qk, input_precision="ieee")
+            else:
+                contribution += tl.dot(tl.trans(grad_qn), x_qk)
+        # Keep this as a separate FP32 addition after each invocation GEMM.
+        running = running + contribution
+    tl.store(accumulator_ptr + offs_n[:, None] * stride_acc_n + offs_k[None, :] * stride_acc_k,
+             running, mask=n_mask[:, None] & k_mask[None, :])
+
+
 def _dense_mm(a, rows, weight, plan: Plan, transpose: bool, *, precision="ieee", output_dtype=None,
               single_expert=False) -> torch.Tensor:
     """Grouped A @ W_eᵀ (W_e = weight[e], [N, K]) or, transposed, A @ W_e (the input gradient), with one fixed tile."""
@@ -574,6 +610,49 @@ def invariant_weight_gradient(x, grad):
                      precision='ieee', output_dtype=torch.float32, single_expert=True)
 
 
+def ordered_invariant_weight_gradient(records, accumulator):
+    """Apply an invocation-ordered sequence of the existing invariant dW GEMMs."""
+    if not records:
+        return accumulator
+    device = accumulator.device
+    x_items, grad_items, counts = [], [], []
+    for activation, gradient in records:
+        if activation.device != device or gradient.device != device:
+            raise RuntimeError('deferred invariant dW operands changed device before anchor flush')
+        if activation.dtype != gradient.dtype:
+            activation, gradient = activation.float(), gradient.float()
+        x_items.append(activation)
+        grad_items.append(gradient)
+        counts.append(activation.shape[0])
+    if any(activation.shape[1] != x_items[0].shape[1] for activation in x_items):
+        raise RuntimeError('deferred invariant dW activation widths differ')
+    if any(gradient.shape[1] != grad_items[0].shape[1] for gradient in grad_items):
+        raise RuntimeError('deferred invariant dW output widths differ')
+    packed_x = torch.cat(x_items, dim=0).contiguous()
+    packed_grad = torch.cat(grad_items, dim=0).contiguous()
+    offsets = []
+    cursor = 0
+    for count in counts:
+        offsets.append(cursor)
+        cursor += count
+    offsets = torch.tensor(offsets, device=device, dtype=torch.int32)
+    counts = torch.tensor(counts, device=device, dtype=torch.int32)
+    n, k = packed_grad.shape[1], packed_x.shape[1]
+    if accumulator.shape != (n, k):
+        raise RuntimeError('deferred invariant dW accumulator shape differs')
+    if accumulator.dtype != torch.float32:
+        raise RuntimeError('deferred invariant dW accumulator must be FP32')
+    ieee = packed_grad.dtype == torch.float32
+    bm, bk = 64, (32 if ieee else 64)
+    bn = 64 if ieee else 256
+    tuning = dict(num_warps=4, num_stages=2) if ieee else dict(num_warps=8, num_stages=2)
+    _ordered_dense_weight_gradient[(triton.cdiv(n, bm), triton.cdiv(k, bn))](
+        packed_grad, packed_x, offsets, counts, accumulator, n, k, len(x_items),
+        accumulator.stride(0), accumulator.stride(1), BM=bm, BN=bn, BK=bk,
+        DOT_PRECISION='ieee' if ieee else 'native', **tuning)
+    return accumulator
+
+
 class _InvariantLinear(torch.autograd.Function):
     """x @ wᵀ for every row with the same fixed tile (FP32 inputs in exact FP32): the router's logits."""
 
@@ -613,18 +692,26 @@ class _InvariantLinear(torch.autograd.Function):
             precision=backward_precision, single_expert=True) if ctx.needs_input_grad[0] else None
         dw = None
         if ctx.needs_input_grad[1]:
-            from ..model.native_gradient_partitions import reduce_parameter_rows
-            from ..model.native_weight_carrier import _scope_add
-            def contribution(section):
-                xx, gg = x[section], grad[section]
-                if ctx.carrier:
-                    return invariant_weight_gradient(xx, gg)
-                if xx.dtype == torch.float32 and ctx.precision == 'bf16':
-                    return gg.T @ xx.to(torch.bfloat16).float()
-                return gg.T @ xx
-            dw = reduce_parameter_rows(ctx.partitions, x.shape[0], contribution,
-                add=(lambda value: _scope_add(ctx.scope_weight, value, ctx.anchors, ctx.scope))
-                    if ctx.anchors else None)
+            from ..model.native_gradient_partitions import token_slices
+            deferred = False
+            if (ctx.carrier and ctx.anchors and ctx.scope is not None and
+                    ctx.scope.mode in ('update', 'vjp') and x.is_cuda):
+                sections = token_slices(ctx.partitions, x.shape[0])
+                deferred = ctx.scope.defer_dense_linear_rows(
+                    ctx.scope_weight, [(x[section], grad[section]) for section in sections], ctx.anchors)
+            if not deferred:
+                from ..model.native_gradient_partitions import reduce_parameter_rows
+                from ..model.native_weight_carrier import _scope_add
+                def contribution(section):
+                    xx, gg = x[section], grad[section]
+                    if ctx.carrier:
+                        return invariant_weight_gradient(xx, gg)
+                    if xx.dtype == torch.float32 and ctx.precision == 'bf16':
+                        return gg.T @ xx.to(torch.bfloat16).float()
+                    return gg.T @ xx
+                dw = reduce_parameter_rows(ctx.partitions, x.shape[0], contribution,
+                    add=(lambda value: _scope_add(ctx.scope_weight, value, ctx.anchors, ctx.scope))
+                        if ctx.anchors else None)
         anchor_grads = (None,) * len(ctx.anchors)
         if ctx.anchors and ctx.needs_input_grad[1]:
             dw = None

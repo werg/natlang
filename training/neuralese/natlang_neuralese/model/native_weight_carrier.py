@@ -188,6 +188,7 @@ class ParameterCotangentScope:
         self.model = None
         self._reference_parameters = {}
         self._expert_chunk_sequence = 0
+        self._dense_linear_sequence = 0
         self._allocated_accumulator_bytes = 0
         self._scratch_peak_bytes = 0
         for index, (name, parameter) in enumerate(unique.values()):
@@ -197,7 +198,7 @@ class ParameterCotangentScope:
                 'anchor_value': None, 'anchor_backward': 0, 'initial_grad': initial_grad,
                 'initial_grad_value': None, 'reference_gradient_audited': False,
                 'initial_grad_version': None if initial_grad is None else initial_grad._version,
-                'expert_chunks': []}
+                'expert_chunks': [], 'dense_linear_chunks': []}
 
     def __enter__(self):
         if _COTANGENT_SCOPE.get() is not None:
@@ -334,7 +335,7 @@ class ParameterCotangentScope:
             'anchor_value': None, 'anchor_backward': 0, 'initial_grad': initial_grad,
             'initial_grad_value': None, 'reference_gradient_audited': False,
             'initial_grad_version': None if initial_grad is None else initial_grad._version,
-            'expert_chunks': []}
+            'expert_chunks': [], 'dense_linear_chunks': []}
 
     def _register_auxiliary(self, name, tensor):
         entry = self._auxiliary_entries.get(id(tensor))
@@ -513,6 +514,7 @@ class ParameterCotangentScope:
             entry['anchor_value'] = None
 
     def add(self, parameter, contribution):
+        self._flush_dense_linear_chunks(parameter)
         entry = self._entry_for(parameter)
         if entry is None:
             raise RuntimeError('custom low-precision weight path has no registered cotangent anchor')
@@ -543,6 +545,77 @@ class ParameterCotangentScope:
             piece = contribution[start:stop].detach().to(device='cpu', dtype=torch.float32)
             target[start:stop].add_(piece)
         entry['count'] += 1
+
+    def defer_dense_linear_rows(self, weight, operands, anchors):
+        """Queue exact dW operands for one existing parameter-anchor flush."""
+        if (self.mode not in ('update', 'vjp') or not anchors or not operands or
+                not operands[0][0].is_cuda):
+            return False
+        expected = self.anchors_for_weight(weight)
+        if (len(expected) != len(anchors) or not expected or
+                any(left is not right for left, right in zip(expected, anchors))):
+            return False
+        route_owner, route = self._effective_route_for(weight)
+        if route is None:
+            targets = (weight,)
+        else:
+            base, deltas = route
+            targets = tuple(
+                [self._route_parameter_view(base['parameter'], route_owner, weight)]
+                if base is not None else []
+            ) + tuple(self._route_parameter_view(delta['parameter'], route_owner, weight)
+                      for delta in deltas)
+        if len(targets) != len(anchors):
+            return False
+        entries = []
+        for target, anchor in zip(targets, anchors):
+            entry = self._entry_for(target)
+            if entry is None or entry['anchor_value'] is not anchor:
+                return False
+            entries.append((entry, target))
+        for activation, gradient in operands:
+            if not activation.is_cuda or gradient.device != activation.device:
+                raise RuntimeError('deferred dense dW operands have inconsistent devices')
+            self._dense_linear_sequence += 1
+            sequence = self._dense_linear_sequence
+            for entry, target in entries:
+                entry['dense_linear_chunks'].append({
+                    'weight': target, 'activation': activation.detach(),
+                    'gradient': gradient.detach(), 'sequence': sequence,
+                })
+        return True
+
+    def _flush_dense_linear_chunks(self, parameter):
+        entry = self._entry_for(parameter)
+        if entry is None or not entry['dense_linear_chunks']:
+            return
+        records = entry['dense_linear_chunks']
+        records.sort(key=lambda item: item['sequence'])
+        weight = records[0]['weight']
+        if any(tuple(item['weight'].shape) != tuple(weight.shape) or
+               tuple(item['weight'].stride()) != tuple(weight.stride())
+               for item in records):
+            raise RuntimeError(f"deferred dense dW views differ for {entry['name']}")
+        if entry['accumulator'] is None:
+            entry['accumulator'] = self._allocate_accumulator(entry)
+        base = entry['accumulator']
+        offset = weight.storage_offset() - entry['parameter'].storage_offset()
+        last = offset + sum((size - 1) * stride for size, stride in zip(weight.shape, weight.stride()))
+        if offset < 0 or last >= entry['parameter'].numel():
+            raise RuntimeError(f"deferred dense dW view escapes {entry['name']}")
+        target = base.as_strided(weight.shape, weight.stride(), offset)
+        device = records[0]['activation'].device
+        if target.device.type == 'cuda':
+            running = target
+        else:
+            running = target.to(device=device, dtype=torch.float32)
+        from ..maple.fused_moe import ordered_invariant_weight_gradient
+        ordered_invariant_weight_gradient(
+            [(item['activation'], item['gradient']) for item in records], running)
+        if target.device.type != 'cuda':
+            target.copy_(running)
+        entry['count'] += len(records)
+        records.clear()
 
     def defer_expert_chunk(self, weight, gradient, activation, row_indices, starts, counts,
                            pair_count, partitions, anchors):
@@ -644,6 +717,7 @@ class ParameterCotangentScope:
 
     def add_ordered_finite_convolution(self, parameter, histories, gradient, *, bias=False):
         """Fold finite-convolution token cotangents in cached reverse order."""
+        self._flush_dense_linear_chunks(parameter)
         entry = self._entry_for(parameter)
         if entry is None:
             raise RuntimeError('finite-convolution path has no registered cotangent anchor')
@@ -664,6 +738,7 @@ class ParameterCotangentScope:
     def add_embedding_rows(self, parameter, indices, contribution, *, padding_idx=None,
                            scale_grad_by_freq=False):
         """Add indexed embedding dW rows directly to the selected accumulator."""
+        self._flush_dense_linear_chunks(parameter)
         entry = self._entry_for(parameter)
         if entry is None:
             raise RuntimeError('embedding cotangent has no registered parameter anchor')
@@ -843,6 +918,7 @@ class ParameterCotangentScope:
             entry['accumulator'] = None
             entry['anchor_value'] = None
             entry.get('expert_chunks', []).clear()
+            entry.get('dense_linear_chunks', []).clear()
         self._effective_routes.clear()
         self._expert_chunk_buckets.clear()
         self._expert_anchor_buckets.clear()
@@ -868,6 +944,7 @@ class _ParameterCotangentAnchor(torch.autograd.Function):
     @staticmethod
     def backward(ctx, sentinel_gradient):
         entry = ctx.scope._entry_for(ctx.parameter)
+        ctx.scope._flush_dense_linear_chunks(ctx.parameter)
         ctx.scope._flush_expert_chunks(ctx.parameter)
         entry = ctx.scope._entry_for(ctx.parameter)
         if not entry['count'] or entry['accumulator'] is None:

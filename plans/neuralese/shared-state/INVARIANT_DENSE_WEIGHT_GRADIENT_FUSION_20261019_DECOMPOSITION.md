@@ -1,0 +1,23 @@
+# Invariant dense weight-gradient fusion
+
+## Natural-language design
+
+For one original parameter, gather the already-computed activation and output-adjoint pieces that its backward uses produced. At the parameter's existing shared cotangent anchor, visit those pieces in the exact order the current backward added them. For each piece, run the same fixed IEEE grouped matrix-product reduction and add its completed FP32 result to the existing FP32 accumulator. Return one completed contribution to the accumulator backend. Keep the forward pass, input adjoints, optimizer, RNG, exposure, and data unchanged.
+
+## Exact mechanism
+
+1. `_InvariantLinear.backward` records `(activation, adjoint)` views instead of launching one dW kernel per invocation only when an existing low-precision cotangent anchor owns the weight in the ordinary VJP/update scope. This includes the production SFT path, which returns gradients from the shared anchor to `autograd` before the optimizer consumes them. Preserve record arrival order and retain references only until that parameter's anchor fires. Unanchored and explicit higher-order reference behavior keeps the current path.
+2. The existing `_ParameterCotangentAnchor` flushes the parameter's records. A packed representation carries invocation offsets and row counts. It does not reorder or pad rows across invocations.
+3. One Triton launch visits each output tile. Within each invocation it resets the dot accumulator, iterates row blocks in the same order and with the same `tl.dot(..., input_precision='ieee')` settings as the existing kernel, then adds the completed FP32 invocation result to the running FP32 tile. The running tile begins at the exact preexisting scope accumulator. Disable contraction across the invocation boundary so this matches repeated kernel-result plus `add_` operations.
+4. For a device-FP32 accumulator, the fused kernel updates that exact accumulator directly. For CPU-file, transfer the existing FP32 accumulator to CUDA once, perform the ordered sequence there, then copy it back once. The activation/adjoint row views are held only until that parameter's anchor and are released immediately after flush; the packed CUDA operand scratch is bounded to the current parameter's queued invocation rows. The CPU-file full-parameter mmap remains the existing backend and does not become resident CPU RAM.
+5. Release record references and packed scratch at the parameter anchor, including exceptional exits. Existing anchor audits, counts, adapter base/delta routes, microbatch accumulation, and checkpoint provenance remain authoritative.
+
+## Boundaries and proof
+
+This is an execution optimization, not a new arithmetic mode. It must preserve each invocation's old kernel result bit-for-bit and preserve the ordered FP32 additions. It never fuses across parameters or changes row order. Tests compare both CPU-file and device-FP32 scope results against the unmodified per-invocation implementation, including nonzero prior accumulator, multiple forward frames, checkpoint recompute, and returned VJPs. Adapter routes are handled by their existing exact anchor mapping; the candidate's direct tests cover the ordinary parameter route, while adapter-specific CUDA coverage remains part of integrated qualification. A CUDA kernel-count/time improvement is reported only from measured scoped cases; no full-model claim follows from tiny tests.
+
+The existing `native_weight_carrier` anchor is the only deferred-work mechanism. No new optimizer state, checkpoint field, recipe option, or model-facing behavior is introduced.
+
+## Measured example and bounded storage
+
+The retained LFM real-update trace has 11,650 `_grouped_dense_mm` kernels in four updates; 1,360 calls have grid `(64,72)`. With the kernel's `64x64` output tiles, this is an `(N=4096,K=4608)` dW shape. A ledgered workload-shaped comparison uses that shape with three invocation records of 128 BF16 rows each. The retained row views are 6.75 MiB total; packing them at anchor adds a bounded 6.75 MiB CUDA copy. A CPU-file FP32 accumulator is 72 MiB. The old three per-invocation contribution transfers write 216 MiB back to that CPU-file accumulator; the fused path copies the existing 72 MiB accumulator to the device and the updated 72 MiB back, 144 MiB total. These are derived sizes for the measured shape, not whole-model memory claims. Activation/adjoint references for each parameter expire at its anchor flush; the packed buffers die when the kernel call returns. The test reports process peak for the whole small benchmark, not a per-parameter allocation measurement.
