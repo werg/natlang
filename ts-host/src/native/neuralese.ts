@@ -329,10 +329,17 @@ function expectedValueTypes(expected: TurnValueExpectation | undefined): Type[] 
 function acceptsNativeStateParts(expected: TurnValueExpectation | undefined): boolean {
   if (!expected) return false;
   const type = expected.env.resolve(expected.type);
+  if (type.kind === 'refined' || type.kind === 'untrusted')
+    return acceptsNativeStateParts({ ...expected, type: type.base });
   if (type.kind === 'neuralese' || type.kind === 'prim' && type.name === 'unknown') return true;
   if (type.kind === 'union') return type.members.some(member => acceptsNativeStateParts({ ...expected, type: member }));
   if (type.kind === 'list' || type.kind === 'dict') return acceptsNativeStateParts({ ...expected, type: type.element });
   return false;
+}
+
+function acceptsNativeStateList(expected: TurnValueExpectation | undefined): boolean {
+  return expectedValueTypes(expected).some(type => type.kind === 'list' &&
+    acceptsNativeStateParts({ env: expected!.env, type: type.element }));
 }
 
 function expectedChild(expected: TurnValueExpectation | undefined, key: string, container: unknown): TurnValueExpectation | undefined {
@@ -377,7 +384,7 @@ export async function decodeTurnValue(value: unknown, port: NeuralesePort | unde
     if (!hasNonText) return value.map(part => (part as NeuraleseTextPart).text).join('');
     const onlyStateReferences = value.length > 0 && value.every(part => part.type === 'native_state');
     if (onlyStateReferences && acceptsNativeStateParts(expected)) {
-      if (expected && expected.env.resolve(expected.type).kind === 'list')
+      if (acceptsNativeStateList(expected))
         return value.map(part => nativeStateSentinel(part.id, part.stop_gradient, part.source_occurrence));
       return value.map(part => ({ ...part }));
     }

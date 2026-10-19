@@ -8,7 +8,7 @@ The existing typed function contract decides whether a completion is an ordinary
 
 1. The model server continues to report actual text and native-state content parts and archives every reported state before the agent normalizes the turn.
 2. The shared TS turn decoder receives the declared return type and the native-state store already owned by that call.
-3. For a value boundary, it preserves native-state parts when the declared type admits Neuralese (or `unknown`), including a list whose element type admits those references; otherwise it materializes content in order, resolving native-state parts to their authenticated `metadata.text` and preserving ordinary text runs. Textual producer spans still use the existing `written` accumulator and graph recording.
+3. For a value boundary, it preserves native-state parts when the declared type admits Neuralese (or `unknown`), including through `refined`/`untrusted` wrappers and list alternatives inside unions; list alternatives become the existing typed sentinels. Otherwise it materializes content in order, resolving native-state parts to their authenticated `metadata.text` and preserving ordinary text runs. Textual producer spans still use the existing `written` accumulator and graph recording.
 4. The existing `return_result`/`coerceReturn` path validates the resulting declared type. No type checks, state identity checks, or graph receipts are bypassed. The inferred assistant completion is passed through the existing typed `return_result` path; explicit tool-call values keep their existing transport handling.
 
 ## Exact code

@@ -387,6 +387,29 @@ test('declared union discriminants preserve the selected nested literal/Neurales
   assert.equal(coerce(argument, parseType('{ nested: Neuralese<string>[] }'), env).nested[0].$neuralese.id, id);
 });
 
+test('typed native-state completion preserves refined, untrusted, and union-list alternatives', async () => {
+  const store = new MemoryNeuraleseStore(), artifact = await store.putNativeState(nativeStateFixture());
+  const env = envFor(runtimeFor(store));
+  const parts = [{ type: 'native_state', id: artifact.id }];
+  const refined = parseType('Is<Neuralese<string>, "a useful memo">');
+  const refinedValue = await decodeTurnValue(parts, undefined, { marker_context: 'return-result' }, [],
+    { type: refined, env });
+  assert.deepEqual(refinedValue, parts);
+  assert.equal(coerce(refinedValue, refined, env).$neuralese.id, artifact.id);
+
+  const untrusted = { kind: 'untrusted', base: parseType('Neuralese<string>') };
+  const untrustedValue = await decodeTurnValue(parts, undefined, { marker_context: 'return-result' }, [],
+    { type: untrusted, env });
+  assert.deepEqual(untrustedValue, parts);
+  assert.equal(coerce(untrustedValue, untrusted, env).$neuralese.id, artifact.id);
+
+  const unionList = parseType('Neuralese<string>[] | null');
+  const listValue = await decodeTurnValue(parts, undefined, { marker_context: 'return-result' }, [],
+    { type: unionList, env });
+  assert.deepEqual(listValue, [neuraleseSentinel(artifact.id)]);
+  assert.equal(coerce(listValue, unionList, env)[0].$neuralese.id, artifact.id);
+});
+
 
 for (const format of ['native_state', 'neuralese']) for (const channel of ['tool', 'assistant']) {
   test(`${format} ${channel} real HTTP normalization preserves producer provenance through agent rejection`, async () => {
