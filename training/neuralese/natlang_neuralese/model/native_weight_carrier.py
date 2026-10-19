@@ -591,29 +591,46 @@ class ParameterCotangentScope:
             return
         records = entry['dense_linear_chunks']
         records.sort(key=lambda item: item['sequence'])
-        weight = records[0]['weight']
-        if any(tuple(item['weight'].shape) != tuple(weight.shape) or
-               tuple(item['weight'].stride()) != tuple(weight.stride())
-               for item in records):
-            raise RuntimeError(f"deferred dense dW views differ for {entry['name']}")
         if entry['accumulator'] is None:
             entry['accumulator'] = self._allocate_accumulator(entry)
         base = entry['accumulator']
-        offset = weight.storage_offset() - entry['parameter'].storage_offset()
-        last = offset + sum((size - 1) * stride for size, stride in zip(weight.shape, weight.stride()))
-        if offset < 0 or last >= entry['parameter'].numel():
-            raise RuntimeError(f"deferred dense dW view escapes {entry['name']}")
-        target = base.as_strided(weight.shape, weight.stride(), offset)
-        device = records[0]['activation'].device
-        if target.device.type == 'cuda':
-            running = target
-        else:
-            running = target.to(device=device, dtype=torch.float32)
         from ..maple.fused_moe import ordered_invariant_weight_gradient
-        ordered_invariant_weight_gradient(
-            [(item['activation'], item['gradient']) for item in records], running)
-        if target.device.type != 'cuda':
-            target.copy_(running)
+        def arithmetic_dtype(item):
+            activation, gradient = item['activation'], item['gradient']
+            return activation.dtype if activation.dtype == gradient.dtype else torch.float32
+
+        # One kernel invocation may combine only records which address the same
+        # exact parameter view and use the same dW precision law. Keep groups
+        # contiguous in backward-arrival order: distinct or overlapping views
+        # must update the shared FP32 accumulator in that same order.
+        start = 0
+        while start < len(records):
+            first = records[start]
+            weight = first['weight']
+            offset = weight.storage_offset() - entry['parameter'].storage_offset()
+            view_key = (offset, tuple(weight.shape), tuple(weight.stride()), arithmetic_dtype(first))
+            stop = start + 1
+            while stop < len(records):
+                item = records[stop]
+                other = item['weight']
+                other_offset = other.storage_offset() - entry['parameter'].storage_offset()
+                other_key = (other_offset, tuple(other.shape), tuple(other.stride()), arithmetic_dtype(item))
+                if other_key != view_key:
+                    break
+                stop += 1
+            last = offset + sum((size - 1) * stride for size, stride in zip(weight.shape, weight.stride()))
+            if offset < 0 or last >= entry['parameter'].numel():
+                raise RuntimeError(f"deferred dense dW view escapes {entry['name']}")
+            target = base.as_strided(weight.shape, weight.stride(), offset)
+            if target.device.type == 'cuda':
+                running = target
+            else:
+                running = target.to(device=first['activation'].device, dtype=torch.float32)
+            ordered_invariant_weight_gradient(
+                [(item['activation'], item['gradient']) for item in records[start:stop]], running)
+            if target.device.type != 'cuda':
+                target.copy_(running)
+            start = stop
         entry['count'] += len(records)
         records.clear()
 

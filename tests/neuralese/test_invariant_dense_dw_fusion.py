@@ -182,6 +182,80 @@ def test_ordered_dense_dwd_fusion_preserves_adapter_base_and_delta_vjps(tmp_path
     assert torch.equal(actual[1], expected[1])
 
 
+@pytest.mark.parametrize('backend', ['cpu_file', 'device_fp32'])
+def test_ordered_dense_dwd_fusion_preserves_disjoint_and_overlapping_view_vjps(backend, tmp_path):
+    if not torch.cuda.is_available():
+        pytest.skip('CUDA unavailable')
+    from natlang_neuralese.maple.fused_moe import invariant_linear
+
+    torch.manual_seed(9971)
+    initial = torch.nn.Parameter(torch.randn((32, 80), device='cuda', dtype=torch.bfloat16))
+    calls = []
+    for offset in (0, 16, 0):
+        x = torch.randn((13, 64), device='cuda', dtype=torch.bfloat16)
+        dy = torch.randn((13, 32), device='cuda', dtype=torch.bfloat16)
+        calls.append((offset, x, dy))
+
+    def run(fused):
+        weight = torch.nn.Parameter(initial.detach().clone())
+        scope = ParameterCotangentScope([('weight', weight)], mode='vjp',
+                                        accumulator_backend=backend, directory=tmp_path)
+        if not fused:
+            scope.defer_dense_linear_rows = lambda *_args: False
+        with scope:
+            loss = None
+            for invocation, (offset, x, dy) in enumerate(calls):
+                view = weight[:, offset:offset + 64]
+                with gradient_partitions(GradientPartitions((x.shape[0],), invocation_index=invocation,
+                                                            invocation_namespace=(9,))):
+                    output = invariant_linear(x, view, forward_storage_dtype=torch.bfloat16,
+                                              cotangent_anchors=(scope.anchor_for(weight),))
+                part = (output * dy).sum()
+                loss = part if loss is None else loss + part
+            (gradient,) = torch.autograd.grad(loss, weight)
+            scope.finish()
+            return gradient.detach().clone()
+
+    assert torch.equal(run(True), run(False))
+
+
+@pytest.mark.parametrize('backend', ['cpu_file', 'device_fp32'])
+def test_ordered_dense_dwd_fusion_preserves_mixed_invocation_dtype_laws(backend, tmp_path):
+    if not torch.cuda.is_available():
+        pytest.skip('CUDA unavailable')
+    from natlang_neuralese.maple.fused_moe import invariant_linear
+
+    torch.manual_seed(9972)
+    initial = torch.nn.Parameter(torch.randn((48, 32), device='cuda', dtype=torch.bfloat16))
+    calls = []
+    for dtype in (torch.bfloat16, torch.float32, torch.bfloat16):
+        x = torch.randn((15, 32), device='cuda', dtype=dtype)
+        dy = torch.randn((15, 48), device='cuda', dtype=dtype)
+        calls.append((x, dy, dtype))
+
+    def run(fused):
+        weight = torch.nn.Parameter(initial.detach().clone())
+        scope = ParameterCotangentScope([('weight', weight)], mode='vjp',
+                                        accumulator_backend=backend, directory=tmp_path)
+        if not fused:
+            scope.defer_dense_linear_rows = lambda *_args: False
+        with scope:
+            loss = None
+            for invocation, (x, dy, dtype) in enumerate(calls):
+                with gradient_partitions(GradientPartitions((x.shape[0],), invocation_index=invocation,
+                                                            invocation_namespace=(10,))):
+                    output = invariant_linear(x, weight,
+                                              forward_storage_dtype=dtype,
+                                              cotangent_anchors=(scope.anchor_for(weight),))
+                part = (output * dy).sum()
+                loss = part if loss is None else loss + part
+            (gradient,) = torch.autograd.grad(loss, weight)
+            scope.finish()
+            return gradient.detach().clone()
+
+    assert torch.equal(run(True), run(False))
+
+
 @pytest.mark.parametrize('family', ['lfm', 'mellum'])
 def test_ordered_dense_dwd_fusion_matches_shared_graph_training_update(family, monkeypatch):
     """Exercise the production VJP scope inside the real shared-graph trainer."""

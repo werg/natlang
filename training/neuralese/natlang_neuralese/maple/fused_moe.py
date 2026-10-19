@@ -616,11 +616,16 @@ def ordered_invariant_weight_gradient(records, accumulator):
         return accumulator
     device = accumulator.device
     x_items, grad_items, counts = [], [], []
+    record_dtype = None
     for activation, gradient in records:
         if activation.device != device or gradient.device != device:
             raise RuntimeError('deferred invariant dW operands changed device before anchor flush')
         if activation.dtype != gradient.dtype:
             activation, gradient = activation.float(), gradient.float()
+        if record_dtype is None:
+            record_dtype = activation.dtype
+        elif activation.dtype != record_dtype:
+            raise RuntimeError('ordered invariant dW records must retain each invocation dtype law')
         x_items.append(activation)
         grad_items.append(gradient)
         counts.append(activation.shape[0])
