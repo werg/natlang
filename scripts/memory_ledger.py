@@ -745,8 +745,16 @@ def run(args):
         start_release()
     deadline = time.time() + args.wait
     since = time.time()
+    request_generation = None
     while True:
         with ledger() as state:
+            generation = state.get('cancel_generations', {}).get(unit, 0)
+            if request_generation is None:
+                request_generation = generation
+            elif generation != request_generation:
+                # Do not remove anything: a deliberate newer run may already
+                # own this unit's queue entry or admitted claim.
+                raise SystemExit(f'{unit} admission request cancelled')
             gpu = gpu_usage()
             free, live = headroom(state, gpu)
             cuda_free = cuda_headroom(live, gpu) if cuda_budget is not None else None
@@ -903,6 +911,8 @@ def cancel(args):
     elif loaded.returncode and loaded.stdout.strip() != 'not-found':
         raise RuntimeError('cannot inspect detached waiter: ' + loaded.stderr.strip())
     with ledger() as state:
+        generations = state.setdefault('cancel_generations', {})
+        generations[unit] = generations.get(unit, 0) + 1
         entry = state.get('waiting', {}).pop(unit, None)
         if entry is not None:
             state['events'].append({'time': time.time(), 'event': 'cancelled', 'unit': unit,

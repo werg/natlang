@@ -1043,3 +1043,73 @@ def test_immediate_rejected_request_is_never_published_to_preemption_guard(monke
     with pytest.raises(SystemExit,match='not admitted'):
         ledger.run(args)
     assert committed==[{}]
+
+
+@pytest.mark.parametrize('entry_expired', [False, True])
+def test_cancel_prevents_foreground_waiter_resurrection(monkeypatch, tmp_path, entry_expired):
+    from types import SimpleNamespace
+    monkeypatch.setattr(ledger, 'STATE', str(tmp_path / 'ledger.json'))
+    monkeypatch.setattr(ledger, 'gpu_usage', lambda: {})
+    monkeypatch.setattr(ledger, 'mem_free', lambda: 100 * GIB)
+    monkeypatch.setattr(ledger, 'headroom', lambda state, gpu: (0, {}))
+    monkeypatch.setattr(ledger, 'learned_budget', lambda state, unit, budget: budget)
+    monkeypatch.setattr(ledger.subprocess, 'run', lambda *a, **kw:
+                        SimpleNamespace(returncode=0, stdout='not-found\n'))
+    launches = []
+    monkeypatch.setattr(ledger, 'launch', lambda spec: launches.append(spec) or 0)
+    args = SimpleNamespace(unit='cancel-me', budget_gb=1, cuda_budget_gb=None,
+                           reserve_gb=1, priority='low', cls='collection', wait=3600,
+                           resumable=False)
+    sleeps = []
+
+    def cancel_while_waiting(seconds):
+        sleeps.append(seconds)
+        assert sleeps == [30]
+        with ledger.ledger() as state:
+            assert 'cancel-me.service' in state['waiting']
+            if entry_expired:
+                state['waiting'].pop('cancel-me.service')
+        assert ledger.cancel(SimpleNamespace(unit='cancel-me')) == int(entry_expired)
+
+    monkeypatch.setattr(ledger.time, 'sleep', cancel_while_waiting)
+    with pytest.raises(SystemExit, match='admission request cancelled'):
+        ledger.run(args)
+    with ledger.ledger() as state:
+        assert state['waiting'] == {} and state['claims'] == {}
+        assert state['cancel_generations']['cancel-me.service'] == 1
+    assert launches == []
+
+
+def test_fresh_same_unit_retry_survives_old_waiter_cancellation(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+    monkeypatch.setattr(ledger, 'STATE', str(tmp_path / 'ledger.json'))
+    monkeypatch.setattr(ledger, 'gpu_usage', lambda: {})
+    monkeypatch.setattr(ledger, 'mem_free', lambda: 100 * GIB)
+    monkeypatch.setattr(ledger, 'learned_budget', lambda state, unit, budget: budget)
+    monkeypatch.setattr(ledger.subprocess, 'run', lambda *a, **kw:
+                        SimpleNamespace(returncode=0, stdout='not-found\n'))
+    free = [0]
+    monkeypatch.setattr(ledger, 'headroom', lambda state, gpu: (free[0], {}))
+    launches = []
+    monkeypatch.setattr(ledger, 'launch', lambda spec: launches.append(spec) or 0)
+    args = SimpleNamespace(unit='retry', budget_gb=1, cuda_budget_gb=None,
+                           reserve_gb=1, priority='low', cls='collection', wait=3600,
+                           resumable=False, host_max_gb=None, oom_policy='stop', workdir='.',
+                           env=[], stop_seconds=None, command=['new-job'], hold_budget=False, container=[])
+
+    def cancel_and_retry(seconds):
+        assert seconds == 30
+        assert ledger.cancel(SimpleNamespace(unit='retry')) == 0
+        # A second cancellation with no entry must also be durable.
+        assert ledger.cancel(SimpleNamespace(unit='retry')) == 1
+        free[0] = 100 * GIB
+        ledger.run(args)
+
+    monkeypatch.setattr(ledger.time, 'sleep', cancel_and_retry)
+    with pytest.raises(SystemExit, match='admission request cancelled'):
+        ledger.run(args)
+    with ledger.ledger() as state:
+        assert state['waiting'] == {}
+        assert state['claims']['retry.service']['command'] == ['new-job']
+        assert state['cancel_generations']['retry.service'] == 2
+    assert len(launches) == 1

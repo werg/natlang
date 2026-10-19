@@ -146,3 +146,5 @@ trace when that agent session ended (the 2026-10-13 handover units: ckpt-write-b
 repeat-dragnet-open-ab, mellum-deploy-gguf-ternary, legacy-llamacpp-conformance, e2e tests14, ...). Queue anything that
 may wait longer than the calling session with `--detach --wait N`: the waiter then runs as the user unit
 `<unit>-waiter` (output in its journal) and the job starts when admitted.
+
+Cancellation is durable for foreground and detached waiters: `cancel --unit NAME` advances a per-unit cancellation generation under the ledger lock. An existing waiting client exits on its next poll rather than restoring the entry, even if the entry had expired. A new deliberate `run` reads the new generation and may request the same name. Cancel leaves already-admitted execution units alone. See [the cancellation decomposition](MEMORY_LEDGER_CANCELLATION_DECOMPOSITION_20261019.md).
