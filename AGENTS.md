@@ -186,6 +186,14 @@ comprehensive training on the entire evolving production recipe.
   it can leave strict-write launch records that block the real learner. Put
   diagnostics in an isolated namespace, preserve concrete failure evidence,
   and avoid repeated whole-entry barriers while useful training is stopped.
+- **Avoid redundant supervision barriers** (engineering practice, 2026-10-20).
+  Routine data append payloads that change only counts, paths and authenticated
+  generations may proceed through the already reviewed mechanism with an
+  independent operator review and the normal schema, source/held, custody,
+  geometry and compare-and-swap checks. They do not need another round trip to
+  the root agent. Review mechanism changes separately. Record the actual
+  reviewer and standing authorization; never claim an individual review that
+  did not occur. Preserve exact exposure and continue useful training.
 - **Bring in deferred improvements** (owner, 2026-10-16). Keep a current
   inventory of deferred data, performance, training and inference work; actively
   integrate each ready improvement. An old handover, incomplete source census,
