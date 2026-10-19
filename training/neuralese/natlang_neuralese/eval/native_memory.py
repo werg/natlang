@@ -37,6 +37,122 @@ def _optimizer_versions(optimizer):
             for name,child in _children(optimizer)}
 
 
+
+def _reference_digest(value):
+    """Hash small execution/backend/RNG metadata, never model or optimizer values."""
+    digest = hashlib.sha256()
+    def add(item):
+        if torch.is_tensor(item):
+            if item.layout != torch.strided:raise TypeError('non-strided reference metadata')
+            tensor = item.detach().cpu().contiguous()
+            add(('tensor', str(tensor.dtype), tuple(tensor.shape)))
+            digest.update(memoryview(tensor.reshape(-1).view(torch.uint8).numpy()))
+        elif isinstance(item, str):
+            digest.update(('str:' + json.dumps(str(item)) + ';').encode())
+        elif item is None or type(item) in (bool, int):
+            digest.update((type(item).__name__ + ':' + json.dumps(item) + ';').encode())
+        elif type(item) is float and math.isfinite(item):
+            digest.update(('float:' + item.hex() + ';').encode())
+        elif isinstance(item, (list, tuple)):
+            digest.update(b'(' if isinstance(item,tuple) else b'[')
+            for child in item:add(child)
+            digest.update(b')' if isinstance(item,tuple) else b']')
+        elif isinstance(item, dict) and all(type(key) in (str, int) for key in item):
+            digest.update(b'{')
+            for key in sorted(item, key=lambda key:(type(key).__name__, str(key))):
+                add(key);add(item[key])
+            digest.update(b'}')
+        else:
+            raise TypeError('unsupported numerical-reference metadata')
+    add(value)
+    return digest.hexdigest()
+
+
+def _reference_versions(value):
+    if torch.is_tensor(value):
+        if value.layout != torch.strided:raise TypeError('non-strided reference state')
+        return (id(value), value._version, str(value.dtype), str(value.device),
+                tuple(value.shape), tuple(value.stride()), value.data_ptr())
+    if isinstance(value, dict):
+        return {key:_reference_versions(item) for key,item in value.items()}
+    if isinstance(value, tuple):
+        return tuple(_reference_versions(item) for item in value)
+    if isinstance(value, list):
+        return [_reference_versions(item) for item in value]
+    return value
+
+
+def _reference_boundary(model, optimizer, backend):
+    """Versioned state identities at one unarmed, read-only optimizer boundary."""
+    named = list(model.named_parameters())
+    named.extend(getattr(optimizer, '_native_named_parameters', ()))
+    parameters = {id(parameter):parameter for _,parameter in named}
+    execution = ('native_shared_execution', 'native_norm_execution',
+                 'native_cotangent_accumulator_backend', 'natlang_precision',
+                 'native_linear_precision', 'native_attention_precision',
+                 'ffn_chunk_tokens', 'checkpoint_layers', 'share_causal_prefixes')
+    owners = (model, model.port, getattr(model.port, 'hf', None))
+    modes = [(id(module), module.training, id(type(module).forward),
+              id(module.__dict__.get('forward'))) for module in model.modules()]
+    device = next(iter(parameters.values())).device
+    state = {
+        'model':id(model), 'optimizer':id(optimizer),
+        'parameters':[(identity, parameter.requires_grad, _reference_versions(parameter),
+                       parameter.grad is None) for identity,parameter in parameters.items()],
+        'buffers':[(name,_reference_versions(buffer)) for name,buffer in model.named_buffers()],
+        'module_dispatch':modes,
+        'execution':[{name:getattr(owner,name) for name in execution if hasattr(owner,name)}
+                     for owner in owners if owner is not None],
+        'optimizer_children':[(name,id(child),
+            {id(parameter):_reference_versions(value) for parameter,value in child.state.items()},
+            [_reference_versions(group) for group in child.param_groups])
+            for name,child in _children(optimizer)],
+        'rng':capture_training_rng_state('cuda' if device.type=='cuda' or torch.cuda.is_initialized() else 'cpu'),
+        'backend':None if backend is None else {
+            'identity':id(backend), 'configuration':backend.configuration(),
+            'extra_state':backend.extra_state(),
+            'row_counts':getattr(backend,'row_counts',None),
+            'has_executed':getattr(backend,'has_executed',False)},
+    }
+    # Only backend/RNG tensors are value-hashed; parameter/moment tensors above
+    # are replaced by identity/version/device/storage metadata first.
+    full = _reference_digest(state)
+    # A backend may restore an identical scale value with a fresh buffer
+    # version, or initialize a nonparameter execution cache. This prevents
+    # reuse without imposing a new buffer-identity law on valid qualification.
+    return full, _reference_digest({key:value for key,value in state.items() if key!='buffers'})
+
+
+class _NumericalReferenceReuse:
+    """Successful reference evidence lives only for this serial run_prepared call."""
+    def __init__(self):
+        self.completed = {}
+
+    def measure(self, invocation, *, model, optimizer, backend, request, operation):
+        try:
+            key = _reference_digest(invocation)
+            before = _reference_boundary(model, optimizer, backend)
+        except (TypeError, NotImplementedError):
+            # Unknown backend metadata cannot authorize reuse. The existing
+            # numerical comparison and its own state guards still run normally.
+            return operation(), {'measured':True, 'reuse_supported':False}
+        previous = self.completed.get(key)
+        if previous is not None and previous['boundary']==before:
+            return copy.deepcopy(previous['proof']), {
+                'measured':False, 'same_owned_boundary':True,
+                'original_request':copy.deepcopy(previous['request']),
+                'invocation_sha256':key, 'boundary_sha256':before[0]}
+        proof = operation()
+        after = _reference_boundary(model, optimizer, backend)
+        if after[1] != before[1]:
+            raise CapacityStateChangedError('numerical reference changed its owned model/optimizer/backend/RNG boundary')
+        if proof.get('passed') is True and after == before:
+            self.completed[key] = {'boundary':after, 'proof':copy.deepcopy(proof),
+                                   'request':copy.deepcopy(request)}
+        return proof, {'measured':True, 'reuse_supported':after==before,
+                       'invocation_sha256':key, 'boundary_sha256':before[0]}
+
+
 def _host_memory():
     result = {}
     try:
@@ -285,7 +401,7 @@ def capacity_identity(config,args,backend):
                'input_gradient_precision':getattr(backend,'input_gradient_precision',None)}}
 
 
-def _run_one_prepared(model,optimizer,train,roles,config,args,*,backend,checkpoint_sha256,objective=None):
+def _run_one_prepared(model,optimizer,train,roles,config,args,*,backend,checkpoint_sha256,objective=None,reference_reuse=None):
     """Called once at the normal restore boundary, before any new optimizer step.
 
     Failed novel source checks cannot stop useful SGD on the existing source.
@@ -368,11 +484,22 @@ def _run_one_prepared(model,optimizer,train,roles,config,args,*,backend,checkpoi
             raise ValueError('active source still has a failed whole-graph memory qualification')
         return previous
     try:
-        example=next(train.iter_indices([ref_index]))
-        result['numerical_reference']=offload_numerical_parity(model,optimizer,example,backend=backend,
-            chunk_tokens=args.chunk_tokens,checkpoint_sha256=checkpoint_sha256,source_binding=binding(train.path),
-            checkpoint_layers=args.checkpoint_layers,checkpoint_input_offload=args.checkpoint_input_offload,
-            checkpoint_input_offload_directory=getattr(args,'checkpoint_input_offload_directory',None),objective=objective)
+        def measure_reference():
+            example=next(train.iter_indices([ref_index]))
+            return offload_numerical_parity(model,optimizer,example,backend=backend,
+                chunk_tokens=args.chunk_tokens,checkpoint_sha256=checkpoint_sha256,source_binding=binding(train.path),
+                checkpoint_layers=args.checkpoint_layers,checkpoint_input_offload=args.checkpoint_input_offload,
+                checkpoint_input_offload_directory=getattr(args,'checkpoint_input_offload_directory',None),objective=objective)
+        if reference_reuse is None:
+            result['numerical_reference']=measure_reference()
+        else:
+            invocation={'parent_checkpoint_sha256':checkpoint_sha256,'runtime_code_sha256':code_sha,
+                'identity':identity,'reference_source':binding(train.path),'reference':reference,
+                'reference_entry':train.entries[ref_index],'roles':list(roles.ids),
+                'objective':actual_objective}
+            result['numerical_reference'],result['numerical_reference_execution']=reference_reuse.measure(
+                invocation,model=model,optimizer=optimizer,backend=backend,
+                request=result['request'],operation=measure_reference)
         if result['numerical_reference']['passed']:
             examples=list(source.iter_indices([row['index'] for row in selected]))
             result['capacity']=qualify_capacity(model,optimizer,examples,backend=backend,chunk_tokens=args.chunk_tokens,
@@ -575,7 +702,7 @@ def run_prepared(model,optimizer,train,roles,config,args,*,backend,checkpoint_sh
             args.memory_qualification=original
     if not isinstance(requests,list) or not requests:
         raise ValueError('memory qualification needs a binding or nonempty ordered bindings')
-    original=args.memory_qualification;checks=[]
+    original=args.memory_qualification;checks=[];reference_reuse=_NumericalReferenceReuse()
     try:
         resolved=[]
         for request in requests:
@@ -584,7 +711,8 @@ def run_prepared(model,optimizer,train,roles,config,args,*,backend,checkpoint_sh
         for request in resolved:
             args.memory_qualification=json.dumps(request)
             checks.append(_run_one_prepared(model,optimizer,train,roles,config,args,
-                backend=backend,checkpoint_sha256=checkpoint_sha256,objective=objective))
+                backend=backend,checkpoint_sha256=checkpoint_sha256,objective=objective,
+                reference_reuse=reference_reuse))
             if 'numerical_reference' in checks[-1] and not (checks[-1]['numerical_reference'] or {}).get('passed'):
                 break  # Failed exact-reference qualification cannot certify a later cohort.
     finally:
