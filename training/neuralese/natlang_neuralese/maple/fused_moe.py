@@ -389,7 +389,13 @@ def dense_grouped_experts(x: torch.Tensor, index: torch.Tensor, weights: torch.T
 # 1e-6 apart after layer 0's MoE, 3e-3 after layer 1's). Here every routed row is computed by the same Triton tile
 # with one fixed configuration: a row's result depends only on its own inputs and the expert's weights.
 
-INVARIANT_BLOCK = 64  # fixed expert/training rows; linear inference also has an exact 16-row tile
+INVARIANT_BLOCK = 64  # training/adjoint rows; true inference also has an exact 16-row tile
+
+
+def _invariant_row_block(rows):
+    # The exact row arithmetic is shared by linear and routed expert kernels.
+    # Actual training/adjoint calls keep the original 64-row geometry.
+    return 16 if torch.is_inference_mode_enabled() and rows <= 16 else INVARIANT_BLOCK
 
 
 @triton.jit
@@ -591,10 +597,13 @@ class _DenseExpertProjection(torch.autograd.Function):
 
 def invariant_dense_experts(x: torch.Tensor, index: torch.Tensor, weights: torch.Tensor, gate_up: torch.Tensor,
                             down: torch.Tensor, clamp: float | None) -> torch.Tensor:
-    """``SparseMoE``'s dense experts with every routed row computed by one fixed Triton tile (batch-invariant): the
-    same pairs, routing weights and FP32 combine as the loop; only each GEMM's accumulation order differs from it."""
+    """Dense routed experts with qualified row tiles and invariant per-row math.
+
+    Keep the same pairs, routing weights and FP32 combine as the loop; inference
+    can reduce padding while ordinary training retains its original geometry.
+    """
     tokens, top_k = index.shape
-    plan = Plan(index, gate_up.shape[0], tokens, INVARIANT_BLOCK)
+    plan = Plan(index, gate_up.shape[0], tokens, _invariant_row_block(tokens * top_k))
     padded_x = torch.cat([x, x.new_zeros(1, x.shape[-1])], 0)  # the padding rows read zeros
     from ..model.native_weight_carrier import _scope_anchors
     hidden = _DenseExpertProjection.apply(padded_x, plan.rows, gate_up, plan, *_scope_anchors(gate_up))
@@ -665,7 +674,7 @@ def _invariant_forward_plan(rows):
     # Native decode has one/few real rows. The same K/N geometry and dot
     # reduction are exact with 16 rows; 64 only adds padded work. Restrict the
     # smaller tile to true inference, retaining all training/adjoint contracts.
-    block = 16 if torch.is_inference_mode_enabled() and rows <= 16 else INVARIANT_BLOCK
+    block = _invariant_row_block(rows)
     return SimpleNamespace(size=rows, blocks=triton.cdiv(rows, block), block=block)
 
 
