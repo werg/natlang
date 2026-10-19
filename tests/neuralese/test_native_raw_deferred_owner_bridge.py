@@ -172,13 +172,16 @@ def test_bridge_cursor_is_an_explicit_sft_first_runtime_boundary(bridge_case):
     bridge_ref=bridge(x)
     cursor=json.loads((x['root']/'cycle.json').read_text())
     state=json.loads((Path(json.loads(x['config'].read_text())['out'])/'state.json').read_text())
+    shutil.copyfile(x['config'],x['root']/'runtime-config-snapshot.json')
     proof={'deferred_owner_bridge':bridge_ref,'checkpoint':x['child'],
         'sources':{'config':resident.binding(x['config']),
             'cursor':resident.binding(x['root']/'cycle.json'),
             'state':resident.binding(Path(json.loads(x['config'].read_text())['out'])/'state.json')},
+        'snapshots':{'config':resident.binding(x['root']/'runtime-config-snapshot.json')},
         'handoff':x['handoff']}
     recipe={'stages':[{'id':'sft','kind':'native_state_sft'}]}
     runtime._verified_deferred_owner_bridge(bridge_ref,x['child'],proof['sources'],
+        config_snapshot=proof['snapshots']['config'],
         cursor=cursor,state=state,handoff=x['handoff'])
     assert runtime._owned_cycle_boundary(proof,cursor,state,recipe,'sft')
     bad=copy.deepcopy(cursor);bad['deferred_owner_handoff_bridge']['request_sha256']='0'*64
@@ -234,7 +237,8 @@ def test_bridge_runtime_handoff_reaches_owed_sft_without_owned_operation_credit(
     monkeypatch.setattr(runtime,'_authority',lambda *args:transition)
     monkeypatch.setattr(runtime,'_verify',lambda value,*args:
         runtime._verified_deferred_owner_bridge(value['deferred_owner_bridge'],value['checkpoint'],
-            value['sources'],handoff=value['handoff']))
+            value['sources'],config_snapshot=value['snapshots']['config'],
+            handoff=value['handoff']))
     proof_path=tmp_path/'runtime-handoff.json'
     runtime_ref=runtime.prepare_runtime_handoff({'path':'fixture-bootstrap'},x['handoff'],None,
         x['config'],proof_path,bare_direct_owner=bare,deferred_owner_bridge=bridge_ref,
@@ -246,7 +250,6 @@ def test_bridge_runtime_handoff_reaches_owed_sft_without_owned_operation_credit(
         'runtime_handoff':runtime_ref,'cases':resident.binding(cases),'runtime':str(collector),
         'commands':{'actor_command':['new-actor']}}
     plan_path=tmp_path/'plan.json';write(plan_path,{'models':[declaration]})
-    monkeypatch.setattr(runtime,'verify_runtime_handoff',lambda *args,**kwargs:proof)
     monkeypatch.setattr(raw,'_scheduling_controls',lambda *args,**kwargs:None)
     def provider(config,declaration,*args,**kwargs):
         config['actor_command']=declaration['commands']['actor_command']
@@ -259,17 +262,39 @@ def test_bridge_runtime_handoff_reaches_owed_sft_without_owned_operation_credit(
     configured=raw.configure_model(plan_path,declaration,proof['bootstrap'],x['root'])
     installed=json.loads(configured.read_text())
     assert installed['runtime_handoff']==runtime_ref and installed['actor_command']==['new-actor']
+    # The config is now mutable current state. Reconfiguration and verification
+    # must use the runtime proof's immutable config snapshot, not reopen it as
+    # if it were still the startup config.
+    assert raw.configure_model(plan_path,declaration,proof['bootstrap'],x['root'])==configured
+    runtime_after_config=runtime.verify_runtime_handoff(runtime_ref,bootstrap=proof['bootstrap'])
+    assert runtime_after_config['deferred_owner_bridge']==bridge_ref
 
     calls=[];stop=SimpleNamespace(requested=False)
     def supervised(continuation,jobdir,config,cursor,owner_stop):
         calls.append((continuation['production_stage'],Path(jobdir)))
         owner_stop.requested=True
-    monkeypatch.setattr(raw,'configure_model',lambda *args:configured)
+    original_configure=raw.configure_model
+    def configure_again(*args):
+        calls.append(('configure',Path(args[3])))
+        return original_configure(*args)
+    monkeypatch.setattr(raw,'configure_model',configure_again)
     monkeypatch.setattr(raw,'_supervised_job',supervised)
     result=raw.student_cycle(plan_path,declaration,proof['bootstrap'],x['root'],stop=stop)
-    assert calls and calls[0][0]=='sft'
+    assert any(call[0]=='sft' for call in calls)
     assert result['phase']=='sft' and result['next_stage']==0
     assert result.get('whole_recipe_completed') is not True
+    cursor_after=json.loads((x['root']/'cycle.json').read_text())
+    assert 'deferred_owner_handoff_bridge' not in cursor_after
+    consumed=cursor_after['deferred_owner_handoff_bridge_consumed']
+    assert consumed['runtime_handoff']==runtime_ref and consumed['training_credit']==0
+    assert not runtime._owned_cycle_boundary(proof,
+        json.loads((x['root']/'cycle.json').read_text()),
+        json.loads((Path(json.loads(x['config'].read_text())['out'])/'state.json').read_text()),
+        {'stages':[{'id':'sft','kind':'native_state_sft'}]},'sft')
+    # A retry after the one-time config application must keep the same
+    # authority and must not classify the consumed marker as a fresh boundary.
+    retry=raw.student_cycle(plan_path,declaration,proof['bootstrap'],x['root'],stop=stop)
+    assert retry['deferred_owner_handoff_bridge_consumed']==consumed
 
 
 def test_deferred_bridge_rejects_child_without_selected_parent_chain(bridge_case):

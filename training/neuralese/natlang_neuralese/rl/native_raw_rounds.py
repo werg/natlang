@@ -1491,6 +1491,30 @@ def student_cycle(plan_path,declaration,handoff,directory,*,stop):
         raise StudentConfigurationError(str(error)) from error
     cursor_path=directory/'cycle.json'
     cursor=json.loads(cursor_path.read_text()) if cursor_path.exists() else {'cycle':0,'phase':'rl','next_stage':0}
+    bridge_marker=cursor.get('deferred_owner_handoff_bridge')
+    if bridge_marker:
+        runtime_reference=config.get('runtime_handoff')
+        if not runtime_reference:
+            raise StudentConfigurationError('deferred owner bridge still requires its verified runtime handoff')
+        from .native_runtime_handoff import verify_runtime_handoff
+        runtime_proof=verify_runtime_handoff(runtime_reference,bootstrap=handoff)
+        bridge_receipt=(json.loads(_bound(runtime_proof['deferred_owner_bridge']).read_text())
+            if runtime_proof.get('deferred_owner_bridge') else {})
+        if (runtime_proof.get('deferred_owner_bridge') is None
+                or bridge_receipt.get('request_sha256')!=bridge_marker.get('request_sha256')
+                or runtime_proof['checkpoint']!=bridge_marker.get('checkpoint')):
+            raise StudentConfigurationError('deferred owner bridge runtime handoff does not match its boundary')
+        if bridge_marker.get('runtime_handoff_required') not in (True,False):
+            raise StudentConfigurationError('deferred owner bridge has an invalid runtime handoff state')
+        if (bridge_marker.get('runtime_handoff_required') is False
+                and bridge_marker.get('runtime_handoff')!=runtime_reference):
+            raise StudentConfigurationError('consumed deferred owner bridge names another runtime handoff')
+        cursor['deferred_owner_handoff_bridge_consumed']={
+            'request_sha256':bridge_marker['request_sha256'],'bridge':runtime_proof['deferred_owner_bridge'],
+            'runtime_handoff':runtime_reference,'checkpoint':bridge_marker['checkpoint'],
+            'whole_recipe_completed':False,'training_credit':0,'raw_completion_credit':0}
+        cursor.pop('deferred_owner_handoff_bridge',None)
+        write_json_durable(cursor_path,cursor)
     reconciliation=cursor.get('owned_operation_reconciliation')or{}
     if reconciliation.get('runtime_configuration_required'):
         if binding(config['production_recipe'])['sha256']!=reconciliation['recipe_sha256']:

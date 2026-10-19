@@ -41,3 +41,11 @@ first scheduled ordinary SFT work remains owed. The frozen startup runtime
 package is checked against its original startup gate and code inventory; the
 currently running verifier may be a later package revision and is not used to
 relabel that startup package.
+
+Runtime-handoff verification always reads the immutable config snapshot sealed
+with the handoff, because applying the handoff rewrites the live config. The
+scheduler clears the one-time bridge boundary only after it verifies that the
+configured runtime proof names the same bridge request and checkpoint. It
+records that applied handoff in a zero-credit consumed receipt while the owed
+SFT work is pending, so later scheduler entries cannot mistake the original
+boundary for new work. None of these steps changes debt or grants stage credit.
