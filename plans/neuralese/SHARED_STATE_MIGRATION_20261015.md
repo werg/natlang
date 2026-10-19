@@ -48,7 +48,7 @@ through the projected-value implementation.
 
 ## Current status
 
-October 19, 15:06 UTC: replacement continuation is still in startup; neither
+October 19, 15:20 UTC: replacement continuation is still in startup; neither
 recovered entry has earned a new optimizer update. LFM's exact 16397 parent is
 now loaded by R9 owner 3782488, with completed current-owner import and fresh
 actor parity. Its preceding entry passed the complete gradient check, then
@@ -60,15 +60,25 @@ actual numerical checks and all prior exposure. The original sandbox remains
 reachable; the unexplained guest-wide shared-memory accounting is not evidence
 that reusable source files can be deleted.
 
-Mellum's exact full 24508 parent is loaded by owner 2379860 and passed fresh
-actor parity. Its complete-gradient/FFN qualification is still progressing.
-Approximately 1 TB of observed writes belongs to that qualification, which
-performs several backward passes; it is not a measurement of production bytes
-per optimizer update. The next R9 entry has passed the actual parsed-argument
-comparison with the qualified runtime. It may carry the original genuine
-gradient result only after that result passes, under an independently reviewed
-exact module inventory; fresh actor and actual capacity checks remain required.
-Do not repeat this expensive measurement solely for changed metadata.
+Mellum owner 2379860 exited before SGD after its FFN 0-to-4096 transition failed.
+Both individual settings passed all 315 cached-versus-flat derivatives, and
+cross-setting forward outputs/CE were exact. Only cross-setting expert weight
+derivatives failed: 34 tensors, 80 coordinates, maximum difference 0.00048828125.
+A tiny actual Mellum FFN/carrier reproduction localized changed expert-row
+reduction boundaries across a physical chunk seam. Repair whole-invocation
+reduction provenance while keeping the FFN memory bound; do not dismiss the
+failure as BF16 noise or relax its tolerance.
+
+The supervisor authorized returning to the genuinely qualified FFN0 setting
+while that optimization is repaired. A typed selector must authenticate the
+original complete baseline certificate, exact parent/configuration/cohort and
+reviewed unchanged numerical code; it must retain the rejected transition as
+failed. Fresh actor and actual whole-source maximum capacity checks remain
+required before SGD, without cutting sources or quotas. No new standalone
+precision PASS may be fabricated from the failed wrapper. Approximately 1.1 TB
+of writes over 3738 seconds belonged to this qualification's several backward
+passes, not production updates. The shared observer now brackets actual update
+I/O and bounded host/GPU memory telemetry for the next legitimate continuation.
 
 Both sandboxes' stale source-host RAW rounds were retired under their exact
 live controller leases with zero training/readiness credit. Whole-recipe work
@@ -77,6 +87,13 @@ verified new leaves together with their evidence, preserving prior proof and
 held-data prefixes, optimizer/RNG and earned row visits. R9 deliberately stays
 at the reviewed `df15aa423` package (code `68060d44`); later unused handoff or
 registry changes do not justify interrupting it again.
+
+Teacher generation remains continuous on its dedicated sandbox. Its selector
+already alternates qualified broad tasks (the active broad packet covers 56
+families) with a recovery priority packet, rather than only the small typed
+copy/extract/join curriculum. Newly admitted views remain zero exposure until
+the learners actually consume them; source registration and staging are not
+whole-recipe progress.
 
 The earlier exits motivating this recovery reached their finite initial
 foundation boundary and exited instead of handing back to the whole-recipe
