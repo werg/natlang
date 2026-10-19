@@ -272,3 +272,27 @@ def test_explicit_actor_runtime_reconciles_known_role_binder_command_only(tmp_pa
     with pytest.raises(ValueError,match='factory-bound runtime'):
         configure_provider({'actor_environment':{**environment,'NATLANG_REPO':'/wrong'}},
             declaration,{}, {},tmp_path/'unused',write=False)
+
+
+@pytest.mark.parametrize('command',[
+    ['custom-actor','/old/scripts/neuralese_data/serve_direct_checkpoint.py'],
+    ['/bin/sh','-c','/old/scripts/neuralese_data/serve_direct_checkpoint.py'],
+    ['/usr/bin/env','NATLANG_REPO=/old','custom-actor','/old/scripts/neuralese_data/serve_direct_checkpoint.py'],
+    ['/usr/bin/python','-c','/old/scripts/neuralese_data/serve_direct_checkpoint.py'],
+])
+def test_actor_runtime_never_reinterprets_custom_prefix_with_native_path(tmp_path,command):
+    from natlang_neuralese.rl.native_rounds import configure_provider
+    with pytest.raises(ValueError,match='custom actor command'):
+        configure_provider({}, {'actor_runtime':str(tmp_path),'commands':{'actor_command':command}},
+                           {},{},tmp_path/'unused',write=False)
+
+
+@pytest.mark.parametrize('prefix',[['/usr/bin/python'],['/usr/bin/python','-u'],
+    ['/usr/bin/env','OMP_NUM_THREADS=2','/usr/bin/python','-B','-u']])
+def test_actor_runtime_accepts_declared_python_launcher_shapes(tmp_path,prefix):
+    from natlang_neuralese.rl.native_rounds import configure_provider
+    environment={'NATLANG_REPO':str(tmp_path),'PYTHONPATH':str(tmp_path/'training/neuralese')}
+    command=prefix+['/old/scripts/neuralese_data/serve_direct_checkpoint.py','--native-state']
+    result=configure_provider({'actor_environment':environment},
+        {'actor_runtime':str(tmp_path),'commands':{'actor_command':command}}, {},{},tmp_path/'unused',write=False)
+    assert result['actor_command'][-2:]==[str(tmp_path/'scripts/neuralese_data/serve_direct_checkpoint.py'),'--native-state']

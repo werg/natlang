@@ -127,10 +127,21 @@ def configure_provider(config,declaration,plan,binding,config_path,*,write=True)
         # wrapper. An explicit actor package owns only this known native actor
         # entry point and its import roots, never a custom serving command.
         actor = config['actor_command']
-        entry = [index for index, value in enumerate(actor)
-                 if value.endswith('/scripts/neuralese_data/serve_direct_checkpoint.py')]
-        if len(entry) != 1:
+        import re
+        cursor = 0
+        if actor[0] in ('env', '/usr/bin/env', '/bin/env'):
+            cursor = 1
+            while cursor < len(actor) and re.match(r'^[A-Za-z_][A-Za-z_0-9]*=', actor[cursor]):
+                cursor += 1
+        if cursor >= len(actor) or re.fullmatch(r'python(?:3(?:\.\d+)?)?', Path(actor[cursor]).name) is None:
             raise ValueError('explicit actor runtime cannot reinterpret a custom actor command')
+        cursor += 1
+        while cursor < len(actor) and actor[cursor] in ('-u', '-B'):
+            cursor += 1
+        if (cursor >= len(actor)
+                or not actor[cursor].endswith('/scripts/neuralese_data/serve_direct_checkpoint.py')):
+            raise ValueError('explicit actor runtime cannot reinterpret a custom actor command')
+        entry = [cursor]
         environment = config.get('actor_environment') or {}
         repository = str(Path(declaration['actor_runtime']).resolve(strict=True))
         if environment.get('NATLANG_REPO') != repository:
