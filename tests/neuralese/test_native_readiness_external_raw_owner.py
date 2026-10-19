@@ -65,3 +65,44 @@ def test_external_raw_release_autoseals_through_real_role_protocol(tmp_path,monk
     roles.install_assets(right['plan_path'],request,assets)
     ready,pending=m.ready_participants(config)
     assert len(ready)==2 and not pending
+
+@pytest.mark.parametrize('ready_count',[0,1,2])
+def test_pending_poll_defers_full_pair_index_until_two_ready(tmp_path,monkeypatch,ready_count):
+    from natlang_neuralese.train import native_semantic_stage as semantic
+    from natlang_neuralese.common.hashing import sha256_file_hex
+    calls=[];original=semantic.PairedSource
+    class ObservedSource(original):
+        def __init__(self,binding,*,split):
+            calls.append(split);super().__init__(binding,split=split)
+    monkeypatch.setattr(semantic,'PairedSource',ObservedSource)
+    monkeypatch.setattr(semantic,'validate_config',lambda value:value)
+    pairs={}
+    for split in ('train','test'):
+        source=tmp_path/(split+'.jsonl')
+        source.write_text(json.dumps({'schema':semantic.PAIR_SCHEMA,'split':split,'id':split,
+            'models':{'0':{},'1':{}},'source_groups':[split]})+'\n')
+        pairs[split]={'path':str(source),'sha256':sha256_file_hex(source)}
+    curriculum=tmp_path/'curriculum.json';curriculum.write_text(json.dumps({'pairs':pairs['train'],'held_pairs':pairs['test']}))
+    config={'schema':'natlang.native-shared-stage-controller/1','out':str(tmp_path/'out'),
+        'command':['semantic'],'curriculum':str(curriculum)}
+    path=tmp_path/'config.json';path.write_text(json.dumps(config))
+    monkeypatch.setattr(m,'ready_participants',lambda cfg:([{'model_id':str(i)}for i in range(ready_count)],[]))
+    monkeypatch.setattr(m,'_launch_child',lambda *args,**kwargs:pytest.fail('inspection cannot launch a child'))
+    result=m.run(path,once=True)
+    assert result['ready_models']==ready_count
+    assert calls==(['train','test']if ready_count==2 else [])
+
+
+def test_two_ready_owners_still_reject_invalid_pair_before_launch(tmp_path,monkeypatch):
+    from natlang_neuralese.train import native_semantic_stage as semantic
+    from natlang_neuralese.common.hashing import sha256_file_hex
+    source=tmp_path/'bad.jsonl';source.write_text('{}\n')
+    ref={'path':str(source),'sha256':sha256_file_hex(source)}
+    curriculum=tmp_path/'curriculum.json';curriculum.write_text(json.dumps({'pairs':ref,'held_pairs':ref}))
+    path=tmp_path/'config.json';path.write_text(json.dumps({'schema':'natlang.native-shared-stage-controller/1',
+        'out':str(tmp_path/'out'),'command':['semantic'],'curriculum':str(curriculum)}))
+    monkeypatch.setattr(semantic,'validate_config',lambda value:value)
+    monkeypatch.setattr(m,'ready_participants',lambda cfg:([{'model_id':'0'},{'model_id':'1'}],[]))
+    monkeypatch.setattr(m,'_launch_child',lambda *args,**kwargs:pytest.fail('invalid pairs cannot launch'))
+    with pytest.raises(ValueError,match='invalid schema'):
+        m.run(path,once=True)

@@ -530,7 +530,9 @@ def _run(config_path, *, once=False, stop):
             manage_raw = _manage_raw_bootstrap(config)
             ready, pending = ready_participants(config)
             curriculum = (json.loads(Path(config['curriculum']).read_text()) if config.get('curriculum') else {})
-            if curriculum.get('pairs') and curriculum.get('held_pairs'):
+            # Pending external owners need polling, not a full paired-row index.
+            # Once two owners qualify, validate every train/held row before launch.
+            if len(ready) >= 2 and curriculum.get('pairs') and curriculum.get('held_pairs'):
                 from .native_semantic_stage import PairedSource,validate_config
                 curriculum=validate_config(curriculum)
                 cache_key = (curriculum['pairs']['sha256'], curriculum['held_pairs']['sha256'])
