@@ -260,6 +260,7 @@ def verify_initial_foundation_cohort(train, foundation, *, already_declared=Fals
 def communication_foundation(source,counts,*,epochs,trained_bindings):
     """Exact full declared communication cohort; ordinary rows do not gate it."""
     from ..common.hashing import canonical_json_sha256_hex
+    from .native_operation_report import source_receipt
     quotas=required_visits(source.ordered_ids(),epochs)
     rows={}
     for entry in source.entries:
@@ -271,7 +272,7 @@ def communication_foundation(source,counts,*,epochs,trained_bindings):
             'admitted_to_training':compatible}
     cohort={key:{name:row[name] for name in ('binding','required_visits')} for key,row in rows.items()}
     return {'schema':'natlang.native-communication-foundation/1',
-        'cohort_sha256':canonical_json_sha256_hex(cohort),'sources':source.receipt(),
+        'cohort_sha256':canonical_json_sha256_hex(cohort),'sources':source_receipt(source),
         'epochs':epochs,'rows':rows,'graphs':len(rows),
         'required_graph_visits':sum(row['required_visits'] for row in rows.values()),
         'graph_visits':sum(row['graph_visits'] for row in rows.values()),

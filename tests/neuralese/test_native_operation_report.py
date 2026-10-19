@@ -11,6 +11,44 @@ from natlang_neuralese.common.hashing import canonical_json_sha256_hex
 from natlang_neuralese.train import native_operation_report as report
 
 
+def test_nested_source_receipt_preserves_totals_and_identities_with_linear_row_work(tmp_path):
+    from natlang_neuralese.data.native_sources import NativeGraphSource
+    visits=[]
+    class CountedEntries(list):
+        def __iter__(self):
+            visits.append(len(self))
+            return super().__iter__()
+    def leaf(index):
+        return SimpleNamespace(path=tmp_path/str(index),file_sha256=str(index),kind='native-graphs',
+            entries=CountedEntries([{'groups':['all',str(index)],'supervised_tokens':index+1,
+                                    'communication':bool(index%2)}]))
+    source=leaf(0)
+    for index in range(1,65):
+        child=leaf(index)
+        source=SimpleNamespace(path=tmp_path/f'manifest-{index}',file_sha256=f'm{index}',
+            kind='manifest',children=[source,child],entries=CountedEntries(source.entries+child.entries))
+    # Bind the genuine original method to this in-memory source tree.
+    def original(node):
+        node.receipt=lambda:NativeGraphSource.receipt(node)
+        for child in getattr(node,'children',[]):original(child)
+    original(source)
+    legacy=source.receipt()
+    visits.clear()
+    bounded=report.source_receipt(source)
+    assert sum(visits)==2*65  # root totals plus each leaf once; no ancestor scans
+    assert bounded['by_source_group']==legacy['by_source_group']
+    def identities(value):
+        result={key:value[key] for key in ('path','sha256','rows','communication_graphs')}
+        if 'sources' in value:result['sources']=[identities(child) for child in value['sources']]
+        return result
+    assert identities(bounded)==identities(legacy)
+    assert bounded['group_counts_scope']=='root-only/1'
+    assert 'by_source_group' not in bounded['sources'][0]
+    view=report.SourceIdentityView(source)
+    assert view.entries is source.entries
+    assert view.receipt()==identities(legacy)
+
+
 def fixture(tmp_path):
     checkpoint=tmp_path/'checkpoint.pt'
     groups={'ordinary':{'examples':2,'supervised_tokens':8}}

@@ -1091,7 +1091,8 @@ def main(argv=None):
     train_groups, held_groups = train.groups, held.groups
     if train_groups & held_groups:
         raise ValueError('native train/held source groups overlap: ' + ', '.join(sorted(train_groups & held_groups)[:8]))
-    source_receipts = [train.receipt(), held.receipt()]
+    from .native_operation_report import source_receipt, SourceIdentityView
+    source_receipts = [source_receipt(train), source_receipt(held)]
     source_row_bindings = train.bindings
     from .native_continuation import reject_withdrawn_targets
     reject_withdrawn_targets(saved_training,source_row_bindings)
@@ -1171,7 +1172,7 @@ def main(argv=None):
         restored_progress = True
     from .native_source_classification import (migration_classes, reclassify_progress,
                                                require_explicit_reclassification)
-    class_migration = (migration_classes(args.source_classification_migration, train)
+    class_migration = (migration_classes(args.source_classification_migration, SourceIdentityView(train))
                        if args.source_classification_migration else {})
     require_explicit_reclassification(carried_progress, train.entries, class_migration)
     if class_migration:
@@ -1572,7 +1573,7 @@ def main(argv=None):
                     args.recipe_binding = json.dumps(resident.recipe_binding)
                     source_row_bindings = train.bindings
                     source_order = train.ordered_ids()
-                    source_receipts = [train.receipt(), held.receipt()]
+                    source_receipts = [source_receipt(train), source_receipt(held)]
                     source_hash = hashlib.sha256(json.dumps(
                         [source_receipts[0]['sha256'], source_receipts[1]['sha256'],
                          sorted(source_row_bindings.items()), sorted(held_row_bindings.items())],

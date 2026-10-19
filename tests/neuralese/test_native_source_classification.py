@@ -87,6 +87,9 @@ def test_migration_reuses_bindings_writes_new_cache_and_never_compiles(tmp_path,
         'train_sha256': current.receipt()['sha256'], 'indexes': [part]}))
     classes = migration.migration_classes(proof, current)
     assert classes[current.entries[0]['id']]['producer_consumer']
+    from natlang_neuralese.train.native_operation_report import SourceIdentityView
+    monkeypatch.setattr(current,'receipt',lambda:pytest.fail('classification built full group histograms'))
+    assert migration.migration_classes(proof,SourceIdentityView(current))==classes
     # A second equivalent invocation is idempotent and leaves identical bytes.
     before = Path(part['new_index']['path']).read_bytes()
     again = migration.migrate_index(source, old, old_package=old_package, new_package=package)
@@ -138,10 +141,12 @@ def test_history_uses_actual_counts_and_preserves_optimizer_rng_quotas_and_old_f
         migration.reclassify_progress({'s': frame}, bad)
 
 
-def test_external_only_does_not_establish_participating_model_foundation():
+def test_external_only_does_not_establish_participating_model_foundation(tmp_path):
     source = SimpleNamespace(entries=[{'id': 'external', 'binding': 'e', 'communication': True,
-        'producer_consumer': False, 'external_state_consumption': True}],
-        ordered_ids=lambda: ['external'], receipt=lambda: {'source': 'external'})
+        'producer_consumer': False, 'external_state_consumption': True,
+        'groups':['external'],'supervised_tokens':1}],
+        path=tmp_path/'external',file_sha256='external',kind='native-graphs',
+        ordered_ids=lambda: ['external'])
     result = communication_foundation(source, {'external': 99}, epochs=1, trained_bindings={'external': 'e'})
     assert result['graphs'] == 0 and not result['complete']
 

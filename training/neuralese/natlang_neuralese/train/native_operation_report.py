@@ -10,6 +10,46 @@ from ..common.hashing import sha256_file_hex_cached
 DETAIL_SCHEMA='natlang.native-operation-detail/1'
 
 
+def source_identity_receipt(source):
+    """Keep every source identity without repeated ancestor-wide group maps."""
+    result={'path':str(source.path.resolve()),'sha256':source.file_sha256,
+            'rows':len(source.entries)}
+    if source.kind=='manifest':
+        children=[source_identity_receipt(child) for child in source.children]
+        result.update(sources=children,
+            communication_graphs=sum(child['communication_graphs'] for child in children))
+    else:
+        result['communication_graphs']=sum(bool(entry.get('communication')) for entry in source.entries)
+    return result
+
+
+def source_receipt(source):
+    """Record exact whole-source totals once, plus the complete identity tree."""
+    result=source_identity_receipt(source)
+    groups={}
+    for entry in source.entries:
+        for group in entry['groups']:
+            count=groups.setdefault(group,{'examples':0,'supervised_tokens':0})
+            count['examples']+=1
+            count['supervised_tokens']+=entry['supervised_tokens']
+    return {**result,'by_source_group':groups,'group_counts_scope':'root-only/1'}
+
+
+class SourceIdentityView:
+    """The classification verifier needs exact entries and source identities.
+
+    Its existing producer module is immutable evidence for migrated caches.
+    This consumer view supplies its read interface without manufacturing the
+    unrelated full group histograms at every historical manifest ancestor.
+    """
+    def __init__(self,source):
+        self.entries=source.entries
+        self._receipt=source_identity_receipt(source)
+
+    def receipt(self):
+        return self._receipt
+
+
 def _digest(value):
     # Stream the inventory, while letting the native encoder handle each
     # bounded batch of records. iterencode's Python scalar generator dominated final reports on
