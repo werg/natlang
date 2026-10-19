@@ -48,17 +48,33 @@ through the projected-value implementation.
 
 ## Current status
 
-October 19, 00:15 UTC: both useful diagnostic trainers continue. Mellum's
-natural hourly checkpoint completed at global 24959 / ordinary 23943, then
-SGD resumed. LFM actually adopted the corrected 604-row continuation at global
-15373 and continued updates, with resident generation `bf102d0c` containing
-1,313,869 rows. Mellum remains on `3b7085c0` (1,234,855 rows). These are actual
-progress observations, not whole-recipe completion or a task-quality lift.
-Historical protected scores remain LFM14952=0/16 and Mellum22016=11/16.
-The Mellum24464 view finished download to external storage and its real local
-evaluation is running; no result is available yet. Mellum24508's full
+October 19, 13:15 UTC: both diagnostic learners reached their finite initial
+foundation boundary and exited instead of handing back to the whole-recipe
+controller. The original sandboxes remain reachable on the same boots; neither
+exit is a new OOM. LFM ended at global 16397 / ordinary 15641, Mellum at
+29861 / 28845. Each completed its initial 26,312-graph foundation, but actual
+communication exposure is only 26,314/107,766 and 26,313/107,766 respectively.
+The remaining production recipe is not complete. The cloud owner is installing
+the completed source classification and restoring into the corrected runtime;
+LFM proceeds independently while Mellum's regression is investigated. Require
+durable whole-recipe handback after entry, not another unattended finite stop.
+LFM's adopted source remains `bf102d0c` (1,313,869 rows); Mellum remains
+`3b7085c0` (1,234,855 rows). Its further 158 verified rows passed the actual
+continuation consumer but were not adopted before its old owner exited.
+
+Protected historical task scores are LFM16397=0/16, Mellum22016=11/16,
+Mellum24464=10/16 and Mellum29861=1/16. All sixteen latest cases have classified
+outcomes without infrastructure errors; these historical evaluations do not
+qualify newly restored weights. Mellum's later checkpoint skips execution and
+repeats invalid typed completions under the same task packet, tool interface,
+sampler and model configuration. The symptom is real; its training cause is
+still under investigation. Do not train on these protected traces or answers.
+Resume Mellum from its protected full 24508 parent, restoring that parent's
+optimizer/RNG/exposure rather than the regressed 29861 history. The full
 48,739,398,749-byte parent was independently uploaded and fully read back
-with exact SHA-256 `4775b9f3`.
+with SHA-256 `4775b9f3485f510be613bbc80c1bc526cb27e772697d4034d22e57d38979e03b`.
+Its proximity to 24464 does not inherit 24464's task proof. Preserve 29861 for
+the assigned regression investigation.
 
 The previous Mellum successor passed exact full/view/cache forward comparison,
 then failed its complete 314-parameter gradient check before any SGD. A real
@@ -67,9 +83,10 @@ counterexample localized concrete mechanisms. Shared repair `0bc25389f`
 preserves invocation-local reductions, cached reverse-token convolution fan-in,
 interleaved actor ordering and checkpoint execution context while still running
 one layer-major graph traversal. Independent full review is clear and focused
-tests pass. The repository full check is still running; its four observed
-failures have concrete newer fixes: decoded options lifetime `6be74d124` and
-test filesystem selection `8893c64c2`. This is not a current full-green claim.
+tests pass. Earlier full-check failures have fixes for decoded options lifetime
+`6be74d124`, test filesystem selection `8893c64c2`, and stale continuation/held
+cadence assertions `882ab24cb`. Full check of `c9b6a3d68` is now running;
+67 integrated focused tests and quick checks passed. No full-green claim yet.
 Actual-parent cloud gradient/capacity qualification remains required.
 See [gradient partition implementation](shared-state/GRAPH_GRADIENT_PARTITIONS_20261019.md)
 and [ordered convolution](shared-state/FINITE_CONVOLUTION_COTANGENT_ORDER_20261019.md).
@@ -94,8 +111,10 @@ need nonempty imports and positive supervised continuation; genuine in-model
 production is distinguished from external-only consumption. Only ONE of the
 two admitted 797-family long graphs actually communicates. Exact historical
 row visits, quotas, optimizer and RNG remain preserved; old caches require
-an explicit authenticated index migration. Those cloud migrations are being
-prepared, not yet claimed as applied.
+an explicit authenticated index migration. The raw classification proofs are complete and privately staged for
+1,004,737 LFM rows and 974,931 Mellum rows. The guarded combined operator is
+ready; cache installation and the actual full consumer remain cloud-owned.
+Neither private staging nor schema verification establishes training exposure.
 
 The self-hosted Qwen teacher remains busy. Actual hardware is RTX PRO 6000
 Blackwell with 96 GB, correcting older B200 descriptions. Its serving engine
@@ -105,15 +124,19 @@ typed plus 24/24 ordinary recovery and 3/3 private recovery references.
 The 198-packet source/runtime epoch is actually adopted; the publisher
 recovered from a transient gateway file-read error and completed its first
 matching healthy poll without a restart. Existing collectors retain their
-original runtime custody. Three new 48-trajectory windows wait their legitimate
-capacity turn; no future sample or completed measurement is inferred from
-configuration adoption. The shared guardian now verifies naturally archived
+original runtime custody. The first typed window actually completed 48/48 captured and host-accepted
+trajectories, including five plaintext private producers. Conversion/admission
+remains explicit; a captured success is not an admitted or trained row. At
+13:02 UTC the teacher GPU was 88% busy with 14 running and 18 waiting
+requests. The reviewed source-authority successor expands 195 to 198 packets
+with unchanged quality and protected-split checks; typed/recovery and ordinary
+backlog admission is in progress for both students. The shared guardian now verifies naturally archived
 completed slots against exact original owner/start and boundary custody
 (`74d374d21`); the future operator derivative is prepared, not executed merely
 to change a working guardian.
 
-Neither model has completed its whole foundation/production recipe or earned
-cross-model VAE readiness. Continue genuine shared-state graphs, ordinary data,
+Both initial foundation quotas are now complete, but neither model has
+completed the whole production recipe or earned cross-model VAE readiness. Continue genuine shared-state graphs, ordinary data,
 full-graph policy updates and executable existing coordinator stage handback
 as their real dependencies become ready. Exact live owners, save/adoption
 receipts and counters are maintained in the DGX coordination status.
