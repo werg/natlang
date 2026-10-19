@@ -288,6 +288,9 @@ def main(argv=None):
     parser.add_argument('--state-dir', type=pathlib.Path, required=True)
     parser.add_argument('--export-command', required=True, help='JSON argv with {role} and {pin}')
     parser.add_argument('--bound-output', help='JSON immutable argv binding and allowed_output_root')
+    parser.add_argument('--publication-spec', type=pathlib.Path,
+                        help='Exact owned-publication export specification; separate owner journal required')
+    parser.add_argument('--publication-spec-sha256')
     parser.add_argument('--pin-directory', default='/work/production/durable-exports')
     parser.add_argument('--minimum-available-bytes', type=int, default=16*1024**3)
     parser.add_argument('--actor-view-directory', type=pathlib.Path)
@@ -301,6 +304,21 @@ def main(argv=None):
     parser.add_argument('--interval', type=float, default=120)
     parser.add_argument('--once', action='store_true')
     args = parser.parse_args(argv)
+    publication = None
+    if bool(args.publication_spec) != bool(args.publication_spec_sha256):
+        parser.error('owned publication needs specification and exact SHA256 together')
+    if args.publication_spec:
+        raw = args.publication_spec.read_bytes()
+        if hashlib.sha256(raw).hexdigest() != args.publication_spec_sha256:
+            parser.error('owned publication specification changed')
+        publication = json.loads(raw)
+        if (publication.get('schema') != 'natlang.owned-publication-export/1'
+                or publication.get('role') != args.role):
+            parser.error('owned publication specification belongs to another role/schema')
+        if (args.bound_output or args.actor_view_directory or args.actor_view_runtime
+                or args.actor_view_sidecar or args.actor_view_sidecar_sha256
+                or args.training_summary_spec or args.training_summary_runtime or args.checkpoint_control_spec):
+            parser.error('owned publication uses its bound output/control; actor derivation is separate')
     if bool(args.actor_view_directory) != bool(args.actor_view_runtime):
         parser.error('actor view export needs directory and explicit runtime together')
     if bool(args.actor_view_sidecar) != bool(args.actor_view_sidecar_sha256) or (args.actor_view_sidecar and (not args.actor_view_directory or not re.fullmatch(r'[0-9a-f]{64}',args.actor_view_sidecar_sha256))):
@@ -323,23 +341,54 @@ def main(argv=None):
     cwctl.load_env_file(); cwctl.require_key()
     lease = (args.state_dir/f'{args.role}-cursor-periodic-export-owner.lock').open('a')
     fcntl.flock(lease, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    selection_path = args.state_dir/'owned-publication-selection.json'
+    if publication is not None:
+        if selection_path.exists():
+            if json.loads(selection_path.read_text()) != publication:
+                raise ValueError('owned export journal belongs to another continuation')
+        else:
+            if any(path.exists() for path in paths_for(args.state_dir,args.role).values()):
+                raise ValueError('owned publication requires a fresh journal, not an old step watermark')
+            save(selection_path,publication)
+    elif selection_path.exists():
+        raise ValueError('owned publication journal cannot become a legacy cursor journal')
     def observe(**kwargs):
-        code = remote_code(role=args.role, root=args.root, extra=extra,
+        if publication is not None:
+            try:
+                from .owned_publication_export import remote_code as owned_code
+            except ImportError:
+                from scripts.coreweave.owned_publication_export import remote_code as owned_code
+            state_path=paths_for(args.state_dir,args.role)['state']
+            state=json.loads(state_path.read_text()) if state_path.exists() else {}
+            code=owned_code(publication,known_sha256=(state.get('receipt') or {}).get('identity',{}).get('sha256'),
+                            known_step=state.get('last_verified_step',-1))
+        else:
+            code = remote_code(role=args.role, root=args.root, extra=extra,
                            pin_directory=args.pin_directory, minimum_available_bytes=args.minimum_available_bytes,
                            actor_view_directory=args.actor_view_directory,actor_view_runtime=args.actor_view_runtime,
                            actor_view_sidecar=args.actor_view_sidecar,actor_view_sidecar_sha256=args.actor_view_sidecar_sha256,
                            checkpoint_control_spec=json.loads(args.checkpoint_control_spec) if args.checkpoint_control_spec else None,
                            training_summary_spec=summary,training_summary_runtime=args.training_summary_runtime,**kwargs)
-        code = recoverable_remote_code(code, role=args.role, root=args.root)
+            code = recoverable_remote_code(code, role=args.role, root=args.root)
         result = cwctl.read_sandbox(args.sandbox_id, patience=60).exec(
             ['python', '-c', code], timeout_seconds=3600).result(timeout=3690)
         if result.returncode: raise RuntimeError('owned remote checkpoint observation failed: '+str(result.stderr)[-3000:])
         return json.loads(result.stdout)
     def export(chosen, receipt_path):
         actual = [item.replace('{role}', args.role).replace('{pin}', chosen['pin']) for item in command]
-        subprocess.run(actual, check=True, env={**os.environ, 'CW_EXPORT_RECEIPT_FILE': str(receipt_path),
-                       'CW_EXPORT_SANDBOX_ID': args.sandbox_id, 'CW_EXPORT_VERIFY_REMOTE': '1'})
-        return json.loads(receipt_path.read_text())
+        environment={**os.environ, 'CW_EXPORT_RECEIPT_FILE': str(receipt_path),
+                     'CW_EXPORT_SANDBOX_ID': args.sandbox_id, 'CW_EXPORT_VERIFY_REMOTE': '1'}
+        if publication is not None:
+            environment.update(CW_EXPORT_EXPECTED_SHA256=chosen['sha256'],
+                               CW_EXPORT_EXPECTED_BYTES=str(chosen['bytes']))
+        subprocess.run(actual, check=True, env=environment)
+        receipt=json.loads(receipt_path.read_text())
+        if publication is not None and receipt['identity'] != {'sha256':chosen['sha256'],'bytes':chosen['bytes']}:
+            raise ValueError('private export changed the exact owned publication identity')
+        if publication is not None and (receipt.get('private') is not True or receipt.get('role') != args.role
+                                       or receipt.get('sandbox_id') != args.sandbox_id):
+            raise ValueError('owned publication needs its exact private role/sandbox receipt')
+        return receipt
     while True:
         try:
             result = run_once(args.state_dir, args.role, observe=observe, export=export)
