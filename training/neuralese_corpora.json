@@ -223630,6 +223630,78 @@
         "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0044-tranche0003",
         "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0044-tranche0004"
       ]
+    },
+    {
+      "id": "d39-static-repository-whole-code-236ce19d-first-parquet-20261019-v1",
+      "path": "runs/d39-static-repository-whole-code-236ce19d-first-parquet-20261019-v1",
+      "owner": "dgx",
+      "source_class": "source-curated-static-repository-code-continuation",
+      "split": "Original repository/source content groups closed against current global held/quality/pending protection; whole files only.",
+      "license": "Expansion-plan gated/custom-other license accepted by owner; exact pinned source identity retained.",
+      "source_revision": "236ce19d88b06fba4bd52bdccb93d42592be96ee",
+      "upstream_dataset": "MidTool/MidTool-Mix",
+      "source_acquisition_scope": "One complete pinned code Parquet member; other upstream members are not acquired or claimed complete.",
+      "training_admission": true,
+      "training_admission_reason": "Every admitted whole code graph was replayed exactly against its original source row, repository/path/commit header, tokenizer and source-protection closure. This is static ordinary code SFT, without execution-success, assistant-answer or communication qualification. Three invalid original source rows remain explicitly pending. Oversized complete graphs remain in executable source declarations.",
+      "include": [
+        "acquisition-and-schema.json",
+        "code/part-00000.parquet",
+        "native-static-code-v1/lfm25/receipt.json",
+        "native-static-code-v1/lfm25/source-pending.jsonl",
+        "native-static-code-v1/lfm25/source-row-proofs.jsonl",
+        "native-static-code-v1/lfm25/test/native-graphs.jsonl.zst",
+        "native-static-code-v1/lfm25/train/native-graphs.jsonl.zst",
+        "native-static-code-v1/mellum21/receipt.json",
+        "native-static-code-v1/mellum21/source-pending.jsonl",
+        "native-static-code-v1/mellum21/source-row-proofs.jsonl",
+        "native-static-code-v1/mellum21/test/native-graphs.jsonl.zst",
+        "native-static-code-v1/mellum21/train/native-graphs.jsonl.zst",
+        "static-capacity-limits-v1.json",
+        "static-capacity-partition-v1/files/coverage.jsonl",
+        "static-capacity-partition-v1/files/lfm25/test/fit.jsonl.zst",
+        "static-capacity-partition-v1/files/lfm25/test/remaining-long.jsonl.zst",
+        "static-capacity-partition-v1/files/lfm25/train/fit-sources.json",
+        "static-capacity-partition-v1/files/lfm25/train/fit.jsonl.zst",
+        "static-capacity-partition-v1/files/lfm25/train/remaining-long-sources.json",
+        "static-capacity-partition-v1/files/lfm25/train/remaining-long.jsonl.zst",
+        "static-capacity-partition-v1/files/mellum21/test/fit.jsonl.zst",
+        "static-capacity-partition-v1/files/mellum21/test/remaining-long.jsonl.zst",
+        "static-capacity-partition-v1/files/mellum21/train/fit-sources.json",
+        "static-capacity-partition-v1/files/mellum21/train/fit.jsonl.zst",
+        "static-capacity-partition-v1/files/mellum21/train/remaining-long-sources.json",
+        "static-capacity-partition-v1/files/mellum21/train/remaining-long.jsonl.zst",
+        "static-capacity-partition-v1/files/pending-sources.json",
+        "static-capacity-partition-v1/receipt.json",
+        "static-source-admission-both-v1/audit.json",
+        "static-source-admission-both-v1/row-proof.jsonl",
+        "static-source-admission-both-v1/source-render-samples.json"
+      ],
+      "build": {
+        "audit": "static-source-admission-both-v1/audit.json",
+        "audit_sha256": "bf21376f18f35c32a318496e0c0fc40d0d8d55c89a11a22d2f7a5207f05ee1fa",
+        "source_render_samples": {
+          "path": "static-source-admission-both-v1/source-render-samples.json",
+          "sha256": "2b5b20f46fc3a371e26dc99dd9fde248173c49ab00f427df694e0562d9885cb6"
+        },
+        "capacity_partition": {
+          "path": "static-capacity-partition-v1/receipt.json",
+          "sha256": "778e1649fb30559ea247ef5f0f0dd5b070b7f6f8bc89e0399c3c787ba55a5eab"
+        }
+      },
+      "documents": {
+        "lfm25": {
+          "whole_graphs": 99997,
+          "fit": 99979,
+          "remaining_long": 18,
+          "invalid_source_pending": 3
+        },
+        "mellum21": {
+          "whole_graphs": 99997,
+          "fit": 99975,
+          "remaining_long": 22,
+          "invalid_source_pending": 3
+        }
+      }
     }
   ],
   "coverage_backlog": [
