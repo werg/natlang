@@ -1246,3 +1246,29 @@ the replay sidecar is
 (SHA-256 `db206b9f5bdec498c8919d4587675a8dbf02a2b48cb96b04ad092a34d13014f1`).
 Direct ordinary scalar native-state completions remain measurement debt; this
 window does not establish task lift or authorize a quality claim.
+
+Follow-up public measurement for complete native writer wiring (2026-10-20): the
+previous run omitted the server-backed native text writer from the actor runtime,
+so its eight `Neuralese<string>` record tasks could not exercise the intended
+producer path. The shared runtime factory now requires explicit server
+advertisement of `native.text-write` and a declared reader identity/mode, then
+binds the existing typed writer port together with the store and dialect. A new
+48-session public LFM17214 window used that complete binding: all 48 sessions
+ended without a runtime exception, all 48 finished with a stop response, and 34
+intermediate turns hit the 128-token per-turn cap before continuing. Exact public
+expected-value checks matched 37/48 tasks; the other 11 were 3 strings, 7
+numbers, and 1 list. All 8 `Neuralese<string>` record tasks emitted a writer
+trace event and returned a typed native-state reference whose stored text,
+checkpoint identity, tokenizer identity, and artifact bytes were verified. This
+is an execution-boundary measurement, not a task-quality gain claim or training
+admission. No held inputs or external teachers were used.
+
+The capture is
+`/home/werg/data/dgxops/public-typed-return-live48-writer-v3-20261020/captured-turns.json`
+(SHA-256 `6a9efc532a0571ed77774f115033ac76840d5671e09508b09d30c759a8f4f76b`);
+the corrected interpretation and per-artifact evidence are in
+`/home/werg/data/dgxops/public-typed-return-live48-writer-v3-20261020/corrected-analysis.json`
+(SHA-256 `7f053dc0ced5feaeb9c9ceb84c559ad92aa74b2bdd411e1c95ccd9cd6d2fecf6`).
+The sampler's generated raw summary does not count state writes returned through
+tool results, so its `native_state_parts`, `pinned_state_count`, and raw
+`decoder_differences` fields are not used as evidence.
