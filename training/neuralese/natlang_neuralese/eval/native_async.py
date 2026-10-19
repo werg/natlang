@@ -39,8 +39,53 @@ def selected_ingest_export(export_state, prior):
                 or canonical_json_sha256_hex(pending['export'])!=pending.get('sha256')):
             raise ValueError('native eval interrupted transfer binding changed')
         selected=pending['export']
+    if 'fetching_export' not in prior and selected.get('schema') == 'natlang.owned-publication-owner-index/1':
+        selected = selected_owner_generation_export(export_state)
     verified_export(selected)
     return selected
+
+
+def selected_owner_generation_export(index_path):
+    """Resolve only the index's exact current owner generation for task evaluation."""
+    index_path=Path(index_path)
+    if index_path.is_symlink():raise ValueError('native eval owner index may not be a symlink')
+    index_path=index_path.resolve(strict=True)
+    raw_index=index_path.read_bytes();index=json.loads(raw_index)
+    if index.get('schema')!='natlang.owned-publication-owner-index/1' or index.get('role') not in {'lfm','mellum'}:
+        raise ValueError('native eval owner index has the wrong schema or role')
+    current=index.get('current')
+    generation=current.get('generation_sha256') if isinstance(current,dict) else None
+    if not isinstance(generation,str) or len(generation)!=64 or any(c not in '0123456789abcdef' for c in generation):
+        raise ValueError('native eval owner index has no exact current generation')
+    owner_root=index_path.parent/'owner-generations'
+    if owner_root.is_symlink():raise ValueError('native eval owner journal may not be a symlink')
+    generation_dir=owner_root/generation
+    if generation_dir.is_symlink() or not generation_dir.resolve(strict=True).is_relative_to(owner_root.resolve(strict=True)):
+        raise ValueError('native eval owner generation escaped its journal')
+    records=index.get('generations')
+    if not isinstance(records,list):raise ValueError('native eval owner index has no generation records')
+    record=next((row for row in records if isinstance(row,dict)
+                 and row.get('generation_sha256')==generation),None)
+    selection_path=generation_dir/'owner-selection.json'
+    state_path=generation_dir/f"coreweave-native-{index['role']}-periodic-export-state-20261015.json"
+    if selection_path.is_symlink() or state_path.is_symlink():
+        raise ValueError('native eval owner generation journal may not use symlinks')
+    raw_selection=selection_path.read_bytes();selection=json.loads(raw_selection)
+    raw_state=state_path.read_bytes();state=json.loads(raw_state)
+    expected={'schema':'natlang.owned-publication-owner-selection/1','role':index['role'],
+        'generation_sha256':generation,'manifest':current.get('manifest')}
+    if (current!=expected or record!=expected or selection!=expected
+            or state.get('last_verified_step') is None):
+        raise ValueError('native eval current owner selection differs from its generation journal')
+    verified_export(state)
+    if state['receipt'].get('role')!=index['role']:
+        raise ValueError('native eval owner receipt role differs')
+    # Reject a journal swap during selection; the current generation may advance
+    # immediately afterward, but this selected full-read receipt remains exact.
+    if (index_path.read_bytes()!=raw_index or selection_path.read_bytes()!=raw_selection
+            or state_path.read_bytes()!=raw_state):
+        raise ValueError('native eval owner generation changed during selection')
+    return {**state,'owner_generation_sha256':generation}
 
 
 def verify_environment(provenance):

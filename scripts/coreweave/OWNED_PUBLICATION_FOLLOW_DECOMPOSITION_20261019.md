@@ -36,3 +36,12 @@ Exact durable file binding, the atomic selector, and remote publication checks
 are crisp mechanisms. The controller's choice of learner, parent, next stage
 and backup cadence remains in the existing supervisor policy. No model-facing
 behavior changes.
+
+The existing asynchronous task evaluator consumes the same owner follower
+without introducing a second checkpoint watermark. Its export selector reads
+only the index's current generation, verifies that generation's immutable
+selection record and independently read-back private receipt, and then passes
+that exact receipt to the existing transfer/evaluation path. If a transfer is
+already pending, the evaluator continues using its sealed transfer receipt;
+the owner may advance independently, and the next selection happens only after
+that evaluation boundary drains.

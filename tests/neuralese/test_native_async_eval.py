@@ -197,6 +197,55 @@ def test_null_interrupted_transfer_rejected_before_latest_read(tmp_path):
         selected_ingest_export(tmp_path/'unavailable-export',{'fetching_export':None})
 
 
+def test_task_eval_selects_only_verified_current_owner_generation(tmp_path):
+    from natlang_neuralese.eval.native_async import selected_ingest_export
+    from natlang_neuralese.common.jsonio import write_json_durable
+    role='lfm';generation='c'*64
+    index_path=tmp_path/'owner-follow'/'owned-publication-owner-index.json'
+    generation_dir=index_path.parent/'owner-generations'/generation
+    generation_dir.mkdir(parents=True)
+    manifest={'path':'/owner/manifest.json','sha256':'a'*64,'bytes':128}
+    current={'schema':'natlang.owned-publication-owner-selection/1','role':role,
+        'generation_sha256':generation,'manifest':manifest}
+    write_json_durable(generation_dir/'owner-selection.json',current)
+    identity={'sha256':'b'*64,'bytes':4096}
+    state={'last_verified_step':17,'receipt':{'role':role,'private':True,
+        'identity':identity,'independent_verification':dict(identity),'run':'fixture/run',
+        'name':'fixture.pt'}}
+    write_json_durable(generation_dir/'coreweave-native-lfm-periodic-export-state-20261015.json',state)
+    write_json_durable(index_path,{'schema':'natlang.owned-publication-owner-index/1','role':role,
+        'generations':[current],'current':current})
+    selected=selected_ingest_export(index_path,{})
+    assert selected['last_verified_step']==17
+    assert selected['receipt']==state['receipt']
+    assert selected['owner_generation_sha256']==generation
+
+
+@pytest.mark.parametrize('tamper', ['wrong-role', 'wrong-generation', 'receipt-role'])
+def test_task_eval_rejects_owner_generation_journal_mismatch(tmp_path,tamper):
+    from natlang_neuralese.eval.native_async import selected_ingest_export
+    from natlang_neuralese.common.jsonio import write_json_durable
+    role='lfm';generation='d'*64
+    index_path=tmp_path/'owner-follow'/'owned-publication-owner-index.json'
+    generation_dir=index_path.parent/'owner-generations'/generation
+    generation_dir.mkdir(parents=True)
+    manifest={'path':'/owner/manifest.json','sha256':'a'*64,'bytes':128}
+    current={'schema':'natlang.owned-publication-owner-selection/1','role':role,
+        'generation_sha256':generation,'manifest':manifest}
+    selection=dict(current)
+    if tamper=='wrong-role':selection['role']='mellum'
+    if tamper=='wrong-generation':selection['generation_sha256']='e'*64
+    write_json_durable(generation_dir/'owner-selection.json',selection)
+    identity={'sha256':'b'*64,'bytes':4096}
+    receipt_role='mellum' if tamper=='receipt-role' else role
+    state={'last_verified_step':17,'receipt':{'role':receipt_role,'private':True,
+        'identity':identity,'independent_verification':dict(identity)}}
+    write_json_durable(generation_dir/'coreweave-native-lfm-periodic-export-state-20261015.json',state)
+    write_json_durable(index_path,{'schema':'natlang.owned-publication-owner-index/1','role':role,
+        'generations':[current],'current':current})
+    with pytest.raises(ValueError):selected_ingest_export(index_path,{})
+
+
 def test_export_schema_step_and_identity_are_exact(tmp_path):
     base,_,checkpoint,spec,export=fixture(tmp_path)
     options=dict(identity=export['receipt']['identity'],spec=spec,out=tmp_path/'eval',base=base,queue=tmp_path/'queue')
