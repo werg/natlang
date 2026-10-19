@@ -8,6 +8,10 @@ import json
 SCHEMA = 'natlang.native-capacity-activation-geometry-part/1'
 # Reviewed ordinary_geometry producer; preference partitioning has another schema.
 _ORDINARY_PARTITION_VERIFIERS = frozenset({
+    # Adds authenticated static-source replay to the producer; the acquired
+    # ordinary row-byte/geometry law is unchanged. Static audits still require
+    # their own consumer qualification and are not admitted by this hash.
+    'dc4796d788655f08563c77d3e6528dafa420179a54e78235a00360552bc8c91b',
     '9282654e7427f1435496ec863bc221222fcec2702ab6cc9115798f3fa0d45c09',
     # Historical ordinary-only producers preserve the same audited row bytes,
     # all-row graph proof and one-node physical/KV geometry law.
