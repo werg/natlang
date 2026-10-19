@@ -187,3 +187,42 @@ def test_supervised_execute_publishes_the_exact_expanded_trainer_command(tmp_pat
     assert json.loads(Path(argv_ref['path']).read_text())==captured['command']
     assert captured['command'][captured['command'].index('--continue-from')+1]==str(selected_parent)
     assert captured['command'][captured['command'].index('--out')+1]==str(output/'learner')
+
+
+def test_external_helper_keeps_sidecar_file_and_uses_explicit_runtime_root(tmp_path):
+    import importlib.util
+
+    source = Path(owner.__file__).read_bytes()
+    sidecar = tmp_path / 'external-control' / 'native_publication_owner.py'
+    sidecar.parent.mkdir(parents=True)
+    sidecar.write_bytes(source)
+    name = 'natlang_neuralese.rl.external_publication_owner_fixture'
+    spec = importlib.util.spec_from_file_location(name, sidecar)
+    external = importlib.util.module_from_spec(spec)
+    external.__package__ = 'natlang_neuralese.rl'
+    spec.loader.exec_module(external)
+    config, command, output = _fixture(tmp_path)
+    published = external.emit_current(config, command, out=output,
+        selected_checkpoint=config['checkpoint'], runtime_root=config['runtime'])
+    manifest, _ = external.read_owner(config['native_checkpoint_publication_owner_pointer'], role='lfm')
+    assert Path(external.__file__).resolve() == sidecar.resolve()
+    assert manifest['runtime'] == str(Path(config['runtime']).resolve())
+    assert manifest['package']['path'] == str(Path(config['runtime']).resolve() / 'training/neuralese/natlang_neuralese')
+    assert published['runtime_code_sha256'] == manifest['runtime_code_sha256']
+
+
+def test_external_helper_rejects_runtime_root_different_from_bound_config(tmp_path):
+    config, command, output = _fixture(tmp_path)
+    with pytest.raises(ValueError, match='bound operation config'):
+        owner.emit_current(config, command, out=output,
+            selected_checkpoint=config['checkpoint'], runtime_root=tmp_path)
+
+
+def test_accepts_native_preference_adapter_that_forwards_publication_args(tmp_path):
+    config, command, output = _fixture(tmp_path)
+    command[3] = 'natlang_neuralese.train.native_preference'
+    command.extend(['--objective-spec', str(tmp_path / 'objective.json')])
+    published = owner.emit_current(config, command, out=output, selected_checkpoint=config['checkpoint'])
+    manifest, _ = owner.read_owner(config['native_checkpoint_publication_owner_pointer'], role='lfm')
+    assert published['generation_sha256'] == manifest['generation_sha256']
+    assert manifest['publication_spec']['effective_argv']['path']

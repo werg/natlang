@@ -13,6 +13,7 @@ from ..model.native_checkpoint_control import validate_publication_selection
 SCHEMA = 'natlang.owned-publication-owner/1'
 POINTER_SCHEMA = 'natlang.owned-publication-owner-current/1'
 TRAINER_MODULE = 'natlang_neuralese.train.native_state_sft'
+TRAINER_MODULES = frozenset({TRAINER_MODULE, 'natlang_neuralese.train.native_preference'})
 
 
 def _file_binding(path):
@@ -40,7 +41,7 @@ def _arg(command, name):
     return command[indices[0] + 1]
 
 
-def emit_current(config, command, *, out, selected_checkpoint):
+def emit_current(config, command, *, out, selected_checkpoint, runtime_root=None):
     """Publish one exact quantum intent; it is not a liveness or progress claim."""
     pointer_value = config.get('native_checkpoint_publication_owner_pointer')
     if pointer_value is None:
@@ -58,14 +59,22 @@ def emit_current(config, command, *, out, selected_checkpoint):
                 or existing_pointer.get('role') != role):
             raise ValueError('publication owner pointer belongs to another role/schema')
     command = list(command)
-    if (len(command) < 4 or command[1:3] != ['-u', '-m'] or command[3] != TRAINER_MODULE
+    if (len(command) < 4 or command[1:3] != ['-u', '-m'] or command[3] not in TRAINER_MODULES
             or any(not isinstance(arg, str) for arg in command)):
         raise ValueError('publication owner needs the exact shared native SFT command')
-    runtime = Path(__file__).resolve().parents[4]
+    from ..train import native_resident as resident
+    from ..model import native_checkpoint_control as checkpoint_control
     configured_runtime = config.get('runtime')
+    if runtime_root is None:
+        runtime = Path(__file__).resolve().parents[4]
+    else:
+        runtime = Path(runtime_root).resolve(strict=True)
     if configured_runtime is not None and Path(configured_runtime).resolve(strict=True) != runtime:
-        raise ValueError('publication owner runtime differs from its executing package')
+        raise ValueError('publication owner runtime differs from its bound operation config')
     package = runtime / 'training/neuralese/natlang_neuralese'
+    if (Path(resident.__file__).resolve() != package / 'train/native_resident.py'
+            or Path(checkpoint_control.__file__).resolve() != package / 'model/native_checkpoint_control.py'):
+        raise ValueError('publication owner dependencies are not imported from the bound runtime')
     from ..train.native_resident import digest as canonical_digest
     runtime_code = code_inventory(package)
     runtime_sha = canonical_digest(runtime_code)
