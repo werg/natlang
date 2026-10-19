@@ -222,6 +222,9 @@ def test_bridge_runtime_handoff_reaches_owed_sft_without_owned_operation_credit(
     deferred.update(authority=resident.binding(x['authority_path']),config=resident.binding(x['config']))
     write(deferred_path,deferred);x['deferred']=resident.binding(deferred_path)
     bridge_ref=bridge(x)
+    # Runtime handoff references can carry the standard path/SHA/size shape.
+    # Validate the byte count at the actual producer-to-runtime boundary.
+    bridge_ref={**bridge_ref,'bytes':Path(bridge_ref['path']).stat().st_size}
 
     qualification=tmp_path/'fixture-qualification.json'
     write(qualification,{'passed':True,'fixture_only':True})
@@ -240,6 +243,11 @@ def test_bridge_runtime_handoff_reaches_owed_sft_without_owned_operation_credit(
             value['sources'],config_snapshot=value['snapshots']['config'],
             handoff=value['handoff']))
     proof_path=tmp_path/'runtime-handoff.json'
+    wrong_size={**bridge_ref,'bytes':bridge_ref['bytes']+1}
+    with pytest.raises(ValueError,match='deferred-owner bridge receipt changed'):
+        runtime.prepare_runtime_handoff({'path':'fixture-bootstrap'},x['handoff'],None,
+            x['config'],tmp_path/'wrong-size-runtime-handoff.json',bare_direct_owner=bare,
+            deferred_owner_bridge=wrong_size,verified_handoff=handoff.verify_handoff(x['handoff']))
     runtime_ref=runtime.prepare_runtime_handoff({'path':'fixture-bootstrap'},x['handoff'],None,
         x['config'],proof_path,bare_direct_owner=bare,deferred_owner_bridge=bridge_ref,
         verified_handoff=handoff.verify_handoff(x['handoff']))

@@ -396,7 +396,7 @@ def _verified_deferred_owner_bridge(reference,checkpoint,sources,*,config_snapsh
     path=_bound(reference)
     current=binding(path)
     if (current.get('path')!=reference.get('path') or current.get('sha256')!=reference.get('sha256')
-            or ('bytes' in reference and current.get('bytes')!=reference['bytes'])):
+            or ('bytes' in reference and path.stat().st_size!=reference['bytes'])):
         raise ValueError('deferred-owner bridge receipt changed')
     receipt=_read(reference)
     if (receipt.get('schema')!='natlang.native-raw-deferred-owner-bridge/1'
