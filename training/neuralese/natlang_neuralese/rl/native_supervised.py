@@ -33,11 +33,13 @@ SOURCE_ARGUMENTS = {
 }
 
 
-def _without_source_argument(command, flag):
+def _without_source_argument(command, flag, *, takes_value=True):
     result=[];index=0
     while index<len(command):
         value=command[index]
         if value==flag:
+            if not takes_value:
+                index+=1;continue
             if index+1==len(command) or command[index+1].startswith('--'):
                 raise ValueError('native source argument lacks a value: '+flag)
             index+=2
@@ -47,6 +49,23 @@ def _without_source_argument(command, flag):
         else:
             result.append(value);index+=1
     return result
+
+
+def bind_seed_parameters(config,parameters):
+    """One declared stage value wins over inherited native launcher defaults."""
+    command=list(config['seed_command'])
+    if not any(value in {'natlang_neuralese.train.native_state_sft',
+        'natlang_neuralese.train.native_preference'} for value in command):return config
+    for key,value in parameters.items():
+        flag='--'+key.replace('_','-')
+        command=_without_source_argument(command,flag,takes_value=not isinstance(value,bool))
+        if isinstance(value,bool):
+            command=_without_source_argument(command,'--no-'+key.replace('_','-'),takes_value=False)
+    slots=[value for value in command if value in ('{trainer_args}','{seed_trainer_args}')]
+    if len(slots)>1:raise ValueError('native seed command must contain one trainer parameter splice')
+    if not slots:command.append('{trainer_args}')
+    config['seed_command']=command
+    return config
 
 
 def bind_seed_sources(config, sources):
@@ -153,6 +172,7 @@ def continuation_config(config,stage,*,checkpoint,adapter,out):
         'seed_native_graphs':sources['native_graphs']['path'],
         'held_native_graphs':sources['held_native_graphs']['path']}
     if adapter is None:result.pop('semantic_adapter',None)
+    bind_seed_parameters(result,parameters)
     bind_seed_sources(result,sources)
     bind_seed_objective(result,stage['kind'],sources)
     return result,sources

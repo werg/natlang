@@ -294,3 +294,52 @@ def test_custom_seed_contract_retains_implicit_core_sources_and_current_optional
     assert config['seed_command']==['custom-launcher','{trainer_args}','--continued-native-graphs','{continued_native_graphs}']
     assert config['seed_native_graphs']=='current'and config['continued_native_graphs']=='current-predecessor'
     assert 'foundation_native_graphs'not in config
+
+
+def test_declared_recipe_parameters_cannot_be_disabled_by_seed_defaults(tmp_path):
+    from natlang_neuralese.rl.production import expand_command
+    from natlang_neuralese.train.recipe import stage_parameter_args
+    train=tmp_path/'train.jsonl';train.write_text('{}\n')
+    held=tmp_path/'held.jsonl';held.write_text('{}\n')
+    task={'packet':{'path':str(held),'sha256':sha256_file_hex(held)},'cases':[0],
+          'neuralese_server':True,'runtime_failure_policy':'report'}
+    parameters={'epochs':1,'task_eval':task,'task_eval_every':0,
+        'learned_row_learning_rate':.0003,'checkpoint_layers':True,'checkpoint_input_offload':False}
+    stage={'id':'full','kind':'native_state_sft','requires':[],
+        'inputs':{'native_graphs':'train','held_native_graphs':'held'},'parameters':parameters}
+    recipe=tmp_path/'recipe.json';recipe.write_text(json.dumps({
+        'schema':'natlang.neuralese-training-recipe/1','id':'actual-argv-policy',
+        'input_bindings':{name:{'path':str(path),'sha256':sha256_file_hex(path)}
+                          for name,path in [('train',train),('held',held)]},'stages':[stage]}))
+    command=['python','-m','natlang_neuralese.train.native_state_sft','{trainer_args}',
+        '--task-eval','{task_eval_json}','--task-eval-every=99',
+        '--learned-row-learning-rate','{learned_row_learning_rate}',
+        '--no-checkpoint-layers','--checkpoint-input-offload','--chunk-tokens','128']
+    config={'production_recipe':str(recipe),'recipe_lineage_sha256':'a'*64,
+        'seed_command':command,'task_eval_json':'','learned_row_learning_rate':1e-6}
+    declared,_=supervised.continuation_config(config,stage,checkpoint='full-parent',adapter=None,out=tmp_path/'out')
+    argv=expand_command(declared['seed_command'],{**declared,
+        'trainer_args':stage_parameter_args(declared['trainer_parameters'])})
+    assert argv.count('--task-eval')==1
+    assert json.loads(argv[argv.index('--task-eval')+1])==task
+    assert argv.count('--task-eval-every')==1 and argv[argv.index('--task-eval-every')+1]=='0'
+    assert argv.count('--learned-row-learning-rate')==1
+    assert float(argv[argv.index('--learned-row-learning-rate')+1])==.0003
+    assert argv.count('--checkpoint-layers')==1 and '--no-checkpoint-layers'not in argv
+    assert argv.count('--no-checkpoint-input-offload')==1 and '--checkpoint-input-offload'not in argv
+    assert argv[argv.index('--chunk-tokens')+1]=='128'  # Undeclared fallback stays.
+    assert config['seed_command']==command
+    assert argv[argv.index('--native-graphs')+1]==str(train)
+    assert argv[argv.index('--held-native-graphs')+1]==str(held)
+
+
+def test_native_parameters_add_missing_splice_but_custom_launcher_keeps_its_contract():
+    native={'seed_command':['python','-m','natlang_neuralese.train.native_state_sft','--task-eval','']}
+    supervised.bind_seed_parameters(native,{'task_eval':{'cases':[0]}})
+    assert native['seed_command']==['python','-m','natlang_neuralese.train.native_state_sft','{trainer_args}']
+    custom={'seed_command':['custom-launcher','--task-eval','']}
+    supervised.bind_seed_parameters(custom,{'task_eval':{'cases':[0]}})
+    assert custom['seed_command']==['custom-launcher','--task-eval','']
+    with pytest.raises(ValueError,match='one trainer parameter splice'):
+        supervised.bind_seed_parameters({'seed_command':['python','-m',
+            'natlang_neuralese.train.native_state_sft','{trainer_args}','{seed_trainer_args}']},{})
