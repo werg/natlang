@@ -94,15 +94,21 @@ def test_disk_guard_preserves_partial_fetch(tmp_path):
     assert pending.read_bytes()==b'x'*50
 
 
-def _external_test_root(request):
+def _external_test_root(tmp_path,request):
     import shutil,tempfile
-    external=Path(tempfile.mkdtemp(prefix='native-export-test-',dir='/dev/shm'))
+    # Full checks put pytest's own temporary directory on /dev/shm. Choose
+    # another actual filesystem rather than assuming pytest uses /tmp.
+    alternate=next((root for root in map(Path,('/dev/shm','/tmp'))
+                    if root.is_dir() and root.stat().st_dev!=tmp_path.stat().st_dev),None)
+    if alternate is None:
+        pytest.skip('external payload test requires two actual filesystems')
+    external=Path(tempfile.mkdtemp(prefix='native-export-test-',dir=alternate))
     request.addfinalizer(lambda:shutil.rmtree(external,ignore_errors=True))
     return external
 
 
 def test_external_payload_admission_keeps_tmpfs_reserve_and_external_floor(tmp_path,request):
-    c=config(tmp_path);external=_external_test_root(request)
+    c=config(tmp_path);external=_external_test_root(tmp_path,request)
     floor=20<<30;c['external_payload_root']=str(external);c['external_min_free_bytes']=floor
     calls=[]
     def ingest(export,**kwargs):
@@ -122,7 +128,7 @@ def test_external_payload_admission_keeps_tmpfs_reserve_and_external_floor(tmp_p
 
 
 def test_external_payload_requires_explicit_migration_of_logical_partial(tmp_path,request):
-    c=config(tmp_path);external=_external_test_root(request)
+    c=config(tmp_path);external=_external_test_root(tmp_path,request)
     c['external_payload_root']=str(external)
     destination=Path(c['out'])/'incoming'/('checkpoint-'+'f'*64+'.pt')
     pending=destination.with_name(destination.name+'.pending');pending.parent.mkdir(parents=True)
