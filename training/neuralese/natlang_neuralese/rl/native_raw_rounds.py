@@ -122,7 +122,7 @@ def _scheduling_controls(config,declaration,plan_path,record,*,pending=False):
     return config
 
 
-def configure_model(plan_path,declaration,handoff,out):
+def configure_model(plan_path,declaration,handoff,out,*,verified_handoff=None):
     from .production import configure_native
     from .native_rounds import configure_provider
     for key in ('rows_per_round','supervised_quantum_updates'):
@@ -148,7 +148,7 @@ def configure_model(plan_path,declaration,handoff,out):
             return configure(plan_path,declaration,handoff,path)
         if declaration.get('runtime_handoff'):
             from .native_runtime_handoff import configure_runtime_handoff
-            return configure_runtime_handoff(plan_path,declaration,handoff,path)
+            return configure_runtime_handoff(plan_path,declaration,handoff,path,verified_handoff=verified_handoff)
     elif declaration.get('runtime_handoff'):
         raise ValueError('later runtime authority requires its existing bootstrap and cursor')
     record,saved=verify_handoff(handoff,requirement=declaration['handoff_requirement'])

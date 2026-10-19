@@ -214,7 +214,7 @@ def prepare_runtime_handoff(bootstrap,handoff,recipe_handoff,config_path,out,*,o
     """Snapshot an actual later drain under the existing coordinator/worker leases."""
     config_path=Path(config_path);out=Path(out)
     if out.exists():
-        value=verify_runtime_handoff(binding(out),bootstrap=bootstrap)
+        value=verify_runtime_handoff(binding(out),bootstrap=bootstrap,verified_handoff=verified_handoff)
         if (value['handoff']!=handoff or value['recipe_handoff']!=recipe_handoff
                 or (value.get('bare_direct_owner') or {}).get('requested')!=bare_direct_owner
                 or (value.get('operation') or {}).get('original')!=operation
@@ -378,10 +378,10 @@ def _verify(value,bootstrap,record,saved,transition):
     return config,cursor,state
 
 
-def verify_runtime_handoff(reference,*,bootstrap):
+def verify_runtime_handoff(reference,*,bootstrap,verified_handoff=None):
     value=_read(reference)
     verify_handoff_metadata(bootstrap)
-    record,saved=verify_handoff(value['handoff'])
+    record,saved=_loaded_handoff(value['handoff'],verified_handoff)
     transition=_authority(value,value['handoff'],record,saved,_read(value['snapshots']['config']))
     _verify(value,bootstrap,record,saved,transition)
     return value
@@ -509,9 +509,9 @@ def _owned_cycle_boundary(proof,cursor,state,recipe,production_stage):
             and not state.get('pending_native_checkpoint') and not state.get('pending_semantic_source'))
 
 
-def configure_runtime_handoff(plan_path,declaration,bootstrap,config_path):
+def configure_runtime_handoff(plan_path,declaration,bootstrap,config_path,*,verified_handoff=None):
     """Rebind invocation metadata; never republish a parent or rewrite a cursor."""
-    reference=declaration['runtime_handoff'];proof=verify_runtime_handoff(reference,bootstrap=bootstrap)
+    reference=declaration['runtime_handoff'];proof=verify_runtime_handoff(reference,bootstrap=bootstrap,verified_handoff=verified_handoff)
     path=Path(config_path);prior=json.loads(path.read_text());old=_read(proof['snapshots']['config'])
     if str(path.resolve())!=proof['sources']['config']['path']:
         raise ValueError('runtime handoff belongs to another current controller namespace')
@@ -561,6 +561,19 @@ def configure_runtime_handoff(plan_path,declaration,bootstrap,config_path):
         if key in continued:config[key]=continued[key]
         else:config.pop(key,None)
     config['seed_trainer_parameters']={**config['trainer_parameters'],'stage_id':stage_id,'refresh_at_checkpoint':True}
+    record=_read(proof['handoff'])
+    if not bare:
+        source_record=record
+        if not source_record.get('resident'):
+            # A later policy owner can carry the already verified SFT frame.
+            # Its genuine source-plan authority remains the original drain.
+            source_record=_read(transition['handoff'])
+        resident_directory=(source_record.get('resident') or {}).get('directory')
+        if not isinstance(resident_directory,str) or not Path(resident_directory).is_absolute():
+            raise ValueError('resident runtime handoff lost its actual drained source directory')
+        config['resident_data_directory']=resident_directory
+        for parameters in ('trainer_parameters','seed_trainer_parameters'):
+            config[parameters]['resident_data_directory']=resident_directory
     if bare:
         config.pop('resident_data_directory',None)
         for parameters in ('trainer_parameters','seed_trainer_parameters'):
