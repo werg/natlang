@@ -151,9 +151,13 @@ def test_inherited_foundation_requalifies_after_completed_new_source_boundary(tm
         native_state_enabled=False
         def __init__(self,*args,**kwargs): self.__dict__.update(kwargs)
 
+    task_calls=[]
     class FakeTaskEval:
         def __init__(self,spec,out,engine,*,prompt_rendering): self.engine=engine
-        def cadence(self,step,*,final): return {'run':'fixture','step':step,'eligible':True,'passed':True}
+        def cadence(self,step,*,final):
+            task_calls.append((step,final))
+            return {'run':'fixture','step':step,'eligible':True,'passed':True,
+                    'task_successes':0,'outcome_counts':{'invalid_action':1}}
 
     monkeypatch.setattr(engine_module,'Engine',FakeEngine)
     monkeypatch.setattr(store_module,'TensorStore',lambda:object())
@@ -176,7 +180,7 @@ def test_inherited_foundation_requalifies_after_completed_new_source_boundary(tm
     args=['--base',str(base),'--dtype','float32','--rank','4','--device','cpu',
         '--native-graphs',str(original_manifest),'--foundation-native-graphs',str(original_manifest),
         '--communication-foundation','--held-native-graphs',str(held),'--epochs','1',
-        '--stage-id','full','--eval-every','1','--task-eval',task_spec,'--out',str(first_out),
+        '--stage-id','full','--eval-every','1','--task-eval',task_spec,'--task-eval-every','0','--out',str(first_out),
         '--forward-atol','1e-4','--gradient-atol','1e-5','--checkpoint-every','1']
     assert trainer.main(args)==0
     first=torch.load(first_out/'checkpoint.pt',weights_only=False)
@@ -208,7 +212,7 @@ def test_inherited_foundation_requalifies_after_completed_new_source_boundary(tm
     continued += ['--continue-from',str(parent),'--objective-continuation',
                   '--continued-native-graphs',str(original_manifest),'--refresh-at-checkpoint',
                   '--refresh-after-updates','1','--refresh-foundation-readiness']
-    before=len(calls)
+    before=len(calls);before_task=len(task_calls)
     assert trainer.main(continued)==0
     report=json.loads((resumed/'report.json').read_text())
     receipt=json.loads((resumed/'native-training-receipt.json').read_text())
@@ -222,3 +226,4 @@ def test_inherited_foundation_requalifies_after_completed_new_source_boundary(tm
     assert runtime['native_identity']['checkpoint_sha256']==report['checkpoint_sha256']
     assert len(calls)-before==1  # one terminal qualification, not one per checkpoint/update
     assert calls[-1]==report['checkpoint_sha256']
+    assert task_calls[before_task:]==[(report['task_eval']['step'],True)]

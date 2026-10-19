@@ -53,6 +53,27 @@ def test_fully_accounted_failures_preserve_missing_exports_and_success_count(tmp
     assert path.read_bytes() == original
 
 
+@pytest.mark.parametrize('task_failure', ['invalid_action', 'repetition', 'semantic_mismatch'])
+def test_completed_task_failures_are_execution_eligible_without_a_success_bar(tmp_path, task_failure):
+    summary, score, path = score_fixture(tmp_path)
+    # Replace one successful task result with a genuine accounted task outcome.
+    # Execution completeness is distinct from task performance; success remains
+    # telemetry and never becomes the foundation readiness threshold.
+    score['cases_detail'][0]['outcome'] = task_failure
+    score['outcome_counts']['task_success'] -= 1
+    score['outcome_counts'][task_failure] += 1
+    score['task_successes'] -= 1
+    summary.update({key: value for key, value in score.items() if key != 'cases_detail'})
+    path.write_text(json.dumps(score))
+    receipt = task_execution_receipt(summary, IDENTITY, checkpoint_sha256='a'*64)
+    assert receipt['passed'] is True
+    assert receipt['complete'] is True and receipt['eligible'] is True
+    assert receipt['task_successes'] == 0
+    assert receipt['outcome_counts'][task_failure] == 1
+    assert receipt['task_successes_are_qualification_barrier'] is False
+    assert validate_task_execution_receipt(receipt, IDENTITY)
+
+
 @pytest.mark.parametrize('failure', ['unresolved', 'infrastructure_error'])
 def test_unknown_or_infrastructure_outcomes_still_block_execution_readiness(tmp_path, failure):
     summary, score, path = score_fixture(tmp_path)
