@@ -323,6 +323,7 @@ def _verify(value,bootstrap,record,saved,transition):
                 or owned.get('request_sha256')!=digest(intent['request'])
                 or owned.get('global_step')!=saved['training'].get('global_step',saved['training'].get('step'))
                 or owned.get('acknowledged_finite_stages')!=intent.get('new_stage_ids')
+                or bool(owned.get('retain_mandatory_schedule'))!=bool(intent.get('retain_mandatory_schedule'))
                 or intent['request']['operations'][-1]['handoff']!=value['handoff']
                 or owned.get('published_checkpoint')!=record['checkpoint']
                 or owned.get('whole_recipe_completed')is not False
@@ -381,9 +382,22 @@ def _owned_cycle_boundary(proof,cursor,state,recipe,production_stage):
     from .native_raw_rounds import _supervised_stage_inventory
     ids=[stage['id']for stage in _supervised_stage_inventory(recipe,production_stage)]
     owned=_read(proof['owned_operations']);ack=cursor.get('owned_operation_reconciliation')or{}
+    retained=owned.get('retain_mandatory_schedule')is True
+    if retained:
+        intent=_read(owned['intent'])
+        actual=[]
+        for item in intent['operations']:
+            if not actual or actual[-1]!=item['stage_id']:actual.append(item['stage_id'])
+        schedule_valid=(intent['request'].get('retain_mandatory_schedule')is True
+            and intent.get('mandatory_stage_ids')==ids
+            and ack.get('retain_mandatory_schedule')is True
+            and cursor.get('next_stage')==0
+            and owned.get('acknowledged_finite_stages')==actual
+            and bool(actual) and set(actual)<=set(ids))
+    else:
+        schedule_valid=(cursor.get('next_stage')==len(ids) and owned.get('acknowledged_finite_stages')==ids)
     return (cursor.get('phase')=='sft' and 'pending_rl_round'not in cursor
-            and cursor.get('next_stage')==len(ids)
-            and owned.get('acknowledged_finite_stages')==ids
+            and schedule_valid
             and ack.get('receipt')==proof['owned_operations']['path']
             and ack.get('request_sha256')==owned.get('request_sha256')
             and ack.get('runtime_configuration_required')is True

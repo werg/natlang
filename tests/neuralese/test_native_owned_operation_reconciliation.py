@@ -363,3 +363,24 @@ def test_new_owner_retains_only_exact_previously_acknowledged_prefix():
     for prefix in ([],[sft],[dict(dpo,changed=True)]):
         with pytest.raises(ValueError):
             raw._acknowledged_owned_stage_ids(chain,[dpo,sft],acknowledged_prefix=prefix)
+
+
+def test_recovery_keeps_the_entire_mandatory_schedule_pending(owned):
+    x=owned
+    result=raw.reconcile_owned_operations(x['config'],x['operations'],x['bare']['recipe'],
+        x['reconciliation'],bare_direct_owner=x['bare'],retain_mandatory_schedule=True)
+    receipt=json.loads(Path(result['path']).read_text())
+    cursor=json.loads((x['root']/'cycle.json').read_text())
+    intent=json.loads(Path(receipt['intent']['path']).read_text())
+    assert cursor['next_stage']==0 and cursor['phase']=='sft'
+    assert cursor['owned_operation_reconciliation']['retain_mandatory_schedule'] is True
+    assert intent['mandatory_stage_ids']==['sft']
+    assert receipt['whole_recipe_completed'] is False
+    from natlang_neuralese.rl.native_runtime_handoff import _owned_cycle_boundary
+    proof={'owned_operations':result}
+    state=json.loads((x['out']/'state.json').read_text())
+    from natlang_neuralese.train.recipe import resolve_recipe_data
+    recipe=resolve_recipe_data(x['bare']['recipe']['path'])
+    assert _owned_cycle_boundary(proof,cursor,state,recipe,'sft')
+    cursor['next_stage']=1
+    assert not _owned_cycle_boundary(proof,cursor,state,recipe,'sft')

@@ -706,7 +706,7 @@ def _owned_earned_stage_inventory(transition,stages,stage_id):
         'authority':'existing verified lineage_handoff operational tuning'}
 
 
-def reconcile_owned_operations(config_path,operations,recipe_reference,out,*,bare_direct_owner=None,recipe_handoff=None,verified_handoff=None):
+def reconcile_owned_operations(config_path,operations,recipe_reference,out,*,bare_direct_owner=None,recipe_handoff=None,verified_handoff=None,retain_mandatory_schedule=False):
     """Leased, durable acknowledgement of earned work, never stage completion."""
     import contextlib
     from ..common.hashing import canonical_json_sha256_hex as digest
@@ -720,6 +720,8 @@ def reconcile_owned_operations(config_path,operations,recipe_reference,out,*,bar
         raise ValueError('owned reconciliation requires exactly one genuine bare or resident authority')
     requested_authority=bare_direct_owner if bare_direct_owner is not None else {'recipe_handoff':recipe_handoff}
     request={'config':str(config_path),'operations':operations,'recipe':recipe_reference,'authority':requested_authority}
+    if type(retain_mandatory_schedule)is not bool:raise ValueError('mandatory schedule continuation must be explicit boolean')
+    if retain_mandatory_schedule:request['retain_mandatory_schedule']=True
     directory=out.parent/(out.stem+'-control');intent_path=directory/'intent.json'
     with contextlib.ExitStack()as stack:
         for path in sorted({root.parent/'controller.lock',Path(config['out'])/'controller.lock'}):
@@ -774,7 +776,16 @@ def reconcile_owned_operations(config_path,operations,recipe_reference,out,*,bar
             # exact carried frame/recipe is still verified below; this carries
             # scheduling history, never full-stage completion or extra visits.
             prior_stages=old_stages[:cursor.get('next_stage',0)] if cursor['phase']=='sft' else []
-            _acknowledged_owned_stage_ids(chain,earned_stages,acknowledged_prefix=prior_stages)
+            if retain_mandatory_schedule:
+                # A recovered external owner can publish real updates without
+                # pretending to have executed the other mandatory stages.
+                owned_ids={item['stage_id'] for item in chain}
+                earned_stages=[stage for stage in earned_stages if stage['id'] in owned_ids]
+                if owned_ids!={stage['id']for stage in earned_stages}:
+                    raise ValueError('owned schedule continuation changed its actual stage inventory')
+                ids=_acknowledged_owned_stage_ids(chain,earned_stages)
+            else:
+                _acknowledged_owned_stage_ids(chain,earned_stages,acknowledged_prefix=prior_stages)
             from ..train.native_continuation import collect_sft_progress
             from ..train.recipe import native_recipe_binding
             progress=collect_sft_progress(saved['training'],borrow_frames=True)
@@ -787,10 +798,11 @@ def reconcile_owned_operations(config_path,operations,recipe_reference,out,*,bar
                         or [item for item in resolve_recipe_data(stage_recipe)['stages']if item['id']==stage['id']]!=[stage]):
                     raise ValueError('owned reconciliation changed a carried stage instead of preserving its debt')
             next_state=_published_checkpoint_state(state,record['checkpoint'])
-            next_cursor={**cursor,'phase':'sft','next_stage':len(stages),'current_checkpoint':record['checkpoint'],
+            next_cursor={**cursor,'phase':'sft','next_stage':0 if retain_mandatory_schedule else len(stages),'current_checkpoint':record['checkpoint'],
                 'owned_operation_reconciliation':{'receipt':str(out),'request_sha256':digest(request),
                     'recipe_sha256':recipe_reference['sha256'],'runtime_configuration_required':True,
-                    'acknowledged_finite_stages':ids}}
+                    'acknowledged_finite_stages':ids,
+                    **({'retain_mandatory_schedule':True}if retain_mandatory_schedule else {})}}
             next_cursor.pop('pending_rl_round',None);next_cursor.pop('readiness',None)
             directory.mkdir(parents=True,exist_ok=True)
             snapshots={};candidates={}
@@ -803,6 +815,7 @@ def reconcile_owned_operations(config_path,operations,recipe_reference,out,*,bar
                 'before':before,'snapshots':snapshots,'candidates':candidates,'operations':chain,
                 'old_stage_ids':[stage['id']for stage in old_stages],'new_stage_ids':ids,
                 'previously_acknowledged_stage_ids':[stage['id']for stage in prior_stages],
+                **({'retain_mandatory_schedule':True,'mandatory_stage_ids':[stage['id']for stage in stages]}if retain_mandatory_schedule else {}),
                 'verified_operational_tuning':operational_tuning,
                 'global_step':saved['training'].get('global_step',saved['training'].get('step')),
                 'whole_recipe_completed':False}
@@ -819,6 +832,7 @@ def reconcile_owned_operations(config_path,operations,recipe_reference,out,*,bar
         write_json_durable(out,{'schema':intent['schema'],'request_sha256':digest(request),
             'intent':binding(intent_path),'published_checkpoint':intent['operations'][-1]['checkpoint'],
             'global_step':intent['global_step'],'acknowledged_finite_stages':intent['new_stage_ids'],
+            **({'retain_mandatory_schedule':True}if intent.get('retain_mandatory_schedule') else {}),
             'whole_recipe_completed':False})
     return binding(out)
 

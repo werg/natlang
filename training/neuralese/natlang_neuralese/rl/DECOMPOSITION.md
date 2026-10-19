@@ -109,3 +109,10 @@ from a supervisor with a child process; it never invents a trainer child.
 Capture the normal live drain intent, then complete the existing handoff only
 after that owner exits. This is exact process/transport plumbing, not training
 readiness, completed exposure, or permission to invent historical owners.
+
+Recovery can explicitly retain the entire mandatory supervised schedule when a
+new external owner publishes genuine updates. Acknowledge only the stages
+actually represented by its verified operation chain, restart schedule traversal
+at its first stage, and let the existing per-row debt checker skip earned visits.
+The runtime handoff accepts this exact unsealed boundary without interpreting
+it as full-stage or whole-recipe completion.
