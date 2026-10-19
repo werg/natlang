@@ -202,6 +202,9 @@ def read_owner(pointer, *, role):
             or manifest['publication_spec'].get('runtime') != manifest.get('runtime')
             or manifest['publication_spec'].get('runtime_code_sha256') != manifest.get('runtime_code_sha256')):
         raise ValueError('publication owner manifest role/schema differs')
-    if pointer.stat() != before or pointer.read_bytes() != raw:
+    after = pointer.stat()
+    if ((after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns)
+            != (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns)
+            or pointer.read_bytes() != raw):
         raise ValueError('publication owner pointer changed during read')
     return manifest, {'path': str(manifest_path), 'sha256': ref['sha256'], 'bytes': ref['bytes']}

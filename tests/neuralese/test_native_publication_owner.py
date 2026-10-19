@@ -36,12 +36,12 @@ def _raw_fixture(tmp_path):
     runtime = Path(__file__).resolve().parents[2]
     parent = tmp_path / 'parent.pt'
     parent.write_bytes(b'complete optimizer parent')
-    output = tmp_path / 'rounds' / 'lfm' / 'cycles' / '000004' / 'retired-attempt-000001' / 'supervised' / '000'
+    output = tmp_path / 'rounds' / 'lfm' / 'cycles' / '000004' / 'retired-attempt-000001' / 'multi-rft' / '000'
     writer = output / 'learner-kind'
     writer.mkdir(parents=True)
     selection = publication_selection(namespace='/work/native-production', readonly_input_roots=D24_ROOTS)
     command = ['env', f'PYTHONPATH={runtime}/training/neuralese:{runtime}', f'NATLANG_REPO={runtime}',
-        '/usr/bin/python', '-m', owner.TRAINER_MODULE,
+        '/usr/bin/python3.11', '-m', owner.TRAINER_MODULE,
         '--out', str(writer), '--continue-from', str(parent), '--checkpoint-publication',
         '--checkpoint-publication-namespace', selection['namespace'],
         '--checkpoint-publication-readonly-input-roots', json.dumps(selection['readonly_input_roots'])]
@@ -95,16 +95,16 @@ def test_export_verifier_accepts_actual_env_prefixed_raw_command_and_rejects_esc
         runtime_root=config['native_checkpoint_publication_runtime_root'])
     manifest, _ = owner.read_owner(config['native_checkpoint_publication_owner_pointer'], role='lfm')
     spec = manifest['publication_spec']
-    assert verify_owned_publication_command(command, spec) == owner.TRAINER_MODULE
+    assert verify_owned_publication_command(command, spec, owner._trainer_invocation) == owner.TRAINER_MODULE
     bad = list(command)
     bad[bad.index('--out') + 1] = str(tmp_path / 'escape' / 'learner')
     with pytest.raises(ValueError, match='bounded writer output'):
-        verify_owned_publication_command(bad, spec)
+        verify_owned_publication_command(bad, spec, owner._trainer_invocation)
     bad = list(command)
     env_index = next(i for i, value in enumerate(bad) if value.startswith('NATLANG_REPO='))
     bad[env_index] = f'NATLANG_REPO={tmp_path}'
     with pytest.raises(ValueError, match='actual trainer environment'):
-        verify_owned_publication_command(bad, spec)
+        verify_owned_publication_command(bad, spec, owner._trainer_invocation)
 
 
 def test_emits_and_reads_exact_owner_generation_with_narrow_external_roots(tmp_path):

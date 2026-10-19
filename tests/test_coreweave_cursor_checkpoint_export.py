@@ -373,7 +373,7 @@ def test_remote_owner_observer_accepts_real_native_preference_publication(tmp_pa
     test_root = Path(tempfile.mkdtemp(prefix='.owned-publication-observer-', dir=runtime))
     parent = test_root / 'parent.pt'
     parent.write_bytes(b'full selected parent')
-    output = test_root / 'rounds' / 'lfm' / 'cycles' / '000004' / 'supervised' / '001'
+    output = test_root / 'rounds' / 'lfm' / 'cycles' / '000004' / 'multi-rft' / '000'
     learner = output / 'learner-kind'
     learner.mkdir(parents=True)
     (learner / 'checkpoint.pt').write_bytes(b'full saved child')
@@ -390,7 +390,7 @@ def test_remote_owner_observer_accepts_real_native_preference_publication(tmp_pa
         'native_checkpoint_publication_owner_pointer': str(pointer),
         'request_id': 'preference-operation'}
     raw_command = ['env', f'PYTHONPATH={runtime}/training/neuralese:{runtime}',
-        f'NATLANG_REPO={runtime}', '/usr/bin/python', '-m', 'natlang_neuralese.train.native_preference',
+        f'NATLANG_REPO={runtime}', '/usr/bin/python3.11', '-m', 'natlang_neuralese.train.native_preference',
         '--out', str(output / 'learner-kind'), '--continue-from', str(parent), '--checkpoint-publication',
         '--checkpoint-publication-namespace', selection['namespace'],
         '--checkpoint-publication-readonly-input-roots', json.dumps(selection['readonly_input_roots']),

@@ -168,24 +168,9 @@ def verify_owner_pointer(pointer_path, *, role, production_root='/work/native-pr
         pointer_stat.st_size, pointer_stat.st_mtime_ns, hashlib.sha256(pointer_raw).hexdigest())
 
 
-def verify_owned_publication_command(command, spec):
+def verify_owned_publication_command(command, spec, trainer_invocation):
     """Verify production's exact env-prefixed trainer argv and bounded writer."""
-    if not isinstance(command, list) or not command or any(not isinstance(value, str) for value in command):
-        raise ValueError('owned publication command is not a string argv list')
-    index=0;environment={}
-    if command[0]=='env':
-        index=1
-        while index<len(command) and '=' in command[index] and not command[index].startswith('-'):
-            key,value=command[index].split('=',1)
-            if not key or key in environment:raise ValueError('owned publication command has invalid environment prefix')
-            environment[key]=value;index+=1
-    if index>=len(command) or Path(command[index]).name not in {'python','python3'}:
-        raise ValueError('owned publication command is not a direct Python invocation')
-    index+=1
-    if index<len(command) and command[index]=='-u':index+=1
-    if index+1>=len(command) or command[index]!='-m':raise ValueError('owned publication command must use Python -m')
-    if command[index+1] not in {'natlang_neuralese.train.native_state_sft','natlang_neuralese.train.native_preference'}:
-        raise ValueError('owned publication command is not a supported shared trainer')
+    module,environment,_=trainer_invocation(command)
     if spec.get('effective_argv',{}).get('runtime_from_command_env'):
         if Path(environment.get('NATLANG_REPO','')).resolve()!=Path(spec['runtime']).resolve():
             raise ValueError('owned publication runtime differs from actual trainer environment')
@@ -203,7 +188,7 @@ def verify_owned_publication_command(command, spec):
             or command.count('--checkpoint-publication-namespace')!=1
             or command[command.index('--checkpoint-publication-namespace')+1]!=selected['namespace']):
         raise ValueError('owned publication command differs from its sealed producer selection')
-    return command[index+1]
+    return module
 
 
 def owner_remote_code(pointer_path, *, role, known_generation=None, known_sha256=None,
@@ -212,11 +197,14 @@ def owner_remote_code(pointer_path, *, role, known_generation=None, known_sha256
     """Observe whatever exact learner the supervisor has most recently selected."""
     helper_source = inspect.getsource(verify_owner_pointer)
     command_helper = inspect.getsource(verify_owned_publication_command)
+    from natlang_neuralese.rl import native_publication_owner
+    trainer_parser = inspect.getsource(native_publication_owner._trainer_invocation)
     source = (
         'import hashlib,json,os,pathlib,re,shutil,subprocess,sys,uuid\nfrom pathlib import Path\n'
         + 'POINTER=' + repr(str(pointer_path)) + '\nROLE=' + repr(role) + '\n'
         + 'PRODUCTION_ROOT=' + repr(production_root) + '\nCONTROL_ROOT=' + repr(control_root) + '\n'
-        + helper_source + '\n' + command_helper + '\n'
+        + 'TRAINER_MODULES=' + repr(tuple(native_publication_owner.TRAINER_MODULES)) + '\n'
+        + helper_source + '\n' + trainer_parser + '\n' + command_helper + '\n'
         + "if Path(POINTER).is_symlink():raise ValueError('owned publication pointer may not be a symlink')\n"
         + "if not Path(POINTER).exists():print(json.dumps({'owner':None,'chosen':None,'observations':{}}));sys.exit(0)\n"
         + 'manifest,manifest_ref,pointer_signature=verify_owner_pointer(POINTER,role=ROLE,production_root=PRODUCTION_ROOT,control_root=CONTROL_ROOT)\n'
@@ -236,7 +224,7 @@ def owner_remote_code(pointer_path, *, role, known_generation=None, known_sha256
         + inspect.getsource(observe_publication) + '\n'
         + "command_ref=SPEC['effective_argv'];command_path=Path(command_ref['path']).resolve(strict=True);command_raw=command_path.read_bytes()\n"
         + "if len(command_raw)!=command_ref.get('bytes') or hashlib.sha256(command_raw).hexdigest()!=command_ref['sha256']:raise ValueError('owned publication effective command changed')\n"
-        + "command=json.loads(command_raw);verify_owned_publication_command(command,SPEC)\n"
+        + "command=json.loads(command_raw);verify_owned_publication_command(command,SPEC,_trainer_invocation)\n"
         + "kwargs=dict(producer=selected['producer'],dependency_producer=selected['dependency_producer'],namespace=selected['namespace'],readonly_input_roots=selected['readonly_input_roots'])\n"
         + 'known_generation=' + repr(known_generation) + '\n'
         + 'known_sha256=' + repr(known_sha256) + '\nknown_step=' + repr(known_step) + '\n'
