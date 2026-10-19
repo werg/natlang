@@ -251,7 +251,7 @@ def execute(config,state,state_path,control):
         effective_command=expand_command(command,values)
         state['checkpoint_publication_owner']=emit_current(config,effective_command,
             out=config['out'],selected_checkpoint=values['checkpoint'],
-            runtime_root=config.get('runtime'))
+            runtime_root=config.get('native_checkpoint_publication_runtime_root',config.get('runtime')))
         write_json_durable(state_path,state)
     run_command(command,values)
     checkpoint=directory/'checkpoint.pt'

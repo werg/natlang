@@ -374,7 +374,7 @@ def test_remote_owner_observer_accepts_real_native_preference_publication(tmp_pa
     parent = test_root / 'parent.pt'
     parent.write_bytes(b'full selected parent')
     output = test_root / 'rounds' / 'lfm' / 'cycles' / '000004' / 'supervised' / '001'
-    learner = output / 'learner'
+    learner = output / 'learner-kind'
     learner.mkdir(parents=True)
     (learner / 'checkpoint.pt').write_bytes(b'full saved child')
     selection = publication_selection(namespace=str(production),
@@ -382,17 +382,22 @@ def test_remote_owner_observer_accepts_real_native_preference_publication(tmp_pa
     control = production / 'control'
     control.mkdir(exist_ok=True)
     pointer = control / (test_root.name + '-lfm-current-owner.json')
-    config = {'runtime': str(runtime), 'native_participant': 'lfm',
+    config = {'runtime': '/work/native-production/task-runtimes/ts-host',
+        'model': 'lfm', 'native_actor_mode': 'raw-state',
+        'native_checkpoint_publication_role': 'lfm',
+        'native_checkpoint_publication_runtime_root': str(runtime),
         'native_checkpoint_publication': selection,
         'native_checkpoint_publication_owner_pointer': str(pointer),
         'request_id': 'preference-operation'}
-    command = ['/usr/bin/python', '-u', '-m', 'natlang_neuralese.train.native_preference',
-        '--out', str(learner), '--continue-from', str(parent), '--checkpoint-publication',
+    raw_command = ['env', f'PYTHONPATH={runtime}/training/neuralese:{runtime}',
+        f'NATLANG_REPO={runtime}', '/usr/bin/python', '-m', 'natlang_neuralese.train.native_preference',
+        '--out', str(output / 'learner-kind'), '--continue-from', str(parent), '--checkpoint-publication',
         '--checkpoint-publication-namespace', selection['namespace'],
         '--checkpoint-publication-readonly-input-roots', json.dumps(selection['readonly_input_roots']),
         '--objective-spec', str(tmp_path / 'objective.json')]
     try:
-        owner.emit_current(config, command, out=output, selected_checkpoint=parent)
+        owner.emit_current(config, raw_command, out=output, selected_checkpoint=parent,
+            runtime_root=config['native_checkpoint_publication_runtime_root'])
         code = owner_remote_code(str(pointer), role='lfm', production_root=str(production),
             control_root=str(control))
         result = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True)

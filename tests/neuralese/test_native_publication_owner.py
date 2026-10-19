@@ -32,6 +32,81 @@ def _fixture(tmp_path, *, pointer=None):
     return config, command, output
 
 
+def _raw_fixture(tmp_path):
+    runtime = Path(__file__).resolve().parents[2]
+    parent = tmp_path / 'parent.pt'
+    parent.write_bytes(b'complete optimizer parent')
+    output = tmp_path / 'rounds' / 'lfm' / 'cycles' / '000004' / 'retired-attempt-000001' / 'supervised' / '000'
+    writer = output / 'learner-kind'
+    writer.mkdir(parents=True)
+    selection = publication_selection(namespace='/work/native-production', readonly_input_roots=D24_ROOTS)
+    command = ['env', f'PYTHONPATH={runtime}/training/neuralese:{runtime}', f'NATLANG_REPO={runtime}',
+        '/usr/bin/python', '-m', owner.TRAINER_MODULE,
+        '--out', str(writer), '--continue-from', str(parent), '--checkpoint-publication',
+        '--checkpoint-publication-namespace', selection['namespace'],
+        '--checkpoint-publication-readonly-input-roots', json.dumps(selection['readonly_input_roots'])]
+    config = {'model': 'lfm', 'native_actor_mode': 'raw-state', 'runtime': '/work/native-production/task-runtimes/ts-host',
+        'native_checkpoint_publication_role': 'lfm', 'native_checkpoint_publication_runtime_root': str(runtime),
+        'checkpoint': str(parent), 'native_checkpoint_publication': selection,
+        'native_checkpoint_publication_owner_pointer': str(tmp_path / 'control' / 'lfm-current-owner.json'),
+        'production_stage': 'native_full_sft', 'recipe_lineage_sha256': 'b' * 64,
+        'request_id': 'raw-round-4-supervised-1'}
+    return config, command, output, writer, runtime
+
+
+def test_raw_owner_binds_explicit_role_python_runtime_and_nested_writer(tmp_path):
+    config, command, output, writer, runtime = _raw_fixture(tmp_path)
+    published = owner.emit_current(config, command, out=output,
+        selected_checkpoint=config['checkpoint'],
+        runtime_root=config['native_checkpoint_publication_runtime_root'])
+    manifest, _ = owner.read_owner(config['native_checkpoint_publication_owner_pointer'], role='lfm')
+    spec = manifest['publication_spec']
+    assert published['generation_sha256'] == manifest['generation_sha256']
+    assert manifest['operation']['model_role'] == 'lfm'
+    assert 'participant' not in manifest['operation']
+    assert manifest['operation']['orchestration_runtime'] == config['runtime']
+    assert spec['runtime'] == str(runtime.resolve())
+    assert spec['effective_argv']['writer_output'] == str(writer.resolve())
+    assert spec['effective_argv']['runtime_from_command_env'] is True
+    assert spec['effective_argv']['allowed_output_root'] == str(output.resolve())
+    assert published['qualification_credit'] is False
+
+
+@pytest.mark.parametrize('change,pattern', [
+    ('role', 'differs from the configured model'),
+    ('runtime', 'differs from the expanded trainer environment'),
+])
+def test_raw_owner_rejects_misbound_operational_metadata(tmp_path, change, pattern):
+    config, command, output, _, runtime = _raw_fixture(tmp_path)
+    if change == 'role':
+        config['native_checkpoint_publication_role'] = 'mellum'
+    else:
+        config['native_checkpoint_publication_runtime_root'] = str(tmp_path)
+    with pytest.raises(ValueError, match=pattern):
+        owner.emit_current(config, command, out=output,
+            selected_checkpoint=config['checkpoint'],
+            runtime_root=config['native_checkpoint_publication_runtime_root'])
+
+
+def test_export_verifier_accepts_actual_env_prefixed_raw_command_and_rejects_escape(tmp_path):
+    from scripts.coreweave.owned_publication_export import verify_owned_publication_command
+    config, command, output, writer, runtime = _raw_fixture(tmp_path)
+    owner.emit_current(config, command, out=output, selected_checkpoint=config['checkpoint'],
+        runtime_root=config['native_checkpoint_publication_runtime_root'])
+    manifest, _ = owner.read_owner(config['native_checkpoint_publication_owner_pointer'], role='lfm')
+    spec = manifest['publication_spec']
+    assert verify_owned_publication_command(command, spec) == owner.TRAINER_MODULE
+    bad = list(command)
+    bad[bad.index('--out') + 1] = str(tmp_path / 'escape' / 'learner')
+    with pytest.raises(ValueError, match='bounded writer output'):
+        verify_owned_publication_command(bad, spec)
+    bad = list(command)
+    env_index = next(i for i, value in enumerate(bad) if value.startswith('NATLANG_REPO='))
+    bad[env_index] = f'NATLANG_REPO={tmp_path}'
+    with pytest.raises(ValueError, match='actual trainer environment'):
+        verify_owned_publication_command(bad, spec)
+
+
 def test_emits_and_reads_exact_owner_generation_with_narrow_external_roots(tmp_path):
     config, command, output = _fixture(tmp_path)
     published = owner.emit_current(config, command, out=output, selected_checkpoint=config['checkpoint'])
