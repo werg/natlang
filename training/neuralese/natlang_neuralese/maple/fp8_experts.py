@@ -99,14 +99,15 @@ class GroupedLinear(torch.autograd.Function):
 def _grouped_weight_gradient(g_ptr, a_ptr, ends_ptr, out_ptr, N: tl.constexpr, K: tl.constexpr,
                              SG0: tl.constexpr, SG1: tl.constexpr, SA0: tl.constexpr, SA1: tl.constexpr,
                              FP32_INPUTS: tl.constexpr, B: tl.constexpr):
-    expert = tl.program_id(0)
-    n = tl.program_id(1) * B + tl.arange(0, B)
-    k = tl.program_id(2) * B + tl.arange(0, B)
+    expert = tl.program_id(0).to(tl.int64)
+    n = (tl.program_id(1) * B + tl.arange(0, B)).to(tl.int64)
+    k = (tl.program_id(2) * B + tl.arange(0, B)).to(tl.int64)
     start = tl.load(ends_ptr + expert - 1, mask=expert > 0, other=0)
     stop = tl.load(ends_ptr + expert)
     acc = tl.zeros((B, B), tl.float32)
     for p0 in range(start, stop, B):
-        p = p0 + tl.arange(0, B)
+        # Routed rows times a projection stride can exceed signed32.
+        p = (p0 + tl.arange(0, B)).to(tl.int64)
         grad = tl.load(g_ptr + p[None, :] * SG0 + n[:, None] * SG1,
                        mask=(p[None, :] < stop) & (n[:, None] < N), other=0)
         value = tl.load(a_ptr + p[:, None] * SA0 + k[None, :] * SA1,
@@ -216,9 +217,9 @@ def _grouped_weight_gradient_chunk_tiles(g_ptrs, a_ptrs, row_ptrs, starts_ptr, c
     owns each row, assembles the whole 32-row operands in registers, and runs
     the same single dot and ordered FP32 add as `_grouped_weight_gradient`.
     """
-    expert = tl.program_id(0)
-    n = tl.program_id(1) * B + tl.arange(0, B)
-    k = tl.program_id(2) * B + tl.arange(0, B)
+    expert = tl.program_id(0).to(tl.int64)
+    n = (tl.program_id(1) * B + tl.arange(0, B)).to(tl.int64)
+    k = (tl.program_id(2) * B + tl.arange(0, B)).to(tl.int64)
     n_mask, k_mask = n < N, k < K
     total = 0
     for chunk in range(C):
@@ -234,14 +235,14 @@ def _grouped_weight_gradient_chunk_tiles(g_ptrs, a_ptrs, row_ptrs, starts_ptr, c
             start = tl.load(starts_ptr + chunk * E + expert)
             local = p - prefix
             valid = (local >= 0) & (local < count)
-            source = start + local
+            source = (start + local).to(tl.int64)
             g_raw = tl.load(g_ptrs + chunk).to(tl.pointer_type(GTYPE))
             a_raw = tl.load(a_ptrs + chunk).to(tl.pointer_type(ATYPE))
             g = tl.load(g_raw + source[None, :] * SG0 + n[:, None] * SG1,
                         mask=valid[None, :] & n_mask[:, None], other=0)
             if HAS_ROWS:
                 rows_raw = tl.load(row_ptrs + chunk).to(tl.pointer_type(RTYPE))
-                token = tl.load(rows_raw + source * SR, mask=valid, other=0)
+                token = tl.load(rows_raw + source * SR, mask=valid, other=0).to(tl.int64)
                 a = tl.load(a_raw + token[:, None] * SA0 + k[None, :] * SA1,
                             mask=valid[:, None] & k_mask[None, :], other=0)
             else:
