@@ -214,3 +214,61 @@ def test_sealed_request_selection_retains_failed_attempt_and_selects_earned_succ
     with pytest.raises(ValueError,match='ambiguous'):raw._sealed_supervised_request(job)
     assert raw._sealed_supervised_request(job,res.binding(successor))==(successor,original)
     with pytest.raises(ValueError):raw._sealed_supervised_request(job,res.binding(parent))
+
+
+def task_runtime_successor(f):
+    """A real small built-runtime inventory and protected packet, no Node execution."""
+    from natlang_neuralese.common.runtime_inventory import task_runtime_inventory
+    runtime=f.tmp_path/'new-runtime'/'ts-host'
+    for name in ('prelude.js','package.json','../package.json','../package-lock.json',
+                 '../training/source-reviews/holds.jsonl','../training/source-reviews/family-holds.json',
+                 '../training/source-reviews/datasets.json','dist/teacher/cli.js'):
+        path=runtime/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_text('exact built '+name)
+    packet=f.tmp_path/'held-task.jsonl';packet.write_text(json.dumps({'split':'test','family':'shape'})+'\n')
+    recipe=json.loads(f.successor.read_text());recipe['stages'][0]['parameters']['task_eval']={
+        'packet':res.binding(packet),'cases':[0],'runtime':str(runtime),'neuralese_server':True}
+    write(f.successor,recipe);f.request['recipe']=res.binding(f.successor)
+    f.request['task_runtime']={'path':str(runtime),'inventory_sha256':m.digest(task_runtime_inventory(runtime))}
+    def update():
+        write(f.request_path,f.request);f.declaration['supervised_boundary_continuation']=res.binding(f.request_path)
+        write(f.plan_path,{'models':[f.declaration]})
+    update()
+    return runtime,update
+
+
+def test_task_runtime_commit_and_recovery_bind_collector_and_evaluator(tmp_path,monkeypatch):
+    f=fixture(tmp_path,monkeypatch);f.config['runtime']='old-collector'
+    f.config['native_checkpoint_publication_runtime_root']='unchanged-python-runtime'
+    write(f.root/'config.json',f.config)
+    runtime,_=task_runtime_successor(f)
+    config,cursor=m.apply(f.plan_path,f.declaration,{},f.config,f.cursor,f.root)
+    assert config['runtime']==str(runtime)
+    assert config['native_checkpoint_publication_runtime_root']=='unchanged-python-runtime'
+    assert config['seed_trainer_parameters']['task_eval']['runtime']==str(runtime)
+    assert config['checkpoint']==f.config['checkpoint']and cursor['mandatory_debt']=={'ordinary':8}
+    assert m.recover_configuration(f.root/'config.json',f.plan_path,f.declaration,{})
+    (runtime/'dist/teacher/cli.js').write_text('changed after commit')
+    with pytest.raises(ValueError,match='task runtime inventory changed'):
+        m.recover_configuration(f.root/'config.json',f.plan_path,f.declaration,{})
+
+
+@pytest.mark.parametrize('change',['inventory','evaluator','extra-key','relative','non-string','missing-evaluator-runtime'])
+def test_task_runtime_substitution_rejected_before_commit(tmp_path,monkeypatch,change):
+    f=fixture(tmp_path,monkeypatch);runtime,update=task_runtime_successor(f)
+    if change=='inventory':f.request['task_runtime']['inventory_sha256']='0'*64
+    elif change=='extra-key':f.request['task_runtime']['unchecked']='other-runtime'
+    elif change=='relative':f.request['task_runtime']['path']='relative-runtime'
+    elif change=='non-string':f.request['task_runtime']['path']=None
+    else:
+        recipe=json.loads(f.successor.read_text());recipe['stages'][0]['parameters']['task_eval']['runtime']=None if change=='missing-evaluator-runtime'else str(tmp_path/'other')
+        write(f.successor,recipe);f.request['recipe']=res.binding(f.successor)
+    update()
+    with pytest.raises(ValueError,match='task runtime|collector runtime'):
+        m.apply(f.plan_path,f.declaration,{},f.config,f.cursor,f.root)
+    assert json.loads((f.root/'config.json').read_text())==f.config
+
+
+def test_legacy_boundary_retains_existing_collector_runtime(tmp_path,monkeypatch):
+    f=fixture(tmp_path,monkeypatch);f.config['runtime']='existing-collector';write(f.root/'config.json',f.config)
+    config,_=m.apply(f.plan_path,f.declaration,{},f.config,f.cursor,f.root)
+    assert config['runtime']=='existing-collector'
