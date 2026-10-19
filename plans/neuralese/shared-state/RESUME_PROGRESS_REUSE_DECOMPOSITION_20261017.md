@@ -16,3 +16,18 @@ returning the GPU to useful work promptly.
 This is crisp ownership and allocation plumbing in the existing shared
 continuation mechanism. It changes no numerical operations, model-facing text,
 recipe policy, checkpoint identity or training credits.
+
+## Release decoded setup metadata before checks (2026-10-19)
+
+After exact optimizer/FP8/RNG restoration, retain only the prior policy-capacity
+proof, pending admission record and completed foundation identifiers needed by
+subsequent setup. Release all obsolete decoded/restored predecessor aliases
+before gradient and capacity checks, rather than after them. Live sources,
+optimizer state, counters, checkpoint options and carried stage progress keep
+their existing ownership; no predecessor map is mutated to recover memory.
+
+A real interrupted/resumed tiny-model run tracks the decoded training dictionary
+with a weak reference, verifies collection before the restored-model check, then
+performs the remaining update and checks exact exposure and monotonic steps.
+Existing continuation tests compare resumed weights, optimizer and RNG exactly.
+This reduces setup lifetime; actual cloud memory improvement remains to measure.

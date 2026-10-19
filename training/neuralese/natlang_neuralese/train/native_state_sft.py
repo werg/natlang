@@ -1409,6 +1409,18 @@ def main(argv=None):
         # Avoid locals(): its cached frame dictionary retains every setup
         # reference even after the corresponding fast local is cleared.
         state = parent_state = None
+    # Keep only the small continuation values still needed below. Decoded
+    # predecessor/source maps are no longer needed after optimizer/RNG restore;
+    # retaining them through gradient and capacity checks wastes gigabytes.
+    prior_policy_capacity = ((resume or {}).get('options') or {}).get('policy_capacity')
+    admission_record = ((resume or saved_training).get('options') or {}).get('_pending_source_admission')
+    prior_foundations = set((resume or {}).get('completed_foundations') or
+        (carried_progress.get(args.stage_id or 'native-graph-ce') or {}).get('completed_foundations') or [])
+    saved_options = class_migration = None
+    saved_training = resume = shared_resume = continuation_training = restored_frame = None
+    source_resume = foundation_frame = old_frame = old_options = None
+    old_counts = old_quotas = prior_bindings = prior_order = prior_held = None
+    old_source = origins = None
     transition_check = qualify_precision_transition(model, tokenizer, roles, config,
         previous_precision=previous_precision,
         previous_attention_precision=previous_attention_precision,
@@ -1476,7 +1488,7 @@ def main(argv=None):
         from ..eval.native_memory import qualify_policy_objective
         checkpoint_options['policy_capacity']=qualify_policy_objective(model,optimizer,train,objective,args,config,
             backend=backend,checkpoint_sha256=sha256_file_hex_cached(args.continue_from if parent_continuation else policy.slot),
-            pending_batches=pending_batches,prior_proof=((resume or {}).get('options') or {}).get('policy_capacity'))
+            pending_batches=pending_batches,prior_proof=prior_policy_capacity)
     target_rows = sum(required_visits.values())
     total_end = step + len(pending_batches)
     if step > total_end:
@@ -1511,7 +1523,6 @@ def main(argv=None):
         (carried_progress.get(args.stage_id or 'native-graph-ce') or {}).get('pending_source_declarations'))
     pending_parent_sha = (sha256_file_hex_cached(policy.slot) if policy.slot.is_file() else
         ((checkpoint_options.get('continuation') or {}).get('checkpoint_sha256')))
-    admission_record = ((resume or saved_training).get('options') or {}).get('_pending_source_admission')
     if pending_sources_changed and pending_parent_sha and not len(pending_batches):
         admission_record = {'schema': 'natlang.native-pending-source-admission/1',
             'parent_checkpoint_sha256': pending_parent_sha, 'new_optimizer_updates': 0,
@@ -1534,8 +1545,6 @@ def main(argv=None):
     def foundation_exposure():
         return communication_foundation(foundation_source, exposure_counts, epochs=args.epochs,
                                         trained_bindings=source_row_bindings)
-    prior_foundations = set((resume or {}).get('completed_foundations') or
-        (carried_progress.get(args.stage_id or 'native-graph-ce') or {}).get('completed_foundations') or [])
     foundation_template = foundation_exposure() if args.communication_foundation else None
     foundation_missing = {key for key,row in (foundation_template or {}).get('rows',{}).items()
         if not row['admitted_to_training'] or row['required_visits']<=0 or row['graph_visits']<row['required_visits']}
@@ -1548,17 +1557,6 @@ def main(argv=None):
         return bool(foundation_template and foundation_template['graphs'] and not foundation_missing and
                     foundation_template['cohort_sha256'] not in prior_foundations and
                     not refresh_inherited_foundation)
-    # Setup used independent decoded/restored frames to validate and restore
-    # the continuation. Their maps can be gigabytes; Python locals otherwise
-    # retain them throughout training and during the next owned save snapshot.
-    # All live state now belongs to the sources, optimizer, RNG, counters,
-    # checkpoint_options and carried_progress. Drop references, never mutate
-    # the predecessor or weaken snapshot ownership to reclaim this memory.
-    saved_options = class_migration = None
-    saved_training = resume = shared_resume = continuation_training = restored_frame = None
-    source_resume = foundation_frame = old_frame = old_options = None
-    old_counts = old_quotas = prior_bindings = prior_order = prior_held = None
-    old_source = origins = None
     try:
         while not policy.signaled and not foundation_pending():
             if resident is not None:

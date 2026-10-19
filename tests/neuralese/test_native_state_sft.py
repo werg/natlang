@@ -27,6 +27,61 @@ def test_native_data_continuation_only_adds_exact_rows():
         append_only_rows(prior, _row_bindings([changed, old[1]]), label='training-source')
 
 
+def test_decoded_parent_metadata_is_released_before_restored_model_checks(tmp_path, monkeypatch):
+    import gc
+    import json
+    import weakref
+    import torch
+    from test_native_serve import _tiny_source
+    from natlang_neuralese.model.native_model import load_native_model
+    from natlang_neuralese.train import native_state_sft as trainer
+
+    base = tmp_path / 'base'
+    _tiny_source(base)
+    _, _, _, config = load_native_model(base, dtype=torch.float32, rank=4)
+    paths = {}
+    for split in ('train', 'test'):
+        row = dict(graph(split), split=split, source_groups=[split],
+                   tokenizer_fingerprint=config['tokenizer_fingerprint'])
+        paths[split] = tmp_path / (split + '.jsonl')
+        paths[split].write_text(json.dumps(row) + '\n')
+    out = tmp_path / 'run'
+    argv = ['--base', str(base), '--dtype', 'float32', '--rank', '4', '--device', 'cpu',
+        '--native-graphs', str(paths['train']), '--held-native-graphs', str(paths['test']),
+        '--epochs', '2', '--eval-every', '100', '--out', str(out)]
+    def stop_after_update(policy, step, **kwargs):
+        policy.stop.requested = True
+        return False
+    with monkeypatch.context() as patch:
+        patch.setattr(trainer.CheckpointPolicy, 'due', stop_after_update)
+        assert trainer.main(argv) == 0
+    refs = []
+    loader = trainer.load_native_checkpoint
+    class DecodedTraining(dict):
+        pass
+    def load(*args, **kwargs):
+        result = loader(*args, **kwargs)
+        state = result[-1]
+        state['training'] = DecodedTraining(state['training'])
+        refs.append(weakref.ref(state['training']))
+        return result
+    checks = []
+    qualification = trainer.qualify_precision_transition
+    def check(*args, **kwargs):
+        gc.collect()
+        assert refs and all(ref() is None for ref in refs)
+        checks.append(True)
+        return qualification(*args, **kwargs)
+    monkeypatch.setattr(trainer, 'load_native_checkpoint', load)
+    monkeypatch.setattr(trainer, 'qualify_precision_transition', check)
+    assert trainer.main(argv) == 0
+    assert checks == [True]
+    saved = torch.load(out / 'checkpoint.pt', weights_only=False)['training']
+    assert saved['step'] == saved['global_step'] == 2
+    assert saved['exposure_counts'] == {'train': 2}
+    assert saved['optimizer'] and saved['rng']
+
+
 def test_append_schedule_preserves_resumed_epoch_prefix_and_deterministic_next_epoch():
     rows = [SimpleNamespace(id=key) for key in ('old-a', 'old-b', 'new-a', 'new-b')]
     old_ids = {'old-a', 'old-b'}
