@@ -1218,5 +1218,27 @@ against the declared function return type. A compatible Neuralese result keeps
 its state reference; an ordinary result materializes authenticated stored text,
 preserving mixed text/state order, before the existing return checker. Explicit
 `return_result` calls and type checks are unchanged. This repairs a concrete
-runtime failure without changing prompt wording. Measure this behavior on the
-next own-teacher window; no live measurement has been completed for this update.
+runtime failure without changing prompt wording. A public, held-free LFM17214
+window sampled 48 distinct `NativeToolAgent` sessions (8 each: string, number,
+record, list, nested record, and state-record) from the exact checkpoint
+`30bdfe1bfc6d2880867161af125a7760e17e6684c3850638453b5f7477489506`, using
+the native-state server, full rendering, CUDA, and temperature 0. The captures
+contain 102 assistant responses and 114 streamed deltas; 34 responses reached
+the 128-token per-turn cap. Six responses emitted actual native-state content
+parts, all on state-record functions whose declared result was a record. Their
+first-attempt decodes changed from opaque transport arrays to authenticated
+stored text, and both values were correctly rejected as the wrong record shape.
+No direct assistant native-state completion to an ordinary scalar return was
+sampled. The harness recorded no uncaught exception in 48 sessions, but this is
+not a task-success score: eight final JS-symbol values are not JSON-scorable,
+and semantic expected-value checks were correct on 29 of 40 scorable cases.
+The initial decoder-difference counter was based on raw tool-call responses and
+is invalid; do not use it. The corrected content-part replay has six rows,
+and the capture is
+`/home/werg/data/dgxops/public-typed-return-live48-v2-20261019/captured-turns.json`
+(SHA-256 `9fdf587d3b7669eaab66c1b7303e19935f160a2139eeb1e8dc41378857e34d19`);
+the replay sidecar is
+`/home/werg/data/dgxops/public-typed-return-live48-v2-20261019/decoder-replay.json`
+(SHA-256 `db206b9f5bdec498c8919d4587675a8dbf02a2b48cb96b04ad092a34d13014f1`).
+Direct ordinary scalar native-state completions remain measurement debt; this
+window does not establish task lift or authorize a quality claim.
