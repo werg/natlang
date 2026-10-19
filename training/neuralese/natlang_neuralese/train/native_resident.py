@@ -1287,7 +1287,9 @@ def _delta_payload(directory, previous, plan, proposed, stage_id, recipe_path,
     initial = json.loads((directory/'initial.json').read_text())
     prior_counts = previous['payload'] if previous else initial
     rows, held_rows = prior_counts.get('rows'), prior_counts.get('held_rows')
-    if type(rows) is not int or rows < 1 or type(held_rows) is not int or held_rows < 1:
+    successor_plan = (previous is None and isinstance(initial.get('plan_sha256'),str)
+        and len(initial['plan_sha256'])==64 and initial['plan_sha256']!=digest(plan))
+    if not successor_plan and (type(rows) is not int or rows < 1 or type(held_rows) is not int or held_rows < 1):
         raise ValueError('resident delta preparation lacks authenticated prior row counts')
     from .native_source_preparation import NativeSourcePreparation
     if previous and (previous['payload'].get('train') != prior_ref
@@ -1298,7 +1300,12 @@ def _delta_payload(directory, previous, plan, proposed, stage_id, recipe_path,
     preparation = NativeSourcePreparation(tokenizer_fingerprint, role_ids, cache_only=True)
     old = preparation.load(prior_ref, split='train')
     old_held = preparation.load(held_ref, split='test')
-    if len(old) != rows or len(old_held) != held_rows:
+    if successor_plan:
+        # A drained recipe handoff can advance the plan after current.json was
+        # retired. The old initial remains historical; the actual SHA-bound
+        # plan and its fully validated cache-only indexes own these counts.
+        rows,held_rows=len(old),len(old_held)
+    elif len(old) != rows or len(old_held) != held_rows:
         raise ValueError('resident delta authenticated prior counts differ from cached source rows')
     preparation.cache_only = False
     delta = preparation.load(delta_ref, split='train')
@@ -1354,7 +1361,10 @@ def _delta_payload(directory, previous, plan, proposed, stage_id, recipe_path,
         'delta_validation': {'schema': 'natlang.native-resident-delta-validation/1',
             'source': delta_ref, 'rows': len(delta), 'entries_sha256': entries_digest(
                 [{**entry, 'training_priority':entry.get('training_priority',0)} for entry in delta.entries]),
-            'prior_rows': rows, 'prior_held_rows': held_rows, 'prior_plan_sha256': digest(plan)}}
+            'prior_rows': rows, 'prior_held_rows': held_rows, 'prior_plan_sha256': digest(plan),
+            'prior_count_authority':{'kind':'authenticated-plan-indexes'if successor_plan else 'committed-generation'if previous else 'same-plan-initial',
+                'plan_sha256':digest(plan),'historical_initial_plan_sha256':initial.get('plan_sha256'),
+                'train':prior_ref,'held':held_ref}}}
     if geometry_evidence:payload['geometry_evidence']=geometry_evidence
     return payload
 
