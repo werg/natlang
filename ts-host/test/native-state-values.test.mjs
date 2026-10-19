@@ -4,6 +4,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { createServer } from 'node:http';
 import { neuraleseServerModelTurn, encodeBlockBody, requestNativeStateIds } from '../dist/model/neuralese-server.js';
+import { nativeStateRuntimeOptions } from '../dist/model/native-state-client.js';
 import { join } from 'node:path';
 import { MemoryNeuraleseStore, encodeNativeState, StandInNeuralesePort, hashingEmbedder } from '../dist/native/neuralese-store.js';
 import { neuraleseRef, neuraleseSentinel, isNeuraleseRef, soleSentinel, sourceWithLiteralCalls,
@@ -20,6 +21,30 @@ import { nativeStateFixture } from './fixtures/native-state.mjs';
 
 const runtimeFor = (store, architecture='fixture') => ({ store, dialect: `native-state/${architecture}` });
 const envFor = options => { const env = new TypeEnv(); env.dialects = dialectBinding(options); return env; };
+
+test('native server runtime binding supplies the real typed-state writer and refuses unsupported required writers', async () => {
+  const store = new MemoryNeuraleseStore();
+  const info = { dialects: ['native-state/fixture'], capabilities: ['native.text-write'], native_state: {
+    enabled: true, architecture: 'fixture', checkpoint_sha256: 'a'.repeat(64), tokenizer_fingerprint: 'b'.repeat(64),
+    embedding_weight_sha256: 'c'.repeat(64), consumption_modes: ['exact-native-state'], role_marker_ids: [1, 2, 3, 4],
+  } };
+  const runtime = await nativeStateRuntimeOptions({ endpoint: 'http://native-fixture', store, info });
+  assert.equal(runtime.store, store);
+  assert.equal(runtime.dialect, 'native-state/fixture');
+  assert.equal(runtime.port.dialect, 'native-state/fixture');
+  assert.equal(runtime.nativeStateConsumer.checkpoint_sha256, 'a'.repeat(64));
+
+  const readOnly = await nativeStateRuntimeOptions({ endpoint: 'http://native-fixture', store,
+    info: { ...info, capabilities: [] } }, { write: 'available' });
+  assert.equal(readOnly.port, undefined);
+  await assert.rejects(() => nativeStateRuntimeOptions({ endpoint: 'http://native-fixture', store,
+    info: { ...info, capabilities: [] } }), /neuralese-native-text-write-unavailable/);
+  await assert.rejects(() => nativeStateRuntimeOptions({ endpoint: 'http://native-fixture', store,
+    info: { ...info, capabilities: undefined } }), /neuralese-native-text-write-unavailable/);
+  await assert.rejects(() => nativeStateRuntimeOptions({ endpoint: 'http://native-fixture', store,
+    info: { ...info, native_state: { ...info.native_state, consumption_modes: undefined } } }, { write: 'available' }),
+    /neuralese-native-state-unavailable/);
+});
 
 test('short native ID in historical tool arguments stays ordinary data', () => {
   const full = 'nzs1_' + 'a'.repeat(52);

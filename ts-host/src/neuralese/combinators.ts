@@ -17,8 +17,8 @@ import { parseType } from '../native/types.js';
  * and coercions), a representation-generic call used for its Neuralese form (runtime/kernel.ts) and the builtin `view`
  * write.
  */
-import { nativeStateConsumerFromInfo, dialectBinding } from '../native/neuralese.js';
-import { nativeStateWritePort } from '../model/native-state-client.js';
+import { dialectBinding } from '../native/neuralese.js';
+import { nativeStateRuntimeOptions } from '../model/native-state-client.js';
 import { currentFrame } from '../runtime/context.js';
 import { softFunction } from '../runtime/contexts.js';
 import { graphNode, traceFor, valueInputs } from '../native/graph.js';
@@ -92,7 +92,8 @@ export async function buildStandardLibrary(options: { endpoint: string; headers?
     { dialects: string[]; width: number } & import('../model/neuralese-info.js').NeuraleseServerInfo;
   const local = new MemoryNeuraleseStore();
   const native = !!(info.native_state as { enabled?: boolean } | undefined)?.enabled;
-  const nativePort = native ? await nativeStateWritePort({ endpoint: options.endpoint, headers, store: local, info }) : undefined;
+  const nativeRuntime = native ? await nativeStateRuntimeOptions({ endpoint: options.endpoint, headers, store: local, info }) : undefined;
+  const nativePort = nativeRuntime?.port;
   const fetchBlock = async (id: string) => {
     if (!(await local.has(id))) {
       if (id.startsWith('nzs1_')) {
@@ -132,8 +133,7 @@ export async function buildStandardLibrary(options: { endpoint: string; headers?
         await fetchBlock(placeholder);
         const all = Object.fromEntries(Object.keys(COMBINATORS).map(key => [key, placeholder])) as Record<CombinatorName, string>;
         const lib = createNeuraleseLibrary({ dialect: info.dialects[0]!, width: info.width, bodies: all });
-        const runtime = createNatlangRuntime({ model: driver as never, neuralese: { store: local, dialect: info.dialects[0]!,
-          nativeStateConsumer: nativeStateConsumerFromInfo(info), ...(nativePort ? { port: nativePort } : {}) } });
+        const runtime = createNatlangRuntime({ model: driver as never, neuralese: nativeRuntime ?? { store: local, dialect: info.dialects[0]! } });
         return runtime.run(() => samples[name](lib));
       } });
     bodies[name] = result.id;

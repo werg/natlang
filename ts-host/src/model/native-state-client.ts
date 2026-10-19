@@ -5,6 +5,7 @@ import { archiveNativeTensorFrom, archiveNativeArtifactFrom, nativeStateBlockMet
   type NeuralesePort, type NeuraleseStore, type NativeAdapterStateConsumption, validateNativeAdapterStateConsumption, nativeCanonicalJson } from '../native/neuralese-store.js';
 import { hexDigest } from '../native/hash.js';
 import { neuraleseServerInfo, serves, type NeuraleseServerInfo } from '../model/neuralese-info.js';
+import { nativeStateConsumerFromInfo, type NeuraleseRuntimeOptions } from '../native/neuralese.js';
 
 export type { NativeAdapterStateConsumption } from '../native/neuralese-store.js';
 
@@ -21,6 +22,30 @@ export type NativeTextResult = { id: string; native_state: Record<string, unknow
   source_text_sha256: string; init?: Record<string, unknown>; gate?: null };
 export type NativeClientOptions = { endpoint: string; headers?: Record<string, string>; store: NeuraleseStore;
   info?: NeuraleseServerInfo };
+
+/** Build the complete shared-state runtime binding for a server-backed native actor. */
+export async function nativeStateRuntimeOptions(options: NativeClientOptions, settings: {
+  /** `required` fails during setup if the server cannot produce native state; `available` permits read-only use. */
+  write?: 'required' | 'available';
+} = {}): Promise<NeuraleseRuntimeOptions> {
+  const info = options.info ?? await neuraleseServerInfo(options.endpoint, { headers: options.headers });
+  const native = info.native_state as { enabled?: boolean } | undefined;
+  if (native?.enabled !== true)
+    return failure('neuralese-native-state-unavailable', 'the server does not declare its shared-state reader identity');
+  const dialect = info.dialects?.[0];
+  if (typeof dialect !== 'string' || !dialect)
+    return failure('neuralese-native-state-unavailable', 'the server must declare its native value dialect');
+  // `serves()` intentionally supports older servers by inferring common capabilities. A
+  // state writer is an exact producer service, so never infer it from an old info shape.
+  const canWrite = Array.isArray(info.capabilities) && info.capabilities.includes('native.text-write');
+  if (settings.write !== 'available' && !canWrite)
+    return failure('neuralese-native-text-write-unavailable', 'the server must explicitly advertise native.text-write');
+  const port = canWrite ? await nativeStateWritePort({ ...options, info }) : undefined;
+  const nativeStateConsumer = nativeStateConsumerFromInfo(info);
+  if (!nativeStateConsumer)
+    return failure('neuralese-native-state-unavailable', 'the server must declare native identity and consumption modes');
+  return { store: options.store, dialect, nativeStateConsumer, ...(port ? { port } : {}) };
+}
 
 const failure = (code: string, detail: string): never => { throw Object.assign(new Error(`${code}: ${detail}`), { code }); };
 
