@@ -529,6 +529,239 @@ def import_current_owner_checkpoint(config_path,cursor_path,selected_checkpoint,
     return binding(out)
 
 
+def bridge_deferred_owner_handoff(config_path,cursor_path,deferred_reference,handoff_reference,
+                                  retirement_reference,out,*,recovery_reason,verified_handoff=None,
+                                  owned_controller_fd=None):
+    """Join a deferred startup parent to its completed child without reloading that parent.
+
+    The startup import may have been deferred because the old RAW cursor had a
+    sealed round.  After the owner has trained and drained, this exact bridge
+    verifies the original dispatch plus the real child checkpoint's
+    continuation SHA, revalidates the no-credit stale-round retirement, and
+    atomically publishes only the child pointer.  It never reconstructs a
+    saved checkpoint from the startup summary and never advances recipe/RAW
+    readiness.
+    """
+    import contextlib
+    from ..common.hashing import canonical_json_sha256_hex as digest
+    from ..train.native_resident import code_inventory
+    from .native_runtime_handoff import _loaded_handoff
+
+    config_path=Path(config_path).resolve(strict=True);cursor_path=Path(cursor_path).resolve(strict=True)
+    out=Path(out).resolve();config=json.loads(config_path.read_text());root=config_path.parent
+    state_path=Path(config['out']).resolve()/'state.json'
+    if cursor_path!=root/'cycle.json' or Path(config['out']).resolve().parent!=root:
+        raise ValueError('deferred owner bridge lost its exact RAW controller namespace')
+    deferred_path=_bound(deferred_reference);deferred=json.loads(deferred_path.read_text())
+    if (not isinstance(deferred,dict)
+            or deferred.get('whole_recipe_completed') is not False
+            or deferred.get('readiness_granted') is not False
+            or deferred.get('reason') not in ('current-owner import cannot bypass an active sealed RAW operation',
+                'current-owner import cannot bypass a pending sealed RAW round')
+            or not isinstance(recovery_reason,str) or not recovery_reason.strip()):
+        raise ValueError('deferred owner bridge needs the exact no-credit startup deferral and recovery reason')
+    authority_ref=deferred.get('authority');authority_path=_bound(authority_ref)
+    if binding(authority_path)!=authority_ref:
+        raise ValueError('deferred owner startup authority changed')
+    authority=json.loads(authority_path.read_text())
+    if (authority.get('schema')!='natlang.native-raw-current-owner/2'
+            or authority.get('selected_checkpoint')!=deferred.get('selected_checkpoint')
+            or authority.get('config')!=deferred.get('config')
+            or deferred.get('config')!=binding(config_path)
+            or deferred.get('cursor',{}).get('path')!=str(cursor_path)):
+        raise ValueError('deferred owner bridge changed its original selected parent or controller authority')
+    if authority.get('package',{}).get('path')!=str(Path(__file__).resolve().parents[1]):
+        raise ValueError('deferred owner bridge package differs from the running shared trainer')
+    package=Path(authority['package']['path']).resolve(strict=True)
+    if code_inventory(package)!=authority['package'].get('code'):
+        raise ValueError('deferred owner bridge runtime package changed after startup')
+    selected=authority['selected_checkpoint']
+    if (not isinstance(selected,dict) or not {'path','sha256','bytes'}<=set(selected)
+            or type(selected.get('bytes')) is not int or selected['bytes']<=0
+            or not Path(selected['path']).is_absolute()):
+        raise ValueError('deferred owner bridge selected startup checkpoint binding is malformed')
+    startup_summary=deferred.get('saved_state')
+    if (startup_summary!=authority.get('saved_state')
+            or startup_summary.get('checkpoint')!=selected
+            or type(startup_summary.get('global_step')) is not int
+            or startup_summary['global_step']<0
+            or startup_summary.get('model_id')!=config.get('raw_model_id')):
+        raise ValueError('deferred owner bridge startup summary is not bound to its selected parent')
+
+    # The recorded launch, dispatch and pre-signal tree are the startup
+    # attestation. Reuse their exact validators rather than treating the small
+    # summary as if it were loaded optimizer state.
+    launch_ref=deferred.get('launch');drain_ref=deferred.get('drain_intent')
+    launch_path=_bound(launch_ref);drain_path=_bound(drain_ref)
+    if binding(launch_path)!=launch_ref or binding(drain_path)!=drain_ref:
+        raise ValueError('deferred owner bridge launch or drain intent changed')
+    drain=json.loads(drain_path.read_text());launch=json.loads(launch_path.read_text())
+    if (drain.get('schema') not in ('natlang.native-raw-optimizer-drain/2','natlang.native-raw-optimizer-drain/1')
+            or drain.get('source_launch')!=launch_ref or drain.get('launch',{}).get('sha256')!=launch_ref.get('sha256')
+            or authority.get('owner')!=drain.get('owner')
+            or authority.get('process_argv')!=launch.get('argv')
+            or launch.get('inprocess_dispatch') is None):
+        raise ValueError('deferred owner bridge lost the exact original in-process startup dispatch')
+    gate_ref=authority['wrapper_configuration'];gate_path=_bound(gate_ref);gate=json.loads(gate_path.read_text())
+    args_ref=authority['effective_argv_binding'];args_path=_bound(args_ref);args=json.loads(args_path.read_text())
+    from .native_owned_dispatch import verify as verify_dispatch
+    continuation,command,dispatch_refs=verify_dispatch(drain,launch)
+    runtime_package=Path(gate.get('runtime','')).resolve(strict=True)/'training/neuralese/natlang_neuralese'
+    if (continuation.get('parent')!=selected
+            or dispatch_refs.get('supervisor')!=authority.get('wrapper')
+            or not isinstance(command,list) or command!=json.loads(_bound(authority['effective_argv_file']).read_text())):
+        raise ValueError('deferred owner bridge dispatch did not start from its exact selected checkpoint')
+    if (binding(gate_path)!=gate_ref or binding(args_path)!=args_ref
+            or gate.get('trainer_arguments')!=args or gate.get('effective_trainer_argv')!=args_ref
+            or gate.get('parent')!=selected or runtime_package.resolve()!=package
+            or gate.get('runtime_code_sha256')!=digest(code_inventory(runtime_package))):
+        raise ValueError('deferred owner bridge selected parent differs from its exact trainer specification')
+
+    from .native_raw_handoff import verify_handoff_controls
+    handoff_record,saved=_loaded_handoff(handoff_reference,verified_handoff)
+    # Controls are rechecked even when the child was already decoded by the
+    # owner; the parent itself is never deserialized here.
+    controls=verify_handoff_controls(handoff_reference)
+    intent=json.loads(_bound(controls['intent']).read_text())
+    if (controls!=handoff_record or controls.get('intent')!=drain_ref
+            or intent.get('source_launch')!=launch_ref
+            or intent.get('owner')!=drain.get('owner')):
+        raise ValueError('completed handoff is not the exact deferred startup owner and drain')
+    training=saved.get('training') or {};options=training.get('options') or {}
+    model=saved.get('model_config') or {}
+    model_id=model.get('architecture','')+':'+model.get('base_inventory_sha256','')
+    continuation_parent=(options.get('continuation') or {}).get('checkpoint_sha256')
+    step=training.get('global_step',training.get('step'))
+    if (continuation_parent!=selected['sha256'] or model_id!=startup_summary['model_id']
+            or type(step) is not int or step<startup_summary['global_step']
+            or config.get('raw_model_id')!=model_id):
+        raise ValueError('completed handoff checkpoint does not continue the selected startup optimizer parent')
+    child=handoff_record['checkpoint']
+    child_path=_bound(child)
+    if child.get('bytes') is not None and child_path.stat().st_size!=child['bytes']:
+        raise ValueError('completed handoff child checkpoint byte binding changed')
+
+    # Ask the existing retirement verifier to replay its durable no-credit
+    # intent. Its completed-retry path is read-only and verifies the original
+    # snapshots, candidates, quiescence evidence, debt and request.
+    retirement_path=_bound(retirement_reference);retirement=json.loads(retirement_path.read_text())
+    retirement_intent=json.loads(_bound(retirement.get('intent')).read_text())
+    if retirement_intent.get('schema')!='natlang.native-raw-stale-pending-retirement/1':
+        raise ValueError('deferred owner bridge requires the exact completed stale-round retirement')
+    verified_retirement=retire_stale_pending_raw_round(config_path,cursor_path,
+        retirement_intent['authority'],retirement_path)
+    if verified_retirement!=retirement_reference:
+        raise ValueError('stale-round retirement receipt changed during bridge verification')
+
+    request={'deferred_startup':deferred_reference,'handoff':handoff_reference,
+        'retirement':retirement_reference,'config':binding(config_path),
+        'recovery_reason':recovery_reason,'selected_parent':selected,'child_checkpoint':child}
+    directory=out.parent/(out.stem+'-deferred-owner-bridge');intent_path=directory/'intent.json'
+    paths={'state':state_path,'cursor':cursor_path}
+    def candidates(state,cursor):
+        if state.get('phase')!='collect' or cursor.get('phase')!='sft' or cursor.get('next_stage')!=0:
+            raise ValueError('deferred owner bridge requires the retired SFT-first RAW boundary')
+        if (state.get('stale_pending_raw_retirement',{}).get('request_sha256')!=retirement.get('request_sha256')
+                or cursor.get('stale_pending_raw_retirement',{}).get('request_sha256')!=retirement.get('request_sha256')
+                or state.get('round')!=retirement.get('retired_round')
+                or cursor.get('raw_retry_generation')!=retirement.get('collection_attempt')):
+            raise ValueError('deferred owner bridge no longer follows this exact no-credit retirement')
+        if state.get('pending_native_checkpoint') is not None or state.get('pending_native_round_dir') is not None:
+            raise ValueError('deferred owner bridge cannot bypass a newly pending RAW operation')
+        next_state=_published_checkpoint_state(state,child);next_state.pop('readiness',None)
+        next_cursor={**cursor,'current_checkpoint':child}
+        next_cursor.pop('readiness',None);next_cursor.pop('foundation_qualified',None)
+        next_cursor['deferred_owner_handoff_bridge']={'request_sha256':digest(request),
+            'checkpoint':child,'whole_recipe_completed':False,'raw_completion_credit':0,
+            'readiness_granted':False,'runtime_handoff_required':True}
+        return next_state,next_cursor
+    def validate_intent(value,expected_request):
+        if (not isinstance(value,dict) or value.get('schema')!='natlang.native-raw-deferred-owner-bridge/1'
+                or value.get('request')!=expected_request or value.get('whole_recipe_completed') is not False
+                or value.get('training_credit')!=0 or value.get('raw_completion_credit')!=0
+                or set(value.get('before',{}))!=set(paths) or set(value.get('snapshots',{}))!=set(paths)
+                or set(value.get('candidates',{}))!=set(paths)):
+            raise ValueError('deferred owner bridge intent changed its exact no-credit request')
+        originals={}
+        for name,path in paths.items():
+            snap=value['snapshots'][name];candidate=value['candidates'][name]
+            if (snap.get('path')!=str(directory/('original-'+name+'.json'))
+                    or candidate.get('path')!=str(directory/('candidate-'+name+'.json'))
+                    or binding(_bound(snap))!=snap or snap.get('sha256')!=value['before'][name].get('sha256')):
+                raise ValueError('deferred owner bridge transaction artifact changed')
+            originals[name]=json.loads(_bound(snap).read_text())
+        expected_state,expected_cursor=candidates(originals['state'],originals['cursor'])
+        for name,expected in (('state',expected_state),('cursor',expected_cursor)):
+            if json.loads(_bound(value['candidates'][name]).read_text())!=expected:
+                raise ValueError('deferred owner bridge candidate changed RAW debt or readiness')
+        return value
+
+    controller_lock=root.parent/'controller.lock';locks={Path(config['out']).resolve()/'controller.lock'}
+    with contextlib.ExitStack() as stack:
+        if owned_controller_fd is not None:
+            fd=owned_controller_fd;path=controller_lock
+            if type(fd)is not int or fd<0 or not path.is_file() or not os.path.isfile(f'/proc/self/fd/{fd}'):
+                raise ValueError('deferred owner bridge lacks its existing canonical controller lease')
+            opened=os.fstat(fd);actual=path.stat()
+            rows=[line for line in Path('/proc/self/fdinfo',str(fd)).read_text().splitlines()
+                  if line.startswith('lock:') and 'FLOCK' in line]
+            if (opened.st_dev,opened.st_ino)!=(actual.st_dev,actual.st_ino) or len(rows)!=1 or 'WRITE' not in rows[0]:
+                raise ValueError('deferred owner bridge descriptor is not the existing exclusive controller lease')
+        else:locks.add(controller_lock)
+        for lock_path in sorted(locks):
+            lock_path.parent.mkdir(parents=True,exist_ok=True);lease=stack.enter_context(lock_path.open('a'))
+            fcntl.flock(lease,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        if binding(config_path)!=request['config'] or binding(deferred_path)!=deferred_reference or binding(_bound(handoff_reference))!=handoff_reference:
+            raise ValueError('deferred owner bridge source authority changed before commit')
+        if out.exists():
+            receipt=json.loads(out.read_text());stored=json.loads(_bound(receipt['intent']).read_text())
+            if (receipt.get('schema')!='natlang.native-raw-deferred-owner-bridge/1'
+                    or receipt.get('request_sha256')!=digest(request)
+                    or Path(_bound(receipt['intent'])).resolve()!=intent_path.resolve()):
+                raise ValueError('deferred owner bridge retry changed its transaction')
+            validate_intent(stored,request)
+            if (receipt.get('published_checkpoint')!=child or receipt.get('whole_recipe_completed') is not False
+                    or receipt.get('training_credit')!=0 or receipt.get('raw_completion_credit')!=0):
+                raise ValueError('deferred owner bridge receipt changed its exact no-credit result')
+            return binding(out)
+        if intent_path.exists():
+            intent=validate_intent(json.loads(intent_path.read_text()),request)
+        else:
+            before={name:binding(path) for name,path in paths.items()}
+            # The current files must still be the exact retired candidates.
+            for name,path in paths.items():
+                if before[name]['sha256']!=retirement_intent['candidates'][name]['sha256']:
+                    raise ValueError('deferred owner bridge found a successor after RAW retirement')
+            state=json.loads(state_path.read_text());cursor=json.loads(cursor_path.read_text())
+            next_state,next_cursor=candidates(state,cursor)
+            directory.mkdir(parents=True,exist_ok=True);snapshots={};candidate_refs={}
+            for name,path in paths.items():
+                snap=directory/('original-'+name+'.json');write_bytes_durable(snap,_bound(before[name]).read_bytes());snapshots[name]=binding(snap)
+            for name,value in (('state',next_state),('cursor',next_cursor)):
+                candidate=directory/('candidate-'+name+'.json');write_json_durable(candidate,value);candidate_refs[name]=binding(candidate)
+            if any(binding(path)!=before[name] for name,path in paths.items()):
+                raise ValueError('deferred owner bridge controller changed before durable intent')
+            intent={'schema':'natlang.native-raw-deferred-owner-bridge/1','request':request,
+                'before':before,'snapshots':snapshots,'candidates':candidate_refs,
+                'whole_recipe_completed':False,'training_credit':0,'raw_completion_credit':0}
+            write_json_durable(intent_path,intent);intent=validate_intent(intent,request)
+        if binding(config_path)!=request['config']:
+            raise ValueError('deferred owner bridge config changed during transaction')
+        for name,path in paths.items():
+            actual=binding(path);candidate=intent['candidates'][name]
+            if actual['sha256']!=candidate['sha256'] and actual!=intent['before'][name]:
+                raise ValueError('deferred owner bridge found an unknown controller successor')
+        for name,path in paths.items():
+            candidate=intent['candidates'][name]
+            if binding(path)['sha256']!=candidate['sha256']:
+                write_bytes_durable(path,_bound(candidate).read_bytes())
+        write_json_durable(out,{'schema':intent['schema'],'request_sha256':digest(request),
+            'intent':binding(intent_path),'published_checkpoint':child,'selected_startup_parent':selected,
+            'whole_recipe_completed':False,'training_credit':0,'raw_completion_credit':0,
+            'readiness_granted':False,'runtime_handoff_required':True})
+    return binding(out)
+
+
 def retire_stale_pending_raw_round(config_path,cursor_path,authority,out,*,owned_controller_fd=None,permitted_controller_owner_fd=None):
     """Retire one authenticated dead RAW operation without crediting its work.
 

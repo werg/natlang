@@ -86,9 +86,9 @@ def owned(ordinary,tmp_path):
     return x
 
 
-def invoke(x):
+def invoke(x,**kwargs):
     return raw.reconcile_owned_operations(x['config'],x['operations'],x['bare']['recipe'],
-        x['reconciliation'],bare_direct_owner=x['bare'])
+        x['reconciliation'],bare_direct_owner=x['bare'],**kwargs)
 
 
 def test_earned_quantum_publishes_current_optimizer_without_marking_stage_complete(owned):
@@ -205,10 +205,10 @@ def test_scheduler_cannot_dispatch_old_recipe_after_owned_publication(owned,monk
         raw.student_cycle(x['plan'],x['declaration'],x['bootstrap'],x['root'],stop=SimpleNamespace(requested=False))
 
 
-def test_owned_cycle_boundary_installs_next_actor_and_collector_before_fastpath(owned,tmp_path):
+def test_owned_cycle_boundary_installs_next_actor_and_collector_before_fastpath(owned,tmp_path,monkeypatch):
     from natlang_neuralese.rl import native_runtime_handoff as runtime
     x=owned;config=json.loads(x['config'].read_text());config['actor_command']=['old-actor'];write(x['config'],config)
-    published=invoke(x)
+    published=invoke(x,retain_mandatory_schedule=True)
     proof=runtime.prepare_runtime_handoff(x['bootstrap'],x['handoff'],None,x['config'],
         tmp_path/'next-unsealed-runtime.json',bare_direct_owner=x['bare'],owned_operations=published)
     collector=tmp_path/'new-collector';(collector/'dist/teacher').mkdir(parents=True);(collector/'dist/teacher/cli.js').write_text('/* fixture */')
@@ -221,6 +221,40 @@ def test_owned_cycle_boundary_installs_next_actor_and_collector_before_fastpath(
     assert actual['runtime_binding']['plan_sha256']==resident.binding(x['plan'])['sha256']
     raw.configure_model(x['plan'],declaration,x['bootstrap'],x['root'])
     assert json.loads(x['config'].read_text())['actor_command']==['new-qualified-actor']
+
+    # Exercise the real scheduler entry after configure_model has consumed the
+    # standard runtime authority. This handoff explicitly retains mandatory
+    # SFT work; stop at the real supervised worker boundary before publication.
+    from types import SimpleNamespace
+    calls=[];stop=SimpleNamespace(requested=False)
+    # Bind an incomplete progress report derived from this exact tiny saved
+    # checkpoint, using the same canonical obligation function as the trainer.
+    # The scheduler test does not claim model training or readiness.
+    from natlang_neuralese.train.native_continuation import progress_obligations
+    checkpoint_state=__import__('torch').load(x['pin'],weights_only=False)
+    progress=progress_obligations(checkpoint_state['training']['sft_progress'])
+    report_path=x['pin'].parent/'student-cycle-native-sft-report.json'
+    write(report_path,{'schema':'natlang.neuralese-native-sft-report/1',
+        'checkpoint_sha256':resident.binding(x['pin'])['sha256'],'completed':False,
+        'mandatory_sft':progress})
+    readiness_path=x['pin'].parent/'native-training-receipt.json'
+    readiness=json.loads(readiness_path.read_text());readiness['mandatory_sft']=progress
+    readiness['training_receipt']=resident.binding(report_path);write(readiness_path,readiness)
+    # configure_model already consumed the actual prepared handoff above. Keep
+    # the scheduler invocation focused on resuming that configured runtime;
+    # this fixture's operation receipt predates the separate tiny report.
+    monkeypatch.setattr(raw,'configure_model',lambda *args:x['config'])
+    cursor_path=x['root']/'cycle.json';cursor=json.loads(cursor_path.read_text())
+    assert cursor['phase']=='sft' and cursor['next_stage']==0
+    def dispatch(continuation,jobdir,config,cycle_cursor,owner_stop):
+        calls.append((continuation['runtime'],continuation['production_stage'],Path(jobdir)))
+        owner_stop.requested=True
+    monkeypatch.setattr(raw,'_supervised_job',dispatch)
+    result=raw.student_cycle(x['plan'],declaration,x['bootstrap'],x['root'],stop=stop)
+    assert calls and calls[0][0]==str(collector)
+    assert calls[0][1]=='sft'
+    assert result['phase']=='sft' and result['next_stage']==0
+    assert result.get('whole_recipe_completed') is not True
 
 
 @pytest.mark.parametrize('unfinished',['sft','round-zero','round-one','learner','unacknowledged','stale-receipt','pending-checkpoint'])
