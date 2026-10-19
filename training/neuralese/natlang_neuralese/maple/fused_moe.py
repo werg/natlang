@@ -389,7 +389,7 @@ def dense_grouped_experts(x: torch.Tensor, index: torch.Tensor, weights: torch.T
 # 1e-6 apart after layer 0's MoE, 3e-3 after layer 1's). Here every routed row is computed by the same Triton tile
 # with one fixed configuration: a row's result depends only on its own inputs and the expert's weights.
 
-INVARIANT_BLOCK = 64  # rows per expert block, fixed: the tile, and so each row's arithmetic, never depends on the call
+INVARIANT_BLOCK = 64  # fixed expert/training rows; linear inference also has an exact 16-row tile
 
 
 @triton.jit
@@ -485,11 +485,14 @@ def _ordered_dense_weight_gradient(grad_ptr, x_ptr, offsets_ptr, counts_ptr, acc
 
 
 def _dense_mm(a, rows, weight, plan: Plan, transpose: bool, *, precision="ieee", output_dtype=None,
-              single_expert=False) -> torch.Tensor:
+              single_expert=False, inference_output=False) -> torch.Tensor:
     """Grouped A @ W_eᵀ (W_e = weight[e], [N, K]) or, transposed, A @ W_e (the input gradient), with one fixed tile."""
     E, R, C = weight.shape
     N, K = (R, C) if not transpose else (C, R)
-    out = torch.zeros(plan.size, N, device=a.device, dtype=output_dtype or a.dtype)
+    # Single-expert inference stores every real output cell. Grouped expert
+    # padding and all training/adjoint paths keep their original zero fill.
+    allocate = torch.empty if single_expert and inference_output and torch.is_inference_mode_enabled() else torch.zeros
+    out = allocate(plan.size, N, device=a.device, dtype=output_dtype or a.dtype)
     inner, outer = (weight.stride(2), weight.stride(1)) if not transpose else (weight.stride(1), weight.stride(2))
     ieee = a.dtype == torch.float32 and precision == "ieee"
     dot_precision = precision if a.dtype == torch.float32 else "native"
@@ -660,14 +663,21 @@ def ordered_invariant_weight_gradient(records, accumulator):
 
 def _invariant_forward_plan(rows):
     # Native decode has one/few real rows. The same K/N geometry and dot
-    # reduction are exact with16 rows;64 only adds padded work. Restrict the
+    # reduction are exact with 16 rows; 64 only adds padded work. Restrict the
     # smaller tile to true inference, retaining all training/adjoint contracts.
     block = 16 if torch.is_inference_mode_enabled() and rows <= 16 else INVARIANT_BLOCK
     return SimpleNamespace(size=rows, blocks=triton.cdiv(rows, block), block=block)
 
 
+def _invariant_linear_forward(x, w, precision):
+    plan = _invariant_forward_plan(x.shape[0])
+    return _dense_mm(x.contiguous(), None, w[None], plan, transpose=False,
+                     precision=precision, single_expert=True,
+                     inference_output=torch.is_inference_mode_enabled())
+
+
 class _InvariantLinear(torch.autograd.Function):
-    """x @ wᵀ for every row with the same fixed tile (FP32 inputs in exact FP32): the router's logits."""
+    """x @ wᵀ with qualified row tiles and unchanged per-row reductions."""
 
     @staticmethod
     def forward(ctx, x, w, precision, forward_storage_dtype, *cotangent_anchors):
@@ -681,10 +691,7 @@ class _InvariantLinear(torch.autograd.Function):
         w = w.to(forward_storage_dtype) if ctx.carrier else w
         ctx.save_for_backward(x, w)
         ctx.precision = precision
-        rows = x.shape[0]
-        plan = _invariant_forward_plan(rows)
-        return _dense_mm(x.contiguous(), None, w[None], plan, transpose=False, precision=precision,
-                         single_expert=True)
+        return _invariant_linear_forward(x, w, precision)
 
     @staticmethod
     def backward(ctx, grad):
@@ -740,4 +747,9 @@ def invariant_linear(x: torch.Tensor, w: torch.Tensor, *, precision="ieee", forw
         return reference_linear(x,w)
     if precision not in {"ieee", "tf32x3", "tf32", "bf16", "bf16x6"}:
         raise ValueError("native fixed linear requires explicit ieee, tf32x3, tf32, bf16 or bf16x6 arithmetic")
+    if torch.is_inference_mode_enabled():
+        # Preserve the same effective stored operands; there is no autograd
+        # graph in true inference, so no cotangent bookkeeping is consumed.
+        weight = w.to(forward_storage_dtype) if forward_storage_dtype is not None else w
+        return _invariant_linear_forward(x, weight, precision)
     return _InvariantLinear.apply(x, w, precision, forward_storage_dtype, *cotangent_anchors)

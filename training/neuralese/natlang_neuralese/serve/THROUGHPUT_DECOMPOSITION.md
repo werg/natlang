@@ -41,3 +41,12 @@ the existing64-row tile. Before adoption compare exact outputs and explicit
 input adjoints across arithmetic modes, then full fan-out graph gradients on both
 canonical ports and actual trained-actor sampled/captured-state parity. No
 precision downgrade or probability-law change is authorized by this optimization.
+
+Next measured launch work preserves one shared invariant-linear forward. True
+inference calls it directly without AutogradFunction save/backward bookkeeping;
+all gradient-enabled and ordinary no-grad calls retain the original Function.
+A single-expert inference kernel writes every real output element, so its output
+can be allocated without a redundant zero fill. Grouped expert padding and all
+training/backward allocations retain their existing zero initialization. Poisoned
+allocation, storage-cast/adapter parity, both-port captures and exact gradient
+checks qualify these crisp changes before another full-size timing window.

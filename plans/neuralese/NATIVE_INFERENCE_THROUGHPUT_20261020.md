@@ -123,3 +123,29 @@ state difference. That is localized unchanged stock-FFN shape arithmetic, not a
 KV import corruption or model incapacity. The original sequential prefix stays
 in place pending a separately justified numerical/runtime qualification; no
 precision or tolerance was silently changed.
+
+## Inference launch followup
+
+The invariant linear now has one shared forward implementation. True inference
+calls it without AutogradFunction save/backward bookkeeping while retaining
+exact effective-storage casts. Ordinary no-grad and every gradient-enabled call
+retain the Function. An explicit forward-only allocation hint skips zero-fill
+only for fully written single-expert inference outputs. Grouped invalid/padded
+expert rows and all adjoint/training allocations keep zeros, including an
+explicit adjoint invoked inside an outer inference scope.
+
+All32 focused checks pass: poison uninitialized output with NaNs, require every
+cell finite and bitwise equal, cover all six precision/dtype modes and Mellum
+2304/1792 geometry, preserve grouped padding and adjoint allocation, compare
+actual adapted native producer/reader receipts on both ports, and retain every
+prior fan-out parameter-gradient/cache/state check. Quick22/TS checks pass.
+
+The same retained trained LFM derived-public-message benchmark passed exact
+sample/log-probability/input parity in all six alternating requests. Timed pairs
+were25.07→26.03 and18.84→24.99 decoded positions/s. Both improved, but shared
+hardware load varied strongly; do not turn these into a universal speedup claim
+or compare their absolute rates with the earlier row-tile window. Model load
+was103 seconds and ledger peak8.9GiB; it exited after measurement. Evidence is
+`fullsize-launch-report.json`. Four-way ctx/direct × zero/empty microprobes are
+retained as `linear-split-probe.json`; they did not isolate a stable readout
+regression. No full12B Mellum throughput or task-quality result is claimed.
