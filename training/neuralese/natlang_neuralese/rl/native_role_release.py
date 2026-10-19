@@ -11,12 +11,15 @@ import re
 import os
 from pathlib import Path
 import socket
+import importlib
 from ..common.hashing import canonical_json_sha256_hex,sha256_file_hex_cached,sha256_hex
 from ..common.jsonio import write_bytes_durable,write_json_durable
 from .native_raw_handoff import binding as _binding
 
 SCHEMA='natlang.native-source-host-role-proof/1'
 EXCHANGE='natlang.native-source-host-exchange/1'
+MECHANISM_FILES=('rl/native_role_release.py','rl/native_raw_rounds.py','train/native_readiness.py',
+                 'eval/native_gradients.py','rl/native_raw_policy.py','rl/native_raw_handoff.py')
 
 
 def binding(path):
@@ -49,6 +52,12 @@ def ownership(plan):
                 or not isinstance(row.get('source_host_id'),str)or not row['source_host_id']):
             raise ValueError('source-host role has invalid ownership or host identity')
         all_names.extend(values);source_hosts.append(row['source_host_id'])
+    declared=[row.get('verification_mechanism') for row in exchange['roles'].values()]
+    if any('verification_mechanism' in row for row in exchange['roles'].values()):
+        if any(not isinstance(value,dict) or set(value)!=set(MECHANISM_FILES)
+               or any(not isinstance(digest,str) or re.fullmatch(r'[0-9a-f]{64}',digest) is None
+                      for digest in value.values()) for value in declared):
+            raise ValueError('source-host mechanism authority needs every exact file hash for every role')
     role=exchange.get('role')
     if (len(set(source_hosts))!=len(source_hosts)or set(all_names)!=names or len(all_names)!=len(set(all_names))
             or role not in exchange['roles']or set(exchange['roles'][role]['owned_models'])!=set(owned)):
@@ -72,9 +81,39 @@ def contract(plan):
 
 def mechanism():
     package=Path(__file__).resolve().parents[1]
-    return {name:sha256_file_hex_cached(package/name)for name in
-        ('rl/native_role_release.py','rl/native_raw_rounds.py','train/native_readiness.py',
-         'eval/native_gradients.py','rl/native_raw_policy.py','rl/native_raw_handoff.py')}
+    result={}
+    for name in MECHANISM_FILES:
+        module=importlib.import_module('natlang_neuralese.'+name[:-3].replace('/','.'))
+        external=getattr(module,'__native_external_control_source__',None)
+        if external is not None:
+            if (not isinstance(external,dict) or not isinstance(external.get('path'),str)
+                    or not Path(external['path']).is_absolute()):
+                raise ValueError('external role mechanism needs its exact source binding')
+            source=Path(external['path']);actual=sha256_file_hex_cached(source)
+            if actual!=external.get('sha256') or ('bytes' in external and source.stat().st_size!=external['bytes']):
+                raise ValueError('external role mechanism source binding changed')
+            result[name]=actual
+        else:
+            if Path(module.__file__).resolve()!=package/name:
+                raise ValueError('role mechanism module escaped its installed runtime')
+            result[name]=sha256_file_hex_cached(package/name)
+    return result
+
+
+def _expected_mechanism(plan,role):
+    _,exchange=ownership(plan)
+    if exchange is None or role not in exchange['roles']:
+        raise ValueError('mechanism authority requires its declared source-host role')
+    declared=exchange['roles'][role].get('verification_mechanism')
+    return dict(declared) if declared is not None else mechanism()
+
+
+def _publishing_mechanism(plan):
+    _,exchange=ownership(plan)
+    actual=mechanism()
+    if exchange is None or actual!=_expected_mechanism(plan,exchange['role']):
+        raise ValueError('actual source-host mechanism differs from its declared authority')
+    return actual
 
 
 def _inline(reference):
@@ -137,7 +176,7 @@ def publish(plan_path,state_path,*,kind):
     proof={'schema':SCHEMA,'kind':kind,'role':exchange['role'],
         'source_host_id':exchange['roles'][exchange['role']]['source_host_id'],
         'source_host':{'hostname':socket.gethostname(),'validator':process_owner()},
-        'contract':contract(plan),'mechanism':mechanism(),'owned_models':sorted(owned),
+        'contract':contract(plan),'mechanism':_publishing_mechanism(plan),'owned_models':sorted(owned),
         'plan':_inline(binding(plan_path)),'raw_state':_inline(binding(state_path)),
         'controller':state['owner'],'models':evidence,
         'optimizer_released':kind=='released','production_complete':False}
@@ -157,8 +196,8 @@ def validate(reference,plan,*,kind):
             or type(proof.get('revision'))is not int or proof['revision']<1
             or proof.get('optimizer_released')is not(kind=='released')
             or proof.get('production_complete')is not False
-            or proof.get('contract')!=expected or proof.get('mechanism')!=mechanism()
-            or role not in exchange['roles']
+            or proof.get('contract')!=expected or role not in exchange['roles']
+            or proof.get('mechanism')!=_expected_mechanism(plan,role)
             or proof.get('source_host_id')!=exchange['roles'][role]['source_host_id']
             or proof.get('owned_models')!=sorted(exchange['roles'][role]['owned_models'])
             or set(proof.get('models')or{})!=set(proof['owned_models'])):
@@ -282,7 +321,7 @@ def withdraw(plan,state_path):
     state=json.loads(Path(state_path).read_text())
     return _commit(exchange,{'schema':SCHEMA,'kind':'pending','optimizer_released':False,
         'role':exchange['role'],'source_host_id':exchange['roles'][exchange['role']]['source_host_id'],
-        'contract':contract(plan),'mechanism':mechanism(),'controller':state['owner'],
+        'contract':contract(plan),'mechanism':_publishing_mechanism(plan),'controller':state['owner'],
         'raw_state':_inline(binding(state_path)),'production_complete':False})
 
 
@@ -291,7 +330,7 @@ def import_proof(reference,plan):
     from ..train.native_readiness import _bound
     proof=json.loads(_bound(reference).read_text());_,exchange=ownership(plan);role=proof.get('role')
     if(proof.get('schema')!=SCHEMA or proof.get('contract')!=contract(plan)
-            or proof.get('mechanism')!=mechanism()or role not in exchange['roles']
+            or role not in exchange['roles']or proof.get('mechanism')!=_expected_mechanism(plan,role)
             or proof.get('source_host_id')!=exchange['roles'][role]['source_host_id']
             or type(proof.get('revision'))is not int or proof['revision']<1):
         raise ValueError('imported source-host role status has invalid authority')

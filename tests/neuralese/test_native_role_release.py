@@ -396,3 +396,82 @@ def test_new_valid_release_refreshes_old_assets_without_reusing_stale_authority(
     assert not ready and all(item.get('semantic_assets_required')for item in pending)
     roles.install_assets(right['plan_path'],current,assets)
     assert len(roles.ready_participants(right['plan'])[0])==2
+
+
+def _bind_role_mechanisms(rows, authorities):
+    for row in rows.values():
+        for name, value in row['plan']['role_exchange']['roles'].items():
+            value['verification_mechanism']=dict(authorities[name])
+        write_json_durable(row['plan_path'],row['plan'])
+        row['config']['raw_rl_bootstrap']=raw.binding(row['plan_path'])
+        row['state']['plan_sha256']=sha256_file_hex(row['plan_path'])
+        name=row['plan']['role_exchange']['role']
+        path=Path(row['state']['models'][name]['config']['path'])
+        write_json_durable(path,{'runtime_binding':{'plan_sha256':sha256_file_hex(row['plan_path'])}})
+        row['state']['models'][name]['config']=raw.binding(path)
+        write_json_durable(row['state_path'],row['state'])
+
+
+def test_exact_role_authority_exchanges_distinct_reviewed_mechanisms_with_real_validators(tmp_path,monkeypatch):
+    rows=fixture(tmp_path,monkeypatch);left,right=rows['lfm'],rows['mellum']
+    actual=roles.mechanism();peer={**actual,'eval/native_gradients.py':'d'*64}
+    _bind_role_mechanisms(rows,{'lfm':actual,'mellum':peer})
+    proof=roles.publish(left['plan_path'],left['state_path'],kind='released')
+    monkeypatch.setattr(roles,'mechanism',lambda:peer)
+    received=roles.receive(Path(proof['path']).read_text(),right['plan_path'])
+    assert roles.validate(received,right['plan'],kind='released')[0]=='lfm'
+    # The peer's own declaration is also checked before publishing a genuine proof.
+    assert roles.publish(right['plan_path'],right['state_path'],kind='released')
+    assert roles.contract(left['plan'])==roles.contract(right['plan'])
+
+
+@pytest.mark.parametrize('damage',['missing-role','missing-file','extra-file','invalid-sha'])
+def test_role_mechanism_authority_requires_complete_exact_maps(tmp_path,monkeypatch,damage):
+    rows=fixture(tmp_path,monkeypatch);actual=roles.mechanism()
+    _bind_role_mechanisms(rows,{'lfm':actual,'mellum':actual})
+    assignment=rows['lfm']['plan']['role_exchange']['roles']
+    if damage=='missing-role':assignment['mellum'].pop('verification_mechanism')
+    elif damage=='missing-file':assignment['lfm']['verification_mechanism'].pop('eval/native_gradients.py')
+    elif damage=='extra-file':assignment['lfm']['verification_mechanism']['unreviewed']='a'*64
+    else:assignment['lfm']['verification_mechanism']['eval/native_gradients.py']='*'
+    with pytest.raises(ValueError,match='mechanism authority'):roles.ownership(rows['lfm']['plan'])
+
+
+def test_role_authority_rejects_local_substitution_pending_and_release(tmp_path,monkeypatch):
+    rows=fixture(tmp_path,monkeypatch);actual=roles.mechanism()
+    _bind_role_mechanisms(rows,{'lfm':actual,'mellum':actual})
+    monkeypatch.setattr(roles,'mechanism',lambda:{**actual,'eval/native_gradients.py':'e'*64})
+    with pytest.raises(ValueError,match='actual source-host mechanism'):
+        roles.publish(rows['lfm']['plan_path'],rows['lfm']['state_path'],kind='released')
+    with pytest.raises(ValueError,match='actual source-host mechanism'):
+        roles.withdraw(rows['lfm']['plan'],rows['lfm']['state_path'])
+
+
+def test_role_authority_rejects_transported_substitution_or_changed_contract(tmp_path,monkeypatch):
+    rows=fixture(tmp_path,monkeypatch);left,right=rows['lfm'],rows['mellum'];actual=roles.mechanism()
+    _bind_role_mechanisms(rows,{'lfm':actual,'mellum':actual})
+    reference=roles.publish(left['plan_path'],left['state_path'],kind='released')
+    proof=json.loads(Path(reference['path']).read_bytes());proof['mechanism']['eval/native_gradients.py']='e'*64
+    with pytest.raises(ValueError,match='authority'):roles.receive(json.dumps(proof),right['plan_path'])
+    changed=copy.deepcopy(right['plan']);changed['role_exchange']['roles']['lfm']['verification_mechanism']['eval/native_gradients.py']='e'*64
+    with pytest.raises(ValueError,match='mechanism or release scope'):
+        roles.validate(reference,changed,kind='released')
+
+
+def test_legacy_role_plan_keeps_exact_local_mechanism_requirement(tmp_path,monkeypatch):
+    rows=fixture(tmp_path,monkeypatch);reference=roles.publish(rows['lfm']['plan_path'],rows['lfm']['state_path'],kind='released');actual=roles.mechanism()
+    monkeypatch.setattr(roles,'mechanism',lambda:{**actual,'eval/native_gradients.py':'d'*64})
+    with pytest.raises(ValueError,match='authority'):
+        roles.receive(Path(reference['path']).read_text(),rows['mellum']['plan_path'])
+
+
+def test_declared_mechanism_records_bound_external_control_source_not_installed_origin(tmp_path,monkeypatch):
+    from natlang_neuralese.rl import native_raw_handoff
+    installed=roles.mechanism();path=tmp_path/'reviewed-raw-handoff-control.py';path.write_text('# reviewed external control\n')
+    reference={**raw.binding(path),'bytes':path.stat().st_size}
+    monkeypatch.setattr(native_raw_handoff,'__native_external_control_source__',reference,raising=False)
+    actual=roles.mechanism()
+    assert actual['rl/native_raw_handoff.py']==reference['sha256']
+    assert {k:v for k,v in actual.items()if k!='rl/native_raw_handoff.py'}=={k:v for k,v in installed.items()if k!='rl/native_raw_handoff.py'}
+    path.write_text('# substituted control\n')
+    with pytest.raises(ValueError,match='source binding changed'):roles.mechanism()
