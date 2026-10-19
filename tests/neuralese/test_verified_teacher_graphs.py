@@ -941,11 +941,14 @@ def _legacy_content_cache(tmp_path, monkeypatch, *, corruption=None):
     return path,expected,old,old.read_bytes()
 
 
-def test_reviewed_content_cache_migrates_exact_legacy_without_reparse(tmp_path, monkeypatch):
+def test_reviewed_content_cache_uses_legacy_only_under_its_exact_parser_law(tmp_path, monkeypatch):
     from natlang_neuralese.common import row_index
     path,expected,old,original=_legacy_content_cache(tmp_path,monkeypatch)
-    monkeypatch.setattr(converter,'parse_graph',lambda *_a,**_kw:pytest.fail('reviewed exact legacy must not reparse'))
+    calls=[];parse=converter.parse_graph
+    monkeypatch.setattr(converter,'parse_graph',lambda *a,**kw:calls.append(True)or parse(*a,**kw))
     assert converter.seed_content_fingerprints([path], 'tokenizer-a')==expected
+    same_law = converter._content_index_policy_sha256()==converter._REVIEWED_LEGACY_CONTENT_CACHE['policy_sha256']
+    assert calls == ([] if same_law else [True])
     assert old.read_bytes()==original
     caches=list((tmp_path/'cache').glob('teacher-content-*.pkl'))
     assert len(caches)==2
@@ -987,3 +990,133 @@ def test_changed_parser_law_cannot_migrate_legacy(tmp_path,monkeypatch):
     monkeypatch.setattr(converter,'parse_graph',lambda *a,**kw:calls.append(True)or parse(*a,**kw))
     assert converter.seed_content_fingerprints([path], 'tokenizer-a')==expected
     assert calls==[True] and old.read_bytes()==original
+
+
+def _classification_content_fixture(tmp_path, monkeypatch):
+    import shutil
+    from natlang_neuralese.common import row_index
+    from natlang_neuralese.data.native_sources import NativeGraphSource
+    from natlang_neuralese.train import native_source_classification as migration
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE', str(tmp_path/'cache'))
+    path=tmp_path/'graph.jsonl';path.write_text(''.join(json.dumps(_content_graph(key))+'\n'
+        for key in ('first','second')))
+    expected=converter.seed_content_fingerprints([path], 'tokenizer-a')
+    content_path=next((tmp_path/'cache').glob('teacher-content-*.pkl'))
+    content=row_index.load(content_path);content_path.unlink()
+    source=NativeGraphSource(path,'tokenizer-a',required_split='train')
+    package=Path(migration.__file__).resolve().parents[1];old_package=tmp_path/'old-package'
+    for name in (*migration.POLICY_FILES,'data/native_graph.py'):
+        target=old_package/name;target.parent.mkdir(parents=True,exist_ok=True)
+        shutil.copyfile(package/name,target)
+    with (old_package/'data/native_sources.py').open('a')as stream:
+        stream.write('\n# exact predecessor parser inventory\n')
+    current=next((tmp_path/'cache').glob('native-graphs-*.pkl'))
+    old=row_index.load(current)
+    for entry in old['entries']:
+        for name in migration.CLASS_FIELDS:entry.pop(name,None)
+        entry['communication']=False
+    old['key']['policy_sha256']=migration.source_policy(old_package)
+    old['metadata_sha256']=converter.canonical_json_sha256_hex(old['entries'])
+    old_index=tmp_path/'old-index.pkl';row_index.save(old_index,old)
+    part=migration.migrate_index(path,old_index,old_package=old_package,new_package=package)
+    proof=tmp_path/'classification.json';proof.write_text(json.dumps({
+        'schema':migration.SCHEMA,'train_sha256':source.receipt()['sha256'],'indexes':[part]}))
+    parser={name:converter.sha256_file(old_package/name)
+            for name in (*migration.POLICY_FILES,'data/native_graph.py')}
+    content['key']['policy_sha256']=converter._content_index_policy_sha256(parser)
+    legacy=row_index.entry_path('teacher-content',converter.canonical_json_sha256_hex(content['key']))
+    row_index.save(legacy,content)
+    return path,proof,part,legacy,legacy.read_bytes(),expected
+
+
+def test_classification_content_continuation_actual_policy_proof_without_parse(tmp_path,monkeypatch):
+    from natlang_neuralese.common import row_index
+    from natlang_neuralese.train import native_source_classification as migration
+    path,proof,part,legacy,original,expected=_classification_content_fixture(tmp_path,monkeypatch)
+    monkeypatch.setattr(converter,'parse_graph',lambda *_a,**_kw:pytest.fail('content graph reparsed'))
+    monkeypatch.setattr(migration,'_jsonl',lambda *_a,**_kw:pytest.fail('topology reparsed'))
+    seen,inputs=converter.seed_content_fingerprints([path],'tokenizer-a',classification_migrations=[proof])
+    assert seen==expected[0] and legacy.read_bytes()==original
+    witness=inputs[0]['content_cache_continuation']
+    assert witness['classification_proof']==migration._binding(proof)
+    assert witness['old_index']==part['old_index'] and witness['new_index']==part['new_index']
+    current=next(p for p in (tmp_path/'cache').glob('teacher-content-*.pkl')if p!=legacy)
+    migrated=row_index.load(current);prior=row_index.load(legacy)
+    assert migrated['fingerprints']==prior['fingerprints']
+    assert migrated['metadata_sha256']==prior['metadata_sha256']
+    assert migrated['key']['policy_sha256']==converter._content_index_policy_sha256()
+
+
+@pytest.mark.parametrize('change',['binding','order','policy','producer','old-code'])
+def test_classification_content_continuation_rejects_changed_proof(tmp_path,monkeypatch,change):
+    from natlang_neuralese.common import row_index
+    from natlang_neuralese.train import native_source_classification as migration
+    path,proof,part,legacy,original,_=_classification_content_fixture(tmp_path,monkeypatch)
+    value=json.loads(proof.read_text());selected=value['indexes'][0]
+    if change=='producer':selected['producer']['sha256']='0'*64
+    elif change=='old-code':
+        p=Path(next(iter(selected['old_policy'].values()))['path']);p.write_text(p.read_text()+'\n# changed\n')
+    else:
+        p=Path(selected['new_index']['path']);index=row_index.load(p)
+        if change=='binding':index['entries'][0]['binding']='changed'
+        elif change=='order':index['entries'].reverse()
+        else:index['key']['policy_sha256']='0'*64
+        index['metadata_sha256']=converter.canonical_json_sha256_hex(index['entries'])
+        row_index.save(p,index);selected['new_index']=migration._binding(p)
+    proof.write_text(json.dumps(value))
+    monkeypatch.setattr(converter,'parse_graph',lambda *_a,**_kw:pytest.fail('invalid proof fell through'))
+    with pytest.raises(ValueError):
+        converter.seed_content_fingerprints([path],'tokenizer-a',classification_migrations=[proof])
+    assert legacy.read_bytes()==original
+
+
+@pytest.mark.parametrize('change',['missing','metadata','count','native-graph'])
+def test_classification_content_cache_incompatible_legacy_uses_real_validation(tmp_path,monkeypatch,change):
+    from natlang_neuralese.common import row_index
+    path,proof,part,legacy,original,expected=_classification_content_fixture(tmp_path,monkeypatch)
+    if change=='missing':legacy.unlink()
+    elif change=='native-graph':
+        p=Path(next(iter(part['old_policy'].values()))['path']).parent.parent/'data/native_graph.py'
+        p.write_text(p.read_text()+'\n# changed extra parser\n')
+    else:
+        value=row_index.load(legacy)
+        if change=='metadata':value['metadata_sha256']='0'*64
+        else:
+            value['rows']+=1;value['metadata_sha256']=converter.canonical_json_sha256_hex(
+                {'rows':value['rows'],'fingerprints':value['fingerprints']})
+        row_index.save(legacy,value)
+    calls=[];parse=converter.parse_graph
+    monkeypatch.setattr(converter,'parse_graph',lambda *a,**kw:calls.append(True)or parse(*a,**kw))
+    assert converter.seed_content_fingerprints([path],'tokenizer-a',classification_migrations=[proof])==expected
+    assert calls==[True,True]
+
+
+def test_classification_proof_cannot_continue_changed_fingerprint_semantics(tmp_path,monkeypatch):
+    path,proof,part,legacy,original,expected=_classification_content_fixture(tmp_path,monkeypatch)
+    read=converter.Path.read_text;module=Path(converter.__file__).resolve()
+    def changed_law(p,*a,**kw):
+        text=read(p,*a,**kw)
+        return text.replace("'nodes': graph['nodes']", "'nodes': graph['nodes'], 'changed': True")if p.resolve()==module else text
+    monkeypatch.setattr(converter.Path,'read_text',changed_law)
+    monkeypatch.setattr(converter,'graph_content_sha256',lambda graph:converter.canonical_json_sha256_hex(
+        {'tokenizer_fingerprint':graph['tokenizer_fingerprint'],'nodes':graph['nodes'],'changed':True}))
+    calls=[];parse=converter.parse_graph
+    monkeypatch.setattr(converter,'parse_graph',lambda *a,**kw:calls.append(True)or parse(*a,**kw))
+    seen,_=converter.seed_content_fingerprints([path],'tokenizer-a',classification_migrations=[proof])
+    assert calls==[True,True] and seen!=expected[0] and legacy.read_bytes()==original
+
+
+def test_classification_content_proof_race_rejects_before_cache_publication(tmp_path,monkeypatch):
+    from natlang_neuralese.train import native_source_classification as migration
+    path,proof,part,legacy,original,_=_classification_content_fixture(tmp_path,monkeypatch)
+    read_index=migration._index
+    def raced(reference):
+        result=read_index(reference)
+        value=json.loads(proof.read_text());value['changed_during_validation']=True
+        proof.write_text(json.dumps(value));return result
+    monkeypatch.setattr(migration,'_index',raced)
+    monkeypatch.setattr(converter,'parse_graph',lambda *_a,**_kw:pytest.fail('raced proof fell through'))
+    with pytest.raises(ValueError,match='artifact changed'):
+        converter.seed_content_fingerprints([path],'tokenizer-a',classification_migrations=[proof])
+    assert list((tmp_path/'cache').glob('teacher-content-*.pkl'))==[legacy]
+    assert legacy.read_bytes()==original

@@ -1015,7 +1015,7 @@ def _valid_content_index(cached, key):
             {'rows': count, 'fingerprints': contents}))
 
 
-def _content_index_policy_sha256():
+def _content_index_policy_sha256(parser_sha256=None):
     from scripts.neuralese_data.continue_native_source_indexes import POLICY_FILES
     package = Path(__file__).resolve().parents[2] / 'training/neuralese/natlang_neuralese'
     functions = {'graph_content_sha256', '_validated_content_fingerprints', '_valid_content_index'}
@@ -1026,8 +1026,9 @@ def _content_index_policy_sha256():
         raise ValueError('teacher content-index law is incomplete')
     return canonical_json_sha256_hex({
         'schema': 'natlang.teacher-content-index-law/2', 'functions': law,
-        'parser': {name: sha256_file(package / name)
-                   for name in (*POLICY_FILES, 'data/native_graph.py')}})
+        'parser': (parser_sha256 if parser_sha256 is not None else
+                   {name: sha256_file(package / name)
+                    for name in (*POLICY_FILES, 'data/native_graph.py')})})
 
 
 # Independently reviewed legacy whole-converter identity. Migration is available
@@ -1039,8 +1040,91 @@ _REVIEWED_LEGACY_CONTENT_CACHE = {
 }
 
 
-def seed_content_fingerprints(paths, fingerprint):
+def _classification_content_cache(part, proof, key, source_bytes):
+    """Reuse an exact content cache through authenticated class-only indexes."""
     from natlang_neuralese.common import row_index
+    from natlang_neuralese.train import native_source_classification as migration
+    package = Path(migration.__file__).resolve().parents[1]
+    if part['source'].get('bytes', source_bytes) != source_bytes:
+        raise ValueError('content continuation source byte binding changed')
+    if part['producer'] != migration._binding(migration.__file__):
+        raise ValueError('content continuation classification producer changed')
+    old_policy = part.get('old_policy') or {}
+    if set(old_policy) != set(migration.POLICY_FILES):
+        raise ValueError('content continuation lost its original parser inventory')
+    parser = {name: migration._binding(migration._checked(ref))['sha256']
+              for name, ref in old_policy.items()}
+    roots = set()
+    for name, ref in old_policy.items():
+        root = Path(ref['path']).resolve()
+        for _ in Path(name).parts:
+            root = root.parent
+        if (root / name).resolve() != Path(ref['path']).resolve():
+            raise ValueError('content continuation original parser path differs')
+        roots.add(root)
+    if len(roots) != 1:
+        raise ValueError('content continuation original parser roots differ')
+    old_graph = roots.pop() / 'data/native_graph.py'
+    if sha256_file(old_graph) != sha256_file(package / 'data/native_graph.py'):
+        return None
+    parser['data/native_graph.py'] = sha256_file(old_graph)
+    legacy_key = {**key, 'policy_sha256': _content_index_policy_sha256(parser)}
+    legacy_path = row_index.entry_path('teacher-content', canonical_json_sha256_hex(legacy_key))
+    if not legacy_path.is_file():
+        return None
+    legacy_ref = migration._binding(legacy_path)
+    legacy = row_index.load(legacy_path)
+    if not _valid_content_index(legacy, legacy_key):
+        return None
+    old, new = migration._index(part['old_index']), migration._index(part['new_index'])
+    current_policy = {name: migration._binding(package / name) for name in migration.POLICY_FILES}
+    old_key = old['key']
+    if (old_key['source_sha256'] != key['source_sha256']
+            or old_key['tokenizer'] != key['tokenizer_fingerprint']
+            or old_key['kind'] != 'native-graphs' or old_key['split'] != 'train'
+            or old_key['policy_sha256'] != canonical_json_sha256_hex(
+                {name: parser[name] for name in migration.POLICY_FILES})
+            or new['key'] != {**old_key, 'policy_sha256': canonical_json_sha256_hex(
+                {name: ref['sha256'] for name, ref in current_policy.items()})}
+            or type(part['rows']) is not int or part['rows'] != len(old['entries'])
+            or len(old['entries']) != len(new['entries'])):
+        raise ValueError('content continuation execution-index identity changed')
+    strip = lambda entry: {k: v for k, v in entry.items() if k not in migration.CLASS_FIELDS}
+    if (any(strip(before) != strip(after) for before, after in zip(old['entries'], new['entries']))
+            or any(any(type(entry.get(name)) is not bool for name in migration.CLASS_FIELDS)
+                   or entry['communication'] != (entry['producer_consumer'] or entry['external_state_consumption'])
+                   for entry in new['entries'])):
+        raise ValueError('content continuation changed non-classification execution metadata')
+    if (legacy['rows'] != len(old['entries'])
+            or not set(legacy['fingerprints'].values()) <= {entry['id'] for entry in old['entries']}):
+        return None
+    return legacy, {'classification_proof': proof, 'old_index': part['old_index'],
+                    'new_index': part['new_index'], 'old_content_index': legacy_ref,
+                    'producer': part['producer'], 'old_policy': old_policy, 'current_policy': current_policy,
+                    'extra_old_parser': migration._binding(old_graph),
+                    'extra_current_parser': migration._binding(package / 'data/native_graph.py')}
+
+
+def _check_content_continuation_witness(value):
+    from natlang_neuralese.train import native_source_classification as migration
+    if isinstance(value, dict):
+        if 'path' in value and 'sha256' in value:
+            migration._checked(value)
+        else:
+            for item in value.values():
+                _check_content_continuation_witness(item)
+
+
+def seed_content_fingerprints(paths, fingerprint, *, classification_migrations=()):
+    from natlang_neuralese.common import row_index
+    from natlang_neuralese.train import native_source_classification as migration
+    proofs = []
+    for path in classification_migrations:
+        reference = migration._binding(path)
+        value = json.loads(Path(path).read_text())
+        if value.get('schema') != migration.SCHEMA or not value.get('indexes'):
+            raise ValueError('content continuation requires a source-classification proof')
+        proofs.append((reference, value))
     policy = _content_index_policy_sha256()
     seen, inputs = {}, []
     for path in paths:
@@ -1051,6 +1135,7 @@ def seed_content_fingerprints(paths, fingerprint):
         cached = row_index.load(cache_path)
         valid = _valid_content_index(cached, key)
         migrated = False
+        evidence = None
         continuation = _REVIEWED_LEGACY_CONTENT_CACHE
         if not valid and policy == continuation['policy_sha256']:
             legacy_key = {**key, 'policy_sha256': continuation['legacy_policy_sha256']}
@@ -1058,6 +1143,18 @@ def seed_content_fingerprints(paths, fingerprint):
             legacy = row_index.load(legacy_path)
             if _valid_content_index(legacy, legacy_key):
                 cached, valid, migrated = legacy, True, True
+        if not valid:
+            for reference, proof in proofs:
+                for part in proof['indexes']:
+                    if part['source']['sha256'] != digest:
+                        continue
+                    reused = _classification_content_cache(part, reference, key, Path(path).stat().st_size)
+                    if reused is not None:
+                        cached, evidence = reused
+                        valid = migrated = True
+                        break
+                if valid:
+                    break
         if valid:
             contents, count = cached['fingerprints'], cached['rows']
         else:
@@ -1065,12 +1162,19 @@ def seed_content_fingerprints(paths, fingerprint):
         if sha256_file(path) != digest:
             raise ValueError('teacher deduplication source changed during validation')
         if not valid or migrated:
+            if evidence is not None:
+                _check_content_continuation_witness(evidence)
             metadata = {'rows': count, 'fingerprints': contents}
             row_index.save(cache_path, {'key': key, **metadata,
                 'metadata_sha256': canonical_json_sha256_hex(metadata)})
         for content, identifier in contents.items():
             seen.setdefault(content, {'path': str(path), 'id': identifier})
-        inputs.append({'path': str(path), 'sha256': digest, 'rows': count})
+        item = {'path': str(path), 'sha256': digest, 'rows': count}
+        if evidence is not None:
+            item['content_cache_continuation'] = evidence
+        inputs.append(item)
+    if any(migration._binding(ref['path']) != ref for ref, _ in proofs):
+        raise ValueError('content continuation classification proof changed during validation')
     return seen, inputs
 
 
@@ -1101,6 +1205,8 @@ def main():
                         help='explicit rendering policy; omitted preserves the backbone default')
     parser.add_argument("--protection-manifest", type=Path, required=True)
     parser.add_argument('--deduplicate-against', type=Path, action='append', default=[])
+    parser.add_argument('--content-index-classification-migration', type=Path, action='append', default=[],
+                        help='authenticate class-only parser/index continuation of historical content caches')
     parser.add_argument("--model-key", choices=("lfm25", "mellum21"), required=True)
     args = parser.parse_args()
     if args.scaffold_harvest is not None and not args.source.exists():
@@ -1121,7 +1227,8 @@ def main():
     inventory = base_inventory(args.base_tokenizer)
     model_type = json.loads((args.base_tokenizer / "config.json").read_text())["model_type"]
     model_id = model_type + ":" + canonical_json_sha256_hex(inventory)
-    seen_contents, dedup_inputs = seed_content_fingerprints(args.deduplicate_against, expanded_fingerprint)
+    seen_contents, dedup_inputs = seed_content_fingerprints(args.deduplicate_against, expanded_fingerprint,
+        classification_migrations=args.content_index_classification_migration)
     duplicate_omissions = []
     writer = GraphWriter(args.output / "train" / "native-graphs.jsonl.zst")
     held = GraphWriter(args.output / "test" / "native-graphs.jsonl.zst")

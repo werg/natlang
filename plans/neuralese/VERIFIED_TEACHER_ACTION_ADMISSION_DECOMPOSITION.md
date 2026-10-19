@@ -89,3 +89,25 @@ complete validator counts; no new semantic selection policy is introduced.
 
 This is exact cache identity and provenance plumbing. It makes no new quality,
 training-admission, execution or exposure decision.
+# Classification-backed content-index continuation
+
+The admission policy remains the existing exact source, split, quality and
+protection policy. A classification repair must not make unchanged historical
+graph content wait for another payload parse. Reuse its explicitly selected
+classification proof only as an exact cache-continuation witness:
+
+1. Bind the proof, original/current parser inventories, producer implementation
+   and both execution indexes. Require the same source, tokenizer and train
+   split, with identical ordered execution metadata except classification flags.
+2. Derive the predecessor content-cache key using the current fingerprint and
+   cache-validation function ASTs and the authenticated predecessor parser
+   inventory. The additional native-graph parser module must be byte-identical.
+3. Reuse only a valid predecessor cache with matching source/tokenizer, row
+   count, payload digest and indexed identities. Publish the same fingerprints
+   under the current policy key and retain the original cache and proof binding.
+4. Missing or incompatible content caches use ordinary validation. Invalid
+   selected proof/index bindings fail before reuse. This mechanism grants no
+   graph admission, changed semantic verdict, geometry or earned exposure.
+
+These are crisp identity and durability checks. There is no new model-facing
+policy, teacher response, graph conversion or student control action.
