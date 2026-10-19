@@ -18,7 +18,7 @@ from natlang_neuralese.rl.graph_replay import save_bundle
 from natlang_neuralese.serve.store import encode_native_state
 
 
-def fixture(tmp_path):
+def fixture(tmp_path,*,use_expert_backend=True):
     device=os.environ.get('NATLANG_NATIVE_ADAPTER_TEST_DEVICE','cpu')
     original,channel,_,_=case(tmp_path,'lfm','mellum')
     participants={name:SemanticParticipant(value.model,value.tokenizer,value.config,value.identity,
@@ -28,8 +28,9 @@ def fixture(tmp_path):
         recipe=tmp_path/(name+'-recipe.json');recipe.write_text(json.dumps({'model':name}))
         value.recipe_binding=native_recipe_binding(recipe,('a' if name=='lfm' else 'b')*64)
     from natlang_neuralese.train.fp8_backend import make_backend
-    participants['mellum'].backend=make_backend('triton-experts',participants['mellum'].model.port.hf,device=device)
-    participants['mellum'].model.port.activation_checkpoint=participants['mellum'].backend.checkpoint
+    if use_expert_backend:
+        participants['mellum'].backend=make_backend('triton-experts',participants['mellum'].model.port.hf,device=device)
+        participants['mellum'].model.port.activation_checkpoint=participants['mellum'].backend.checkpoint
     config={'schema':stage.CONFIG_SCHEMA,'backbone_lr':1e-4,'vae_lr':1e-3,'latent_width':4,'hidden_width':8,
         'models':{name:{'fp8_training':'triton-experts' if name=='mellum' else 'off'} for name in participants},
         'checkpoint_every':1,'eval_every':100,'phases':[{'id':kind,'kind':kind,'epochs':1} for kind in ('vae','joint','distill')]}
@@ -134,3 +135,35 @@ def test_real_joint_policy_stage_stop_resume_preserves_both_models_codec_optimiz
     extended_export=json.loads((tmp_path/'extended'/'semantic-adapter.json').read_text())
     for name in a['participants']:
         assert extended_export['models'][name]['recipe_binding']==export['models'][name]['recipe_binding']
+
+
+def test_real_cpu_policy_stage_qualifies_policy_and_preserves_exact_interrupted_training(tmp_path,monkeypatch):
+    path,manifest,config,parent=fixture(tmp_path,use_expert_backend=False)
+    # Load the real tiny native checkpoints; only the production CUDA FP8
+    # backend selection is replaced for this CPU arithmetic regression.
+    from natlang_neuralese.model.native_model import load_native_checkpoint,native_identity
+    def load(name,binding,config,device):
+        model,tokenizer,_,model_config,_=load_native_checkpoint(binding['checkpoint']['path'],
+            device=device,participant=binding['checkpoint'].get('participant'))
+        return SemanticParticipant(model,tokenizer,model_config,
+            native_identity(model,model_config,checkpoint_sha256=binding['checkpoint']['sha256']),
+            make_native_optimizer(model,lr=config['backbone_lr'],in_backward=False)[0])
+    monkeypatch.setattr(stage,'load_participant',load)
+    torch.manual_seed(1973)
+    whole=stage.run(path,manifest,tmp_path/'whole-cpu',resume=parent,device='cpu')
+    assert whole['exposure_complete'] and whole['step']==5
+    assert not whole['production_ready']  # CPU arithmetic does not qualify Mellum FP8.
+    complete=CheckpointPolicy.load(tmp_path/'whole-cpu'/'checkpoint.pt')
+    proofs=list(complete['training']['phase_qualifications'].values())
+    assert {proof['profile']['phase']for proof in proofs}=={'vae','joint','distill','policy'}
+    assert next(p for p in proofs if p['profile']['phase']=='policy')['profile']['objective']=='whole-policy-episode'
+    assert list(whole['exposure']['policy'].values())==[{'episode':2}]
+    torch.manual_seed(1973)
+    paused=stage.run(path,manifest,tmp_path/'paused-cpu',resume=parent,device='cpu',max_updates=2)
+    assert not paused['completed']
+    resumed=stage.run(path,manifest,tmp_path/'paused-cpu',resume=tmp_path/'paused-cpu'/'checkpoint.pt',device='cpu')
+    continued=CheckpointPolicy.load(tmp_path/'paused-cpu'/'checkpoint.pt')
+    assert resumed['exposure_complete'] and resumed['exposure']==whole['exposure']
+    assert not resumed['production_ready']
+    for key in ('vae_state','vae_optimizer','participants'):assert_same(complete[key],continued[key])
+    assert_same(complete['training']['rng'],continued['training']['rng'])

@@ -133,7 +133,7 @@ class SemanticChannel:
 
     def adapt(self, block, *, target_name, target_model, target_tokenizer, target_identity,
               allow_nearest=False,source_state_id=None,target_adapter_binding=None,
-              source_channel=None,training_execution=None):
+              source_channel=None,training_execution=None,reference=False):
         from .semantic_message import SemanticStateMessage, retained_source_offsets
         self.require_target(target_name, target_identity)
         if target_adapter_binding is not None:
@@ -162,7 +162,7 @@ class SemanticChannel:
         ids = tuple(target_tokens['input_ids'])
         op, close = target_model.marker_ids[:2]
         plan = compile_graph([Invocation('__semantic_payload', (op, *ids, close), producing=((1, 1+len(ids)),))])
-        baseline = capture_block(target_model(plan), '__semantic_payload', 1, 1+len(ids),
+        baseline = capture_block(target_model(plan,reference=reference), '__semantic_payload', 1, 1+len(ids),
                                  text=block.text, adapter_binding=target_adapter_binding, **target_identity)
         device = next(self.vae.parameters()).device
         code = message.code.to(device=device, dtype=next(self.vae.parameters()).dtype)

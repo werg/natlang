@@ -116,7 +116,7 @@ def compile_semantic_episode(rollout,participants,*,channel,fetch_block):
 
 
 def semantic_episode_loss(participants,replays,dependencies,*,channel,external_blocks,advantage,mode='grpo',
-                          clip_low=.2,clip_high=.28,chunk_tokens=128,training_execution=None,behavior_channel=None):
+                          clip_low=.2,clip_high=.28,chunk_tokens=128,training_execution=None,behavior_channel=None,reference=False):
     """One joint policy objective; this mechanism never steps any optimizer."""
     import math
     import torch
@@ -127,7 +127,7 @@ def semantic_episode_loss(participants,replays,dependencies,*,channel,external_b
         raise ValueError('semantic policy objective needs an actual finite admitted advantage and supported mode')
     results,execution=execute_codec_graph(participants,{name:replay.plan for name,replay in replays.items()},
         dependencies,channel=channel,external_blocks=external_blocks,
-        training_execution=training_execution,behavior_channel=behavior_channel)
+        training_execution=training_execution,behavior_channel=behavior_channel,reference=reference)
     terms=[];count=0;by_model={}
     for name,replay in replays.items():
         from ..model.native_adapters import require_model_execution_actor

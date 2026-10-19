@@ -64,3 +64,21 @@ continuation pass. Existing complete-gradient/cotangent CPU regressions and
 whole-policy continuation checks pass; CUDA-only cases are explicitly skipped
 in that CPU regression invocation. Target-hardware measurements remain mandatory
 at the cloud phase boundary. These local checks do not grant cloud readiness.
+
+Independent review found that the policy branch skipped the phase gate. Extend
+the same objective boundary, complete comparator and retained-gradient capacity
+mechanisms to complete authenticated policy episodes. Pass the explicit cached
+reference through every native segment and codec target baseline. Scan actual
+admitted policy episode geometry once per bound source/profile and qualify its
+frontier, retaining a derivative representative of each active participant set,
+objective mode, advantage sign and communication kind. Keep source rewards, actor/codec history
+and update/exposure counters immutable. This is exact execution plumbing for the
+existing curriculum, not a new curriculum policy or a text-only RL substitute.
+
+Policy extension verification: 65 focused CPU cases pass across the complete
+phase checks, real heterogeneous-tokenizer codec episodes, gradient routing and
+semantic continuation. A further real CPU curriculum executes VAE, joint,
+distillation and two complete policy updates, and matches every model, VAE,
+optimizer and RNG tensor after interruption/resume. Its Mellum FP8 production
+certificate remains false on CPU; the CUDA-specific test remains explicitly
+skipped. No target-hardware qualification is inferred from these checks.

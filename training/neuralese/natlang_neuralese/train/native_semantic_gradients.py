@@ -49,6 +49,16 @@ class SemanticObjectiveScope:
 
 def qualify_joint_gradients(vae, participants, row, *, phase, options=None,
                             fetch_external=None, atol, rtol, device, optimizer=None):
+    from .native_semantic import joint_loss
+    def forward(reference):
+        return joint_loss(vae,participants,row,phase=phase,options=options,
+            fetch_external=fetch_external,reference=reference)
+    return qualify_objective_gradients(vae,participants,row,forward=forward,phase=phase,
+        options=options,atol=atol,rtol=rtol,device=device,optimizer=optimizer)
+
+
+def qualify_objective_gradients(vae, participants, row, *, forward, phase, options=None,
+                                atol, rtol, device, optimizer=None):
     """Measure the real two-sided objective without consuming a training update.
 
     The existing complete comparator retains CPU reference derivatives and
@@ -56,7 +66,6 @@ def qualify_joint_gradients(vae, participants, row, *, phase, options=None,
     synthetic input embedding argument in this objective.
     """
     from .native_semantic_boundary import ObjectiveBoundary
-    from .native_semantic import joint_loss
     from ..eval.native_gradients import compare_complete_gradients
     from ..common.hashing import canonical_json_sha256_hex
 
@@ -70,16 +79,14 @@ def qualify_joint_gradients(vae, participants, row, *, phase, options=None,
     reference_scope = None
     try:
         flat_scope = SemanticObjectiveScope(participants,vae,mode='vjp').__enter__()
-        flat_loss,_ = joint_loss(vae,participants,row,phase=phase,options=options,
-                                fetch_external=fetch_external)
+        flat_loss,_ = forward(False)
         actual_loss = float(flat_loss.detach())
         reference_losses = []
         def reference():
             nonlocal reference_scope
             boundary.restore()
             reference_scope=SemanticObjectiveScope(participants,vae,mode='vjp').__enter__()
-            loss,_=joint_loss(vae,participants,row,phase=phase,options=options,
-                              fetch_external=fetch_external,reference=True)
+            loss,_=forward(True)
             reference_losses.append(float(loss.detach()))
             return loss,None,reference_scope
         proof=compare_complete_gradients(flat_loss,None,named,None,None,

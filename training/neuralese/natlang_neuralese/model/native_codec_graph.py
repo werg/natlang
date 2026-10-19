@@ -56,7 +56,7 @@ def _identity(block):
 
 
 def execute_codec_graph(participants, plans, dependencies, *, channel, external_blocks=None,
-                        training_execution=None,behavior_channel=None):
+                        training_execution=None,behavior_channel=None,reference=False):
     """Run every actual invocation once, preserving all cross-segment adjoints.
 
     Participants expose model/tokenizer/identity. The caller owns backend scopes,
@@ -158,7 +158,7 @@ def execute_codec_graph(participants, plans, dependencies, *, channel, external_
                             target_adapter_binding=target['adapter_binding'],allow_nearest=True,
                             source_state_id=dependency.source_state_id,
                             source_channel=source_channel if source_channel is not channel else None,
-                            training_execution=training_execution)
+                            training_execution=training_execution,reference=reference)
                 block,receipt=bank.execute(name,adapt) if bank is not None else adapt()
                 if (block.token_ids.tolist()!=list(dependency.target_token_ids)
                         or receipt['mode']!='learned-semantic-state-deltas'):
@@ -188,7 +188,7 @@ def execute_codec_graph(participants, plans, dependencies, *, channel, external_
         plan=compile_graph(selected,external_sizes=sizes)
         with invocation_graph_scope(model.port,names):
             result=model(plan,external_blocks=blocks,external_identity={key:_identity(block) for key,block in blocks.items()},
-                         retain_states=any(needed[name] for name in names))
+                         retain_states=any(needed[name] for name in names),reference=reference)
         execution.append({'kind':'native-graph-segment','participant':owner,'invocations':list(names),
                           'physical_tokens':plan.token_count,'logical_slots':sum(map(len,plan.sequences))})
         for node,offset in zip(plan.invocations,plan.offsets):

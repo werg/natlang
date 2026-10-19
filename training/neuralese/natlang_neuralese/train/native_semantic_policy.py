@@ -194,11 +194,11 @@ def checkpoint_progress(training):
     return {key:training[key] for key in keys if key in training}
 
 
-def policy_loss(source,entry,participants,vae,training,origin,*,device,loaded=None):
-    """Use current joint tensors with separately authenticated behavior history."""
+def prepare_policy(source,entry,participants,vae,training,origin,*,device,loaded=None):
+    """Compile the actual authenticated complete episode without model execution."""
     from types import SimpleNamespace
     from ..model.semantic_channel import SemanticChannel
-    from ..rl.native_semantic_replay import compile_semantic_episode,semantic_episode_loss
+    from ..rl.native_semantic_replay import compile_semantic_episode
     rollout,behavior,fetch=loaded or source.load(entry,device=device)
     if set(behavior.bindings)-set(participants):
         raise ValueError('semantic policy behavior names an absent current participant')
@@ -222,11 +222,20 @@ def policy_loss(source,entry,participants,vae,training,origin,*,device,loaded=No
     execution={'schema':'natlang.native-semantic-policy-execution/1',
         'parent_checkpoint_sha256':origin['checkpoint_sha256'],'parent_adapter_sha256':origin['adapter_sha256'],
         'parent_step':origin['step'],'step':training['step'],'behavior_adapter_sha256':behavior.adapter_sha256}
+    return selected,replays,dependencies,channel,external,execution,behavior
+
+
+def policy_loss(source,entry,participants,vae,training,origin,*,device,loaded=None,
+                reference=False,prepared=None):
+    """Use current joint tensors with separately authenticated behavior history."""
+    from ..rl.native_semantic_replay import semantic_episode_loss
+    selected,replays,dependencies,channel,external,execution,behavior=(prepared or
+        prepare_policy(source,entry,participants,vae,training,origin,device=device,loaded=loaded))
     declaration=source.declaration
     loss,details=semantic_episode_loss(selected,replays,dependencies,channel=channel,external_blocks=external,
         advantage=entry['advantage'],mode=entry['mode'],clip_low=declaration.get('clip_low',.2),
         clip_high=declaration.get('clip_high',.28),chunk_tokens=declaration.get('chunk_tokens',128),
-        training_execution=execution,behavior_channel=behavior)
+        training_execution=execution,behavior_channel=behavior,reference=reference)
     return loss,{**details,'training_execution':execution,'source_row_sha256':entry['id'],
         'behavior_source':source.sources[entry['source']]},set(replays)
 

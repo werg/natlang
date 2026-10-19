@@ -8,7 +8,7 @@ from ..common.jsonio import write_json_durable
 from ..eval.native_memory import _HostPeak
 from .native_semantic_boundary import ObjectiveBoundary
 from .native_semantic import parse_pair, consumer_example, joint_loss
-from .native_semantic_gradients import SemanticObjectiveScope, qualify_joint_gradients
+from .native_semantic_gradients import SemanticObjectiveScope, qualify_joint_gradients, qualify_objective_gradients
 
 
 
@@ -50,7 +50,7 @@ def capacity_frontier(source, participants):
     return frontier,representatives,count
 
 
-def qualify_capacity(vae, participants, row, *, phase, options, optimizer, fetch_external, device):
+def qualify_capacity(vae, participants, row, *, phase, options, optimizer, fetch_external, device, forward=None, whole_geometry=None):
     """Match production: keep ALL gradients until whole backward and clipping."""
     boundary=ObjectiveBoundary(participants,vae,optimizer,device)
     started=time.monotonic()
@@ -59,7 +59,8 @@ def qualify_capacity(vae, participants, row, *, phase, options, optimizer, fetch
         if cuda:torch.cuda.synchronize(device)
         with _HostPeak() as peak:
             with SemanticObjectiveScope(participants,vae) as scope:
-                loss,_=joint_loss(vae,participants,row,phase=phase,options=options,fetch_external=fetch_external)
+                loss,_=(forward(False) if forward is not None else joint_loss(vae,participants,row,
+                    phase=phase,options=options,fetch_external=fetch_external))
                 loss.backward();scope.finish()
             parameters=[p for _,p in boundary.named if p.requires_grad and p.grad is not None]
             norm=torch.nn.utils.clip_grad_norm_(parameters,options.get('max_grad_norm',float('inf')))
@@ -67,7 +68,7 @@ def qualify_capacity(vae, participants, row, *, phase, options, optimizer, fetch
             finite=bool(torch.isfinite(loss.detach()) and torch.isfinite(norm))
             proof={'schema':'natlang.native-semantic-whole-pair-capacity/1','passed':finite,
                 'phase':phase,'row_sha256':canonical_json_sha256_hex(row),
-                'whole_pair_geometry':list(geometry(row,participants)),
+                'whole_pair_geometry':list(whole_geometry if whole_geometry is not None else geometry(row,participants)),
                 'loss':float(loss.detach()),'gradient_norm':float(norm),
                 'retained_gradient_bytes':sum(p.grad.numel()*p.grad.element_size() for p in parameters),
                 'gradient_lifetime':'all participant and VAE gradients retained through whole backward and clipping',
@@ -80,7 +81,7 @@ def qualify_capacity(vae, participants, row, *, phase, options, optimizer, fetch
 
 
 def ensure_phase_qualification(vae, participants, source, *, phase, options, optimizer,
-                               fetch_external, device, training, out, cache):
+                               fetch_external, device, training, out, cache, objective=None):
     """Checkpoint-carried phase evidence; adaptive new profiles qualify anew."""
     from pathlib import Path
     files=[Path(__file__),Path(__file__).with_name('native_semantic_boundary.py'),
@@ -110,6 +111,7 @@ def ensure_phase_qualification(vae, participants, source, *, phase, options, opt
         'cuda_matmul_tf32':torch.backends.cuda.matmul.allow_tf32,'cudnn_tf32':torch.backends.cudnn.allow_tf32}
     invocation={'runtime_code_sha256':cache[runtime_key],'numerical_runtime':numerical_runtime,
         'execution':execution,'phase':phase,'options':options,'source':source.binding,
+        'objective':objective.kind if objective is not None else 'paired-semantic',
         'participants':{name:entry.identity for name,entry in sorted(participants.items())},
         'trainables':{name:[(key,list(p.shape),str(p.dtype)) for key,p in entry.model.named_parameters() if p.requires_grad]
                       for name,entry in sorted(participants.items())},
@@ -119,8 +121,9 @@ def ensure_phase_qualification(vae, participants, source, *, phase, options, opt
     key=canonical_json_sha256_hex(invocation)
     completed=training.setdefault('phase_qualifications',{})
     if completed.get(key,{}).get('passed') is True:return completed[key]
-    frontier_key=canonical_json_sha256_hex({'source':source.binding,'participants':sorted(participants)})
-    if frontier_key not in cache:cache[frontier_key]=capacity_frontier(source,participants)
+    frontier_key=canonical_json_sha256_hex({'source':source.binding,'participants':sorted(participants),'objective':invocation['objective']})
+    if frontier_key not in cache:cache[frontier_key]=(objective.frontier(participants) if objective is not None
+                                                               else capacity_frontier(source,participants))
     frontier,representatives,count=cache[frontier_key]
     numerical=[];capacities=[]
     proof_directory=Path(out)/'phase-qualifications'
@@ -136,17 +139,23 @@ def ensure_phase_qualification(vae, participants, source, *, phase, options, opt
     progress('qualifying')
     boundary=ObjectiveBoundary(participants,vae,optimizer,device)
     try:
-        for active,row in sorted(representatives.items()):
+        for category,row in sorted(representatives.items()):
+            active=category[0] if objective is not None else category
             selected={name:participants[name] for name in active}
-            numerical.append(qualify_joint_gradients(vae,selected,row,phase=phase,options=options,
-                fetch_external=fetch_external,atol=options.get('gradient_atol',1e-5),
-                rtol=options.get('gradient_rtol',1e-4),device=device,optimizer=optimizer))
+            arguments=dict(phase=phase,options=options,atol=options.get('gradient_atol',1e-5),
+                rtol=options.get('gradient_rtol',1e-4),device=device,optimizer=optimizer)
+            numerical.append(qualify_objective_gradients(vae,selected,row,
+                forward=lambda reference:objective.loss(row,reference),**arguments) if objective is not None else
+                qualify_joint_gradients(vae,selected,row,fetch_external=fetch_external,**arguments))
             progress('qualifying',last_gradient=numerical[-1])
             if numerical[-1]['passed'] is not True:raise RuntimeError('complete semantic objective gradient qualification failed')
         for _,row in frontier:
-            selected={name:participants[name] for name in sorted(set(row['models'])&set(participants))}
+            selected=(participants if objective is not None else
+                      {name:participants[name] for name in sorted(set(row['models'])&set(participants))})
             capacities.append(qualify_capacity(vae,selected,row,phase=phase,options=options,
-                optimizer=optimizer,fetch_external=fetch_external,device=device))
+                optimizer=optimizer,fetch_external=fetch_external,device=device,
+                **({'forward':lambda reference:objective.loss(row,reference),
+                    'whole_geometry':objective.geometry(row)} if objective is not None else {})))
             progress('qualifying',last_capacity=capacities[-1])
             if capacities[-1]['passed'] is not True:raise RuntimeError('whole-pair semantic capacity qualification failed')
     except BaseException as error:

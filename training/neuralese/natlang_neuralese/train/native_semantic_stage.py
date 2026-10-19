@@ -736,11 +736,14 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
         optimizer.zero_grad(set_to_none=True)
         vae.requires_grad_(phase['kind'] != 'distill')
         _adjust_lr(optimizer, options.get('vae_lr', config['vae_lr']))
-        if not policy_due:
-            from .native_semantic_capacity import ensure_phase_qualification
-            ensure_phase_qualification(vae, selected, train, phase=phase['kind'], options=options,
-                optimizer=optimizer, fetch_external=resolver, device=device,
-                training=training, out=out, cache=qualification_cache)
+        from .native_semantic_capacity import ensure_phase_qualification
+        objective=None
+        if policy_due:
+            from .native_semantic_policy_capacity import PolicyQualification
+            objective=PolicyQualification(policy_source,participants,vae,training,origin,device)
+        ensure_phase_qualification(vae, selected, objective if policy_due else train,
+            phase=phase['kind'], options=options,optimizer=optimizer,fetch_external=resolver,
+            device=device,training=training,out=out,cache=qualification_cache,objective=objective)
         for participant in selected.values():
             if participant.backend is not None:participant.backend.reset_row_counts()
         from .native_semantic_gradients import SemanticObjectiveScope
