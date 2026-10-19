@@ -14,6 +14,7 @@ import json
 import math
 import os
 import random
+import signal
 import subprocess
 import sys
 import time
@@ -898,6 +899,15 @@ def _foundation_readiness_boundary(foundation, prior_foundations, *, completed,
 
 
 def main(argv=None):
+    from .loop import StopSignal
+    requested_refresh = StopSignal().install((signal.SIGUSR2,))
+    try:
+        return _main(argv, requested_refresh=requested_refresh)
+    finally:
+        requested_refresh.restore()
+
+
+def _main(argv=None, *, requested_refresh):
     args = build_parser().parse_args(argv)
     if args.ffn_chunk_tokens is not None and args.ffn_chunk_tokens<0:
         raise ValueError('ffn-chunk-tokens must be a nonnegative integer')
@@ -1719,7 +1729,8 @@ def main(argv=None):
             print(json.dumps(progress, sort_keys=True), flush=True)
             relative_refresh_due = (args.refresh_after_updates is not None
                                     and step - resumed_step >= args.refresh_after_updates)
-            due_checkpoint = policy.due(step, end=step == total_end) or relative_refresh_due
+            due_checkpoint = (policy.due(step, end=step == total_end)
+                              or relative_refresh_due or requested_refresh.requested)
             if policy.signaled:
                 break
             due_task = task_eval is not None and ((step == total_end and not policy_operation) or
@@ -1801,7 +1812,7 @@ def main(argv=None):
                       fp8_state=backend.extra_state() if backend is not None else None, sft_progress=carried_progress)
                 last_saved_step = step
                 metadata_dirty = False
-            if relative_refresh_due or (args.refresh_after_updates is None
+            if requested_refresh.requested or relative_refresh_due or (args.refresh_after_updates is None
                                         and args.refresh_at_checkpoint and due_checkpoint):
                 refresh_boundary = True
                 break
@@ -1933,6 +1944,8 @@ def main(argv=None):
         if admission_record and admission_record['global_step'] == global_step and step == resumed_step else None)
     continuation_boundary = {'kind': 'semantic-refresh', 'reached': bool(refresh_boundary and step>resumed_step),
         'new_optimizer_updates':step-resumed_step, 'checkpoint_sha256':checkpoint_sha}
+    if requested_refresh.received:
+        continuation_boundary['requested_signals'] = requested_refresh.received
     foundation_ready = bool(foundation_boundary and runtime_report.get('passed') is True and task_receipt_ok)
     resident_receipt = ({'generation': resident.generation, 'directory': str(resident.directory.resolve()),
                          'history': resident.state['history']} if resident and resident.state else None)

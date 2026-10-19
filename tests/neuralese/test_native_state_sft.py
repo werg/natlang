@@ -1069,7 +1069,7 @@ def test_held_failure_preserves_completed_optimizer_rng_and_exposure_for_exact_r
         equal(actual[key], expected[key])
 
 
-@pytest.mark.parametrize('refresh',[True,False])
+@pytest.mark.parametrize('refresh',['checkpoint','relative','signal','complete'])
 def test_refresh_only_boundary_does_not_force_task_window(tmp_path,monkeypatch,refresh):
     import json
     import torch
@@ -1095,15 +1095,45 @@ def test_refresh_only_boundary_does_not_force_task_window(tmp_path,monkeypatch,r
         '--epochs','2','--checkpoint-every','1','--eval-every','1',
         '--task-eval-every','0','--out',str(out),
         '--task-eval',json.dumps({'packet':{'path':'unused','sha256':'s'},'cases':[0]})]
-    if refresh:argv+=['--refresh-at-checkpoint']
+    if refresh=='checkpoint':argv+=['--refresh-at-checkpoint']
+    elif refresh=='relative':argv+=['--refresh-after-updates','1']
+    elif refresh=='signal':
+        import copy
+        import os
+        import signal
+        # Request after the real optimizer update, with both cadence options far
+        # away: the saved weights/moments/RNG/exposure must still reach refresh.
+        argv+=['--refresh-after-updates','1000','--checkpoint-every','1000']
+        update=trainer.native_training_update
+        expected_state={}
+        def request_after_update(*args,**kwargs):
+            result=update(*args,**kwargs)
+            expected_state['optimizer']=copy.deepcopy(args[1].state_dict())
+            expected_state['rng']=trainer.capture_training_rng_state('cpu')
+            os.kill(os.getpid(),signal.SIGUSR2)
+            return result
+        monkeypatch.setattr(trainer,'native_training_update',request_after_update)
     assert trainer.main(argv)==0
     report=json.loads((out/'report.json').read_text())
-    if refresh:
+    if refresh!='complete':
         assert not calls
         assert report['completed'] is False
         assert report['continuation_boundary']['reached'] is True
         assert report['continuation_boundary']['new_optimizer_updates']==1
         assert torch.load(out/'checkpoint.pt',weights_only=False)['training']['exposure_counts']=={'train':1}
+        if refresh=='signal':
+            assert report['continuation_boundary']['requested_signals'][0]['signal']=='SIGUSR2'
+            saved=torch.load(out/'checkpoint.pt',weights_only=False)['training']
+            def equal(left,right):
+                if isinstance(left,dict):
+                    assert left.keys()==right.keys()
+                    for key in left:equal(left[key],right[key])
+                elif isinstance(left,(tuple,list)):
+                    assert len(left)==len(right)
+                    for a,b in zip(left,right,strict=True):equal(a,b)
+                elif hasattr(left,'shape'):assert (left==right).all()
+                else:assert left==right
+            for key,value in expected_state.items():equal(saved[key],value)
     else:
         assert calls and all(final for _,final in calls)
         assert report['completed'] is True
