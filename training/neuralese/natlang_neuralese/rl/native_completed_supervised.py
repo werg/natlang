@@ -238,7 +238,7 @@ def consume(config_path,request_ref,result_ref,out,*,controller):
 def consume_raw(config_path,request_ref,result_ref,out,*,controller):
     """Close the real completed raw cursor, keeping every supervised stage pending."""
     from .native_bridge import verify_result
-    from .native_raw_rounds import completed_raw_cursor
+    from .native_raw_rounds import completed_raw_cursor,cycle_work_directory
     out=Path(out);out.parent.mkdir(parents=True,exist_ok=True)
     config,paths=_controls(config_path);_no_owner(controller);_no_active_operation(paths['config'].parent)
     with(paths['config'].parent.parent/'controller.lock').open('a')as lease:
