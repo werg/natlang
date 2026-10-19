@@ -37,11 +37,13 @@ def _old_geometry(plan,device,window=None):
 _ORIGINAL_MASK=shared.graph_block_mask
 
 
-@pytest.mark.parametrize('family',['lfm','mellum','qwen'])
+@pytest.mark.parametrize('family',['lfm','mellum','qwen','mellum-bf16'])
 @pytest.mark.parametrize('device',['cpu','cuda'])
 def test_decode_imported_native_state_and_producer_capture_match_prior_path(family,device,monkeypatch):
     if device=='cuda' and not torch.cuda.is_available():pytest.skip('CUDA unavailable')
-    model=shared.SharedStateModel(tiny(family).to(device),(58,59,60,61),rank=4).eval()
+    port=tiny('mellum' if family=='mellum-bf16' else family).to(device)
+    if family=='mellum-bf16':port.bfloat16()
+    model=shared.SharedStateModel(port,(58,59,60,61),rank=4).eval()
     torch.nn.init.normal_(model.adapter.up.weight,std=.03)
     identity=dict(checkpoint_sha256='a'*64,tokenizer_fingerprint='b'*64,embedding_weight_sha256='c'*64)
     def run(old):
@@ -62,6 +64,10 @@ def test_decode_imported_native_state_and_producer_capture_match_prior_path(fami
     with torch.inference_mode():
         actual=run(False)
         monkeypatch.setattr(shared,'graph_block_mask',_old_geometry)
+        from natlang_neuralese.maple import fused_moe
+        import triton
+        monkeypatch.setattr(fused_moe,'_invariant_forward_plan',lambda rows:
+            SimpleNamespace(size=rows,blocks=triton.cdiv(rows,64),block=64))
         expected=run(True)
     for left,right in zip([actual[0],*actual[1]],[expected[0],*expected[1]]):
         assert torch.equal(left['h_final'],right['h_final'])

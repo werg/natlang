@@ -32,3 +32,12 @@ Unadapted no-grad execution also omits the per-round parameter inventory walk
 used only to decide whether an autograd cotangent carrier is needed. Functional
 adapters still resolve/substitute exactly; gradient-enabled VJPs retain the same
 parameter discovery and carrier routing.
+
+Measured next mechanism: fixed linear single-query inference currently pads to
+64 rows and accounts for about86% of actual trained LFM GPU time. Reuse the same
+grouped dense kernel with a16-row inference tile for at most16 actual rows; keep
+K/N tiles, dot precision and accumulation order. Ordinary training/adjoints keep
+the existing64-row tile. Before adoption compare exact outputs and explicit
+input adjoints across arithmetic modes, then full fan-out graph gradients on both
+canonical ports and actual trained-actor sampled/captured-state parity. No
+precision downgrade or probability-law change is authorized by this optimization.

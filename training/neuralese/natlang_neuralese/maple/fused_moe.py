@@ -658,6 +658,14 @@ def ordered_invariant_weight_gradient(records, accumulator):
     return accumulator
 
 
+def _invariant_forward_plan(rows):
+    # Native decode has one/few real rows. The same K/N geometry and dot
+    # reduction are exact with16 rows;64 only adds padded work. Restrict the
+    # smaller tile to true inference, retaining all training/adjoint contracts.
+    block = 16 if torch.is_inference_mode_enabled() and rows <= 16 else INVARIANT_BLOCK
+    return SimpleNamespace(size=rows, blocks=triton.cdiv(rows, block), block=block)
+
+
 class _InvariantLinear(torch.autograd.Function):
     """x @ wᵀ for every row with the same fixed tile (FP32 inputs in exact FP32): the router's logits."""
 
@@ -674,7 +682,7 @@ class _InvariantLinear(torch.autograd.Function):
         ctx.save_for_backward(x, w)
         ctx.precision = precision
         rows = x.shape[0]
-        plan = SimpleNamespace(size=rows, blocks=triton.cdiv(rows, INVARIANT_BLOCK), block=INVARIANT_BLOCK)
+        plan = _invariant_forward_plan(rows)
         return _dense_mm(x.contiguous(), None, w[None], plan, transpose=False, precision=precision,
                          single_expert=True)
 
