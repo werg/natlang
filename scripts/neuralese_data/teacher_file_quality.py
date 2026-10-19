@@ -1,6 +1,7 @@
 """Exact JSON file-format evaluation continuation; original executions stay intact."""
 from __future__ import annotations
 import copy
+from collections import Counter
 import hashlib
 import json
 import re
@@ -16,6 +17,7 @@ AUTHORING_REVIEWED_ALIAS_SCHEMA = 'natlang.teacher-reviewed-source-authoring-qua
 AUTHORING_ALIAS_SCHEMA = 'natlang.teacher-source-grounded-authoring-quality-continuation/1'
 AUTHORING_REQUIREMENT_SCHEMA = 'natlang.teacher-authoring-construct-quality-continuation/1'
 AUTHORING_COMPILER_SCHEMA = 'natlang.teacher-authoring-compiler-quality-continuation/1'
+UNORDERED_SUMMARY_SCHEMA = 'natlang.teacher-reviewed-unordered-summary-continuation/1'
 SPAN_REVIEW_SCHEMA = 'natlang.teacher-span-answer-quality-continuation/1'
 HISTORICAL_AUTHORING_RUNTIME = '43e248a84b6faba6e793181fe593796dc03c878b05199091d95e824408de7ed1'
 
@@ -103,7 +105,10 @@ def verify_quality_continuation(row, original, original_binding):
     continuation = (continue_authoring_requirement_quality if schema == AUTHORING_REQUIREMENT_SCHEMA else
                     continue_authoring_alias_quality if schema == AUTHORING_ALIAS_SCHEMA else
                     continue_authoring_quality if schema == AUTHORING_SCHEMA else continue_quality)
-    if schema == SPAN_REVIEW_SCHEMA:
+    if schema == UNORDERED_SUMMARY_SCHEMA:
+        expected = continue_unordered_summary_quality(original, original_binding,
+            review_reference=row['source_quality_continuation']['source_review'])
+    elif schema == SPAN_REVIEW_SCHEMA:
         expected = continue_span_answer_quality(original, original_binding,
             review_reference=row['source_quality_continuation']['source_review'])
     elif schema == AUTHORING_REVIEWED_ALIAS_SCHEMA:
@@ -541,3 +546,99 @@ def reviewed_source_criteria(original, original_binding, review_reference):
     return {'schema': 'natlang.reviewed-source-child-criteria/1',
             'module_sha256': row['captured_file']['sha256'], 'criteria': criteria,
             **({'literal_bindings': bindings} if bindings is not None else {})}
+
+
+def continue_unordered_summary_quality(original, original_binding, *, review_reference):
+    """Transport an exact independent source-contract verdict; retain old failures."""
+    from scripts.coreweave.teacher_tranche_admission import read_bound
+    review = read_bound(review_reference)
+    if (review.get('schema') != 'natlang.teacher-unordered-summary-semantic-review/1'
+            or review.get('reviewer') != 'independent-root-source-meaning-review'
+            or review.get('training_admission') is not False
+            or not isinstance(review.get('reason_verbatim'), str)
+            or not review['reason_verbatim'].strip()):
+        raise ValueError('unordered summary requires independent source-contract review')
+    inventory = read_bound(review['inventory'])
+    if (inventory.get('schema') != 'natlang.teacher-order-contract-review-inventory/1'
+            or inventory.get('training_admission') is not False
+            or 'source_quality_continuation' in original):
+        raise ValueError('unordered summary requires original non-admission inventory')
+    path = Path(original_binding['path'])
+    if (sha256_file_hex(path) != original_binding['sha256']
+            or path.stat().st_size != original_binding['bytes']):
+        raise ValueError('unordered summary original artifact changed')
+    row_sha = canonical_json_sha256_hex(original)
+    program = original['task']['program_ir']
+    program_sha = canonical_json_sha256_hex(program)
+    identity = {'id': original['id'], 'original_row_sha256': row_sha,
+                'program_sha256': program_sha}
+    if sum(entry == identity for entry in review.get('approved', [])) != 1:
+        raise ValueError('unordered summary row lacks exact independent approval')
+    entries = [entry for entry in inventory['rows'] if entry.get('id') == original['id']]
+    if (len(entries) != 1 or any(entries[0].get(key) != value for key, value in identity.items())
+            or entries[0]['original'] != {key: original_binding[key]
+                for key in ('path', 'sha256', 'bytes')}
+            or entries[0]['expected'] != program['semantics']['expected']):
+        raise ValueError('unordered summary inventory custody changed')
+    # Prove membership, not merely that some file happens to have this digest.
+    if sum(canonical_json_sha256_hex(json.loads(line)) == row_sha
+           for line in path.read_text().splitlines() if line.strip()) != 1:
+        raise ValueError('unordered summary original row membership changed')
+    semantics = program['semantics']; outcome = original['outcome']
+    checks = outcome.get('checks', {})
+    required = {'seeded_failure_requirement', 'expected_status', 'honest_stop',
+                'effects', 'files', 'world', 'file_return_consistency', 'answer'}
+    if (program.get('split') != 'train' or not program.get('source_groups')
+            or program.get('family') != 'curriculum_short_execution_recovery'
+            or outcome.get('status') != 'done' or outcome.get('accepted') is not False
+            or outcome.get('oracle', {}).get('accepted') is not False
+            or outcome.get('oracle', {}).get('level') != 'exact'
+            or outcome.get('quality_pending') != []
+            or outcome.get('rejection_reasons') != ['files', 'answer']
+            or not required <= set(checks)
+            or checks.get('answer') is not False or checks.get('files') is not False
+            or any(value is not True for key, value in checks.items()
+                   if key not in ('answer', 'files'))
+            or outcome.get('files_check', {}).get('accepted') is not False):
+        raise ValueError('unordered summary requires only exact ordering failures')
+    expected = semantics['expected']; actual = outcome.get('value')
+    def summary(value):
+        return (isinstance(value, dict) and set(value) == {'ids', 'total', 'count'}
+                and type(value['total']) is int and type(value['count']) is int
+                and isinstance(value['ids'], list)
+                and all(type(item) is str for item in value['ids'])
+                and value['count'] == len(value['ids']))
+    if (not summary(expected) or not summary(actual)
+            or Counter(actual['ids']) != Counter(expected['ids'])
+            or actual['total'] != expected['total'] or actual['count'] != expected['count']):
+        raise ValueError('unordered summary complete typed answer differs')
+    expected_files = semantics['expected_files']; actual_files = outcome['files']
+    if (set(actual_files) != set(expected_files) or 'summary.json' not in expected_files
+            or json.loads(expected_files['summary.json']) != expected
+            or json.loads(actual_files['summary.json']) != actual
+            or any(actual_files[key] != value for key, value in expected_files.items()
+                   if key != 'summary.json')
+            or any(actual_files.get(key) != value for key, value in semantics['folder_files'].items()
+                   if key != 'summary.json')):
+        raise ValueError('unordered summary saved output or read-only files differ')
+    if (sha256_file_hex(path) != original_binding['sha256']
+            or path.stat().st_size != original_binding['bytes']
+            or read_bound(review_reference) != review
+            or read_bound(review['inventory']) != inventory):
+        raise ValueError('unordered summary authority changed during verification')
+    verifier = {'files': 1, 'inventory_sha256': sha256_file_hex(Path(__file__))}
+    result = copy.deepcopy(original)
+    result['outcome'].update(accepted=True, rejection_reasons=[],
+        oracle={**outcome['oracle'], 'accepted': True,
+                'verification_epoch': 'reviewed-unordered-summary/1'},
+        files_check={**outcome['files_check'], 'accepted': True, 'score': 1,
+                     'passed': len(expected_files), 'items': len(expected_files),
+                     'failed': [], 'errors': [], 'pending': [],
+                     'verification_epoch': 'reviewed-unordered-summary/1'})
+    result['outcome']['checks'].update(answer=True, files=True)
+    result['source_quality_continuation'] = {'schema': UNORDERED_SUMMARY_SCHEMA,
+        'original': original_binding, 'original_row_sha256': row_sha,
+        'source_review': review_reference, 'verifier': verifier,
+        'comparator': {'kind': 'source-reviewed-unordered-summary/1'},
+        'claim': 'Explicit revalidation under independently reviewed order-independent source contract; original exact negative grade, gold and full execution retained unchanged in original custody'}
+    return result

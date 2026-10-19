@@ -25,3 +25,25 @@ source artifact. It is not admission authority: a current canonical comparator
 must reconstruct the evaluation from the original, and every other field must
 match exactly. A changed comparator rejection invalidates the continuation;
 an unrelated runtime rebuild with the same result does not erase valid custody.
+
+## Reviewed unordered summaries
+
+Policy: when the independently reviewed source instruction requests every selected
+record without prescribing order, selected IDs may appear in any order. Preserve
+ID multiplicity and the exact independently constructed total/count. The original
+negative oracle and captured execution remain immutable; a separately named
+verifier epoch rechecks the same output. This policy grants no parent approval.
+
+1. Authenticate the independent natural-language verdict and its exact inventory,
+   raw file, row, program, TRAIN identity and unchanged expected values.
+2. Require all original non-answer/file checks to pass and no pending quality.
+3. Compare complete typed summary objects: exact keys, integer total/count and
+   a multiset of string IDs. Compare the parsed saved summary to the returned
+   object exactly, retain every read-only input and reject additional files.
+4. Emit a separate continuation view, preserving all prompts, model outputs,
+   references, gold values and original execution custody. Replay this same
+   verifier during conversion; normal protection and decision gates still apply.
+
+Crisp code implements exact custody and multiset comparison only. The independent
+review decides whether the source instruction permits order independence; this
+is not a general relaxation of ordered JSON arrays or task prompts.
