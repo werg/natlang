@@ -1795,6 +1795,39 @@ def _pending_source_continuation(old, new):
 
 
 
+def _classification_input_continuation(old, new):
+    """Bind a metadata-only classification proof while preserving every data input.
+
+    This only admits the proof input. The trainer independently validates all
+    cache rows against its real loaded source before reattributing existing visits.
+    """
+    role = 'source_classification_migration'
+    if ('native_graphs' not in old or role not in new or old.get(role) == new[role]
+            or {k:v for k,v in old.items() if k != role} !=
+               {k:v for k,v in new.items() if k != role}):
+        return False
+    from .native_source_classification import SCHEMA, _checked, _binding, POLICY_FILES
+    from . import native_source_classification as producer
+    reference = new[role]
+    if not all(reference.get(key) for key in ('path', 'sha256', 'binding')):
+        raise ValueError('classification continuation needs an exact declared binding')
+    proof = json.loads(_checked(reference).read_text())
+    if (proof.get('schema') != SCHEMA
+            or proof.get('train_sha256') != new['native_graphs']['sha256']
+            or not proof.get('indexes') or not proof.get('held_indexes')
+            or proof.get('optimizer_updates') != 0 or proof.get('student_pointer_writes') != 0
+            or proof.get('model_allocations') != 0 or proof.get('graph_position_expansions') != 0):
+        raise ValueError('classification continuation proof differs from current source or metadata-only work')
+    if proof.get('held', {}).get('sha256') != new.get('held_native_graphs', {}).get('sha256'):
+        raise ValueError('classification continuation held source differs')
+    for part in proof['indexes'] + proof['held_indexes']:
+        if part.get('producer') != _binding(producer.__file__) or set(part.get('old_policy', {})) != set(POLICY_FILES):
+            raise ValueError('classification continuation producer/policy differs')
+        for value in (part['source'], part['old_index'], part['new_index'], *part['old_policy'].values()):
+            _checked(value)
+    return True
+
+
 def _combined_native_source_continuation(old, new):
     """Compose exact active and pending continuations at a drained handoff only.
 
@@ -1903,11 +1936,14 @@ def unstarted_stage_input_changes(existing, plan, out, *, started_stage_ids=()):
             if stage_finished(out, stage_id) or not (
                     _priority_only_native_source_continuation(old, new) or _data_continuation(old, new)
                     or _pending_source_continuation(old, new)
-                    or _combined_native_source_continuation(old, new)):
+                    or _combined_native_source_continuation(old, new)
+                    or (next(s for s in plan['recipe']['stages'] if s['id'] == stage_id)['kind'] == 'native_state_sft'
+                        and _classification_input_continuation(old, new))):
                 raise ValueError('handoff refused: inputs of started stage ' + stage_id + ' changed; only a stage '
-                                 'that has not started may take new inputs, and the active stage only by a declared '
+                                 'that has not started may take new inputs, and the active stage only by an explicit metadata classification or declared '
                                  'data continuation (' + DATA_CONTINUATION_ROLE + ' = the text data it trained on)')
-            changes[stage_id] = {'kind': ('scheduling_priority_continuation'
+            changes[stage_id] = {'kind': ('metadata_classification_continuation'
+                if _classification_input_continuation(old, new) else 'scheduling_priority_continuation'
                 if _priority_only_native_source_continuation(old, new) else 'data_continuation'),
                 'old': old, 'new': new}
             continue
@@ -1942,7 +1978,7 @@ def _without_unstarted_bindings(old_recipe, new_recipe, changes):
         for name in changed:
             value.get('input_bindings', {}).pop(name, None)
         for stage in value.get('stages', []):
-            if changes.get(stage['id'], {}).get('kind') in {'data_continuation', 'scheduling_priority_continuation'}:
+            if changes.get(stage['id'], {}).get('kind') in {'data_continuation', 'scheduling_priority_continuation', 'metadata_classification_continuation'}:
                 stage.pop('inputs', None)  # exact old inputs are preserved by the continuation predecessor binding
     return old_value, new_value
 

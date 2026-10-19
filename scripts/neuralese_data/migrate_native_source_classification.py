@@ -45,7 +45,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
     inventory = json.loads(args.inventory.read_text())
     proof = {'schema': SCHEMA, 'train_sha256': inventory['train']['sha256'],
-             'train': inventory['train'], 'inventory': _binding(args.inventory),
+             'train': inventory['train'], 'held': inventory['held'], 'inventory': _binding(args.inventory),
              'indexes': [], 'held_indexes': [], 'graph_position_expansions': 0,
              'model_allocations': 0, 'optimizer_updates': 0, 'student_pointer_writes': 0}
     for split, name in (('train', 'indexes'), ('test', 'held_indexes')):
