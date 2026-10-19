@@ -24,6 +24,16 @@ def _hash_file(path):
     return size,digest
 
 
+def _complete_file_identity(path):
+    # Reuse the shared exact-content cache, never an archive-receipt shortcut.
+    package_root=str(Path(__file__).resolve().parents[2]/'training/neuralese')
+    if package_root not in sys.path:sys.path.insert(0,package_root)
+    from natlang_neuralese.common.hashing import sha256_file_hex_cached
+    path=Path(path)
+    sha=sha256_file_hex_cached(path,trust_archive_receipt=False)
+    return path.stat().st_size,sha
+
+
 def _content_range(value,expected_start,expected_size):
     match=re.fullmatch(r'bytes (\d+)-(\d+)/(\d+)',value or '')
     if not match:return False
@@ -98,20 +108,20 @@ def external_payload_path(payload_root,identity):
 def publish_payload_link(payload,destination,identity):
     """Atomically expose an already verified external payload at its logical path."""
     payload=Path(payload).resolve(strict=True);destination=Path(destination)
-    size,digest=_hash_file(payload)
-    if size!=identity['bytes']or digest.hexdigest()!=identity['sha256']:
+    size,sha=_complete_file_identity(payload)
+    if size!=identity['bytes']or sha!=identity['sha256']:
         raise ValueError('external payload differs from private receipt')
     destination.parent.mkdir(parents=True,exist_ok=True)
     if destination.is_symlink():
         if destination.resolve(strict=True)!=payload:
             raise ValueError('logical export symlink points at a different payload')
-        return {'path':str(destination),'payload_path':str(payload),'sha256':digest.hexdigest(),
+        return {'path':str(destination),'payload_path':str(payload),'sha256':sha,
                 'bytes':size,'reused_destination':True}
     if destination.exists():
-        existing_size,existing_digest=_hash_file(destination)
-        if existing_size!=size or existing_digest.hexdigest()!=digest.hexdigest():
+        existing_size,existing_sha=_complete_file_identity(destination)
+        if existing_size!=size or existing_sha!=sha:
             raise ValueError('logical export destination already contains different bytes')
-        return {'path':str(destination),'payload_path':str(payload),'sha256':digest.hexdigest(),
+        return {'path':str(destination),'payload_path':str(payload),'sha256':sha,
                 'bytes':size,'reused_destination':True}
     if destination.is_symlink():raise ValueError('logical export destination is a dangling symlink')
     temporary=destination.with_name(destination.name+'.link-'+str(os.getpid())+'-'+uuid.uuid4().hex)
@@ -123,7 +133,7 @@ def publish_payload_link(payload,destination,identity):
         finally:os.close(descriptor)
     finally:
         temporary.unlink(missing_ok=True)
-    return {'path':str(destination),'payload_path':str(payload),'sha256':digest.hexdigest(),'bytes':size}
+    return {'path':str(destination),'payload_path':str(payload),'sha256':sha,'bytes':size}
 
 
 def fetch(receipt,destination,*,payload_root=None,minimum_external_free_bytes=20<<30,
@@ -142,10 +152,10 @@ def fetch(receipt,destination,*,payload_root=None,minimum_external_free_bytes=20
     if payload_root is not None and logical_destination.is_symlink() and not logical_destination.exists():
         raise ValueError('logical export destination is a dangling symlink')
     if payload_root is not None and logical_destination.is_file() and not logical_destination.is_symlink():
-        size,digest=_hash_file(logical_destination)
-        if size!=identity['bytes']or digest.hexdigest()!=identity['sha256']:
+        size,sha=_complete_file_identity(logical_destination)
+        if size!=identity['bytes']or sha!=identity['sha256']:
             raise ValueError('existing logical export differs from private receipt')
-        return {'path':str(logical_destination),'sha256':digest.hexdigest(),'bytes':size,
+        return {'path':str(logical_destination),'sha256':sha,'bytes':size,
                 'seconds':0.0,'private':True,'resumed_bytes':size,'reused_destination':True,
                 'external_payload':False}
     if payload_root is not None:
@@ -171,10 +181,10 @@ def fetch(receipt,destination,*,payload_root=None,minimum_external_free_bytes=20
             raise ValueError('logical export symlink points at a different content-addressed payload')
     started=time.time();expected=identity['bytes']
     if destination.exists():
-        size,digest=_hash_file(destination)
-        if size!=expected or digest.hexdigest()!=identity['sha256']:
+        size,sha=_complete_file_identity(destination)
+        if size!=expected or sha!=identity['sha256']:
             raise ValueError('existing private export destination differs from receipt')
-        result={'path':str(destination),'sha256':digest.hexdigest(),'bytes':size,
+        result={'path':str(destination),'sha256':sha,'bytes':size,
                 'seconds':time.time()-started,'private':True,'resumed_bytes':size,'reused_destination':True}
         if payload_root is not None:
             link=publish_payload_link(destination,logical_destination,identity)

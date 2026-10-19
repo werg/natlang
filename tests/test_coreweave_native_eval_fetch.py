@@ -159,3 +159,40 @@ def test_verified_existing_destination_is_never_overwritten(tmp_path):
     with pytest.raises(ValueError, match='existing private export destination'):
         fetcher.fetch(receipt(b'expected'), destination, requests_client=FakeRequests([]), wandb_api=FakeApi())
     assert destination.read_bytes() == b'wrong'
+
+
+def test_existing_external_payload_is_hashed_once_and_rewrites_invalidate(tmp_path, monkeypatch):
+    import builtins
+    monkeypatch.setenv('NATLANG_HASH_CACHE',str(tmp_path/'content-cache.jsonl'))
+    data=b'complete-private-checkpoint'
+    proof=receipt(data);root=tmp_path/'external';root.mkdir()
+    payload=fetcher.external_payload_path(root,proof['identity'])
+    payload.parent.mkdir();payload.write_bytes(data)
+    destination=tmp_path/'logical'/'weights.pt'
+    real_open=builtins.open;reads=[]
+    def counting_open(path,*args,**kwargs):
+        if os.path.realpath(path)==str(payload) and (args[0] if args else kwargs.get('mode','r'))=='rb':
+            reads.append(str(path))
+        return real_open(path,*args,**kwargs)
+    monkeypatch.setattr(builtins,'open',counting_open)
+    result=fetcher.fetch(proof,destination,payload_root=root,require_separate_filesystem=False)
+    assert result['sha256']==proof['identity']['sha256'] and destination.resolve()==payload
+    assert len(reads)==1  # full verification and link share the existing content cache
+    fetcher.fetch(proof,destination,payload_root=root,require_separate_filesystem=False)
+    assert len(reads)==1
+    before=payload.stat()
+    payload.write_bytes(b'X'+data[1:]);os.utime(payload,ns=(before.st_atime_ns,before.st_mtime_ns))
+    with pytest.raises(ValueError,match='differs from receipt'):
+        fetcher.fetch(proof,destination,payload_root=root,require_separate_filesystem=False)
+    assert len(reads)==2  # ctime invalidates a same-size rewrite even with restored mtime
+
+
+def test_complete_payload_inode_replacement_cannot_reuse_cached_identity(tmp_path,monkeypatch):
+    monkeypatch.setenv('NATLANG_HASH_CACHE',str(tmp_path/'content-cache.jsonl'))
+    data=b'private';payload=tmp_path/'payload.pt';payload.write_bytes(data)
+    identity=receipt(data)['identity'];destination=tmp_path/'logical.pt'
+    fetcher.publish_payload_link(payload,destination,identity)
+    before=payload.stat();replacement=tmp_path/'replacement.pt';replacement.write_bytes(b'changed')
+    os.utime(replacement,ns=(before.st_atime_ns,before.st_mtime_ns));replacement.replace(payload)
+    with pytest.raises(ValueError,match='differs from private receipt'):
+        fetcher.publish_payload_link(payload,destination,identity)
