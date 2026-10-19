@@ -1540,7 +1540,8 @@ def student_cycle(plan_path,declaration,handoff,directory,*,stop):
     while True:
         if stop.requested:return cursor
         from .native_supervised_boundary import apply as apply_boundary
-        sealed=_sealed_supervised_request(work/'supervised'/f"{cursor.get('next_stage',0):03d}")
+        sealed_job=work/'supervised'/f"{cursor.get('next_stage',0):03d}"
+        sealed=_sealed_supervised_request(sealed_job,(config.get('supervised_sealed_operations')or{}).get(str(sealed_job)))
         if sealed is None:
             config,cursor=apply_boundary(plan_path,declaration,handoff,config,cursor,directory)
         recipe=resolve_recipe_data(config['production_recipe'])
@@ -1592,7 +1593,7 @@ def student_cycle(plan_path,declaration,handoff,directory,*,stop):
     return cursor
 
 
-def _sealed_supervised_request(jobdir):
+def _sealed_supervised_request(jobdir,expected=None):
     """An issued bridge request fixes its operation even after its state advances."""
     from .native_bridge import read_request,verify_result_inventory
     paths=[]
@@ -1601,6 +1602,10 @@ def _sealed_supervised_request(jobdir):
         if result.exists() and verify_result_inventory(path,result)[1]['status']=='failed':
             continue  # An authenticated failed attempt never replaces an earned successor.
         paths.append(path)
+    if expected is not None:
+        selected=_bound(expected)
+        if selected not in paths:raise ValueError('selected sealed operation is not an actual nonfailed owned request')
+        paths=[selected]
     if not paths:return None
     if len(paths)!=1:raise ValueError('supervised operation has ambiguous sealed requests')
     request=read_request(paths[0])
@@ -1616,7 +1621,7 @@ def _supervised_job(continuation,jobdir,config,cursor,stop):
     from .native_rounds import round_job,bridge_result
     if Path(continuation['out']).resolve() != Path(jobdir).resolve():
         raise ValueError('supervised operation configuration/output differs from its owned job directory')
-    sealed=_sealed_supervised_request(jobdir)
+    sealed=_sealed_supervised_request(jobdir,(config.get('supervised_sealed_operations')or{}).get(str(jobdir)))
     if sealed is not None:
         request,continuation=sealed
         result=bridge_result(continuation['round_command'],request,stop)

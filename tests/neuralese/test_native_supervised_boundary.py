@@ -212,3 +212,5 @@ def test_sealed_request_selection_retains_failed_attempt_and_selects_earned_succ
     assert failed.exists()and failed.with_suffix('.result.json').exists()
     other=native_bridge.write_request(job/'bridge',kind='round',out=job,config=job/'config.json')
     with pytest.raises(ValueError,match='ambiguous'):raw._sealed_supervised_request(job)
+    assert raw._sealed_supervised_request(job,res.binding(successor))==(successor,original)
+    with pytest.raises(ValueError):raw._sealed_supervised_request(job,res.binding(parent))
