@@ -176,7 +176,9 @@ class Combine(torch.autograd.Function):
 def routing_permutation(index: torch.Tensor):
     """(order, slot_of): the routed (token, slot) pairs sorted by expert, and each pair's sorted position."""
     flat = index.reshape(-1)
-    order = flat.argsort()
+    # Preserve token/slot order among equal experts so adjacent FFN chunks
+    # reconstruct the same expert-local row stream as an unchunked call.
+    order = flat.argsort(stable=True)
     slot_of = torch.empty_like(order)
     slot_of[order] = torch.arange(order.numel(), device=order.device)
     return order, slot_of.to(torch.int32).contiguous()

@@ -183,9 +183,11 @@ class Fp8ExpertProjection(torch.autograd.Function):
 
     @staticmethod
     def forward(ctx, a, rows, slot_of, top_k, weight, table, offsets, hand=None, *anchors):
+        from ..model.native_gradient_partitions import active_gradient_partitions
         from ..model.native_adapters import native_forward_storage_dtype
         dtype = native_forward_storage_dtype(weight)
         ctx.carrier = dtype is not None
+        ctx.partitions = active_gradient_partitions()
         ctx.anchors = anchors
         ctx.scope_weight = weight if anchors else None
         from ..model.native_weight_carrier import active_cotangent_scope
@@ -242,11 +244,25 @@ class Fp8ExpertProjection(torch.autograd.Function):
         if ctx.needs_input_grad[4]:
             # BF16 grouped GEMM in the parameter layout (a Triton reduction kernel measured 2-5x slower here).
             if ctx.carrier:
-                from .fp8_experts import grouped_weight_gradient
-                grad_weight = grouped_weight_gradient(grad, a[rows] if rows is not None else a, offsets, weight.shape)
+                from ..model.native_weight_carrier import active_cotangent_scope
+                starts = torch.cat((offsets.new_zeros(1), offsets[:-1]))
+                counts = offsets - starts
+                scope = active_cotangent_scope() if ctx.anchors else None
+                deferred = (scope is not None and scope.defer_expert_chunk(
+                    ctx.scope_weight, grad, a, rows, starts, counts,
+                    rows.numel() if rows is not None else a.shape[0],
+                    ctx.partitions, ctx.anchors))
+                if deferred:
+                    grad_weight = None
+                else:
+                    from .fp8_experts import grouped_weight_gradient
+                    grad_weight = grouped_weight_gradient(
+                        grad, a[rows] if rows is not None else a, offsets, weight.shape)
             else:
                 grad_weight = torch._grouped_mm(grad.t(), a[rows] if rows is not None else a, offs=offsets)
         anchor_grads = (None,) * len(ctx.anchors)
+        if ctx.needs_input_grad[4] and ctx.carrier and grad_weight is None and ctx.anchors:
+            anchor_grads = tuple(grad.new_ones((), dtype=torch.float32) for anchor in ctx.anchors)
         if ctx.anchors and grad_weight is not None:
             from ..model.native_weight_carrier import _scope_add
             _scope_add(ctx.scope_weight, grad_weight, ctx.anchors, ctx.scope)

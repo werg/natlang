@@ -17,10 +17,21 @@ _ACTIVE = ContextVar('natlang_graph_gradient_partitions', default=None)
 class GradientPartitions:
     """Contiguous invocation ownership of the current token-local operands."""
     lengths: tuple[int, ...]
+    invocation_index: int | None = None
+    chunk_offset: int | None = None
+    invocation_length: int | None = None
 
     def __post_init__(self):
         if any(type(n) is not int or n < 0 for n in self.lengths):
             raise ValueError('gradient partition lengths must be nonnegative integers')
+        metadata = (self.invocation_index, self.chunk_offset, self.invocation_length)
+        if any(value is not None for value in metadata):
+            if any(type(value) is not int or value < 0 for value in metadata):
+                raise ValueError('chunk provenance requires nonnegative integer invocation, offset, and length')
+            if len(self.lengths) != 1 or sum(self.lengths) != self.lengths[0]:
+                raise ValueError('one FFN chunk must belong to exactly one physical invocation')
+            if self.chunk_offset + self.lengths[0] > self.invocation_length:
+                raise ValueError('FFN chunk escapes its parent invocation')
 
     @property
     def token_count(self):
@@ -101,11 +112,13 @@ def token_local_chunks(h, chunk_tokens, callback):
         raise RuntimeError('graph FFN chunks lost their token axis')
     sections = token_slices(partitions, h.shape[1], reverse=False)
     outputs = []
-    for section in sections:
+    for invocation_index, section in enumerate(sections):
         count = section.stop - section.start
         width = chunk_tokens if chunk_tokens > 0 else count
         for start in range(section.start, section.stop, width):
             part = h[:, start:min(start + width, section.stop)]
-            with gradient_partitions(GradientPartitions((part.shape[1],))):
+            with gradient_partitions(GradientPartitions(
+                    (part.shape[1],), invocation_index=invocation_index,
+                    chunk_offset=start - section.start, invocation_length=count)):
                 outputs.append(callback(part))
     return torch.cat(outputs, dim=1) if outputs else h

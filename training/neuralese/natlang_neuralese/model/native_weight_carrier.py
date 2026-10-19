@@ -177,6 +177,8 @@ class ParameterCotangentScope:
         self.entries = {}
         self._auxiliary_entries = {}
         self._effective_routes = {}
+        self._expert_chunk_buckets = {}
+        self._expert_anchor_buckets = {}
         self.directory = tempfile.mkdtemp(prefix='natlang-cotangent-', dir=directory)
         self._token = None
         self._closed = False
@@ -185,6 +187,7 @@ class ParameterCotangentScope:
         self._gradient_hooks = []
         self.model = None
         self._reference_parameters = {}
+        self._expert_chunk_sequence = 0
         self._allocated_accumulator_bytes = 0
         self._scratch_peak_bytes = 0
         for index, (name, parameter) in enumerate(unique.values()):
@@ -193,7 +196,8 @@ class ParameterCotangentScope:
                 'count': 0, 'path': os.path.join(self.directory, f'{index:06d}.f32'), 'accumulator': None,
                 'anchor_value': None, 'anchor_backward': 0, 'initial_grad': initial_grad,
                 'initial_grad_value': None, 'reference_gradient_audited': False,
-                'initial_grad_version': None if initial_grad is None else initial_grad._version}
+                'initial_grad_version': None if initial_grad is None else initial_grad._version,
+                'expert_chunks': []}
 
     def __enter__(self):
         if _COTANGENT_SCOPE.get() is not None:
@@ -329,7 +333,8 @@ class ParameterCotangentScope:
             'path': os.path.join(self.directory, f'{index:06d}.f32'), 'accumulator': None,
             'anchor_value': None, 'anchor_backward': 0, 'initial_grad': initial_grad,
             'initial_grad_value': None, 'reference_gradient_audited': False,
-            'initial_grad_version': None if initial_grad is None else initial_grad._version}
+            'initial_grad_version': None if initial_grad is None else initial_grad._version,
+            'expert_chunks': []}
 
     def _register_auxiliary(self, name, tensor):
         entry = self._auxiliary_entries.get(id(tensor))
@@ -502,9 +507,9 @@ class ParameterCotangentScope:
         """Start another forward/backward microbatch in one optimizer update."""
         if self.mode != 'update' or self._closed:
             raise RuntimeError('new cotangent backward is only valid in an open optimizer-update scope')
-        for entry in self.entries.values():
-            entry['anchor_value'] = None
-        for entry in self._auxiliary_entries.values():
+        if self._expert_chunk_buckets:
+            raise RuntimeError('previous backward left deferred expert chunks before its parameter anchor')
+        for entry in (*self.entries.values(), *self._auxiliary_entries.values()):
             entry['anchor_value'] = None
 
     def add(self, parameter, contribution):
@@ -538,6 +543,100 @@ class ParameterCotangentScope:
             piece = contribution[start:stop].detach().to(device='cpu', dtype=torch.float32)
             target[start:stop].add_(piece)
         entry['count'] += 1
+
+    def defer_expert_chunk(self, weight, gradient, activation, row_indices, starts, counts,
+                           pair_count, partitions, anchors):
+        """Retain one chunk's expert operands for exact invocation-wide tile alignment.
+
+        The chunk's input/gradient tensors are already autograd-owned. This
+        stores references only; grouped operands are reduced at the registered
+        anchor after every chunk adjoint has arrived. Effective adapter routes
+        use a bucket keyed by their exact anchor tuple so one delta anchor cannot
+        flush another route before its own chunks are complete.
+        """
+        if (partitions is None or partitions.invocation_index is None or
+                partitions.chunk_offset is None or partitions.invocation_length is None or not anchors):
+            return False
+        if any(anchor is None for anchor in anchors):
+            return False
+        expected_anchors = self.anchors_for_weight(weight)
+        if (len(expected_anchors) != len(anchors) or
+                any(expected is not actual for expected, actual in zip(expected_anchors, anchors))):
+            return False
+        anchor_entries = [next((candidate for candidates in
+                                (self.entries.values(), self._auxiliary_entries.values())
+                                for candidate in candidates
+                                if candidate['anchor_value'] is anchor), None)
+                          for anchor in anchors]
+        if any(candidate is None for candidate in anchor_entries):
+            return False
+        # A separate bucket per exact anchor tuple matters for adapter routes:
+        # a delta anchor may finish before a different effective route that
+        # shares only the base anchor. It can then flush its complete bucket
+        # without observing a partial bucket from the other route.
+        bucket_key = tuple(id(anchor) for anchor in anchors)
+        bucket = self._expert_chunk_buckets.get(bucket_key)
+        if bucket is None:
+            bucket = {'records': []}
+            self._expert_chunk_buckets[bucket_key] = bucket
+            for anchor in anchors:
+                keys = self._expert_anchor_buckets.setdefault(id(anchor), [])
+                if bucket_key not in keys:
+                    keys.append(bucket_key)
+        self._expert_chunk_sequence += 1
+        bucket['records'].append({
+            'weight': weight, 'gradient': gradient, 'activation': activation,
+            'row_indices': row_indices, 'starts': starts, 'counts': counts,
+            'anchors': tuple(anchors),
+            'pair_count': int(pair_count), 'invocation_index': partitions.invocation_index,
+            'chunk_offset': partitions.chunk_offset, 'chunk_length': partitions.lengths[0],
+            'invocation_length': partitions.invocation_length,
+            'sequence': self._expert_chunk_sequence,
+        })
+        return True
+
+    def _flush_expert_chunks(self, parameter):
+        entry = self._entry_for(parameter)
+        if entry is None:
+            return
+        anchor = entry['anchor_value']
+        if anchor is None:
+            return
+        bucket_keys = tuple(self._expert_anchor_buckets.get(id(anchor), ()))
+        if not bucket_keys:
+            return
+        from ..maple.fp8_experts import grouped_weight_gradient_chunk_tiles
+        for bucket_key in bucket_keys:
+            bucket = self._expert_chunk_buckets.pop(bucket_key, None)
+            if bucket is None:
+                continue
+            records = bucket['records']
+            by_invocation = {}
+            for record in records:
+                by_invocation.setdefault(record['invocation_index'], []).append(record)
+            for invocation in sorted(by_invocation, reverse=True):
+                grouped = {}
+                for record in by_invocation[invocation]:
+                    grouped.setdefault(id(record['weight']), []).append(record)
+                for chunks in grouped.values():
+                    chunks.sort(key=lambda item: (item['chunk_offset'], item['sequence']))
+                    cursor = 0
+                    for chunk in chunks:
+                        if (chunk['chunk_offset'] != cursor or
+                                chunk['invocation_length'] != chunks[0]['invocation_length']):
+                            raise RuntimeError('deferred expert chunks do not exactly cover their invocation in order')
+                        cursor += chunk['chunk_length']
+                    if cursor != chunks[0]['invocation_length']:
+                        raise RuntimeError('deferred expert chunks omit physical rows from their invocation')
+                    contribution = grouped_weight_gradient_chunk_tiles(chunks, chunks[0]['weight'].shape)
+                    _scope_add(chunks[0]['weight'], contribution, chunks[0]['anchors'], self)
+            for anchor_id in bucket_key:
+                keys = self._expert_anchor_buckets.get(anchor_id)
+                if keys is not None:
+                    keys.remove(bucket_key)
+                    if not keys:
+                        self._expert_anchor_buckets.pop(anchor_id, None)
+            del records
 
     def add_ordered_finite_convolution(self, parameter, histories, gradient, *, bias=False):
         """Fold finite-convolution token cotangents in cached reverse order."""
@@ -739,7 +838,10 @@ class ParameterCotangentScope:
         for entry in (*self.entries.values(), *self._auxiliary_entries.values()):
             entry['accumulator'] = None
             entry['anchor_value'] = None
+            entry.get('expert_chunks', []).clear()
         self._effective_routes.clear()
+        self._expert_chunk_buckets.clear()
+        self._expert_anchor_buckets.clear()
         self._reference_parameters.clear()
         self._auxiliary_entries.clear()
         self.entries.clear()
@@ -761,6 +863,8 @@ class _ParameterCotangentAnchor(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, sentinel_gradient):
+        entry = ctx.scope._entry_for(ctx.parameter)
+        ctx.scope._flush_expert_chunks(ctx.parameter)
         entry = ctx.scope._entry_for(ctx.parameter)
         if not entry['count'] or entry['accumulator'] is None:
             raise RuntimeError(f"cotangent anchor for {entry['name']} has no accumulated weight derivative")

@@ -357,7 +357,9 @@ def dense_grouped_experts(x: torch.Tensor, index: torch.Tensor, weights: torch.T
         from .moe_glue import Combine, GatherRows, routing_permutation
         order, slot_of = routing_permutation(index)
     else:
-        order = flat.argsort()
+        # Equal expert IDs retain token/slot order. Token-local FFN chunking
+        # must be joinable into the same expert row stream as one invocation.
+        order = flat.argsort(stable=True)
     # Group ends from the sorted expert ids.
     offsets = torch.searchsorted(flat[order], torch.arange(experts, device=flat.device), right=True).to(torch.int32)
     rows = GatherRows.apply(x, order // top_k, slot_of, top_k) if glue else x[order // top_k]
@@ -481,7 +483,9 @@ class _DenseExpertProjection(torch.autograd.Function):
 
     @staticmethod
     def forward(ctx, a, rows, weight, plan, *anchors):
+        from ..model.native_gradient_partitions import active_gradient_partitions
         from ..model.native_adapters import native_forward_storage_dtype
+        ctx.partitions = active_gradient_partitions()
         dtype = native_forward_storage_dtype(weight)
         ctx.carrier = dtype is not None
         ctx.anchors = anchors
@@ -499,11 +503,17 @@ class _DenseExpertProjection(torch.autograd.Function):
         plan = ctx.plan
         grad = grad.contiguous()
         grad_weight = None
+        deferred = False
         if ctx.needs_input_grad[2]:
             if ctx.carrier:
                 from .fp8_experts import grouped_weight_gradient
                 ends = (plan.start + (plan.count + plan.block - 1) // plan.block * plan.block).to(torch.int32)
-                grad_weight = grouped_weight_gradient(grad, a[rows] if rows is not None else a, ends, weight.shape)
+                deferred = (ctx.anchors and ctx.scope.defer_expert_chunk(
+                    ctx.scope_weight, grad, a, rows, plan.start, plan.count,
+                    plan.position.numel(), ctx.partitions, ctx.anchors))
+                grad_weight = (None if deferred else
+                               grouped_weight_gradient(grad, a[rows] if rows is not None else a,
+                                                       ends, weight.shape))
             else:
                 grad_weight = _weight_grad(grad, a[rows] if rows is not None else a, plan, weight.shape).to(weight.dtype)
         grad_a = None
@@ -516,6 +526,10 @@ class _DenseExpertProjection(torch.autograd.Function):
                 summed = _gather_sum(grad_rows, plan.position, tokens, plan.top_k)
                 grad_a = torch.cat([summed, summed.new_zeros(1, summed.shape[-1])], 0).to(a.dtype)
         anchor_grads = (None,) * len(ctx.anchors)
+        if deferred:
+            # Retain the anchor edge as a scheduling dependency. Its backward
+            # flushes the collected chunk operands once all graph uses arrived.
+            anchor_grads = tuple(grad.new_ones((), dtype=torch.float32) for anchor in ctx.anchors)
         if ctx.anchors and grad_weight is not None:
             from ..model.native_weight_carrier import _scope_add
             _scope_add(ctx.scope_weight, grad_weight, ctx.anchors, ctx.scope)
