@@ -566,6 +566,10 @@ export class NativeToolAgent {
       ...(returnType ? { result_type: returnType } : {}) };
     const port = this.options.neuralese?.port;
     const expectedReturn = session.lam.type.kind === 'lambda' ? session.env.resolve(session.lam.type.returns) : undefined;
+    const nativeStateText = async (id: string): Promise<string | undefined> => {
+      const artifact = await this.options.neuralese?.store.getNativeState?.(id);
+      return artifact?.metadata.text;
+    };
     const nativeOrigins=await this.nativeWriteOrigins(response,session,turn,turnNode);
     const originUses=new Map<string,number>();
     const withNativeOrigins=(value:unknown):unknown=>{
@@ -589,7 +593,7 @@ export class NativeToolAgent {
       return value;
     };
     const written: NeuraleseBlockMeta[] = [...serverBlocks];
-    const decodeCall = async ([name, args]: [string, Record<string, unknown>]): Promise<[string, Record<string, unknown>]> => {
+    const decodeCall = async ([name, args]: [string, Record<string, unknown>], assistantCompletion = false): Promise<[string, Record<string, unknown>]> => {
       const decodedArgs: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(args)) {
         const context = name === 'eval' && key === 'code' ? 'eval-code' :
@@ -597,7 +601,8 @@ export class NativeToolAgent {
         const resultValue = name === 'return_result' && key === 'value' &&
           (args.status === undefined || args.status === 'success');
         decodedArgs[key] = await decodeTurnValue(withNativeOrigins(value), port, { ...producer, marker_context: context }, written,
-          resultValue && expectedReturn ? { type: expectedReturn, env: session.env } : undefined);
+          resultValue && expectedReturn ? { type: expectedReturn, env: session.env } : undefined,
+          assistantCompletion ? nativeStateText : undefined);
       }
       return [name, decodedArgs];
     };
@@ -605,13 +610,13 @@ export class NativeToolAgent {
       content.some(part => part.type !== 'text');
     const decoded = { ...response,
       ...(structuredResult ? { text: '' } : response.text === undefined ? {} : { text: await decodeTurnValue(response.text, port,
-        { ...producer, marker_context: 'assistant-text' }, written) as string }),
-      ...(response.calls === undefined ? {} : { calls: await Promise.all(response.calls.map(decodeCall)) as ModelTurn['calls'] }) };
+        { ...producer, marker_context: 'assistant-text' }, written, undefined, nativeStateText) as string }),
+      ...(response.calls === undefined ? {} : { calls: await Promise.all(response.calls.map(call => decodeCall(call))) as ModelTurn['calls'] }) };
     if (structuredResult) {
       // Actual producer parts are a typed return, not an opaque-ID string.
       // Literal strings never enter this branch, even if they spell a marker.
       decoded.text = '';
-      decoded.calls = [await decodeCall(['return_result', { status: 'success', value: content }])];
+      decoded.calls = [await decodeCall(['return_result', { status: 'success', value: content }], true)];
     }
     // Each block the turn wrote is a node. Stop decisions and distribution parameters come from a writer that reports
     // them (a Neuralese server); the stand-in writer has none.

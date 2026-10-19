@@ -326,6 +326,22 @@ function expectedValueTypes(expected: TurnValueExpectation | undefined): Type[] 
   return [type];
 }
 
+function acceptsNativeStateParts(expected: TurnValueExpectation | undefined): boolean {
+  if (!expected) return false;
+  const type = expected.env.resolve(expected.type);
+  if (type.kind === 'refined' || type.kind === 'untrusted')
+    return acceptsNativeStateParts({ ...expected, type: type.base });
+  if (type.kind === 'neuralese' || type.kind === 'prim' && type.name === 'unknown') return true;
+  if (type.kind === 'union') return type.members.some(member => acceptsNativeStateParts({ ...expected, type: member }));
+  if (type.kind === 'list' || type.kind === 'dict') return acceptsNativeStateParts({ ...expected, type: type.element });
+  return false;
+}
+
+function acceptsNativeStateList(expected: TurnValueExpectation | undefined): boolean {
+  return expectedValueTypes(expected).some(type => type.kind === 'list' &&
+    acceptsNativeStateParts({ env: expected!.env, type: type.element }));
+}
+
 function expectedChild(expected: TurnValueExpectation | undefined, key: string, container: unknown): TurnValueExpectation | undefined {
   const candidates = expectedValueTypes(expected).filter(type => {
     if (type.kind !== 'record' || !container || typeof container !== 'object') return true;
@@ -345,7 +361,8 @@ function expectedChild(expected: TurnValueExpectation | undefined, key: string, 
 }
 
 export async function decodeTurnValue(value: unknown, port: NeuralesePort | undefined,
-  producer: Record<string, unknown>, written?: NeuraleseBlockMeta[], expected?: TurnValueExpectation): Promise<unknown> {
+  producer: Record<string, unknown>, written?: NeuraleseBlockMeta[], expected?: TurnValueExpectation,
+  nativeStateText?: (id: string) => Promise<string | undefined>): Promise<unknown> {
   const valueBoundary = producer.marker_context === 'return-result' || producer.marker_context === 'other-tool-argument';
   if (typeof value === 'string') {
     const types = expectedValueTypes(expected);
@@ -359,15 +376,43 @@ export async function decodeTurnValue(value: unknown, port: NeuralesePort | unde
   }
   if (isContentParts(value)) {
     if (!valueBoundary) return decodeTurnValue(partsToText(value), port, producer, written);
-    // Text runs remain literal; only actual block parts confer transport identity.
-    return value.some(part => part.type !== 'text') ? value.map(part => ({ ...part })) :
-      value.map(part => (part as NeuraleseTextPart).text).join('');
+    // A single actual state part is already the declared soft value when the
+    // result type admits Neuralese (or unknown). Other declared result types
+    // receive the state artifact's authenticated stored text in its original
+    // position; they must not be handed an opaque-reference array.
+    const hasNonText = value.some(part => part.type !== 'text');
+    if (!hasNonText) return value.map(part => (part as NeuraleseTextPart).text).join('');
+    const onlyStateReferences = value.length > 0 && value.every(part => part.type === 'native_state');
+    if (onlyStateReferences && acceptsNativeStateParts(expected)) {
+      if (acceptsNativeStateList(expected))
+        return value.map(part => nativeStateSentinel(part.id, part.stop_gradient, part.source_occurrence));
+      return value.map(part => ({ ...part }));
+    }
+    if (value.some(part => part.type === 'native_state') && expected && nativeStateText) {
+      const text: string[] = [];
+      for (const part of value) {
+        if (part.type === 'text') text.push(part.text);
+        else if (part.type === 'native_state') {
+          const stored = await nativeStateText(part.id);
+          if (stored === undefined) throw new NeuraleseUnsupportedError(
+            `native state ${part.id} has no authenticated stored text for the declared ordinary result`);
+          text.push(stored);
+        } else {
+          // Legacy projected blocks do not carry authenticated source text.
+          return value.map(item => ({ ...item }));
+        }
+      }
+      return text.join('');
+    }
+    // Keep unsupported or untyped transport parts intact for the existing
+    // exact value checker to reject; never coerce their IDs into ordinary data.
+    return value.map(part => ({ ...part }));
   }
   if (Array.isArray(value)) return Promise.all(value.map((item, index) =>
-    decodeTurnValue(item, port, producer, written, expectedChild(expected, String(index), value))));
+    decodeTurnValue(item, port, producer, written, expectedChild(expected, String(index), value), nativeStateText)));
   if (value && typeof value === 'object') {
     const entries = await Promise.all(Object.entries(value).map(async ([key, item]) =>
-      [key, await decodeTurnValue(item, port, producer, written, expectedChild(expected, key, value))]));
+      [key, await decodeTurnValue(item, port, producer, written, expectedChild(expected, key, value), nativeStateText)]));
     return Object.fromEntries(entries);
   }
   return value;
