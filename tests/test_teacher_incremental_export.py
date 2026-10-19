@@ -1496,3 +1496,28 @@ def test_scoped_virtual_boot_transport_fails_closed(monkeypatch, failure):
     _, reader = module.scoped_sdk_session('sandbox')
     with pytest.raises(TimeoutError if failure == 'timeout' else OSError):
         reader('/proc/sys/kernel/random/boot_id')
+
+
+@pytest.mark.parametrize('failure', [OSError, TimeoutError, RuntimeError, ValueError, KeyError, TypeError])
+def test_scoped_file_failure_identifies_path_without_retry_or_identity_downgrade(monkeypatch, failure):
+    from types import SimpleNamespace
+    from scripts.coreweave import teacher_incremental_export as module
+    original = failure('gateway failure')
+    calls = []
+    def read_file(path):
+        calls.append(path)
+        def result(**_kwargs):
+            raise original
+        return SimpleNamespace(result=result)
+    monkeypatch.setattr(module, '_cwctl_module', lambda: SimpleNamespace(
+        read_sandbox=lambda *_a, **_k: SimpleNamespace(read_file=read_file)))
+    _, reader = module.scoped_sdk_session('sandbox')
+    fatal = failure in (ValueError, KeyError, TypeError)
+    with pytest.raises(failure if fatal else OSError) as caught:
+        reader('/batch/results/verified.json')
+    assert calls == ['/batch/results/verified.json']
+    if fatal:
+        assert caught.value is original
+    else:
+        assert '/batch/results/verified.json' in str(caught.value)
+        assert caught.value.__cause__ is original

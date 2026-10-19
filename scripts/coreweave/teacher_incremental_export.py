@@ -934,7 +934,16 @@ def scoped_sdk_session(sandbox_id: str, *, timeout: int = 180):
             if not boot.stdout.strip():
                 raise OSError('active teacher boot identity read was empty')
             return boot.stdout.encode()
-        result = sandbox.read_file(path).result(timeout=timeout)
+        try:
+            result = sandbox.read_file(path).result(timeout=timeout)
+        except (ValueError, KeyError, TypeError):
+            # Keep identity/programming failures fatal in the publisher.
+            raise
+        except Exception as error:
+            # The gateway's generic ReadFile error omits the requested path.
+            # Retain it in the durable transport failure instead of forcing a
+            # second pass over every source merely to locate the failed read.
+            raise OSError(f'teacher ReadFile {path!r}: {type(error).__name__}: {error}') from error
         return result if isinstance(result, bytes) else bytes(result)
 
     def read_many(paths):
