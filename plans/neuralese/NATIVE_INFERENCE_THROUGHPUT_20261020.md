@@ -266,8 +266,8 @@ architecture qualification. Full12B throughput remains unmeasured.
 ## Immutable actor plus future role-controller artifact
 
 The local artifact is
-`/home/werg/data/dgxops/native-actor-coordinator-composition-v5-20261020`, with
-`construction.json`, 369 byte-bound source/control files and package inventory
+`/home/werg/data/dgxops/native-actor-coordinator-composition-v6-20261020`, with
+`construction.json`, 372 byte-bound source/control files and package inventory
 `4395eecce55a29524f477956bc704910f37dda03c4dccc259b69ac899e1311cf`.
 It is **not cloud-staged or active**. `compose_native_actor_runtime.py` constructs
 it from the exact R15 construction receipt
@@ -352,3 +352,11 @@ composition, so no duplicate model/GPU qualification was run. Both actual
 publishing closures passed metadata checks. Three role-material tests cover
 actual-input preservation, two-field review bindings and wrong-review/source
 tamper rejection. No full-size cloud RL or task-lift result is claimed.
+
+
+The final artifact also includes the exact three reviewed utility CLIs from
+`04bd86020` under `scripts/coreweave`, including the preparer's sibling imports.
+An actual artifact-only smoke pins all utility/native package origins, verifies
+all 372 files, and runs each CLI's `--help` from `/tmp`. It records no preparation
+execution, root approval, model allocation, GPU run, cloud mutation or readiness.
+The source host can run the preparer against its real absolute references.

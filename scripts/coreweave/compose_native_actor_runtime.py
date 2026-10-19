@@ -152,6 +152,12 @@ def compose(base_construction, base_sha256, source, out, closures, publisher_loa
             target = pending/name
             target.parent.mkdir(parents=True,exist_ok=True)
             write_bytes_durable(target,git('show','d1ef19931:'+name))
+        # These helpers run on the real source host where /work bindings exist.
+        # Keep their sibling imports self-contained and pinned to reviewed bytes.
+        for name in ('compose_native_actor_runtime.py', 'prepare_native_actor_role.py',
+                     'verify_native_actor_runtime.py'):
+            target = pending/'scripts/coreweave'/name
+            write_bytes_durable(target,git('show','04bd86020:scripts/coreweave/'+name))
         def reference(path):
             path = Path(path)
             return {'path': str(out/path.relative_to(pending)),
@@ -261,6 +267,7 @@ def compose(base_construction, base_sha256, source, out, closures, publisher_loa
             'fused_inference_rebase':{'reviewed_commit':'cb46b28de','exact_units':list(FUSED_UNITS),
                 'r15_adjoints_byte_unchanged':True,'unrelated_deferred_gradient_machinery_imported':False},
             'role_controls':control_records,'role_mechanism_authorities':authority,
+            'preparation_utilities_commit':'04bd86020',
             'external_control_commits':{'native_supervised_boundary':'5778b3422'},
             'role_materials':materials,'controller_source':controller,'binder_source':binder,
             'publisher_loader':loader_reference,'actor_entrypoint':reference(pending/entry),

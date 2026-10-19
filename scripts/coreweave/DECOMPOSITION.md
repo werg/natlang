@@ -268,3 +268,9 @@ sources, bind both peers explicitly, and exercise the existing publishing loader
 without decoding checkpoints or starting models. Preserve numerical modules,
 old owner/control artifacts and live cloud packages. A local composition grants
 no readiness, training exposure, cloud staging or process authority.
+
+The frozen source-host artifact includes all three metadata utility CLIs and
+their sibling imports from the exact reviewed source commit. The real host can
+therefore prepare its own absolute bootstrap/provider bindings without reaching
+back into a supervisor checkout. This adds source closure only, not a process,
+model allocation, mathematical change or readiness claim.
