@@ -315,7 +315,9 @@ def _saved_update_recovery_controls(reference,receipt):
     from ..train.native_resident import code_inventory
     from ..common.hashing import canonical_json_sha256_hex as digest
     recovery=json.loads(_bound(reference).read_text())
-    if (recovery.get('schema')!=SAVED_UPDATE_RECOVERY
+    from . import native_interrupted_update as interrupted
+    operational = recovery.get('schema') == interrupted.SCHEMA
+    if (recovery.get('schema') not in (SAVED_UPDATE_RECOVERY, interrupted.SCHEMA)
             or recovery.get('original_operation_still_failed')is not True
             or recovery.get('complete_optimizer_rng_and_ordinary_exposure_verified')is not True):
         raise ValueError('saved-update recovery needs its explicit original failed-operation evidence')
@@ -335,7 +337,8 @@ def _saved_update_recovery_controls(reference,receipt):
     provider_launch=launch.get('original_provider_launch')or{}
     if (spec.get('kind')!='round' or request['kind']!='round' or result.get('status')!='failed'
             or spec.get('request_id')!=request['request_id'] or launch.get('request')!=request['request_id']
-            or argv!=launch['argv'] or argv[1:4]!=['-u','-m','natlang_neuralese.rl.native_bridge']
+            or argv!=launch['argv'] or not (interrupted.bridge_invocation(spec,argv,recovery,intent) if operational
+                else argv[1:4]==['-u','-m','natlang_neuralese.rl.native_bridge'])
             or Path(argument('--result')).resolve()!=result_path.resolve()
             or terminal.get('actual_operation_result')!=recovery['actual_failed_result']
             or type(terminal.get('returncode'))is not int or terminal['returncode']==0
@@ -359,7 +362,9 @@ def _saved_update_recovery_controls(reference,receipt):
     artifact(request['config'])
     slot=artifact(recovery['original_slot'],read=False)
     report=artifact(recovery['report']);readiness=artifact(receipt)
-    certificate=artifact(recovery['runtime_certificate']);artifact(recovery['partial_quality'],read=False)
+    certificate=artifact(recovery['runtime_certificate'])
+    if not operational or recovery.get('partial_quality'):
+        artifact(recovery['partial_quality'],read=False)
     updates=recovery.get('actual_new_optimizer_updates');boundary=readiness.get('continuation_boundary')or{}
     checkpoint=recovery['checkpoint'];parent=request['parent_checkpoint']['sha256']
     if (type(updates)is not int or updates<=0 or type(recovery.get('saved_global_step'))is not int
@@ -369,7 +374,8 @@ def _saved_update_recovery_controls(reference,receipt):
             or report.get('step')!=recovery['saved_stage_step']
             or report.get('checkpoint')!=slot['path'] or report.get('checkpoint_sha256')!=checkpoint['sha256']
             or (report.get('continuation')or{}).get('checkpoint_sha256')!=parent
-            or boundary.get('new_optimizer_updates')!=updates or boundary.get('reached')is not True
+            or boundary.get('new_optimizer_updates')!=updates
+            or boundary.get('reached') is not (False if operational else True)
             or boundary.get('checkpoint_sha256')!=checkpoint['sha256']
             or (readiness.get('checkpoint')or{}).get('sha256')!=checkpoint['sha256']
             or (certificate.get('native_identity')or{}).get('checkpoint_sha256')!=checkpoint['sha256']):
@@ -377,6 +383,27 @@ def _saved_update_recovery_controls(reference,receipt):
     progress=artifact(binding(Path(slot['path']).with_name('progress.json')))
     if progress.get('global_step')!=recovery['saved_global_step'] or progress.get('step')!=recovery['saved_stage_step']:
         raise ValueError('saved-update recovery counters differ from the failed operation inventory')
+    if operational:
+        resident = interrupted.verify_controls(recovery,receipt=readiness,report=report,
+            certificate=certificate,spec=spec,intent=intent,identities=identities,
+            terminal=terminal,parent=parent)
+    else:
+        resident = None
+        _saved_update_memory_controls(recovery,artifact,slot,parent,spec,report)
+    record={'schema':SAVED_UPDATE_RECOVERY,'at':recovery['at'],'intent':recovery['captured_owner_intent'],
+        'checkpoint':checkpoint,'checkpoint_pin':{'original_slot':recovery['original_slot'],
+            'bytes':recovery['checkpoint_bytes'],'original_inode':recovery['original_slot_inode'],
+            'pin_inode':recovery['independent_pin_inode']},'resident':resident,'recovery':reference,
+        'original_failed_result':recovery['actual_failed_result'],
+        'outcome':{'status':'failed','returncode':terminal['returncode'],'recovered_optimizer_updates':updates,
+                   'communication_runtime_qualified':certificate.get('passed')is True}}
+    _checkpoint_pin_controls(record)
+    return record,identities
+
+
+def _saved_update_memory_controls(recovery,artifact,slot,parent,spec,report):
+    from ..train.native_resident import code_inventory
+    from ..common.hashing import canonical_json_sha256_hex as digest
     wrapper=artifact(binding(Path(slot['path']).with_name('memory-qualification.json')))
     proof=artifact(wrapper['proof']);prepared=artifact(wrapper['request'])
     observation=json.loads(_bound(recovery['saved_frame_observation']).read_text())
@@ -391,15 +418,6 @@ def _saved_update_recovery_controls(reference,receipt):
             or remembered is not None and (remembered.get('passed')is not True
                 or any(remembered.get(key)!=wrapper.get(key)for key in('parent_checkpoint_sha256','request')))):
         raise ValueError('saved-update recovery lost its actual physical memory qualification')
-    record={'schema':SAVED_UPDATE_RECOVERY,'at':recovery['at'],'intent':recovery['captured_owner_intent'],
-        'checkpoint':checkpoint,'checkpoint_pin':{'original_slot':recovery['original_slot'],
-            'bytes':recovery['checkpoint_bytes'],'original_inode':recovery['original_slot_inode'],
-            'pin_inode':recovery['independent_pin_inode']},'resident':None,'recovery':reference,
-        'original_failed_result':recovery['actual_failed_result'],
-        'outcome':{'status':'failed','returncode':terminal['returncode'],'recovered_optimizer_updates':updates,
-                   'communication_runtime_qualified':certificate.get('passed')is True}}
-    _checkpoint_pin_controls(record)
-    return record,identities
 
 
 def prepare_saved_update_acknowledgement(recovery,receipt,out):
@@ -411,8 +429,18 @@ def prepare_saved_update_acknowledgement(recovery,receipt,out):
     observations=[observe(item['pid'])for item in identities]
     if any(same_process(old,new)and new['state']not in('Z','X')for old,new in zip(identities,observations)):
         raise ValueError('saved-update recovery owner or captured child remains alive')
+    from . import native_interrupted_update as interrupted
+    recovery_value = json.loads(_bound(recovery).read_text())
+    payload_verification = None
+    if recovery_value['schema'] == interrupted.SCHEMA:
+        if Path(out).exists():
+            payload_verification = json.loads(Path(out).read_text()).get('payload_verification')
+            interrupted.verify_payload_evidence(payload_verification, record)
+        else:
+            payload_verification = interrupted.verify_checkpoint_pin(recovery_value)
     value={'schema':SAVED_UPDATE_ACK,'at':time.time(),'recovery':recovery,'receipt':receipt,
            'observations':observations,'source_boot_id':boot,'outcome':record['outcome']}
+    if payload_verification is not None:value['payload_verification'] = payload_verification
     out=Path(out)
     if out.exists():
         existing=json.loads(out.read_text())
@@ -428,6 +456,9 @@ def verify_saved_update_acknowledgement(reference,*,receipt):
     if value.get('schema')!=SAVED_UPDATE_ACK or value.get('receipt')!=receipt:
         raise ValueError('saved-update acknowledgement differs from its original training receipt')
     record,identities=_saved_update_recovery_controls(value['recovery'],receipt)
+    from . import native_interrupted_update as interrupted
+    if json.loads(_bound(value['recovery']).read_text())['schema'] == interrupted.SCHEMA:
+        interrupted.verify_payload_evidence(value.get('payload_verification'), record)
     observations=value.get('observations');boot=Path('/proc/sys/kernel/random/boot_id').read_text().strip()
     if (not isinstance(observations,list)or len(observations)!=len(identities)
             or type(value.get('at'))not in(int,float)or value['at']<record['at']

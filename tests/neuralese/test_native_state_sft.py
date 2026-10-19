@@ -1069,7 +1069,7 @@ def test_held_failure_preserves_completed_optimizer_rng_and_exposure_for_exact_r
         equal(actual[key], expected[key])
 
 
-@pytest.mark.parametrize('refresh',['checkpoint','relative','signal','complete'])
+@pytest.mark.parametrize('refresh',['checkpoint','relative','signal','stop','complete'])
 def test_refresh_only_boundary_does_not_force_task_window(tmp_path,monkeypatch,refresh):
     import json
     import torch
@@ -1097,7 +1097,7 @@ def test_refresh_only_boundary_does_not_force_task_window(tmp_path,monkeypatch,r
         '--task-eval',json.dumps({'packet':{'path':'unused','sha256':'s'},'cases':[0]})]
     if refresh=='checkpoint':argv+=['--refresh-at-checkpoint']
     elif refresh=='relative':argv+=['--refresh-after-updates','1']
-    elif refresh=='signal':
+    elif refresh in('signal','stop'):
         import copy
         import os
         import signal
@@ -1110,7 +1110,7 @@ def test_refresh_only_boundary_does_not_force_task_window(tmp_path,monkeypatch,r
             result=update(*args,**kwargs)
             expected_state['optimizer']=copy.deepcopy(args[1].state_dict())
             expected_state['rng']=trainer.capture_training_rng_state('cpu')
-            os.kill(os.getpid(),signal.SIGUSR2)
+            os.kill(os.getpid(),signal.SIGTERM if refresh=='stop'else signal.SIGUSR2)
             return result
         monkeypatch.setattr(trainer,'native_training_update',request_after_update)
     assert trainer.main(argv)==0
@@ -1118,11 +1118,15 @@ def test_refresh_only_boundary_does_not_force_task_window(tmp_path,monkeypatch,r
     if refresh!='complete':
         assert not calls
         assert report['completed'] is False
-        assert report['continuation_boundary']['reached'] is True
+        assert report['continuation_boundary']['reached'] is (refresh!='stop')
         assert report['continuation_boundary']['new_optimizer_updates']==1
         assert torch.load(out/'checkpoint.pt',weights_only=False)['training']['exposure_counts']=={'train':1}
-        if refresh=='signal':
-            assert report['continuation_boundary']['requested_signals'][0]['signal']=='SIGUSR2'
+        if refresh in('signal','stop'):
+            if refresh=='signal':assert report['continuation_boundary']['requested_signals'][0]['signal']=='SIGUSR2'
+            else:
+                certificate=json.loads((out/'native-runtime-certificate.json').read_text())
+                assert certificate['passed']is False and certificate['deferred']is True
+                assert certificate['reason']=='operational stop; qualification deferred until resume'
             saved=torch.load(out/'checkpoint.pt',weights_only=False)['training']
             def equal(left,right):
                 if isinstance(left,dict):
