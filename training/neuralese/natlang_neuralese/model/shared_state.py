@@ -84,8 +84,10 @@ def _actor_layer_inputs(bank,groups,port,layer,h,attention):
     if bank is None:
         return _layer_inputs(port,layer,h,attention)
     merged=None
-    for name,rows in groups:
-        values=bank.execute(name,lambda:_layer_inputs(port,layer,h.index_select(1,rows),attention))
+    for name,rows,subset in groups:
+        from .native_gradient_partitions import gradient_partitions
+        with gradient_partitions(subset):
+            values=bank.execute(name,lambda:_layer_inputs(port,layer,h.index_select(1,rows),attention))
         dim=2 if attention else 1
         if merged is None:
             merged=[value.new_zeros((*value.shape[:dim],h.shape[1],*value.shape[dim+1:])) for value in values]
@@ -97,8 +99,10 @@ def _actor_finish(bank,groups,port,layer,h,out,attention):
     if bank is None:
         return _finish(port,layer,h,out,attention)
     result=torch.zeros_like(h)
-    for name,rows in groups:
-        value=bank.execute(name,lambda:_finish(port,layer,h.index_select(1,rows),out.index_select(2 if attention else 1,rows),attention))
+    for name,rows,subset in groups:
+        from .native_gradient_partitions import gradient_partitions
+        with gradient_partitions(subset):
+            value=bank.execute(name,lambda:_finish(port,layer,h.index_select(1,rows),out.index_select(2 if attention else 1,rows),attention))
         result=result.index_copy(1,rows,value)
     return result
 
@@ -154,6 +158,15 @@ def _fp32_kv_cotangents(port, tensor):
 
 
 def forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None = None, *, embeddings=None, external_blocks=None, external_identity=None, retain_states=True):
+    """One layer-major graph traversal with immutable reduction provenance."""
+    from .native_gradient_partitions import GradientPartitions, gradient_partitions
+    partitions = GradientPartitions(tuple(len(node.token_ids) for node in plan.invocations))
+    with gradient_partitions(partitions):
+        return _forward_graph(port, plan, adapter, embeddings=embeddings,
+            external_blocks=external_blocks, external_identity=external_identity, retain_states=retain_states)
+
+
+def _forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None = None, *, embeddings=None, external_blocks=None, external_identity=None, retain_states=True):
     """Single layer-major DAG pass. No source trajectory is rerun per import."""
     device = port.embedding_weight.device
     ids = plan.tensor([t for n in plan.invocations for t in n.token_ids], device)
@@ -169,7 +182,16 @@ def forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None =
     external = _external_layers(port, plan, external_blocks, external_identity)
     from .native_actor_graph import invocation_actor_bank
     actor_bank=invocation_actor_bank(port)
-    actor_groups=actor_bank.row_groups(plan,device) if actor_bank is not None else ()
+    actor_groups=()
+    if actor_bank is not None:
+        from .native_gradient_partitions import GradientPartitions
+        actor_bank.row_groups(plan,device)  # Validate the complete actual actor inventory.
+        # Interleaving A0,B1,A2 as actor buckets A={0,2},B={1} changes the
+        # shared-base accumulator order (and can change BF16 gradients after
+        # prior microbatches). Keep invocation order, with each token once.
+        actor_groups=tuple((node.name,torch.arange(offset,offset+len(node.token_ids),device=device),
+                            GradientPartitions((len(node.token_ids),)))
+            for node,offset in zip(plan.invocations,plan.offsets) if node.token_ids)
     if plan.token_count == 0:
         state = tuple(tuple(torch.cat([item[i][j] for item in external], dim=2 if port.is_attention(i) else 1)
                             for j in range(2 if port.is_attention(i) else 1)) for i in range(port.num_layers))
@@ -241,9 +263,8 @@ def forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None =
                     with eager_rms_norm(compiled_only=True):
                         return function(*args)
                 run_layer=stable_norm_layer
-            from .native_adapters import capture_native_execution
-            from ..common.native_higher_order import capture_reference_execution
-            run_layer = capture_reference_execution(capture_native_execution(run_layer))
+            from .native_adapters import capture_native_checkpoint_execution
+            run_layer = capture_native_checkpoint_execution(run_layer)
             from torch.utils.checkpoint import checkpoint
             checkpoint = getattr(port, 'activation_checkpoint', checkpoint)
             updated = checkpoint(run_layer, h, *external_i, use_reentrant=False,
@@ -534,8 +555,17 @@ class SharedStateModel(nn.Module):
         return logits
 
     def forward(self, plan, *, embeddings=None, reference=False, external_blocks=None, external_identity=None, retain_states=True):
+        from .native_gradient_partitions import GradientPartitions, gradient_partitions
+        partitions = None if reference else GradientPartitions(tuple(len(node.token_ids) for node in plan.invocations))
+        with gradient_partitions(partitions):
+            return self._forward_impl(plan, embeddings=embeddings, reference=reference,
+                external_blocks=external_blocks, external_identity=external_identity, retain_states=retain_states)
+
+    def _forward_impl(self, plan, *, embeddings=None, reference=False, external_blocks=None, external_identity=None, retain_states=True):
         ids = plan.tensor([t for node in plan.invocations for t in node.token_ids], self.input_rows.device)
-        raw = self.embed(ids[None]) if embeddings is None else embeddings
+        from .native_gradient_partitions import gradient_partitions
+        with gradient_partitions(None):
+            raw = self.embed(ids[None]) if embeddings is None else embeddings
         fn = forward_reference if reference else forward_graph
         kwargs = {} if reference else {'retain_states': retain_states}
         result = fn(self.port, plan, self.adapter, embeddings=raw, external_blocks=external_blocks, external_identity=external_identity, **kwargs)

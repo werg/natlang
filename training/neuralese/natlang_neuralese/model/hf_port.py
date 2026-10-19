@@ -223,10 +223,9 @@ class QwenPortBackbone(PortBackbone):
     def _feed_forward(self, layer, h):
         """Residual feed-forward, in token chunks when `ffn_chunk_tokens` is set (token-local, so exact): bounds the
         expanded-width and expert-dispatch temporaries of long sequences."""
-        chunk = self.ffn_chunk_tokens
-        if chunk <= 0 or h.shape[1] <= chunk:
-            return h + layer.mlp(layer.post_attention_layernorm(h))
-        return torch.cat([part + layer.mlp(layer.post_attention_layernorm(part)) for part in h.split(chunk, dim=1)], 1)
+        from .native_gradient_partitions import token_local_chunks
+        return token_local_chunks(h, self.ffn_chunk_tokens,
+            lambda part: part + layer.mlp(layer.post_attention_layernorm(part)))
 
     def _run_checkpointed(self, h, layers, cache, positions, padding, left_pad):
         """`run_layers` with each layer under activation checkpointing (as the LFM2 port): only the layer's own
@@ -259,6 +258,8 @@ class QwenPortBackbone(PortBackbone):
                                                   padding=padding_arg, left_pad=left_pad_arg, _checkpoint_layer=True)
                 return (output, *updated.states[index].fields())
 
+            from .native_adapters import capture_native_checkpoint_execution
+            run_one = capture_native_checkpoint_execution(run_one)
             h, *updated = checkpoint(run_one, h, positions, padding, left_pad, cache.pad, *fields,
                                      use_reentrant=False, preserve_rng_state=self.checkpoint_preserve_rng)
             states, lengths = list(cache.states), list(cache.lengths)
