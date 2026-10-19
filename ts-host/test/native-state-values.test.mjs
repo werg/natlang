@@ -130,6 +130,32 @@ test('assistant native completion is decoded against the declared return type', 
   await run('string', 'ordinary text result', 'ordinary text result');
   await run('number', '42', 42);
   await run('{ count: number; label: string }', '{"count":7,"label":"ready"}', { count: 7, label: 'ready' });
+  const unknown = await makeDriver('opaque value');
+  const unknownSession = open({ type: '() => unknown', instructions: 'Return the requested value.' }, { neuralese }).session;
+  await new NativeToolAgent(unknown.driver, { maxTurns: 2, neuralese }).run(unknownSession);
+  assert.equal(unknownSession.lam.return.$neuralese.id, unknown.artifact.id);
+
+  const listArtifacts = await Promise.all(['first', 'second'].map(async text => store.putNativeState({
+    ...nativeStateFixture(), metadata: { ...nativeStateFixture().metadata, text },
+  })));
+  const listParts = listArtifacts.map(artifact => ({ type: 'native_state', id: artifact.id }));
+  const listDriver = Object.assign(async () => ({ calls: [], raw_response: {
+    choices: [{ message: { role: 'assistant', content: listParts } }],
+  } }), { neuralese: true });
+  const listSession = open({ type: '() => Neuralese<string>[]', instructions: 'Return both values.' }, { neuralese }).session;
+  await new NativeToolAgent(listDriver, { maxTurns: 2, neuralese }).run(listSession);
+  assert.deepEqual(listSession.lam.return.map(value => value.$neuralese.id), listArtifacts.map(value => value.id));
+
+  const recordArtifact = await store.putNativeState({ ...nativeStateFixture(), metadata: {
+    ...nativeStateFixture().metadata, text: 'record memo',
+  } });
+  const recordDriver = Object.assign(async () => ({ calls: [['return_result', { status: 'success', value: {
+    memo: [{ type: 'native_state', id: recordArtifact.id }],
+  } }]] }), { neuralese: true });
+  const recordSession = open({ type: '() => { memo: Neuralese<string>[] }', instructions: 'Return the memo.' },
+    { neuralese }).session;
+  await new NativeToolAgent(recordDriver, { maxTurns: 2, neuralese }).run(recordSession);
+  assert.deepEqual(recordSession.lam.return.memo.map(value => value.$neuralese.id), [recordArtifact.id]);
 
   const native = await makeDriver('soft memo');
   const softSession = open({ type: '() => Neuralese<string>', instructions: 'Return the requested soft value.' },
@@ -148,6 +174,20 @@ test('assistant native completion is decoded against the declared return type', 
   const mixedSession = open({ type: '() => string', instructions: 'Return the requested text.' }, { neuralese }).session;
   await new NativeToolAgent(mixedDriver, { maxTurns: 2, neuralese }).run(mixedSession);
   assert.equal(mixedSession.lam.return, 'before middle after');
+});
+
+test('textual assistant producer spans remain recorded as writes', async () => {
+  const store = new MemoryNeuraleseStore(), port = new StandInNeuralesePort(store, hashingEmbedder(8), 8);
+  const neuralese = { store, port, dialect: port.dialect };
+  const driver = Object.assign(async () => ({
+    text: '<|neuralese|>recorded producer<|/neuralese|>', calls: [],
+  }), { neuralese: true });
+  const session = open({ type: '() => Neuralese<string>', instructions: 'Return a produced memo.' }, { neuralese }).session;
+  await new NativeToolAgent(driver, { maxTurns: 2, neuralese }).run(session);
+  assert.equal((await store.get(session.lam.return.$neuralese.id)).meta.producer.kind, 'stand-in');
+  const writes = session.runtime.trace.events.filter(event => event.kind === 'block_write');
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0].block, session.lam.return.$neuralese.id);
 });
 
 test('native typed artifacts survive file/OPFS restart, pin lifecycle, .nz and compiled-import adoption', async () => {

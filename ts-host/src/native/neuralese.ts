@@ -326,6 +326,15 @@ function expectedValueTypes(expected: TurnValueExpectation | undefined): Type[] 
   return [type];
 }
 
+function acceptsNativeStateParts(expected: TurnValueExpectation | undefined): boolean {
+  if (!expected) return false;
+  const type = expected.env.resolve(expected.type);
+  if (type.kind === 'neuralese' || type.kind === 'prim' && type.name === 'unknown') return true;
+  if (type.kind === 'union') return type.members.some(member => acceptsNativeStateParts({ ...expected, type: member }));
+  if (type.kind === 'list' || type.kind === 'dict') return acceptsNativeStateParts({ ...expected, type: type.element });
+  return false;
+}
+
 function expectedChild(expected: TurnValueExpectation | undefined, key: string, container: unknown): TurnValueExpectation | undefined {
   const candidates = expectedValueTypes(expected).filter(type => {
     if (type.kind !== 'record' || !container || typeof container !== 'object') return true;
@@ -366,10 +375,12 @@ export async function decodeTurnValue(value: unknown, port: NeuralesePort | unde
     // position; they must not be handed an opaque-reference array.
     const hasNonText = value.some(part => part.type !== 'text');
     if (!hasNonText) return value.map(part => (part as NeuraleseTextPart).text).join('');
-    const onlyStateReference = value.length === 1 && value[0]!.type === 'native_state';
-    const acceptsNativeReference = expectedValueTypes(expected).some(type => type.kind === 'neuralese' ||
-      type.kind === 'prim' && type.name === 'unknown');
-    if (onlyStateReference && acceptsNativeReference) return value.map(part => ({ ...part }));
+    const onlyStateReferences = value.length > 0 && value.every(part => part.type === 'native_state');
+    if (onlyStateReferences && acceptsNativeStateParts(expected)) {
+      if (expected && expected.env.resolve(expected.type).kind === 'list')
+        return value.map(part => nativeStateSentinel(part.id, part.stop_gradient, part.source_occurrence));
+      return value.map(part => ({ ...part }));
+    }
     if (value.some(part => part.type === 'native_state') && expected && nativeStateText) {
       const text: string[] = [];
       for (const part of value) {

@@ -610,7 +610,7 @@ export class NativeToolAgent {
       content.some(part => part.type !== 'text');
     const decoded = { ...response,
       ...(structuredResult ? { text: '' } : response.text === undefined ? {} : { text: await decodeTurnValue(response.text, port,
-        { ...producer, marker_context: 'assistant-text' }, undefined, undefined, nativeStateText) as string }),
+        { ...producer, marker_context: 'assistant-text' }, written, undefined, nativeStateText) as string }),
       ...(response.calls === undefined ? {} : { calls: await Promise.all(response.calls.map(call => decodeCall(call))) as ModelTurn['calls'] }) };
     if (structuredResult) {
       // Actual producer parts are a typed return, not an opaque-ID string.
