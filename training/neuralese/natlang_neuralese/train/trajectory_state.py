@@ -1,5 +1,6 @@
 """Optimizer and atomic, complete state checkpoints for recurrence training."""
 import json
+import hashlib
 import os
 import time
 import random
@@ -142,15 +143,40 @@ def atomic_checkpoint(path, state):
     after_write(path)
 
 
+class _CheckpointDigestWriter:
+    """Hash the sequential zip writer without exposing a bypassing descriptor."""
+    def __init__(self, stream):
+        self.stream = stream
+        self.digest = hashlib.sha256()
+        self.bytes = 0
+
+    def write(self, value):
+        if self.stream.tell() != self.bytes:
+            raise OSError('checkpoint stream is no longer sequential')
+        written = self.stream.write(value)
+        if written != len(value) or self.stream.tell() != self.bytes + written:
+            raise OSError('checkpoint stream did not write its complete bytes')
+        self.digest.update(value)
+        self.bytes += written
+        return written
+
+    def flush(self):
+        return self.stream.flush()
+
+
 def _atomic_checkpoint(path, state):
     path = Path(path)
     pending = path.with_suffix('.pending')
     started = time.monotonic()
     try:
         with pending.open('wb') as stream:
-            torch.save(state, stream)
+            writer = _CheckpointDigestWriter(stream)
+            torch.save(state, writer)
             stream.flush()
             os.fsync(stream.fileno())
+            written_stat = os.fstat(stream.fileno())
+            if writer.bytes != written_stat.st_size:
+                raise OSError('checkpoint digest did not cover its whole file')
             # On the GB10 page cache comes out of the same memory CUDA allocates from: a multi-GB checkpoint's
             # clean cache would otherwise sit in MemFree until something reclaims it.
             drop_file_cache(stream.fileno())
@@ -161,6 +187,14 @@ def _atomic_checkpoint(path, state):
             os.fsync(directory)
         finally:
             os.close(directory)
+        committed = path.stat()
+        if any(getattr(committed, field) != getattr(written_stat, field)
+               for field in ('st_dev', 'st_ino', 'st_size', 'st_mtime_ns')):
+            raise RuntimeError('checkpoint changed during its atomic publication')
+        from ..common.hashing import remember_written_file_digest
+        signature = tuple(getattr(committed, field) for field in
+                          ('st_dev', 'st_ino', 'st_size', 'st_mtime_ns', 'st_ctime_ns'))
+        remember_written_file_digest(path, writer.digest.hexdigest(), signature=signature)
         record_checkpoint_write(path, path.stat().st_size, time.monotonic() - started)
     except BaseException:
         # A failed write (often ENOSPC) leaves an incomplete owned temp file.
