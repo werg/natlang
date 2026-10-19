@@ -306,7 +306,7 @@ class ParameterCotangentScope:
         # They still participate in repeated embedding and readout uses, so
         # they need the same one-cast cotangent path when stored in BF16.
         for name, parameter in model.named_parameters(remove_duplicate=False):
-            if (name in {'input_rows', 'output_rows', 'extra_input_rows', 'extra_output_rows'}
+            if (name.rsplit('.', 1)[-1] in {'input_rows', 'output_rows', 'extra_input_rows', 'extra_output_rows'}
                     and parameter.dtype in (torch.float16, torch.bfloat16)
                     and id(parameter) not in seen):
                 selected.append((name, parameter)); seen.add(id(parameter))

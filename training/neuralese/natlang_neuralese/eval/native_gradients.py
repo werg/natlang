@@ -48,7 +48,9 @@ def _compare_complete_gradients(flat_loss,cached_loss,named,flat_inputs,cached_i
     """
     if any(type(value)not in(float,int)or not math.isfinite(value)or value<0 for value in(atol,rtol)):
         raise ValueError('complete gradient comparison needs finite nonnegative gates')
-    named=list(named);names=['input_embeddings',*(name for name,_ in named)]
+    named=list(named)
+    has_inputs=flat_inputs is not None
+    names=(["input_embeddings"] if has_inputs else [])+[name for name,_ in named]
     parameters=[value for _,value in named]
     if (len(names)!=len(set(names))or len(parameters)!=len({id(p)for p in parameters})
             or any(not isinstance(name,str)or not name for name,_ in named)
@@ -56,8 +58,10 @@ def _compare_complete_gradients(flat_loss,cached_loss,named,flat_inputs,cached_i
         raise ValueError('complete gradient inventory needs unique trainable names and parameters')
     if gradient_observer is not None and callable(getattr(gradient_observer,'begin_vjp_observation',None)):
         gradient_observer.begin_vjp_observation()
+    if (flat_inputs is None) != (cached_inputs is None) and cached_factory is None:
+        raise ValueError('complete gradient comparison must agree on explicit input presence')
     old_grads={id(p):(p.grad,None if p.grad is None else p.grad._version)for p in parameters}
-    flat_values=(flat_inputs,*parameters)
+    flat_values=((flat_inputs,) if has_inputs else ())+tuple(parameters)
     try:
         flat=torch.autograd.grad(flat_loss,flat_values,allow_unused=True)
         if flat_cotangent_scope is not None:
@@ -75,7 +79,10 @@ def _compare_complete_gradients(flat_loss,cached_loss,named,flat_inputs,cached_i
             cached_loss,cached_inputs,cached_cotangent_scope=produced
         else:
             cached_loss,cached_inputs=produced
-    cached_values=(cached_inputs,*parameters)
+    if (cached_inputs is not None) != has_inputs:
+        if cached_cotangent_scope is not None:cached_cotangent_scope.close()
+        raise ValueError('complete gradient comparison changed explicit input presence')
+    cached_values=((cached_inputs,) if has_inputs else ())+tuple(parameters)
     retained=sum(g.numel()*g.element_size()for g in waiting.values()if g is not None)
     remaining=retained;max_pair=0;comparisons={};hooks=[]
     def hook(name):

@@ -35,12 +35,12 @@ class SemanticParticipant:
     recipe_binding: dict | None = None
 
 
-def producer(participant, example, view, *, external_blocks=None, chunk_tokens=128, supervise=True):
+def producer(participant, example, view, *, external_blocks=None, chunk_tokens=128, supervise=True, reference=False):
     model = participant.model
     model.port.checkpoint_layers = True
     kwargs = ({'external_blocks': external_blocks, 'external_identity': participant.identity}
               if external_blocks else {})
-    result = model(example.plan, retain_states=True, **kwargs)
+    result = model(example.plan, retain_states=True, reference=reference, **kwargs)
     export = view['export']
     if export.get('logical', False):
         values = capture_logical_span(result, export['node'], export['start'], export['stop'])
@@ -62,7 +62,7 @@ def producer(participant, example, view, *, external_blocks=None, chunk_tokens=1
     # trajectory. They are not synthetic payload tokens or exported KV rows.
     op, close = model.marker_ids[:2]
     plan = compile_graph([Invocation('__semantic_payload', (op, *ids, close), producing=((1, 1 + len(ids)),))])
-    baseline = capture_block(model(plan), '__semantic_payload', 1, 1 + len(ids),
+    baseline = capture_block(model(plan, reference=reference), '__semantic_payload', 1, 1 + len(ids),
                              text=block.text, **participant.identity)
     return block, baseline, result, control
 
@@ -124,13 +124,13 @@ def consumer_example(example, view, token_count):
         {name: value for name, value in example.external_states.items() if name in used}), wire
 
 
-def _consumer_forward(participant, example, view, block, *, external_blocks=None, chunk_tokens=128):
+def _consumer_forward(participant, example, view, block, *, external_blocks=None, chunk_tokens=128, reference=False):
     consumer, wire = consumer_example(example, view, len(block.token_ids))
     blocks = {**(external_blocks or {}), wire: block}
     # Unused producer observations do not enter the consumer's external layout.
     blocks = {name: blocks[name] for name in consumer.plan.external_names}
     result = participant.model(consumer.plan, external_blocks=blocks,
-                               external_identity=participant.identity, retain_states=False)
+                               external_identity=participant.identity, retain_states=False, reference=reference)
     loss, details = graph_loss_from_result(participant.model, consumer, result, chunk_tokens=chunk_tokens)
     return loss, result, consumer, details
 
@@ -172,7 +172,7 @@ def distillation_loss(model, student, teacher, consumer, *, temperature=1., chun
     return total / selected.sum()
 
 
-def joint_loss(vae, participants, row, *, phase='joint', options=None, fetch_external=None):
+def joint_loss(vae, participants, row, *, phase='joint', options=None, fetch_external=None, reference=False):
     """Differentiable bidirectional loss; this function never steps an optimizer."""
     options = options or {}
     for key in ('kl_weight', 'alignment_weight', 'cross_weight', 'reconstruction_weight',
@@ -197,7 +197,7 @@ def joint_loss(vae, participants, row, *, phase='joint', options=None, fetch_ext
         observations[name] = external
         with torch.set_grad_enabled(torch.is_grad_enabled() and phase != 'vae'):
             produced[name] = producer(participant, example, view, external_blocks=external,
-                chunk_tokens=chunk_tokens, supervise=phase != 'vae')
+                chunk_tokens=chunk_tokens, supervise=phase != 'vae', reference=reference)
     terms, stats = [], {'pairs': [], 'phase': phase, 'models': sorted(parsed)}
     for first, second in itertools.combinations(sorted(parsed), 2):
         a, ab, ar, ac = produced[first]
@@ -227,7 +227,7 @@ def joint_loss(vae, participants, row, *, phase='joint', options=None, fetch_ext
                 participant, (example, view) = participants[name], parsed[name]
                 with torch.set_grad_enabled(torch.is_grad_enabled() and phase == 'joint'):
                     consumer_loss, adapted_result, consumer, _ = _consumer_forward(participant,
-                        example, view, adapted, external_blocks=observations[name], chunk_tokens=chunk_tokens)
+                        example, view, adapted, external_blocks=observations[name], chunk_tokens=chunk_tokens, reference=reference)
                 if phase == 'joint':
                     behavior.append(consumer_loss)
                 else:

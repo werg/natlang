@@ -269,7 +269,8 @@ def _first_view(source, participants, name):
 def _layout(source, participants, name, resolver):
     participant = participants[name]
     example, view = _first_view(source, participants, name)
-    with torch.no_grad():
+    context=participant.backend.autocast() if participant.backend is not None else contextlib.nullcontext()
+    with torch.no_grad(),context:
         external = {key: resolver(name, value['id']) for key, value in example.external_states.items()}
         block = producer(participant, example, view, supervise=False, external_blocks=external)[0]
     return StateLayout.from_block(block)
@@ -512,6 +513,7 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
     if prior and prior.get('schema') != SHARED_CHECKPOINT_SCHEMA:
         raise ValueError('semantic continuation needs its complete shared model/VAE/optimizer checkpoint')
     training = dict(prior['training']) if prior else {'step': 0, 'exposure': {}, 'config_history': []}
+    qualification_cache = {}
     if semantic_parent is not None:
         parent_identity={role+'_sha256':binding['sha256'] for role,binding in semantic_parent.items()}
         if (sha256_file_hex_cached(resume)!=semantic_parent['checkpoint']['sha256']
@@ -734,12 +736,15 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
         optimizer.zero_grad(set_to_none=True)
         vae.requires_grad_(phase['kind'] != 'distill')
         _adjust_lr(optimizer, options.get('vae_lr', config['vae_lr']))
+        if not policy_due:
+            from .native_semantic_capacity import ensure_phase_qualification
+            ensure_phase_qualification(vae, selected, train, phase=phase['kind'], options=options,
+                optimizer=optimizer, fetch_external=resolver, device=device,
+                training=training, out=out, cache=qualification_cache)
         for participant in selected.values():
             if participant.backend is not None:participant.backend.reset_row_counts()
-        with contextlib.ExitStack() as stack:
-            for participant in selected.values():
-                if participant.backend is not None:
-                    stack.enter_context(participant.backend.autocast())
+        from .native_semantic_gradients import SemanticObjectiveScope
+        with SemanticObjectiveScope(selected, vae) as objective_scope:
             if policy_due:
                 from .native_semantic_policy import policy_loss
                 loss,details,actual_active=policy_loss(policy_source,policy_entry,participants,vae,training,origin,
@@ -749,6 +754,7 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
                 loss, details = joint_loss(vae, selected, row, phase=phase['kind'], options=options,
                                            fetch_external=resolver)
             loss.backward()
+            objective_scope.finish()
         parameters = [parameter for participant in selected.values() for parameter in participant.model.parameters()
                       if parameter.requires_grad and parameter.grad is not None]
         parameters += [parameter for parameter in vae.parameters() if parameter.requires_grad and parameter.grad is not None]
