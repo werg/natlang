@@ -1,0 +1,7 @@
+# Rolling held-task evaluation dispatch
+
+Policy: evaluate exactly the declared held rows, with the declared actor, checkpoint, prompt, seed, resource limits, and scoring contract. Keep up to the requested worker count occupied while cases remain. A completed case releases its slot for the next not-yet-started case. A collector that stops at an authenticated before-case storage pause keeps its exact queue and journal and is resumed only when the declared disk floor is available. Operator drains, other exits, and failures remain terminal for that attempt; none are retried or relabeled as model outcomes.
+
+Mechanism: `TaskEval._queues` writes one immutable single-entry queue per selected case. Its entry fields and original per-case jobs, result, and log paths remain unchanged. `wait_collectors` owns the bounded launch/poll loop and returns one exit code per case. It validates queue bytes and journal events before resuming a storage pause. The same path is used by LFM and Mellum through shared task evaluation; no prompt, model, seed, scorer, or task data changes.
+
+Evidence: deterministic scheduler tests use variable completion times to prove slots refill, each case launches exactly once, and queue entry bytes and artifact paths stay fixed. A paused case must yield its worker slot to other eligible cases, then resume only its same queue/journal after the disk floor clears. Failure and drain cases must not be resurrected. Tests do not call a model or collector.

@@ -471,3 +471,133 @@ def test_storage_worker_resumes_before_another_busy_worker_finishes(tmp_path, mo
     assert module.wait_collectors([(Busy(),logs[0]),(Finished(75),logs[1])],queues,launch,
                                   min_free_mib=20)==[0,0]
     assert launched==[queues[1][0]] and all(log.closed for log in logs)
+
+
+def test_rolling_case_dispatch_refills_slots_without_changing_case_entries(tmp_path, monkeypatch):
+    import io
+    import json
+    from pathlib import Path
+    from natlang_neuralese.eval import task_cadence as module
+
+    evaluator = module.TaskEval.__new__(module.TaskEval)
+    evaluator.spec = module.parse_task_eval({'packet': {'path': 'packet', 'sha256': 'a' * 64},
+        'cases': [3, 8, 13, 21], 'workers': 2, 'temperature': 0.4})
+    evaluator.rows = [{}, {}, {}, {}]
+    evaluator.prompt_rendering = 'full'
+    evaluator.subset = tmp_path / 'subset.jsonl'
+    queues = evaluator._queues(tmp_path / 'run', repeat=2)
+    assert len(queues) == 4 and all(len(entries) == 1 for _, _, entries in queues)
+    entries = [rows[0] for _, _, rows in queues]
+    assert [entry['index'] for entry in entries] == list(range(4))
+    assert [entry['seed'] for entry in entries] == [600003, 600008, 600013, 600021]
+    for index, entry in enumerate(entries):
+        case = tmp_path / 'run' / f'worker-{index % 2:02d}' / f'case-{index:04d}'
+        assert Path(entry['jobs']) == case / 'jobs'
+        assert Path(entry['log']) == case / 'collector.log'
+        assert Path(entry['output']) == case / 'results.jsonl'
+        assert json.loads(queues[index][0].read_text()) == entry
+
+    completion = {0: 3, 1: 1, 2: 1, 3: 2}
+    launch_order = []
+    active = set()
+    peak = 0
+
+    class Child:
+        def __init__(self, index):
+            self.index = index
+            self.remaining = completion[index]
+        def poll(self):
+            self.remaining -= 1
+            if self.remaining > 0:
+                return None
+            active.remove(self.index)
+            with queues[self.index][1].open('a') as stream:
+                stream.write(json.dumps({'event': 'finish', 'key': entries[self.index]['key']}) + '\n')
+            return 0
+
+    def launch(queue, journal, queue_entries):
+        nonlocal peak
+        index = queue_entries[0]['index']
+        assert index not in launch_order
+        launch_order.append(index)
+        active.add(index)
+        peak = max(peak, len(active))
+        return Child(index), io.StringIO()
+
+    monkeypatch.setattr(module.time, 'sleep', lambda _: None)
+    assert module.wait_collectors([], queues, launch, min_free_mib=0, max_workers=2) == [0] * 4
+    assert peak == 2 and launch_order == [0, 1, 2, 3]
+    assert not active
+    assert all(queue.read_bytes() == (json.dumps(entry, sort_keys=True) + '\n').encode()
+               for (queue, _, _), entry in zip(queues, entries, strict=True))
+
+
+def test_rolling_storage_pause_yields_slot_and_resumes_same_case_once(tmp_path, monkeypatch):
+    import io
+    import json
+    from types import SimpleNamespace
+    from natlang_neuralese.eval import task_cadence as module
+
+    queues = []
+    for index in range(3):
+        directory = tmp_path / f'case-{index}'
+        directory.mkdir()
+        queue, journal = directory / 'queue.jsonl', directory / 'journal.jsonl'
+        entry = {'index': index, 'key': f'task-{index}', 'output': str(directory / 'results.jsonl')}
+        queue.write_text(json.dumps(entry, sort_keys=True) + '\n')
+        queues.append((queue, journal, [entry]))
+    free = iter([100, 10, 100, 100, 100, 100])
+    monkeypatch.setattr(module.shutil, 'disk_usage', lambda _: SimpleNamespace(free=next(free) * 1024**2))
+    monkeypatch.setattr(module.time, 'sleep', lambda _: None)
+    launched, active = [], set()
+
+    class Child:
+        def __init__(self, index, attempt):
+            self.index, self.attempt = index, attempt
+        def poll(self):
+            active.remove(self.index)
+            if self.index == 0 and self.attempt == 1:
+                with queues[0][1].open('a') as stream:
+                    stream.write(json.dumps({'event': 'storage_pause', 'key': 'task-0',
+                                             'minimum_free_mib': 20}) + '\n')
+                return 75
+            with queues[self.index][1].open('a') as stream:
+                stream.write(json.dumps({'event': 'finish', 'key': f'task-{self.index}'}) + '\n')
+            return 0
+
+    def launch(queue, journal, entries):
+        index = entries[0]['index']
+        attempt = sum(item == index for item in launched) + 1
+        launched.append(index)
+        active.add(index)
+        return Child(index, attempt), io.StringIO()
+
+    codes = module.wait_collectors([], queues, launch, min_free_mib=20, max_workers=2)
+    assert codes == [0, 0, 0]
+    assert launched.count(0) == 2 and launched.count(1) == 1 and launched.count(2) == 1
+    assert launched.index(2) < launched.index(0, 1)  # untouched work ran before the paused case resumed
+    assert not active
+    assert all(journal.read_text().count('"event": "finish"') == 1
+               for _, journal, _ in queues)
+
+
+@pytest.mark.parametrize('event', ['operator_drain', 'collector_error'])
+def test_rolling_dispatch_does_not_resurrect_terminal_exit_75_or_failure(tmp_path, monkeypatch, event):
+    import io
+    import json
+    from natlang_neuralese.eval import task_cadence as module
+    queue, journal = tmp_path / 'queue', tmp_path / 'journal'
+    entry = {'key': 'only'}
+    queue.write_text(json.dumps(entry) + '\n')
+    launches = []
+    class Child:
+        def poll(self):
+            journal.write_text(json.dumps({'event': event, 'key': 'only'}) + '\n')
+            return 75 if event == 'operator_drain' else 2
+    def launch(*args):
+        launches.append(args[0])
+        return Child(), io.StringIO()
+    monkeypatch.setattr(module.time, 'sleep', lambda _: None)
+    assert module.wait_collectors([], [(queue, journal, [entry])], launch,
+        min_free_mib=20, max_workers=1) == [75 if event == 'operator_drain' else 2]
+    assert launches == [queue]

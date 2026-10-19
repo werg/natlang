@@ -73,44 +73,75 @@ DEFAULT_CASES = tuple(range(0, 48, 3))
 SCHEMA = 'natlang.in-run-task-eval/1'
 
 
-def wait_collectors(children, queues, launch, *, min_free_mib):
-    """Resume only exact before-case disk pauses; keep the same actor/journals."""
+def wait_collectors(children, queues, launch, *, min_free_mib, max_workers=None):
+    """Run exact case queues, optionally refilling a bounded set of collector slots.
+
+    With ``max_workers`` the queue list is a stable case order and children starts
+    empty. A storage-paused case stays pending while its slot runs other cases;
+    only that exact queue can be relaunched after the disk floor is restored.
+    Without it, callers may pass the historical one-child-per-queue shape.
+    """
     snapshots = [queue.read_bytes() for queue, _, _ in queues]
-    codes = [None] * len(children)
-    pending = set(range(len(children)))
-    running = set(pending)
+    if max_workers is None:
+        if len(children) != len(queues):
+            raise ValueError('task collector child count must match fixed queues')
+        max_workers = len(queues)
+        running = {index: children[index] for index in range(len(children))}
+        launched = set(running)
+    else:
+        if type(max_workers) is not int or max_workers < 1 or children:
+            raise ValueError('rolling task dispatch needs an empty child list and positive worker count')
+        running, launched = {}, set()
+    codes = [None] * len(queues)
+    pending = set(range(len(queues)))
+    paused = set()
+
+    def check_pause(index):
+        queue, journal, entries = queues[index]
+        events = [json.loads(line) for line in journal.read_text().splitlines() if line.strip()]
+        last = events[-1] if events else {}
+        if last.get('event') != 'storage_pause':
+            return False  # Operator drains and all other exit-75 reasons are terminal.
+        finished = {row['key'] for row in events if row.get('event') == 'finish'}
+        remaining = [row['key'] for row in entries if row['key'] not in finished]
+        if (queue.read_bytes() != snapshots[index]
+                or last.get('minimum_free_mib') != min_free_mib
+                or not remaining or last.get('key') != remaining[0]
+                or any(row.get('event') == 'start' and row.get('key') == last['key'] for row in events)):
+            raise ValueError('task evaluation storage pause does not match its exact unstarted queue')
+        return True
+
     while pending:
-        for index in sorted(pending):
-            queue, journal, entries = queues[index]
-            if index in running:
-                code = children[index][0].poll()
-                if code is None:
-                    continue
-                children[index][1].close()
-                running.remove(index)
-                codes[index] = code
-            if codes[index] != 75 or not min_free_mib:
-                pending.remove(index)
+        for index in tuple(sorted(running)):
+            child, log = running[index]
+            code = child.poll()
+            if code is None:
                 continue
-            events = [json.loads(line) for line in journal.read_text().split('\n') if line.strip()]
-            last = events[-1] if events else {}
-            if last.get('event') != 'storage_pause':
-                pending.remove(index)  # Never undo an operator drain.
+            log.close()
+            del running[index]
+            if code == 75 and min_free_mib and check_pause(index):
+                paused.add(index)
                 continue
-            finished = {row['key'] for row in events if row.get('event') == 'finish'}
-            remaining = [row['key'] for row in entries if row['key'] not in finished]
-            if (queue.read_bytes() != snapshots[index]
-                    or last.get('minimum_free_mib') != min_free_mib
-                    or not remaining or last.get('key') != remaining[0]
-                    or any(row.get('event') == 'start' and row.get('key') == last['key'] for row in events)):
-                raise ValueError('task evaluation storage pause does not match its exact unstarted queue')
-            if shutil.disk_usage(journal.parent).free // (1024 * 1024) < min_free_mib:
-                continue
-            if queue.read_bytes() != snapshots[index]:
-                raise ValueError('task evaluation queue changed while waiting for disk headroom')
-            children[index] = launch(queue, journal, entries)
-            codes[index] = None
-            running.add(index)
+            codes[index] = code
+            pending.remove(index)
+
+        free_slots = max_workers - len(running)
+        if free_slots and pending:
+            disk_ok = (not min_free_mib or
+                       shutil.disk_usage(queues[0][1].parent).free // (1024 * 1024) >= min_free_mib)
+            if disk_ok:
+                # A disk-paused case waits behind untouched work once the floor
+                # returns; it never holds a slot while other cases remain.
+                candidates = ([index for index in sorted(pending)
+                               if index not in running and index not in launched] +
+                              [index for index in sorted(paused) if index in pending and index not in running])
+                for index in candidates[:free_slots]:
+                    queue, journal, entries = queues[index]
+                    if queue.read_bytes() != snapshots[index]:
+                        raise ValueError('task evaluation queue changed before collector launch')
+                    running[index] = launch(queue, journal, entries)
+                    launched.add(index)
+                    paused.discard(index)
         if pending:
             time.sleep(0.2 if running else 30)
     return codes
@@ -245,24 +276,23 @@ class TaskEval:
     def _queues(self, run: Path, repeat: int = 0) -> list[tuple[Path, Path, list[dict]]]:
         workers = min(self.spec['workers'], len(self.rows))
         queues = []
-        for worker in range(workers):
-            directory = run / f'worker-{worker:02d}'
+        for index in range(len(self.rows)):
+            worker = index % workers
+            directory = run / f'worker-{worker:02d}' / f'case-{index:04d}'
             directory.mkdir(parents=True, exist_ok=True)
-            entries = []
-            for index in range(worker, len(self.rows), workers):
-                case = directory / f'case-{index:04d}'
-                entries.append({'index': index, 'count': 1, 'key': f'task-{index:04d}',
-                                'source': str(self.subset), 'jobs': str(case / 'jobs'),
-                                'log': str(case / 'collector.log'), 'output': str(case / 'results.jsonl'),
-                                'case_seconds': self.spec['case_seconds'], 'context_tokens': 32768,
-                                'max_model_requests': self.spec['max_model_requests'],
-                                'prompt_rendering': self.prompt_rendering,
-                                'max_turns': self.spec['max_turns'], 'request_retries': 1,
-                                'transport_retries': 0,
-                                'seed': 400000 + self.spec['cases'][index] + (100000 * repeat if self.spec.get('temperature') else 0),
-                                'text_neuralese_emulation': False,
-                                'temperature': self.spec['temperature'],
-                                'neuralese_server': self.spec.get('neuralese_server',False)})
+            case = directory
+            entries = [{'index': index, 'count': 1, 'key': f'task-{index:04d}',
+                        'source': str(self.subset), 'jobs': str(case / 'jobs'),
+                        'log': str(case / 'collector.log'), 'output': str(case / 'results.jsonl'),
+                        'case_seconds': self.spec['case_seconds'], 'context_tokens': 32768,
+                        'max_model_requests': self.spec['max_model_requests'],
+                        'prompt_rendering': self.prompt_rendering,
+                        'max_turns': self.spec['max_turns'], 'request_retries': 1,
+                        'transport_retries': 0,
+                        'seed': 400000 + self.spec['cases'][index] + (100000 * repeat if self.spec.get('temperature') else 0),
+                        'text_neuralese_emulation': False,
+                        'temperature': self.spec['temperature'],
+                        'neuralese_server': self.spec.get('neuralese_server',False)}]
             queue = directory / 'queue.jsonl'
             queue.write_text(''.join(json.dumps(e, sort_keys=True) + '\n' for e in entries), encoding='utf-8')
             queues.append((queue, directory / 'journal.jsonl', entries))
@@ -320,9 +350,9 @@ class TaskEval:
                      '--identical-turn-limit', str(self.spec['identical_turn_limit']), *coefficient_args,
                      *(['--neuralese-server'] if self.spec.get('neuralese_server') else [])],
                     cwd=self.repo, env=env, stdout=log, stderr=subprocess.STDOUT), log)
-            children = [launch(*item) for item in queues]
-            codes = wait_collectors(children, queues, launch,
-                                    min_free_mib=self.spec.get('min_free_mib', 0))
+            codes = wait_collectors([], queues, launch,
+                                    min_free_mib=self.spec.get('min_free_mib', 0),
+                                    max_workers=min(self.spec['workers'], len(queues)))
         finally:
             if server is not None:
                 server.shutdown()
@@ -339,9 +369,9 @@ class TaskEval:
                     if line.strip():
                         event = json.loads(line)
                         if event.get('event') == 'finish':
-                            finishes[f'{queue.parent.name}/{event["key"]}'] = event
+                            finishes[f'{queue.parent.parent.name}/{event["key"]}'] = event
             for entry in entries:
-                keys[entry['index']] = f'{queue.parent.name}/{entry["key"]}'
+                keys[entry['index']] = f'{queue.parent.parent.name}/{entry["key"]}'
                 if Path(entry['output']).is_file():
                     results.extend(read_jsonl(entry['output']))
         return score_rows(self.rows, results, finishes, keys), codes
