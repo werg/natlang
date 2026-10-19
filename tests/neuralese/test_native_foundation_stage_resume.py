@@ -119,7 +119,8 @@ def test_fresh_incomplete_foundation_stays_strict(tmp_path):
         verify_initial_foundation_cohort(train,foundation)
 
 
-def test_inherited_foundation_requalifies_after_completed_new_source_boundary(tmp_path, monkeypatch):
+@pytest.mark.parametrize("acknowledged", [True, False])
+def test_inherited_foundation_requalifies_after_completed_new_source_boundary(tmp_path, monkeypatch, acknowledged):
     """A fixed earned cohort gets one fresh proof after new supervised work."""
     from natlang_neuralese.eval import native_backend, native_state, task_cadence
     from natlang_neuralese.serve import engine as engine_module, store as store_module
@@ -182,7 +183,8 @@ def test_inherited_foundation_requalifies_after_completed_new_source_boundary(tm
     first_report=json.loads((first_out/'report.json').read_text())
     cohort_sha=first_report['communication_foundation']['cohort_sha256']
     frame=collect_sft_progress(first['training'])
-    frame['full']['completed_foundations']=[cohort_sha]
+    if acknowledged:
+        frame['full']['completed_foundations']=[cohort_sha]
     first['training']['sft_progress']=frame
     parent=tmp_path/'parent.pt';torch.save(first,parent)
 

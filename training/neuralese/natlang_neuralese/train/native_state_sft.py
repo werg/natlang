@@ -1535,9 +1535,15 @@ def main(argv=None):
     foundation_template = foundation_exposure() if args.communication_foundation else None
     foundation_missing = {key for key,row in (foundation_template or {}).get('rows',{}).items()
         if not row['admitted_to_training'] or row['required_visits']<=0 or row['graph_visits']<row['required_visits']}
+    # An explicitly owned refresh continues an already exposed cohort through
+    # its declared update boundary before checking the new weights. Exposure
+    # alone never adds a qualified completed_foundations acknowledgement.
+    refresh_inherited_foundation = bool(args.refresh_foundation_readiness and
+        foundation_template and foundation_template['complete'])
     def foundation_pending():
         return bool(foundation_template and foundation_template['graphs'] and not foundation_missing and
-                    foundation_template['cohort_sha256'] not in prior_foundations)
+                    foundation_template['cohort_sha256'] not in prior_foundations and
+                    not refresh_inherited_foundation)
     # Setup used independent decoded/restored frames to validate and restore
     # the continuation. Their maps can be gigabytes; Python locals otherwise
     # retain them throughout training and during the next owned save snapshot.

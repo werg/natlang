@@ -125,3 +125,13 @@ the optimizer update never enter this recovery path because in-backward updates
 may have partially changed parameters. Checkpoint-write failure preserves the
 previous durable slot and is attached to the original evaluation exception.
 This is crisp exception/durability plumbing, not another recovery policy.
+
+## Explicit refresh of an exposed finite foundation
+
+The supervising policy may continue useful supervised training before checking
+readiness again. If the inherited fixed communication cohort already has all
+its required visits, an explicit foundation-readiness refresh runs the declared
+update quantum before terminal qualification, even if no earlier qualified
+acknowledgement exists. The trainer's crisp boundary selector implements this
+choice; it neither adds visits nor marks an unqualified cohort as ready. First
+completion of an initially incomplete cohort retains its normal pause.
