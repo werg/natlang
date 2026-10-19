@@ -57,14 +57,20 @@ def test_external_task_execution_reuses_same_queues_without_engine_lifecycle(tmp
     run=tmp_path/'held';run.mkdir();sentinel=run/'already-finished-journal';sentinel.write_text('preserve earned held result')
     commands=[]
     monkeypatch.setattr(cadence.subprocess,'Popen',lambda argv,**kwargs:commands.append(argv)or object())
-    monkeypatch.setattr(cadence,'wait_collectors',lambda children,queues,launch,**kw: [log.close()for _,log in children]or[0])
+    def dispatch(children,queues,launch,**kwargs):
+        assert children==[] and kwargs['max_workers']==1
+        for queue,journal,entries in queues:
+            _,log=launch(queue,journal,entries)
+            log.close()
+        return [0 for _ in queues]
+    monkeypatch.setattr(cadence,'wait_collectors',dispatch)
     monkeypatch.setattr(task_packet,'score_rows',lambda rows,results,finishes,keys:{'cases':len(rows)})
     score,_=evaluator._execute(run)
     assert score=={'cases':1} and sentinel.read_text()=='preserve earned held result'
     argv=commands[0]
     assert argv[argv.index('--server')+1]=='http://same-current-actor'
     assert argv[argv.index('--model-id')+1]=='current-actor'
-    entry=json.loads((run/'worker-00/queue.jsonl').read_text())
+    entry=json.loads((run/'worker-00/case-0000/queue.jsonl').read_text())
     assert(entry['case_seconds'],entry['max_model_requests'],entry['max_turns'])==(7200,128,160)
     assert '--neuralese-server'in argv and argv[argv.index('--identical-turn-limit')+1]=='3'
 
