@@ -210,7 +210,7 @@ def _loaded_handoff(reference,verified=None):
     return record,saved
 
 
-def prepare_runtime_handoff(bootstrap,handoff,recipe_handoff,config_path,out,*,operation=None,bare_direct_owner=None,owned_operations=None,verified_handoff=None):
+def prepare_runtime_handoff(bootstrap,handoff,recipe_handoff,config_path,out,*,operation=None,bare_direct_owner=None,owned_operations=None,deferred_owner_bridge=None,verified_handoff=None):
     """Snapshot an actual later drain under the existing coordinator/worker leases."""
     config_path=Path(config_path);out=Path(out)
     if out.exists():
@@ -219,10 +219,13 @@ def prepare_runtime_handoff(bootstrap,handoff,recipe_handoff,config_path,out,*,o
                 or (value.get('bare_direct_owner') or {}).get('requested')!=bare_direct_owner
                 or (value.get('operation') or {}).get('original')!=operation
                 or value.get('owned_operations')!=owned_operations
+                or value.get('deferred_owner_bridge')!=deferred_owner_bridge
                 or value['sources']['config']['path']!=str(config_path.resolve())):
             raise ValueError('runtime handoff retry changed its requested authority')
         return binding(out)
     config=json.loads(config_path.read_text());root,cursor,state=_paths(config_path,config)
+    if deferred_owner_bridge is not None and (operation is not None or owned_operations is not None):
+        raise ValueError('deferred-owner bridge cannot be combined with another runtime operation authority')
     locks=[root.parent/'controller.lock',Path(config['out'])/'controller.lock']
     if operation:
         request=_read(operation['request']);locks.append(Path(request['out'])/'controller.lock')
@@ -274,10 +277,14 @@ def prepare_runtime_handoff(bootstrap,handoff,recipe_handoff,config_path,out,*,o
                 'request':_snap(operation['request'],directory,'operation-request.json'),
                 'result':_snap(operation['result'],directory,'operation-result.json'),
                 'state':_snap(result['state'],directory,'operation-state.json')}
+        bridge=None
+        if deferred_owner_bridge is not None:
+            bridge=_verified_deferred_owner_bridge(deferred_owner_bridge,record['checkpoint'],sources)
         value={'schema':SCHEMA,'bootstrap':bootstrap,'handoff':handoff,'recipe_handoff':recipe_handoff,
             'bare_direct_owner':authority.get('bare_direct_owner'),
             'checkpoint':record['checkpoint'],'published_checkpoint':published,'sources':sources,
-            'snapshots':snapshots,'operation':operation_snapshot,'owned_operations':owned_operations,'model_id':config.get('raw_model_id'),
+            'snapshots':snapshots,'operation':operation_snapshot,'owned_operations':owned_operations,
+            'deferred_owner_bridge':bridge,'model_id':config.get('raw_model_id'),
             'lineage':config.get('recipe_lineage_sha256'),'previous':config.get('runtime_handoff')}
         _verify(value,bootstrap,record,saved,transition)
         if any(binding(ref['path'])!=ref for ref in sources.values()):
@@ -332,6 +339,9 @@ def _verify(value,bootstrap,record,saved,transition):
                 or any(intent['candidates'][key]['sha256']!=value['snapshots'][key]['sha256']for key in('state','cursor'))
                 or intent['before']['config']['sha256']!=value['snapshots']['config']['sha256']):
             raise ValueError('runtime handoff lost its exact owned-operation publication and stage acknowledgement')
+    if value.get('deferred_owner_bridge'):
+        _verified_deferred_owner_bridge(value['deferred_owner_bridge'],record['checkpoint'],value['sources'],
+            cursor=cursor,state=state,handoff=value['handoff'])
     if value.get('operation'):
         from .native_bridge import read_request,RESULT_SCHEMA
         request=read_request(_bound(value['operation']['request']))
@@ -376,9 +386,88 @@ def verify_runtime_handoff(reference,*,bootstrap):
     return value
 
 
+def _verified_deferred_owner_bridge(reference,checkpoint,sources,*,cursor=None,state=None,handoff=None):
+    """Verify a no-credit bridge as the boundary authority for a fresh SFT schedule."""
+    from ..common.hashing import canonical_json_sha256_hex as digest
+    if (not isinstance(reference,dict) or not {'path','sha256'}<=set(reference)
+            or set(reference)-{'path','sha256','bytes'}):
+        raise ValueError('runtime handoff needs an exact deferred-owner bridge receipt')
+    path=_bound(reference)
+    if binding(path)!=reference:raise ValueError('deferred-owner bridge receipt changed')
+    receipt=_read(reference)
+    if (receipt.get('schema')!='natlang.native-raw-deferred-owner-bridge/1'
+            or receipt.get('published_checkpoint')!=checkpoint
+            or receipt.get('whole_recipe_completed') is not False
+            or receipt.get('training_credit')!=0 or receipt.get('raw_completion_credit')!=0
+            or receipt.get('readiness_granted') is not False or receipt.get('runtime_handoff_required') is not True):
+        raise ValueError('deferred-owner bridge does not bind this exact no-credit checkpoint')
+    intent_ref=receipt.get('intent');intent=_read(intent_ref)
+    request=intent.get('request')
+    if (intent.get('schema')!='natlang.native-raw-deferred-owner-bridge/1'
+            or receipt.get('request_sha256')!=digest(request)
+            or intent.get('whole_recipe_completed') is not False or intent.get('training_credit')!=0
+            or intent.get('raw_completion_credit')!=0 or request.get('child_checkpoint')!=checkpoint
+            or request.get('config')!=sources['config']
+            or request.get('handoff') is None):
+        raise ValueError('deferred-owner bridge intent is not the source of this checkpoint')
+    if handoff is not None and request.get('handoff')!=handoff:
+        raise ValueError('deferred-owner bridge names another completed handoff')
+    config=json.loads(_bound(sources['config']).read_text())
+    root,cursor_path,state_path=_paths(sources['config']['path'],config)
+    paths={'state':state_path,'cursor':cursor_path}
+    if (set(intent.get('before',{}))!=set(paths) or set(intent.get('snapshots',{}))!=set(paths)
+            or set(intent.get('candidates',{}))!=set(paths)):
+        raise ValueError('deferred-owner bridge omitted an exact controller snapshot or candidate')
+    originals={}
+    for name,path in paths.items():
+        before=intent['before'][name];snapshot=intent['snapshots'][name];candidate=intent['candidates'][name]
+        if (before.get('path')!=str(path) or snapshot.get('sha256')!=before.get('sha256')
+                or binding(_bound(snapshot))!=snapshot):
+            raise ValueError('deferred-owner bridge snapshot bindings differ from its intent')
+        if not candidate.get('path') or binding(_bound(candidate))!=candidate:
+            raise ValueError('deferred-owner bridge candidate binding changed')
+        originals[name]=_read(snapshot)
+    expected_state={**originals['state'],'checkpoint':checkpoint['path'],'phase':'collect',
+        'actor_policy_pending_load':checkpoint['sha256']}
+    expected_state.pop('readiness',None)
+    expected_cursor={**originals['cursor'],'current_checkpoint':checkpoint}
+    expected_cursor.pop('readiness',None);expected_cursor.pop('foundation_qualified',None)
+    expected_cursor['deferred_owner_handoff_bridge']={'request_sha256':receipt['request_sha256'],
+        'checkpoint':checkpoint,'whole_recipe_completed':False,'raw_completion_credit':0,
+        'readiness_granted':False,'runtime_handoff_required':True}
+    for name,expected in (('state',expected_state),('cursor',expected_cursor)):
+        candidate=intent['candidates'][name]
+        if (json.loads(_bound(candidate).read_text())!=expected
+                or sources[name].get('sha256')!=candidate.get('sha256')):
+            raise ValueError('deferred-owner bridge changed controller debt or is not the current successor')
+    if cursor is not None and state is not None:
+        marker=cursor.get('deferred_owner_handoff_bridge') or {}
+        if (marker.get('request_sha256')!=receipt['request_sha256']
+                or marker.get('checkpoint')!=checkpoint or marker.get('whole_recipe_completed') is not False
+                or marker.get('raw_completion_credit')!=0 or marker.get('readiness_granted') is not False
+                or marker.get('runtime_handoff_required') is not True
+                or cursor.get('phase')!='sft' or cursor.get('next_stage')!=0
+                or 'pending_rl_round' in cursor
+                or state.get('phase')!='collect' or state.get('checkpoint')!=checkpoint['path']
+                or state.get('pending_native_checkpoint') is not None
+                or state.get('pending_native_round_dir') is not None
+                or state.get('pending_semantic_source') is not None):
+            raise ValueError('deferred-owner bridge cursor is not its exact SFT-first boundary')
+    return reference
+
+
 def _owned_cycle_boundary(proof,cursor,state,recipe,production_stage):
     """An authenticated end-of-cycle acknowledgement has no sealed next packet."""
-    if not proof.get('owned_operations'):return False
+    if not proof.get('owned_operations'):
+        bridge=proof.get('deferred_owner_bridge')
+        if not bridge:return False
+        try:
+            from .native_raw_rounds import _supervised_stage_inventory
+            if not _supervised_stage_inventory(recipe,production_stage):return False
+            _verified_deferred_owner_bridge(bridge,proof['checkpoint'],proof['sources'],
+                cursor=cursor,state=state,handoff=proof['handoff'])
+        except (ValueError,KeyError,TypeError,OSError):return False
+        return True
     from .native_raw_rounds import _supervised_stage_inventory
     ids=[stage['id']for stage in _supervised_stage_inventory(recipe,production_stage)]
     owned=_read(proof['owned_operations']);ack=cursor.get('owned_operation_reconciliation')or{}
@@ -517,6 +606,8 @@ def main(argv=None):
     parser.add_argument('--operation-request',type=Path)
     parser.add_argument('--operation-result',type=Path)
     parser.add_argument('--owned-operations',type=Path,help='bound completed owned operation-chain JSON; no stage is marked complete')
+    parser.add_argument('--deferred-owner-bridge',type=Path,
+        help='bound no-credit bridge from the selected startup parent to its completed owner checkpoint')
     args=parser.parse_args(argv)
     bootstrap=binding(args.bootstrap)
     if args.verify:
@@ -556,7 +647,8 @@ def main(argv=None):
                 bare_direct_owner=bare,recipe_handoff=binding(args.recipe_handoff) if args.recipe_handoff else None,verified_handoff=verified)
         reference=prepare_runtime_handoff(bootstrap,binding(args.handoff),binding(args.recipe_handoff) if args.recipe_handoff else None,
             args.config,args.out,operation=operation,bare_direct_owner=bare,
-            owned_operations=owned,verified_handoff=verified)
+            owned_operations=owned,deferred_owner_bridge=(binding(args.deferred_owner_bridge)
+                if args.deferred_owner_bridge else None),verified_handoff=verified)
     print(json.dumps(reference,sort_keys=True))
     return 0
 

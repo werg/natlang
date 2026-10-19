@@ -31,3 +31,13 @@ Exact hashes, byte bindings, process identities, locks, snapshots and atomic
 JSON writes are crisp because they define the outside-world custody boundary.
 No full startup checkpoint is reconstructed from the summary, and no model
 policy or training credit is inferred by the bridge.
+
+The later runtime-handoff proof accepts the bridge receipt as a distinct
+boundary authority. It rechecks the bridge's current state/cursor candidates and
+requires the existing mandatory supervised-stage inventory before treating the
+cursor as SFT-first. This does not manufacture an `owned_operations` receipt:
+the bridge reference remains explicit in the runtime-handoff proof, and the
+first scheduled ordinary SFT work remains owed. The frozen startup runtime
+package is checked against its original startup gate and code inventory; the
+currently running verifier may be a later package revision and is not used to
+relabel that startup package.

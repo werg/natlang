@@ -570,8 +570,6 @@ def bridge_deferred_owner_handoff(config_path,cursor_path,deferred_reference,han
             or deferred.get('config')!=binding(config_path)
             or deferred.get('cursor',{}).get('path')!=str(cursor_path)):
         raise ValueError('deferred owner bridge changed its original selected parent or controller authority')
-    if authority.get('package',{}).get('path')!=str(Path(__file__).resolve().parents[1]):
-        raise ValueError('deferred owner bridge package differs from the running shared trainer')
     package=Path(authority['package']['path']).resolve(strict=True)
     if code_inventory(package)!=authority['package'].get('code'):
         raise ValueError('deferred owner bridge runtime package changed after startup')

@@ -14,6 +14,7 @@ from natlang_neuralese.common.jsonio import write_json_durable as write
 from natlang_neuralese.rl import native_raw_rounds as raw
 from natlang_neuralese.rl import native_raw_handoff as handoff
 from natlang_neuralese.train import native_resident as resident
+from test_native_resident import setup
 
 
 @pytest.fixture
@@ -104,7 +105,7 @@ def bridge_case(actual_drain, tmp_path, monkeypatch):
         'drain_intent': drain_ref, 'readiness_granted': False, 'whole_recipe_completed': False}
     write(deferred_path, deferred)
     from natlang_neuralese.rl import native_owned_dispatch
-    def verified_dispatch(captured, observed):
+    def verified_dispatch(captured, observed, snapshots=None):
         assert captured['owner'] == owner and observed['inprocess_dispatch'] == resident.binding(dispatch_file)
         return json.loads(continuation_file.read_text()), full_command, {
             'supervisor': wrapper, 'intent': resident.binding(dispatch_file),
@@ -163,6 +164,112 @@ def test_deferred_startup_parent_bridges_to_completed_real_handoff_without_recip
     assert proof['selected_startup_parent'] == x['selected']
     assert proof['published_checkpoint'] == x['child']
     assert proof['training_credit'] == 0 and proof['whole_recipe_completed'] is False
+
+
+def test_bridge_cursor_is_an_explicit_sft_first_runtime_boundary(bridge_case):
+    from natlang_neuralese.rl import native_runtime_handoff as runtime
+    x=bridge_case
+    bridge_ref=bridge(x)
+    cursor=json.loads((x['root']/'cycle.json').read_text())
+    state=json.loads((Path(json.loads(x['config'].read_text())['out'])/'state.json').read_text())
+    proof={'deferred_owner_bridge':bridge_ref,'checkpoint':x['child'],
+        'sources':{'config':resident.binding(x['config']),
+            'cursor':resident.binding(x['root']/'cycle.json'),
+            'state':resident.binding(Path(json.loads(x['config'].read_text())['out'])/'state.json')},
+        'handoff':x['handoff']}
+    recipe={'stages':[{'id':'sft','kind':'native_state_sft'}]}
+    runtime._verified_deferred_owner_bridge(bridge_ref,x['child'],proof['sources'],
+        cursor=cursor,state=state,handoff=x['handoff'])
+    assert runtime._owned_cycle_boundary(proof,cursor,state,recipe,'sft')
+    bad=copy.deepcopy(cursor);bad['deferred_owner_handoff_bridge']['request_sha256']='0'*64
+    assert not runtime._owned_cycle_boundary(proof,bad,state,recipe,'sft')
+    bad=copy.deepcopy(state);bad['checkpoint']=str(x['selected']['path'])
+    assert not runtime._owned_cycle_boundary(proof,cursor,bad,recipe,'sft')
+
+
+def test_bridge_runtime_handoff_reaches_owed_sft_without_owned_operation_credit(
+        bridge_case,tmp_path,monkeypatch):
+    from types import SimpleNamespace
+    from natlang_neuralese.rl import native_runtime_handoff as runtime
+    from natlang_neuralese.rl import native_rounds
+    import natlang_neuralese.rl.native_supervised as native_supervised
+
+    x=bridge_case
+    # Install a small ordinary SFT recipe in the existing controller namespace.
+    (tmp_path/'recipe-fixture').mkdir()
+    paths,recipe_directory,_,_=setup(tmp_path/'recipe-fixture')
+    recipe_path=tmp_path/'recipe-fixture'/'old-recipe.json'
+    recipe_plan=json.loads((recipe_directory.parent/'recipe-plan.json').read_text())
+    cases=tmp_path/'cases.jsonl';cases.write_text('{"id":"ordinary-case","split":"train"}\n')
+    collector=tmp_path/'collector';(collector/'dist/teacher').mkdir(parents=True)
+    (collector/'dist/teacher/cli.js').write_text('/* fixture */')
+    package=Path(raw.__file__).resolve().parents[1]
+    config=json.loads(x['config'].read_text())
+    config.update(bootstrap_binding={'plan_sha256':'fixture-plan','handoff':x['handoff']},
+        production_recipe=str(recipe_path),recipe_lineage_sha256=recipe_plan['recipe_sha256'],
+        production_stage='sft',trainer_parameters={},seed_trainer_parameters={},
+        seed_command=['env','PYTHONPATH='+str(package.parent),'python','-m','natlang_neuralese.train.native_state_sft'],
+        cases=str(cases),runtime='sealed-runtime',actor_command=['old-actor'],
+        before_collect=['old-before'],task_source={'fixture':True},source_admission={'fixture':True},
+        native_state=True,native_actor_mode='raw-state')
+    write(x['config'],config)
+    authority=json.loads(x['authority_path'].read_text());authority['config']=resident.binding(x['config'])
+    write(x['authority_path'],authority)
+    deferred_path=Path(x['deferred']['path']);deferred=json.loads(deferred_path.read_text())
+    deferred.update(authority=resident.binding(x['authority_path']),config=resident.binding(x['config']))
+    write(deferred_path,deferred);x['deferred']=resident.binding(deferred_path)
+    bridge_ref=bridge(x)
+
+    qualification=tmp_path/'fixture-qualification.json'
+    write(qualification,{'passed':True,'fixture_only':True})
+    bare={'recipe':resident.binding(recipe_path),'package':str(package),
+        'ordinary_capacity':resident.binding(qualification)}
+    # The production handoff verifier is separately exercised by the runtime
+    # suite. This fixture isolates the new bridge authority edge while keeping
+    # the real publication, configuration and scheduler calls.
+    recipe_binding=resident.binding(recipe_path)
+    transition={'bare':True,'recipe':recipe_binding,'new_code':resident.code_inventory(package),
+        'lineage':recipe_plan['recipe_sha256'],'inputs':{}}
+    monkeypatch.setattr(runtime,'verify_handoff_metadata',lambda *args:None)
+    monkeypatch.setattr(runtime,'_authority',lambda *args:transition)
+    monkeypatch.setattr(runtime,'_verify',lambda value,*args:
+        runtime._verified_deferred_owner_bridge(value['deferred_owner_bridge'],value['checkpoint'],
+            value['sources'],handoff=value['handoff']))
+    proof_path=tmp_path/'runtime-handoff.json'
+    runtime_ref=runtime.prepare_runtime_handoff({'path':'fixture-bootstrap'},x['handoff'],None,
+        x['config'],proof_path,bare_direct_owner=bare,deferred_owner_bridge=bridge_ref,
+        verified_handoff=handoff.verify_handoff(x['handoff']))
+    proof=json.loads(proof_path.read_text())
+    assert proof['deferred_owner_bridge']==bridge_ref and proof['owned_operations'] is None
+
+    declaration={'production_stage':'sft','handoff_requirement':{'model_id':config['raw_model_id']},
+        'runtime_handoff':runtime_ref,'cases':resident.binding(cases),'runtime':str(collector),
+        'commands':{'actor_command':['new-actor']}}
+    plan_path=tmp_path/'plan.json';write(plan_path,{'models':[declaration]})
+    monkeypatch.setattr(runtime,'verify_runtime_handoff',lambda *args,**kwargs:proof)
+    monkeypatch.setattr(raw,'_scheduling_controls',lambda *args,**kwargs:None)
+    def provider(config,declaration,*args,**kwargs):
+        config['actor_command']=declaration['commands']['actor_command']
+    monkeypatch.setattr(native_rounds,'configure_provider',provider)
+    import natlang_neuralese.rl.native_bootstrap_metadata as bootstrap_metadata
+    monkeypatch.setattr(bootstrap_metadata,'save',lambda *args,**kwargs:None)
+    monkeypatch.setattr(native_supervised,'continuation_config',lambda config,stage,**kwargs:
+        ({'trainer_parameters':{'stage_id':stage['id'],'epochs':1},'production_stage':stage['id']},{}))
+    monkeypatch.setattr(native_supervised,'stage_pending',lambda *args,**kwargs:True)
+    configured=raw.configure_model(plan_path,declaration,proof['bootstrap'],x['root'])
+    installed=json.loads(configured.read_text())
+    assert installed['runtime_handoff']==runtime_ref and installed['actor_command']==['new-actor']
+
+    calls=[];stop=SimpleNamespace(requested=False)
+    def supervised(continuation,jobdir,config,cursor,owner_stop):
+        calls.append((continuation['production_stage'],Path(jobdir)))
+        owner_stop.requested=True
+    monkeypatch.setattr(raw,'configure_model',lambda *args:configured)
+    monkeypatch.setattr(raw,'_supervised_job',supervised)
+    result=raw.student_cycle(plan_path,declaration,proof['bootstrap'],x['root'],stop=stop)
+    assert calls and calls[0][0]=='sft'
+    assert result['phase']=='sft' and result['next_stage']==0
+    assert result.get('whole_recipe_completed') is not True
 
 
 def test_deferred_bridge_rejects_child_without_selected_parent_chain(bridge_case):
