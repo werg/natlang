@@ -194,10 +194,107 @@ def tool_contract_recovery_worlds(shapes=4):
         yield row
 
 
+
+STATE_EFFECTS_REVISION = 'authored-incremental-state-effects-20261019/1'
+
+
+def state_effect_recovery_worlds(shapes=1):
+    """Fresh finite event worlds; NL root/child decide and execute complete effects."""
+    variants = {'namespace-reuse', 'api-recovery', 'readback-recovery'}
+    for row in terminal_policy_worlds(shapes, revision=STATE_EFFECTS_REVISION, domains=DOMAINS):
+        if row['curriculum']['variant'] not in variants:
+            continue
+        semantics = row['semantics']
+        service = next(iter(semantics['services'].values()))
+        records = json.loads(service.split('const ROWS:Row[] = ', 1)[1].split(';\n', 1)[0])
+        policy = semantics['inputs']['policy']
+        upsert = {**records[0], 'category': policy['category'], 'active': True,
+                  'blocked': False, 'waiver': True, 'value': policy['minimum'] + 37}
+        added = {**upsert, 'id': records[0]['id'] + '-new', 'value': policy['minimum'] + 61}
+        group = row['source_groups'][0]
+        first = {'id': group + ':event-1', 'kind': 'upsert', 'record': upsert}
+        inbox = [first, {'id': group + ':event-2', 'kind': 'delete', 'record_id': records[1]['id']},
+                 {'id': group + ':event-3', 'kind': 'upsert', 'record': added}, dict(first)]
+        archive = [{'id': group + ':event-0', 'kind': 'upsert', 'record': records[-1]}]
+        by_id = {record['id']: dict(record) for record in records}
+        for event in inbox:
+            if event['kind'] == 'delete':
+                by_id.pop(event['record_id'], None)
+            else:
+                by_id[event['record']['id']] = dict(event['record'])
+        final = sorted(by_id.values(), key=lambda value: value['id'])
+        selected = [r for r in final if r['category'] == policy['category'] and not r['blocked']
+                    and (r['waiver'] or (r['active'] and r['value'] >= policy['minimum']))]
+        expected = {'ids': [r['id'] for r in selected], 'total': sum(r['value'] for r in selected),
+                    'count': len(selected)}
+        old = semantics['expected']
+        revision = group + ':revision-2'
+        events = {event['id']: event for event in [*archive, *inbox]}
+        final_archive = [events[key] for key in sorted(events)]
+        schedule = [{'id': record['id'], 'value': record['value']} for record in selected]
+        initial_schedule = [{'id': records[0]['id'], 'value': records[0]['value']}] * 2
+        json_text = lambda value: json.dumps(value, separators=(',', ':')) + '\n'
+        semantics['folder_files'] = {'records.json': json_text(records), 'inbox.json': json_text(inbox),
+            'archive.json': json_text(archive), 'schedule.json': json_text(initial_schedule),
+            'cache.json': json_text({'revision': group + ':revision-1', 'summary': old}),
+            'notes.txt': 'Preserve this independent source note.\n'}
+        semantics['expected_files'] = {'records.json': json_text(final), 'inbox.json': json_text([]),
+            'archive.json': json_text(final_archive), 'schedule.json': json_text(schedule),
+            'cache.json': json_text({'revision': revision, 'summary': expected}),
+            'notes.txt': semantics['folder_files']['notes.txt']}
+        semantics['expected'] = expected
+        semantics['files']['summarize.nl'] = (
+            '---\nargs:\n  policy: "Policy"\nreturns: "Summary"\nkind: directory-reducer\n---\n'
+            'Reconcile the record and scheduling state in this folder after its inbox updates.\n'
+            '1. Read records.json, inbox.json, archive.json, schedule.json and cache.json. '
+            'Treat records as the starting source of truth; the cache is an earlier derived view.\n'
+            '2. Apply inbox events in order. An upsert replaces the complete record with that ID; '
+            'a delete removes that ID. Identical event IDs identify the same event and have one effect. '
+            'Preserve every unaffected record, and sort the resulting records by ID.\n'
+            '3. Ask select_record about each complete resulting record and policy. Rebuild Summary '
+            'from the selected records: IDs in lexicographic order, total of their values and their count.\n'
+            '4. Reconcile schedule.json to exactly one {id,value} entry per selected record, sorted by ID. '
+            'Archive each processed event once by event ID, retaining existing archive entries and sorting by ID.\n'
+            f'5. Write all resulting records, schedule and archive. Set cache.json to '
+            f'{{revision:{json.dumps(revision)},summary:Summary}}, and clear inbox.json to []. '
+            'Preserve other files. Read back all five state files and return the rebuilt Summary.\n')
+        predicate = ('record.category === policy.category && !record.blocked && '
+                     '(record.waiver || (record.active && record.value >= policy.minimum))')
+        reference = (
+            "const read = async name => JSON.parse(await folder.file(name).readText()); "
+            "const records = await read('records.json'), inbox = await read('inbox.json'), archive = await read('archive.json'); "
+            "await read('schedule.json'); await read('cache.json'); "
+            "const byId = new Map(records.map(record => [record.id,record])); "
+            "for (const event of inbox) { if (event.kind === 'delete') byId.delete(event.record_id); "
+            "else byId.set(event.record.id,event.record); } "
+            "const final = [...byId.values()].sort((a,b)=>a.id.localeCompare(b.id)); "
+            "const decisions = await Promise.all(final.map(async record => ({record,keep:await select_record(record,policy)}))); "
+            "const selected = decisions.filter(item=>item.keep).map(item=>item.record); "
+            "const summary = {ids:selected.map(record=>record.id),total:selected.reduce((sum,r)=>sum+r.value,0),count:selected.length}; "
+            "const events = new Map([...archive,...inbox].map(event=>[event.id,event])); "
+            "const saved = {'records.json':final,'archive.json':[...events.values()].sort((a,b)=>a.id.localeCompare(b.id)),"
+            "'schedule.json':selected.map(record=>({id:record.id,value:record.value})),"
+            "'cache.json':{revision:" + json.dumps(revision) + ",summary},'inbox.json':[]}; "
+            "for (const [name,value] of Object.entries(saved)) await folder.file(name).writeText(JSON.stringify(value)+'\\n'); "
+            "await Promise.all(Object.keys(saved).map(read)); return summary;")
+        row['curriculum']['reference'] = {'root': [['eval', {'code': reference}],
+            ['return_result', {'status': 'success', 'value': expected}]],
+            'children': [{'match': ['select_record(', record['id']], 'calls': [
+                ['eval', {'code': 'return ' + predicate + ';'}],
+                ['return_result', {'status': 'success', 'value': record in selected}]]} for record in final]}
+        row['family'] = 'curriculum_fresh_state_effect_recovery'
+        row['curriculum']['family'] = 'fresh_state_effect_recovery'
+        row['curriculum']['minimum_sequence'] = ['read current records, inbox and prior derived state',
+            'apply all events while preserving unaffected records', 'recompute each record decision',
+            'deduplicate schedule and archive by identity', 'write and read back every required effect']
+        row['generation']['authorship'] = 'Fresh constructed record/event facts; no held inputs, facts or target answers used'
+        yield row
+
+
 def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--output',type=Path,required=True)
     p.add_argument('--protection',type=Path,required=True);p.add_argument('--shapes',type=int,default=16)
-    p.add_argument('--profile', choices=('legacy', 'terminal-policy', 'tool-contract-recovery'), default='legacy')
+    p.add_argument('--profile', choices=('legacy', 'terminal-policy', 'tool-contract-recovery', 'state-effects-recovery'), default='legacy')
     a=p.parse_args()
     if a.shapes<1:raise ValueError('shapes must be positive')
     if a.output.exists():raise ValueError('new teacher packet output must not exist')
@@ -205,7 +302,7 @@ def main():
     root=Path(__file__).resolve().parents[2]
     holds,bindings=load_decision_holds(sorted((root/'training/decision-holds').glob('*.jsonl')))
     held_programs={identifier.split(':decision:',1)[0] for identifier in holds}
-    constructors={'legacy':worlds,'terminal-policy':terminal_policy_worlds,'tool-contract-recovery':tool_contract_recovery_worlds}
+    constructors={'legacy':worlds,'terminal-policy':terminal_policy_worlds,'tool-contract-recovery':tool_contract_recovery_worlds,'state-effects-recovery':state_effect_recovery_worlds}
     rows=list(constructors[a.profile](a.shapes));groups={group for row in rows for group in row['source_groups']}
     if groups & (protection['held']|protection['quality']|protection['pending']):
         raise ValueError('fresh authored worlds intersect current protection')
@@ -215,7 +312,7 @@ def main():
     source=a.output/'cases.jsonl'
     source.write_text(''.join(json.dumps(row,sort_keys=(a.profile != 'legacy'),ensure_ascii=False,separators=(',',':'))+'\n' for row in rows))
     write_json_durable(a.output/'selection-proof.json',{'schema':'natlang.fresh-authored-teacher-packet/1',
-        'cases':len(rows),'cases_sha256':sha256_file_hex(source),'worlds':len(groups),'revision':{'legacy':REVISION,'terminal-policy':TERMINAL_REVISION,'tool-contract-recovery':TOOL_CONTRACT_REVISION}[a.profile],
+        'cases':len(rows),'cases_sha256':sha256_file_hex(source),'worlds':len(groups),'revision':{'legacy':REVISION,'terminal-policy':TERMINAL_REVISION,'tool-contract-recovery':TOOL_CONTRACT_REVISION,'state-effects-recovery':STATE_EFFECTS_REVISION}[a.profile],
         'profile':a.profile,
         'domain_counts':dict(Counter(row['curriculum']['shape'].rsplit('-',1)[0] for row in rows)),
         'family_shape_counts':dict(Counter(row['curriculum']['variant'] for row in rows)),

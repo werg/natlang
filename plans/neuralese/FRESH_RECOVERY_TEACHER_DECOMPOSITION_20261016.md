@@ -32,3 +32,27 @@ binding without requiring it to equal a newer live registry. Current protection
 and actual per-decision teacher admission still run separately. Transport includes
 these immutable witnesses with each batch; no reference trace is admitted as a
 teacher generation.
+
+## Incremental state and complete effects (2026-10-19)
+
+Use independently constructed record/event worlds to teach recovery from stale
+cached summaries, repeated events and incomplete effects. Only the broad failure
+categories from diagnostics motivate this packet; held inputs, facts, target
+answers and task programs are not builder inputs.
+
+1. The existing typed natural-language root reads the complete records, inbox,
+   cache, schedule and archive. Apply inbox events to records by identity; replay
+   of an event must not duplicate its effect.
+2. The existing typed policy child decides each complete resulting record. The
+   root rebuilds the summary and one schedule entry per selected identity, rather
+   than trusting an earlier cache. Preserve unaffected records.
+3. The root writes every required state file, archives each event once, clears
+   the processed inbox, reads the results back and returns the rebuilt summary.
+
+These are natural-language task decisions. Crisp code constructs fresh fixtures,
+computes exact finite reference outcomes and checks durable files. The recorded
+reference uses bounded array operations and the existing scripted child replies;
+it is never admitted as a teacher response. The shared reference qualifier and
+existing Qwen queue must qualify and then actually execute these worlds before
+any normal per-action training admission. The existing packet constructor and
+collector remain the only mechanism; no extra teacher or serving allocation.
