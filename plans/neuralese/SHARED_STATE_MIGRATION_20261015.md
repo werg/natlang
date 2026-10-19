@@ -48,52 +48,69 @@ through the projected-value implementation.
 
 ## Current status
 
-October 18, 23:50 UTC: both useful diagnostic trainers continue. LFM reached
-15347 global / 14591 ordinary updates at about 3000 supervised tokens/s;
-Mellum reached 24872 global / 23856 ordinary, with a recent 4688 tokens/s.
-Both GPUs were sampled at 100% utilization. LFM's current resident generation
-is `1c082270` (1,313,265 rows); Mellum remains on `3b7085c0` (1,234,855 rows).
-These are actual progress observations, not whole-recipe completion or a
-current task-quality improvement claim. Historical protected scores remain
-LFM14952=0/16 and Mellum22016=11/16; the newer Mellum24464 view is transferring
-for evaluation. Mellum24508's full 48,739,398,749-byte parent is independently
-uploaded and fully read back with exact SHA-256 `4775b9f3`.
+October 19, 00:15 UTC: both useful diagnostic trainers continue. Mellum's
+natural hourly checkpoint completed at global 24959 / ordinary 23943, then
+SGD resumed. LFM actually adopted the corrected 604-row continuation at global
+15373 and continued updates, with resident generation `bf102d0c` containing
+1,313,869 rows. Mellum remains on `3b7085c0` (1,234,855 rows). These are actual
+progress observations, not whole-recipe completion or a task-quality lift.
+Historical protected scores remain LFM14952=0/16 and Mellum22016=11/16.
+The Mellum24464 view finished download to external storage and its real local
+evaluation is running; no result is available yet. Mellum24508's full
+48,739,398,749-byte parent was independently uploaded and fully read back
+with exact SHA-256 `4775b9f3`.
 
-The latest Mellum successor passed exact full/view/cache forward comparison,
+The previous Mellum successor passed exact full/view/cache forward comparison,
 then failed its complete 314-parameter gradient check before any SGD. A real
 FP32 reduction/BF16 midpoint reproducer and an independent actor/microbatch
 counterexample localized concrete mechanisms. Shared repair `0bc25389f`
 preserves invocation-local reductions, cached reverse-token convolution fan-in,
 interleaved actor ordering and checkpoint execution context while still running
-one layer-major graph traversal. Focused tests pass; its complete repository
-check and actual-parent cloud gradient/capacity qualification remain pending.
+one layer-major graph traversal. Independent full review is clear and focused
+tests pass. The repository full check is still running; its four observed
+failures have concrete newer fixes: decoded options lifetime `6be74d124` and
+test filesystem selection `8893c64c2`. This is not a current full-green claim.
+Actual-parent cloud gradient/capacity qualification remains required.
 See [gradient partition implementation](shared-state/GRAPH_GRADIENT_PARTITIONS_20261019.md)
 and [ordered convolution](shared-state/FINITE_CONVOLUTION_COTANGENT_ORDER_20261019.md).
-LFM's next successor also removes checkpoint-input file offload and may use the
-explicit device FP32 accumulator after actual restored-model capacity proof.
-No runtime package is credited as successful production training merely for
-being staged.
+LFM's successor removes checkpoint-input file offload and may use the explicit
+device FP32 accumulator after actual restored-model capacity proof. Complete
+common runtime composition is underway for both models; import preflight
+caught a missing explicitly supplied profiler observer before any learner stop.
+No runtime package earns production credit merely for being staged.
 
 A proposed 2343-row LFM continuation contained 1739 already represented rows.
 The learner rejected it before commit; the pending request was withdrawn and
-received zero training credit. The replacement contains 604 genuinely new
+received zero training credit. Its replacement contains 604 genuinely new
 whole rows, preserving all pending obligations and excluding over-frontier rows
-without truncation. Shared resident-prefix and pending-commit race safeguards
-are integrated (`236e4b130`, `bbb481a21`, `a47ca02c9`); actual consumer closure,
-publication and learner adoption of the corrected continuation remain separate.
-Native graph communication classification also needs an explicit metadata/cache
-continuation: existing native graph rows executed their topology, but their
-communication flag was false. Correct per-row exposure accounting before claiming
-producer/consumer readiness; do not reset or invent exposure.
+without truncation. Consumer closure, publication and actual adoption are now
+verified; adoption alone does not establish that all 604 rows were visited.
+Shared safeguards are integrated (`236e4b130`, `bbb481a21`, `a47ca02c9`).
 
-The self-hosted Qwen teacher remains busy. Actual hardware census identifies
-its existing sandbox as RTX PRO 6000 Blackwell with 96 GB, correcting the older
-B200 description. The Node runtime passed strict physical verification and fresh
-3/3 typed plus 24/24 ordinary recovery and 3/3 private recovery references.
-A future-only 198-packet source/runtime epoch adds three 48-trajectory windows;
-its new configuration is applied and publisher reconciliation is in progress.
-Existing collectors retain their original runtime custody. No future sample,
-admission or completed measurement is inferred from that configuration change.
+Native graph communication classification and explicit earned-credit migration
+are integrated in `6400f4241`, independently reviewed, with 46 root continuation/
+classification tests and 218 cloud integration tests passing. Native consumers
+need nonempty imports and positive supervised continuation; genuine in-model
+production is distinguished from external-only consumption. Only ONE of the
+two admitted 797-family long graphs actually communicates. Exact historical
+row visits, quotas, optimizer and RNG remain preserved; old caches require
+an explicit authenticated index migration. Those cloud migrations are being
+prepared, not yet claimed as applied.
+
+The self-hosted Qwen teacher remains busy. Actual hardware is RTX PRO 6000
+Blackwell with 96 GB, correcting older B200 descriptions. Its serving engine
+uses the SM120 B12X linear, MoE and GDN paths with mixed ModelOpt FP4, FP8 KV
+and MTP. The Node runtime passed strict physical verification and fresh 3/3
+typed plus 24/24 ordinary recovery and 3/3 private recovery references.
+The 198-packet source/runtime epoch is actually adopted; the publisher
+recovered from a transient gateway file-read error and completed its first
+matching healthy poll without a restart. Existing collectors retain their
+original runtime custody. Three new 48-trajectory windows wait their legitimate
+capacity turn; no future sample or completed measurement is inferred from
+configuration adoption. The shared guardian now verifies naturally archived
+completed slots against exact original owner/start and boundary custody
+(`74d374d21`); the future operator derivative is prepared, not executed merely
+to change a working guardian.
 
 Neither model has completed its whole foundation/production recipe or earned
 cross-model VAE readiness. Continue genuine shared-state graphs, ordinary data,
