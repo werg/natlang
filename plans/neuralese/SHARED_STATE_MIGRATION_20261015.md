@@ -48,15 +48,44 @@ through the projected-value implementation.
 
 ## Current status
 
-October 19, 13:15 UTC: both diagnostic learners reached their finite initial
+October 19, 15:06 UTC: replacement continuation is still in startup; neither
+recovered entry has earned a new optimizer update. LFM's exact 16397 parent is
+now loaded by R9 owner 3782488, with completed current-owner import and fresh
+actor parity. Its preceding entry passed the complete gradient check, then
+ran short of host memory during capacity preparation. We retired that paused
+process only after testing two concrete fixes: release decoded predecessor
+metadata immediately after optimizer/RNG restoration, and reuse source trees
+already loaded by the trainer during capacity verification. Both preserve the
+actual numerical checks and all prior exposure. The original sandbox remains
+reachable; the unexplained guest-wide shared-memory accounting is not evidence
+that reusable source files can be deleted.
+
+Mellum's exact full 24508 parent is loaded by owner 2379860 and passed fresh
+actor parity. Its complete-gradient/FFN qualification is still progressing.
+Approximately 1 TB of observed writes belongs to that qualification, which
+performs several backward passes; it is not a measurement of production bytes
+per optimizer update. The next R9 entry has passed the actual parsed-argument
+comparison with the qualified runtime. It may carry the original genuine
+gradient result only after that result passes, under an independently reviewed
+exact module inventory; fresh actor and actual capacity checks remain required.
+Do not repeat this expensive measurement solely for changed metadata.
+
+Both sandboxes' stale source-host RAW rounds were retired under their exact
+live controller leases with zero training/readiness credit. Whole-recipe work
+and RAW debt remain owed. Shared joint data/classification append now admits
+verified new leaves together with their evidence, preserving prior proof and
+held-data prefixes, optimizer/RNG and earned row visits. R9 deliberately stays
+at the reviewed `df15aa423` package (code `68060d44`); later unused handoff or
+registry changes do not justify interrupting it again.
+
+The earlier exits motivating this recovery reached their finite initial
 foundation boundary and exited instead of handing back to the whole-recipe
 controller. The original sandboxes remain reachable on the same boots; neither
 exit is a new OOM. LFM ended at global 16397 / ordinary 15641, Mellum at
 29861 / 28845. Each completed its initial 26,312-graph foundation, but actual
 communication exposure is only 26,314/107,766 and 26,313/107,766 respectively.
-The remaining production recipe is not complete. The cloud owner is installing
-the completed source classification and restoring into the corrected runtime;
-LFM proceeds independently while Mellum's regression is investigated. Require
+The remaining production recipe is not complete. Source classification and all
+18 LFM / 7 Mellum geometry successors passed their existing verifiers. Require
 durable whole-recipe handback after entry, not another unattended finite stop.
 LFM's adopted source remains `bf102d0c` (1,313,869 rows); Mellum remains
 `3b7085c0` (1,234,855 rows). Its further 158 verified rows passed the actual
@@ -85,8 +114,11 @@ interleaved actor ordering and checkpoint execution context while still running
 one layer-major graph traversal. Independent full review is clear and focused
 tests pass. Earlier full-check failures have fixes for decoded options lifetime
 `6be74d124`, test filesystem selection `8893c64c2`, and stale continuation/held
-cadence assertions `882ab24cb`. Full check of `c9b6a3d68` is now running;
-67 integrated focused tests and quick checks passed. No full-green claim yet.
+cadence assertions `882ab24cb`. That full check and its successor exposed test
+fixture import problems, now fixed by `aa2db3741`; its full suite is running.
+The early metadata release passed 76 focused tests and independent review;
+deferred-owner handoff/configuration retries passed 123 focused tests after
+review fixes. Integrated quick checks passed. No full-green claim yet.
 Actual-parent cloud gradient/capacity qualification remains required.
 See [gradient partition implementation](shared-state/GRAPH_GRADIENT_PARTITIONS_20261019.md)
 and [ordered convolution](shared-state/FINITE_CONVOLUTION_COTANGENT_ORDER_20261019.md).
