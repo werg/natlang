@@ -191,7 +191,7 @@ def _atomic_checkpoint(path, state):
         if any(getattr(committed, field) != getattr(written_stat, field)
                for field in ('st_dev', 'st_ino', 'st_size', 'st_mtime_ns')):
             raise RuntimeError('checkpoint changed during its atomic publication')
-        from ..common.hashing import remember_written_file_digest
+        from ..common.checkpoint_digest import remember_written_file_digest
         signature = tuple(getattr(committed, field) for field in
                           ('st_dev', 'st_ino', 'st_size', 'st_mtime_ns', 'st_ctime_ns'))
         remember_written_file_digest(path, writer.digest.hexdigest(), signature=signature)
