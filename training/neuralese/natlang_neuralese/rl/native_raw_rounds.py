@@ -529,6 +529,306 @@ def import_current_owner_checkpoint(config_path,cursor_path,selected_checkpoint,
     return binding(out)
 
 
+def retire_stale_pending_raw_round(config_path,cursor_path,authority,out,*,owned_controller_fd):
+    """Retire one authenticated dead RAW operation without crediting its work.
+
+    The operation owner chooses whether a stopped pending round should be
+    retried. This exact transaction only preserves its files and debt, clears
+    stale operation pointers, and sends the existing scheduler back through
+    mandatory SFT before a fresh collection attempt.
+    """
+    import contextlib
+    from ..common.hashing import canonical_json_sha256_hex as digest
+
+    config_path=Path(config_path).resolve(strict=True);cursor_path=Path(cursor_path).resolve(strict=True)
+    out=Path(out).resolve();config=json.loads(config_path.read_text());root=config_path.parent
+    state_path=Path(config['out']).resolve()/'state.json'
+    if cursor_path!=root/'cycle.json' or Path(config['out']).resolve().parent!=root:
+        raise ValueError('stale RAW retirement lost its exact controller namespace')
+    required={'schema','config','state','cursor','selection','historical_owner_identity_available',
+        'process_census','permitted_owner','operation_directories','provider_quiescence','reason'}
+    if (not isinstance(authority,dict) or set(authority)!=required
+            or authority.get('schema')!='natlang.native-raw-stale-pending-authority/2'
+            or authority.get('historical_owner_identity_available') is not False):
+        raise ValueError('stale RAW retirement requires complete exact owner and predecessor bindings')
+    directory=out.parent/(out.stem+'-stale-pending-retirement');intent_path=directory/'intent.json'
+    paths={'state':state_path,'cursor':cursor_path}
+    if binding(config_path)!=authority['config']:
+        raise ValueError('stale RAW retirement predecessor config changed')
+    if intent_path.is_file():
+        prior_intent=json.loads(intent_path.read_text())
+        if (prior_intent.get('authority')!=authority
+                or set(prior_intent.get('snapshots',{}))!=set(paths)):
+            raise ValueError('stale RAW retirement recovery intent changed its exact predecessor')
+        original={name:json.loads(_bound(prior_intent['snapshots'][name]).read_text()) for name in paths}
+        for name in paths:
+            if prior_intent.get('before',{}).get(name)!=authority[name]:
+                raise ValueError('stale RAW retirement recovery snapshot lost its predecessor binding')
+        state,cursor=original['state'],original['cursor']
+    else:
+        for name,path in (('state',state_path),('cursor',cursor_path)):
+            if binding(path)!=authority[name]:raise ValueError('stale RAW retirement predecessor '+name+' changed')
+        state=json.loads(state_path.read_text());cursor=json.loads(cursor_path.read_text())
+    if not isinstance(authority['reason'],str) or not authority['reason'].strip():
+        raise ValueError('stale RAW retirement needs the owner decision reason')
+    quiescence_ref=authority['provider_quiescence'];quiescence_path=_bound(quiescence_ref)
+    if binding(quiescence_path)!=quiescence_ref:
+        raise ValueError('stale RAW retirement provider quiescence proof changed')
+    quiescence=json.loads(quiescence_path.read_text())
+    expected_units={'cw-lfm-cpu26-keep-provider-20261018.service',
+        'cw-lfm-cpu26-keep-heartbeat-20261018.service',
+        'cw-mellum-cpu26-actual-queue-provider-20261018.service',
+        'cw-mellum-cpu26-actual-queue-heartbeat-20261018.service'}
+    if (quiescence.get('schema')!='natlang.supervisor-legacy-provider-quiescence/1'
+            or type(quiescence.get('at')) not in (int,float)
+            or time.time()-quiescence['at']<0 or time.time()-quiescence['at']>300
+            or not isinstance(quiescence.get('boot_id'),str) or not quiescence['boot_id']
+            or quiescence.get('training_credit')!=0 or quiescence.get('learner_checkpoint_mutations')!=[]
+            or not isinstance(quiescence.get('units'),list)
+            or len(quiescence['units'])!=len(expected_units)
+            or any(not isinstance(row,dict) for row in quiescence['units'])
+            or {row.get('Id') for row in quiescence['units']}!=expected_units
+            or any(row.get('ActiveState')!='inactive' or row.get('SubState')!='dead' or row.get('MainPID')!='0'
+                   for row in quiescence['units'])):
+        raise ValueError('stale RAW retirement requires all exact legacy source-host provider units parked')
+    if (state.get('phase') not in ('updating','stopped_collecting')
+            or cursor.get('phase')!='rl' or type(cursor.get('pending_rl_round'))is not int
+            or type(state.get('round'))is not int or cursor['pending_rl_round']!=state['round']+1
+            or type(cursor.get('cycle'))is not int or cursor.get('next_stage')!=0
+            or state.get('production_complete') is True):
+        raise ValueError('stale RAW retirement does not match an incomplete pending RL round')
+    if any(key.startswith('pending_') and value is not None
+            for key,value in state.items() if key not in ('pending_native_checkpoint','pending_native_round_dir')):
+        raise ValueError('stale RAW retirement cannot bypass another pending production operation')
+    if any(key.startswith('pending_') and key!='pending_rl_round' and value is not None
+            for key,value in cursor.items()):
+        raise ValueError('stale RAW retirement found an unknown pending cursor owner')
+    if any(state.get(key) is not None for key in ('pending_native_checkpoint','pending_native_round_dir','learner_pending')):
+        raise ValueError('stale RAW retirement cannot bypass an active sealed RAW operation')
+    if state.get('checkpoint') is None or cursor.get('current_checkpoint') is None:
+        raise ValueError('stale RAW retirement requires the same bound current checkpoint')
+    checkpoint=binding(state['checkpoint'])
+    if {key:cursor['current_checkpoint'].get(key) for key in ('path','sha256')}!=checkpoint:
+        raise ValueError('stale RAW retirement found different state and cursor checkpoints')
+    selection_path=Path(config['out']).resolve()/f"round-{state['round']:06d}-selection.json"
+    if binding(selection_path)!=authority['selection']:
+        raise ValueError('stale RAW retirement selection snapshot changed')
+    selection=json.loads(selection_path.read_text())
+    if (not isinstance(selection,dict) or not isinstance(selection.get('selection'),list)
+            or not selection['selection'] or not isinstance(selection.get('cases'),list)
+            or len(selection['cases'])!=len(selection['selection'])):
+        raise ValueError('stale RAW retirement requires its original nonempty sealed selection')
+    operation_directories=authority['operation_directories']
+    expected_bridge=root/'cycles'/f"{cursor['cycle']:06d}"/'rl-bridge'
+    expected_update=Path(state.get('active_update_round','')).resolve()
+    if (not isinstance(operation_directories,list) or not operation_directories
+            or any(not isinstance(path,str) for path in operation_directories)
+            or str(expected_bridge.resolve()) not in operation_directories
+            or str(expected_update) not in operation_directories
+            or any(Path(path).resolve()==root or root.resolve() not in Path(path).resolve().parents for path in operation_directories)):
+        raise ValueError('stale RAW retirement operation directories do not bind the exact round and updater')
+    if type(state.get('collection_attempt',0)) is not int or state.get('collection_attempt',0)<0:
+        raise ValueError('stale RAW retirement collection attempt is malformed')
+    from .native_raw_handoff import observe,process_argv,same_process
+    census_ref=authority['process_census'];census_path=_bound(census_ref)
+    if binding(census_path)!=census_ref:
+        raise ValueError('stale RAW retirement process census binding changed')
+    census=json.loads(census_path.read_text())
+    boot=Path('/proc/sys/kernel/random/boot_id').read_text().strip()
+    recovering=intent_path.exists()
+    if (not isinstance(census,dict) or census.get('boot_id')!=boot
+            or not isinstance(census.get('processes'),list) or type(census.get('at')) not in (int,float)
+            or not recovering and (time.time()-census['at']<0 or time.time()-census['at']>120)):
+        raise ValueError('stale RAW retirement needs a current same-host process census')
+    permitted=authority['permitted_owner']
+    if (not isinstance(permitted,dict) or set(permitted)!={'identity','q_root','gate_spec','wrapper','argv'}
+            or not isinstance(permitted['identity'],dict)):
+        raise ValueError('stale RAW retirement needs the exact distinct new-entry owner')
+    new_root=Path(permitted['q_root']).resolve(strict=True)
+    gate_ref=permitted['gate_spec'];gate_path=_bound(gate_ref);wrapper_ref=permitted['wrapper'];wrapper_path=_bound(wrapper_ref)
+    if binding(gate_path)!=gate_ref or binding(wrapper_path)!=wrapper_ref:
+        raise ValueError('stale RAW retirement new-entry authority changed')
+    gate=json.loads(gate_path.read_text())
+    if (new_root==root or wrapper_path!=new_root/'owned-entry.py'
+            or Path(gate.get('out','')).resolve()!=new_root/'learner'
+            or root.as_posix() in str(gate.get('out',''))):
+        raise ValueError('stale RAW retirement permitted owner is not bound to a distinct RAW successor')
+    permitted_identity=permitted['identity'];permitted_observed=observe(permitted_identity.get('pid'))
+    expected_wrapper_argv=[permitted['argv'][0],'-u',str(wrapper_path)] if isinstance(permitted.get('argv'),list) and permitted['argv'] else None
+    if (not same_process(permitted_identity,permitted_observed)
+            or process_argv(permitted_observed)!=permitted.get('argv')
+            or any(type(arg)is not str for arg in permitted['argv'])
+            or permitted['argv']!=expected_wrapper_argv
+            or not any(str(new_root) in arg for arg in permitted['argv'])):
+        raise ValueError('stale RAW retirement permitted process is not the exact distinct in-process entry')
+    census_owner=False
+    for entry in census['processes']:
+        if (not isinstance(entry,dict) or type(entry.get('pid'))is not int
+                or not isinstance(entry.get('birth'),str) or not isinstance(entry.get('argv'),list)
+                or entry.get('boot_id')!=boot
+                or any(type(arg)is not str for arg in entry['argv'])):
+            raise ValueError('stale RAW retirement census has a malformed process row')
+        observed=observe(entry['pid'])
+        expected={'pid':entry['pid'],'boot_id':boot,'start_ticks':entry['birth']}
+        if same_process(expected,observed):
+            if process_argv(observed)!=entry['argv']:
+                raise ValueError('stale RAW retirement census process argv changed after capture')
+            if same_process(permitted_identity,observed):census_owner=True
+    if not census_owner:
+        raise ValueError('stale RAW retirement census does not include its exact new-entry owner')
+
+    # A fresh local /proc pass closes the census-to-commit window. Only the
+    # captured new entry may mention its new Q/gate-spec. Any other current
+    # process pointing into the stale request/config/output blocks retirement.
+    stale_paths=[str(config_path),str(state_path),str(cursor_path),*(str(Path(path).resolve()) for path in operation_directories)]
+    def references_stale(argv):
+        return any(old and any(old in arg for arg in argv) for old in stale_paths)
+    def assert_no_live_stale_processes():
+        # The immutable census detects a changed/reused PID; this current pass
+        # catches workers launched after it. The permitted in-process owner is
+        # excluded only by its complete PID/birth/boot and exact argv.
+        for proc in Path('/proc').iterdir():
+            if not proc.name.isdigit():continue
+            observed=observe(int(proc.name))
+            if observed is None:continue
+            argv=process_argv(observed)
+            if references_stale(argv) and not same_process(permitted_identity,observed):
+                raise ValueError('stale RAW retirement is blocked by a live process using the old RAW operation')
+    for operation_directory in operation_directories:
+        original_path=Path(operation_directory)
+        path=original_path.resolve()
+        if original_path.is_symlink() or not path.is_dir():
+            raise ValueError('stale RAW retirement operation directory is not an intact directory')
+
+    def verify_controller_fd(fd,path):
+        if type(fd)is not int or fd<0 or not path.is_file() or not os.path.isfile(f'/proc/self/fd/{fd}'):
+            raise ValueError('stale RAW retirement lacks the inherited canonical controller lease')
+        opened=os.fstat(fd);actual=path.stat()
+        if opened.st_dev!=actual.st_dev or opened.st_ino!=actual.st_ino:
+            raise ValueError('stale RAW retirement inherited descriptor is not the canonical controller lease')
+        info=Path('/proc/self/fdinfo',str(fd)).read_text().splitlines()
+        locks=[line for line in info if line.startswith('lock:') and 'FLOCK' in line]
+        if len(locks)!=1 or 'WRITE' not in locks[0]:
+            raise ValueError('stale RAW retirement inherited descriptor has no exclusive controller lease')
+
+    request={'authority_sha256':digest(authority),'config':authority['config'],'state':authority['state'],
+        'cursor':authority['cursor'],'round':state['round'],'pending_round':cursor['pending_rl_round'],
+        'checkpoint':checkpoint,'selection':authority['selection'],'reason':authority['reason']}
+    def candidates_from(original_state,original_cursor):
+        retired={key:value for key,value in original_state.items()
+            if key.startswith(('active_update_','update_','partial_update_'))}
+        if not any(key.startswith('active_update_') for key in retired):
+            raise ValueError('stale RAW retirement has no active update ownership to retire')
+        next_state=dict(original_state)
+        for key in retired:next_state.pop(key,None)
+        next_state.update(phase='collect',collection_attempt=original_state.get('collection_attempt',0)+1)
+        record={'request_sha256':digest(request),'round':original_state['round'],
+            'pending_round':original_cursor['pending_rl_round'],'selection':authority['selection'],
+            'previous_checkpoint':binding(original_state['checkpoint']),
+            'operation_directories':operation_directories,'process_census':census_ref,
+            'permitted_owner':permitted,
+            'retired_state_fields':retired,'reason':authority['reason'],
+            'whole_recipe_completed':False,'training_credit':0}
+        next_state['stale_pending_raw_retirement']=record
+        next_cursor=dict(original_cursor);next_cursor.update(phase='sft',next_stage=0,
+            stale_pending_raw_retirement={'request_sha256':digest(request),'round':original_state['round'],
+                'pending_round':original_cursor['pending_rl_round'],'receipt_path':str(out),
+                'whole_recipe_completed':False})
+        next_cursor.pop('pending_rl_round',None);next_cursor.pop('readiness',None);next_cursor.pop('foundation_qualified',None)
+        next_cursor['raw_retry_generation']=next_state['collection_attempt']
+        return next_state,next_cursor,retired
+
+    def validate_intent(intent):
+        if (not isinstance(intent,dict) or intent.get('schema')!='natlang.native-raw-stale-pending-retirement/1'
+                or intent.get('request')!=request or intent.get('authority')!=authority
+                or intent.get('whole_recipe_completed') is not False or intent.get('training_credit')!=0
+                or set(intent.get('before',{}))!=set(paths) or set(intent.get('snapshots',{}))!=set(paths)
+                or set(intent.get('candidates',{}))!=set(paths)):
+            raise ValueError('stale RAW retirement durable intent changed its exact request')
+        originals={}
+        for name,path in paths.items():
+            if (intent['before'][name]!=authority[name]
+                    or Path(intent['snapshots'][name]['path']).resolve()!=directory/('original-'+name+'.json')
+                    or Path(intent['candidates'][name]['path']).resolve()!=directory/('candidate-'+name+'.json')):
+                raise ValueError('stale RAW retirement intent substituted a transaction artifact')
+            snapshot=_bound(intent['snapshots'][name])
+            if binding(snapshot)!=intent['snapshots'][name]:raise ValueError('stale RAW retirement snapshot binding changed')
+            originals[name]=json.loads(snapshot.read_text())
+        expected_state,expected_cursor,retired=candidates_from(originals['state'],originals['cursor'])
+        if retired!=intent.get('retired_state_fields'):
+            raise ValueError('stale RAW retirement intent lost retired operation fields')
+        for name,expected in (('state',expected_state),('cursor',expected_cursor)):
+            candidate=_bound(intent['candidates'][name])
+            if json.loads(candidate.read_text())!=expected:
+                raise ValueError('stale RAW retirement candidate changed debt or unrelated fields')
+        return intent
+
+    controller_lock=root.parent/'controller.lock';locks={Path(config['out']).resolve()/'controller.lock'}
+    with contextlib.ExitStack() as stack:
+        verify_controller_fd(owned_controller_fd,controller_lock)
+        for lock_path in sorted(locks):
+            lease=stack.enter_context(lock_path.open('a'))
+            fcntl.flock(lease,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        if binding(config_path)!=authority['config']:
+            raise ValueError('stale RAW retirement configuration changed before commit')
+        assert_no_live_stale_processes()
+        if (Path('/proc/sys/kernel/random/boot_id').read_text().strip()!=boot
+                or not same_process(permitted_identity,observe(permitted_identity['pid']))):
+            raise ValueError('stale RAW retirement process authority changed before commit')
+
+        if out.exists():
+            receipt=json.loads(out.read_text())
+            if (receipt.get('schema')!='natlang.native-raw-stale-pending-retirement/1'
+                    or receipt.get('request_sha256')!=digest(request)
+                    or Path(_bound(receipt['intent']))!=intent_path.resolve()):
+                raise ValueError('stale RAW retirement receipt belongs to another operation')
+            stored=validate_intent(json.loads(_bound(receipt['intent']).read_text()))
+            if (receipt.get('whole_recipe_completed') is not False or receipt.get('training_credit')!=0
+                    or receipt.get('retired_round')!=request['round'] or receipt.get('pending_round')!=request['pending_round']
+                    or receipt.get('same_selection')!=authority['selection']
+                    or receipt.get('collection_attempt')!=state.get('collection_attempt',0)+1):
+                raise ValueError('stale RAW retirement receipt changed its exact no-credit result')
+            return binding(out)
+
+        if intent_path.exists():
+            intent=json.loads(intent_path.read_text())
+            intent=validate_intent(intent)
+        else:
+            before={name:binding(path) for name,path in paths.items()}
+            if before!={'state':authority['state'],'cursor':authority['cursor']}:
+                raise ValueError('stale RAW retirement pointers changed before intent')
+            next_state,next_cursor,retired_fields=candidates_from(state,cursor)
+            directory.mkdir(parents=True,exist_ok=True);snapshots={};candidates={}
+            for name,path in paths.items():
+                snapshot=directory/('original-'+name+'.json')
+                write_bytes_durable(snapshot,_bound(before[name]).read_bytes());snapshots[name]=binding(snapshot)
+            for name,value in (('state',next_state),('cursor',next_cursor)):
+                candidate=directory/('candidate-'+name+'.json');write_json_durable(candidate,value);candidates[name]=binding(candidate)
+            if any(binding(path)!=before[name] for name,path in paths.items()):
+                raise ValueError('stale RAW retirement controller changed before durable intent')
+            intent={'schema':'natlang.native-raw-stale-pending-retirement/1','request':request,
+                'authority':authority,'before':before,'snapshots':snapshots,'candidates':candidates,
+                'retired_state_fields':retired_fields,'whole_recipe_completed':False,'training_credit':0}
+            write_json_durable(intent_path,intent)
+            intent=validate_intent(intent)
+        if binding(config_path)!=authority['config']:
+            raise ValueError('stale RAW retirement configuration changed during transaction')
+        for name,path in paths.items():
+            actual=binding(path);candidate=intent['candidates'][name]
+            if actual['sha256']!=candidate['sha256'] and actual!=intent['before'][name]:
+                raise ValueError('stale RAW retirement found an unknown controller successor')
+        for name,path in paths.items():
+            candidate=intent['candidates'][name]
+            if binding(path)['sha256']!=candidate['sha256']:
+                write_bytes_durable(path,_bound(candidate).read_bytes())
+        write_json_durable(out,{'schema':intent['schema'],'request_sha256':digest(request),
+            'intent':binding(intent_path),'whole_recipe_completed':False,'training_credit':0,
+            'retired_round':state['round'],'pending_round':cursor['pending_rl_round'],
+            'same_selection':authority['selection'],'next_phase':'sft','next_stage':0,
+            'collection_attempt':state.get('collection_attempt',0)+1})
+    return binding(out)
+
+
 def _owned_training_invocation(argv,parent,*,parent_bytes=None):
     """Resolve only the exact reviewed read-only historical restore observer."""
     if '--argv-binding' not in argv:return argv,None
@@ -894,6 +1194,20 @@ def completed_raw_cursor(config,cursor,result):
     return updated
 
 
+def _raw_bridge_jobdir(work,cursor):
+    """The cycle work directory already separates an explicitly retired attempt."""
+    return Path(work)/'rl-bridge'
+
+
+def cycle_work_directory(root,cursor):
+    """Return the immutable work namespace for the current RAW attempt."""
+    cycle=cursor.get('cycle');generation=cursor.get('raw_retry_generation',0)
+    if type(cycle)is not int or cycle<0 or type(generation)is not int or generation<0:
+        raise ValueError('RAW cycle work identity is malformed')
+    path=Path(root)/'cycles'/f'{cycle:06d}'
+    return path if generation==0 else path/f'retired-attempt-{generation:06d}'
+
+
 def student_cycle(plan_path,declaration,handoff,directory,*,stop):
     """Resume exact per-operation outputs; every source remains a carried obligation."""
     from .native_rounds import round_job
@@ -912,7 +1226,7 @@ def student_cycle(plan_path,declaration,handoff,directory,*,stop):
         if binding(config['production_recipe'])['sha256']!=reconciliation['recipe_sha256']:
             raise StudentConfigurationError('owned completed work requires its actual current runtime configuration')
         reconciliation['runtime_configuration_required']=False;write_json_durable(cursor_path,cursor)
-    cycle=cursor['cycle'];work=directory/'cycles'/f'{cycle:06d}'
+    cycle=cursor['cycle'];work=cycle_work_directory(directory,cursor)
     if cursor['phase']=='rl':
         if stop.requested:return cursor
         production_state=Path(config['out'])/'state.json'
@@ -920,8 +1234,9 @@ def student_cycle(plan_path,declaration,handoff,directory,*,stop):
         if 'pending_rl_round' not in cursor:
             cursor['pending_rl_round']=state['round']+1
             write_json_durable(cursor_path,cursor)
+        bridge_job=_raw_bridge_jobdir(work,cursor)
         result=(state if state['round']>=cursor['pending_rl_round'] else
-            round_job(config_path,config,work/'rl-bridge',stop))
+            round_job(config_path,config,bridge_job,stop))
         if stop.requested:return cursor
         cursor=completed_raw_cursor(config,cursor,result)
         write_json_durable(cursor_path,cursor)
@@ -965,6 +1280,7 @@ def student_cycle(plan_path,declaration,handoff,directory,*,stop):
         continuation['raw_foundation_qualification']=True
         _supervised_job(continuation,jobdir,config,cursor,stop)
         if stop.requested:return cursor
+    cursor.pop('raw_retry_generation',None)
     cursor.update(cycle=cycle+1,phase='rl',next_stage=0,current_checkpoint=_current_checkpoint(config))
     write_json_durable(cursor_path,cursor)
     return cursor

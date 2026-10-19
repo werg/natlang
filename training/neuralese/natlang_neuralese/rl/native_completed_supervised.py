@@ -54,7 +54,7 @@ def _no_active_operation(root):
 
 def _operation(config,cursor,request_ref,result_ref):
     from .native_bridge import read_request,verify_result_inventory
-    from .native_raw_rounds import _supervised_stage_inventory
+    from .native_raw_rounds import _supervised_stage_inventory,cycle_work_directory
     from ..train.recipe import resolve_recipe_data
     request,result=verify_result_inventory(_bound(request_ref),_bound(result_ref))
     root=Path(config['out']).parent
@@ -64,7 +64,7 @@ def _operation(config,cursor,request_ref,result_ref):
             or type(index)is not int or not 0<=index<len(stages) or type(cycle)is not int
             or request.get('native_actor_mode')!='raw-state' or request['kind']!='round'
             or result.get('status')!='completed'
-            or Path(request['out']).resolve()!=root/'cycles'/f'{cycle:06d}'/'supervised'/f'{index:03d}'):
+            or Path(request['out']).resolve()!=cycle_work_directory(root,cursor)/'supervised'/f'{index:03d}'):
         raise ValueError('completed supervised result differs from the current cycle/stage')
     continuation=_read(request['config']);stage=stages[index]
     if (continuation.get('mandatory_sft_only')is not True
@@ -79,6 +79,7 @@ def _operation(config,cursor,request_ref,result_ref):
 def _raw_operation(config,cursor,request_ref,result_ref,operation_state=None):
     """Authenticate a completed raw round without interpreting it as CE work."""
     from .native_bridge import verify_result_inventory
+    from .native_raw_rounds import cycle_work_directory
     request,result=verify_result_inventory(_bound(request_ref),_bound(result_ref))
     operation=_read(operation_state or result['state'])
     prior=_read(request['state']) if request.get('state') else None
@@ -89,7 +90,7 @@ def _raw_operation(config,cursor,request_ref,result_ref,operation_state=None):
             or cursor.get('phase')!='rl' or type(cycle)is not int
             or type(cursor.get('pending_rl_round'))is not int
             or Path(request['out']).resolve()!=Path(config['out']).resolve()
-            or Path(request_ref['path']).resolve().parent!=root/'cycles'/f'{cycle:06d}'/'rl-bridge'
+            or Path(request_ref['path']).resolve().parent!=cycle_work_directory(root,cursor)/'rl-bridge'
             or invocation.get('mandatory_sft_only')is True or invocation.get('semantic_adapter')
             or invocation.get('coefficient_policy') or request.get('semantic_adapter')
             or binding(invocation['production_recipe'])!=binding(config['production_recipe'])
@@ -268,7 +269,7 @@ def consume_raw(config_path,request_ref,result_ref,out,*,controller):
         receipt_path,training_receipt,updates,evidence=_raw_receipt(pair[1],pair[0],request['parent_checkpoint'])
         next_cursor=completed_raw_cursor(config,cursor,operation)
         if (next_cursor.get('next_stage')!=0 or next_cursor.get('phase')!='sft'
-                or any((paths['config'].parent/'cycles'/f"{cursor['cycle']:06d}"/'supervised').rglob('*.request.json'))):
+                or any((cycle_work_directory(paths['config'].parent,cursor)/'supervised').rglob('*.request.json'))):
             raise ValueError('completed raw consumption lost its unstarted supervised-stage boundary')
         directory=out.parent/(out.stem+'-controls');directory.mkdir(exist_ok=True)
         snapshots={}
