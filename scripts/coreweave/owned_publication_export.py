@@ -50,7 +50,12 @@ def observe_publication(spec, *, known_sha256=None, known_step=-1, verify=None):
     status_before = source_stat(status)
     published = json.loads(status.read_bytes())
     if published.get('passed') is not True:
-        return None
+        # A failed derivation must remain observable: treating it like an
+        # absent first save would leave quality evaluation waiting forever.
+        kind = published.get('error_type')
+        if not isinstance(kind, str) or not kind.isidentifier():
+            kind = 'InvalidPublicationStatus'
+        raise ValueError('owned checkpoint publication failed: ' + kind)
     reference, checkpoint = published['control'], published['checkpoint']
     if Path(checkpoint['path']).resolve() != source.resolve():
         raise ValueError('publication belongs to another learner output')

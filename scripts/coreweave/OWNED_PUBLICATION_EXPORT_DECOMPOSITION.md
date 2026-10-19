@@ -26,3 +26,8 @@ pinning; it does not select a model, alter training or introduce model prompts.
 It reuses `native_checkpoint_control.verify_checkpoint_publication`,
 `cursor_checkpoint_export.bound_output_checkpoint` and the existing private
 export journal/uploader rather than inventing alternate checkpoint proofs.
+
+A missing first publication remains an ordinary wait. A present failed publication
+is an observable export retry with its sanitized failure class; it must not look
+like a first-save wait and indefinitely hide a blocked backup/quality pipeline.
+The full checkpoint remains authoritative and training continues during repair.

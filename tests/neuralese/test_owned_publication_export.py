@@ -175,3 +175,15 @@ def test_actual_cli_pins_reads_back_and_rejects_foreign_journal(publication, tmp
     argv[argv.index('--state-dir')+1] = str(old)
     with pytest.raises(ValueError,match='fresh journal'):
         cursor.main(argv)
+
+
+def test_failed_publication_is_a_visible_retry_not_an_absent_first_save(publication, monkeypatch):
+    spec, source, _ = publication
+    status = source.parent/'checkpoint-publication-status.json'
+    status.unlink()
+    assert module.observe_publication(spec) is None
+    status.write_text(json.dumps({'passed':False,'error_type':'ValueError','full_checkpoint_preserved':True}))
+    monkeypatch.setattr(torch,'load',lambda *a,**k:pytest.fail('failed controls must not decode state'))
+    with pytest.raises(ValueError,match='owned checkpoint publication failed: ValueError'):
+        module.observe_publication(spec)
+    assert not Path(spec['pin_directory']).exists()
