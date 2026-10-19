@@ -6,6 +6,8 @@ import functools
 import json
 import math
 import time
+import threading
+import resource
 from pathlib import Path
 
 
@@ -83,6 +85,81 @@ def _after(before):
     return result
 
 
+def _host_resources():
+    status = {}
+    for line in Path('/proc/self/status').read_text().splitlines():
+        name, _, value = line.partition(':')
+        if name in ('VmRSS', 'RssAnon', 'RssFile', 'RssShmem'):
+            status[name + '_bytes'] = int(value.split()[0]) * 1024
+    memory = {}
+    for line in Path('/proc/meminfo').read_text().splitlines():
+        name, _, value = line.partition(':')
+        if name in ('MemAvailable', 'Shmem'):
+            memory[name + '_bytes'] = int(value.split()[0]) * 1024
+    for name in ('memory.current', 'memory.max'):
+        path = Path('/sys/fs/cgroup') / name
+        if path.exists():
+            value = path.read_text().strip()
+            memory[name] = None if value == 'max' else int(value)
+    return {'process': status, 'host': memory}
+
+
+def _resource_point(cuda_device=None):
+    import torch
+    io = {key: int(value) for key, value in
+          (line.split(':', 1) for line in Path('/proc/self/io').read_text().splitlines())}
+    result = {**_host_resources(), 'io': io,
+              'process_lifetime_max_rss_bytes': resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * 1024}
+    if cuda_device is not None:
+        result['cuda'] = {'allocated_bytes': torch.cuda.memory_allocated(cuda_device),
+                          'reserved_bytes': torch.cuda.memory_reserved(cuda_device),
+                          'peak_allocated_bytes': torch.cuda.max_memory_allocated(cuda_device),
+                          'peak_reserved_bytes': torch.cuda.max_memory_reserved(cuda_device)}
+    return result
+
+
+class _ActualUpdateResources:
+    """Bounded metadata sampling around the existing update; no model operation."""
+    def __init__(self, cuda_device=None):
+        import torch
+        self.cuda_device = cuda_device
+        self.before = _resource_point(cuda_device)
+        self.peak = dict(self.before['process'])
+        self.minimum_available = self.before['host']['MemAvailable_bytes']
+        self.stop = threading.Event()
+        self.error = None
+        if cuda_device is not None:
+            torch.cuda.reset_peak_memory_stats(cuda_device)
+        def sample():
+            try:
+                while not self.stop.wait(.2):
+                    value = _host_resources()
+                    for key, count in value['process'].items():
+                        self.peak[key] = max(self.peak.get(key, 0), count)
+                    self.minimum_available = min(self.minimum_available, value['host']['MemAvailable_bytes'])
+            except Exception as error:
+                self.error = type(error).__name__
+        self.thread = threading.Thread(target=sample, name='native-update-resource-observer', daemon=True)
+        self.thread.start()
+        self.started = time.monotonic()
+
+    def finish(self):
+        self.stop.set()
+        self.thread.join()
+        after = _resource_point(self.cuda_device)
+        for key, count in after['process'].items():
+            self.peak[key] = max(self.peak.get(key, 0), count)
+        self.minimum_available = min(self.minimum_available, after['host']['MemAvailable_bytes'])
+        return {'schema': 'natlang.actual-native-update-resources/1',
+                'before': self.before, 'after': after,
+                'io_delta': {key: after['io'][key] - count for key, count in self.before['io'].items()},
+                'host_wall_seconds': time.monotonic() - self.started,
+                'sampled_process_peak_bytes': self.peak,
+                'sampled_minimum_guest_available_bytes': self.minimum_available,
+                'host_sampling_seconds': .2, 'sampling_error': self.error,
+                'scope': 'Exactly one original update. Host peaks sampled at 200ms; lifetime RSS labeled separately. CUDA allocator peaks reset at bracket entry; no synchronization or extra model computation.'}
+
+
 @contextlib.contextmanager
 def observe_backbone_updates(out, *, every=250, samples=128):
     """Observe first/every-N relative calls; never grant committed exposure."""
@@ -115,7 +192,29 @@ def observe_backbone_updates(out, *, every=250, samples=128):
             except Exception as error:
                 failed(error)
         before_seconds = time.monotonic() - observation_started
-        result = original(*args, **kwargs)
+        resources = None
+        if enabled and (number <= 5 or number % every == 0):
+            try:
+                optimizer = args[1] if len(args) > 1 else kwargs['optimizer']
+                devices = {parameter.device for _, parameter in optimizer._native_named_parameters if parameter.is_cuda}
+                if len(devices) > 1:
+                    raise ValueError('resource observation needs one actual CUDA device')
+                resources = _ActualUpdateResources(next(iter(devices), None))
+            except Exception as error:
+                failed(error)
+        update_completed = False
+        try:
+            result = original(*args, **kwargs)
+            update_completed = True
+        finally:
+            if resources is not None:
+                try:
+                    observed_resources = resources.finish()
+                    out.mkdir(parents=True, exist_ok=True)
+                    with (out / 'native-update-resources.jsonl').open('a') as stream:
+                        stream.write(json.dumps({'relative_update': number, 'update_completed': update_completed, **observed_resources}, allow_nan=False) + '\n')
+                except Exception as error:
+                    failed(error)
         state['completed_updates'] += 1
         if before is not None:
             try:

@@ -49,6 +49,11 @@ def test_actual_both_ports_preserve_parameters_optimizer_rng_and_report_updates(
     assert_tree_equal(run(False), run(True))
     rows = [json.loads(line) for line in (tmp_path/'native-backbone-updates.jsonl').read_text().splitlines()]
     assert [row['relative_update'] for row in rows] == [1, 3]
+    resources = [json.loads(line) for line in (tmp_path/'native-update-resources.jsonl').read_text().splitlines()]
+    assert [row['relative_update'] for row in resources] == [1, 2, 3, 4]
+    assert all(row['update_completed'] and row['host_wall_seconds'] >= 0 for row in resources)
+    assert all(row['sampled_process_peak_bytes']['VmRSS_bytes'] >= row['before']['process']['VmRSS_bytes'] for row in resources)
+    assert all('cuda' not in row['before'] for row in resources)
     for row in rows:
         assert row['parameters'] and all(p['name'].startswith('backbone.') for p in row['parameters'])
         assert any(p['sampled_update_l2'] > 0 and p['changed_sampled_coordinates'] > 0
@@ -143,3 +148,38 @@ def test_bound_helper_cli_retains_observer_after_finite_profile(tmp_path, monkey
     with pytest.raises(SystemExit):
         main(['--profile-out', str(tmp_path/'wrong'), '--backbone-update-every', '250',
               '--backbone-update-observer', json.dumps(binding), '--', *arguments])
+
+
+def test_actual_update_io_bracket_excludes_the_observer_output(tmp_path, monkeypatch):
+    import os
+    from types import SimpleNamespace
+    payload = b'x' * (2 * 1024 * 1024)
+    optimizer = SimpleNamespace(_native_named_parameters=[('backbone.weight', torch.nn.Parameter(torch.ones(1)))])
+    token = object()
+    def update(*args, **kwargs):
+        with (tmp_path/'actual-update-output').open('wb') as stream:
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+        return token
+    monkeypatch.setattr(native, 'native_training_update', update)
+    # CPU observations must never initialize a CUDA context just because a GPU exists.
+    monkeypatch.setattr(torch.cuda, 'memory_allocated', lambda *args: (_ for _ in ()).throw(AssertionError('CPU observer touched CUDA')))
+    with observe_backbone_updates(tmp_path/'observations', samples=1):
+        assert native.native_training_update(None, optimizer, []) is token
+    report = json.loads((tmp_path/'observations/native-update-resources.jsonl').read_text())
+    assert report['update_completed'] and report['io_delta']['wchar'] == len(payload)
+    assert report['io_delta']['write_bytes'] >= len(payload)
+    assert report['sampling_error'] is None
+
+
+def test_resource_sampling_error_keeps_actual_update_result(tmp_path, monkeypatch):
+    import scripts.neuralese_data.native_update_observer as helper
+    from types import SimpleNamespace
+    optimizer = SimpleNamespace(_native_named_parameters=[('backbone.weight', torch.nn.Parameter(torch.ones(1)))])
+    token = object()
+    monkeypatch.setattr(native, 'native_training_update', lambda *args, **kwargs: token)
+    monkeypatch.setattr(helper, '_resource_point', lambda *args: (_ for _ in ()).throw(OSError('proc unavailable')))
+    with observe_backbone_updates(tmp_path, samples=1) as state:
+        assert native.native_training_update(None, optimizer, []) is token
+    assert state['completed_updates'] == 1 and state['diagnostic_errors'] == ['OSError']
