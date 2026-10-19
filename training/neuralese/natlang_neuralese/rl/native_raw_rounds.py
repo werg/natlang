@@ -1594,8 +1594,13 @@ def student_cycle(plan_path,declaration,handoff,directory,*,stop):
 
 def _sealed_supervised_request(jobdir):
     """An issued bridge request fixes its operation even after its state advances."""
-    from .native_bridge import read_request
-    paths=sorted((Path(jobdir)/'bridge').glob('*.request.json'))
+    from .native_bridge import read_request,verify_result_inventory
+    paths=[]
+    for path in sorted((Path(jobdir)/'bridge').glob('*.request.json')):
+        result=path.with_suffix('.result.json')
+        if result.exists() and verify_result_inventory(path,result)[1]['status']=='failed':
+            continue  # An authenticated failed attempt never replaces an earned successor.
+        paths.append(path)
     if not paths:return None
     if len(paths)!=1:raise ValueError('supervised operation has ambiguous sealed requests')
     request=read_request(paths[0])

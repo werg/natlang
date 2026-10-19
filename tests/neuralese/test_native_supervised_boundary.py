@@ -199,3 +199,16 @@ def test_config_owned_selector_does_not_require_bootstrap_plan_mutation(tmp_path
     config,cursor=m.apply(f.plan_path,declaration,{},f.config,f.cursor,f.root)
     assert config['production_recipe']==str(f.successor)
     assert f.plan_path.read_bytes()==before and cursor['mandatory_debt']=={'ordinary':8}
+
+
+def test_sealed_request_selection_retains_failed_attempt_and_selects_earned_successor(tmp_path,monkeypatch):
+    from natlang_neuralese.rl import native_raw_rounds as raw,native_bridge
+    job=tmp_path/'job';job.mkdir();parent=tmp_path/'parent';parent.write_bytes(b'parent')
+    original={'out':str(job),'checkpoint':str(parent)};write(job/'config.json',original)
+    failed=native_bridge.write_request(job/'bridge',kind='round',out=job,config=job/'config.json')
+    write(failed.with_suffix('.result.json'),{'schema':native_bridge.RESULT_SCHEMA,'kind':'round','request_sha256':res.sha(failed),'request_id':json.loads(failed.read_text())['request_id'],'status':'failed','artifacts':[]})
+    successor=native_bridge.write_request(job/'bridge',kind='round',out=job,config=job/'config.json')
+    assert failed!=successor and raw._sealed_supervised_request(job)==(successor,original)
+    assert failed.exists()and failed.with_suffix('.result.json').exists()
+    other=native_bridge.write_request(job/'bridge',kind='round',out=job,config=job/'config.json')
+    with pytest.raises(ValueError,match='ambiguous'):raw._sealed_supervised_request(job)
