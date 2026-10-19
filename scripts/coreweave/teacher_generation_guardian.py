@@ -521,6 +521,202 @@ def primary_ahead_slots(state):
     return {batch:result[batch]for batch in sorted(result)}
 
 
+def verify_preserved_primary_slot(root, folder, state, expected_slot, expected_started,
+                                 expected_state_slot, *, allow_uncaptured_active=False):
+    """Verify one handover batch against its live or sealed guardian custody.
+
+    ``expected_slot`` and ``expected_started`` come from the immutable handover
+    manifest.  This is read-only: it never adopts, archives, or relabels work.
+    A dead process is accepted only when the same batch has its exact complete
+    guardian boundary; a missing slot or unauthenticated boundary is an error.
+    """
+    root, folder = Path(root), Path(folder)
+    if (not isinstance(expected_slot, dict) or type(expected_slot.get('batch')) is not int
+            or not isinstance(expected_started, dict)
+            or (expected_state_slot is not None and not isinstance(expected_state_slot, dict))
+            or (expected_state_slot is None and not allow_uncaptured_active)):
+        raise ValueError('preserved slot needs its exact manifest, state slot, and started receipt')
+    batch = expected_slot['batch']; key = str(batch)
+    expected_owner = expected_slot.get('owner')
+    if isinstance(expected_owner, dict) and 'identity' in expected_owner:
+        expected_owner = expected_owner['identity']
+    identity_fields = ('pid', 'start_ticks', 'boot_id')
+    if (not isinstance(expected_owner, dict)
+            or any(expected_owner.get(name) is None for name in identity_fields)):
+        raise ValueError('preserved slot lacks its original process identity')
+    expected_sealed = expected_slot.get('sealed')
+    names = ('source-cases.jsonl', 'queue.jsonl', 'teacher-source.json')
+    if not isinstance(expected_sealed, dict) or set(expected_sealed) != set(names):
+        raise ValueError('preserved slot lacks its exact source, queue, and teacher bindings')
+    batch_root = root / 'evidence-collections-v2' / f'batch-{batch:04d}'
+    for name in names:
+        expected_path = batch_root / name
+        if (expected_sealed[name].get('path') != str(expected_path)
+                or binding(expected_path) != expected_sealed[name]):
+            raise ValueError(f'preserved batch {name} differs from its original sealed bytes')
+
+    sequence = state.get('source_sequence')
+    if not isinstance(sequence, dict) or sequence.get('started', {}).get(key) != expected_started:
+        raise ValueError('preserved slot lost its exact source-sequence start binding')
+    started_path = folder / 'source-sequence' / 'started' / f'batch-{batch:04d}.json'
+    if (expected_started.get('path') != str(started_path)
+            or binding(started_path) != expected_started):
+        raise ValueError('preserved slot started receipt changed or escaped its control directory')
+    started = json.loads(started_path.read_bytes())
+    if (started.get('batch') != batch or started.get('sealed') != expected_sealed
+            or not isinstance(started.get('selection_intent'), dict)):
+        raise ValueError('preserved slot start receipt disagrees with its original batch')
+    intent_ref = started['selection_intent']
+    if binding(intent_ref['path']) != intent_ref:
+        raise ValueError('preserved slot selection intent changed')
+    intent = json.loads(Path(intent_ref['path']).read_bytes())
+    if intent.get('batch') != batch:
+        raise ValueError('preserved slot selection intent names another batch')
+    prefetch = intent.get('prefetch') or {}
+    runtime = prefetch.get('task_runtime')
+    if runtime is None:
+        configuration_ref = intent.get('new_configuration')
+        if not isinstance(configuration_ref, dict) or binding(configuration_ref['path']) != configuration_ref:
+            raise ValueError('preserved slot has no authenticated runtime configuration epoch')
+        runtime = json.loads(Path(configuration_ref['path']).read_bytes()).get('task_runtime')
+    if not isinstance(runtime, str) or not runtime:
+        raise ValueError('preserved slot runtime epoch is missing')
+    source = json.loads((batch_root / 'teacher-source.json').read_bytes())
+    if source.get('actual_task_runtime') != runtime:
+        raise ValueError('preserved slot source was sealed under another task-runtime epoch')
+
+    actual_slot = primary_ahead_slots(state).get(batch)
+    if actual_slot is None:
+        actual_slot = (state.get('primary_launches') or {}).get(key)
+    if actual_slot is None and state.get('active_batch') == batch:
+        actual_slot = {'batch': batch, 'owner': state.get('owner'),
+            'feeder': state.get('feeder'), 'task_runtime': state.get('task_runtime')}
+    if not isinstance(actual_slot, dict) or actual_slot.get('batch') != batch:
+        raise ValueError('preserved batch has no matching live, completed, or adopted guardian slot')
+    if expected_state_slot is not None and actual_slot != expected_state_slot:
+        raise ValueError('preserved guardian slot differs from its captured handover state')
+    actual_owner = actual_slot.get('owner')
+    if not isinstance(actual_owner, dict) or any(actual_owner.get(name) != expected_owner[name]
+                                                   for name in identity_fields):
+        raise ValueError('preserved batch owner identity changed')
+    if isinstance(expected_slot.get('owner'), dict) and expected_slot['owner'].get('argv'):
+        current = process(expected_owner['pid']) if alive(expected_owner) else None
+        if current is not None and current['argv'] != [item.encode() if isinstance(item, str) else item
+                                                        for item in expected_slot['owner']['argv']]:
+            raise ValueError('preserved live batch feeder argv changed')
+    if actual_slot.get('selection_intent') is not None and actual_slot['selection_intent'] != intent_ref:
+        raise ValueError('preserved slot selection intent changed')
+    if actual_slot.get('task_runtime') is not None and actual_slot['task_runtime'] != runtime:
+        raise ValueError('preserved slot runtime epoch changed')
+    source_configuration = actual_slot.get('source_configuration')
+    if source_configuration is not None and intent.get('new_configuration') != source_configuration:
+        raise ValueError('preserved slot source configuration epoch changed')
+
+    live = alive(expected_owner)
+    route = 'live-owner'
+    boundary_ref = None
+    completed = str(batch) in state.get('primary_completed_ahead', {})
+    closed_ref = sequence.get('closed', {}).get(key)
+    if not live:
+        if completed:
+            boundary_ref = actual_slot.get('boundary')
+            route = 'authenticated-completed-ahead'
+        elif closed_ref is not None:
+            if binding(closed_ref['path']) != closed_ref:
+                raise ValueError('preserved slot closed source receipt changed')
+            closed = json.loads(Path(closed_ref['path']).read_bytes())
+            if closed.get('batch') != batch or closed.get('started') != expected_started:
+                raise ValueError('preserved slot closed receipt changed owner/source epoch')
+            boundary_ref = closed.get('boundary')
+            route = 'authenticated-closed-boundary'
+        else:
+            raise ValueError('dead preserved slot has no authenticated completion boundary')
+        expected_boundary = folder / 'boundaries' / f'batch-{batch:04d}.json'
+        if (not isinstance(boundary_ref, dict) or boundary_ref.get('path') != str(expected_boundary)
+                or binding(expected_boundary) != boundary_ref):
+            raise ValueError('preserved slot boundary is missing or not its exact guardian receipt')
+        boundary_value = json.loads(expected_boundary.read_bytes())
+        if (boundary_value.get('batch') != batch or boundary_value.get('batch_complete') is not True
+                or not isinstance(boundary_value.get('bindings'), dict)):
+            raise ValueError('preserved slot boundary is incomplete or names another batch')
+        for reference in boundary_value['bindings'].values():
+            if binding(reference['path']) != reference:
+                raise ValueError('preserved slot boundary dependency changed')
+        for name in ('queue.jsonl', 'teacher-source.json'):
+            if boundary_value['bindings'].get(name) != expected_sealed[name]:
+                raise ValueError('preserved slot boundary does not bind its original queue/source')
+    elif completed:
+        raise ValueError('completed-ahead slot still has a live owner')
+    return {'batch': batch, 'owner': expected_owner, 'sealed': expected_sealed,
+        'task_runtime': runtime, 'custody_route': route, 'boundary': boundary_ref,
+        'started': expected_started}
+
+
+def verify_preserved_primary_slots(root, folder, state, handover):
+    """Operator entry point for a manifest's complete preserved-slot set.
+
+    New handover manifests capture the exact source-sequence cursor and every
+    state representation which may own a batch. This function resolves each
+    expected slot from those immutable snapshots and delegates all checking to
+    ``verify_preserved_primary_slot``; it does not choose a transition.
+    """
+    if not isinstance(handover, dict) or 'slots' not in handover or 'bound_source_sequence' not in handover:
+        raise ValueError('handover manifest lacks exact preserved-slot inventory and source sequence')
+    # Accept both the deployed v3 manifest names and the descriptive names
+    # used by newer manifests. Missing launch snapshots are empty because old
+    # manifests captured active/completed/prefetch slots but not that map.
+    def captured(primary, deployed, default=None):
+        if primary in handover:
+            value = handover[primary]
+            if deployed in handover and handover[deployed] != value:
+                raise ValueError('handover contains conflicting preserved-slot snapshots')
+            return value
+        return handover.get(deployed, default)
+
+    expected_slots = handover['slots']; sequence = handover['bound_source_sequence']
+    if not isinstance(expected_slots, list) or not isinstance(sequence, dict):
+        raise ValueError('handover preserved-slot inventory is malformed')
+    started = sequence.get('started')
+    if not isinstance(started, dict):
+        raise ValueError('handover manifest lacks original started-source receipts')
+    state_maps = [captured('bound_primary_completed_ahead', 'bound_completed_ahead', {}),
+                  captured('bound_primary_active_ahead', 'bound_active_ahead', {}),
+                  captured('bound_primary_launches', 'bound_primary_launches', {})]
+    prefetch = captured('bound_primary_prefetch', 'bound_prefetch')
+    if not all(isinstance(value, dict) for value in state_maps):
+        raise ValueError('handover slot snapshots are malformed')
+    if prefetch is not None and not isinstance(prefetch, dict):
+        raise ValueError('handover primary-prefetch snapshot is malformed')
+    results = []; seen = set()
+    for expected in expected_slots:
+        if not isinstance(expected, dict) or type(expected.get('batch')) is not int:
+            raise ValueError('handover slot manifest entry is malformed')
+        batch = expected['batch']; key = str(batch)
+        if batch in seen or key not in started:
+            raise ValueError('handover slot repeats or lacks its original started receipt')
+        seen.add(batch)
+        candidates = [mapping[key] for mapping in state_maps if key in mapping]
+        if prefetch is not None and prefetch.get('batch') == batch:
+            candidates.append(prefetch)
+        if not candidates and batch == handover.get('active_batch'):
+            active_owner = handover.get('original_owner')
+            expected_owner = expected.get('owner', {})
+            if isinstance(expected_owner, dict) and 'identity' in expected_owner:
+                expected_owner = expected_owner['identity']
+            if not isinstance(active_owner, dict) or any(
+                    active_owner.get(name) != expected_owner.get(name)
+                    for name in ('pid', 'start_ticks', 'boot_id')):
+                raise ValueError('handover active owner differs from its preserved slot identity')
+            candidates = [None]
+        if not candidates or any(candidate != candidates[0] for candidate in candidates[1:]):
+            raise ValueError('handover manifest has no unique exact guardian slot snapshot')
+        results.append(verify_preserved_primary_slot(root, folder, state,
+            expected, started[key], candidates[0],
+            allow_uncaptured_active=(candidates[0] is None and batch == handover.get('active_batch'))))
+    return {'schema': 'natlang.teacher-preserved-slots/1', 'slots': results,
+        'batches': sorted(seen), 'training_admission': False}
+
+
 def _primary_work_frontier(root,batch):
     """Observe immutable queue custody and actual worker journal capacity."""
     home=Path(root)/'evidence-collections-v2'/f'batch-{batch:04d}';queue=home/'queue.jsonl'

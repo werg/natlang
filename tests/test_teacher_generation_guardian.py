@@ -200,3 +200,121 @@ def test_prepared_never_started_repair_revises_actor_without_claiming_old_actor_
     assert after['attempts'][0]['state']=='superseded_unstarted_configuration_revision'
     assert after['current']['model_id']=='new-quant-teacher' and after['current']['server']=='http://new-engine'
     assert after['current']['token']!=before['current']['token']
+
+
+def preserved_slot_fixture(tmp_path, *, completed=False, closed=False, active_current=False,
+                           batch=46, root=None, control=None):
+    root=root or tmp_path/'generation';control=control or tmp_path/'control'
+    home=root/'evidence-collections-v2'/f'batch-{batch:04d}'
+    home.mkdir(parents=True);control.mkdir(parents=True,exist_ok=True)
+    sealed={}
+    for name,value in [('source-cases.jsonl',b'{"case":"kept"}\n'),
+                       ('queue.jsonl',b'{"key":"case"}\n'),
+                       ('teacher-source.json',json.dumps({'batch':batch,'actual_task_runtime':'/runtime/epoch-a'}).encode())]:
+        (home/name).write_bytes(value);sealed[name]=guardian.binding(home/name)
+    intent_path=control/f'source-sequence/intents/batch-{batch:04d}.json'
+    guardian.write(intent_path,{'batch':batch,'prefetch':{'task_runtime':'/runtime/epoch-a'}})
+    intent=guardian.binding(intent_path)
+    started_path=control/f'source-sequence/started/batch-{batch:04d}.json'
+    guardian.write(started_path,{'batch':batch,'sealed':sealed,'selection_intent':intent})
+    started=guardian.binding(started_path)
+    owner={'pid':9021+batch,'start_ticks':f'12345-{batch}','boot_id':'boot-a'}
+    slot={'batch':batch,'owner':owner,'selection_intent':intent,'task_runtime':'/runtime/epoch-a'}
+    state={'active_batch':45,'source_sequence':{'started':{str(batch):started}}}
+    if active_current:
+        state['active_batch']=batch;state['owner']=owner;state['primary_launches']={str(batch):slot}
+    elif completed:
+        boundary_path=control/f'boundaries/batch-{batch:04d}.json'
+        guardian.write(boundary_path,{'batch':batch,'batch_complete':True,'bindings':{
+            name:sealed[name] for name in ('queue.jsonl','teacher-source.json')}})
+        boundary=guardian.binding(boundary_path);slot['boundary']=boundary
+        state['primary_completed_ahead']={str(batch):slot}
+    else:
+        state['primary_active_ahead']={str(batch):slot}
+    if closed:
+        if not completed:raise AssertionError('closed fixture needs completed batch')
+        closure_path=control/f'source-sequence/closed/batch-{batch:04d}.json'
+        guardian.write(closure_path,{'batch':batch,'started':started,'boundary':slot['boundary']})
+        state['source_sequence']['closed']={str(batch):guardian.binding(closure_path)}
+        state['primary_completed_ahead'].clear()
+        state['primary_launches']={str(batch):slot}
+    expected={'batch':batch,'owner':{'identity':owner,'argv':['python','feeder.py']},'sealed':sealed}
+    return root,control,state,expected,started,owner,copy.deepcopy(slot)
+
+
+def test_preserved_slot_verifier_accepts_live_and_completed_boundary_custody(tmp_path,monkeypatch):
+    root,control,state,expected,started,owner,expected_state_slot=preserved_slot_fixture(tmp_path)
+    monkeypatch.setattr(guardian,'alive',lambda identity:identity==owner)
+    monkeypatch.setattr(guardian,'process',lambda pid:{**owner,'argv':[b'python',b'feeder.py']})
+    live=guardian.verify_preserved_primary_slot(root,control,state,expected,started,expected_state_slot)
+    assert live['custody_route']=='live-owner' and live['task_runtime']=='/runtime/epoch-a'
+    root,control,state,expected,started,owner,expected_state_slot=preserved_slot_fixture(tmp_path/'completed',completed=True)
+    monkeypatch.setattr(guardian,'alive',lambda identity:False)
+    done=guardian.verify_preserved_primary_slot(root,control,state,expected,started,expected_state_slot)
+    assert done['custody_route']=='authenticated-completed-ahead'
+    assert done['boundary']==state['primary_completed_ahead']['46']['boundary']
+
+
+def test_preserved_slot_verifier_accepts_only_exact_closed_source_boundary(tmp_path,monkeypatch):
+    root,control,state,expected,started,_,expected_state_slot=preserved_slot_fixture(tmp_path,completed=True,closed=True)
+    monkeypatch.setattr(guardian,'alive',lambda identity:False)
+    result=guardian.verify_preserved_primary_slot(root,control,state,expected,started,expected_state_slot)
+    assert result['custody_route']=='authenticated-closed-boundary'
+
+
+def test_manifest_operator_entry_resolves_captured_slots_and_started_receipts(tmp_path,monkeypatch):
+    root,control,state,expected,started,owner,state_slot=preserved_slot_fixture(tmp_path,completed=True)
+    monkeypatch.setattr(guardian,'alive',lambda identity:False)
+    handover={'slots':[expected], 'bound_source_sequence':{'started':{'46':started}},
+        'bound_primary_prefetch':None, 'bound_primary_completed_ahead':{'46':state_slot},
+        'bound_primary_active_ahead':{}, 'bound_primary_launches':{}}
+    result=guardian.verify_preserved_primary_slots(root,control,state,handover)
+    assert result['batches']==[46] and result['training_admission'] is False
+    handover['bound_primary_completed_ahead']['46']['boundary']['sha256']='0'*64
+    with pytest.raises(ValueError,match='preserved guardian slot differs from its captured handover state'):
+        guardian.verify_preserved_primary_slots(root,control,state,handover)
+
+
+def test_deployed_v3_manifest_shape_directly_verifies_active_and_closed_46_48(tmp_path,monkeypatch):
+    root=tmp_path/'generation';control=tmp_path/'control'
+    active=preserved_slot_fixture(tmp_path/'batch-45',active_current=True,batch=45,root=root,control=control)
+    closed_cases=[preserved_slot_fixture(tmp_path/f'batch-{batch}',completed=True,closed=True,
+        batch=batch,root=root,control=control) for batch in (46,48)]
+    cases=[active,*closed_cases]
+    started={str(item[3]['batch']):item[4] for item in cases}
+    # This is the deployed v3 field shape: the public handover manifest uses
+    # bound_prefetch/bound_completed_ahead/bound_active_ahead, not new aliases.
+    manifest={'slots':[item[3] for item in cases], 'active_batch':45,
+        'original_owner':active[5],
+        'bound_source_sequence':{'started':started},
+        'bound_prefetch':None,
+        'bound_completed_ahead':{str(item[3]['batch']):item[6] for item in closed_cases},
+        'bound_active_ahead':{}}
+    state={'active_batch':45,'owner':active[5],
+        'source_sequence':{'started':started,
+        'closed':{str(item[3]['batch']):item[2]['source_sequence']['closed'][str(item[3]['batch'])]
+            for item in closed_cases}},
+        'primary_launches':{'45':active[6],
+            **{str(item[3]['batch']):item[6] for item in closed_cases}}}
+    monkeypatch.setattr(guardian,'alive',lambda identity:identity==active[5])
+    monkeypatch.setattr(guardian,'process',lambda pid:{**active[5],'argv':[b'python',b'feeder.py']})
+    result=guardian.verify_preserved_primary_slots(root,control,state,manifest)
+    assert result['batches']==[45,46,48]
+    assert [slot['custody_route'] for slot in result['slots']]==[
+        'live-owner',
+        'authenticated-closed-boundary','authenticated-closed-boundary']
+    assert result['training_admission'] is False
+
+
+@pytest.mark.parametrize('mutation', ['missing-slot','wrong-owner','wrong-cases','wrong-runtime','arbitrary-boundary','missing-boundary'])
+def test_preserved_slot_verifier_rejects_missing_or_changed_custody(tmp_path,monkeypatch,mutation):
+    root,control,state,expected,started,owner,expected_state_slot=preserved_slot_fixture(tmp_path,completed=True)
+    monkeypatch.setattr(guardian,'alive',lambda identity:False)
+    if mutation=='missing-slot':state['primary_completed_ahead'].clear()
+    elif mutation=='wrong-owner':state['primary_completed_ahead']['46']['owner']={**owner,'start_ticks':'999'}
+    elif mutation=='wrong-cases':expected['sealed']['source-cases.jsonl']['sha256']='0'*64
+    elif mutation=='wrong-runtime':state['primary_completed_ahead']['46']['task_runtime']='/runtime/epoch-b'
+    elif mutation=='arbitrary-boundary':state['primary_completed_ahead']['46']['boundary']=guardian.binding(root/'evidence-collections-v2/batch-0046/queue.jsonl')
+    elif mutation=='missing-boundary':(control/'boundaries/batch-0046.json').unlink()
+    with pytest.raises((ValueError,KeyError,FileNotFoundError),match='preserved|source|boundary|owner|slot|runtime|batch|batch-0046'):
+        guardian.verify_preserved_primary_slot(root,control,state,expected,started,expected_state_slot)
