@@ -1213,7 +1213,14 @@ def retire(directory, checkpoint, terminal, *, handoff=None, verified_handoff=No
         if owner_alive(initial.get('owner') or {}):
             raise ValueError('resident retirement requires the actual optimizer process to exit')
         exit_record = json.loads(bound(terminal).read_text())
-        if exit_record.get('returncode') != 0 or exit_record.get('at', 0) < state['at']:
+        successful = type(exit_record.get('returncode')) is int and exit_record['returncode'] == 0
+        if not successful and verified_handoff is not None:
+            from ..rl.native_raw_handoff import verify_handoff_controls
+            controls = verify_handoff_controls(handoff)
+            if controls != verified_handoff[0]:
+                raise ValueError('resident retirement changed its verified drain controls')
+            successful = controls.get('inprocess_completion') is not None
+        if not successful or exit_record.get('at', 0) < state['at']:
             raise ValueError('resident retirement requires the drained optimizer owner')
         if verified_handoff is None:
             saved = torch.load(bound(checkpoint), map_location='cpu', weights_only=False, mmap=True)

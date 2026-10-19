@@ -63,3 +63,131 @@ def test_dispatch_snapshots_survive_pruned_wrapper(dispatch):
         p=x['root']/('saved-'+name);p.write_bytes(Path(reference['path']).read_bytes());snapshots[name]=binding(p)
     Path(refs['supervisor']['path']).unlink()
     assert runtime._owned_launch_chain(x['record'],snapshots)[1]==x['command']
+
+
+@pytest.fixture
+def completing_dispatch(tmp_path):
+    import time
+    from natlang_neuralese.rl.native_owned_dispatch import capture_completion_contract
+    parent=tmp_path/'parent.json';parent.write_text('{}')
+    script=tmp_path/'owned-entry.py'
+    command=[sys.executable,'-u','-m','natlang_neuralese.train.native_state_sft']
+    script.write_text('from natlang_neuralese.rl.native_owned_dispatch import capture\n'
+        'from natlang_neuralese.common.jsonio import write_json_durable\n'
+        'from pathlib import Path\nimport json,sys,time\n'
+        f'print(json.dumps(capture(__file__,{command!r},{binding(parent)!r},{str(tmp_path/"capture")!r},environment={{}})),flush=True)\n'
+        'sys.stdin.buffer.read()\n'
+        'write_json_durable(Path(__file__).parent/"entry-terminal.json",'
+        '{"at":time.time(),"passed":True,"raw_completion_credit":0})\n')
+    env={**os.environ,'PYTHONPATH':str(Path(raw.__file__).resolve().parents[2])}
+    child=subprocess.Popen([sys.executable,str(script)],stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True,env=env)
+    try:
+        launch=json.loads(child.stdout.readline())
+        terminal=tmp_path/'entry-terminal.json'
+        contract=capture_completion_contract(launch,terminal,tmp_path/'completion.json')
+        intent=raw.capture_drain_intent(launch,tmp_path/'drain.json')
+        yield child,launch,contract,intent,terminal
+    finally:
+        if child.poll() is None:child.communicate(timeout=15)
+
+
+def test_genuine_predeclared_return_survives_pruned_original_controls(completing_dispatch):
+    from natlang_neuralese.rl.native_owned_dispatch import verify_completion_contract
+    child,launch,contract,intent,terminal=completing_dispatch
+    child.communicate(timeout=15)
+    captured=json.loads(Path(intent['path']).read_text())
+    value=json.loads(terminal.read_text())
+    assert 'returncode' not in value
+    receipt=verify_completion_contract(contract,captured,binding(terminal),value)
+    original=json.loads(Path(launch['path']).read_text())
+    dispatch=json.loads(Path(original['inprocess_dispatch']['path']).read_text())
+    for ref in (launch,original['inprocess_dispatch'],dispatch['wrapper'],dispatch['continuation']):
+        Path(ref['path']).unlink()
+    assert verify_completion_contract(contract,captured,binding(terminal),value)==receipt
+
+
+@pytest.mark.parametrize('tamper',['terminal-path','owner','launch','late','passed','credit','returncode','kind'])
+def test_completion_rejects_borrowed_or_ambiguous_success(completing_dispatch,tamper):
+    from natlang_neuralese.rl.native_owned_dispatch import verify_completion_contract
+    child,launch,contract,intent,terminal=completing_dispatch
+    child.communicate(timeout=15)
+    captured=json.loads(Path(intent['path']).read_text());value=json.loads(terminal.read_text())
+    path=Path(contract['path']);declaration=json.loads(path.read_text());reference=binding(terminal)
+    if tamper=='terminal-path':reference={**reference,'path':str(terminal.with_name('other.json'))}
+    elif tamper=='owner':declaration['owner']['start_ticks']='0'
+    elif tamper=='launch':declaration['source_launch']['sha256']='0'*64
+    elif tamper=='late':declaration['at']=value['at']+1
+    elif tamper=='passed':value['passed']=False
+    elif tamper=='credit':value['raw_completion_credit']=1
+    elif tamper=='returncode':value['returncode']=0
+    elif tamper=='kind':declaration['success_kind']='os-returncode'
+    path.write_text(json.dumps(declaration))
+    with pytest.raises(ValueError):verify_completion_contract(binding(path),captured,reference,value)
+
+
+def test_completion_contract_cannot_be_created_after_exit(completing_dispatch,tmp_path):
+    from natlang_neuralese.rl.native_owned_dispatch import capture_completion_contract
+    child,launch,contract,intent,terminal=completing_dispatch
+    child.communicate(timeout=15)
+    with pytest.raises(ValueError,match='live captured owner'):
+        capture_completion_contract(launch,terminal,tmp_path/'late.json')
+
+
+def test_full_typed_drain_returns_one_decoded_pair(completing_dispatch,tmp_path,monkeypatch):
+    import torch,shutil
+    from natlang_neuralese.model.native_model import CHECKPOINT_SCHEMA
+    from natlang_neuralese.train.native_continuation import TRAINING_SCHEMA
+    from natlang_neuralese.train.loop import capture_training_rng_state
+    child,launch,contract,intent,terminal=completing_dispatch
+    slot=tmp_path/'slot.pt'
+    torch.save({'schema':CHECKPOINT_SCHEMA,'model_config':{'architecture':'fixture','base_inventory_sha256':'a'*64},
+        'training':{'schema':TRAINING_SCHEMA,'optimizer':{'value':torch.tensor([7.])},
+            'rng':capture_training_rng_state('cpu'),'sft_progress':{'earned':[1,2]}}},slot)
+    pin=tmp_path/'pin.pt';shutil.copyfile(slot,pin)
+    child.communicate(timeout=15)
+    original=torch.load;loads=[]
+    def counted(*args,**kwargs):
+        loads.append(args[0]);return original(*args,**kwargs)
+    monkeypatch.setattr(torch,'load',counted)
+    reference,loaded=raw.complete_drain(intent,binding(terminal),binding(pin),tmp_path/'handoff.json',
+        original_slot=binding(slot),inprocess_completion=contract,return_verified=True)
+    assert len(loads)==1
+    assert loaded[0]==json.loads(Path(reference['path']).read_text())
+    assert loaded[1]['training']['sft_progress']=={'earned':[1,2]}
+    assert torch.equal(loaded[1]['training']['optimizer']['value'],torch.tensor([7.]))
+    assert raw.verify_handoff_controls(reference)==loaded[0]
+    assert len(loads)==1
+
+
+def test_typed_drain_retires_exact_adoption_without_another_decode(completing_dispatch,tmp_path,monkeypatch):
+    import shutil,torch
+    from test_native_resident import setup
+    from natlang_neuralese.train import native_resident as resident
+    from natlang_neuralese.model.native_model import CHECKPOINT_SCHEMA
+    from natlang_neuralese.train.native_continuation import TRAINING_SCHEMA
+    from natlang_neuralese.train.loop import capture_training_rng_state
+    child,launch,contract,intent,terminal=completing_dispatch
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE',str(tmp_path/'cache'))
+    source=tmp_path/'source';source.mkdir()
+    _,directory,manager,recipe=setup(source)
+    resident.prepare(directory,recipe,'sft',tokenizer_fingerprint='tokenizer-sha',role_ids=())
+    manager.poll(7);state=resident.current(directory)
+    initial=json.loads((directory/'initial.json').read_text())
+    initial['owner']=json.loads(Path(intent['path']).read_text())['owner']
+    (directory/'initial.json').write_text(json.dumps(initial))
+    slot=tmp_path/'slot.pt';pin=tmp_path/'pin.pt'
+    torch.save({'schema':CHECKPOINT_SCHEMA,'model_config':{'architecture':'fixture','base_inventory_sha256':'a'*64},
+        'training':{'schema':TRAINING_SCHEMA,'optimizer':{'value':torch.tensor([7.])},
+            'rng':capture_training_rng_state('cpu'),'sft_progress':{'earned':[1,2]},'global_step':7,
+            'source_receipts':[state['payload']['train']],
+            'options':{'resident_adoption':{'generation':state['generation'],'history':state['history']}}}},slot)
+    shutil.copyfile(slot,pin);child.communicate(timeout=15)
+    reference,loaded=raw.complete_drain(intent,binding(terminal),binding(pin),tmp_path/'handoff.json',
+        original_slot=binding(slot),resident_directory=directory,inprocess_completion=contract,return_verified=True)
+    # The marker alone never authorizes retiring a resident generation.
+    with pytest.raises(ValueError,match='drained optimizer'):
+        resident.retire(directory,binding(pin),binding(terminal))
+    monkeypatch.setattr(torch,'load',lambda *a,**k:pytest.fail('retirement must reuse the verified full state'))
+    resident.retire(directory,loaded[0]['checkpoint'],loaded[0]['terminal'],handoff=reference,verified_handoff=loaded)
+    assert resident.current(directory) is None
+    assert (directory/'retired'/(state['generation']+'.json')).exists()

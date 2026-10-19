@@ -172,7 +172,8 @@ def _verify_process_tree(intent):
         raise ValueError('raw handoff process census omitted a captured descendant')
 
 
-def complete_drain(intent, terminal, checkpoint, out, *, original_slot, resident_directory=None):
+def complete_drain(intent, terminal, checkpoint, out, *, original_slot, resident_directory=None,
+                   inprocess_completion=None, return_verified=False):
     """After owner/children drain and checkpoint pin, persist exact observations."""
     value=json.loads(_bound(intent).read_text())
     if value.get('schema') not in (INTENT,LEGACY_INTENT):raise ValueError('raw handoff requires its exact pre-signal intent')
@@ -192,6 +193,15 @@ def complete_drain(intent, terminal, checkpoint, out, *, original_slot, resident
             'checkpoint_pin':{'original_slot':original_slot,'bytes':pin_stat.st_size,
                 'original_inode':[slot_stat.st_dev,slot_stat.st_ino],'pin_inode':[pin_stat.st_dev,pin_stat.st_ino]},
             'observations':observations,'resident':None}
+    if inprocess_completion is not None:
+        from .native_owned_dispatch import verify_completion_contract
+        terminal_value=json.loads(_bound(terminal).read_text())
+        verify_completion_contract(inprocess_completion,value,terminal,terminal_value)
+        if Path(terminal['path']).with_name('entry-failed.json').exists():
+            raise ValueError('in-process owner has failure evidence, not a successful return')
+        completion_snapshot=Path(out).with_name(Path(out).stem+'-completion.json')
+        write_bytes_durable(completion_snapshot,_bound(inprocess_completion).read_bytes())
+        record['inprocess_completion']=binding(completion_snapshot)
     if resident_directory is not None:
         from ..train.native_resident import current
         directory=Path(resident_directory);state=current(directory)
@@ -212,8 +222,9 @@ def complete_drain(intent, terminal, checkpoint, out, *, original_slot, resident
                 target=snapshots/'recipe-plan.json';write_bytes_durable(target,source.read_bytes())
                 record['resident']['plan']=binding(target)
     write_json_durable(out,record)
-    verify_handoff(binding(out))
-    return binding(out)
+    reference=binding(out)
+    verified=verify_handoff(reference)
+    return (reference,verified) if return_verified else reference
 
 
 def _captured_owner_controls(reference):
@@ -258,7 +269,14 @@ def verify_handoff_controls(reference, *, requirement=None):
     terminal=json.loads(_bound(record['terminal']).read_text())
     if record.get('source_terminal',record['terminal'])['sha256']!=record['terminal']['sha256']:
         raise ValueError('raw handoff terminal snapshot differs from original source')
-    if (terminal.get('returncode')!=0 or any(type(item) not in (int,float) for item in
+    if record.get('inprocess_completion') is not None:
+        from .native_owned_dispatch import verify_completion_contract
+        verify_completion_contract(record['inprocess_completion'],intent,
+            record.get('source_terminal',record['terminal']),terminal)
+        successful=True
+    else:
+        successful=type(terminal.get('returncode')) is int and terminal['returncode']==0
+    if (not successful or any(type(item) not in (int,float) for item in
             (launch.get('at'),intent.get('at'),terminal.get('at'),record.get('at')))
             or not launch['at']<=intent['at']<=terminal['at']<=record['at']):
         raise ValueError('raw bootstrap requires successful exact post-drain terminal evidence')
