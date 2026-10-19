@@ -121,7 +121,25 @@ def configure_provider(config,declaration,plan,binding,config_path,*,write=True)
     for name, argv in overrides.items():
         if not isinstance(argv, list) or not argv or any(not isinstance(arg, str) for arg in argv):
             raise ValueError('native RL provider bridge commands must be explicit nonempty argv lists')
-        config[name] = argv
+        config[name] = list(argv)
+    if declaration.get('actor_runtime') and 'actor_command' in overrides:
+        # Existing role binders may retain the learner's repository in an env
+        # wrapper. An explicit actor package owns only this known native actor
+        # entry point and its import roots, never a custom serving command.
+        actor = config['actor_command']
+        entry = [index for index, value in enumerate(actor)
+                 if value.endswith('/scripts/neuralese_data/serve_direct_checkpoint.py')]
+        if len(entry) != 1:
+            raise ValueError('explicit actor runtime cannot reinterpret a custom actor command')
+        environment = config.get('actor_environment') or {}
+        repository = str(Path(declaration['actor_runtime']).resolve(strict=True))
+        if environment.get('NATLANG_REPO') != repository:
+            raise ValueError('actor override differs from the factory-bound runtime')
+        actor[entry[0]] = repository + '/scripts/neuralese_data/serve_direct_checkpoint.py'
+        for index, value in enumerate(actor):
+            for name in ('NATLANG_REPO', 'PYTHONPATH'):
+                if value.startswith(name + '='):
+                    actor[index] = name + '=' + environment[name]
     if plan.get('refresh_command'):
         argv = plan['refresh_command']
         if not isinstance(argv, list) or not argv or any(not isinstance(arg, str) for arg in argv):

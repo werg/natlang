@@ -130,3 +130,10 @@ explicit legacy evidence. Never rewrite a training runtime or replace the global
 provider environment just to advance an actor implementation. New actor snapshots
 use explicit command/package paths and unchanged checkpoint/adapter identities.
 No prompt, token, sampling distribution, imported state or replay graph changes.
+
+An explicit actor runtime also owns the known native actor script and its import
+environment inside an existing provider command wrapper. Rebind only those
+fields on a copied argv; preserve learner commands and the original declaration.
+Reject an unknown custom launcher instead of pretending its imports changed.
+Role/coordinator adoption follows the existing verified later-runtime handoff at
+a natural safe boundary; an old owner's source plan is never relabeled.
