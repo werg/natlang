@@ -42,7 +42,8 @@ def test_actual_cgroup_accounting_keeps_nonreclaimable_and_cache_distinct(tmp_pa
     for name,value in {'memory.current':'95','memory.max':'100','memory.events':'oom 0\noom_kill 0\n',
         'memory.stat':'anon 10\nkernel 2\nshmem 3\nfile_dirty 1\nfile_writeback 0\nunevictable 4\nfile 80\n'}.items():
         (tmp_path/name).write_text(value)
-    value=guard.ram_sample(tmp_path)
+    meminfo=tmp_path/'meminfo';meminfo.write_text('MemAvailable: 100 kB\n')
+    value=guard.ram_sample(tmp_path,meminfo=meminfo)
     assert value['nonreclaimable_upper_bound']==20 and value['reclaimable_lower_bound']==75
     assert value['headroom_lower_bound']==80
 
@@ -127,3 +128,26 @@ def test_real_guard_sigterm_forwards_and_reaps_signal_ignoring_child(tmp_path):
         assert not Path('/proc',str(terminal['identity']['pid'])).exists()
     finally:
         if child.poll()is None:child.terminate();child.wait(timeout=5)
+
+
+@pytest.mark.parametrize('guest_kb,cgroup_limit,expected', [(3,10000,3072),(100,10000,9980),(0,10000,0)])
+def test_actual_global_or_cgroup_headroom_both_bound_reserve(tmp_path,guest_kb,cgroup_limit,expected):
+    for name,value in {'memory.current':'95','memory.max':str(cgroup_limit),'memory.events':'oom 0\noom_kill 0\n',
+        'memory.stat':'anon 10\nkernel 2\nshmem 3\nfile_dirty 1\nfile_writeback 0\nunevictable 4\nfile 80\n'}.items():
+        (tmp_path/name).write_text(value)
+    meminfo=tmp_path/'meminfo';meminfo.write_text(f'MemAvailable: {guest_kb} kB\n')
+    actual=guard.ram_sample(tmp_path,meminfo=meminfo)
+    assert actual['headroom_lower_bound']==expected
+    assert actual['cgroup_headroom_lower_bound']==cgroup_limit-20
+    assert actual['guest_available']==guest_kb*1024
+    assert guard.ram_threat(actual,4096,actual['events']) == (expected<4096)
+
+
+@pytest.mark.parametrize('text',['MemTotal: 100 kB\n','MemAvailable: -1 kB\n','MemAvailable: 1 MB\n',
+    'MemAvailable: 1 kB\nMemAvailable: 2 kB\n'])
+def test_global_memory_accounting_must_be_present_and_valid(tmp_path,text):
+    for name,value in {'memory.current':'95','memory.max':'100','memory.events':'oom 0\n',
+        'memory.stat':'anon 10\nkernel 2\nshmem 3\nfile_dirty 1\nfile_writeback 0\nunevictable 4\n'}.items():
+        (tmp_path/name).write_text(value)
+    meminfo=tmp_path/'meminfo';meminfo.write_text(text)
+    with pytest.raises(ValueError,match='guest MemAvailable'):guard.ram_sample(tmp_path,meminfo=meminfo)

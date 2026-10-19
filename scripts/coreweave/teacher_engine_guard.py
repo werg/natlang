@@ -15,7 +15,7 @@ except ImportError:
     from teacher_generation_guardian import binding,write,process,public_identity,alive
 
 
-def ram_sample(root=Path('/sys/fs/cgroup')):
+def ram_sample(root=Path('/sys/fs/cgroup'), *, meminfo=Path('/proc/meminfo')):
     def number(name):return int((root/name).read_text().strip())
     def pairs(name):return {key:int(value)for key,value in (line.split()for line in(root/name).read_text().splitlines())}
     current,limit=number('memory.current'),number('memory.max')
@@ -26,8 +26,16 @@ def ram_sample(root=Path('/sys/fs/cgroup')):
     # Conservative bound: unevictable may overlap anon/shmem. Clean mapped
     # source pages remain reclaimable; memory.current alone is not RSS/OOM.
     protected=min(current,sum(stat[key]for key in required))
+    fields = [line.split() for line in Path(meminfo).read_text().splitlines() if line.startswith('MemAvailable:')]
+    if len(fields) != 1 or len(fields[0]) != 3 or fields[0][2] != 'kB':
+        raise ValueError('invalid actual guest MemAvailable accounting')
+    guest_available = int(fields[0][1]) * 1024
+    if guest_available < 0:
+        raise ValueError('invalid actual guest MemAvailable accounting')
+    cgroup_headroom = limit - protected
     return {'current':current,'limit':limit,'nonreclaimable_upper_bound':protected,
-        'reclaimable_lower_bound':max(0,current-protected),'headroom_lower_bound':limit-protected,
+        'reclaimable_lower_bound':max(0,current-protected),'headroom_lower_bound':min(cgroup_headroom, guest_available),
+        'cgroup_headroom_lower_bound':cgroup_headroom,'guest_available':guest_available,
         'stat':stat,'events':events}
 
 
