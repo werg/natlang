@@ -245,6 +245,13 @@ or load that library with its archived empty state. Contextual native body
 initialization preserves its actual source capture and does not claim equality
 with an ordinary-text prompt.
 
+When hosting a server-backed native runtime, bind its real writer and reader
+identity with `nativeStateRuntimeOptions({ endpoint, store, headers? })`; a store
+alone cannot produce model-native state. If setup reports
+`neuralese-native-text-write-unavailable`, use a server that exposes the forced
+native text writer. Do not replace it with hash embeddings or projected token
+values.
+
 A configured learned semantic adapter may consume another trained model's
 native value by decoding shared per-token codes into target-state deltas.
 Keep the value reference and its actual consumption receipt. On

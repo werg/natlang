@@ -4,18 +4,17 @@ const [endpoint, archive] = process.argv.slice(2);
 const info = await fetch(endpoint+'/v1/neuralese/info').then(r => r.json());
 const reopened = await FileNeuraleseStore.open(archive, { residentBytes: 0 });
 // Forced typed writes execute the actual producer; contextual init preserves imported source receipts.
-const { nativeStateWritePort } = await import('../../dist/model/native-state-client.js');
+const { nativeStateRuntimeOptions } = await import('../../dist/model/native-state-client.js');
 const { initBodyInContext } = await import('../../dist/neuralese/text-init.js');
 const { saveNz, decodeNz } = await import('../../dist/native/nz-file.js');
-const port = await nativeStateWritePort({ endpoint, store: reopened, info });
+const neuralese = await nativeStateRuntimeOptions({ endpoint, store: reopened, info });
+const port = neuralese.port;
 const forced = await port.write('t5', { type: 'Neuralese<string>' });
 assert.ok(forced.id.startsWith('nzs1_'));
 assert.equal((await reopened.getNativeState(forced.id)).metadata.text, 't5');
 assert.ok(forced.producer.native_source_capture);
 const { NativeToolAgent } = await import('../../dist/native/agent.js');
 const { session: open } = await import('../support/natlang.mjs');
-const { nativeStateConsumerFromInfo } = await import('../../dist/native/neuralese.js');
-const neuralese = { store: reopened, dialect: info.dialects[0], port, nativeStateConsumer: nativeStateConsumerFromInfo(info) };
 for (const text of ['t5', '']) {
   const computed = open({ type: '() => Neuralese<string>', instructions: 'Return the computed string.' }, { neuralese }).session;
   const driver = async () => ({ calls: [['return_result', { status: 'success', value: text }]] });

@@ -17,3 +17,18 @@ The existing typed function contract decides whether a completion is an ordinary
 - Pass the call's existing `NeuraleseStore.getNativeState` resolver from `NativeAgent.decodeNeuralese` only for the inferred assistant result; do not reinterpret explicit tool arguments or explicit `return_result` values.
 - Add tests at the actual `NativeToolAgent` boundary for ordinary string/number/object results, `unknown`, Neuralese lists/records, a genuine textual producer span, and mixed text/state order. A missing or unavailable native artifact remains an error.
 - Update authoring/integration recovery guidance only for the concrete completion conversion semantics. Prompt text and model-visible wording remain unchanged; measure the new behavior on the next authorized teacher window and record measurement debt until then.
+
+## Shared-state writer binding
+
+### Natlang-native policy
+
+The declared native model service is the producer: it receives source text and creates authentic shared positional/hybrid state under its own tokenizer, model, and producer markers. The host configures that service and its archive; it must not synthesize a replacement state from text or projected values.
+
+### Mechanism
+
+1. The caller supplies endpoint, headers, and native-capable store.
+2. `nativeStateRuntimeOptions` binds the server's declared dialect, reader identity, and existing `native.text-write` endpoint. Required writers fail during setup when that capability is absent; read-only callers may request the explicitly optional writer mode.
+3. Collector, combinator initialization, and direct runtime harnesses consume this single configuration instead of assembling partial store-only settings.
+4. The existing runtime write path and endpoint validate exact source text, token span, producer markers, checkpoint/tokenizer identity, and archive the actual state artifact.
+
+The public 48-session probe passed only `{store}` and therefore never configured a producer port. It found a harness wiring omission; the reference server already implements the real native producer endpoint. Corrected public sessions must use `nativeStateRuntimeOptions` and report actual returned state provenance.

@@ -229,6 +229,13 @@ A `neuralese-native-source-integrity` error requires repairing the mismatched
 source identity, payload or role markers before retrying. Native views retain
 all chunk/combine `source_turns`; archive their imports and outputs before use,
 and retain the observer receipts when running outside an invocation trace.
+For a server-backed `NativeRuntime`, configure the complete binding with
+`nativeStateRuntimeOptions({ endpoint, store, headers? })`. Passing only the
+store enables archival but leaves typed text writes without a producer port;
+`neuralese-native-text-write-unavailable` means the server lacks the required
+producer capability, so use a compatible native server rather than a stand-in
+embedder or legacy projection. Callers that only consume native state may pass
+`{ write: 'available' }` and must not claim they can synthesize new state.
 Native empty states have zero token rows and full model/layer identities;
 `neuralese-native-empty-unavailable` means load the native library's empty state.
 When a body placeholder shares its content ID with another imported value,
