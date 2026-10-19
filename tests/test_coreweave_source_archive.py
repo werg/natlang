@@ -103,3 +103,51 @@ def test_retargeted_file_symlink_aborts_without_sealing_archive(tmp_path, monkey
         archive.pack(source, spool, 'native', reserve_bytes=0, dereference_file_symlinks=True)
     assert not (spool / 'native.tar.zst').exists()
     assert not (spool / 'native.tar.pending').exists()
+
+
+def recovery_authority(packed):
+    return {'private_receipt':'private-full-get.json',
+        'archive_identity':{'sha256':packed['archive_sha256'],'bytes':packed['archive_bytes']},
+        'keys':['key-0'],'source_context':{'cases':'exact source'},'training_admission':False}
+
+
+def test_repeated_actual_restore_preserves_sealed_receipt_bytes_and_inode(tmp_path):
+    source=tmp_path/'source';source.mkdir();(source/'row').write_bytes(b'original\r\n')
+    spool=tmp_path/'spool';packed=archive.pack(source,spool,'native',reserve_bytes=0)
+    target=tmp_path/'restored';receipt=spool/'recovery-receipt.json';authority=recovery_authority(packed)
+    first=archive.restore_with_stable_receipt(spool,'native',target,receipt_path=receipt,authority=authority)
+    raw=receipt.read_bytes();inode=receipt.stat().st_ino
+    second=archive.restore_with_stable_receipt(spool,'native',target,receipt_path=receipt,authority=authority)
+    assert first==second and receipt.read_bytes()==raw and receipt.stat().st_ino==inode
+    assert (target/'row').read_bytes()==b'original\r\n'
+    observations=[json.loads(line)for line in receipt.with_name(receipt.name+'.observations.jsonl').read_text().splitlines()]
+    assert len(observations)==2 and [o['reused_receipt']for o in observations]==[False,True]
+    assert observations[0]['receipt']==observations[1]['receipt']
+
+
+@pytest.mark.parametrize('change',['private_receipt','keys','source_context','archive_identity'])
+def test_changed_recovery_authority_rejects_before_restore(tmp_path,monkeypatch,change):
+    source=tmp_path/'source';source.mkdir();(source/'row').write_text('original')
+    spool=tmp_path/'spool';packed=archive.pack(source,spool,'native',reserve_bytes=0)
+    target=tmp_path/'restored';receipt=spool/'recovery.json';authority=recovery_authority(packed)
+    archive.restore_with_stable_receipt(spool,'native',target,receipt_path=receipt,authority=authority)
+    raw=receipt.read_bytes();bad={**authority,change:'changed'}
+    monkeypatch.setattr(archive,'restore',lambda *a,**kw:pytest.fail('changed authority reached restore'))
+    with pytest.raises(ValueError,match='authority changed'):
+        archive.restore_with_stable_receipt(spool,'native',target,receipt_path=receipt,authority=bad)
+    assert receipt.read_bytes()==raw
+
+
+def test_recovery_rejects_wrong_compressed_size_and_changed_archive(tmp_path):
+    source=tmp_path/'source';source.mkdir();(source/'row').write_text('original')
+    spool=tmp_path/'spool';packed=archive.pack(source,spool,'native',reserve_bytes=0)
+    target=tmp_path/'restored';receipt=spool/'recovery.json';authority=recovery_authority(packed)
+    wrong={**authority,'archive_identity':{**authority['archive_identity'],'bytes':0}}
+    with pytest.raises(ValueError,match='sealed bytes'):
+        archive.restore_with_stable_receipt(spool,'native',target,receipt_path=receipt,authority=wrong)
+    assert not receipt.exists() and not target.exists()
+    archive.restore_with_stable_receipt(spool,'native',target,receipt_path=receipt,authority=authority)
+    raw=receipt.read_bytes();Path(packed['archive']).write_bytes(b'changed')
+    with pytest.raises(ValueError):
+        archive.restore_with_stable_receipt(spool,'native',target,receipt_path=receipt,authority=authority)
+    assert receipt.read_bytes()==raw

@@ -233,6 +233,73 @@ def restore(spool, name, target):
         'control':'Decoded archive and every target SHA/size verified; each member fsynced and atomically replaced; no training admission'}
 
 
+
+def restore_with_stable_receipt(spool, name, target, *, receipt_path, authority):
+    """Verify/restore the same source while preserving its first sealed receipt."""
+    import fcntl
+    import math
+    receipt_path = Path(receipt_path)
+    if (set(authority) != {'private_receipt', 'archive_identity', 'keys',
+                          'source_context', 'training_admission'}
+            or authority['training_admission'] is not False):
+        raise ValueError('recovery authority must be exact non-admission private custody')
+    receipt_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = receipt_path.with_name(receipt_path.name + '.lock')
+    if lock_path.is_symlink():
+        raise ValueError('recovery receipt lock refuses symlinks')
+    with lock_path.open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if receipt_path.is_symlink():
+            raise ValueError('recovery receipt refuses symlinks')
+        previous_raw = receipt_path.read_bytes() if receipt_path.exists() else None
+        previous = json.loads(previous_raw) if previous_raw is not None else None
+        if previous is not None:
+            if ({key: previous.get(key) for key in authority} != authority
+                    or set(previous) != set(authority) | {'at', 'restoration', 'restored'}
+                    or type(previous['at']) not in (int, float) or not math.isfinite(previous['at'])
+                    or previous['restored'] != str(target)):
+                raise ValueError('existing recovery source authority changed')
+        archive_receipt = json.loads((Path(spool) / (name + '.receipt.json')).read_text())
+        identity = authority['archive_identity']
+        if (not isinstance(identity, dict) or set(identity) != {'sha256', 'bytes'}
+                or type(identity['bytes']) is not int
+                or identity['sha256'] != archive_receipt['archive_sha256']
+                or identity['bytes'] != archive_receipt['archive_bytes']):
+            raise ValueError('recovery archive identity differs from sealed bytes')
+        observation_path = receipt_path.with_name(receipt_path.name + '.observations.jsonl')
+        if observation_path.is_symlink():
+            raise ValueError('recovery observations refuse symlinks')
+        proof = restore(spool, name, target)
+        if proof['archive_sha256'] != authority['archive_identity']['sha256']:
+            raise ValueError('recovery archive identity differs from private custody')
+        candidate = {**authority, 'at': time.time(), 'restoration': proof, 'restored': str(target)}
+        if previous is not None:
+            if ({key: value for key, value in previous.items() if key != 'at'} !=
+                    {key: value for key, value in candidate.items() if key != 'at'}):
+                raise ValueError('existing recovery member verification changed')
+            if receipt_path.read_bytes() != previous_raw:
+                raise ValueError('recovery receipt changed during verification')
+            sealed = previous
+        else:
+            _write_json(receipt_path, candidate)
+            directory = os.open(receipt_path.parent, os.O_DIRECTORY)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
+            sealed = candidate
+        observation = {'verified_at': time.time(), 'reused_receipt': previous is not None,
+            'receipt': {'path': str(receipt_path), 'sha256': digest_file(receipt_path),
+                        'bytes': receipt_path.stat().st_size},
+            'archive_sha256': proof['archive_sha256'], 'restored_files': proof['restored_files'],
+            'training_admission': False}
+        with observation_path.open('a') as log:
+            log.write(json.dumps(observation, sort_keys=True) + '\n')
+            log.flush()
+            os.fsync(log.fileno())
+        return sealed
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('operation', choices=('pack', 'verify', 'restore'))
