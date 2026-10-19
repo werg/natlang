@@ -228,11 +228,13 @@ def test_policy_completion_uses_bounded_rotating_numeric_held_graphs(tmp_path,mo
     report=json.loads((tmp_path/'learner/report.json').read_text())
     state=torch.load(tmp_path/'learner/checkpoint.pt',weights_only=False)
     held=state['training']['metrics']['held']
-    assert held['scope']=='cadence-subset' and held['examples']==1 and held['source_graphs']==6
+    assert held['scope']=='cadence-subset' and held['examples']==2 and held['source_graphs']==6
     assert held['loss']>=0
-    assert held['selection']['classes']['ordinary']['selected_ids']==['communication-0']
-    # Frozen numeric JSONL source indexes classify all rows as ordinary; no parser policy change here.
-    assert held['selection']['classes']['communication']['selected_ids']==[]
+    # The rotating selector visits one whole graph from each available class,
+    # even though this two-graph minimum exceeds the one-token budget.
+    assert held['selection']['classes']['ordinary']['selected_ids']==['ordinary-1']
+    assert held['selection']['classes']['communication']['selected_ids']==['communication-1']
+    assert held['selection']['whole_graph_class_minimum_over_budget'] is True
     assert report['mandatory_sft']['remaining_graph_visits']==1
     readiness=json.loads((tmp_path/'learner/native-training-receipt.json').read_text())
     assert readiness['completed'] is False and readiness['policy_operation_completed'] is True

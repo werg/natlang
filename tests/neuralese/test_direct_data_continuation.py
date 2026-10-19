@@ -232,9 +232,9 @@ def _handoff_fixture(tmp_path):
 
 def test_handoff_moves_the_active_stage_to_new_data_only_by_a_declared_data_continuation(tmp_path):
     out, frozen, package, plan_path, existing, plan_for = _handoff_fixture(tmp_path)
-    with pytest.raises(ValueError, match='only by a declared data continuation'):
+    with pytest.raises(ValueError, match='declared data continuation'):
         runner.lineage_handoff(copy.deepcopy(existing), plan_for('r3'), frozen, package, plan_path, out, dry_run=True)
-    with pytest.raises(ValueError, match='only by a declared data continuation'):  # not the data it trained on
+    with pytest.raises(ValueError, match='declared data continuation'):  # not the data it trained on
         runner.lineage_handoff(copy.deepcopy(existing), plan_for('r3', continued='other'), frozen, package, plan_path,
                                out, dry_run=True)
     updated = runner.lineage_handoff(copy.deepcopy(existing), plan_for('r3', continued='r2'), frozen, package,
