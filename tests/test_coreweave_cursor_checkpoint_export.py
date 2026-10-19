@@ -359,3 +359,45 @@ def test_remote_owner_observer_code_compiles_and_waits_for_first_owner(tmp_path)
         control_root=str(tmp_path/'control'))
     result=subprocess.run([sys.executable,'-c',code],capture_output=True,text=True)
     assert result.returncode and 'pointer may not be a symlink' in result.stderr
+
+
+def test_remote_owner_observer_accepts_real_native_preference_publication(tmp_path):
+    import shutil
+    import tempfile
+    from natlang_neuralese.model.native_checkpoint_control import publication_selection
+    from natlang_neuralese.rl import native_publication_owner as owner
+    from scripts.coreweave.owned_publication_export import owner_remote_code
+
+    runtime = Path(__file__).resolve().parents[1]
+    production = runtime
+    test_root = Path(tempfile.mkdtemp(prefix='.owned-publication-observer-', dir=runtime))
+    parent = test_root / 'parent.pt'
+    parent.write_bytes(b'full selected parent')
+    output = test_root / 'rounds' / 'lfm' / 'cycles' / '000004' / 'supervised' / '001'
+    learner = output / 'learner'
+    learner.mkdir(parents=True)
+    (learner / 'checkpoint.pt').write_bytes(b'full saved child')
+    selection = publication_selection(namespace=str(production),
+        readonly_input_roots=[str(production), str(runtime)])
+    control = production / 'control'
+    control.mkdir(exist_ok=True)
+    pointer = control / (test_root.name + '-lfm-current-owner.json')
+    config = {'runtime': str(runtime), 'native_participant': 'lfm',
+        'native_checkpoint_publication': selection,
+        'native_checkpoint_publication_owner_pointer': str(pointer),
+        'request_id': 'preference-operation'}
+    command = ['/usr/bin/python', '-u', '-m', 'natlang_neuralese.train.native_preference',
+        '--out', str(learner), '--continue-from', str(parent), '--checkpoint-publication',
+        '--checkpoint-publication-namespace', selection['namespace'],
+        '--checkpoint-publication-readonly-input-roots', json.dumps(selection['readonly_input_roots']),
+        '--objective-spec', str(tmp_path / 'objective.json')]
+    try:
+        owner.emit_current(config, command, out=output, selected_checkpoint=parent)
+        code = owner_remote_code(str(pointer), role='lfm', production_root=str(production),
+            control_root=str(control))
+        result = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True)
+        assert result.returncode == 0, result.stderr
+        assert json.loads(result.stdout)['chosen'] is None
+    finally:
+        pointer.unlink(missing_ok=True)
+        shutil.rmtree(test_root, ignore_errors=True)

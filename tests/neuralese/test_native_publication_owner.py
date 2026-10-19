@@ -142,6 +142,9 @@ def test_retry_uses_live_selected_parent_and_content_addressed_command_in_same_o
 
 
 def test_supervised_execute_publishes_the_exact_expanded_trainer_command(tmp_path, monkeypatch):
+    import ast
+    import importlib.util
+    import sys
     from natlang_neuralese.rl import native_supervised as supervised
     from natlang_neuralese.train import native_operation_report
     from natlang_neuralese.train import recipe
@@ -166,6 +169,24 @@ def test_supervised_execute_publishes_the_exact_expanded_trainer_command(tmp_pat
         'seed_command':['/usr/bin/python','-u','-m',owner.TRAINER_MODULE,
             '--out','{learner_out}','--continue-from','{checkpoint}','{trainer_args}']}
     monkeypatch.setattr(recipe,'stage_parameter_args',lambda _:trainer_args)
+    external_dir=tmp_path/'external-control';external_dir.mkdir()
+    helper_path=external_dir/'native_publication_owner.py';helper_path.write_bytes(Path(owner.__file__).read_bytes())
+    helper_name='natlang_neuralese.rl.native_publication_owner'
+    helper_spec=importlib.util.spec_from_file_location(helper_name,helper_path)
+    external_helper=importlib.util.module_from_spec(helper_spec);external_helper.__package__='natlang_neuralese.rl'
+    helper_spec.loader.exec_module(external_helper)
+    monkeypatch.setitem(sys.modules,helper_name,external_helper)
+    supervised_source=Path(supervised.__file__).read_bytes()
+    execute_node=next(node for node in ast.parse(supervised_source).body
+        if isinstance(node,ast.FunctionDef) and node.name=='execute')
+    hook_path=external_dir/'native_supervised_hook.py'
+    hook_path.write_bytes(supervised_source)
+    namespace=dict(supervised.__dict__)
+    exec(compile(ast.Module(body=[execute_node],type_ignores=[]),str(hook_path),'exec'),namespace)
+    monkeypatch.setattr(supervised,'execute',namespace['execute'])
+    assert Path(supervised.__file__).resolve()!=hook_path.resolve()
+    assert supervised.execute.__code__.co_filename==str(hook_path)
+    assert external_helper.emit_current.__code__.co_filename==str(helper_path)
     captured={}
     def run(command, values):
         from natlang_neuralese.rl.production import expand_command
@@ -182,7 +203,7 @@ def test_supervised_execute_publishes_the_exact_expanded_trainer_command(tmp_pat
     state_path=tmp_path/'state.json'
     result=supervised.execute(config,state,state_path,None)
     assert result['phase']=='awaiting_semantic_refresh'
-    manifest,_=owner.read_owner(config['native_checkpoint_publication_owner_pointer'],role='lfm')
+    manifest,_=external_helper.read_owner(config['native_checkpoint_publication_owner_pointer'],role='lfm')
     argv_ref=manifest['publication_spec']['effective_argv']
     assert json.loads(Path(argv_ref['path']).read_text())==captured['command']
     assert captured['command'][captured['command'].index('--continue-from')+1]==str(selected_parent)
