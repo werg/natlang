@@ -585,12 +585,19 @@ def verify_preserved_primary_slot(root, folder, state, expected_slot, expected_s
     if source.get('actual_task_runtime') != runtime:
         raise ValueError('preserved slot source was sealed under another task-runtime epoch')
 
+    closed_ref = sequence.get('closed', {}).get(key)
     actual_slot = primary_ahead_slots(state).get(batch)
     if actual_slot is None:
         actual_slot = (state.get('primary_launches') or {}).get(key)
     if actual_slot is None and state.get('active_batch') == batch:
         actual_slot = {'batch': batch, 'owner': state.get('owner'),
             'feeder': state.get('feeder'), 'task_runtime': state.get('task_runtime')}
+    if actual_slot is None and closed_ref is not None and not alive(expected_owner):
+        # Natural source-sequence closure may archive a completed slot out of
+        # both ahead maps and primary_launches. Its exact immutable handover
+        # slot remains the expected owner record; the closed receipt and
+        # boundary below must still match its original start and sealed bytes.
+        actual_slot = expected_state_slot or {'batch': batch, 'owner': expected_owner}
     if not isinstance(actual_slot, dict) or actual_slot.get('batch') != batch:
         raise ValueError('preserved batch has no matching live, completed, or adopted guardian slot')
     if expected_state_slot is not None and actual_slot != expected_state_slot:
@@ -616,7 +623,6 @@ def verify_preserved_primary_slot(root, folder, state, expected_slot, expected_s
     route = 'live-owner'
     boundary_ref = None
     completed = str(batch) in state.get('primary_completed_ahead', {})
-    closed_ref = sequence.get('closed', {}).get(key)
     if not live:
         if completed:
             boundary_ref = actual_slot.get('boundary')
@@ -628,6 +634,9 @@ def verify_preserved_primary_slot(root, folder, state, expected_slot, expected_s
             if closed.get('batch') != batch or closed.get('started') != expected_started:
                 raise ValueError('preserved slot closed receipt changed owner/source epoch')
             boundary_ref = closed.get('boundary')
+            if (expected_state_slot is not None and expected_state_slot.get('boundary') is not None
+                    and boundary_ref != expected_state_slot['boundary']):
+                raise ValueError('preserved archived slot boundary differs from its captured owner record')
             route = 'authenticated-closed-boundary'
         else:
             raise ValueError('dead preserved slot has no authenticated completion boundary')

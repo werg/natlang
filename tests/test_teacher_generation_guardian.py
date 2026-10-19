@@ -294,8 +294,9 @@ def test_deployed_v3_manifest_shape_directly_verifies_active_and_closed_46_48(tm
         'source_sequence':{'started':started,
         'closed':{str(item[3]['batch']):item[2]['source_sequence']['closed'][str(item[3]['batch'])]
             for item in closed_cases}},
-        'primary_launches':{'45':active[6],
-            **{str(item[3]['batch']):item[6] for item in closed_cases}}}
+        # 46 and 48 have been naturally archived from every slot map; their
+        # only current custody is the source-sequence closed receipt/boundary.
+        'primary_launches':{'45':active[6]}}
     monkeypatch.setattr(guardian,'alive',lambda identity:identity==active[5])
     monkeypatch.setattr(guardian,'process',lambda pid:{**active[5],'argv':[b'python',b'feeder.py']})
     result=guardian.verify_preserved_primary_slots(root,control,state,manifest)
@@ -304,6 +305,9 @@ def test_deployed_v3_manifest_shape_directly_verifies_active_and_closed_46_48(tm
         'live-owner',
         'authenticated-closed-boundary','authenticated-closed-boundary']
     assert result['training_admission'] is False
+    manifest['bound_completed_ahead']['46']['boundary']['sha256']='0'*64
+    with pytest.raises(ValueError,match='archived slot boundary differs'):
+        guardian.verify_preserved_primary_slots(root,control,state,manifest)
 
 
 @pytest.mark.parametrize('mutation', ['missing-slot','wrong-owner','wrong-cases','wrong-runtime','arbitrary-boundary','missing-boundary'])
