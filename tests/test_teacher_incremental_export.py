@@ -1414,6 +1414,38 @@ def test_runtime_epochs_reject_changed_or_ambiguous_custody(mutation):
         _publisher_batch_runtime(publisher, 28, remote.__getitem__)
 
 
+def test_runtime_epochs_use_bounded_bulk_reader_and_revalidate_each_resolution():
+    from scripts.coreweave.teacher_incremental_export import _publisher_batch_runtime
+    guardian = {'control': '/control', 'root': '/generation', 'task_runtime': '/work/runtime',
+                'teacher_identity': {'sha256': 'b'*64}}
+    raw = json.dumps(guardian).encode()
+    publisher = {'anchor_batch': 19, 'control_dir': '/control', 'generation_root': '/generation',
+        'identity': {'runtime_path': '/work/runtime', 'execution_identity_sha256': 'b'*64},
+        'guardian_config': {'path': '/control/config.json', 'bytes': len(raw),
+                           'sha256': hashlib.sha256(raw).hexdigest()}}
+    remote = {'/control/config.json': raw}
+    _arm_runtime_epochs(publisher, remote, 29)
+    calls = []
+    def reader(path):
+        pytest.fail('the scoped bulk reader must transport the complete independent epoch set')
+    def read_many(paths):
+        paths = list(paths); calls.append(paths)
+        return {path: remote[path] for path in paths}
+    reader.read_many = read_many
+    expected = ['/control/original-guardian.json', '/control/config.json']
+    assert _publisher_batch_runtime(publisher, 28, reader) == '/work/runtime'
+    assert calls == [expected]
+    # Parallel transport is not a cache: changed historical bytes still fail.
+    remote[expected[0]] += b' '
+    with pytest.raises(ValueError, match='configuration changed'):
+        _publisher_batch_runtime(publisher, 29, reader)
+    assert calls == [expected, expected]
+    publisher['runtime_epochs'][1]['first_batch'] = 19
+    with pytest.raises(ValueError, match='strictly increase'):
+        _publisher_batch_runtime(publisher, 29, reader)
+    assert calls == [expected, expected]  # malformed authority triggers no reads
+
+
 def test_small_batch_keeps_empty_shards_without_granting_job_custody():
     row = {'key': 'only-job', 'index': 0, 'source': '/cases.jsonl'}
     master = (json.dumps(row) + '\n').encode()

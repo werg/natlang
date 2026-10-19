@@ -1074,7 +1074,6 @@ def _publisher_batch_runtime(publisher: dict, batch: int, read_file: Callable[[s
     if not isinstance(epochs, list) or len(epochs) < 2:
         raise ValueError('runtime epochs need original and current guardian configurations')
     previous = None
-    selected = None
     for index, epoch in enumerate(epochs):
         if not isinstance(epoch, dict) or set(epoch) != {'first_batch', 'guardian_config'}:
             raise ValueError('runtime epoch lacks exact batch and guardian configuration')
@@ -1086,7 +1085,18 @@ def _publisher_batch_runtime(publisher: dict, batch: int, read_file: Callable[[s
                 or not isinstance(reference['path'], str) or type(reference['bytes']) is not int
                 or reference['bytes'] < 0):
             raise ValueError('runtime epoch lacks an exact guardian file binding')
-        raw = read_file(reference['path'])
+        if index == len(epochs) - 1 and reference != publisher['guardian_config']:
+            raise ValueError('last runtime epoch must bind the current guardian configuration')
+        previous = first
+    # Every resolution still reads and verifies every bound epoch. Reuse the
+    # scoped reader's bounded parallel transport instead of serial gateway
+    # round trips for this independent set of historical configuration files.
+    raw_by_path = _read_tranche_files(read_file,
+        [epoch['guardian_config']['path'] for epoch in epochs])
+    selected = None
+    for index, epoch in enumerate(epochs):
+        first, reference = epoch['first_batch'], epoch['guardian_config']
+        raw = raw_by_path[reference['path']]
         if len(raw) != reference['bytes'] or _sha(raw) != reference['sha256']:
             raise ValueError('runtime epoch guardian configuration changed')
         configuration = _json(raw, 'runtime epoch guardian configuration')
@@ -1099,11 +1109,8 @@ def _publisher_batch_runtime(publisher: dict, batch: int, read_file: Callable[[s
             raise ValueError('runtime epoch changed controller, generation root or teacher identity')
         if index == 0 and runtime != original:
             raise ValueError('first runtime epoch differs from original publisher identity')
-        if index == len(epochs) - 1 and reference != publisher['guardian_config']:
-            raise ValueError('last runtime epoch must bind the current guardian configuration')
         if first <= batch:
             selected = runtime
-        previous = first
     if selected is None:
         raise ValueError('teacher batch precedes its authorized runtime epochs')
     return selected
