@@ -252,3 +252,19 @@ the original error and output manifest, and invokes the existing shared
 of the exact sealed source bytes. Hashing, path containment, immutable archive
 construction and original queue identity are crisp mechanisms; the continuation
 policy is the existing supervisor instruction, not another success classifier.
+
+
+## Immutable native actor and role-controller composition
+
+The training policy stays in the existing raw/shared readiness and curriculum
+programs. The operator chooses a reviewed immutable composition. Crisp plumbing
+authenticates the exact R15 package inventory, applies only reviewed inference
+and actor-declaration patches, retains source receipts and compiles the result.
+The same source tree serves actors and future coordinators; a separate process
+loads existing byte-bound external supervisor modules. Patch the final external
+raw-rounds source too, because it otherwise shadows actor-runtime support.
+Recompute all six role verification files from the actual installed/external
+sources, bind both peers explicitly, and exercise the existing publishing loader
+without decoding checkpoints or starting models. Preserve numerical modules,
+old owner/control artifacts and live cloud packages. A local composition grants
+no readiness, training exposure, cloud staging or process authority.
