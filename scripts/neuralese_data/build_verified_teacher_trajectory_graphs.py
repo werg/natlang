@@ -1024,17 +1024,26 @@ def _content_index_policy_sha256(parser_sha256=None):
            if isinstance(node, ast.FunctionDef) and node.name in functions}
     if set(law) != functions:
         raise ValueError('teacher content-index law is incomplete')
+    if parser_sha256 is not None:
+        # Historical execution-policy identities remain available for authenticated
+        # class-only continuation proofs; they are not the current content key.
+        return canonical_json_sha256_hex({'schema': 'natlang.teacher-content-index-law/2',
+            'functions': law, 'parser': parser_sha256})
+    from scripts.neuralese_data.source_policy_identity import scoped_python_policy, scoped_python_policy_bytes
     return canonical_json_sha256_hex({
-        'schema': 'natlang.teacher-content-index-law/2', 'functions': law,
-        'parser': (parser_sha256 if parser_sha256 is not None else
-                   {name: sha256_file(package / name)
-                    for name in (*POLICY_FILES, 'data/native_graph.py')})})
+        'schema': 'natlang.teacher-content-index-law/3',
+        'functions': scoped_python_policy_bytes(Path(__file__).read_text().encode(), functions),
+        'parser': scoped_python_policy(package / 'data/native_graph_schema.py', ('parse_graph',)),
+        'graph_facade': sha256_file(package / 'data/native_graph.py'),
+        'graph_plan': sha256_file(package / 'model/native_graph_plan.py'),
+        'jsonio': sha256_file(package / 'common/jsonio.py'),
+        'hashing': scoped_python_policy(package / 'common/hashing.py', ('canonical_json_sha256_hex',))})
 
 
 # Independently reviewed legacy whole-converter identity. Migration is available
 # only while the complete new fingerprint/parser/cache-validation law matches.
 _REVIEWED_LEGACY_CONTENT_CACHE = {
-    'policy_sha256': '673e8c76458b0bb6fe3ad127494678df8c924f90da7b8ed2b73de6a2c3c27635',
+    'policy_sha256': '2ebde0101c9d93116285ae9f7deedacadfaca151e81943002e6317b47fef96d4',
     'legacy_policy_sha256': '22dc344fa6c242e804294431241f39cc8f4b20d602353402710e1e6312d78db7',
     'legacy_converter_sha256': '0e16b1d941f1ee4aa2a32cd68ded0fd8d7b9f4282ddbdacec1dd050a3b379491',
 }
@@ -1138,11 +1147,14 @@ def seed_content_fingerprints(paths, fingerprint, *, classification_migrations=(
         evidence = None
         continuation = _REVIEWED_LEGACY_CONTENT_CACHE
         if not valid and policy == continuation['policy_sha256']:
-            legacy_key = {**key, 'policy_sha256': continuation['legacy_policy_sha256']}
-            legacy_path = row_index.entry_path('teacher-content', canonical_json_sha256_hex(legacy_key))
-            legacy = row_index.load(legacy_path)
-            if _valid_content_index(legacy, legacy_key):
-                cached, valid, migrated = legacy, True, True
+            for legacy_policy in (continuation['legacy_policy_sha256'],
+                                  '673e8c76458b0bb6fe3ad127494678df8c924f90da7b8ed2b73de6a2c3c27635'):
+                legacy_key = {**key, 'policy_sha256': legacy_policy}
+                legacy_path = row_index.entry_path('teacher-content', canonical_json_sha256_hex(legacy_key))
+                legacy = row_index.load(legacy_path)
+                if _valid_content_index(legacy, legacy_key):
+                    cached, valid, migrated = legacy, True, True
+                    break
         if not valid:
             for reference, proof in proofs:
                 for part in proof['indexes']:

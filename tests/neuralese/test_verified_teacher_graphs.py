@@ -1120,3 +1120,34 @@ def test_classification_content_proof_race_rejects_before_cache_publication(tmp_
         converter.seed_content_fingerprints([path],'tokenizer-a',classification_migrations=[proof])
     assert list((tmp_path/'cache').glob('teacher-content-*.pkl'))==[legacy]
     assert legacy.read_bytes()==original
+
+
+def test_content_policy_ignores_loader_classification_only_bytes(monkeypatch):
+    actual=converter._content_index_policy_sha256()
+    sha=converter.sha256_file
+    def changed(path):
+        return '0'*64 if str(path).endswith(('/data/native_sources.py','/data/native_pair_schema.py','/common/row_index.py')) else sha(path)
+    monkeypatch.setattr(converter,'sha256_file',changed)
+    assert converter._content_index_policy_sha256()==actual
+
+
+def test_changed_fingerprint_law_refuses_reviewed_legacy_cache(tmp_path,monkeypatch):
+    path,expected,old,original=_legacy_content_cache(tmp_path,monkeypatch)
+    read=converter.Path.read_text;module=converter.Path(converter.__file__).resolve()
+    def changed(path,*args,**kwargs):
+        raw=read(path,*args,**kwargs)
+        return raw.replace("'nodes': graph['nodes']", "'nodes': graph.get('nodes')") if path.resolve()==module else raw
+    monkeypatch.setattr(converter.Path,'read_text',changed)
+    assert converter._content_index_policy_sha256()!=converter._REVIEWED_LEGACY_CONTENT_CACHE['policy_sha256']
+    calls=[];parse=converter.parse_graph
+    monkeypatch.setattr(converter,'parse_graph',lambda *a,**kw:calls.append(True)or parse(*a,**kw))
+    assert converter.seed_content_fingerprints([path],'tokenizer-a')==expected
+    assert calls==[True] and old.read_bytes()==original
+
+
+def test_actual_changed_graph_content_cannot_reuse_reviewed_legacy(tmp_path,monkeypatch):
+    path,expected,old,original=_legacy_content_cache(tmp_path,monkeypatch)
+    value=json.loads(path.read_text());value['nodes'][0]['token_ids'][-1]+=1
+    path.write_text(json.dumps(value)+'\n')
+    actual=converter.seed_content_fingerprints([path],'tokenizer-a')
+    assert actual[0]!=expected[0] and old.read_bytes()==original
