@@ -239,6 +239,53 @@ def test_external_helper_rejects_runtime_root_different_from_bound_config(tmp_pa
             selected_checkpoint=config['checkpoint'], runtime_root=tmp_path)
 
 
+def test_raw_rl_invokes_owner_publication_at_the_unchanged_inner_sft_boundary(tmp_path):
+    from types import SimpleNamespace
+    from natlang_neuralese.rl import native_stage
+
+    parent=tmp_path/'parent.pt';parent.write_bytes(b'actual selected RL parent')
+    job=tmp_path/'rounds'/'lfm'/'learner-job';learner=job/'learner'
+    learner.mkdir(parents=True)
+    pointer=tmp_path/'control'/'lfm-current-owner.json'
+    selection=publication_selection(namespace='/work/native-production',readonly_input_roots=D24_ROOTS)
+    forwarded=['--checkpoint-publication','--checkpoint-publication-namespace',selection['namespace'],
+        '--checkpoint-publication-readonly-input-roots',json.dumps(selection['readonly_input_roots'])]
+    actual=['--native-graphs',str(tmp_path/'rl-native-graphs.jsonl'),
+        '--held-native-graphs',str(tmp_path/'held.jsonl'),'--objective-spec',str(tmp_path/'objective.json'),
+        '--continue-from',str(parent),'--objective-continuation','--out',str(learner),*forwarded]
+    args=SimpleNamespace(publication_owner_pointer=pointer,publication_role='lfm',out=learner,
+        continue_from=parent,coefficient_policy=None)
+    called={}
+    def actual_writer(argv):
+        called['argv']=list(argv)
+        manifest,_=owner.read_owner(pointer,role='lfm')
+        called['manifest']=manifest
+        return 17
+    assert native_stage._invoke_raw_trainer(args,forwarded,actual,actual_writer)==17
+    assert called['argv']==actual
+    manifest=called['manifest']
+    command=json.loads(Path(manifest['publication_spec']['effective_argv']['path']).read_text())
+    assert command[-len(actual):]==actual
+    assert command[command.index('--continue-from')+1]==str(parent)
+    assert command[command.index('--out')+1]==str(learner)
+    assert manifest['publication_spec']['parent']['sha256']==__import__('hashlib').sha256(parent.read_bytes()).hexdigest()
+    assert manifest['publication_spec']['effective_argv']['allowed_output_root']==str(job.resolve())
+    assert manifest['operation']['production_stage']=='native_rl'
+    assert manifest['publication_spec']['runtime_code_sha256']==manifest['runtime_code_sha256']
+
+
+def test_raw_rl_publication_requires_explicit_real_trainer_controls(tmp_path):
+    from types import SimpleNamespace
+    from natlang_neuralese.rl import native_stage
+
+    args=SimpleNamespace(publication_owner_pointer=tmp_path/'pointer.json',publication_role='lfm')
+    with pytest.raises(ValueError,match='disabled checkpoint publication'):
+        native_stage._publication_values(args,[])
+    args.publication_owner_pointer=None
+    with pytest.raises(ValueError,match='requires an owner pointer'):
+        native_stage._publication_values(args,['--publication-role','lfm'])
+
+
 def test_accepts_native_preference_adapter_that_forwards_publication_args(tmp_path):
     config, command, output = _fixture(tmp_path)
     command[3] = 'natlang_neuralese.train.native_preference'

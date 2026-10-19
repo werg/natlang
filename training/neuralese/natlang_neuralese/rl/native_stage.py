@@ -114,6 +114,11 @@ def main(argv=None):
     parser.add_argument('--foundation-communication-batches', type=int)
     parser.add_argument('--resident-data-directory', type=Path)
     parser.add_argument('--resident-geometry-qualification', type=Path)
+    # Optional owner-follow metadata is a control-plane pointer. The RL stage
+    # passes it to the real nested trainer boundary below; it never changes the
+    # rollout objective or trainer arguments.
+    parser.add_argument('--publication-owner-pointer', type=Path)
+    parser.add_argument('--publication-role', choices=('lfm', 'mellum'))
     args, trainer = parser.parse_known_args(argv)
     from contextlib import nullcontext
     from .native_output_lease import coefficient_output_lease
@@ -146,10 +151,13 @@ def _admit_and_train(args,trainer):
         'native_graphs_sha256': sha256_file_hex_cached(graph_path),
         'objective_sha256': sha256_file_hex_cached(objective_path), 'execution': 'one-packed-graph-forward'})
     if args.coefficient_policy is not None:
+        if args.publication_owner_pointer is not None:
+            raise ValueError('coefficient-policy RL publication requires its own exact policy-writer boundary')
         from .native_coefficient_stage import main as train_coefficients
-        return train_coefficients(['--coefficient-policy',str(args.coefficient_policy),'--graphs',str(graph_path),
+        coefficient_args=['--coefficient-policy',str(args.coefficient_policy),'--graphs',str(graph_path),
             '--objective',str(objective_path),'--continue-from',str(args.continue_from),
-            '--held-native-graphs',str(args.held_native_graphs),'--out',str(args.out),*trainer])
+            '--held-native-graphs',str(args.held_native_graphs),'--out',str(args.out),*trainer]
+        return train_coefficients(coefficient_args)
     from ..data.native_sources import NativeGraphSource
     from .native_replay import NativePolicyObjective
     from ..eval.native_memory import policy_capacity_request
@@ -161,9 +169,55 @@ def _admit_and_train(args,trainer):
     from ..train.native_resident import binding
     trainer += ['--policy-capacity-request',json.dumps(binding(request_path),sort_keys=True)]
     from ..train.native_state_sft import main as train
-    return train(['--native-graphs', str(graph_path), '--held-native-graphs', str(args.held_native_graphs),
+    trainer_args=['--native-graphs', str(graph_path), '--held-native-graphs', str(args.held_native_graphs),
         '--objective-spec', str(objective_path), '--continue-from', str(args.continue_from),
-        '--objective-continuation', '--out', str(args.out), *trainer])
+        '--objective-continuation', '--out', str(args.out), *trainer]
+    return _invoke_raw_trainer(args, trainer, trainer_args, train)
+
+
+def _publication_values(args, trainer):
+    """Build the exact selected publication contract from forwarded trainer flags."""
+    if args.publication_owner_pointer is None:
+        if args.publication_role is not None:
+            raise ValueError('publication role requires an owner pointer')
+        return None
+    if args.publication_role is None:
+        raise ValueError('owner publication requires its exact participant role')
+    def one(flag, *, required=True):
+        found=[index for index,value in enumerate(trainer) if value==flag]
+        if not found:
+            if required:raise ValueError('owner publication trainer omitted '+flag)
+            return None
+        if len(found)!=1 or found[0]+1>=len(trainer):
+            raise ValueError('owner publication trainer has ambiguous '+flag)
+        return trainer[found[0]+1]
+    if '--checkpoint-publication' not in trainer:
+        raise ValueError('owner publication trainer disabled checkpoint publication')
+    from ..model.native_checkpoint_control import publication_selection
+    namespace=one('--checkpoint-publication-namespace')
+    roots=json.loads(one('--checkpoint-publication-readonly-input-roots'))
+    if not isinstance(roots,list) or not all(isinstance(value,str) for value in roots):
+        raise ValueError('owner publication roots must be an explicit JSON string list')
+    return publication_selection(namespace=namespace,readonly_input_roots=roots)
+
+
+def _invoke_raw_trainer(args, forwarded_trainer_args, actual_trainer_args, train):
+    """Publish the true inner SFT call immediately before invoking its writer."""
+    selection=_publication_values(args,forwarded_trainer_args)
+    if selection is not None:
+        import sys
+        from .native_publication_owner import emit_current
+        module='natlang_neuralese.train.native_state_sft'
+        command=[sys.executable,'-u','-m',module,*actual_trainer_args]
+        job_output=Path(args.out).resolve().parent
+        config={'native_participant':args.publication_role,
+            'native_checkpoint_publication_owner_pointer':str(args.publication_owner_pointer),
+            'native_checkpoint_publication':selection,
+            'runtime':str(Path(__file__).resolve().parents[4]),
+            'production_stage':'native_rl', 'request_id':None}
+        emit_current(config,command,out=job_output,selected_checkpoint=args.continue_from,
+            runtime_root=config['runtime'])
+    return train(actual_trainer_args)
 
 
 if __name__ == '__main__':
