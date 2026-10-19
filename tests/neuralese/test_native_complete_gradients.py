@@ -155,7 +155,9 @@ def test_complete_gradient_observer_start_failure_closes_flat_cotangent_scope():
 
 
 @pytest.mark.parametrize('family',['lfm','mellum'])
-def test_actual_runtime_qualifier_labels_complete_inventory_and_legacy_channel(family):
+@pytest.mark.parametrize('device,backend',[('cpu','cpu_file'),('cuda','cpu_file'),('cuda','device_fp32')])
+def test_actual_runtime_qualifier_labels_complete_inventory_and_legacy_channel(family,device,backend):
+    if device=='cuda'and not torch.cuda.is_available():pytest.skip('CUDA unavailable')
     from types import SimpleNamespace
     from natlang_neuralese.eval.native_state import qualify_existing
     from natlang_neuralese.eval.native_gradients import validate_complete_proof
@@ -163,7 +165,8 @@ def test_actual_runtime_qualifier_labels_complete_inventory_and_legacy_channel(f
         all_special_ids=[]
         def __call__(self,*args,**kwargs):return SimpleNamespace(input_ids=[2,3,4,5,6,7,8,9])
         def decode(self,*args,**kwargs):return 'lexical source'
-    model=SharedStateModel(tiny(family),(58,59,60,61),rank=4)
+    model=SharedStateModel(tiny(family),(58,59,60,61),rank=4).to(device)
+    model.native_cotangent_accumulator_backend=backend
     model.port.checkpoint_layers=False
     model.port.hf.to(dtype=torch.bfloat16)
     if family=='mellum':model.port.hf.natlang_precision='bf16'
@@ -181,6 +184,8 @@ def test_actual_runtime_qualifier_labels_complete_inventory_and_legacy_channel(f
     report=qualify_existing(model,Tokenizer(),roles,config,gradient_parameters=named,**args)
     assert report['passed']and report['gradient_scope']=='complete-production-trainables'
     proof=report['complete_gradient_qualification']
+    assert proof['cotangent_accumulator_backends']=={'flat':backend,'cached':'cpu_file'}
+    assert model.native_cotangent_accumulator_backend==backend
     validate_complete_proof(proof,report['native_identity'],gradient_atol=1e-5)
     assert proof['derivative_comparison_count']==proof['trainable_parameter_count']+1
     for key in ('trainable_parameter_count','derivative_comparison_count'):

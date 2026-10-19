@@ -241,7 +241,9 @@ def qualify_attention_transition(model, tokenizer, roles, config, *, optimizer,
                 outputs = {}
                 def forward(mode, slot):
                     from ..model.native_weight_carrier import ParameterCotangentScope
-                    cotangent_scope=ParameterCotangentScope.for_model(model,mode='vjp')
+                    from .native_gradients import cached_reference_cotangent_scope
+                    cotangent_scope=(cached_reference_cotangent_scope(model) if execution=='cached'
+                        else ParameterCotangentScope.for_model(model,mode='vjp'))
                     cotangent_scope.__enter__()
                     try:
                         select(mode)

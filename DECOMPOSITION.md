@@ -32,3 +32,14 @@ The declared native model service is the producer: it receives source text and c
 4. The existing runtime write path and endpoint validate exact source text, token span, producer markers, checkpoint/tokenizer identity, and archive the actual state artifact.
 
 The public 48-session probe passed only `{store}` and therefore never configured a producer port. It found a harness wiring omission; the reference server already implements the real native producer endpoint. Corrected public sessions must use `nativeStateRuntimeOptions` and report actual returned state provenance.
+
+
+### Complete-gradient reference accumulator placement (2026-10-20)
+
+The supervisor chooses the useful training backend. The exact verifier compares every declared gradient against explicit cached execution. Its cached backward retains interleaved expert cotangents until their shared leaf completes, so GPU accumulation can exhaust device memory independently of the candidate training path.
+
+1. Keep the candidate scope on the model-selected backend.
+2. Collect the explicit cached reference with the existing CPU-file FP32 accumulator, preserving contribution order and the final parameter-dtype cast.
+3. Record both observed accumulator backends, compare all parameter and input gradients at the existing gates, and restore prior gradients and RNG.
+
+These are crisp verifier/storage mechanisms; no data, trainable coverage, numerical gates or production optimizer behavior changes.
