@@ -179,6 +179,13 @@ comprehensive training on the entire evolving production recipe.
   is not the objective: base-relative KL/agreement are telemetry, never a stop
   or qualification barrier. Exact state and artifact identities support safe
   continuation and debugging; they are not a scientific-purity requirement.
+- **Keep launch checks nonmutating and necessary** (engineering lesson, 2026-10-20).
+  Run normal metadata/argument preflight once; let the real entry perform its
+  required state, numerical and capacity checks before updates. Do not execute
+  an entire administrative entry in the canonical production directory first:
+  it can leave strict-write launch records that block the real learner. Put
+  diagnostics in an isolated namespace, preserve concrete failure evidence,
+  and avoid repeated whole-entry barriers while useful training is stopped.
 - **Bring in deferred improvements** (owner, 2026-10-16). Keep a current
   inventory of deferred data, performance, training and inference work; actively
   integrate each ready improvement. An old handover, incomplete source census,
