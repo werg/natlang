@@ -3,7 +3,7 @@
 Tiny protocol fixtures are not production capacity/exposure qualifications. The
 parameterized cases also check the actual next update for both native optimizers.
 """
-import copy,json,shutil,subprocess,sys,time
+import copy,json,os,shutil,subprocess,sys,time
 from pathlib import Path
 import pytest
 import torch
@@ -43,7 +43,9 @@ def external(ordinary,tmp_path,request):
             +"print('ready',flush=True);sys.stdin.buffer.read()")
         write(launch_intent,{'continuation':resident.binding(continuation),'argv_binding':resident.binding(argv_path),
             'supervisor':resident.binding(script),'env':{'PYTHONPATH':str(x['newpackage'].parent)}})
-    supervisor=[sys.executable,str(script),json.dumps(argv)];process=subprocess.Popen(supervisor,stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True)
+    supervisor=[sys.executable,str(script),json.dumps(argv)]
+    child_env={**os.environ,'PYTHONPATH':str(Path(handoff.__file__).resolve().parents[2])}
+    process=subprocess.Popen(supervisor,stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True,env=child_env)
     try:
         assert process.stdout.readline().strip()=='ready';owner=handoff.observe(process.pid)
         original=N/'launch.json';write(original,{'owner':owner,'argv':argv,'intent':resident.binding(launch_intent)})

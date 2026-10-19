@@ -19,7 +19,8 @@ def dispatch(tmp_path):
         'import json,sys\n'
         f'print(json.dumps(capture(__file__,{command!r},{binding(parent)!r},{str(tmp_path/"capture")!r},environment={{"PYTHONPATH":"/exact/runtime"}})),flush=True)\n'
         'sys.stdin.buffer.read()\n')
-    child=subprocess.Popen([sys.executable,str(script)],stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True,env=os.environ.copy())
+    child_env={**os.environ,'PYTHONPATH':str(Path(raw.__file__).resolve().parents[2])}
+    child=subprocess.Popen([sys.executable,str(script)],stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True,env=child_env)
     try:
         launch=json.loads(child.stdout.readline())
         intent=raw.capture_drain_intent(launch,tmp_path/'intent.json')
