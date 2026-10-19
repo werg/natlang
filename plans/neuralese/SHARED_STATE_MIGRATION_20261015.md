@@ -890,3 +890,40 @@ optimizer/RNG, numerical operations and checkpoint format. Its deployment uses
 an explicitly reviewed metadata-only entry composition; no live code injection
 or successful final save is assumed. Recovery must record any unsaved loss.
 See [the decomposition](shared-state/checkpoint-memory/DECOMPOSITION.md).
+
+### Operational continuation, 2026-10-19 21:22 UTC
+
+Comprehensive training remains unfinished. LFM has completed its fixed26,312
+communication foundation, but still owes complete exposure to its evolving
+whole communication corpus. Mellum's latest observed foundation exposure is
+20,731/26,312; its complete communication inventory is114,793. Neither ordinary
+SFT admission nor a metadata continuation grants cross-model VAE readiness.
+
+LFM's protected16-family checkpoint17,214 task evaluation scored0/16. Exact
+checkpoint/native-row restoration is independently verified; repeated tool
+actions and wrong terminal answers remain concrete behavioral defects under
+investigation. Protected evaluation trajectories stay outside teacher data.
+The operational task boundary has been corrected to the16-family specification.
+The saved17,619 parent preserves optimizer, RNG, exposure and the genuinely
+completed250-update DPO stage. Its same-stage recovery is committed, and the
+new controller and provider have entered retry2. A fresh worker request is
+staging; resumed SGD is not yet observed. The earlier failed request remains
+failed and receives no completion or qualification credit.
+
+Mellum is doing genuine SGD again on the qualified R10 profile, observed at
+24,550. The R11 candidate passed exact actor/cache parity but ran out of GPU
+memory during complete-gradient comparison before any SGD. It earns no capacity
+qualification. The shared checker repair streams completed leaf gradients to
+CPU and compares the cached derivatives individually; it remains under
+independent review and caller validation. Keep useful R10 training running
+until an explicitly deployed successor passes the actual full capacity checks.
+Preserve newly earned updates when changing profiles.
+
+The active admitted source generations contain1,423,372 LFM training rows and
+1,344,558 Mellum training rows. Additional ready, verified teacher additions
+total4,400 LFM and5,913 Mellum rows; preparation/adoption and actual visits are
+separate events. The existing Qwen generation sandbox continues with preserved
+in-flight work and the expanded state/effects/recovery curriculum. No additional
+sandbox or external teacher is required. A checksum-verified relocation of
+reusable source data to the external disk restored local root headroom to
+25.22GiB while retaining its original logical path.
