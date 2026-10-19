@@ -1630,7 +1630,12 @@ def _data_continuation(old, new):
             return False
         if old.get(withdrawal) is not None and new.get(withdrawal) is None:
             return False
+        classification='source_classification_migration'
+        classification_changed=old.get(classification)!=new.get(classification)
+        if classification_changed and not _classification_proof_extension(old,new):
+            return False
         excluded = set(roles) | {'continued_' + role for role in roles} | {foundation,withdrawal}
+        if classification_changed:excluded.add(classification)
         return changed and {k: v for k, v in old.items() if k not in excluded} == {
             k: v for k, v in new.items() if k not in excluded}
     if 'text_data' not in old or 'text_data' not in new or DATA_CONTINUATION_ROLE not in new:
@@ -1806,26 +1811,46 @@ def _classification_input_continuation(old, new):
             or {k:v for k,v in old.items() if k != role} !=
                {k:v for k,v in new.items() if k != role}):
         return False
+    _classification_proof(new)
+    return True
+
+
+def _classification_proof(inputs):
+    """Authenticate the existing metadata proof independently of input changes."""
     from .native_source_classification import SCHEMA, _checked, _binding, POLICY_FILES
     from . import native_source_classification as producer
-    reference = new[role]
+    reference = inputs['source_classification_migration']
     if not all(reference.get(key) for key in ('path', 'sha256', 'binding')):
         raise ValueError('classification continuation needs an exact declared binding')
     proof = json.loads(_checked(reference).read_text())
     if (proof.get('schema') != SCHEMA
-            or proof.get('train_sha256') != new['native_graphs']['sha256']
+            or proof.get('train_sha256') != inputs['native_graphs']['sha256']
             or not proof.get('indexes') or not proof.get('held_indexes')
             or proof.get('optimizer_updates') != 0 or proof.get('student_pointer_writes') != 0
             or proof.get('model_allocations') != 0 or proof.get('graph_position_expansions') != 0):
         raise ValueError('classification continuation proof differs from current source or metadata-only work')
-    if proof.get('held', {}).get('sha256') != new.get('held_native_graphs', {}).get('sha256'):
+    if proof.get('held', {}).get('sha256') != inputs.get('held_native_graphs', {}).get('sha256'):
         raise ValueError('classification continuation held source differs')
     for part in proof['indexes'] + proof['held_indexes']:
         if part.get('producer') != _binding(producer.__file__) or set(part.get('old_policy', {})) != set(POLICY_FILES):
             raise ValueError('classification continuation producer/policy differs')
         for value in (part['source'], part['old_index'], part['new_index'], *part['old_policy'].values()):
             _checked(value)
-    return True
+    return proof
+
+
+def _classification_proof_extension(old,new):
+    """Append new proof parts with data; retain every admitted prior part."""
+    role='source_classification_migration'
+    if (not isinstance(old.get(role),dict) or not isinstance(new.get(role),dict)
+            or old[role]==new[role] or old.get('held_native_graphs')!=new.get('held_native_graphs')
+            or old.get('native_graphs',{}).get('sha256')==new.get('native_graphs',{}).get('sha256')
+            or new.get('continued_native_graphs',{}).get('sha256')!=old.get('native_graphs',{}).get('sha256')):
+        return False
+    prior,current=_classification_proof(old),_classification_proof(new)
+    count=len(prior['indexes'])
+    return (len(current['indexes'])>count and current['indexes'][:count]==prior['indexes']
+            and current['held_indexes']==prior['held_indexes'] and current['held']==prior['held'])
 
 
 def _combined_native_source_continuation(old, new):

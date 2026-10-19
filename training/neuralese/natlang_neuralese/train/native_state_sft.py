@@ -869,12 +869,14 @@ def main(argv=None):
         raise ValueError('foundation communication batches must be a positive integer')
     resident_state = None
     if args.resident_data_directory is not None:
-        from .native_resident import recover
+        from .native_resident import recover, bound as resident_bound
         resident_state = recover(args.resident_data_directory)
         if resident_state and resident_state['payload']['stage_id'] == args.stage_id:
             args.native_graphs = Path(resident_state['payload']['train']['path'])
             args.held_native_graphs = Path(resident_state['payload']['held']['path'])
             args.recipe_binding = json.dumps(resident_state['payload']['recipe'])
+            proof=resident_state['payload']['plan']['stage_inputs'][args.stage_id].get('source_classification_migration')
+            args.source_classification_migration=resident_bound(proof) if proof else None
     checkpoint_options = {key: str(value) if isinstance(value, Path) else value
                           for key, value in vars(args).items()}
     if not (math.isfinite(args.epochs) and args.epochs > 0) or min(args.batch_graphs, args.eval_every,
@@ -1179,6 +1181,7 @@ def main(argv=None):
         carried_progress = reclassify_progress(carried_progress, class_migration)
         if resume is not None:
             resume = reclassify_progress({'active': resume}, class_migration)['active']
+    if args.source_classification_migration:
         proof_sha = sha256_file_hex_cached(args.source_classification_migration)
         if not any(item['proof_sha256'] == proof_sha for item in checkpoint_options['source_classification_history']):
             checkpoint_options['source_classification_history'].append(
@@ -1571,6 +1574,12 @@ def main(argv=None):
                     held_row_bindings = held.bindings
                     args.native_graphs = train.path
                     args.recipe_binding = json.dumps(resident.recipe_binding)
+                    proof=resident.plan['stage_inputs'][args.stage_id].get('source_classification_migration')
+                    args.source_classification_migration=resident_bound(proof) if proof else None
+                    checkpoint_options['source_classification_migration']=str(args.source_classification_migration) if proof else None
+                    if proof and not any(item['proof_sha256']==proof['sha256'] for item in checkpoint_options['source_classification_history']):
+                        checkpoint_options['source_classification_history'].append(
+                            {'proof_sha256':proof['sha256'],'graph_visits_created':0})
                     source_row_bindings = train.bindings
                     source_order = train.ordered_ids()
                     source_receipts = [source_receipt(train), source_receipt(held)]

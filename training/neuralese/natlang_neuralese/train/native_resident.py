@@ -149,7 +149,8 @@ def _contract(plan, proposed, stage_id):
             if stage['id'] == stage_id:
                 if stage['kind'] != 'native_state_sft':
                     raise ValueError('resident append supports supervised native graphs only')
-                for key in ('native_graphs', 'continued_native_graphs', 'held_native_graphs', 'continued_held_native_graphs', pending_role):
+                for key in ('native_graphs', 'continued_native_graphs', 'held_native_graphs', 'continued_held_native_graphs', pending_role,
+                            'source_classification_migration'):
                     stage.get('inputs', {}).pop(key, None)
         recipes.append(value)
     if recipes[0] != recipes[1]:
@@ -162,6 +163,57 @@ def pending_declarations(plan, stage_id, tokenizer_fingerprint):
     reference = plan['stage_inputs'][stage_id].get('pending_native_sources')
     return ([load_pending_sources(bound(reference), tokenizer_fingerprint=tokenizer_fingerprint)]
             if reference else [])
+
+
+def validate_classification_append(plan,proposed,stage_id,train,prior_rows,directory):
+    """Verify only newly appended proof parts against actual loaded leaves.
+
+    The prior parts are an immutable prefix, checked by the recipe contract.
+    Derived per-leaf proofs retain both full authorities; the existing producer
+    and verifier remain unchanged. Prior rows are not reparsed or deserialized;
+    the usual immutable-artifact hash checks remain in force.
+    """
+    old,new=plan['stage_inputs'][stage_id],proposed['stage_inputs'][stage_id]
+    role='source_classification_migration'
+    if old.get(role)==new.get(role):return
+    from .recipe import _classification_proof_extension
+    if not _classification_proof_extension(old,new):
+        raise ValueError('resident classification proof is not an exact append')
+    from . import native_source_classification as classification
+    from .native_operation_report import SourceIdentityView
+    before=json.loads(bound(old[role]).read_text());after=json.loads(bound(new[role]).read_text())
+    remaining={entry['id']:entry for entry in train.entries[prior_rows:]}
+    leaves={};pending=[train]
+    while pending:
+        source=pending.pop()
+        if source.kind=='manifest':pending.extend(source.children)
+        else:leaves[source.file_sha256]=source
+    for part in after['indexes'][len(before['indexes']):]:
+        leaf=leaves.get(part['source']['sha256'])
+        if leaf is None:raise ValueError('resident appended proof source is outside the current data')
+        actual_source={**binding(leaf.path),'bytes':leaf.path.stat().st_size}
+        proof_source=classification._binding(classification._checked(part['source']))
+        if any(actual_source[key]!=proof_source[key] for key in ('sha256','bytes')):
+            raise ValueError('resident appended proof and actual source bytes differ')
+        proof={**after,'train_sha256':leaf.file_sha256,'indexes':[part],'held_indexes':[],
+            'resident_append_scope':{'previous_proof':old[role],'full_proof':new[role],
+                'prior_rows':prior_rows,'current_source':binding(train.path),
+                'actual_source':actual_source,'proof_source':proof_source,
+                'optimizer_updates':0,'training_credit':0}}
+        path=Path(directory)/'classification-append-proofs'/(digest(proof)+'.json')
+        if path.exists():
+            if json.loads(path.read_text())!=proof:
+                raise ValueError('resident classification leaf proof changed')
+        else:
+            path.parent.mkdir(parents=True,exist_ok=True)
+            write_json(path,proof)
+        classification.migration_classes(path,SourceIdentityView(leaf))
+        for entry in leaf.entries:
+            actual=remaining.pop(entry['id'],None)
+            if actual is None or {k:v for k,v in actual.items()if k!='training_priority'}!={
+                    k:v for k,v in entry.items()if k!='training_priority'}:
+                raise ValueError('resident appended classification changed or repeated a row')
+    if remaining:raise ValueError('resident appended classification omitted new data rows')
 
 
 def validate_source_obligations(plan, stage_id, train, declarations, withdrawal_history=()):
@@ -1270,6 +1322,7 @@ def _delta_payload(directory, previous, plan, proposed, stage_id, recipe_path,
     declarations = pending_declarations(proposed, stage_id, tokenizer_fingerprint)
     validate_source_obligations(proposed, stage_id, train, declarations,
         initial.get('withdrawal_history') or ())
+    validate_classification_append(plan,proposed,stage_id,train,len(old),directory)
     capacity = initial.get('geometry_qualification')
     if not capacity:
         raise ValueError('resident delta append needs explicit geometry qualification')
@@ -1357,6 +1410,7 @@ def prepare(directory, recipe_path, stage_id, *, tokenizer_fingerprint, role_ids
         initial = json.loads((directory/'initial.json').read_text())
         validate_source_obligations(proposed, stage_id, train, declarations,
             initial.get('withdrawal_history') or ())
+        validate_classification_append(plan,proposed,stage_id,train,len(old),directory)
         capacity_binding = initial.get('geometry_qualification')
         if not capacity_binding:
             raise ValueError('resident append needs an explicit current geometry qualification')
@@ -1531,6 +1585,7 @@ class ResidentAdoption:
             declarations = pending_declarations(payload['plan'], self.stage_id, train.tokenizer_fingerprint)
             validate_source_obligations(payload['plan'], self.stage_id, train, declarations,
                 self.withdrawal_history)
+            validate_classification_append(self.plan,payload['plan'],self.stage_id,train,len(self.train),self.directory)
             with locked(self.directory):
                 current_pointer = self.directory / 'pending.json'
                 if not current_pointer.exists():
