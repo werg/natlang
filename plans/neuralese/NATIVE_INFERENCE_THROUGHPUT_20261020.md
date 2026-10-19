@@ -261,3 +261,102 @@ remain measured opportunities. Current evidence does not yet justify changing
 the RNG law or adding mutable device caches. Deploy the independently ready
 linear/expert changes into useful actors before another full actor reload or
 architecture qualification. Full12B throughput remains unmeasured.
+
+
+## Immutable actor plus future role-controller artifact
+
+The local artifact is
+`/home/werg/data/dgxops/native-actor-coordinator-composition-v6-20261020`, with
+`construction.json`, 372 byte-bound source/control files and package inventory
+`4395eecce55a29524f477956bc704910f37dda03c4dccc259b69ac899e1311cf`.
+It is **not cloud-staged or active**. `compose_native_actor_runtime.py` constructs
+it from the exact R15 construction receipt
+`cfa3bbe8e17772b31f2c868741be27334c04678220208a31a868b5ee22815703`,
+plus only the reviewed inference/runtime-declaration commits and strict command
+precedence followups. Its receipt records full parent/source/patch identities.
+
+Only eight package modules differ from R15. R15 predates optional deferred
+gradient machinery in the later inference patch ancestors; importing all of main
+would bring unrelated training changes. The builder instead copies eight exact
+reviewed inference definitions/methods into the older fused module and checks
+that R15's `_InvariantLinear.backward`, `_DenseExpertProjection` and
+`invariant_weight_gradient` remain byte-identical. All other changes use ordinary
+three-way git merging with explicit conflicts. There is no established R15 CUDA
+bug: the initial ancestor-dependency suspicion was corrected after reading the
+actual carrier references. No unrelated deferred-gradient machinery was imported.
+
+The package-only R15 tree did not include the coordinator's executable scripts.
+The composition includes the exact reviewed serving entry, queue runner and its
+process-custody import closure (engine guard, guardian and batch completion).
+Task cases, pinned base assets, Node runtime/npm/protection closure and existing
+provider SDK environment remain separately declared dependencies; none is
+replaced by a placeholder or a claim that source files are models.
+
+Each role has `role-control/{role}/publishing-manifest.json` and
+`control-material.json`. The existing publishing loader loads actual bound
+external sources, preserves installed module origins, and checks every six-file
+role authority. The future closures retain the exact reviewed `5778b3422` task-runtime continuation
+helper already staged in R14 (the host source closure predates that supplement).
+The final external raw-rounds override also contains the new
+actor-runtime declaration; updating only an installed package would have left
+this shadowed. These are **new future role maps**, not fallback authority for
+old R9/R12/R14 source-host proofs. Historical owner evidence stays unchanged.
+
+Future activation follows the existing verified later-runtime handoff at a
+natural stage/quantum boundary. The actual R14 owner/spec stays untouched. A new
+owner must really import this package and have a matching source plan, optimizer,
+RNG, exposure and geometry; no old source plan is relabeled. The copied reviewed
+controller retains those checks. Its existing binder is generalized only to an
+explicit `config.model` and mandatory `config.actor_runtime`, keeping the same
+actual-owner protocol and task-runtime checks. Review refs compare path/SHA
+with optional byte verification; the existing controller repair-proof producer
+retains its two-field own-source contract, with byte counts kept in frozen refs.
+
+Executable preparation uses three existing-purpose commands:
+
+- `compose_native_actor_runtime.py` builds a new physical tree, authenticating
+  the base construction, both source-control closures and publisher/controller/
+  binder sources. It refuses an existing output and grants no readiness.
+- `verify_native_actor_runtime.py --composition <existing tree> --out <receipt>`
+  verifies every source byte, imports both actual publishing closures in separate
+  CPU processes, checks their six maps and active factory keyword, and verifies
+  the collector custody import. It refuses checkpoint decoding and allocates no
+  model. Its result is metadata evidence, not CUDA or behavioral qualification.
+- `prepare_native_actor_role.py --composition <existing tree> --role lfm|mellum
+  --inputs <real inputs JSON> --out <new binder-config.json>` binds the real
+  `entry_root`, role bootstrap, actual root-review receipt, provider-readiness
+  receipt, publication configuration and frozen refs. Optional `task_runtime`
+  is retained. It requires the review to cover the actual composed controller
+  and binder and accepts path/SHA references with or without redundant bytes.
+  It creates no owner, learner, cloud process, checkpoint or readiness receipt.
+  The operator launches the existing binder only after the approved handoff.
+
+The input files above must be real; no runnable cloud binder-config is claimed
+before the new owner/bootstrap/root-review/provider bindings exist. Current
+provider-global imports and R14 training are never changed by the preparer.
+
+An existing binder may retain learner-root strings in a provider actor command.
+Explicit `actor_runtime` now rewrites only a recognized direct Python launcher
+or env-assignment wrapper followed by Python (`-u`/`-B` permitted) and the exact
+native serving script. Unknown custom executables, shell wrappers and Python
+`-c` commands fail explicitly. The original argv/declaration and learner command
+are preserved. Eight targeted tests and quick checks pass.
+
+Actual composed-kernel validation preimported and asserted the physical package
+and kernel path before pytest's conftest: 39 CUDA checks passed, with bitwise
+outputs/gradients, both-port adapted positional KV/hybrid captures and actual
+Mellum expert geometry. The first attempted run was misdirected by conftest and
+is **not** accepted as composition evidence. The final tree adds only metadata/
+command wiring and collector scripts; its kernel bytes match that qualified
+composition, so no duplicate model/GPU qualification was run. Both actual
+publishing closures passed metadata checks. Three role-material tests cover
+actual-input preservation, two-field review bindings and wrong-review/source
+tamper rejection. No full-size cloud RL or task-lift result is claimed.
+
+
+The final artifact also includes the exact three reviewed utility CLIs from
+`04bd86020` under `scripts/coreweave`, including the preparer's sibling imports.
+An actual artifact-only smoke pins all utility/native package origins, verifies
+all 372 files, and runs each CLI's `--help` from `/tmp`. It records no preparation
+execution, root approval, model allocation, GPU run, cloud mutation or readiness.
+The source host can run the preparer against its real absolute references.
