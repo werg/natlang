@@ -191,11 +191,14 @@ class ParameterCotangentScope:
         self._dense_linear_sequence = 0
         self._allocated_accumulator_bytes = 0
         self._scratch_peak_bytes = 0
+        self._live_accumulator_bytes = 0
+        self._peak_live_accumulator_bytes = 0
+        self._released_accumulator_bytes = 0
         for index, (name, parameter) in enumerate(unique.values()):
             initial_grad=parameter.grad if parameter.is_leaf else None
             self.entries[id(parameter)] = {'name': name, 'parameter': parameter,
                 'count': 0, 'path': os.path.join(self.directory, f'{index:06d}.f32'), 'accumulator': None,
-                'anchor_value': None, 'anchor_backward': 0, 'initial_grad': initial_grad,
+                'anchor_value': None, 'anchor_backward': 0, 'vjp_retired': False, 'initial_grad': initial_grad,
                 'initial_grad_value': None, 'reference_gradient_audited': False,
                 'initial_grad_version': None if initial_grad is None else initial_grad._version,
                 'expert_chunks': [], 'dense_linear_chunks': []}
@@ -251,6 +254,8 @@ class ParameterCotangentScope:
         return self
 
     def _audit_vjp_gradient(self, entry, gradient):
+        if entry.get('vjp_retired'):
+            raise RuntimeError(f"retired VJP cotangent reused: {entry['name']}")
         # Auxiliary adapter values are normally FP32. Their gradients already
         # fan in without the low-precision rounding this scope protects, and
         # explicit high-precision reference arithmetic intentionally bypasses
@@ -271,6 +276,12 @@ class ParameterCotangentScope:
         expected = entry['accumulator'].to(device=gradient.device, dtype=gradient.dtype)
         if not torch.equal(gradient, expected):
             raise RuntimeError(f"low-precision parameter gradient included an uncarried path: {entry['name']}")
+        if self.mode == 'vjp' and self.accumulator_backend == 'device_fp32':
+            size = entry['parameter'].numel() * 4
+            entry['accumulator'] = None
+            entry['vjp_retired'] = True
+            self._live_accumulator_bytes -= size
+            self._released_accumulator_bytes += size
         return gradient
 
     @classmethod
@@ -332,7 +343,7 @@ class ParameterCotangentScope:
         initial_grad=parameter.grad if parameter.is_leaf else None
         return {'name': name, 'parameter': parameter, 'count': 0,
             'path': os.path.join(self.directory, f'{index:06d}.f32'), 'accumulator': None,
-            'anchor_value': None, 'anchor_backward': 0, 'initial_grad': initial_grad,
+            'anchor_value': None, 'anchor_backward': 0, 'vjp_retired': False, 'initial_grad': initial_grad,
             'initial_grad_value': None, 'reference_gradient_audited': False,
             'initial_grad_version': None if initial_grad is None else initial_grad._version,
             'expert_chunks': [], 'dense_linear_chunks': []}
@@ -490,19 +501,23 @@ class ParameterCotangentScope:
         return source.as_strided(view.shape, view.stride(), target_offset)
 
     def _entry_for(self, parameter):
+        def active(entry):
+            if entry is not None and entry.get('vjp_retired'):
+                raise RuntimeError(f"retired VJP cotangent reused: {entry['name']}")
+            return entry
         entry = self.entries.get(id(parameter))
         if entry is not None:
-            return entry
+            return active(entry)
         entry = self._auxiliary_entries.get(id(parameter))
         if entry is not None:
-            return entry
+            return active(entry)
         storage = parameter.untyped_storage().data_ptr()
         matches = [candidate for entries in (self.entries.values(), self._auxiliary_entries.values())
                    for candidate in entries
                    if candidate['parameter'].untyped_storage().data_ptr() == storage]
         if len(matches) > 1:
             raise RuntimeError('cotangent view aliases multiple optimizer or auxiliary targets')
-        return matches[0] if matches else None
+        return active(matches[0]) if matches else None
 
     def new_backward(self):
         """Start another forward/backward microbatch in one optimizer update."""
@@ -828,6 +843,8 @@ class ParameterCotangentScope:
         entry['count'] += 1
 
     def _allocate_accumulator(self, entry):
+        if entry.get('vjp_retired'):
+            raise RuntimeError(f"retired VJP cotangent reused: {entry['name']}")
         parameter = entry['parameter']
         if self.accumulator_backend == 'device_fp32':
             accumulator = torch.zeros(parameter.shape, device=parameter.device, dtype=torch.float32)
@@ -835,7 +852,10 @@ class ParameterCotangentScope:
             # Sparse file mapping avoids a second full-model resident allocation.
             accumulator = torch.from_file(entry['path'], shared=True,
                 size=parameter.numel(), dtype=torch.float32).reshape(parameter.shape)
-        self._allocated_accumulator_bytes += parameter.numel() * 4
+        size = parameter.numel() * 4
+        self._allocated_accumulator_bytes += size
+        self._live_accumulator_bytes += size
+        self._peak_live_accumulator_bytes = max(self._peak_live_accumulator_bytes, self._live_accumulator_bytes)
         return accumulator
 
     def allocation_report(self):
@@ -843,6 +863,9 @@ class ParameterCotangentScope:
         entries = (*self.entries.values(), *self._auxiliary_entries.values())
         return {'backend': self.accumulator_backend,
                 'allocated_accumulator_bytes': self._allocated_accumulator_bytes,
+                'live_accumulator_bytes': self._live_accumulator_bytes,
+                'peak_live_accumulator_bytes': self._peak_live_accumulator_bytes,
+                'released_accumulator_bytes': self._released_accumulator_bytes,
                 'scratch_peak_bytes': self._scratch_peak_bytes,
                 'allocated_entries': sum(entry['accumulator'] is not None for entry in entries)}
 
@@ -932,6 +955,8 @@ class ParameterCotangentScope:
         # collected. Drop file-backed tensors and route/anchor references now
         # so unlinking the files also releases their mmap mappings promptly.
         for entry in (*self.entries.values(), *self._auxiliary_entries.values()):
+            if entry['accumulator'] is not None:
+                self._live_accumulator_bytes -= entry['parameter'].numel() * 4
             entry['accumulator'] = None
             entry['anchor_value'] = None
             entry.get('expert_chunks', []).clear()
@@ -961,6 +986,8 @@ class _ParameterCotangentAnchor(torch.autograd.Function):
     @staticmethod
     def backward(ctx, sentinel_gradient):
         entry = ctx.scope._entry_for(ctx.parameter)
+        if entry.get('vjp_retired'):
+            raise RuntimeError(f"retired VJP cotangent reused: {entry['name']}")
         ctx.scope._flush_dense_linear_chunks(ctx.parameter)
         ctx.scope._flush_expert_chunks(ctx.parameter)
         entry = ctx.scope._entry_for(ctx.parameter)

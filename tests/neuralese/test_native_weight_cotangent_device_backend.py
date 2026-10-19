@@ -49,7 +49,10 @@ def test_device_accumulator_matches_cpu_file_across_microbatches_and_optimizer_s
             assert torch.equal(left, right) if torch.is_tensor(left) else left == right
     assert reports[0]['backend'] == 'cpu_file'
     assert reports[1] == {'backend': 'device_fp32', 'allocated_accumulator_bytes': 4 * (7 * 11 + 7),
-                          'scratch_peak_bytes': 0, 'allocated_entries': 2}
+                          'scratch_peak_bytes': 0, 'allocated_entries': 2,
+                          'live_accumulator_bytes': 4 * (7 * 11 + 7),
+                          'peak_live_accumulator_bytes': 4 * (7 * 11 + 7),
+                          'released_accumulator_bytes': 0}
     assert torch.cuda.get_device_name(device)
 
 
@@ -165,6 +168,7 @@ def test_native_shared_graph_update_selects_backend_from_checkpoint_option(famil
         'nodes': [{'name': 'answer', 'token_ids': [4, 5, 6, 7, 8, 9],
                    'target_weights': [0, 0, 1, 1, 1, 1]}]}, tokenizer_fingerprint='tiny')
     outcomes = []
+    import copy
     rng = torch.cuda.get_rng_state().clone()
     for backend in ('cpu_file', 'device_fp32'):
         model = SharedStateModel(tiny(family).to(dtype=torch.bfloat16), (60, 61, 62, 63), rank=4).to(device)
@@ -178,8 +182,15 @@ def test_native_shared_graph_update_selects_backend_from_checkpoint_option(famil
                                          chunk_tokens=8)
         outcomes.append({'loss': loss.detach().clone(),
                          'state': {name: value.detach().clone() for name, value in model.state_dict().items()},
-                         'rng': torch.cuda.get_rng_state().clone()})
+                         'rng': torch.cuda.get_rng_state().clone(),
+                         'optimizer': copy.deepcopy(optimizer.state_dict())})
     assert torch.equal(outcomes[0]['loss'], outcomes[1]['loss'])
     assert torch.equal(outcomes[0]['rng'], outcomes[1]['rng'])
+    from torch.utils._pytree import tree_flatten
+    left, structure = tree_flatten(outcomes[0]['optimizer'])
+    right, other_structure = tree_flatten(outcomes[1]['optimizer'])
+    assert structure == other_structure
+    for a, b in zip(left, right):
+        assert torch.equal(a,b) if torch.is_tensor(a) else a == b
     for name in outcomes[0]['state']:
         assert torch.equal(outcomes[0]['state'][name], outcomes[1]['state'][name]), name
