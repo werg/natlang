@@ -137,6 +137,13 @@ def wait_collectors(children, queues, launch, *, min_free_mib, max_workers=None)
                               [index for index in sorted(paused) if index in pending and index not in running])
                 for index in candidates[:free_slots]:
                     queue, journal, entries = queues[index]
+                    if index in paused and not check_pause(index):
+                        # An operator may drain a paused case while other work
+                        # runs. Recheck its durable journal before resuming it.
+                        codes[index] = 75
+                        paused.discard(index)
+                        pending.remove(index)
+                        continue
                     if queue.read_bytes() != snapshots[index]:
                         raise ValueError('task evaluation queue changed before collector launch')
                     running[index] = launch(queue, journal, entries)

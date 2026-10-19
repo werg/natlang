@@ -601,3 +601,35 @@ def test_rolling_dispatch_does_not_resurrect_terminal_exit_75_or_failure(tmp_pat
     assert module.wait_collectors([], [(queue, journal, [entry])], launch,
         min_free_mib=20, max_workers=1) == [75 if event == 'operator_drain' else 2]
     assert launches == [queue]
+
+
+def test_rolling_dispatch_rechecks_paused_custody_after_other_work(tmp_path, monkeypatch):
+    import io
+    import json
+    from types import SimpleNamespace
+    from natlang_neuralese.eval import task_cadence as module
+    queues = []
+    for index in range(2):
+        directory = tmp_path / str(index); directory.mkdir()
+        queue, journal = directory / 'queue', directory / 'journal'
+        entry = {'index': index, 'key': f'task-{index}'}
+        queue.write_text(json.dumps(entry) + '\n')
+        queues.append((queue, journal, [entry]))
+    class Child:
+        def __init__(self, index): self.index = index
+        def poll(self):
+            if self.index == 0:
+                queues[0][1].write_text(json.dumps({'event': 'storage_pause', 'key': 'task-0',
+                    'minimum_free_mib': 20}) + '\n')
+                return 75
+            with queues[0][1].open('a') as stream:
+                stream.write(json.dumps({'event': 'operator_drain', 'key': 'task-0'}) + '\n')
+            return 0
+    launches = []
+    def launch(queue, journal, entries):
+        index = entries[0]['index']; launches.append(index)
+        return Child(index), io.StringIO()
+    monkeypatch.setattr(module.time, 'sleep', lambda _: None)
+    monkeypatch.setattr(module.shutil, 'disk_usage', lambda _: SimpleNamespace(free=100 * 1024**2))
+    assert module.wait_collectors([], queues, launch, min_free_mib=20, max_workers=1) == [75, 0]
+    assert launches == [0, 1]
