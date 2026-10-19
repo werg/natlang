@@ -1,6 +1,7 @@
 """Exact complete derivative comparison with CPU reference storage."""
 from __future__ import annotations
 import math
+import warnings
 import torch
 from ..common.hashing import canonical_json_sha256_hex
 
@@ -8,11 +9,15 @@ SCHEMA='natlang.native-complete-communication-gradients/1'
 
 
 def _existing_grad(tensor):
-    # Reading .grad on an ordinary nonleaf emits a warning, even though it is
-    # necessarily empty. Retained nonleaf grads remain part of the preservation
-    # contract.
+    # Nonleaf tensors may have a manually assigned .grad without retain_grad().
+    # Inspect the actual attribute; the warning describes default accumulation,
+    # not evidence that an existing gradient is absent.
     if not tensor.is_leaf and not tensor.retains_grad:
-        return None
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore',
+                message=r'The \.grad attribute of a Tensor that is not a leaf Tensor.*',
+                category=UserWarning)
+            return tensor.grad
     return tensor.grad
 
 

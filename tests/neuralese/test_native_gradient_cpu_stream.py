@@ -64,12 +64,14 @@ def test_streamed_backward_exception_restores_all_prior_grad_objects():
     assert torch.equal(parameter.grad, old)
 
 
-def test_streamed_nonleaf_input_preserves_existing_grad_object_and_value():
+@pytest.mark.parametrize('retain_grad', [False, True])
+def test_streamed_nonleaf_input_preserves_existing_grad_object_and_value(retain_grad):
     torch.manual_seed(77)
     parameter = torch.nn.Parameter(torch.randn(4, dtype=torch.float64))
     leaf = torch.randn(4, dtype=torch.float64, requires_grad=True)
     inputs = (leaf * 2).requires_grad_()
-    inputs.retain_grad()
+    if retain_grad:
+        inputs.retain_grad()
     old = torch.randn_like(inputs)
     expected_loss = (inputs * parameter).square().sum()
     expected = torch.autograd.grad(expected_loss, (inputs, parameter))

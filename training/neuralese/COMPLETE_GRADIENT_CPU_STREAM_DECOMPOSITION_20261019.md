@@ -32,6 +32,10 @@ graphs, including BF16 carrier fan-in, an unused leaf, preexisting parameter
 and input `.grad` objects/values (leaf and retained non-leaf inputs), explicit
 input gradients, backward exception cleanup, and a real cached graph transition
 fixture. Cached CPU gradients are verified to reach the observer one at a time.
+Manually assigned non-leaf input gradients are preserved even without
+`retain_grad()`: that flag controls future accumulation and cannot prove that
+an existing `.grad` attribute is empty. The accessor reads the actual attribute,
+suppressing only PyTorch's expected non-leaf-access warning in that narrow scope.
 CUDA peak evidence must report the complete
 transition peak, not just post-backward allocations. No live runtime is changed
 by this work.
