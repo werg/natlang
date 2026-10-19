@@ -107,3 +107,79 @@ def carry_qualification(reference, spec, *, package, inventory, roles, actor_ide
             'precision_transition': precision, 'ffn_transition': docs['ffn'],
             'numerical_measurement_performed': False, 'optimizer_updates': 0,
             'scope': 'Original measured runtime retained; only reviewed metadata execution changed'}
+
+
+def select_qualified_baseline(reference, spec, *, package, inventory, roles,
+                              actor_identity, config, parser):
+    """Select an actually measured baseline without passing its rejected optimization."""
+    request = json.loads(classification._checked(reference).read_text())
+    selection = {'execution_setting': 'ffn_chunk_tokens', 'mode': 0,
+                 'certificate': 'baseline_cached_reference'}
+    fields = {'gate_spec', 'performance', 'inventory', 'actor', 'ffn', 'failure'}
+    if (set(request) != fields | {'schema', 'selection'}
+            or request['schema'] != 'natlang.qualified-baseline-gradient-selection/1'
+            or request['selection'] != selection):
+        raise ValueError('baseline selection requires its exact typed execution certificate')
+    docs = {name: json.loads(classification._checked(request[name]).read_text()) for name in fields}
+    prior = docs['gate_spec']; transition = docs['ffn']
+    old_package = Path(prior['runtime']) / 'training/neuralese/natlang_neuralese'
+    equivalent = inventory_equivalence(resident.code_inventory(old_package), resident.code_inventory(package))
+    if (prior['runtime_code_sha256'] != equivalent['qualified_runtime_code']
+            or spec['runtime_code_sha256'] != equivalent['executing_runtime_code']
+            or prior['parent'] != spec['parent']
+            or docs['performance'].get('parent') != spec['parent']
+            or docs['performance'].get('runtime_code_sha256') != prior['runtime_code_sha256']
+            or docs['performance'].get('optimizer_updates_from_measurement') != 0
+            or docs['failure'].get('error') != 'actual-parent FFN boundary qualification failed'
+            or transition.get('schema') != 'natlang.native-ffn-chunk-transition-complete/1'
+            or transition.get('execution_setting') != 'ffn_chunk_tokens'
+            or transition.get('previous_mode') != 0 or transition.get('candidate_mode') != 4096
+            or transition.get('passed') is not False or transition.get('cross_mode_passed') is not False
+            or transition.get('cached_reference_passed') is not True
+            or transition.get('parent_checkpoint_sha256') != spec['parent']['sha256']
+            or transition.get('optimizer_updates') != 0 or transition.get('source_state_preserved') is not True):
+        raise ValueError('baseline selection lost the exact rejected optimization and measured parent')
+    actor = docs['actor']; observed = docs['inventory']
+    if (actor.get('passed') is not True or actor.get('parent') != spec['parent']
+            or actor.get('candidate_identity') != actor_identity or actor.get('optimizer_updates') != 0
+            or observed.get('parent') != spec['parent']
+            or observed.get('runtime_code_sha256') != prior['runtime_code_sha256']
+            or observed.get('inventory') != inventory or observed.get('roles') != roles
+            or observed.get('inventory_sha256') != resident.digest(inventory)
+            or observed.get('actual_count') != len(inventory)
+            or set(roles) != {'backbone', 'adapter', 'learned_input', 'learned_output'}
+            or any(not values for values in roles.values())):
+        raise ValueError('baseline selection changed the exact actor or complete optimizer cohort')
+    old_arguments = normalized_arguments(prior['trainer_arguments'], parser, prior)
+    new_arguments = normalized_arguments(spec['trainer_arguments'], parser, spec)
+    if old_arguments.get('ffn_chunk_tokens') != 4096 or new_arguments.get('ffn_chunk_tokens') != 0:
+        raise ValueError('baseline selection must explicitly replace only rejected FFN4096 with measured FFN0')
+    old_arguments['ffn_chunk_tokens'] = 0
+    if old_arguments != new_arguments:
+        raise ValueError('baseline selection changed another numerical trainer option')
+    baseline = transition['baseline_cached_reference']
+    candidate = transition['candidate_cached_reference']
+    complete = baseline.get('complete_gradient_qualification') or {}
+    selected_config = {**config, 'ffn_chunk_tokens': 0}
+    candidate_config = (candidate.get('complete_gradient_qualification') or {}).get('model_config') or {}
+    args = parser.parse_args(spec['trainer_arguments'])
+    from ..eval.native_gradients import validate_complete_proof
+    validate_complete_proof(complete, actor_identity, gradient_atol=args.gradient_atol)
+    if (baseline.get('passed') is not True or baseline.get('checkpoint_sha256') != spec['parent']['sha256']
+            or baseline.get('native_identity') != actor_identity
+            or baseline.get('gradient_scope') != 'complete-production-trainables'
+            or baseline.get('forward_atol', float('inf')) > args.forward_atol
+            or baseline.get('forward_max_abs', float('inf')) > args.forward_atol
+            or baseline.get('consumer_ce_abs', float('inf')) > args.forward_atol
+            or complete.get('model_config') != selected_config
+            or candidate_config != {**selected_config, 'ffn_chunk_tokens': 4096}
+            or candidate.get('passed') is not True
+            or complete.get('inventory') != inventory or complete.get('roles') != roles
+            or complete.get('derivative_comparison_count') != len(inventory) + 1):
+        raise ValueError('baseline selection lacks its exact complete mode0 forward/gradient measurement')
+    return {'schema': 'natlang.selected-qualified-gradient-baseline/1', 'passed': True,
+            'request': dict(reference), 'selection': selection, 'equivalence': equivalent,
+            'parent': spec['parent'], 'runtime_certificate': baseline,
+            'rejected_transition': request['ffn'], 'rejected_transition_passed': False,
+            'numerical_measurement_performed': False, 'optimizer_updates': 0,
+            'readiness_qualified': False, 'task_quality_qualified': False}

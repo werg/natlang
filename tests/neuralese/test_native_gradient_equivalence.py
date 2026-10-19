@@ -93,3 +93,68 @@ def test_changes_cannot_relabel_old_pass_as_current_qualification(tmp_path, monk
     with pytest.raises(ValueError):
         eq.carry_qualification(request(), current, package=package, inventory=inventory,
                                roles=roles, actor_identity=identity, parser=parser)
+
+
+def baseline_fixture(tmp_path, monkeypatch):
+    values = fixture(tmp_path, monkeypatch)
+    old, new, package, inventory, roles, identity, parser, current, docs, _ = values
+    parser.add_argument('--ffn-chunk-tokens', type=int)
+    docs['gate_spec']['trainer_arguments'].extend(['--ffn-chunk-tokens', '4096'])
+    current['trainer_arguments'].extend(['--ffn-chunk-tokens', '0'])
+    baseline = copy.deepcopy(docs['precision']['runtime_reference'])
+    baseline.update(consumer_ce_abs=0., forward_max_abs=0., channel_restore_exact=True,
+                    backbone_optimizer_updates=0)
+    baseline['complete_gradient_qualification']['model_config']['ffn_chunk_tokens'] = 0
+    baseline['complete_gradient_qualification']['model_config_sha256'] = res.digest(baseline['complete_gradient_qualification']['model_config'])
+    candidate = copy.deepcopy(baseline)
+    candidate['complete_gradient_qualification']['model_config']['ffn_chunk_tokens'] = 4096
+    candidate['complete_gradient_qualification']['model_config_sha256'] = res.digest(candidate['complete_gradient_qualification']['model_config'])
+    docs['ffn'] = {'schema': 'natlang.native-ffn-chunk-transition-complete/1',
+        'execution_setting': 'ffn_chunk_tokens', 'previous_mode': 0, 'candidate_mode': 4096,
+        'passed': False, 'cross_mode_passed': False, 'cached_reference_passed': True,
+        'parent_checkpoint_sha256': current['parent']['sha256'], 'optimizer_updates': 0,
+        'source_state_preserved': True, 'baseline_cached_reference': baseline,
+        'candidate_cached_reference': candidate}
+    docs['performance']['passed'] = False
+    docs['failure']['error'] = 'actual-parent FFN boundary qualification failed'
+    def request():
+        refs = {}
+        for name in ('gate_spec', 'performance', 'inventory', 'actor', 'ffn', 'failure'):
+            p = tmp_path / ('baseline-' + name + '.json'); p.write_text(json.dumps(docs[name])); refs[name] = _binding(p)
+        p = tmp_path / 'baseline-request.json'
+        p.write_text(json.dumps({'schema': 'natlang.qualified-baseline-gradient-selection/1',
+            'selection': {'execution_setting': 'ffn_chunk_tokens', 'mode': 0,
+                          'certificate': 'baseline_cached_reference'}, **refs}))
+        return _binding(p)
+    return values[:-1], request
+
+
+def test_measured_baseline_selection_keeps_rejected_transition_failed(tmp_path, monkeypatch):
+    values, request = baseline_fixture(tmp_path, monkeypatch)
+    _, _, package, inventory, roles, identity, parser, current, docs = values
+    result = eq.select_qualified_baseline(request(), current, package=package, inventory=inventory,
+        roles=roles, actor_identity=identity, config={'dtype': 'fp32'}, parser=parser)
+    assert result['runtime_certificate'] == docs['ffn']['baseline_cached_reference']
+    assert result['rejected_transition_passed'] is False and result['numerical_measurement_performed'] is False
+    assert result['selection']['mode'] == 0 and result['optimizer_updates'] == 0
+    assert docs['ffn']['passed'] is False
+
+
+@pytest.mark.parametrize('change', ['mode', 'other-option', 'config', 'model-code', 'parent',
+                                   'inventory', 'failed-baseline', 'failed-coordinate', 'actor'])
+def test_baseline_selection_rejects_unmeasured_execution(tmp_path, monkeypatch, change):
+    values, request = baseline_fixture(tmp_path, monkeypatch)
+    old, new, package, inventory, roles, identity, parser, current, docs = values
+    config = {'dtype': 'fp32'}
+    if change == 'mode': current['trainer_arguments'][-1] = '4096'
+    elif change == 'other-option': current['trainer_arguments'][current['trainer_arguments'].index('bf16x6')] = 'ieee'
+    elif change == 'config': config['dtype'] = 'bf16'
+    elif change == 'model-code': new['model/kernel.py'] = 'changed'
+    elif change == 'parent': current['parent'] = {**current['parent'], 'sha256': '0' * 64}
+    elif change == 'inventory': inventory[0] = {**inventory[0], 'dtype': 'torch.bfloat16'}
+    elif change == 'failed-baseline': docs['ffn']['baseline_cached_reference']['passed'] = False
+    elif change == 'failed-coordinate': docs['ffn']['baseline_cached_reference']['complete_gradient_qualification']['comparisons']['w']['passed'] = False
+    elif change == 'actor': identity = {**identity, 'model': 'other'}
+    with pytest.raises(ValueError):
+        eq.select_qualified_baseline(request(), current, package=package, inventory=inventory,
+            roles=roles, actor_identity=identity, config=config, parser=parser)

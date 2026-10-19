@@ -21,3 +21,10 @@ capacity remain mandatory.
 These are exact provenance/equality verifiers, hence crisp Python. This is one
 shared mechanism for both architectures. A new code transition requires its
 own reviewed hash pair; an arbitrary caller cannot authorize numerical changes.
+
+A rejected FFN optimization may separately contain a genuine complete baseline
+runtime certificate. The typed baseline selection verifies its exact FFN0 model
+configuration, full optimizer cohort, native actor identity and all derivatives;
+only the explicit 4096-to-0 execution choice may differ in the trainer arguments.
+It returns that original certificate unchanged and keeps the original overall
+transition failure. Fresh actor validation and whole-row capacity remain required.
