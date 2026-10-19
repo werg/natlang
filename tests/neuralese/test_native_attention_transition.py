@@ -47,13 +47,20 @@ def fixture(family,device="cpu",inactive=False,bf16=False):
 
 
 @pytest.mark.parametrize('family',['lfm','mellum'])
-def test_attention_transition_complete_vjps_use_bf16_parameter_cotangent_scopes(family):
-    model,optimizer,named,roles,config=fixture(family,bf16=True)
+@pytest.mark.parametrize('device',['cpu','cuda'])
+def test_attention_transition_complete_vjps_use_bf16_parameter_cotangent_scopes(family,device):
+    if device=='cuda'and not torch.cuda.is_available():pytest.skip('CUDA unavailable')
+    model,optimizer,named,roles,config=fixture(family,device=device,bf16=True)
+    backend='device_fp32'if device=='cuda'else'cpu_file'
+    model.native_cotangent_accumulator_backend=backend
     assert any(parameter.dtype is torch.bfloat16 for name,parameter in named if name.startswith('backbone.'))
     report=transition.qualify_attention_transition(model,Tokenizer(),roles,config,optimizer=optimizer,
         previous_mode='ieee',candidate_mode='ieee',checkpoint_sha256='a'*64,
         forward_atol=1e-4,gradient_atol=1e-5)
     assert report['cross_mode_passed'] and report['transition_equivalence']['passed']
+    assert report['cross_mode']['graph']['cotangent_accumulator_backends']=={'flat':backend,'cached':backend}
+    assert report['cross_mode']['cached']['cotangent_accumulator_backends']=={'flat':'cpu_file','cached':'cpu_file'}
+    assert model.native_cotangent_accumulator_backend==backend
     assert all(row['passed'] for execution in report['cross_mode'].values()
                for row in execution['comparisons'].values())
 

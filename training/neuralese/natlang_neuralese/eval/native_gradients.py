@@ -8,6 +8,17 @@ from ..common.hashing import canonical_json_sha256_hex
 SCHEMA='natlang.native-complete-communication-gradients/1'
 
 
+def cached_reference_cotangent_scope(model):
+    """Keep interleaved reference expert banks off the candidate's device.
+
+    Cached token-by-token backward can retain every layer's partial FP32 bank
+    until its last shared leaf use. Use the existing ordered CPU-file carrier;
+    candidate execution and the production optimizer retain their own backend.
+    """
+    from ..model.native_weight_carrier import ParameterCotangentScope
+    return ParameterCotangentScope.for_model(model, mode='vjp', accumulator_backend='cpu_file')
+
+
 def _existing_grad(tensor):
     # Nonleaf tensors may have a manually assigned .grad without retain_grad().
     # Inspect the actual attribute; the warning describes default accumulation,
@@ -234,6 +245,9 @@ def _compare_complete_gradients(flat_loss,cached_loss,named,flat_inputs,cached_i
         'retained_cached_gradient_map_bytes':0,
         'retained_cached_gradient_device':'none',
         'memory_scope':'the utility retains the flat CPU reference map and no cached result map; an external gradient observer may retain its own CPU snapshots, while live per-leaf backward gradients and saved activations remain additional',
+        'cotangent_accumulator_backends':{
+            'flat':getattr(flat_cotangent_scope,'accumulator_backend',None),
+            'cached':getattr(cached_cotangent_scope,'accumulator_backend',None)},
         'optimizer_updates':0,'atol':atol,'rtol':rtol}
 
 

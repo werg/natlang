@@ -196,8 +196,8 @@ def qualify_existing(model, tokenizer, roles, config, *, checkpoint_sha256, forw
             # Construct it only after the flat derivatives have been collected.
             def cached_forward():
                 nonlocal reference,reference_loss
-                from ..model.native_weight_carrier import ParameterCotangentScope
-                cached_scope=ParameterCotangentScope.for_model(model,mode='vjp')
+                from .native_gradients import cached_reference_cotangent_scope
+                cached_scope=cached_reference_cotangent_scope(model)
                 cached_scope.__enter__()
                 try:
                     if before_graph is not None:before_graph()

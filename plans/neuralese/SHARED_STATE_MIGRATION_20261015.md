@@ -927,3 +927,42 @@ in-flight work and the expanded state/effects/recovery curriculum. No additional
 sandbox or external teacher is required. A checksum-verified relocation of
 reusable source data to the external disk restored local root headroom to
 25.22GiB while retaining its original logical path.
+
+
+### Adaptive continuation, 2026-10-19 22:49 UTC
+
+Both learners have genuine resumed SGD: LFM was observed at18,036 on the
+corrected16-family operational task specification; Mellum at24,565 on the
+qualified R10 CPU-file profile. LFM has adopted1,433,779 training rows and25,955
+held rows; Mellum1,350,471 and25,968. Newly admitted sources remain distinct
+from adopted sources and completed visits. Foundation and whole-communication
+exposure debt, optimizer moments and RNG remain attached to their earned
+parents. Neither model has earned the pair's cross-model release readiness.
+
+R12 restored the exact Mellum24,564 parent and passed actor parity, then failed
+before SGD during the cached-reference backward: token-interleaved expert
+contributions kept multiple FP32 bank accumulators live until their final
+shared leaf use. The flat candidate backward had already completed. The
+restored R10 continuation preserves every earned update; the failed R12
+initial exporter is retired and actual R10-v3 monitoring/publication is bound
+to the observed owner and original qualified runtime. The24,557 historical
+private full export was independently downloaded and verified.
+
+The shared checker now places the explicit cached reference on the existing
+ordered CPU-file FP32 carrier while leaving the candidate and production
+backend unchanged. Both accumulator identities are recorded in complete
+gradient proofs. Every declared parameter and explicit input is still compared
+at the existing gates; cross-mode cached attention/FFN comparisons share this
+mechanism. Local tests passed89, plus4 CPU/CUDA cross-mode backend assertions
+across both architectures. Independent source review cleared the fix. A new
+cloud composition and actual capacity qualification remain required; these
+local checks grant no cloud qualification.
+
+The shared task runtime now binds genuine native writer and reader ports.
+A corrected public48-session measurement returned37 exact expected values and
+8/8 actual state-record writes; this is not held-task improvement evidence.
+Operational boundary continuations can bind the same exact built runtime to
+both task evaluation and the RAW RL collector, preserving the separate Python
+publication runtime. The complete runtime snapshot is prepared for deployment;
+existing learners have not silently adopted it. Continuous self-hosted Qwen
+generation and verified whole-trajectory admission continue.
