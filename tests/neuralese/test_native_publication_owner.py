@@ -1,0 +1,189 @@
+import json
+from pathlib import Path
+
+import pytest
+
+from natlang_neuralese.model.native_checkpoint_control import publication_selection
+from natlang_neuralese.rl import native_publication_owner as owner
+
+
+D24_ROOTS = [
+    '/work/data-preparation/acquired-d24-native-20261016-v2/preference-graphs-v6/capacity-envelope-candidate-v2',
+    '/work/data-preparation/d24-whole-pending-20261017-v1',
+]
+
+
+def _fixture(tmp_path, *, pointer=None):
+    runtime = Path(__file__).resolve().parents[2]
+    parent = tmp_path / 'parent.pt'
+    parent.write_bytes(b'complete optimizer parent')
+    output = tmp_path / 'rounds' / 'lfm' / 'cycles' / '000004' / 'supervised' / '001'
+    output.mkdir(parents=True)
+    selection = publication_selection(namespace='/work/native-production', readonly_input_roots=D24_ROOTS)
+    command = ['/usr/bin/python', '-u', '-m', owner.TRAINER_MODULE,
+        '--out', str(output / 'learner'), '--continue-from', str(parent),
+        '--checkpoint-publication', '--checkpoint-publication-namespace', selection['namespace'],
+        '--checkpoint-publication-readonly-input-roots', json.dumps(selection['readonly_input_roots'])]
+    config = {'native_participant': 'lfm', 'runtime': str(runtime), 'checkpoint': str(parent),
+        'native_checkpoint_publication': selection,
+        'native_checkpoint_publication_owner_pointer': str(pointer or tmp_path / 'control' / 'lfm-current-owner.json'),
+        'production_stage': 'native_full_sft', 'recipe_lineage_sha256': 'a' * 64,
+        'request_id': 'round-4-supervised-1'}
+    return config, command, output
+
+
+def test_emits_and_reads_exact_owner_generation_with_narrow_external_roots(tmp_path):
+    config, command, output = _fixture(tmp_path)
+    published = owner.emit_current(config, command, out=output, selected_checkpoint=config['checkpoint'])
+    manifest, reference = owner.read_owner(config['native_checkpoint_publication_owner_pointer'], role='lfm')
+    assert published['generation_sha256'] == manifest['generation_sha256']
+    assert reference == published['manifest']
+    assert manifest['publication_spec']['publication']['readonly_input_roots'] == D24_ROOTS
+    assert manifest['publication_spec']['parent']['path'] == config['checkpoint']
+    assert manifest['operation']['request_id'] == config['request_id']
+    assert manifest['operation']['out'] == str(output.resolve())
+    assert manifest['publication_spec']['effective_argv']['allowed_output_root'] == str(output.resolve())
+    assert published['qualification_credit'] is False
+
+
+@pytest.mark.parametrize('existing', [
+    {'schema': 'wrong/schema', 'role': 'lfm'},
+    {'schema': owner.POINTER_SCHEMA, 'role': 'mellum'},
+])
+def test_emitter_refuses_to_overwrite_pointer_for_another_role_or_schema(tmp_path, existing):
+    pointer = tmp_path / 'control' / 'current-owner.json'
+    pointer.parent.mkdir()
+    original = json.dumps(existing).encode()
+    pointer.write_bytes(original)
+    config, command, output = _fixture(tmp_path, pointer=pointer)
+    with pytest.raises(ValueError, match='another role/schema'):
+        owner.emit_current(config, command, out=output, selected_checkpoint=config['checkpoint'])
+    assert pointer.read_bytes() == original
+
+
+def test_each_supervised_quantum_gets_a_fresh_immutable_generation(tmp_path):
+    config, command, output = _fixture(tmp_path)
+    first = owner.emit_current(config, command, out=output, selected_checkpoint=config['checkpoint'])
+    second_output = tmp_path / 'rounds' / 'lfm' / 'cycles' / '000004' / 'supervised' / '002'
+    second_output.mkdir(parents=True)
+    second_parent = tmp_path / 'second-parent.pt'
+    second_parent.write_bytes(b'next complete optimizer parent')
+    second_config = {**config, 'checkpoint': str(second_parent), 'request_id': 'round-4-supervised-2'}
+    second_command = list(command)
+    second_command[second_command.index('--continue-from') + 1] = str(second_parent)
+    second_command[second_command.index('--out') + 1] = str(second_output / 'learner')
+    second = owner.emit_current(second_config, second_command, out=second_output, selected_checkpoint=second_parent)
+    assert first['generation_sha256'] != second['generation_sha256']
+    assert Path(first['manifest']['path']).is_file()
+    current, _ = owner.read_owner(config['native_checkpoint_publication_owner_pointer'], role='lfm')
+    assert current['generation_sha256'] == second['generation_sha256']
+    assert json.loads(Path(first['manifest']['path']).read_text())['generation_sha256'] == first['generation_sha256']
+
+
+def test_rejects_parent_and_readonly_selection_divergence(tmp_path):
+    config, command, output = _fixture(tmp_path)
+    bad = list(command)
+    bad[bad.index('--continue-from') + 1] = str(tmp_path / 'other.pt')
+    with pytest.raises(ValueError, match='parent differs'):
+        owner.emit_current(config, bad, out=output, selected_checkpoint=config['checkpoint'])
+    bad = list(command)
+    bad[bad.index('--checkpoint-publication-readonly-input-roots') + 1] = '[]'
+    with pytest.raises(ValueError, match='selection differs'):
+        owner.emit_current(config, bad, out=output, selected_checkpoint=config['checkpoint'])
+
+
+def test_owner_pointer_replacement_race_is_rejected(tmp_path, monkeypatch):
+    config, command, output = _fixture(tmp_path)
+    owner.emit_current(config, command, out=output, selected_checkpoint=config['checkpoint'])
+    pointer = Path(config['native_checkpoint_publication_owner_pointer'])
+    old = pointer.read_bytes()
+    original = owner.Path.read_bytes
+    done = {'value': False}
+
+    def replace_after_manifest(self):
+        value = original(self)
+        if self == pointer and not done['value']:
+            done['value'] = True
+            pointer.write_bytes(old + b' ')
+        return value
+
+    monkeypatch.setattr(owner.Path, 'read_bytes', replace_after_manifest)
+    with pytest.raises(ValueError, match='pointer changed'):
+        owner.read_owner(pointer, role='lfm')
+
+
+def test_retry_uses_live_selected_parent_and_content_addressed_command_in_same_output(tmp_path):
+    config, command, output = _fixture(tmp_path)
+    selected = tmp_path / 'selected-parent.pt'
+    selected.write_bytes(b'parent selected from durable owner state')
+    changed = list(command)
+    changed[changed.index('--continue-from')+1] = str(selected)
+    first = owner.emit_current(config, changed, out=output, selected_checkpoint=selected)
+    first_manifest = json.loads(Path(first['manifest']['path']).read_text())
+    first_command = first_manifest['publication_spec']['effective_argv']['path']
+    assert json.loads(Path(first_command).read_text()) == changed
+    assert first_manifest['publication_spec']['parent']['path'] == str(selected)
+
+    next_selected = tmp_path / 'next-selected-parent.pt'
+    next_selected.write_bytes(b'next parent selected from durable owner state')
+    changed[changed.index('--continue-from')+1] = str(next_selected)
+    second = owner.emit_current(config, changed, out=output, selected_checkpoint=next_selected)
+    second_manifest = json.loads(Path(second['manifest']['path']).read_text())
+    second_command = second_manifest['publication_spec']['effective_argv']['path']
+    assert first['generation_sha256'] != second['generation_sha256']
+    assert first_command != second_command
+    assert Path(first_command).is_file()
+    assert json.loads(Path(second_command).read_text()) == changed
+    assert second_manifest['publication_spec']['parent']['path'] == str(next_selected)
+    mismatched = list(changed)
+    mismatched[mismatched.index('--continue-from')+1] = str(selected)
+    with pytest.raises(ValueError, match='selected parent'):
+        owner.emit_current(config, mismatched, out=output, selected_checkpoint=next_selected)
+
+
+def test_supervised_execute_publishes_the_exact_expanded_trainer_command(tmp_path, monkeypatch):
+    from natlang_neuralese.rl import native_supervised as supervised
+    from natlang_neuralese.train import native_operation_report
+    from natlang_neuralese.train import recipe
+    from natlang_neuralese.model.native_checkpoint_control import publication_trainer_parameters
+
+    runtime = Path(__file__).resolve().parents[2]
+    parent = tmp_path / 'parent.pt'
+    parent.write_bytes(b'complete optimizer parent')
+    output = tmp_path / 'rounds' / 'lfm' / 'cycles' / '000004' / 'supervised' / '001'
+    selection = publication_selection(namespace='/work/native-production', readonly_input_roots=D24_ROOTS)
+    args = publication_trainer_parameters(selection)
+    trainer_args = ['--checkpoint-publication' if args['checkpoint_publication'] else '',
+        '--checkpoint-publication-namespace', args['checkpoint_publication_namespace'],
+        '--checkpoint-publication-readonly-input-roots', args['checkpoint_publication_readonly_input_roots']]
+    config = {'native_participant':'lfm','runtime':str(runtime),'checkpoint':str(parent),
+        'native_checkpoint_publication':selection,
+        'native_checkpoint_publication_owner_pointer':str(tmp_path/'control'/'lfm-current-owner.json'),
+        'native_checkpoint_publication_reserve_bytes':20*1024**3,
+        'production_stage':'native_full_sft','recipe_lineage_sha256':'a'*64,
+        'request_id':'round-4-supervised-1','out':str(output),
+        'trainer_parameters':{},
+        'seed_command':['/usr/bin/python','-u','-m',owner.TRAINER_MODULE,
+            '--out','{learner_out}','--continue-from','{checkpoint}','{trainer_args}']}
+    monkeypatch.setattr(recipe,'stage_parameter_args',lambda _:trainer_args)
+    captured={}
+    def run(command, values):
+        from natlang_neuralese.rl.production import expand_command
+        captured['command']=expand_command(command,values)
+        learner=Path(values['learner_out']);learner.mkdir(parents=True)
+        (learner/'checkpoint.pt').write_bytes(b'updated full checkpoint')
+        (learner/'report.json').write_text(json.dumps({'completed':True,'numerics_ok':True}))
+    monkeypatch.setattr('natlang_neuralese.rl.production.run_command',run)
+    monkeypatch.setattr(native_operation_report,'control_progress',lambda report,path:{'mandatory_sft':{'complete':True}})
+    selected_parent=output/'selected-parent.pt'
+    selected_parent.parent.mkdir(parents=True,exist_ok=True)
+    selected_parent.write_bytes(b'parent from current supervised state')
+    state={'checkpoint':str(selected_parent)}
+    state_path=tmp_path/'state.json'
+    result=supervised.execute(config,state,state_path,None)
+    assert result['phase']=='awaiting_semantic_refresh'
+    manifest,_=owner.read_owner(config['native_checkpoint_publication_owner_pointer'],role='lfm')
+    argv_ref=manifest['publication_spec']['effective_argv']
+    assert json.loads(Path(argv_ref['path']).read_text())==captured['command']
+    assert captured['command'][captured['command'].index('--continue-from')+1]==str(selected_parent)
+    assert captured['command'][captured['command'].index('--out')+1]==str(output/'learner')

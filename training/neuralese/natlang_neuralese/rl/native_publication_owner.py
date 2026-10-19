@@ -1,0 +1,148 @@
+"""Bind each supervised command to the publication exporter without decoding weights."""
+from __future__ import annotations
+import hashlib
+import json
+import os
+from pathlib import Path
+
+from ..common.jsonio import write_bytes_durable, write_json_durable
+from ..common.hashing import canonical_json_sha256_hex as digest
+from ..train.native_resident import binding, code_inventory
+from ..model.native_checkpoint_control import validate_publication_selection
+
+SCHEMA = 'natlang.owned-publication-owner/1'
+POINTER_SCHEMA = 'natlang.owned-publication-owner-current/1'
+TRAINER_MODULE = 'natlang_neuralese.train.native_state_sft'
+
+
+def _file_binding(path):
+    ref = binding(path)
+    ref['bytes'] = Path(ref['path']).stat().st_size
+    return ref
+
+
+def _write_immutable(path, raw):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists():
+        if path.is_symlink() or path.read_bytes() != raw:
+            raise ValueError('publication owner generation already has different bytes')
+        return
+    write_bytes_durable(path, raw)
+    if path.is_symlink() or path.read_bytes() != raw:
+        raise ValueError('publication owner generation changed during durable write')
+
+
+def _arg(command, name):
+    indices = [i for i, value in enumerate(command) if value == name]
+    if len(indices) != 1 or indices[0] + 1 >= len(command):
+        raise ValueError('publication owner command needs exactly one ' + name)
+    return command[indices[0] + 1]
+
+
+def emit_current(config, command, *, out, selected_checkpoint):
+    """Publish one exact quantum intent; it is not a liveness or progress claim."""
+    pointer_value = config.get('native_checkpoint_publication_owner_pointer')
+    if pointer_value is None:
+        return None
+    selection = validate_publication_selection(config.get('native_checkpoint_publication'))
+    role = config.get('native_participant')
+    if role not in ('lfm', 'mellum'):
+        raise ValueError('publication owner needs its exact model role')
+    pointer = Path(pointer_value)
+    if not pointer.is_absolute() or pointer.is_symlink():
+        raise ValueError('publication owner pointer must be an absolute nonsymlink path')
+    if pointer.exists():
+        existing_pointer = json.loads(pointer.read_text())
+        if (existing_pointer.get('schema') != POINTER_SCHEMA
+                or existing_pointer.get('role') != role):
+            raise ValueError('publication owner pointer belongs to another role/schema')
+    command = list(command)
+    if (len(command) < 4 or command[1:3] != ['-u', '-m'] or command[3] != TRAINER_MODULE
+            or any(not isinstance(arg, str) for arg in command)):
+        raise ValueError('publication owner needs the exact shared native SFT command')
+    runtime = Path(__file__).resolve().parents[4]
+    configured_runtime = config.get('runtime')
+    if configured_runtime is not None and Path(configured_runtime).resolve(strict=True) != runtime:
+        raise ValueError('publication owner runtime differs from its executing package')
+    package = runtime / 'training/neuralese/natlang_neuralese'
+    from ..train.native_resident import digest as canonical_digest
+    runtime_code = code_inventory(package)
+    runtime_sha = canonical_digest(runtime_code)
+    if any(not Path(selection[key]['path']).resolve(strict=True).is_relative_to(runtime)
+           for key in ('producer', 'dependency_producer')):
+        raise ValueError('publication producers escaped the executing runtime')
+    parent = _file_binding(selected_checkpoint)
+    if Path(_arg(command, '--continue-from')).resolve() != Path(parent['path']):
+        raise ValueError('publication owner selected parent differs from the actual trainer command')
+    output = Path(out).resolve()
+    command_output = Path(_arg(command, '--out')).resolve()
+    if command_output != (output / 'learner').resolve():
+        raise ValueError('publication owner output differs from the supervised job directory')
+    if '--checkpoint-publication' not in command:
+        raise ValueError('publication owner command disabled its declared publisher')
+    encoded_roots = json.loads(_arg(command, '--checkpoint-publication-readonly-input-roots'))
+    encoded_namespace = _arg(command, '--checkpoint-publication-namespace')
+    if (encoded_roots != selection['readonly_input_roots']
+            or encoded_namespace != selection['namespace']):
+        raise ValueError('publication owner selection differs from actual trainer arguments')
+    command_raw = (json.dumps(command, sort_keys=True, indent=2) + '\n').encode()
+    command_sha = hashlib.sha256(command_raw).hexdigest()
+    command_path = output / 'publication-owner' / 'commands' / (command_sha + '.json')
+    _write_immutable(command_path, command_raw)
+    operation = {key: config[key] for key in ('request_id', 'round_id', 'cycle_id',
+        'production_stage', 'recipe_lineage_sha256') if key in config}
+    operation.update(out=str(output), participant=role)
+    namespace = Path(selection['namespace']).resolve()
+    publication_spec = {'schema': 'natlang.owned-publication-export/1',
+        'role': role, 'runtime': str(runtime), 'runtime_code_sha256': runtime_sha,
+        'production_root': str(namespace), 'control_root': str(namespace/'control'),
+        'effective_argv': {**_file_binding(command_path), 'allowed_output_root': str(output)},
+        'parent': parent, 'publication': selection,
+        'pin_directory': str(namespace.parent/'production/durable-exports/current-owned-publications'/role),
+        'reserve_bytes': int(config.get('native_checkpoint_publication_reserve_bytes',20*1024**3))}
+    body = {'schema': SCHEMA, 'role': role, 'runtime': str(runtime),
+        'runtime_code_sha256': runtime_sha, 'package': {'path': str(package), 'code': runtime_code},
+        'operation': operation, 'publication_spec': publication_spec}
+    generation = digest(body)
+    body['generation_sha256'] = generation
+    manifest_raw = (json.dumps(body, sort_keys=True, indent=2) + '\n').encode()
+    manifest = output / 'publication-owner' / generation / 'manifest.json'
+    _write_immutable(manifest, manifest_raw)
+    pointer.parent.mkdir(parents=True,exist_ok=True)
+    write_json_durable(pointer, {'schema': POINTER_SCHEMA, 'role': role,
+        'generation_sha256': generation, 'owner': _file_binding(manifest)})
+    return {'generation_sha256': generation, 'manifest': _file_binding(manifest),
+        'pointer': str(pointer), 'parent': parent, 'runtime_code_sha256': runtime_sha,
+        'publication_roots': selection['readonly_input_roots'], 'qualification_credit': False}
+
+
+def read_owner(pointer, *, role):
+    """Local verifier used by controller-side tests and metadata-only inspectors."""
+    pointer = Path(pointer)
+    before = pointer.stat()
+    raw = pointer.read_bytes()
+    selected = json.loads(raw)
+    if selected.get('schema') != POINTER_SCHEMA or selected.get('role') != role:
+        raise ValueError('publication owner pointer belongs to another role/schema')
+    ref = selected['owner']
+    raw_manifest_path = Path(ref['path'])
+    if raw_manifest_path.is_symlink():
+        raise ValueError('publication owner manifest may not be a symlink')
+    manifest_path = raw_manifest_path.resolve(strict=True)
+    if (manifest_path.stat().st_size != ref.get('bytes')
+            or hashlib.sha256(manifest_path.read_bytes()).hexdigest() != ref['sha256']):
+        raise ValueError('publication owner manifest binding changed')
+    manifest = json.loads(manifest_path.read_bytes())
+    generation = manifest.pop('generation_sha256', None)
+    if digest(manifest) != generation or generation != selected['generation_sha256']:
+        raise ValueError('publication owner generation digest differs')
+    manifest['generation_sha256'] = generation
+    if (manifest.get('schema') != SCHEMA or manifest.get('role') != role
+            or manifest.get('publication_spec', {}).get('role') != role
+            or manifest['publication_spec'].get('runtime') != manifest.get('runtime')
+            or manifest['publication_spec'].get('runtime_code_sha256') != manifest.get('runtime_code_sha256')):
+        raise ValueError('publication owner manifest role/schema differs')
+    if pointer.stat() != before or pointer.read_bytes() != raw:
+        raise ValueError('publication owner pointer changed during read')
+    return manifest, {'path': str(manifest_path), 'sha256': ref['sha256'], 'bytes': ref['bytes']}

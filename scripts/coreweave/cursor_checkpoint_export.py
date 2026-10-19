@@ -10,6 +10,7 @@ import pathlib
 import re
 import subprocess
 import sys
+import threading
 import time
 
 
@@ -26,9 +27,14 @@ def bound_output_checkpoint(reference,role,*,production_root='/work/native-produ
     standard=pathlib.Path(production_root)/('mellum21'if role=='mellum'else'lfm25')
     allowed=pathlib.Path(reference.get('allowed_output_root',str(standard))).resolve()
     if allowed!=standard:
-        if (allowed.parent!=pathlib.Path(control_root).resolve()
-                or re.fullmatch(re.escape(role)+r'(?:[0-9a-f]{3,40})?-.+',allowed.name)is None):
-            raise ValueError('configured control output belongs to another role')
+        control=pathlib.Path(control_root).resolve()
+        control_output=(allowed.parent==control
+            and re.fullmatch(re.escape(role)+r'(?:[0-9a-f]{3,40})?-.+',allowed.name)is not None)
+        parts=allowed.relative_to(pathlib.Path(production_root).resolve()).parts
+        round_output=any(parts[index]=='rounds' and index+1<len(parts) and parts[index+1]==role
+                         for index in range(len(parts)))
+        if not (control_output or round_output):
+            raise ValueError('configured output is outside its role-owned control or round namespace')
     if not output.is_relative_to(allowed):raise ValueError('owner output escapes configured root')
     return output/'checkpoint.pt'
 
@@ -100,6 +106,156 @@ def run_once(directory, role, *, observe, export):
     try: os.fsync(fd)
     finally: os.close(fd)
     return {'verified_step': chosen['step'], 'sha256': identity['sha256'], 'source': chosen['source']}
+
+
+class OwnerFollowWorkers:
+    """Run full private exports outside the owner-polling thread."""
+    def __init__(self):
+        self._lock=threading.Lock();self._threads={};self._events=[];self._old_active=None;self._last_old=None
+
+    def _start(self, key, fn, *, old=False):
+        with self._lock:
+            current=self._threads.get(key)
+            if current is not None and current[0].is_alive():return False
+            if old and self._old_active is not None:
+                active=self._threads.get(self._old_active)
+                if active is not None and active[0].is_alive():return False
+                self._old_active=None
+            def work():
+                try:event={'key':key,'result':fn()}
+                except Exception as error:event={'key':key,'error':type(error).__name__}
+                with self._lock:
+                    self._events.append(event)
+                    if old and self._old_active==key:self._old_active=None
+            thread=threading.Thread(target=work,name='owned-publication-'+key[-12:],daemon=True)
+            self._threads[key]=(thread,None)
+            if old:
+                self._old_active=key
+                self._last_old=key.removeprefix('generation:')
+            thread.start()
+            return True
+
+    def start_current(self,generation,fn):
+        return self._start('generation:'+generation,fn)
+
+    def start_old(self,generation,fn):
+        return self._start('generation:'+generation,fn,old=True)
+
+    def wait(self,key):
+        with self._lock:item=self._threads.get(key)
+        if item is None:return None
+        item[0].join()
+        with self._lock:
+            event=next((value for value in reversed(self._events) if value['key']==key),None)
+        if event and event.get('error'):
+            raise RuntimeError('owned publication export worker failed: '+event['error'])
+        return event.get('result') if event else None
+
+    def drain_events(self):
+        with self._lock:
+            events=self._events;self._events=[]
+        return events
+
+    def next_old(self,candidates):
+        if not candidates:return None
+        with self._lock:
+            if self._old_active is not None:
+                active=self._threads.get(self._old_active)
+                if active is not None and active[0].is_alive():return None
+                self._old_active=None
+            start=(candidates.index(self._last_old)+1) % len(candidates) if self._last_old in candidates else 0
+            return candidates[start]
+
+
+def run_owner_follow_once(directory, role, *, observe, export, workers=None, wait_current=True):
+    """Follow the current immutable owner, preserving independent journals and retries."""
+    directory=pathlib.Path(directory);directory.mkdir(parents=True,exist_ok=True)
+    index_path=directory/'owned-publication-owner-index.json'
+    index=json.loads(index_path.read_text()) if index_path.exists() else {
+        'schema':'natlang.owned-publication-owner-index/1','role':role,'generations':[]}
+    if index.get('schema')!='natlang.owned-publication-owner-index/1' or index.get('role')!=role:
+        raise ValueError('owned publication index belongs to another role/schema')
+    current=index.get('current') or {}
+    generation=current.get('generation_sha256')
+    owner_root=directory/'owner-generations'
+    current_dir=owner_root/generation if generation else None
+    current_state=(json.loads(paths_for(current_dir,role)['state'].read_text())
+        if current_dir and paths_for(current_dir,role)['state'].exists() else {})
+    # Observe the pointer first. This cheap metadata-only read lets a new owner
+    # advance while an old generation's independent full-object upload retries.
+    observed=observe(known_owner_generation=generation,
+        known_sha256=(current_state.get('receipt') or {}).get('identity',{}).get('sha256'),
+        known_step=current_state.get('last_verified_step',-1))
+    owner=observed.get('owner') or {}
+    new_generation=owner.get('generation_sha256') if owner else None
+    if owner and (not isinstance(new_generation,str)
+            or re.fullmatch('[0-9a-f]{64}',new_generation) is None):
+        raise ValueError('remote owner observer omitted its exact generation')
+    pending_failures=[]
+    records={record['generation_sha256']:record for record in index['generations']}
+    if owner:
+        owner_dir=owner_root/new_generation
+        owner_dir.mkdir(parents=True,exist_ok=True)
+        selection_path=owner_dir/'owner-selection.json'
+        selection={'schema':'natlang.owned-publication-owner-selection/1',
+            'role':role,'generation_sha256':new_generation,'manifest':owner.get('manifest')}
+        if selection_path.exists():
+            if json.loads(selection_path.read_text())!=selection:
+                raise ValueError('owned publication generation changed its immutable manifest')
+        else:save(selection_path,selection)
+        records[new_generation]=selection
+        index={'schema':index['schema'],'role':role,'generations':list(records.values()),
+            'current':selection,'at':time.time()}
+        save(index_path,index)
+    if workers is not None:
+        current_result=None
+        if owner:
+            owner_dir=owner_root/new_generation
+            current_key='generation:'+new_generation
+            current_started=workers.start_current(new_generation,
+                lambda:run_once(owner_dir,role,observe=lambda **kwargs:observed,export=export))
+        else:
+            current_key=None;current_started=False
+        pending_old=[generation for generation in records if generation!=new_generation
+            and paths_for(owner_root/generation,role)['pending'].exists()]
+        old_generation=workers.next_old(pending_old)
+        old_started=False
+        if old_generation:
+            old_dir=owner_root/old_generation
+            old_started=workers.start_old(old_generation,
+                lambda:run_once(old_dir,role,observe=lambda **kwargs: (_ for _ in ()).throw(
+                    ValueError('pending publication recovery must not observe a new owner')),export=export))
+        if wait_current and current_key:
+            current_result=workers.wait(current_key)
+        return {'owner_generation':new_generation,'current_export_started':current_started,
+            'current_export':current_result,'old_export_started':old_started,
+            'pending_old_generations':pending_old,
+            'worker_events':workers.drain_events()} if owner else (
+                {'owner_pending':True,'old_export_started':old_started,
+                 'worker_events':workers.drain_events()} if pending_old else None)
+    # Recover each already selected upload without allowing an old owner to
+    # block backup from a newer supervised output.
+    for old_generation in list(records):
+        old_dir=owner_root/old_generation
+        pending=paths_for(old_dir,role)['pending']
+        if not pending.exists():continue
+        try:
+            run_once(old_dir,role,observe=lambda **kwargs: (_ for _ in ()).throw(
+                ValueError('pending publication recovery must not observe a new owner')),export=export)
+        except Exception as error:
+            pending_failures.append({'generation_sha256':old_generation,
+                'type':type(error).__name__})
+    if not owner:
+        return {'owner_pending':True,'pending_failures':pending_failures} if pending_failures else None
+    owner_dir=owner_root/new_generation
+    if paths_for(owner_dir,role)['pending'].exists():
+        # Keep the exact selected upload; the next owner poll can catch a later
+        # checkpoint once this generation's independent full GET succeeds.
+        return {'owner_generation':new_generation,'pending_upload':True,
+            'pending_failures':pending_failures}
+    result=run_once(owner_dir,role,observe=lambda **kwargs:observed,export=export)
+    if pending_failures and result is not None:result['pending_failures']=pending_failures
+    return result
 
 
 def remote_code(*, role, root, known, last, extra, pin_directory, minimum_available_bytes,
@@ -291,6 +447,7 @@ def main(argv=None):
     parser.add_argument('--publication-spec', type=pathlib.Path,
                         help='Exact owned-publication export specification; separate owner journal required')
     parser.add_argument('--publication-spec-sha256')
+    parser.add_argument('--publication-owner-pointer', help='Remote current-owner pointer produced by the supervised controller')
     parser.add_argument('--pin-directory', default='/work/production/durable-exports')
     parser.add_argument('--minimum-available-bytes', type=int, default=16*1024**3)
     parser.add_argument('--actor-view-directory', type=pathlib.Path)
@@ -305,6 +462,12 @@ def main(argv=None):
     parser.add_argument('--once', action='store_true')
     args = parser.parse_args(argv)
     publication = None
+    if args.publication_spec and args.publication_owner_pointer:
+        parser.error('choose one fixed publication selection or current-owner following')
+    if args.publication_owner_pointer and (args.bound_output or args.actor_view_directory or args.actor_view_runtime
+            or args.actor_view_sidecar or args.actor_view_sidecar_sha256 or args.training_summary_spec
+            or args.training_summary_runtime or args.checkpoint_control_spec):
+        parser.error('current-owner following uses the bound publication-only checkpoint control')
     if bool(args.publication_spec) != bool(args.publication_spec_sha256):
         parser.error('owned publication needs specification and exact SHA256 together')
     if args.publication_spec:
@@ -353,7 +516,16 @@ def main(argv=None):
     elif selection_path.exists():
         raise ValueError('owned publication journal cannot become a legacy cursor journal')
     def observe(**kwargs):
-        if publication is not None:
+        if args.publication_owner_pointer:
+            try:
+                from .owned_publication_export import owner_remote_code
+            except ImportError:
+                from scripts.coreweave.owned_publication_export import owner_remote_code
+            code=owner_remote_code(args.publication_owner_pointer,role=args.role,
+                known_generation=kwargs.get('known_owner_generation'),known_sha256=kwargs.get('known_sha256'),
+                known_step=kwargs.get('known_step',-1),production_root=args.root,
+                control_root=str(pathlib.Path(args.root)/'control'))
+        elif publication is not None:
             try:
                 from .owned_publication_export import remote_code as owned_code
             except ImportError:
@@ -378,20 +550,23 @@ def main(argv=None):
         actual = [item.replace('{role}', args.role).replace('{pin}', chosen['pin']) for item in command]
         environment={**os.environ, 'CW_EXPORT_RECEIPT_FILE': str(receipt_path),
                      'CW_EXPORT_SANDBOX_ID': args.sandbox_id, 'CW_EXPORT_VERIFY_REMOTE': '1'}
-        if publication is not None:
+        if publication is not None or args.publication_owner_pointer:
             environment.update(CW_EXPORT_EXPECTED_SHA256=chosen['sha256'],
                                CW_EXPORT_EXPECTED_BYTES=str(chosen['bytes']))
         subprocess.run(actual, check=True, env=environment)
         receipt=json.loads(receipt_path.read_text())
-        if publication is not None and receipt['identity'] != {'sha256':chosen['sha256'],'bytes':chosen['bytes']}:
+        if (publication is not None or args.publication_owner_pointer) and receipt['identity'] != {'sha256':chosen['sha256'],'bytes':chosen['bytes']}:
             raise ValueError('private export changed the exact owned publication identity')
-        if publication is not None and (receipt.get('private') is not True or receipt.get('role') != args.role
+        if (publication is not None or args.publication_owner_pointer) and (receipt.get('private') is not True or receipt.get('role') != args.role
                                        or receipt.get('sandbox_id') != args.sandbox_id):
             raise ValueError('owned publication needs its exact private role/sandbox receipt')
         return receipt
+    owner_workers=OwnerFollowWorkers() if args.publication_owner_pointer else None
     while True:
         try:
-            result = run_once(args.state_dir, args.role, observe=observe, export=export)
+            result = (run_owner_follow_once(args.state_dir,args.role,observe=observe,export=export,
+                                            workers=owner_workers,wait_current=args.once)
+                      if args.publication_owner_pointer else run_once(args.state_dir,args.role,observe=observe,export=export))
             if result: print(json.dumps({'at': time.time(), **result}), flush=True)
             if args.once: return 0
             time.sleep(args.interval)

@@ -101,9 +101,16 @@ def test_default_remote_code_is_byte_identical_when_sidecar_unused(tmp_path):
     spec=importlib.util.spec_from_file_location('published_actor_exporter',original_path)
     original=importlib.util.module_from_spec(spec);spec.loader.exec_module(original)
     options=dict(role='lfm',root='/root',known={},last=0,extra=None,pin_directory='/pins',minimum_available_bytes=0)
-    assert module.remote_code(**options)==original.remote_code(**options).replace('cycles/*/supervised/*/learner/checkpoint.pt','cycles/*/supervised/*/**/learner/checkpoint.pt')
+    import inspect
+    old_bound=inspect.getsource(original.bound_output_checkpoint)
+    new_bound=inspect.getsource(module.bound_output_checkpoint)
+    expected=original.remote_code(**options).replace(old_bound,new_bound).replace(
+        'cycles/*/supervised/*/learner/checkpoint.pt','cycles/*/supervised/*/**/learner/checkpoint.pt')
+    assert module.remote_code(**options)==expected
     options.update(actor_view_directory='/views',actor_view_runtime='/runtime')
-    assert module.remote_code(**options)==original.remote_code(**options).replace('cycles/*/supervised/*/learner/checkpoint.pt','cycles/*/supervised/*/**/learner/checkpoint.pt')
+    expected=original.remote_code(**options).replace(old_bound,new_bound).replace(
+        'cycles/*/supervised/*/learner/checkpoint.pt','cycles/*/supervised/*/**/learner/checkpoint.pt')
+    assert module.remote_code(**options)==expected
 
 
 def test_completed_remote_observation_recovers_after_lost_rpc_without_decode(tmp_path):
@@ -158,3 +165,197 @@ def test_empty_remote_observation_does_not_hide_a_later_actual_checkpoint(tmp_pa
     torch.save({'step':8,'training':{'optimizer':{'moment':torch.tensor([2.])},'rng':{'cpu':torch.get_rng_state()},'source_receipts':[{'actual':True}]}},slot)
     found=subprocess.run([sys.executable,'-c',wrapped],capture_output=True,text=True,check=True,timeout=30)
     assert json.loads(found.stdout)['chosen']['step']==8
+
+
+def test_owner_following_uses_new_generation_journal_without_erasing_old(tmp_path):
+    generations=['1'*64,'2'*64]
+    calls=[];exports=[]
+    def observe(**kwargs):
+        calls.append(kwargs)
+        index=len(calls)-1
+        generation=generations[min(index,1)]
+        chosen={'source':f'round-{index}/learner/checkpoint.pt','pin':f'pin-{index}.pt',
+                'step':10+index,'bytes':123}
+        return {'owner':{'generation_sha256':generation,
+                         'manifest':{'path':f'/owner-{index}.json','sha256':generation,'bytes':12}},
+                'chosen':chosen,'observations':{}}
+    def export(chosen,path):
+        exports.append(chosen)
+        return {'source':chosen['pin'],'identity':{'sha256':'f'*64,'bytes':chosen['bytes']},
+                'independent_verification':{'sha256':'f'*64,'bytes':chosen['bytes']}}
+    first=module.run_owner_follow_once(tmp_path,'lfm',observe=observe,export=export)
+    second=module.run_owner_follow_once(tmp_path,'lfm',observe=observe,export=export)
+    assert first['verified_step']==10 and second['verified_step']==11
+    assert calls[0]['known_owner_generation'] is None
+    assert calls[1]['known_owner_generation']=='1'*64
+    index=json.loads((tmp_path/'owned-publication-owner-index.json').read_text())
+    assert index['current']['generation_sha256']=='2'*64
+    assert {row['generation_sha256'] for row in index['generations']}==set(generations)
+    assert module.paths_for(tmp_path/'owner-generations'/('1'*64),'lfm')['state'].exists()
+    assert module.paths_for(tmp_path/'owner-generations'/('2'*64),'lfm')['state'].exists()
+    assert len(exports)==2
+
+
+def test_owned_output_path_may_follow_only_role_named_round_tree(tmp_path):
+    production=tmp_path/'native-production';round_out=production/'shared/deployment/rounds/lfm/cycles/4/supervised/1/learner'
+    round_out.mkdir(parents=True);argv=tmp_path/'argv.json';argv.write_text(json.dumps(['python','--out',str(round_out)]))
+    ref={'path':str(argv),'sha256':hashlib.sha256(argv.read_bytes()).hexdigest(),
+         'allowed_output_root':str(round_out.parent)}
+    assert module.bound_output_checkpoint(ref,'lfm',production_root=production,
+        control_root=production/'control')==round_out/'checkpoint.pt'
+    foreign=production/'shared/deployment/rounds/mellum/cycles/4/supervised/1/learner';foreign.mkdir(parents=True)
+    argv.write_text(json.dumps(['python','--out',str(foreign)]));ref.update(sha256=hashlib.sha256(argv.read_bytes()).hexdigest(),allowed_output_root=str(foreign.parent))
+    with pytest.raises(ValueError,match='outside its role-owned'):
+        module.bound_output_checkpoint(ref,'lfm',production_root=production,control_root=production/'control')
+
+
+def test_owner_following_keeps_failed_old_upload_while_publishing_new_owner(tmp_path):
+    calls=[]
+    def observe(**kwargs):
+        generation='1'*64 if not calls else '2'*64
+        calls.append(kwargs)
+        index=len(calls)-1
+        return {'owner':{'generation_sha256':generation,
+            'manifest':{'path':f'/manifest-{index}','sha256':generation,'bytes':10}},
+            'chosen':{'source':f'source-{index}','pin':f'pin-{index}.pt','step':20+index,'bytes':10},
+            'observations':{}}
+    def export(chosen,path):
+        if chosen['pin']=='pin-0.pt':raise OSError('old full GET is retrying')
+        return {'source':chosen['pin'],'identity':{'sha256':'a'*64,'bytes':10},
+            'independent_verification':{'sha256':'a'*64,'bytes':10}}
+    with pytest.raises(OSError):
+        module.run_owner_follow_once(tmp_path,'lfm',observe=observe,export=export)
+    second=module.run_owner_follow_once(tmp_path,'lfm',observe=observe,export=export)
+    assert second['verified_step']==21 and len(second['pending_failures'])==1
+    assert second['pending_failures'][0]['generation_sha256']=='1'*64
+    index=json.loads((tmp_path/'owned-publication-owner-index.json').read_text())
+    assert index['current']['generation_sha256']=='2'*64
+    old=module.paths_for(tmp_path/'owner-generations'/('1'*64),'lfm')
+    new=module.paths_for(tmp_path/'owner-generations'/('2'*64),'lfm')
+    assert old['pending'].exists() and new['state'].exists()
+
+
+def test_owner_follower_current_private_export_runs_while_old_get_is_blocked(tmp_path):
+    import threading
+    generations=['1'*64,'2'*64];observations=[];export_calls=[]
+    old_entered=threading.Event();release_old=threading.Event();new_finished=threading.Event()
+    workers=module.OwnerFollowWorkers()
+    def observe(**kwargs):
+        index=len(observations);observations.append(kwargs);generation=generations[min(index,1)]
+        return {'owner':{'generation_sha256':generation,
+            'manifest':{'path':f'/manifest-{index}','sha256':generation,'bytes':10}},
+            'chosen':{'source':f'source-{index}','pin':f'pin-{index}.pt','step':30+index,'bytes':10},
+            'observations':{}}
+    def export(chosen,path):
+        export_calls.append((chosen,path))
+        if len(export_calls)==1:raise OSError('first private GET fails after durable pending selection')
+        if generations[0] in str(path):
+            old_entered.set()
+            if not release_old.wait(5):raise TimeoutError('old private GET fixture was not released')
+        else:
+            if not old_entered.wait(5):raise AssertionError('old export was not actually blocked before current export')
+            new_finished.set()
+        return {'source':chosen['pin'],'identity':{'sha256':'a'*64,'bytes':chosen['bytes']},
+            'independent_verification':{'sha256':'a'*64,'bytes':chosen['bytes']}}
+    with pytest.raises(RuntimeError,match='export worker failed'):
+        module.run_owner_follow_once(tmp_path,'lfm',observe=observe,export=export,
+            workers=workers,wait_current=True)
+    assert module.paths_for(tmp_path/'owner-generations'/generations[0],'lfm')['pending'].exists()
+    second=module.run_owner_follow_once(tmp_path,'lfm',observe=observe,export=export,
+        workers=workers,wait_current=True)
+    assert second['owner_generation']==generations[1]
+    assert second['current_export']['verified_step']==31
+    assert new_finished.is_set() and old_entered.is_set()
+    assert not release_old.is_set()  # current full private export completed while old GET remained blocked
+    release_old.set()
+    old_result=workers.wait('generation:'+generations[0])
+    assert old_result['verified_step']==30
+    assert module.paths_for(tmp_path/'owner-generations'/generations[0],'lfm')['state'].exists()
+
+
+def test_owner_follower_rotates_between_two_pending_old_generations_after_retry(tmp_path):
+    import pytest
+    old_generations=['1'*64,'2'*64]
+    current_generation='3'*64
+    owner_root=tmp_path/'owner-generations'
+    index={'schema':'natlang.owned-publication-owner-index/1','role':'lfm',
+        'generations':[{'generation_sha256':value} for value in old_generations],
+        'current':None}
+    (tmp_path/'owned-publication-owner-index.json').write_text(json.dumps(index))
+    for generation in old_generations:
+        paths=module.paths_for(owner_root/generation,'lfm')
+        paths['pending'].parent.mkdir(parents=True,exist_ok=True)
+        module.save(paths['pending'],{'source':'pin-'+generation,'pin':'pin-'+generation,
+            'step':10,'bytes':4})
+    workers=module.OwnerFollowWorkers()
+    attempts=[]
+    def observe(**kwargs):
+        return {'owner':{'generation_sha256':current_generation,
+            'manifest':{'path':'/manifest-current','sha256':current_generation,'bytes':10}},
+            'chosen':{'source':'current-source','pin':'current-pin','step':11,'bytes':4},
+            'observations':{}}
+    def export(chosen,path):
+        generation=Path(path).parent.name
+        attempts.append(generation)
+        if generation==old_generations[0]:
+            raise OSError('temporary failure; retain this old pending export')
+        return {'source':chosen['pin'],'identity':{'sha256':'a'*64,'bytes':chosen['bytes']},
+            'independent_verification':{'sha256':'a'*64,'bytes':chosen['bytes']}}
+    first=module.run_owner_follow_once(tmp_path,'lfm',observe=observe,export=export,
+        workers=workers,wait_current=True)
+    assert first['old_export_started']
+    try:
+        workers.wait('generation:'+old_generations[0])
+    except RuntimeError as error:
+        assert 'worker failed' in str(error)
+    assert old_generations[0] in attempts
+    assert module.paths_for(owner_root/old_generations[0],'lfm')['pending'].exists()
+    second=module.run_owner_follow_once(tmp_path,'lfm',observe=observe,export=export,
+        workers=workers,wait_current=True)
+    assert second['old_export_started']
+    workers.wait('generation:'+old_generations[1])
+    assert old_generations[0] in attempts and old_generations[1] in attempts
+    assert attempts.index(old_generations[0]) < attempts.index(old_generations[1])
+    assert module.paths_for(owner_root/old_generations[0],'lfm')['pending'].exists()
+    assert not module.paths_for(owner_root/old_generations[1],'lfm')['pending'].exists()
+
+
+def test_current_owner_cli_builds_remote_control_root_without_path_alias(tmp_path,monkeypatch):
+    import sys
+    from types import SimpleNamespace
+    from scripts.coreweave import cwctl
+    monkeypatch.setitem(sys.modules,'cwctl',cwctl)
+    captured={}
+    class Rpc:
+        def result(self,timeout):
+            return SimpleNamespace(returncode=0,stdout=json.dumps({'owner':None,'chosen':None,'observations':{}}),stderr='')
+    class Sandbox:
+        def exec(self,argv,timeout_seconds):
+            captured['code']=argv[2]
+            return Rpc()
+    monkeypatch.setattr(cwctl,'load_env_file',lambda:None)
+    monkeypatch.setattr(cwctl,'require_key',lambda:None)
+    monkeypatch.setattr(cwctl,'read_sandbox',lambda sandbox_id,patience:Sandbox())
+    root=tmp_path/'native-production'
+    state=tmp_path/'owner-journal'
+    pointer=root/'control'/'lfm-current-owner.json'
+    result=module.main(['--role','lfm','--sandbox-id','fixture','--root',str(root),
+        '--state-dir',str(state),'--export-command','["true"]',
+        '--publication-owner-pointer',str(pointer),'--once'])
+    assert result==0
+    assert str(root/'control') in captured['code']
+
+
+def test_remote_owner_observer_code_compiles_and_waits_for_first_owner(tmp_path):
+    from scripts.coreweave.owned_publication_export import owner_remote_code
+    code=owner_remote_code(str(tmp_path/'control'/'lfm-current-owner.json'),role='lfm',
+        production_root=str(tmp_path),control_root=str(tmp_path/'control'))
+    compile(code,'remote-owner-observer','exec')
+    result=subprocess.run([sys.executable,'-c',code],capture_output=True,text=True,check=True)
+    assert json.loads(result.stdout)=={'owner':None,'chosen':None,'observations':{}}
+    pointer=tmp_path/'control'/'lfm-current-owner.json';pointer.parent.mkdir(parents=True)
+    pointer.symlink_to(tmp_path/'missing-target.json')
+    code=owner_remote_code(str(pointer),role='lfm',production_root=str(tmp_path),
+        control_root=str(tmp_path/'control'))
+    result=subprocess.run([sys.executable,'-c',code],capture_output=True,text=True)
+    assert result.returncode and 'pointer may not be a symlink' in result.stderr

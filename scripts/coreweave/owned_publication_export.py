@@ -119,3 +119,89 @@ def observe_publication(spec, *, known_sha256=None, known_step=-1, verify=None):
         'bytes': checkpoint['bytes'], 'sha256': checkpoint['sha256'],
         'checkpoint_control': reference, 'publication_selection': selected,
         'owned_parent': spec['parent'], 'tensor_decodes': 0}
+
+
+def verify_owner_pointer(pointer_path, *, role, production_root='/work/native-production',
+                         control_root='/work/native-production/control'):
+    """Resolve one exact controller-selected owner manifest and detect pointer races."""
+    import hashlib
+    pointer = Path(pointer_path)
+    if not pointer.is_absolute() or pointer.is_symlink():
+        raise ValueError('owned publication pointer must be an absolute nonsymlink file')
+    control = Path(control_root).resolve()
+    if not pointer.resolve(strict=True).is_relative_to(control):
+        raise ValueError('owned publication pointer escaped its controller namespace')
+    pointer_stat = pointer.stat()
+    pointer_raw = pointer.read_bytes()
+    selected = json.loads(pointer_raw)
+    if (selected.get('schema') != 'natlang.owned-publication-owner-current/1'
+            or selected.get('role') != role):
+        raise ValueError('owned publication pointer belongs to another role/schema')
+    reference = selected.get('owner') or {}
+    raw_manifest_path = Path(reference.get('path', ''))
+    if raw_manifest_path.is_symlink():
+        raise ValueError('owned publication manifest may not be a symlink')
+    manifest_path = raw_manifest_path.resolve(strict=True)
+    production = Path(production_root).resolve()
+    if (not manifest_path.is_relative_to(production)
+            or manifest_path.stat().st_size != reference.get('bytes')
+            or hashlib.sha256(manifest_path.read_bytes()).hexdigest() != reference.get('sha256')):
+        raise ValueError('owned publication manifest escaped or changed its bound production artifact')
+    manifest = json.loads(manifest_path.read_bytes())
+    generation = manifest.pop('generation_sha256', None)
+    raw = json.dumps(manifest, ensure_ascii=False, sort_keys=True, separators=(',', ':')).encode()
+    if (hashlib.sha256(raw).hexdigest() != generation
+            or generation != selected.get('generation_sha256')
+            or manifest.get('schema') != 'natlang.owned-publication-owner/1'
+            or manifest.get('role') != role):
+        raise ValueError('owned publication manifest generation or identity differs')
+    if (pointer.stat() != pointer_stat or pointer.read_bytes() != pointer_raw):
+        raise ValueError('owned publication pointer changed during read')
+    manifest['generation_sha256'] = generation
+    return manifest, {'path': str(manifest_path), 'sha256': reference['sha256'],
+        'bytes': reference['bytes']}, (pointer_stat.st_dev, pointer_stat.st_ino,
+        pointer_stat.st_size, pointer_stat.st_mtime_ns, hashlib.sha256(pointer_raw).hexdigest())
+
+
+def owner_remote_code(pointer_path, *, role, known_generation=None, known_sha256=None,
+                      known_step=-1, production_root='/work/native-production',
+                      control_root='/work/native-production/control'):
+    """Observe whatever exact learner the supervisor has most recently selected."""
+    helper_source = inspect.getsource(verify_owner_pointer)
+    source = (
+        'import hashlib,json,os,pathlib,re,shutil,subprocess,sys,uuid\nfrom pathlib import Path\n'
+        + 'POINTER=' + repr(str(pointer_path)) + '\nROLE=' + repr(role) + '\n'
+        + 'PRODUCTION_ROOT=' + repr(production_root) + '\nCONTROL_ROOT=' + repr(control_root) + '\n'
+        + helper_source + '\n'
+        + "if Path(POINTER).is_symlink():raise ValueError('owned publication pointer may not be a symlink')\n"
+        + "if not Path(POINTER).exists():print(json.dumps({'owner':None,'chosen':None,'observations':{}}));sys.exit(0)\n"
+        + 'manifest,manifest_ref,pointer_signature=verify_owner_pointer(POINTER,role=ROLE,production_root=PRODUCTION_ROOT,control_root=CONTROL_ROOT)\n'
+        + "SPEC=manifest.get('publication_spec') or {}\n"
+        + "if SPEC.get('schema')!='natlang.owned-publication-export/1' or SPEC.get('role')!=ROLE:raise ValueError('owned publication spec role/schema differs')\n"
+        + "runtime=Path(SPEC['runtime']).resolve(strict=True)\n"
+        + "if not runtime.is_relative_to(Path(PRODUCTION_ROOT).resolve()) and not str(runtime).startswith('/work/native-runtime/'):raise ValueError('owned publication runtime escaped qualified runtime roots')\n"
+        + "sys.path[:0]=[str(runtime/'training/neuralese'),str(runtime)]\n"
+        + 'from natlang_neuralese.train.native_resident import code_inventory,digest\n'
+        + "package=runtime/'training/neuralese/natlang_neuralese'\n"
+        + "if digest(code_inventory(package))!=SPEC['runtime_code_sha256'] or manifest.get('runtime_code_sha256')!=SPEC['runtime_code_sha256'] or manifest.get('package')!={'path':str(package),'code':code_inventory(package)}:raise ValueError('owned publication runtime inventory changed')\n"
+        + "from natlang_neuralese.model.native_checkpoint_control import validate_publication_selection\n"
+        + "selected=validate_publication_selection(SPEC['publication'])\n"
+        + "if selected['namespace']!=SPEC['production_root'] or Path(SPEC['control_root']).resolve()!=Path(CONTROL_ROOT).resolve():raise ValueError('owned publication roots differ from the current controller namespace')\n"
+        + "if any(not Path(selected[k]['path']).resolve(strict=True).is_relative_to(runtime) for k in ('producer','dependency_producer')):raise ValueError('owned publication producer escaped its runtime')\n"
+        + inspect.getsource(bound_output_checkpoint) + '\n'
+        + inspect.getsource(observe_publication) + '\n'
+        + "command_ref=SPEC['effective_argv'];command_path=Path(command_ref['path']).resolve(strict=True);command_raw=command_path.read_bytes()\n"
+        + "if len(command_raw)!=command_ref.get('bytes') or hashlib.sha256(command_raw).hexdigest()!=command_ref['sha256']:raise ValueError('owned publication effective command changed')\n"
+        + "command=json.loads(command_raw);parent=SPEC['parent']\n"
+        + "if (command[3:4]!=['natlang_neuralese.train.native_state_sft'] or command.count('--continue-from')!=1 or Path(command[command.index('--continue-from')+1]).resolve()!=Path(parent['path']).resolve() or command.count('--out')!=1 or Path(command[command.index('--out')+1]).resolve()!=(Path(SPEC['effective_argv']['allowed_output_root'])/'learner').resolve()):raise ValueError('owned publication command does not continue its selected parent/output')\n"
+        + "if '--checkpoint-publication' not in command or json.loads(command[command.index('--checkpoint-publication-readonly-input-roots')+1])!=selected['readonly_input_roots'] or command[command.index('--checkpoint-publication-namespace')+1]!=selected['namespace']:raise ValueError('owned publication command differs from its sealed producer selection')\n"
+        + "kwargs=dict(producer=selected['producer'],dependency_producer=selected['dependency_producer'],namespace=selected['namespace'],readonly_input_roots=selected['readonly_input_roots'])\n"
+        + 'known_generation=' + repr(known_generation) + '\n'
+        + 'known_sha256=' + repr(known_sha256) + '\nknown_step=' + repr(known_step) + '\n'
+        + 'if known_generation!=manifest.get("generation_sha256"):known_sha256=None;known_step=-1\n'
+        + "chosen=observe_publication(SPEC,known_sha256=known_sha256,known_step=known_step)\n"
+        + "again,again_ref,again_signature=verify_owner_pointer(POINTER,role=ROLE,production_root=PRODUCTION_ROOT,control_root=CONTROL_ROOT)\n"
+        + "if again_signature!=pointer_signature or again_ref!=manifest_ref or again.get('generation_sha256')!=manifest.get('generation_sha256'):raise ValueError('owned publication owner changed while its checkpoint was verified')\n"
+        + "print(json.dumps({'owner':{'generation_sha256':manifest['generation_sha256'],'manifest':manifest_ref},'chosen':chosen,'observations':{}}))\n"
+    )
+    return source

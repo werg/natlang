@@ -282,7 +282,8 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
     return report
 
 
-def run_command(template, values):
+def expand_command(template, values):
+    """Expand one deployment command into the exact argv used by run_command."""
     if not isinstance(template, list) or not template or any(not isinstance(v, str) for v in template):
         raise ValueError('RL deployment commands must be nonempty argv lists')
     command = []
@@ -296,6 +297,11 @@ def run_command(template, values):
             command.pop()
             continue
         command.append(part)
+    return command
+
+
+def run_command(template, values):
+    command = expand_command(template, values)
     control = values.get('_run_control')
     if control is None:
         subprocess.run(command, check=True)

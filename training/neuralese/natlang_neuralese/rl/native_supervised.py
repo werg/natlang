@@ -245,6 +245,13 @@ def execute(config,state,state_path,control):
     if reused is not None:state['resumed_current_source_inputs']=reused
     state.update(phase='updating_mandatory_sft',pending_update_kind='mandatory_sft')
     write_json_durable(state_path,state)
+    if config.get('native_checkpoint_publication_owner_pointer') is not None:
+        from .production import expand_command
+        from .native_publication_owner import emit_current
+        effective_command=expand_command(command,values)
+        state['checkpoint_publication_owner']=emit_current(config,effective_command,
+            out=config['out'],selected_checkpoint=values['checkpoint'])
+        write_json_durable(state_path,state)
     run_command(command,values)
     checkpoint=directory/'checkpoint.pt'
     if not checkpoint.is_file() or not report_path.is_file():
