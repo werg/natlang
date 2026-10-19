@@ -27,3 +27,8 @@ step4 remains an assigned followup: a focused CUDA check found a small differenc
 already after the first LFM convolution/FFN layer; CPU both-port checks were
 exact. The existing sequential prefix is retained pending localization and
 appropriate actual-actor qualification; no tolerance was widened.
+
+Unadapted no-grad execution also omits the per-round parameter inventory walk
+used only to decide whether an autograd cotangent carrier is needed. Functional
+adapters still resolve/substitute exactly; gradient-enabled VJPs retain the same
+parameter discovery and carrier routing.

@@ -302,6 +302,12 @@ def run_native(engine, callback, entries=None, *, leaves=None, gradient_precisio
         token = _ACTIVE.set((*_ACTIVE.get(), (engine, identity, binding, entries, set(), {}, gradient_precision or 'storage', lifecycle)))
         try:
             if not resolved:
+                # No autograd carrier is consumed in inference. Avoid scanning
+                # every layer parameter/buffer on each unadapted decode round.
+                # Grad-enabled VJPs and functional adapter substitution retain
+                # their complete original routing below.
+                if not torch.is_grad_enabled():
+                    return callback()
                 # A serving model is normally frozen, so retain the exact old
                 # no-adapter fast path. A model-parameter VJP temporarily marks
                 # its selected BF16 leaves trainable; those uses still need the

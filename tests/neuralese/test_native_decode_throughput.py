@@ -85,3 +85,26 @@ def test_ordinary_training_keeps_explicit_zero_adapter_gradients(family):
         assert parameter.grad is not None
         assert torch.count_nonzero(parameter.grad)==0
 
+
+
+@pytest.mark.parametrize('family',['lfm','mellum'])
+def test_unadapted_inference_skips_parameter_discovery_but_gradient_execution_keeps_it(family,monkeypatch):
+    import threading
+    from natlang_neuralese.model import native_adapters
+    model=shared.SharedStateModel(tiny(family),(58,59,60,61),rank=4)
+    identity={'checkpoint_sha256':'a'*64}
+    engine=SimpleNamespace(shared_model=model,native_identity=identity,native_execution_lock=threading.RLock())
+    original=native_adapters.target_parameters
+    visits=[]
+    def parameters(value):visits.append(value);return original(value)
+    monkeypatch.setattr(native_adapters,'target_parameters',parameters)
+    def execute():
+        assert native_adapters.execution_identity(engine)==identity
+        return shared.native_step(model,torch.tensor([[3,4]]))['h_final']
+    with torch.inference_mode():actual=native_adapters.run_native(engine,execute)
+    assert not visits
+    expected=native_adapters.run_native(engine,execute)
+    assert visits==[model]
+    assert torch.equal(actual,expected.detach())
+    expected.square().sum().backward()
+    assert model.adapter.up.weight.grad is not None
