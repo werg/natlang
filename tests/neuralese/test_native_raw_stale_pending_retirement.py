@@ -55,7 +55,7 @@ def stale_round(tmp_path,monkeypatch,request):
     quiescence_path=tmp_path/'provider-quiescence.json'
     write(quiescence_path,{'schema':'natlang.supervisor-legacy-provider-quiescence/1',
         'at':time.time(),'boot_id':boot,
-        'training_credit':0,'learner_checkpoint_mutations':[],
+        'training_credit':0,'learner_checkpoint_mutations':0,
         'units':[{'Id':unit,'ActiveState':'inactive','SubState':'dead','MainPID':'0'} for unit in (
             'cw-lfm-cpu26-keep-provider-20261018.service','cw-lfm-cpu26-keep-heartbeat-20261018.service',
             'cw-mellum-cpu26-actual-queue-provider-20261018.service','cw-mellum-cpu26-actual-queue-heartbeat-20261018.service')]})
@@ -82,6 +82,29 @@ def stale_round(tmp_path,monkeypatch,request):
 def retire(x):
     return raw.retire_stale_pending_raw_round(x['config'],x['root']/'cycle.json',x['authority'],
         x['receipt'],owned_controller_fd=x['fd'].fileno())
+
+
+def test_external_operator_verifies_but_does_not_take_over_live_owner_fd(stale_round,monkeypatch):
+    import os
+    x=stale_round
+    fd=x['fd'].fileno();pid=os.getpid();identity={'pid':pid,'boot_id':x['observed']['boot_id'],'start_ticks':'self'}
+    x['authority']['permitted_owner']['identity']=identity
+    argv=x['authority']['permitted_owner']['argv']
+    observation={'pid':pid,'boot_id':identity['boot_id'],'start_ticks':'self','state':'S',
+        'argv_hex':b'\0'.join(arg.encode() for arg in argv).hex()+'00'}
+    x['authority']['process_census']
+    census=Path(x['authority']['process_census']['path'])
+    write(census,{'boot_id':identity['boot_id'],'at':time.time(),'processes':[
+        {'pid':pid,'boot_id':identity['boot_id'],'birth':'self','state':'S','argv':argv}]})
+    x['authority']['process_census']=resident.binding(census)
+    monkeypatch.setattr(handoff,'observe',lambda candidate:observation if candidate==pid else None)
+    result=raw.retire_stale_pending_raw_round(x['config'],x['root']/'cycle.json',x['authority'],
+        x['receipt'],permitted_controller_owner_fd=fd)
+    assert json.loads(Path(result['path']).read_text())['training_credit']==0
+    # The transaction leaves the owner's canonical lock held through completion.
+    duplicate=(x['root'].parent/'controller.lock').open('a')
+    with pytest.raises(BlockingIOError):fcntl.flock(duplicate,fcntl.LOCK_EX|fcntl.LOCK_NB)
+    duplicate.close()
 
 
 def test_retirement_preserves_debt_and_sealed_artifacts_then_returns_to_sft(stale_round):
@@ -119,7 +142,27 @@ def test_crash_between_pointer_replacements_retries_exact_candidates(stale_round
     assert json.loads(Path(result['path']).read_text())['training_credit']==0
 
 
-@pytest.mark.parametrize('mutation',['owner-live','live-old-argv','source-tamper','provider-live','held-pending','unknown-pointer','selection-change','lock-path'])
+def test_completed_retirement_is_historical_idempotence_without_live_owner(stale_round,monkeypatch):
+    x=stale_round;result=retire(x)
+    now=time.time();monkeypatch.setattr(raw.time,'time',lambda:now+10000)
+    monkeypatch.setattr(handoff,'observe',lambda pid:None)
+    # Completed receipts do not need a still-running new owner or a fresh
+    # provider census; no controller FD is taken over on this read-only retry.
+    assert raw.retire_stale_pending_raw_round(x['config'],x['root']/'cycle.json',x['authority'],x['receipt'])==result
+
+
+def test_resealed_snapshot_cannot_replace_authority_original_bytes(stale_round):
+    x=stale_round;retire(x)
+    receipt=json.loads(x['receipt'].read_text());intent_path=Path(receipt['intent']['path'])
+    intent=json.loads(intent_path.read_text());snapshot=Path(intent['snapshots']['state']['path'])
+    snapshot.write_bytes(snapshot.read_bytes()+b' ')
+    intent['snapshots']['state']=resident.binding(snapshot)
+    write(intent_path,intent);receipt['intent']=resident.binding(intent_path);write(x['receipt'],receipt)
+    with pytest.raises(ValueError,match='snapshot binding changed'):
+        retire(x)
+
+
+@pytest.mark.parametrize('mutation',['owner-live','live-old-argv','source-tamper','provider-live','held-pending','unknown-pointer','escaped-op-path','selection-change','lock-path'])
 def test_stale_retirement_fails_closed_without_mutating_controller(stale_round,monkeypatch,mutation):
     x=stale_round
     if mutation=='owner-live':
@@ -149,6 +192,9 @@ def test_stale_retirement_fails_closed_without_mutating_controller(stale_round,m
         value=json.loads(x['state'].read_text());value['pending_native_checkpoint']='sealed';write(x['state'],value)
     elif mutation=='unknown-pointer':
         value=json.loads(x['cursor'].read_text());value['pending_round_owner']={'path':'unknown'};write(x['cursor'],value)
+    elif mutation=='escaped-op-path':
+        value=json.loads(x['state'].read_text());value['update_external_log']=str(x['root'].parent/'outside'/'rollouts.jsonl');write(x['state'],value)
+        x['authority']['state']=resident.binding(x['state'])
     elif mutation=='selection-change':
         value=json.loads(x['selection'].read_text());value['selection'].reverse();write(x['selection'],value)
     else:

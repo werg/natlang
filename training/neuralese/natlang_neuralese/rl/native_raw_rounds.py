@@ -529,7 +529,7 @@ def import_current_owner_checkpoint(config_path,cursor_path,selected_checkpoint,
     return binding(out)
 
 
-def retire_stale_pending_raw_round(config_path,cursor_path,authority,out,*,owned_controller_fd):
+def retire_stale_pending_raw_round(config_path,cursor_path,authority,out,*,owned_controller_fd=None,permitted_controller_owner_fd=None):
     """Retire one authenticated dead RAW operation without crediting its work.
 
     The operation owner chooses whether a stopped pending round should be
@@ -552,6 +552,7 @@ def retire_stale_pending_raw_round(config_path,cursor_path,authority,out,*,owned
             or authority.get('historical_owner_identity_available') is not False):
         raise ValueError('stale RAW retirement requires complete exact owner and predecessor bindings')
     directory=out.parent/(out.stem+'-stale-pending-retirement');intent_path=directory/'intent.json'
+    completed_retry=out.is_file()
     paths={'state':state_path,'cursor':cursor_path}
     if binding(config_path)!=authority['config']:
         raise ValueError('stale RAW retirement predecessor config changed')
@@ -581,9 +582,10 @@ def retire_stale_pending_raw_round(config_path,cursor_path,authority,out,*,owned
         'cw-mellum-cpu26-actual-queue-heartbeat-20261018.service'}
     if (quiescence.get('schema')!='natlang.supervisor-legacy-provider-quiescence/1'
             or type(quiescence.get('at')) not in (int,float)
-            or time.time()-quiescence['at']<0 or time.time()-quiescence['at']>300
+            or not completed_retry and (time.time()-quiescence['at']<0 or time.time()-quiescence['at']>300)
             or not isinstance(quiescence.get('boot_id'),str) or not quiescence['boot_id']
-            or quiescence.get('training_credit')!=0 or quiescence.get('learner_checkpoint_mutations')!=[]
+            or quiescence.get('training_credit')!=0 or type(quiescence.get('learner_checkpoint_mutations'))is not int
+            or quiescence.get('learner_checkpoint_mutations')!=0
             or not isinstance(quiescence.get('units'),list)
             or len(quiescence['units'])!=len(expected_units)
             or any(not isinstance(row,dict) for row in quiescence['units'])
@@ -627,6 +629,12 @@ def retire_stale_pending_raw_round(config_path,cursor_path,authority,out,*,owned
             or str(expected_update) not in operation_directories
             or any(Path(path).resolve()==root or root.resolve() not in Path(path).resolve().parents for path in operation_directories)):
         raise ValueError('stale RAW retirement operation directories do not bind the exact round and updater')
+    bound_operation_roots=[Path(path).resolve() for path in operation_directories]
+    for key,value in state.items():
+        if key.startswith(('active_update_','update_','partial_update_')) and isinstance(value,str) and value.startswith('/'):
+            resolved=Path(value).resolve()
+            if not any(resolved==base or base in resolved.parents for base in bound_operation_roots):
+                raise ValueError('stale RAW retirement omitted a persisted operation path from its process-check scope')
     if type(state.get('collection_attempt',0)) is not int or state.get('collection_attempt',0)<0:
         raise ValueError('stale RAW retirement collection attempt is malformed')
     from .native_raw_handoff import observe,process_argv,same_process
@@ -636,9 +644,9 @@ def retire_stale_pending_raw_round(config_path,cursor_path,authority,out,*,owned
     census=json.loads(census_path.read_text())
     boot=Path('/proc/sys/kernel/random/boot_id').read_text().strip()
     recovering=intent_path.exists()
-    if (not isinstance(census,dict) or census.get('boot_id')!=boot
+    if (not isinstance(census,dict) or not completed_retry and census.get('boot_id')!=boot
             or not isinstance(census.get('processes'),list) or type(census.get('at')) not in (int,float)
-            or not recovering and (time.time()-census['at']<0 or time.time()-census['at']>120)):
+            or not (recovering or completed_retry) and (time.time()-census['at']<0 or time.time()-census['at']>120)):
         raise ValueError('stale RAW retirement needs a current same-host process census')
     permitted=authority['permitted_owner']
     if (not isinstance(permitted,dict) or set(permitted)!={'identity','q_root','gate_spec','wrapper','argv'}
@@ -653,10 +661,10 @@ def retire_stale_pending_raw_round(config_path,cursor_path,authority,out,*,owned
             or Path(gate.get('out','')).resolve()!=new_root/'learner'
             or root.as_posix() in str(gate.get('out',''))):
         raise ValueError('stale RAW retirement permitted owner is not bound to a distinct RAW successor')
-    permitted_identity=permitted['identity'];permitted_observed=observe(permitted_identity.get('pid'))
+    permitted_identity=permitted['identity'];permitted_observed=None if completed_retry else observe(permitted_identity.get('pid'))
     expected_wrapper_argv=[permitted['argv'][0],'-u',str(wrapper_path)] if isinstance(permitted.get('argv'),list) and permitted['argv'] else None
-    if (not same_process(permitted_identity,permitted_observed)
-            or process_argv(permitted_observed)!=permitted.get('argv')
+    if (not completed_retry and (not same_process(permitted_identity,permitted_observed)
+            or process_argv(permitted_observed)!=permitted.get('argv'))
             or any(type(arg)is not str for arg in permitted['argv'])
             or permitted['argv']!=expected_wrapper_argv
             or not any(str(new_root) in arg for arg in permitted['argv'])):
@@ -665,16 +673,17 @@ def retire_stale_pending_raw_round(config_path,cursor_path,authority,out,*,owned
     for entry in census['processes']:
         if (not isinstance(entry,dict) or type(entry.get('pid'))is not int
                 or not isinstance(entry.get('birth'),str) or not isinstance(entry.get('argv'),list)
-                or entry.get('boot_id')!=boot
+                or entry.get('boot_id')!=census.get('boot_id')
                 or any(type(arg)is not str for arg in entry['argv'])):
             raise ValueError('stale RAW retirement census has a malformed process row')
-        observed=observe(entry['pid'])
-        expected={'pid':entry['pid'],'boot_id':boot,'start_ticks':entry['birth']}
-        if same_process(expected,observed):
-            if process_argv(observed)!=entry['argv']:
-                raise ValueError('stale RAW retirement census process argv changed after capture')
-            if same_process(permitted_identity,observed):census_owner=True
-    if not census_owner:
+        if not completed_retry:
+            observed=observe(entry['pid'])
+            expected={'pid':entry['pid'],'boot_id':census['boot_id'],'start_ticks':entry['birth']}
+            if same_process(expected,observed):
+                if process_argv(observed)!=entry['argv']:
+                    raise ValueError('stale RAW retirement census process argv changed after capture')
+                if same_process(permitted_identity,observed):census_owner=True
+    if not completed_retry and not census_owner:
         raise ValueError('stale RAW retirement census does not include its exact new-entry owner')
 
     # A fresh local /proc pass closes the census-to-commit window. Only the
@@ -710,6 +719,24 @@ def retire_stale_pending_raw_round(config_path,cursor_path,authority,out,*,owned
         locks=[line for line in info if line.startswith('lock:') and 'FLOCK' in line]
         if len(locks)!=1 or 'WRITE' not in locks[0]:
             raise ValueError('stale RAW retirement inherited descriptor has no exclusive controller lease')
+
+    def verify_permitted_owner_fd(fd,path,identity):
+        """Verify the live in-process trainer's lease without taking it over."""
+        if type(fd)is not int or fd<0 or not path.is_file():
+            raise ValueError('stale RAW retirement permitted owner descriptor is invalid')
+        observed=observe(identity['pid'])
+        if not same_process(identity,observed):
+            raise ValueError('stale RAW retirement permitted owner descriptor process changed')
+        proc_fd=Path('/proc',str(identity['pid']),'fd',str(fd))
+        proc_info=Path('/proc',str(identity['pid']),'fdinfo',str(fd))
+        if not proc_fd.exists() or not proc_info.is_file():
+            raise ValueError('stale RAW retirement permitted owner no longer holds its controller descriptor')
+        opened=os.stat(proc_fd);actual=path.stat()
+        if opened.st_dev!=actual.st_dev or opened.st_ino!=actual.st_ino:
+            raise ValueError('stale RAW retirement permitted owner descriptor is not the canonical controller lease')
+        locks=[line for line in proc_info.read_text().splitlines() if line.startswith('lock:') and 'FLOCK' in line]
+        if len(locks)!=1 or 'WRITE' not in locks[0]:
+            raise ValueError('stale RAW retirement permitted owner descriptor has no exclusive controller lease')
 
     request={'authority_sha256':digest(authority),'config':authority['config'],'state':authority['state'],
         'cursor':authority['cursor'],'round':state['round'],'pending_round':cursor['pending_rl_round'],
@@ -751,8 +778,10 @@ def retire_stale_pending_raw_round(config_path,cursor_path,authority,out,*,owned
                     or Path(intent['snapshots'][name]['path']).resolve()!=directory/('original-'+name+'.json')
                     or Path(intent['candidates'][name]['path']).resolve()!=directory/('candidate-'+name+'.json')):
                 raise ValueError('stale RAW retirement intent substituted a transaction artifact')
-            snapshot=_bound(intent['snapshots'][name])
-            if binding(snapshot)!=intent['snapshots'][name]:raise ValueError('stale RAW retirement snapshot binding changed')
+            snapshot=_bound(intent['snapshots'][name]);snapshot_binding=binding(snapshot)
+            if (snapshot_binding!=intent['snapshots'][name]
+                    or snapshot_binding.get('sha256')!=authority[name].get('sha256')):
+                raise ValueError('stale RAW retirement snapshot binding changed')
             originals[name]=json.loads(snapshot.read_text())
         expected_state,expected_cursor,retired=candidates_from(originals['state'],originals['cursor'])
         if retired!=intent.get('retired_state_fields'):
@@ -765,15 +794,25 @@ def retire_stale_pending_raw_round(config_path,cursor_path,authority,out,*,owned
 
     controller_lock=root.parent/'controller.lock';locks={Path(config['out']).resolve()/'controller.lock'}
     with contextlib.ExitStack() as stack:
-        verify_controller_fd(owned_controller_fd,controller_lock)
+        if owned_controller_fd is not None and permitted_controller_owner_fd is not None:
+            raise ValueError('stale RAW retirement accepts only one canonical controller lease authority')
+        if completed_retry:
+            pass
+        elif permitted_controller_owner_fd is not None:
+            verify_permitted_owner_fd(permitted_controller_owner_fd,controller_lock,permitted_identity)
+        elif owned_controller_fd is not None:
+            verify_controller_fd(owned_controller_fd,controller_lock)
+        else:
+            raise ValueError('stale RAW retirement requires the existing canonical controller lease')
         for lock_path in sorted(locks):
             lease=stack.enter_context(lock_path.open('a'))
             fcntl.flock(lease,fcntl.LOCK_EX|fcntl.LOCK_NB)
         if binding(config_path)!=authority['config']:
             raise ValueError('stale RAW retirement configuration changed before commit')
-        assert_no_live_stale_processes()
-        if (Path('/proc/sys/kernel/random/boot_id').read_text().strip()!=boot
-                or not same_process(permitted_identity,observe(permitted_identity['pid']))):
+        if not completed_retry:
+            assert_no_live_stale_processes()
+        if (not completed_retry and (Path('/proc/sys/kernel/random/boot_id').read_text().strip()!=boot
+                or not same_process(permitted_identity,observe(permitted_identity['pid'])))):
             raise ValueError('stale RAW retirement process authority changed before commit')
 
         if out.exists():

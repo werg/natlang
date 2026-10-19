@@ -21,11 +21,15 @@ retirement.
    process table, then repeat a current `/proc` stale-path scan under both
    controller leases immediately before pointer publication. The provider
    receipt must be recent and show the exact four legacy provider/heartbeat
-   units inactive, with zero checkpoint mutations and no training credit. Any live process
+   units inactive, with `learner_checkpoint_mutations=0` and no training credit. Any live process
    referencing the retired config, updater, bridge or state/cursor blocks the
    transition. Only the exact successor PID/birth/boot and wrapper command is
    exempt.
-3. Under the inherited canonical controller lease and the production lease,
+3. Verify the canonical controller lease either through this process's inherited
+   descriptor or through the exact permitted live entry owner's `/proc/<pid>/fd`
+   and `fdinfo` descriptor. An external operator leaves that flock held and takes
+   only the separate production-state lease; it never substitutes its own lease.
+   Under the canonical owner lease and the production lease,
    snapshot the old JSON bytes and build two exact candidates. The production
    candidate keeps the same round, offset, trained-round count, selection,
    checkpoint, and debts; it records all retired operation fields and increments
@@ -33,7 +37,10 @@ retirement.
    only the pending-round claim, and moves to `phase=sft,next_stage=0`.
 4. Persist intent and candidate bindings before replacing either pointer. On
    restart, publish only the exact candidates or accept their exact already
-   published bytes. Unknown pointer successors fail closed. The final receipt
+   published bytes; snapshot bytes and hashes must match the original authority.
+   Once a completed receipt exists, a retry authenticates its retained intent
+   and snapshots without requiring a live owner or a newly fresh quiescence
+   sample. Unknown pointer successors fail closed. The final receipt
    explicitly says no RAW round or training work was completed.
 5. The existing scheduler uses the incremented collection attempt to select a
    new collection output directory. A shared cycle-work helper places all new
