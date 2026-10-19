@@ -10,7 +10,8 @@ from natlang_neuralese.train import native_resident as resident
 
 
 def execute_actual_resident_selection(scope):
-    tree=ast.parse(inspect.getsource(trainer.main))
+    # main installs the operational signal wrapper; selection lives in _main.
+    tree=ast.parse(inspect.getsource(trainer._main))
     expected=ast.parse("resident_state and resume and resident_state['payload']['stage_id'] == args.stage_id",mode='eval').body
     blocks=[n for n in ast.walk(tree)if isinstance(n,ast.If)and ast.dump(n.test,include_attributes=False)==ast.dump(expected,include_attributes=False)]
     assert len(blocks)==1

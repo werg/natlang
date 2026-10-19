@@ -63,10 +63,13 @@ def stopped(owned,tmp_path):
         environment=interrupted.capture_provider_environment(captured['owner'],W/'provider-environment.json')
         stop=W/'stop.json';interrupted.request_operational_stop(intent,trainer,binding(spec),
             reason='apply a better task evaluator without resetting earned work',out=stop)
+        observed_signal=None
         for _ in range(200):
-            if signal_proof.exists():break
+            try:observed_signal=signal_proof.read_text()
+            except FileNotFoundError:pass
+            if observed_signal=='SIGTERM':break
             time.sleep(.01)
-        assert signal_proof.read_text()=='SIGTERM'
+        assert observed_signal=='SIGTERM'
         process.communicate();assert process.returncode==1
     finally:
         if process.poll()is None:process.communicate()
@@ -188,15 +191,14 @@ def test_interruption_does_not_relax_process_profile_or_actual_state(stopped,tam
 
 @pytest.mark.parametrize('actual_sha',[None,'0'*64])
 def test_worker_spec_cannot_replace_missing_or_wrong_actual_entry_environment(tmp_path,actual_sha):
-    entry=tmp_path/'entry.py';entry.write_text('import sys;sys.stdin.buffer.read()')
+    entry=tmp_path/'entry.py';entry.write_text("import sys;print('ready',flush=True);sys.stdin.buffer.read()")
     argv=[sys.executable,'-u',str(entry)];env=dict(os.environ);env.pop('NATLANG_WORKER_ENTRY_SHA256',None)
     if actual_sha is not None:env['NATLANG_WORKER_ENTRY_SHA256']=actual_sha
-    process=subprocess.Popen(argv,stdin=subprocess.PIPE,env=env)
+    process=subprocess.Popen(argv,stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True,env=env)
     try:
-        for _ in range(50):
-            owner=h.observe(process.pid)
-            if owner and h.process_argv(owner)==argv:break
-            time.sleep(.01)
+        assert process.stdout.readline().strip()=='ready'
+        owner=h.observe(process.pid)
+        assert owner and h.process_argv(owner)==argv
         intent={'owner':owner,'at':time.time()};out=tmp_path/'environment.json'
         if actual_sha is None:
             with pytest.raises(ValueError):interrupted.capture_provider_environment(owner,out)
