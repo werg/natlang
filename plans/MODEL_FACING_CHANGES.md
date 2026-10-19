@@ -1227,11 +1227,15 @@ contain 102 assistant responses and 114 streamed deltas; 34 responses reached
 the 128-token per-turn cap. Six responses emitted actual native-state content
 parts, all on state-record functions whose declared result was a record. Their
 first-attempt decodes changed from opaque transport arrays to authenticated
-stored text, and both values were correctly rejected as the wrong record shape.
-No direct assistant native-state completion to an ordinary scalar return was
-sampled. The harness recorded no uncaught exception in 48 sessions, but this is
-not a task-success score: eight final JS-symbol values are not JSON-scorable,
-and semantic expected-value checks were correct on 29 of 40 scorable cases.
+stored text. The stored text was a JSON record whose `memo` field was ordinary
+text while the declared field required `Neuralese<string>`; the runtime then
+reported `neuralese-unsupported-backend` because this native-state server path
+has no writer port to create that nested state. This is an unsupported nested
+write, not a successful typed-return repair. No direct assistant native-state
+completion to an ordinary scalar return was sampled. The harness recorded no
+uncaught exception in 48 sessions, but this is not a task-success score: eight
+final JS-symbol values are not JSON-scorable, and semantic expected-value checks
+were correct on 29 of 40 scorable cases.
 The initial decoder-difference counter was based on raw tool-call responses and
 is invalid; do not use it. The corrected content-part replay has six rows,
 and the capture is
