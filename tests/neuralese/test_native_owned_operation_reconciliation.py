@@ -353,3 +353,13 @@ def test_verified_source_append_cannot_be_acknowledged_as_operational_tuning(tmp
     future=raw._supervised_stage_inventory(resolve_recipe_data(resident.bound(transition['recipe'])),'sft')
     with pytest.raises(ValueError,match='new sources or stages'):
         raw._owned_earned_stage_inventory(transition,future,'sft')
+
+
+def test_new_owner_retains_only_exact_previously_acknowledged_prefix():
+    dpo={'id':'preference','kind':'native_offline_preference'}
+    sft={'id':'full','kind':'native_state_sft'}
+    chain=[{'stage_id':'full','stage':sft}]
+    assert raw._acknowledged_owned_stage_ids(chain,[dpo,sft],acknowledged_prefix=[dpo])==['preference','full']
+    for prefix in ([],[sft],[dict(dpo,changed=True)]):
+        with pytest.raises(ValueError):
+            raw._acknowledged_owned_stage_ids(chain,[dpo,sft],acknowledged_prefix=prefix)

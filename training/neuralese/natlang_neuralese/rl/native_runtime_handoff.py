@@ -65,6 +65,9 @@ def _transition(reference,handoff,record,saved):
 def _owned_launch_chain(record, snapshots=None):
     """Follow only the byte-bound launch observed during genuine live capture."""
     captured=_read(record['intent']);observed=_read(captured['launch'])
+    if observed.get('inprocess_dispatch'):
+        from .native_owned_dispatch import verify
+        return verify(captured,observed,snapshots)
     def read(name,reference):
         selected=(snapshots or {}).get(name,reference)
         if selected['sha256']!=reference['sha256']:

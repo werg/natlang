@@ -98,3 +98,14 @@ producer-to-consumer gradient edge. Exact replay plumbing omits the optional
 `stop_gradient` keyword for that default, allowing qualified older native ports
 to execute the same graph. A source-declared true stop remains explicit and is
 never removed for compatibility; an unsupported port rejects it.
+
+## In-process owned trainer launch
+
+A supervisor may load and qualify once, then call the existing trainer in the
+same process. Record that actual live owner, the byte-bound wrapper, effective
+trainer command, import environment and exact continuation before training.
+The shared handoff verifier authenticates this explicit dispatch separately
+from a supervisor with a child process; it never invents a trainer child.
+Capture the normal live drain intent, then complete the existing handoff only
+after that owner exits. This is exact process/transport plumbing, not training
+readiness, completed exposure, or permission to invent historical owners.

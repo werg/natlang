@@ -35,6 +35,14 @@ def external(ordinary,tmp_path,request):
     script=N/'supervisor.py';script.write_text("import subprocess,sys,json;p=subprocess.Popen(json.loads(sys.argv[1]),stdin=subprocess.PIPE);print('ready',flush=True);sys.stdin.buffer.read();p.communicate()")
     launch_intent=N/'launch-intent.json';write(launch_intent,{'continuation':resident.binding(continuation),'argv_binding':resident.binding(argv_path),
         'supervisor':resident.binding(script),'env':{'PYTHONPATH':str(x['newpackage'].parent)}})
+    mode=getattr(request,'param','')or''
+    if mode=='inprocess-owner':
+        script.write_text("import sys,json;from natlang_neuralese.rl.native_owned_dispatch import capture;"
+            +f"capture(__file__,{[sys.executable,'-u','-m','natlang_neuralese.train.native_state_sft',*argv[3:]]!r},"
+            +f"{resident.binding(continuation)!r},{str(N/'inprocess')!r},environment={dict(PYTHONPATH=str(x['newpackage'].parent))!r});"
+            +"print('ready',flush=True);sys.stdin.buffer.read()")
+        write(launch_intent,{'continuation':resident.binding(continuation),'argv_binding':resident.binding(argv_path),
+            'supervisor':resident.binding(script),'env':{'PYTHONPATH':str(x['newpackage'].parent)}})
     supervisor=[sys.executable,str(script),json.dumps(argv)];process=subprocess.Popen(supervisor,stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True)
     try:
         assert process.stdout.readline().strip()=='ready';owner=handoff.observe(process.pid)
@@ -47,8 +55,11 @@ def external(ordinary,tmp_path,request):
         write(spawn,spawn_value)
         observed=N/'observed.json';write(observed,{'at':time.time(),'pid':owner['pid'],'argv':supervisor,'identity':owner,
             'original_launch':resident.binding(original),'spawn':resident.binding(spawn)})
+        if mode=='inprocess-owner':
+            observed=N/'inprocess/launch.json'
         intent=handoff.capture_drain_intent(resident.binding(observed),N/'drain-intent.json')
-        captured=json.loads(Path(intent['path']).read_text());child=next(c for c in captured['children']if handoff.process_argv(c)==argv)
+        captured=json.loads(Path(intent['path']).read_text())
+        child=captured['owner'] if mode=='inprocess-owner' else next(c for c in captured['children']if handoff.process_argv(c)==argv)
         initial=json.loads((directory/'initial.json').read_text());initial['owner']=child;write(directory/'initial.json',initial)
         # Genuine resident publication and adoption, while its captured owner lives.
         successor=copy.deepcopy(recipe);successor['input_bindings']['prior']=successor['input_bindings']['train']
@@ -175,3 +186,12 @@ def test_external_launch_controls_are_in_bootstrap_cache_closure(external,monkey
     assert metadata.unchanged(receipt,x['plan'],x['declaration'],x['bootstrap'],config)
     Path(controls['supervisor']['path']).write_text('# changed authority snapshot\n')
     with pytest.raises(ValueError):metadata.unchanged(receipt,x['plan'],x['declaration'],x['bootstrap'],config)
+
+
+@pytest.mark.parametrize('external',['inprocess-owner'],indirect=True)
+def test_real_inprocess_owner_rejoins_without_inventing_a_child(external):
+    x=external
+    owned=_rejoin(x)
+    assert json.loads(Path(owned['path']).read_text())['whole_recipe_completed'] is False
+    record,_=handoff.verify_handoff(x['handoff'])
+    assert json.loads(Path(record['intent']['path']).read_text())['children']==[]

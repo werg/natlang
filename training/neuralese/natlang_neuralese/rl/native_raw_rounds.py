@@ -369,9 +369,14 @@ def _owned_operation_chain(operations,published,model_id,lineage):
                 or type(updates)is not int or updates<=0):
             raise ValueError('owned operation lost its real parent/recipe/model/update ancestry')
         matching=[]
-        for child in intent['children']:
+        from .native_runtime_handoff import _owned_launch_chain
+        launch=json.loads(_bound(intent['launch']).read_text())
+        inprocess = bool(launch.get('inprocess_dispatch'))
+        candidates = [intent['owner']] if inprocess else intent['children']
+        dispatched = _owned_launch_chain(record)[1] if inprocess else None
+        for child in candidates:
             from .native_raw_handoff import process_argv
-            argv=process_argv(child)
+            argv=dispatched if inprocess else process_argv(child)
             argv,observer=_owned_training_invocation(argv,prior,parent_bytes=prior_bytes)
             def argument(flag):
                 if argv.count(flag)!=1 or argv.index(flag)+1>=len(argv):return None
@@ -394,15 +399,21 @@ def _owned_operation_chain(operations,published,model_id,lineage):
     return result
 
 
-def _acknowledged_owned_stage_ids(chain,stages):
-    ids=[stage['id']for stage in stages];earned=[]
+def _acknowledged_owned_stage_ids(chain,stages,*,acknowledged_prefix=()):
+    ids=[stage['id']for stage in stages]
+    prefix=list(acknowledged_prefix)
+    if prefix!=stages[:len(prefix)]:
+        raise ValueError('owned reconciliation changed its previously acknowledged stage prefix')
+    earned=[stage['id']for stage in prefix]
     for item in chain:
         if not earned or earned[-1]!=item['stage_id']:earned.append(item['stage_id'])
     if earned[-len(ids):]!=ids:
         raise ValueError('owned reconciliation cannot acknowledge an unearned recipe stage')
     for stage in stages:
-        latest=next(item for item in reversed(chain)if item['stage_id']==stage['id'])
-        if latest['stage']!=stage:raise ValueError('owned reconciliation changed an earned stage contract')
+        latest=next((item for item in reversed(chain)if item['stage_id']==stage['id']),None)
+        if latest is None:
+            if stage not in prefix:raise ValueError('owned reconciliation cannot borrow an unearned stage')
+        elif latest['stage']!=stage:raise ValueError('owned reconciliation changed an earned stage contract')
     return ids
 
 
@@ -492,7 +503,12 @@ def reconcile_owned_operations(config_path,operations,recipe_reference,out,*,bar
             if transition['recipe']!=recipe_reference:
                 raise ValueError('owned reconciliation recipe differs from actual latest owner')
             earned_stages,operational_tuning=_owned_earned_stage_inventory(transition,stages,config['production_stage'])
-            _acknowledged_owned_stage_ids(chain,earned_stages)
+            # A new standalone owner need not replay an earlier stage whose
+            # finite operation the existing cursor already acknowledged. Its
+            # exact carried frame/recipe is still verified below; this carries
+            # scheduling history, never full-stage completion or extra visits.
+            prior_stages=old_stages[:cursor.get('next_stage',0)] if cursor['phase']=='sft' else []
+            _acknowledged_owned_stage_ids(chain,earned_stages,acknowledged_prefix=prior_stages)
             from ..train.native_continuation import collect_sft_progress
             from ..train.recipe import native_recipe_binding
             progress=collect_sft_progress(saved['training'],borrow_frames=True)
@@ -520,6 +536,7 @@ def reconcile_owned_operations(config_path,operations,recipe_reference,out,*,bar
             intent={'schema':'natlang.native-owned-operation-reconciliation/1','request':request,
                 'before':before,'snapshots':snapshots,'candidates':candidates,'operations':chain,
                 'old_stage_ids':[stage['id']for stage in old_stages],'new_stage_ids':ids,
+                'previously_acknowledged_stage_ids':[stage['id']for stage in prior_stages],
                 'verified_operational_tuning':operational_tuning,
                 'global_step':saved['training'].get('global_step',saved['training'].get('step')),
                 'whole_recipe_completed':False}
