@@ -29,6 +29,10 @@ def test_all_production_gradients_connected_rows_and_inputs_preserved(family,wro
         Invocation('consumer',(5,60,61,6,7),imports=(ImportSpan(2,'producer',2,4),))])
     ids=plan.tensor([t for node in plan.invocations for t in node.token_ids],model.input_rows.device)
     flat_input=model.embed(ids[None]);cached_input=model.embed(ids[None])
+    flat_input.grad=torch.full_like(flat_input,.125)
+    cached_input.grad=torch.full_like(cached_input,-.25)
+    input_grads=[(flat_input,flat_input.grad,flat_input.grad.clone(),flat_input.grad._version),
+        (cached_input,cached_input.grad,cached_input.grad.clone(),cached_input.grad._version)]
     flat=model(plan,embeddings=flat_input);cached=model(plan,embeddings=cached_input,reference=True)
     a=F.cross_entropy(model.logits(flat['h_final'][:,-1]).float(),torch.tensor([7],device=device))
     b=F.cross_entropy(model.logits(cached['h_final'][:,-1]).float(),torch.tensor([7],device=device))
@@ -41,6 +45,8 @@ def test_all_production_gradients_connected_rows_and_inputs_preserved(family,wro
     assert report['derivative_comparison_count']==len(named)+1
     assert report['retained_flat_gradient_bytes']>report['largest_live_comparison_pair_bytes']
     assert report['retained_flat_gradient_device']=='cpu'and report['retained_flat_gradient_cuda_bytes']==0
+    assert report['retained_cached_gradient_map_bytes']==0
+    assert report['retained_cached_gradient_device']=='none'
     for role in('backbone','adapter','learned_input','learned_output'):
         assert roles[role]
         assert any(report['comparisons'][name].get('reference_l2',0)>0 for name in roles[role])
@@ -48,23 +54,35 @@ def test_all_production_gradients_connected_rows_and_inputs_preserved(family,wro
     assert torch.equal(rng,torch.get_rng_state())
     for p,previous,value,version in before:
         assert p.grad is previous and torch.equal(p.grad,value)and p._version==version
+    for tensor,previous,value,version in input_grads:
+        assert tensor.grad is previous and torch.equal(tensor.grad,value)
+        assert tensor.grad._version==version
     assert optimizer.state_dict()==state
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(),reason='actual CUDA reference lifetime')
 @pytest.mark.parametrize('dtype',[torch.float32,torch.bfloat16])
-def test_reference_gpu_tensors_are_released_before_cached_forward_and_observer_is_exact_cpu(monkeypatch,dtype):
+def test_reference_gradients_are_cpu_resident_and_cached_gradients_stream_to_observer(monkeypatch,dtype):
+    import natlang_neuralese.eval.native_gradients as native_gradients
     parameter=torch.nn.Parameter(torch.linspace(.1,.5,128,device='cuda',dtype=dtype))
     flat_input=torch.ones(2,128,device='cuda',dtype=dtype,requires_grad=True)
     flat=(flat_input*parameter).square().mean()
-    original=torch.autograd.grad;references=[];observed=[]
-    def capture(*args,**kwargs):
-        result=original(*args,**kwargs)
-        if not references:references.extend(weakref.ref(value)for value in result if value is not None)
+    original=native_gradients._backward_gradients_to_cpu
+    flat_refs=[];streamed_calls=[];observed=[]
+    def capture(loss,names,parameters,input_tensor=None,*,on_gradient=None):
+        result=original(loss,names,parameters,input_tensor,on_gradient=on_gradient)
+        if not streamed_calls:
+            assert on_gradient is None
+            assert result and all(value.device.type=='cpu' for value in result.values() if value is not None)
+            flat_refs.extend(weakref.ref(value)for value in result.values()if value is not None)
+        else:
+            assert callable(on_gradient)
+            assert result=={}
+        streamed_calls.append(on_gradient)
         return result
-    monkeypatch.setattr(torch.autograd,'grad',capture)
+    monkeypatch.setattr(native_gradients,'_backward_gradients_to_cpu',capture)
     def cached():
-        assert len(references)==2 and all(ref()is None for ref in references)
+        assert len(flat_refs)==2 and all(ref() is not None and ref().device.type=='cpu' for ref in flat_refs)
         x=torch.ones_like(flat_input,requires_grad=True)
         return (x*parameter).square().mean(),x
     def observer(name,left,right):
@@ -73,10 +91,13 @@ def test_reference_gpu_tensors_are_released_before_cached_forward_and_observer_i
         assert torch.equal(left,right)
         observed.append(name)
     rng=torch.cuda.get_rng_state().clone()
-    report=compare_complete_gradients(flat,None,[('weight',parameter)],flat_input,None,
+    report=compare_complete_gradients(flat,None,[('weight',parameter)],flat_input,flat_input,
         atol=1e-5,rtol=1e-4,cached_factory=cached,gradient_observer=observer)
     assert report['passed']and set(observed)=={'input_embeddings','weight'}
-    assert parameter.grad is None and torch.equal(torch.cuda.get_rng_state(),rng)
+    assert len(streamed_calls)==2 and callable(streamed_calls[1])
+    assert report['retained_cached_gradient_map_bytes']==0
+    assert parameter.grad is None and flat_input.grad is None
+    assert torch.equal(torch.cuda.get_rng_state(),rng)
 
 
 def test_inventory_cannot_omit_a_trainable_or_alias_a_parameter():
