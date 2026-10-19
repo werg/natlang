@@ -1,6 +1,7 @@
 """Historical geometry stays strict across an authenticated class-only migration."""
 import copy
 import json
+import shutil
 from pathlib import Path
 
 import pytest
@@ -74,3 +75,19 @@ def test_changed_original_facts_or_migration_cannot_gain_geometry(tmp_path, monk
         ref = continue_geometry(migration._binding(path), migration._binding(proof), source,
                                 tmp_path / 'continued.json')
         resident.geometry_from_evidence(source, 0, ref, package=package)
+
+
+def test_original_geometry_cache_can_be_identical_bytes_at_another_path(tmp_path, monkeypatch):
+    source, package, path, proof, part = setup(tmp_path, monkeypatch)
+    report = json.loads(path.read_text())
+    alias = tmp_path / 'original-helper-cache.pkl'
+    shutil.copyfile(part['old_index']['path'], alias)
+    report['indexes'][0]['cache'] = resident.binding(alias)
+    path.write_text(json.dumps(report))
+    ref = continue_geometry(migration._binding(path), migration._binding(proof), source,
+                            tmp_path / 'continued.json')
+    assert resident.geometry_from_evidence(source, 0, ref, package=package)
+    alias.write_bytes(b'changed')
+    with pytest.raises(ValueError, match='artifact changed'):
+        continue_geometry(migration._binding(path), migration._binding(proof), source,
+                          tmp_path / 'rejected.json')

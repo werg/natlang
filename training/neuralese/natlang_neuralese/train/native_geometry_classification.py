@@ -37,7 +37,12 @@ def continue_geometry(evidence, proof_reference, source, output):
             raise ValueError('classified geometry migration has ambiguous source parts')
         parts[key] = part
     selected, old_by_id = [], {}
-    recorded = {resident.digest(w): w for w in report['indexes']}
+    def witness_identity(witness):
+        return (resident.digest(witness['key']), witness['metadata_sha256'],
+                witness['cache']['sha256'])
+    recorded = {witness_identity(w): w for w in report['indexes']}
+    if len(recorded) != len(report['indexes']):
+        raise ValueError('classified geometry original witness identity is ambiguous')
     used = set()
     for witness in witnesses:
         part = parts.get(witness['key']['source_sha256'])
@@ -47,12 +52,17 @@ def continue_geometry(evidence, proof_reference, source, output):
         new = classification._index(part['new_index'])
         prior = {'cache': {k: part['old_index'][k] for k in ('path', 'sha256')},
                  'key': old['key'], 'metadata_sha256': old['metadata_sha256']}
-        if (resident.digest(prior) not in recorded
+        identity = witness_identity(prior)
+        if (identity not in recorded
                 or witness['key'] != new['key']
                 or witness['metadata_sha256'] != new['metadata_sha256']
                 or witness['cache']['sha256'] != part['new_index']['sha256']):
             raise ValueError('classified geometry index differs from original evidence/migration')
-        used.add(resident.digest(prior))
+        # The original CPU helper may have used another cache directory.
+        # Authenticate BOTH physical references; equal strong SHA proves an
+        # immutable byte-for-byte relocation, never a policy/row exception.
+        classification._checked(recorded[identity]['cache'])
+        used.add(identity)
         selected.append(part)
         for entry in old['entries']:
             if entry['id'] in old_by_id:
