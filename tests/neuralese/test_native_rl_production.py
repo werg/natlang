@@ -265,7 +265,8 @@ def test_policy_completion_uses_bounded_rotating_numeric_held_graphs(tmp_path,mo
 
 
 @pytest.mark.parametrize('foundation',[False,True])
-def test_native_factory_retains_full_recipe_budget_and_uses_headless_actor(tmp_path, monkeypatch,foundation):
+@pytest.mark.parametrize('separate_actor',[False,True])
+def test_native_factory_retains_full_recipe_budget_and_uses_headless_actor(tmp_path, monkeypatch,foundation,separate_actor):
     from types import SimpleNamespace
     from natlang_neuralese.train import recipe
     parent = tmp_path/'shared.pt'; parent.write_bytes(b'actual-bound-parent')
@@ -287,11 +288,27 @@ def test_native_factory_retains_full_recipe_budget_and_uses_headless_actor(tmp_p
             'semantic_refresh_config', 'seed_native_graphs', 'held_native_graphs', 'production_recipe',
             'base', 'out', 'config', 'cases', 'runtime')})
     monkeypatch.setattr(recipe,'resolve_stage_inputs',lambda *args:{'foundation_native_graphs':{'path':str(tmp_path/'exact-foundation')}})
+    if separate_actor:
+        actor = tmp_path/'actor-snapshot'
+        entry = actor/'scripts/neuralese_data/serve_direct_checkpoint.py'
+        entry.parent.mkdir(parents=True); entry.write_text('# exact actor entry\n')
+        package = actor/'training/neuralese/natlang_neuralese'
+        package.mkdir(parents=True); (package/'__init__.py').write_text('# exact package\n')
+        args.actor_runtime = actor
     production.configure_native(args)
     saved = json.loads(args.config.read_text())
+    if separate_actor:
+        assert saved['actor_command'][1] == str(entry)
+        assert saved['actor_environment'] == {'NATLANG_REPO': str(actor),
+            'PYTHONPATH': str(actor/'training/neuralese') + ':' + str(actor)}
+        assert saved['learner_command'][1:3] == ['-m', 'natlang_neuralese.rl.native_stage']
+        assert saved['trainer_parameters']['dtype'] == 'float32'
     if foundation:
         assert saved['foundation_native_graphs']==str(tmp_path/'exact-foundation')
         assert saved['seed_command'][-2:]==['--foundation-native-graphs','{foundation_native_graphs}']
+    from natlang_neuralese.common.runtime_inventory import python_runtime_binding
+    assert saved['native_actor_python_runtime'] == python_runtime_binding(
+        Path(saved['actor_environment']['NATLANG_REPO'])/'training/neuralese/natlang_neuralese')
     assert saved['trainer_parameters']['epochs'] == 3
     assert saved['recipe_lineage_sha256']=='a'*64
     assert saved['trainer_parameters']['recipe_binding']==reference

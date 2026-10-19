@@ -116,3 +116,17 @@ actually represented by its verified operation chain, restart schedule traversal
 at its first stage, and let the existing per-row debt checker skip earned visits.
 The runtime handoff accepts this exact unsealed boundary without interpreting
 it as full-stage or whole-recipe completion.
+
+
+## Native actor implementation deployment
+
+Policy keeps the existing task curriculum, correct-execution reward and whole
+episode update. Deployment is exact crisp plumbing: inventory the Python package
+with the existing resident code-inventory mechanism; bind its digest in each new
+native actor declaration and attest the actual actor package at load. Require
+replica agreement and the declared digest before collection; retain the receipt
+in the existing immutable collection binding. Legacy all-unattested packets stay
+explicit legacy evidence. Never rewrite a training runtime or replace the global
+provider environment just to advance an actor implementation. New actor snapshots
+use explicit command/package paths and unchanged checkpoint/adapter identities.
+No prompt, token, sampling distribution, imported state or replay graph changes.

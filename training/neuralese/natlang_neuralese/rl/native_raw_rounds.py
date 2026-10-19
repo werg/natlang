@@ -234,6 +234,7 @@ def configure_model(plan_path,declaration,handoff,out,*,verified_handoff=None):
     args=SimpleNamespace(**inputs,model=declaration['model'],native_participant=None,semantic_adapter=None,
         semantic_refresh_config=None,checkpoint=_bound(record['checkpoint']),base=Path(declaration['base']),
         production_stage=declaration['production_stage'],runtime=runtime,out=out/'production',config=path,
+            actor_runtime=declaration.get('actor_runtime'),
         port=declaration['port'],coefficient_policy=None,coefficient_optimizer=None,coefficient_task_eval=None,
         verified_native_checkpoint=(record['checkpoint'],saved))
     config=configure_native(args)

@@ -97,6 +97,7 @@ def bootstrap_configs(plan_path, completion_path, out):
             semantic_adapter=adapter_path, semantic_refresh_config=refresh_config,
             checkpoint=Path(adapter['checkpoint']['path']), base=Path(declaration['base']),
             production_stage=declaration['production_stage'], runtime=runtime,
+            actor_runtime=declaration.get('actor_runtime'),
             out=out/model, config=config_path, port=declaration['port'],
             coefficient_policy=_bound(declaration['coefficient_policy']) if declaration.get('coefficient_policy') else None,
             coefficient_optimizer=declaration.get('coefficient_optimizer'),

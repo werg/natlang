@@ -69,7 +69,20 @@ def validate_actor_receipts(receipts, *, policy_id, neuralese_server, expected_n
         identities = [receipt['native_identity'] for receipt in receipts.values()]
         if any(identity != identities[0] for identity in identities[1:]):
             raise ValueError('native RL replicas disagree on their exact policy identity')
+        implementations = [receipt.get('python_runtime') for receipt in receipts.values()]
+        if any(value != implementations[0] for value in implementations[1:]):
+            raise ValueError('native RL replicas disagree on their Python runtime')
+        for value in implementations:
+            if value is not None and (not isinstance(value, dict) or value.get('schema') != 'natlang.python-runtime/1'
+                    or not isinstance(value.get('sha256'), str)
+                    or not re.fullmatch(r'[0-9a-f]{64}', value['sha256'])
+                    or type(value.get('files')) is not int or value['files'] < 1):
+                raise ValueError('native RL actor lacks valid Python runtime provenance')
     if expected_native is not None:
+        if expected_native.get('python_runtime') is not None and any(
+                receipt.get('python_runtime') != expected_native['python_runtime']
+                for receipt in receipts.values()):
+            raise ValueError('native RL actor differs from the requested Python runtime')
         if modes != {'native-state'} or any(receipt.get('native_identity') != expected_native['native_identity'] or
                 receipt.get('native_participant') != expected_native['native_participant'] or
                 receipt.get('semantic_adapter_sha256') != expected_native['semantic_adapter_sha256']
@@ -365,7 +378,16 @@ def collect_with_actor(config, values, **kwargs):
     from .grpo import Server
     from ..common.hashing import sha256_file_hex_cached
     with (Path(values['out']) / 'actor.log').open('a') as log:
-        process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT)
+        environment = config.get('actor_environment')
+        if environment is not None:
+            if (not isinstance(environment, dict)
+                    or set(environment) != {'NATLANG_REPO', 'PYTHONPATH'}
+                    or any(not isinstance(value, str) or not value for value in environment.values())):
+                raise ValueError('managed actor environment requires explicit repository and Python path')
+            import os
+            environment = {**os.environ, **environment}
+        process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT,
+                                   **({'env': environment} if environment is not None else {}))
         try:
             while True:
                 if control is not None and control.stop.requested:
@@ -646,6 +668,10 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
                     coefficient_cancel_stale_reason=config.get('coefficient_cancel_stale_reason'))
             if config.get('heads'):
                 values['heads_sha256'] = sha256_file_hex(Path(config['heads']))
+            if config.get('native_actor_python_runtime') is not None:
+                if expected_native is None:
+                    raise ValueError('Python actor runtime binding requires an exact native policy')
+                expected_native = {**expected_native, 'python_runtime': config['native_actor_python_runtime']}
             if config.get('before_collect'):
                 run_command(config['before_collect'], values)
             try:
@@ -908,6 +934,11 @@ def configure_native(args):
     if not parameters.get('task_eval') or type(cadence) is not int or cadence < 0:
         raise ValueError('native production must retain real task evaluation and its cadence')
     repo, python = str(root('repo')), sys.executable
+    from ..common.runtime_inventory import python_runtime_binding
+    actor_repo = Path(getattr(args, 'actor_runtime', None) or repo).resolve(strict=True)
+    if not (actor_repo/'scripts/neuralese_data/serve_direct_checkpoint.py').is_file():
+        raise ValueError('native actor runtime requires its actual serving entry point')
+    actor_python_runtime = python_runtime_binding(actor_repo/'training/neuralese/natlang_neuralese')
     endpoint = 'http://127.0.0.1:' + str(args.port)
     if semantic:
         actor_profile = expected_native_actor(args.semantic_adapter, args.native_participant,
@@ -924,6 +955,9 @@ def configure_native(args):
               '--held-native-graphs', '{held_native_graphs}', '--out', '{learner_out}', '{trainer_args}']
     config = {'schema': 'natlang.rl-production-config/1', 'id': 'native-rl-' + args.model,
         'native_state': True, 'model': args.model, 'out': str(args.out.resolve()),
+        'native_actor_python_runtime': actor_python_runtime,
+        'actor_environment': {'NATLANG_REPO': str(actor_repo),
+            'PYTHONPATH': str(actor_repo/'training/neuralese') + ':' + str(actor_repo)},
         'checkpoint': str(args.checkpoint.resolve()),
         'native_actor_mode': 'shared-semantic' if semantic else 'raw-state',
         **({'history_reasoning_policy': history_policy} if history_policy is not None else {}),
@@ -942,7 +976,7 @@ def configure_native(args):
         'task_curriculum': DEFAULT_TASK_CURRICULUM.copy(),
         'neuralese_server': True, 'trainer_parameters': parameters,
         'production_recipe': str(args.production_recipe.resolve()), 'production_stage': args.production_stage,
-        'actor_command': [python, repo + '/scripts/neuralese_data/serve_direct_checkpoint.py',
+        'actor_command': [python, str(actor_repo/'scripts/neuralese_data/serve_direct_checkpoint.py'),
             '--native-state', '--store-dir', '{out}/actor-store',
             '--checkpoint', '{checkpoint}', '--checkpoint-sha256', '{policy_id}',
             '--base', '{base}',
@@ -1116,6 +1150,7 @@ def main(argv=None):
     g.add_argument('--held-text-data', type=Path)
     g.add_argument('--heads', type=Path)
     g.add_argument('--native-state', action='store_true')
+    g.add_argument('--actor-runtime', type=Path, help='existing immutable native actor repository; does not change the learner runtime')
     g.add_argument('--native-participant')
     g.add_argument('--coefficient-policy',type=Path)
     g.add_argument('--coefficient-optimizer',type=json.loads)

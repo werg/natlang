@@ -68,3 +68,15 @@ def task_runtime_inventory(path):
                    for name in names})
     return result
 
+
+
+def python_runtime_binding(package=None):
+    """Bind the existing resident Python closure without a path-dependent identity."""
+    from ..train.native_resident import code_inventory
+    from .hashing import canonical_json_sha256_hex
+    package = Path(package) if package is not None else Path(__file__).resolve().parents[1]
+    files = code_inventory(package)
+    if not files:
+        raise ValueError('native actor Python package has no source inventory')
+    return {'schema': 'natlang.python-runtime/1',
+            'sha256': canonical_json_sha256_hex(files), 'files': len(files)}

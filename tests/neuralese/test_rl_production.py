@@ -326,9 +326,15 @@ def test_empty_source_waits_without_freezing_selection(tmp_path):
 def test_managed_ready_hook_uses_same_live_actor_before_collection(tmp_path,monkeypatch,hook_error):
     from natlang_neuralese.rl import grpo
     events=[]
+    from os import environ
+    actor_env={'NATLANG_REPO':'/frozen/actor','PYTHONPATH':'/frozen/actor/training/neuralese'}
+    parent_repo=environ.get('NATLANG_REPO')
     class Process:
         pid=123
-        def __init__(self,*a,**kw):events.append('spawn');self.stopped=False
+        def __init__(self,*a,**kw):
+            events.append('spawn');self.stopped=False
+            assert all(kw['env'][key]==value for key,value in actor_env.items())
+            assert environ.get('NATLANG_REPO')==parent_repo
         def poll(self):return 0 if self.stopped else None
         def terminate(self):events.append('terminate');self.stopped=True
         def wait(self,*a,**kw):return 0
@@ -343,7 +349,7 @@ def test_managed_ready_hook_uses_same_live_actor_before_collection(tmp_path,monk
         if hook_error:raise RuntimeError('held monitor error')
     monkeypatch.setattr(production,'run_command',command)
     monkeypatch.setattr(production,'collect',lambda **kw:events.append('train')or {'done':True})
-    config={'actor_command':['actor'],'after_actor_ready':['held-only']}
+    config={'actor_command':['actor'],'after_actor_ready':['held-only'],'actor_environment':actor_env}
     values={'out':str(tmp_path),'policy_id':'exact-current'}
     if hook_error:
         with pytest.raises(RuntimeError,match='held monitor'):production.collect_with_actor(config,values,out=tmp_path,endpoints=['http://same'])
@@ -352,3 +358,46 @@ def test_managed_ready_hook_uses_same_live_actor_before_collection(tmp_path,monk
     events.clear();(tmp_path/'score.json').write_text(json.dumps({'collection_complete':True}))
     assert production.collect_with_actor(config,values,out=tmp_path,endpoints=['http://same'])=={'done':True}
     assert events==['train']
+
+
+def test_python_actor_runtime_is_bound_and_mixed_replicas_rejected():
+    from copy import deepcopy
+    policy = '1' * 64
+    native = {'checkpoint_sha256': policy, 'tokenizer_fingerprint': '2' * 64,
+              'embedding_weight_sha256': '3' * 64, 'architecture': 'lfm2'}
+    runtime = {'schema': 'natlang.python-runtime/1', 'sha256': '4' * 64, 'files': 5}
+    receipt = {'schema': 'natlang.rl-policy-binding/2', 'checkpoint_sha256': policy,
+        'communication': 'native-state', 'native_identity': native, 'python_runtime': runtime}
+    expected = {'native_identity': native, 'native_participant': None,
+                'semantic_adapter_sha256': None, 'python_runtime': runtime}
+    production.validate_actor_receipts({'a': receipt}, policy_id=policy, neuralese_server=True,
+                                       expected_native=expected)
+    changed = deepcopy(receipt)
+    changed['python_runtime']['sha256'] = '5' * 64
+    with pytest.raises(ValueError, match='requested Python runtime'):
+        production.validate_actor_receipts({'a': changed}, policy_id=policy, neuralese_server=True,
+                                           expected_native=expected)
+    for replacement in (None, changed['python_runtime']):
+        with pytest.raises(ValueError, match='replicas disagree on their Python runtime'):
+            production.validate_actor_receipts({'a': receipt, 'b': {**receipt, 'python_runtime': replacement}},
+                                               policy_id=policy, neuralese_server=True)
+    for invalid in ('not a receipt', {**runtime, 'files': True}, {**runtime, 'sha256': 'bad'}):
+        with pytest.raises(ValueError, match='Python runtime provenance'):
+            production.validate_actor_receipts({'a': {**receipt, 'python_runtime': invalid}},
+                                               policy_id=policy, neuralese_server=True)
+
+
+def test_python_runtime_reuses_resident_inventory_and_is_path_independent(tmp_path):
+    from natlang_neuralese.common.runtime_inventory import python_runtime_binding
+    from natlang_neuralese.common.hashing import canonical_json_sha256_hex
+    from natlang_neuralese.train.native_resident import code_inventory
+    packages = [tmp_path/'first', tmp_path/'relocated']
+    for package in packages:
+        package.mkdir()
+        (package/'actor.py').write_text('version = 1\n')
+        (package/'ignored.txt').write_text('not executable Python source')
+    initial = python_runtime_binding(packages[0])
+    assert initial == python_runtime_binding(packages[1])
+    assert initial['sha256'] == canonical_json_sha256_hex(code_inventory(packages[0]))
+    (packages[1]/'actor.py').write_text('version = 2\n')
+    assert python_runtime_binding(packages[1]) != initial

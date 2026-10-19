@@ -19,8 +19,8 @@ law, prompt, optimizer or policy-update objective was introduced.
   and adjoints retain64-row tiles. This removes work on padded rows; it does not
   change backbone precision or parameter/optimizer state.
 
-These mechanisms are shared by LFM and Mellum. Root independently reviewed the
-first two patches as clear; the linear tile awaits integrated review/adoption.
+These mechanisms are shared by LFM and Mellum. Root independently reviewed all five inference patches as clear and integrated
+them through `4e8704a83`; integrated checks remain the supervisor’s responsibility.
 Cloud resource control remains with the existing sandbox owner. This document
 is not evidence that a running cloud actor has adopted the patches.
 
@@ -176,3 +176,88 @@ cloud qualification or task-quality result. No cloud processes were changed.
 The 32 existing shared CUDA checks and quick 22/TS checks also pass after this
 shared-selector change (39 focused CUDA checks total). Root owns integrated
 broad-suite validation; none was duplicated here.
+
+
+## Full-graph RL actor deployment
+
+The existing `rl.production.configure_native` actor already executes
+`serve_direct_checkpoint.py --native-state` → `load_native_engine` → the shared
+`native_step`, adapter, attention and routed/linear kernels above. Both raw-state
+and shared-semantic modes use this path. The learner remains the shared native
+trainer/objective; the inference-only guards leave its gradients and replay
+semantics unchanged. No additional serving engine, queue or trainer is required.
+
+The cloud operator confirmed the imminent R14 training package is
+`/work/native-runtime/native-shared-production-classified-v14-cached-reference-cpu-v1-20261019`
+(inventory `b789522986f1045ac54afa4c800a089d32fa2e313e3def72c90209962b294034`).
+It must remain frozen. R15 contains R14 plus eleven joint modules and deliberately
+does **not** contain these inference optimizations. No optimized actor package
+path is approved, staged or active yet, and there is no live RL policy owner.
+Foundation/role release and actual cloud composition remain operator-owned.
+
+Executable provision for that boundary:
+
+1. The operator composes one immutable actor repository from the qualified joint
+   semantics plus these reviewed inference patches and the runtime-binding
+   followup. Stage this same package closure on each selected worker; do not
+   change global provider `NATLANG_REPO`, `PYTHONPATH` or the R14 training tree.
+2. Native `production configure` accepts `--actor-runtime` naming that actual
+   existing repository. Raw/shared bootstrap model declarations accept the same
+   `actor_runtime` path. Defaults retain the existing repository selection. The
+   factory verifies the serving script and source inventory, writes the explicit
+   actor command, and sets `NATLANG_REPO`/`PYTHONPATH` for that child only. Learner
+   and seed commands, their provider environment and optimizer ownership remain
+   unchanged. A provider command override must preserve these exact bindings.
+3. Every newly loaded native actor attests a path-independent Python source
+   digest using the existing resident `code_inventory`. New production configs
+   bind the actual selected actor package; collection rejects a different or
+   missing implementation receipt and rejects mixed-version replicas. The
+   expected receipt and actual actor receipts persist in the existing collection
+   binding/report. Legacy all-unattested actors remain explicitly legacy evidence
+   and cannot satisfy a new bound configuration. Semantic-channel binding retains
+   this implementation attestation.
+4. Keep the checkpoint, participant, tokenizer/embedding identities, sparse-row
+   precision, semantic adapter and history policy exact. Use the existing durable
+   actor store and archive all imported/produced state before actor teardown.
+   Sampling keeps the seeded CPU multinomial and true behavior log probabilities.
+   Whole-episode admission/replay still covers all actual sampled/forced turns,
+   producer occurrences, consumer imports and downstream outcomes. No detached
+   producer, consumer-only update or communication-edge eligibility gate is added.
+5. Use the first useful train-only collection as the operational check, retaining
+   its actual checkpoint/package/runtime receipts and outcome/throughput report.
+   Do not launch another generic qualification campaign in place of useful actor
+   operation. The provider’s existing SDK worker runtime/entry-point checks still
+   apply; a separate actor path does not authorize an unqualified provider launch.
+
+Validation: 57 existing actor/collection/controller checks passed, including a
+real CPU HTTP actor, native-state write, actor restart and exact archived bytes.
+After adding the separate actor path/environment and bootstrap plumbing, 82
+checks passed and one existing optional test skipped. These include mismatched
+code/replica rejection, path-independent source hashing, separate actor package
+selection, child-only environment and preserved learner/seed configuration.
+These are local mechanism checks, not full-size cloud RL qualification.
+
+## Historical task diagnostics and remaining work
+
+The protected LFM17694 report records 0/16: 14 repetition, one model token-budget
+exhaustion, one semantic mismatch, zero infrastructure errors. This used the old
+5d085 TS runtime. It does not predict the running LFM18006 evaluation on corrected
+02b. Only these aggregate failure classes were used here; no protected task
+content or answer was copied into training.
+
+The existing shared curriculum already starts at tractable train tasks, favors
+mixed-success practice and verified full-trajectory seeding for all-fail groups,
+and retains rotating breadth including solved/harder tasks. Existing rewards
+score correct execution as one with or without communication; repetition and
+model-caused exhaustion score zero, while infrastructure and host wall-clock
+stops stay unscored. Keep independently authored short return/tool/read-write
+train tasks as the first useful actor work; new model-facing scaffolds require
+the existing live qualification before admission. Preserve full-graph updates
+and all future comprehensive source exposure. No new prompt or termination rule
+was adopted from these held failures.
+
+The serial native scheduler, CPU sampling and per-token device/index construction
+remain measured opportunities. Current evidence does not yet justify changing
+the RNG law or adding mutable device caches. Deploy the independently ready
+linear/expert changes into useful actors before another full actor reload or
+architecture qualification. Full12B throughput remains unmeasured.

@@ -187,6 +187,8 @@ def load_native_engine(checkpoint: str, *, base: str | None = None, device: str 
         engine.rl_policy_binding['inference_source'] = dict(_state['inference_source'])
     if engine.native_actor_view is not None:
         engine.rl_policy_binding['actor_view'] = dict(engine.native_actor_view)
+    from ..common.runtime_inventory import python_runtime_binding
+    engine.rl_policy_binding['python_runtime'] = python_runtime_binding()
     if semantic_adapter:
         from ..model.semantic_channel import SemanticChannel
         bind_native_semantic_channel(engine, SemanticChannel.load(semantic_adapter,device=device), participant)
@@ -201,9 +203,11 @@ def bind_native_semantic_channel(engine,channel,participant):
     engine.semantic_channel=channel
     engine.semantic_participant=participant
     engine.dialect='semantic-state/'+channel.adapter_sha256
+    python_runtime = getattr(engine, 'rl_policy_binding', {}).get('python_runtime')
     engine.rl_policy_binding={'schema':'natlang.rl-policy-binding/2',
         'checkpoint_sha256':engine.native_identity['checkpoint_sha256'],'communication':'native-state',
         'native_identity':dict(engine.native_identity),'native_participant':participant,
         'history_reasoning':dict(engine.tokenizer.natlang_history_reasoning),
-        'semantic_adapter_sha256':channel.adapter_sha256}
+        'semantic_adapter_sha256':channel.adapter_sha256,
+        **({'python_runtime': python_runtime} if python_runtime is not None else {})}
     return engine

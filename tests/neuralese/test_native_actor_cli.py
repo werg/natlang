@@ -41,6 +41,8 @@ def test_native_actor_cli_restores_actual_checkpoint_and_exposes_exact_policy(tm
                 with urllib.request.urlopen(endpoint+'/v1/neuralese/info', timeout=30) as response:
                     info = json.load(response)
                 assert info['rl_policy_binding'] == ready['rl_policy_binding']
+                from natlang_neuralese.common.runtime_inventory import python_runtime_binding
+                assert info['rl_policy_binding']['python_runtime'] == python_runtime_binding()
                 validate_actor_receipts({endpoint: info['rl_policy_binding']}, policy_id=digest, neuralese_server=True)
                 if attempt:
                     from natlang_neuralese.rl.graph_replay import save_bundle, verified_bundle_bytes
