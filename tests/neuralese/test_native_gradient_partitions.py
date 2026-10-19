@@ -8,6 +8,22 @@ from natlang_neuralese.model.native_gradient_partitions import (
 from natlang_neuralese.model.native_weight_carrier import ParameterCotangentScope, stored_linear
 
 
+def _capture_before_vjp_delivery(scope):
+    """Keep the test's unrounded witness before the audited production release."""
+    captured = {}
+    audit = scope._audit_vjp_gradient
+    def observe(entry, gradient):
+        accumulator = entry.get('accumulator')
+        if accumulator is not None:
+            captured[id(entry['parameter'])] = accumulator.detach().clone()
+        result = audit(entry, gradient)
+        if scope.accumulator_backend == 'device_fp32':
+            assert entry['accumulator'] is None and entry['vjp_retired']
+        return result
+    scope._audit_vjp_gradient = observe
+    return captured
+
+
 def test_partition_context_captures_checkpoint_and_restores_nested_context():
     parts = GradientPartitions((20, 0, 14))
     with gradient_partitions(parts):
@@ -151,6 +167,7 @@ def test_real_dense_grouped_expert_chunk_boundary_preserves_delivered_gradient(d
             return project(part, routes[start:stop], combine[start:stop], gate_up, down, None)
         with ParameterCotangentScope([('experts.gate_up', gate_up), ('experts.down', down)], mode='vjp',
                 accumulator_backend='device_fp32' if device == 'cuda' else 'cpu_file') as scope:
+            delivered = _capture_before_vjp_delivery(scope)
             if not defer:
                 scope.defer_expert_chunk = lambda *args, **kwargs: False
             else:
@@ -170,8 +187,8 @@ def test_real_dense_grouped_expert_chunk_boundary_preserves_delivered_gradient(d
                     lambda part: one_chunk(part[0])[None]).squeeze(0)
             dx, dgate, ddown = torch.autograd.grad((output * cotangents).sum(),
                                                    (x, gate_up, down))
-            acc_gate = scope.entries[id(gate_up)]['accumulator'].clone()
-            acc_down = scope.entries[id(down)]['accumulator'].clone()
+            acc_gate = delivered[id(gate_up)]
+            acc_down = delivered[id(down)]
             scope.finish()
         return output.detach(), dx.detach(), dgate.detach(), ddown.detach(), acc_gate, acc_down, captured
 
@@ -219,6 +236,7 @@ def test_grouped_projection_custom_backward_flushes_chunk_anchor(projection):
         cursor = 0
         with ParameterCotangentScope([('experts.projection', weight)], mode='vjp',
                                      accumulator_backend='device_fp32') as scope:
+            delivered = _capture_before_vjp_delivery(scope)
             if not defer:
                 scope.defer_expert_chunk = lambda *args, **kwargs: False
             def project(part):
@@ -244,7 +262,7 @@ def test_grouped_projection_custom_backward_flushes_chunk_anchor(projection):
                 output = token_local_chunks(x[None], chunk_tokens,
                     lambda part: project(part[0])[None]).squeeze(0)
             dx, dweight = torch.autograd.grad(output.float().sum(), (x, weight))
-            accumulated = scope.entries[id(weight)]['accumulator'].clone()
+            accumulated = delivered[id(weight)]
             scope.finish()
         return output.detach(), dx.detach(), dweight.detach(), accumulated
 
@@ -276,6 +294,7 @@ def test_grouped_linear_deferred_chunks_route_to_base_and_adapter_delta():
         effective = (base.float() + delta.float()).to(torch.bfloat16)
         with ParameterCotangentScope([('experts.base', base)], mode='vjp',
                                      accumulator_backend='device_fp32') as scope:
+            delivered = _capture_before_vjp_delivery(scope)
             scope.register_effective_weight(effective, base, [delta])
             assert scope._effective_route_for(effective)[1] is not None
             if not deferred:
@@ -296,8 +315,8 @@ def test_grouped_linear_deferred_chunks_route_to_base_and_adapter_delta():
                 output = token_local_chunks(x[None], chunk_tokens,
                     lambda part: project(part[0])[None]).squeeze(0)
             dx, dbase, ddelta = torch.autograd.grad(output.float().square().sum(), (x, base, delta))
-            accum_base = scope.entries[id(base)]['accumulator'].clone()
-            accum_delta = scope._auxiliary_entries[id(delta)]['accumulator'].clone()
+            accum_base = delivered[id(base)]
+            accum_delta = delivered[id(delta)]
             scope.finish()
         return output.detach(), dx.detach(), dbase.detach(), ddelta.detach(), accum_base, accum_delta
 
