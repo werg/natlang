@@ -1174,7 +1174,7 @@ def _owned_recipe_invocation(argv, child, record, actual_recipe, stage_id, linea
     return True
 
 
-def _owned_operation_chain(operations,published,model_id,lineage):
+def _owned_operation_chain(operations,published,model_id,lineage,*,inspect_interrupted_tail=False):
     """Authenticate completed finite work without decoding historical optimizers."""
     from .native_raw_handoff import verify_handoff_controls,verify_saved_update_acknowledgement
     from ..train.recipe import native_recipe_binding,resolve_recipe_data
@@ -1184,7 +1184,7 @@ def _owned_operation_chain(operations,published,model_id,lineage):
             raise ValueError('owned operation needs exactly one successful handoff or explicit saved-update recovery')
         recovered=operation.get('saved_update_recovery')
         if recovered:
-            if index==len(operations)-1:
+            if index==len(operations)-1 and not inspect_interrupted_tail:
                 raise ValueError('owned recovery is historical only; the final current owner needs a successful full handoff')
             record=verify_saved_update_acknowledgement(recovered,receipt=operation['receipt'])
         else:record=verify_handoff_controls(operation['handoff'])
