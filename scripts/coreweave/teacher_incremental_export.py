@@ -1844,6 +1844,12 @@ def _export_discovered_guardian_batch(active,prior,publisher,publisher_raw,sandb
     return last
 
 
+def _completed_guardian_poll(value, started_at, started_monotonic):
+    """Timestamp the entire poll, preserving each batch result's own `at`."""
+    return {**value, 'poll_started_at': started_at, 'poll_completed_at': time.time(),
+            'poll_elapsed_seconds': time.monotonic() - started_monotonic}
+
+
 def run_guardian_export_service(publisher_path: Path, *, poll_seconds: float = 15,
                                 max_polls: int | None = None,
                                 allowed_spool_root: Path | None = None) -> dict:
@@ -1869,17 +1875,21 @@ def run_guardian_export_service(publisher_path: Path, *, poll_seconds: float = 1
         raise ValueError('teacher export publisher spool must live under external data root')
     polls, last = 0, None
     while max_polls is None or polls < max_polls:
+        started_at, started_monotonic = time.time(), time.monotonic()
+        closed_exports = {}
         try:
-            cwctl = _cwctl_module()
-            cwctl.load_env_file()
-            sandbox, reader = scoped_sdk_session(publisher['sandbox_id'])
-            active = discover_guardian_batch(publisher, sandbox, reader)
+            # Preserve prior durable custody even if the first SDK discovery
+            # fails after a publisher restart.
             prior = json.loads(state_path.read_text()) if state_path.exists() else {}
             closed_exports = dict(prior.get('closed_boundaries') or {})
             if any(not str(key).isdigit() or not isinstance(value, dict)
                    or not isinstance(value.get('sha256'), str)
                    for key, value in closed_exports.items()):
                 raise ValueError('publisher durable closed-boundary map is malformed')
+            cwctl = _cwctl_module()
+            cwctl.load_env_file()
+            sandbox, reader = scoped_sdk_session(publisher['sandbox_id'])
+            active = discover_guardian_batch(publisher, sandbox, reader)
 
             def export_unseen_closed(boundary_refs, guardian_state, *, active_batch=None):
                 exported = []
@@ -1948,16 +1958,18 @@ def run_guardian_export_service(publisher_path: Path, *, poll_seconds: float = 1
             last = {'schema': 'natlang.teacher-incremental-export-publisher-state/1',
                 'at': time.time(), 'publisher_sha256': _sha(publisher_raw),
                 'identity_error': f'{type(error).__name__}: {error}',
-                'closed_boundaries': locals().get('closed_exports', {}),
+                'closed_boundaries': closed_exports,
                 'training_admission': False, 'exposure': False}
+            last = _completed_guardian_poll(last, started_at, started_monotonic)
             _write(state_path, (json.dumps(last, sort_keys=True, indent=2) + '\n').encode())
             raise
         except Exception as error:
             last = {'schema': 'natlang.teacher-incremental-export-publisher-state/1',
                 'at': time.time(), 'publisher_sha256': _sha(publisher_raw),
                 'transport_error': f'{type(error).__name__}: {error}',
-                'closed_boundaries': locals().get('closed_exports', {}),
+                'closed_boundaries': closed_exports,
                 'training_admission': False, 'exposure': False}
+        last = _completed_guardian_poll(last, started_at, started_monotonic)
         _write(state_path, (json.dumps(last, sort_keys=True, indent=2) + '\n').encode())
         polls += 1
         if max_polls is None or polls < max_polls:

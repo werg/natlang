@@ -1553,3 +1553,44 @@ def test_scoped_file_failure_identifies_path_without_retry_or_identity_downgrade
     else:
         assert '/batch/results/verified.json' in str(caught.value)
         assert caught.value.__cause__ is original
+
+
+@pytest.mark.parametrize('failure',[None,OSError,ValueError])
+def test_whole_poll_timing_and_discovery_failure_preserve_prior_publications(tmp_path,monkeypatch,failure):
+    from types import SimpleNamespace
+    from scripts.coreweave import teacher_incremental_export as module
+    root=tmp_path/'spool';root.mkdir()
+    publisher={'sandbox_id':'sid','directory_root':str(root)}
+    path=tmp_path/'publisher.json';path.write_text(json.dumps(publisher))
+    closed={'0021':{'sha256':'a'*64,'result':{'private':True}}}
+    (root/'publisher-state.json').write_text(json.dumps({'closed_boundaries':closed}))
+    clock=[0.]
+    monkeypatch.setattr(module.time,'time',lambda:1000+clock[0])
+    monkeypatch.setattr(module.time,'monotonic',lambda:clock[0])
+    monkeypatch.setattr(module,'_cwctl_module',lambda:SimpleNamespace(load_env_file=lambda:None))
+    def session(*args):
+        if failure:
+            clock[0]=55.
+            raise failure('failed before any batch was discovered')
+        return object(),lambda p:b''
+    monkeypatch.setattr(module,'scoped_sdk_session',session)
+    active={'batch':22,'guardian_state':{'source_sequence':{'started':{'23':{}}}}}
+    monkeypatch.setattr(module,'discover_guardian_batch',lambda *a,**k:dict(active,batch=k.get('batch_slot',22)))
+    monkeypatch.setattr(module,'_guardian_lookahead_slots',lambda state:{'next':{'owner':{'pid':1},'batch':23}})
+    def exported(batch,*args):
+        clock[0]=10. if batch['batch']==22 else 110.
+        return {'at':1000+clock[0],'training_admission':False,'exposure':False}
+    monkeypatch.setattr(module,'_export_discovered_guardian_batch',exported)
+    if failure is ValueError:
+        with pytest.raises(ValueError,match='before any batch'):
+            module.run_guardian_export_service(path,poll_seconds=0,max_polls=1,allowed_spool_root=tmp_path)
+    else:
+        module.run_guardian_export_service(path,poll_seconds=0,max_polls=1,allowed_spool_root=tmp_path)
+    saved=json.loads((root/'publisher-state.json').read_text())
+    assert saved['closed_boundaries']==closed
+    assert saved['poll_started_at']==1000.
+    assert saved['poll_completed_at']==1000+clock[0]
+    assert saved['poll_elapsed_seconds']==clock[0]
+    if failure is None:
+        assert saved['at']==1010. and saved['poll_completed_at']==1110.
+        assert saved['overlap_batches']['23']['at']==1110.

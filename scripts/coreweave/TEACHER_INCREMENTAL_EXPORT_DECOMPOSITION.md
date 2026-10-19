@@ -73,3 +73,14 @@ the scoped reader, including multi-read callers. Ordinary artifact paths retain
 the SDK file transport. Nonzero exec, empty identity, changed identity and
 transport failures remain failures; no stored boot value substitutes for a read.
 This is crisp outside-world transport, with no policy or model-facing change.
+
+
+### Whole-poll telemetry and discovery failure custody (2026-10-20)
+
+The supervisor diagnoses slow export transport separately from healthy generation.
+The crisp owner-host publisher records start, durable completion and monotonic
+elapsed time for the whole poll, including overlapping batches. A primary
+batch result timestamp remains that batch's observation, not a whole-poll
+heartbeat. Read and validate the existing closed-boundary receipt map before
+SDK discovery, so a discovery failure after restart cannot erase earned
+publication custody. Neither timing nor retained receipts grant admission.
