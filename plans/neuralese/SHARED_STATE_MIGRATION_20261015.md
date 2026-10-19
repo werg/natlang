@@ -48,73 +48,72 @@ through the projected-value implementation.
 
 ## Current status
 
-October 19, 17:08 UTC: LFM has reached 16820 from its exact 16397
-parent, with 3275 new teacher examples actually adopted at 16556. Fixed
-foundation exposure is complete; whole communication exposure remains incomplete
-(26968 / 114794 visits at 16820). New admission is not claimed as exposure.
-The genuine whole-recipe controller is armed (PID3838643/birth42763411,
-spec e5ea4e9c…48fc8) for the next natural update boundary, 16909. Its
-administrative preflight passed without model allocation. The guarded source-host
-provider and heartbeat are active; requests stay blocked until the old learner
-exits and the authenticated controller-entered receipt exists. The five-minute
-monitor now observes both controller and provider identities.
+October 19, 17:50 UTC: LFM completed update16909 from16397. Exact full
+state was pinned and drained; the whole-recipe controller entered at17:43:46.
+Two launch defects were repaired: its handoff API needed the original bootstrap
+receipt rather than the raw plan, and its child needed the exact R9 PYTHONPATH.
+The same immutable corrected controller now runs as3890261/birth43084252;
+the guarded provider is genuinely ready. The next request is queued, but a new
+optimizer update after16909 has not yet been observed. No optimizer/RNG or
+exposure reset was introduced. At16673 the saved exposure map proves395 of3275
+new teacher graphs had actually been visited; admission is not full exposure.
 
-Mellum's R9/v7 completed nine of ten actual capacity backprops, including
-112008 forward tokens, then failed on the 161972-token pending source. The
-original trace locates CUDA illegal access in grouped expert dW, followed by
-sticky-CUDA RNG-restoration failure. Routed rows times width2304 exceed signed32
-there. The repaired kernel widens address operands before stride products;
-reductions, masks and dot arithmetic are unchanged. Independent full source
-review cleared it; four focused real GPU tests pass, including an actual
-above-2^31 address and bitwise historical gradients. Another 37 integrated
-partition tests pass on CPU/CUDA, including chunk-backed gradients. The cloud
-R10 composition changes only the first kernel AST in sealed R9 (new inventory
-6fad3bac…031f3). Fresh complete315 and all ten source-capacity checks precede
-SGD; old nine checks remain evidence for the old runtime only. A fresh-process
-CUDA GEMM/backward health check passed, so no sandbox replacement is indicated.
-Full parent24508, optimizer/RNG/exposure and the exact failed source remain intact.
+Mellum preserves full parent24508 (4775b9f3…). The R9 failure at161972 tokens
+was localized to signed32 expert-address overflow. R10 widens only that kernel's
+address arithmetic, retaining the remaining frozen R9 module bytes. Independent
+source review, actual above-2^31 GPU access and historical bitwise gradients
+passed. Its new owner2446465 passed fresh full-versus-compact actor parity and
+fresh complete315-gradient qualification at17:36:27. All ten capacity cases are
+now running; no new SGD or inherited R9 capacity credit is claimed.
 
-The typed successful completion, single-decode handoff and resident-retirement
-mechanisms have passed actual integration checks and independent review.
-Useful supervised refresh remains the fallback for incomplete readiness; it
-grants neither RL nor VAE readiness. A configuration gap was identified: an
-unset task_eval can never produce the current-weight execution receipt required
-for foundation readiness. Shared recipe wiring is being corrected to evaluate
-the registered held packet at the foundation boundary. Accounted task failure
-is telemetry, not an added task-success threshold for RL. No fabricated receipt
-or readiness waiver is used.
+The shared current-owner checkpoint publication follower is implemented in
+05e28b8a8, with41 focused tests and the quick check passing. It binds each
+actual continuation command, parent, runtime and output to an immutable owner
+generation, and permits a new generation's private backup while an old upload
+retries. Integration of controller pointer emission, successor exporters and
+current-generation quality ingestion is underway. The original optional LFM
+publisher failure was a missing pair of precise readonly dependency roots,
+not checkpoint corruption. Both necessary roots were verified remotely without
+broadening access to their ancestor directory.
 
-The optional LFM publication producer reports ValueError; training and full
-checkpoint saves continue. The observer now surfaces that failure, and both
-exporter processes were refreshed to load the corrected observer. An independent
-full copy86630086…1d10 (2,510,946,351 bytes) passed private upload/readback.
-Actual local single CPU decode established step16673,149 backbone tensors,
-complete optimizer components and1317144 exposure entries; exact saved base
-inventory and raw-policy preparation pass. A separate real held-task ingestion
-now uses that verified full receipt, avoiding delay behind publication repair.
-Mellum24508's qualified compact actor d6bdca44… remains in local private transfer
-for real task evaluation. No newer quality lift is claimed. The old LFM16397
-attempt had0 successes across16 attempted cases but incomplete accounting;
-its six retained contexts do not establish an evaluation-wide conclusion.
+The recovered16673 full checkpoint passed private upload and independent full
+readback, then local decode/restore checks. Its actual16-case held evaluation is
+running; no score is claimed before accounting completes. Root-space pressure
+had blocked some collectors. Pruning12 finished, integrated worktrees reclaimed
+5,027,831,808 bytes and allowed the remaining cases to start. Mellum24508's
+qualified compact d6bdca44… is sealed locally and being verified for evaluation.
+Two closed immutable source pairs were fully verified and deduplicated, retaining
+both logical paths and reclaiming3,752,579,072 external bytes. Active artifacts,
+source data and protected evaluations were preserved.
 
-Shared performance improvements are committed but outside live R9/R10 except
-for the urgent address fix. Ordered dense dW fusion passes167 integrated
-CPU/CUDA checks; no production speedup is claimed from its isolated benchmark.
-Full main67ac289320 passed. Full68b33e81f2 found one test incorrectly requiring
-physical storage writes on tmpfs; the actual observer correctly reported zero.
-The test now checks exact logical update bytes and permits zero physical bytes;
-all12 address/observer focused checks pass. The combined full service will
-validate the updated main rather than duplicating suites.
+The readiness gap from unset task_eval has an implemented shared boundary-only
+recipe helper, awaiting the explicit live recipe continuation. Accounted task
+failure is telemetry rather than a fabricated success gate. The passive outer
+readiness mechanism now supports externally owned raw training and has an
+actual role auto-seal integration test. On the current Mellum sandbox the latest
+57,144 training/11,278 held semantic pairs, qualified LFM QAD base and built
+harness runtime are staged and verified. The outer service still needs its
+current role-plan binding. Genuine shared-graph foundation completion in both
+models and actual joint-stage numerical/capacity checks remain prerequisites;
+no VAE readiness or trained shared dialect is claimed.
 
-Qwen3.8 Flash Next NVFP4 generation continues in the third sandbox. Actual
-17:05 observation showed72% GPU, batches61/63 still active and zero OOM.
-Further795 LF/794 Mellum plus244/model teacher rows await explicit continuation.
-D39 conversion finished99997 complete original code files/model; three invalid
-source rows are explicitly pending. All-row fidelity verification and ordinary
-capacity partition precede admission. D20's first complete upstream transcript
-member yields seven source-audited full-context graphs/model, with source-render
-checks and ordinary fit partition passed. Neither static code nor downloaded
-source data is claimed as genuine communication exposure or trained data.
+D39 now admits99,997 source-replayed complete static code examples per model.
+Current fit partitions contain99,979 LFM and99,975 Mellum examples, with18/22
+whole oversized graphs and three invalid upstream rows/model explicitly retained
+for follow-up. Both fit indexes and geometry checks passed; cloud staging and
+classification are underway. This is ordinary coding SFT, without execution or
+communication qualification. D20's first complete transcript yields seven
+source-audited contexts/model, already registered, classified and staged. New
+teacher51/tr0 adds196/model; other prepared teacher cohorts still require actual
+recipe adoption. Own-sandbox Qwen NVFP4 generation continues with no OOM.
+
+Shared optimizations beyond the address repair remain outside live R9/R10 and
+need their actual runtime checks before adoption. Full main67ac289320 passed;
+the later tmpfs observer assertion was repaired to check logical bytes without
+requiring physical disk writes. Full81cd12c0fb has passed its Python CPU/GPU
+stages and is running TypeScript checks; complete green status is not yet
+claimed. The five-minute monitor is being updated to the genuine handoff owner
+and exact SDK interpreter.
 
 October 19, 15:20 UTC: replacement continuation is still in startup; neither
 recovered entry has earned a new optimizer update. LFM's exact 16397 parent is
