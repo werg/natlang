@@ -1551,6 +1551,8 @@ def student_cycle(plan_path,declaration,handoff,directory,*,stop):
         parameters['communication_foundation']=bool(is_foundation and not cursor.get('foundation_qualified'))
         if is_foundation and config.get('resident_data_directory'):
             parameters['resident_data_directory']=config['resident_data_directory']
+        if is_foundation and cursor.get('foundation_readiness_repair'):
+            parameters['refresh_foundation_readiness']=True
         continuation['raw_foundation_qualification']=parameters['communication_foundation']
         export={'models':{'raw':{'mandatory_sft':_progress(checkpoint)}}}
         pending=stage_pending(export,'raw',stage['id'],sources,parameters.get('epochs',1),
@@ -1575,7 +1577,8 @@ def student_cycle(plan_path,declaration,handoff,directory,*,stop):
         _supervised_job(continuation,jobdir,config,cursor,stop)
         if stop.requested:return cursor
     cursor.pop('raw_retry_generation',None)
-    cursor.update(cycle=cycle+1,phase='rl',next_stage=0,current_checkpoint=_current_checkpoint(config))
+    cursor.update(cycle=cycle+1,phase=('rl' if cursor.get('foundation_qualified') else 'sft'),
+        next_stage=0,current_checkpoint=_current_checkpoint(config))
     write_json_durable(cursor_path,cursor)
     return cursor
 
@@ -1604,9 +1607,12 @@ def _publish_supervised_result(continuation,jobdir,config,cursor,result):
             raise ValueError('raw supervised readiness belongs to another checkpoint')
         if continuation.get('raw_foundation_qualification') and (report.get('foundation_ready') or report.get('completed')):
             cursor.update(readiness=binding(report_path),foundation_qualified=True)
-        elif (continuation.get('raw_foundation_qualification')
-                and (report.get('communication_foundation') or {}).get('complete')):
-            raise RuntimeError('raw current foundation runtime/task qualification needs repair; exact checkpoint retained')
+            cursor.pop('foundation_readiness_repair',None)
+        elif continuation.get('raw_foundation_qualification'):
+            cursor.pop('foundation_qualified',None)
+            cursor['foundation_readiness_repair']={'report':binding(report_path),
+                'checkpoint':checkpoint,'readiness_granted':False,
+                'reason':'Current foundation runtime/task qualification incomplete; continue supervised repair'}
         adopted=report.get('resident_adoption')
         if adopted and continuation.get('resident_data_directory',continuation['trainer_parameters'].get('resident_data_directory')):
             from ..train.native_resident import current
