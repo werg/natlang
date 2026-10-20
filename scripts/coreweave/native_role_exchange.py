@@ -55,7 +55,9 @@ def tick(config,io):
         actual=roles.contract(plan)
         if contract is not None and actual!=contract:raise ValueError('source hosts disagree on the joint contract')
         contract=actual;plans[role]=plan
-    snapshots={}
+    if len({plan.get('snapshot_preparation',False) for plan in plans.values()})!=1:
+        raise ValueError('source hosts disagree on snapshot preparation ownership')
+    snapshots={};qualified_snapshots={}
     for role,host in hosts.items():
         sid=host['source_host_id'];exchange=plans[role]['role_exchange']
         # A final proof is sealed by the actual source host only after its raw
@@ -67,10 +69,19 @@ def tick(config,io):
         proof=json.loads(raw)
         if proof.get('role')!=role:raise ValueError('role relay source substituted another owner')
         snapshots[role]=raw.decode()
+        if plans[role].get('snapshot_preparation'):
+            pointer=io.read_optional(sid,exchange['directory']+'/'+role+'-eligible.json')
+            if pointer is not None:
+                raw=_read_bound(io,sid,json.loads(pointer));proof=json.loads(raw)
+                if proof.get('role')!=role:raise ValueError('qualified snapshot substituted another owner')
+                qualified_snapshots[role]=raw.decode()
     for target,host in hosts.items():
         for source,raw in snapshots.items():
             if source==target:continue
             call(io,host['source_host_id'],'roles.receive('+repr(raw)+','+repr(host['plan']['path'])+')')
+        for source,raw in qualified_snapshots.items():
+            if source!=target:
+                call(io,host['source_host_id'],'roles.receive('+repr(raw)+','+repr(host['plan']['path'])+',snapshot_only=True)')
     consumer=contract['semantic_consumer'];host=hosts[consumer];sid=host['source_host_id']
     request_raw=io.read_optional(sid,plans[consumer]['role_exchange']['directory']+'/semantic-assets-request.json')
     if request_raw is None:return {'status':'waiting-for-semantic-consumption','roles':sorted(snapshots)}
@@ -79,14 +90,15 @@ def tick(config,io):
     if request!=expected:return {'status':'waiting-for-current-releases','roles':sorted(snapshots)}
     usable=call(io,sid,'roles.ready_participants('+repr(plans[consumer])+')[0]')
     if len(usable)>=2:return {'status':'semantic-assets-ready','models':sorted(row['model_id']for row in usable),'transferred':[]}
-    # Assets exist only because the designated shared-stage controller requested
-    # the same exact final participants. No eligible/live proof enters this path.
+    # Explicit snapshot preparation copies exact qualified historical weights;
+    # ordinary joint consumption continues to require actual optimizer release.
     checkpoints={};staged=[]
     for model_id,participant in request['participants'].items():
         source=participant['source_host_id']
         source_role=next(role for role,row in hosts.items()if row['source_host_id']==source)
         source_plan=plans[source_role]
-        found=call(io,source,'roles.exchanged('+repr(source_plan)+',kind="released")[0]')
+        kind='snapshot' if request.get('snapshot_preparation') else 'released'
+        found=call(io,source,'roles.exchanged('+repr(source_plan)+',kind='+repr(kind)+')[0]')
         ready=found[model_id]
         if (ready['checkpoint']!=participant['checkpoint']
                 or ready['source_role_release']['sha256']!=participant['role_release']['sha256']):
@@ -97,7 +109,8 @@ def tick(config,io):
             checkpoint=call(io,source,'roles.pin_checkpoint('+repr(checkpoint)+','+repr(directory)+')')
             closure=io.dependency_closure(source,{'semantic_participants':[checkpoint]})
             metadata=call(io,source,'roles.consumed_metadata('+repr(ready)+')')
-            needs_alias=call(io,source,'roles.recipe_recovery_needed('+repr(ready)+')')
+            needs_alias=(False if request.get('snapshot_preparation') else
+                call(io,source,'roles.recipe_recovery_needed('+repr(ready)+')'))
             missing=call(io,sid,'roles.missing_metadata('+repr(metadata)+')')
             package=call(io,source,'roles.metadata_package('+repr(missing)+','+repr(directory+'/metadata')+')')
             io.mirror_many(source,sid,[*closure['files'],*(item['transport']for item in package)])

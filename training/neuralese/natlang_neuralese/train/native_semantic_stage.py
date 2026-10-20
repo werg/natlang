@@ -93,6 +93,12 @@ def validate_config(config):
         raise ValueError('semantic curriculum must learn VAE before joint adaptation before distillation')
     if any(kind not in kinds for kind in ('vae', 'joint', 'distill')):
         raise ValueError('complete semantic curriculum requires VAE, joint and behavioral distillation phases')
+    if type(config.get('snapshot_preparation',False)) is not bool:
+        raise ValueError('snapshot_preparation must be an explicit boolean')
+    if config.get('snapshot_preparation') and config.get('policy_training'):
+        raise ValueError('snapshot preparation cannot execute a backbone policy objective')
+    if config.get('snapshot_preparation') and config.get('inherit_optimizer',True) is not True:
+        raise ValueError('snapshot preparation must preserve the actual participant optimizer history')
     from .native_learning_rates import validate_learned_row_rate
     from .native_optimizer_migration import validate_native_optimizer_migration
     if any(phase.get('options',{}).get('native_optimizer_migration') is not None for phase in phases):
@@ -158,6 +164,61 @@ def _adjust_lr(optimizer, lr, learned_row_lr=None, interface_row_lr=None):
             group['qat_latent_lr'] = lr
 
 
+def _qualified_snapshot(name,binding):
+    from .native_readiness import validate_ready
+    if binding.get('source_role_plan'):
+        from ..rl import native_role_release as roles
+        reference=binding['source_role_release'];proof=json.loads(_bound(reference).read_text())
+        _,models=roles.validate(reference,binding['source_role_plan'],kind=proof['kind'])
+        checked=models.get(name)
+        if (checked is None or checked['native_identity']!=binding['native_identity']
+                or checked['checkpoint']['sha256']!=binding['checkpoint']['sha256']):
+            raise ValueError('snapshot transport changed the actually qualified source weights: '+name)
+        return checked
+    requirement=binding.get('readiness_requirement')
+    if not binding.get('readiness') or not isinstance(requirement,dict) or requirement.get('model_id')!=name:
+        raise ValueError('snapshot adoption requires its exact qualified participant policy: '+name)
+    checked=validate_ready(_bound(binding['readiness']),requirement)
+    if (checked is None or checked['native_identity']!=binding['native_identity']
+            or checked['checkpoint']['sha256']!=binding['checkpoint']['sha256']):
+        raise ValueError('snapshot adoption requires the exact actually qualified weights: '+name)
+    return checked
+
+
+def _source_readiness(name,binding):
+    if binding.get('source_role_plan'):
+        from ..rl import native_role_release as roles
+        _qualified_snapshot(name,binding)
+        proof=json.loads(_bound(binding['source_role_release']).read_text())
+        evidence=next(item for item in proof['models'].values() if item['ready']['model_id']==name)
+        return roles._evidence(evidence['readiness'])
+    return json.loads(_bound(binding['readiness']).read_text())
+
+
+def _snapshot_adoption(config,bindings):
+    """Only real source-host optimizer releases can adopt prepared snapshots."""
+    from ..rl import native_role_release as roles
+    adoption=config.get('snapshot_adoption') or {}
+    if adoption.get('schema')!='natlang.native-snapshot-adoption/1':
+        raise ValueError('prepared VAE needs its explicit descendant optimizer handoff before joint training')
+    plan=json.loads(_bound(adoption['plan']).read_text());released={}
+    _,exchange=roles.ownership(plan)
+    if exchange is None:raise ValueError('snapshot adoption requires its actual source-host ownership exchange')
+    for reference in adoption.get('releases',[]):
+        role,models=roles.validate(reference,plan,kind='released')
+        current,status=roles._status(exchange,role)
+        if current is None or current['sha256']!=reference['sha256'] or status.get('kind')!='released':
+            raise ValueError('snapshot adoption refers to a retired optimizer release')
+        if set(released)&set(models):raise ValueError('snapshot adoption repeated an optimizer release')
+        released.update(models)
+    if set(released)!=set(bindings):raise ValueError('snapshot adoption omitted a participant optimizer owner')
+    for name,binding in bindings.items():
+        if (released[name]['checkpoint']['sha256']!=binding['checkpoint']['sha256']
+                or released[name]['native_identity']!=binding['native_identity']):
+            raise ValueError('snapshot adoption changed the genuinely released optimizer checkpoint: '+name)
+    return adoption
+
+
 def load_participant(name, binding, config, device):
     from .native_optimizer_migration import native_optimizer_migration_option
     declaration = config.get('models', {}).get(name, {})
@@ -189,7 +250,7 @@ def load_participant(name, binding, config, device):
         if recipe_binding is None:
             if not binding.get('readiness'):
                 raise ValueError('semantic participant needs exact readiness to recover missing saved recipe provenance')
-            readiness=json.loads(_bound(binding['readiness']).read_text())
+            readiness=_source_readiness(name,binding)
             if (readiness.get('recipe')!=declared or readiness.get('native_identity')!=identity
                     or (readiness.get('checkpoint') or {}).get('sha256')!=binding['checkpoint']['sha256']):
                 raise ValueError('semantic participant recipe recovery differs from its actual readiness/checkpoint')
@@ -200,7 +261,8 @@ def load_participant(name, binding, config, device):
                     or not requirement.get('stage_ids')
                     or binding.get('stage_id') not in requirement['stage_ids']):
                 raise ValueError('semantic recipe recovery requires its declared original readiness policy')
-            checked=validate_ready(_bound(binding['readiness']),requirement)
+            checked=(_qualified_snapshot(name,binding) if binding.get('source_role_plan')
+                else validate_ready(_bound(binding['readiness']),requirement))
             if checked is None or checked['stage_id']!=binding['stage_id']:
                 raise ValueError('semantic participant recipe recovery requires qualified original readiness')
         recipe_binding=declared
@@ -219,7 +281,7 @@ def load_participant(name, binding, config, device):
     result.sft_progress = collect_sft_progress(inherited)
     result.global_step = int(inherited.get('global_step', inherited.get('step', 0)))
     if binding.get('readiness'):
-        proof=json.loads(_bound(binding['readiness']).read_text())
+        proof=_source_readiness(name,binding)
         foundation=proof.get('communication_foundation') or {}
         if proof.get('foundation_ready') and foundation.get('complete'):
             frame=result.sft_progress.get(proof['stage_id'])
@@ -227,6 +289,8 @@ def load_participant(name, binding, config, device):
                 raise ValueError('foundation checkpoint lost its mandatory supervised progress: '+name)
             frame['completed_foundations']=sorted(set(frame.get('completed_foundations') or [])|{foundation['cohort_sha256']})
     result.continuation_proof = (inherited.get('options') or {}).get('continuation') or {}
+    result.snapshot_ancestors = list((inherited.get('options') or {}).get('native_snapshot_ancestors') or [])
+    result.source_rng = inherited.get('rng')
     return result
 
 
@@ -335,7 +399,9 @@ def save_shared(policy, participants, vae, optimizer, *, training, device):
             'participants': {name: {'model_config': entry.config, 'model_state': model_state(entry.model),
                 'source_identity': entry.identity, 'optimizer': entry.optimizer.state_dict(),
                 'sft_progress': entry.sft_progress, 'global_step': entry.global_step,
+                'source_rng':getattr(entry,'source_rng',None),
                 'training_options': {**checkpoint_input_storage_options(entry.model.port),
+                    'native_snapshot_ancestors':list(getattr(entry,'snapshot_ancestors',[])),
                     **({'recipe_binding':entry.recipe_binding} if entry.recipe_binding is not None else {})},
                 'fp8': entry.backend.extra_state() if entry.backend is not None else None}
                 for name, entry in participants.items()},
@@ -532,6 +598,8 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
             for name,participant in participants.items()})
     changed_models = set()
     if prior:
+        if training.get('snapshot_preparation') and not config.get('snapshot_preparation'):
+            training['snapshot_adoption']=_snapshot_adoption(config,bindings)
         prior_sha = sha256_file_hex_cached(resume)
         if set(prior['participants']) - set(participants):
             raise ValueError('semantic continuation cannot silently remove existing ready models')
@@ -557,7 +625,16 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
                 if not refresh_participants:
                     raise ValueError('semantic continuation changed the declared model lineage: ' + name)
                 proof = getattr(participant, 'continuation_proof', {})
-                if (proof.get('checkpoint_sha256') != prior_sha or proof.get('participant') != name
+                preparation=training.get('snapshot_preparation') or {}
+                prepared_source=preparation.get('participants',{}).get(name)
+                prepared_descendant=bool(preparation.get('participant_optimizer_updates')==0
+                    and not any(training.get('model_updates',{}).values())
+                    and prepared_source==saved['source_identity']
+                    and prepared_source['checkpoint_sha256'] in getattr(participant,'snapshot_ancestors',[])
+                    and bindings[name].get('readiness'))
+                if prepared_descendant:
+                    _qualified_snapshot(name,bindings[name])
+                if not prepared_descendant and (proof.get('checkpoint_sha256') != prior_sha or proof.get('participant') != name
                         or not proof.get('objective_transition')):
                     raise ValueError('semantic refresh requires an exact optimizer-preserving update from this shared parent: ' + name)
                 changed_models.add(name)
@@ -570,6 +647,7 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
                 migration=native_optimizer_migration_option(config,name)
                 participant.optimizer.load_state_dict(saved['optimizer'],native_optimizer_migration=migration)
                 participant.sft_progress = saved.get('sft_progress', participant.sft_progress)
+                participant.source_rng = saved.get('source_rng',getattr(participant,'source_rng',None))
                 participant.global_step = saved.get('global_step', participant.global_step)
                 if participant.backend is not None:
                     participant.backend.restore_extra_state(saved['fp8'])
@@ -592,6 +670,13 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
         vae = SemanticStateVAE({name: _layout(train, participants, name, resolver) for name in participants},
             latent_width=config.get('latent_width', 128), hidden_width=config.get('hidden_width', 512)).to(device)
         optimizer = _vae_optimizer(vae, config)
+    if config.get('snapshot_preparation'):
+        if any(training.get('model_updates',{}).values()):
+            raise ValueError('snapshot preparation requires a genuinely frozen-backbone parent')
+        for name,binding in bindings.items():
+            _qualified_snapshot(name,binding)
+        training['snapshot_preparation']={'participants':{name:entry.identity for name,entry in participants.items()},
+            'participant_optimizer_updates':0,'consumption':'vae-only; descendant handoff required before backbone updates'}
     policy = CheckpointPolicy(out, every_steps=config['checkpoint_every'],
         every_seconds=config['checkpoint_seconds'], prune_best=False)
     if stop is None:
@@ -613,6 +698,9 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
     metrics = {}
     while not policy.signaled:
         updated = validate_config(json.loads(config_path.read_text()))
+        if (updated.get('snapshot_preparation',False)!=config.get('snapshot_preparation',False)
+                or updated.get('snapshot_adoption')!=config.get('snapshot_adoption')):
+            raise ValueError('snapshot ownership changes require checkpointed explicit adoption and resume')
         config_sha = canonical_json_sha256_hex(updated)
         if config_sha != last_config:
             prior_kinds={phase['id']:phase['kind'] for item in training.get('config_history',[]) for phase in item['config']['phases']}
@@ -658,8 +746,11 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
         if training.get('semantic_obligation_signature')!=obligation_signature:
             training['semantic_obligations']=refresh_schedule.exposure_summary(config['phases'],train,participants,training['exposure'])
             training['semantic_obligation_signature']=obligation_signature
-        refresh_cycle=refresh_schedule.initialize(training,config,manifest)
-        if refresh_cycle is not None:
+        refresh_cycle=None if config.get('snapshot_preparation') else refresh_schedule.initialize(training,config,manifest)
+        if config.get('snapshot_preparation'):
+            work=first_work([phase for phase in config['phases'] if phase['kind']=='vae'],
+                train.entries,participants,training['exposure'],cursors)
+        elif refresh_cycle is not None:
             work=refresh_schedule.work(config['phases'],train.entries,participants,training['exposure'],
                 refresh_cycle,training.setdefault('refresh_source_cursors',{}))
         else:
@@ -720,6 +811,8 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
             raise ValueError('semantic training row changed under its exposure cursor')
         if not policy_due:active = {name for pair in pairs for name in pair}
         selected = {name: participant for name, participant in participants.items() if name in active}
+        if config.get('snapshot_preparation') and phase['kind']!='vae':
+            break  # Structural phase boundary; all joint/distill obligations remain.
         options = {**config.get('options', {}), **phase.get('options', {})}
         for name, participant in participants.items():
             participant.optimizer.zero_grad(set_to_none=True)
@@ -815,7 +908,8 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
             training['held_coverage']=coverage
             metrics['held']=held_metrics;metrics['held_loss']=held_metrics['loss'];metrics['held_rows']=held_metrics['rows']
         write_json_durable(out/'metrics.json', metrics)
-        due_task = bool(config.get('task_eval')) and training['step'] % config.get('task_eval_every', config['eval_every']) == 0
+        due_task = (not config.get('snapshot_preparation') and bool(config.get('task_eval'))
+            and training['step'] % config.get('task_eval_every', config['eval_every']) == 0)
         if policy.due(training['step']) or due_task:
             current = save_shared(policy, participants, vae, optimizer, training=training, device=device)
             if due_task:
@@ -916,6 +1010,10 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
         and all(value['passed'] for value in tasks.values())
         and semantic_certificate is not None and semantic_certificate['passed'])
     report = {'schema': 'natlang.native-shared-stage-completion/1', 'completed': complete,
+        'snapshot_preparation':training.get('snapshot_preparation'),
+        'preparation_complete':bool(config.get('snapshot_preparation') and not policy.signaled
+            and _exposure_complete([phase for phase in config['phases'] if phase['kind']=='vae'],
+                train,participants,training['exposure'])[0]),
         'exposure_complete':exposure_complete,'refresh_ready':bool(refresh_reached and current_checks),
         'refresh_progress':refresh_cycle,'semantic_obligations':training['semantic_obligations'],
         'participants_signature': manifest['signature'], 'step': training['step'],
@@ -958,8 +1056,9 @@ def main(argv=None):
     report = run(args.config, args.participants, args.out, resume=resume,
                  max_updates=args.max_updates, device=args.device, refresh_participants=args.refresh_participants)
     print(json.dumps({'completed': report['completed'], 'step': report['step'],
+                      'preparation_complete':report.get('preparation_complete',False),
                       'checkpoint': report['checkpoint']}), flush=True)
-    return 0 if report['production_ready'] else 75
+    return 0 if report['production_ready'] or report.get('preparation_complete') else 75
 
 
 if __name__ == '__main__':

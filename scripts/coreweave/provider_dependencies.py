@@ -258,6 +258,36 @@ def dependency_closure(request, *, namespace='/work/native-production', readonly
         # Exact fields consumed by production.run/native semantic refresh.
         for reference in value.get('operational_inputs', []):
             bound(reference)
+        qualification=value.get('foundation_qualification_request')
+        if qualification is not None:
+            if not isinstance(qualification,dict):
+                raise ValueError('provider foundation qualification request needs its exact binding')
+            declared=json.loads(bound(qualification).read_text())
+            if declared.get('schema')!='natlang.native-foundation-qualification-request/1':
+                raise ValueError('provider foundation qualification request schema differs')
+            for parameters in (value.get('trainer_parameters') or {},value.get('seed_trainer_parameters') or {}):
+                if parameters.get('foundation_qualification_request') not in (None,qualification['path']):
+                    raise ValueError('provider trainer qualification request differs from its bound input')
+        elif any(parameters.get('foundation_qualification_request') for parameters in
+                (value.get('trainer_parameters') or {},value.get('seed_trainer_parameters') or {})):
+            raise ValueError('provider trainer qualification request lacks its exact bound input')
+        adoption=value.get('snapshot_adoption')
+        if adoption is not None:
+            if not isinstance(adoption,dict) or adoption.get('schema')!='natlang.native-snapshot-adoption/1':
+                raise ValueError('provider snapshot adoption schema differs')
+            plan=json.loads(bound(adoption['plan']).read_text())
+            from natlang_neuralese.rl.native_role_release import ownership,SCHEMA as role_schema
+            _,exchange=ownership(plan)
+            if exchange is None:raise ValueError('provider snapshot adoption needs its source-host exchange')
+            for reference in adoption['releases']:
+                proof=json.loads(bound(reference).read_text());role=proof.get('role')
+                if (proof.get('schema')!=role_schema or role not in exchange['roles']
+                        or proof.get('kind')!='released' or proof.get('optimizer_released') is not True):
+                    raise ValueError('provider snapshot adoption requires an actual source-host release')
+                current=json.loads(add(Path(exchange['directory'])/(role+'-status.json')).read_text())
+                if current['sha256']!=reference['sha256']:
+                    raise ValueError('provider snapshot adoption refers to a retired role release')
+                bound(current)
         if value.get('native_actor_view'):
             from natlang_neuralese.model.native_bundle import actor_view_dependencies
             for reference in actor_view_dependencies(value['native_actor_view']):

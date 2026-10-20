@@ -431,3 +431,90 @@ def test_semantic_resume_never_relabels_changed_or_unchanged_participant_recipe(
     with pytest.raises(ValueError,match='recipe provenance|recipe lineage'):
         stage.run(config,manifest,tmp_path/'changed',resume=parent,refresh_participants=True,device='cpu')
     assert sha256_file_hex(parent)==before
+
+
+def test_frozen_snapshot_preparation_then_explicit_descendant_optimizer_adoption(tmp_path,monkeypatch):
+    """Actual two-port VAE/joint updates; readiness transport is a protocol fixture."""
+    path,manifest,config,_=_fixture(tmp_path,monkeypatch)
+    config['snapshot_preparation']=True
+    bindings=json.loads(manifest.read_text())
+    for binding in bindings['models']:
+        binding.update(readiness={'path':'protocol-proof','sha256':'a'*64},
+            readiness_requirement={'model_id':binding['model_id']})
+    bindings['signature']=canonical_json_sha256_hex(bindings['models']);manifest.write_text(json.dumps(bindings))
+    # Full readiness cryptography has independent per-row/runtime/task tests.
+    # This test measures the actual shared optimizer boundary without fabricating
+    # a production CUDA certificate for its tiny CPU ports.
+    monkeypatch.setattr(stage,'_qualified_snapshot',lambda name,binding:binding)
+    from natlang_neuralese.train import native_continuation
+    monkeypatch.setattr(native_continuation,'qualified_refresh_config',lambda *a,**k:(config,[]))
+    path.write_text(json.dumps(config))
+    frozen=stage.run(path,manifest,tmp_path/'preparation',device='cpu')
+    parent=tmp_path/'preparation/checkpoint.pt';saved=CheckpointPolicy.load(parent)
+    assert frozen['step']==1 and not frozen['production_ready'] and not frozen['completed']
+    assert not any(saved['training'].get('model_updates',{}).values())
+    assert set(saved['training']['exposure'])=={'vae'}
+    from natlang_neuralese.train import native_readiness
+    key=(frozen['participants_signature'],frozen['curriculum_signature'])
+    published={key:{'execution_signature':'frozen-preparation-fixture','models':['lfm','mellum']}}
+    proof,signature=native_readiness.validate_snapshot_preparation(tmp_path/'preparation/shared-stage-completion.json',published)
+    assert signature=='frozen-preparation-fixture' and proof['preparation_complete']
+    with pytest.raises(ValueError,match='shared completion'):
+        native_readiness.validate_completion(tmp_path/'preparation/shared-stage-completion.json',published)
+    controller=tmp_path/'controller.json'
+    controller.write_text(json.dumps({'schema':'natlang.native-shared-stage-controller/1',
+        'participants':bindings['models'],'out':str(tmp_path/'preparation'),'curriculum':str(path),
+        'command':['unused-no-launch-during-once-inspection','--participants','{participants}','--out','{out}']}))
+    with monkeypatch.context() as local:
+        local.setattr(native_readiness,'ready_participants',lambda config:(bindings['models'],[]))
+        inspected=native_readiness.run(controller,once=True)
+    assert inspected['child_pid'] is None and inspected['last_snapshot_preparation']
+    assert inspected['last_successful_participants'] is None
+    assert inspected['last_semantic_publication'] is None
+    # A structurally finished preparation is a successful worker operation,
+    # while remaining explicitly incomplete as a production curriculum.
+    cli=tmp_path/'cli.json';cli.write_text(json.dumps({**config,'task_eval':{'protocol':'not executed here'}}))
+    with monkeypatch.context() as local:
+        local.setattr(stage,'run',lambda *a,**kw:frozen)
+        assert stage.main(['--config',str(cli),'--participants',str(manifest),
+            '--out',str(tmp_path/'preparation'),'--device','cpu'])==0
+    for participant in saved['participants'].values():
+        for key in ('muon','adamw','muonsr'):
+            state=participant['optimizer'].get(key)
+            if state is not None:assert not state['state']
+    config['snapshot_preparation']=False;config['adaptive_refresh']={'updates_per_phase':1}
+    path.write_text(json.dumps(config))
+    with pytest.raises(ValueError,match='explicit descendant optimizer handoff'):
+        stage.run(path,manifest,tmp_path/'without-release',resume=parent,device='cpu',refresh_participants=True)
+    # New descendants are produced by a genuine optimizer update on each tiny
+    # model. Their full optimizer history and earned exposure must be adopted.
+    original=stage.load_participant;loaded={}
+    for binding in bindings['models']:
+        binding['native_identity']['checkpoint_sha256']='b'*64
+    bindings['signature']=canonical_json_sha256_hex(bindings['models']);manifest.write_text(json.dumps(bindings))
+    def descendant(name,binding,current,device):
+        value=original(name,binding,current,device)
+        loss=value.model.input_rows.square().sum();loss.backward();value.optimizer.step();value.optimizer.zero_grad(set_to_none=True)
+        value.identity=binding['native_identity']
+        value.snapshot_ancestors=[saved['participants'][name]['source_identity']['checkpoint_sha256']]
+        value.global_step=17
+        value.source_rng=stage.capture_training_rng_state('cpu')
+        value.sft_progress={'actual-descendant':{'remaining_ordinary_credit':3}}
+        loaded[name]=copy.deepcopy(value.optimizer.state_dict())
+        loaded[name+'-rng']=copy.deepcopy(value.source_rng)
+        return value
+    monkeypatch.setattr(stage,'load_participant',descendant)
+    monkeypatch.setattr(stage,'_snapshot_adoption',lambda config,bindings:{'protocol':'real-owner-release independently tested'})
+    continued=stage.run(path,manifest,tmp_path/'adopted',resume=parent,refresh_participants=True,
+        device='cpu',max_updates=1)
+    adopted=CheckpointPolicy.load(tmp_path/'adopted/checkpoint.pt')
+    assert continued['step']==2 and not continued['production_ready']
+    assert adopted['training']['participant_refreshes'][-1]['changed_models']==['lfm','mellum']
+    for name,participant in adopted['participants'].items():
+        _assert_same(participant['optimizer'],loaded[name])
+        _assert_same(participant['source_rng'],loaded[name+'-rng'])
+        assert participant['global_step']==17
+        assert participant['sft_progress']=={'actual-descendant':{'remaining_ordinary_credit':3}}
+        assert participant['source_identity']['checkpoint_sha256']=='b'*64
+    # The first adopted update is a real VAE refresh; joint/distill still remain.
+    assert continued['refresh_progress']['completed_updates']['vae']==1

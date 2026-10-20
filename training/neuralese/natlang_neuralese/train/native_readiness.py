@@ -273,6 +273,11 @@ def ready_participants(config):
         from ..rl import native_role_release as roles
         if roles.ownership(raw_plan)[1]is not None:
             try:
+                if raw_plan.get('snapshot_preparation'):
+                    curriculum=json.loads(Path(config['curriculum']).read_text())
+                    if curriculum.get('snapshot_preparation') is not True:
+                        raise ValueError('snapshot assets may only launch declared frozen-backbone VAE preparation')
+                    return roles.ready_participants(raw_plan)
                 if not roles.local_released(config):
                     return [],[{'reason':'local source-host optimizer has not released current checkpoint'}]
                 return roles.ready_participants(raw_plan)
@@ -305,6 +310,27 @@ def ready_participants(config):
             raise ValueError('shared-stage participants must be distinct native models')
         ready[value['model_id']] = value
     return [ready[key] for key in sorted(ready)], pending
+
+
+def validate_snapshot_preparation(path,published):
+    """Accept useful frozen VAE exposure, never a joint production publication."""
+    proof=json.loads(Path(path).read_text())
+    key=(proof.get('participants_signature'),proof.get('curriculum_signature'))
+    preparation=proof.get('snapshot_preparation') or {}
+    if (proof.get('schema')!='natlang.native-shared-stage-completion/1'
+            or proof.get('preparation_complete') is not True or proof.get('production_ready') is not False
+            or proof.get('completed') is not False or preparation.get('participant_optimizer_updates')!=0
+            or key not in published):
+        raise ValueError('VAE snapshot preparation is not a completed frozen-backbone exposure')
+    _bound(proof['checkpoint']);adapter=json.loads(_bound(proof['adapter']).read_text())
+    curriculum=json.loads(_bound(proof['curriculum']).read_text())
+    from .native_semantic_stage import validate_config
+    validate_config(curriculum)
+    if (adapter.get('schema')!='natlang.native-semantic-adapter/1'
+            or adapter.get('checkpoint')!=proof['checkpoint'] or curriculum.get('snapshot_preparation') is not True
+            or canonical_json_sha256_hex(curriculum)!=proof['curriculum_signature']):
+        raise ValueError('prepared VAE changed its exact checkpoint or curriculum')
+    return proof,published[key]['execution_signature']
 
 
 def validate_completion(path, published):
@@ -560,6 +586,7 @@ def _run(config_path, *, once=False, stop):
         child, child_kind, last_success, rl_last_success, active_rl_signature = None, None, None, None, None
         published = {}
         semantic_publication=None
+        last_preparation=None
         forwarded = False
         pair_cache = None
         retry = None
@@ -570,6 +597,7 @@ def _run(config_path, *, once=False, stop):
             rl_last_success = previous_state.get('last_successful_rl_bootstrap')
             retry = previous_state.get('retry')
             semantic_publication=previous_state.get('last_semantic_publication')
+            last_preparation=previous_state.get('last_snapshot_preparation')
         launch_path = out/'child-launch.json'
         launch = json.loads(launch_path.read_text()) if launch_path.exists() else None
         if not once and launch and launch.get('status') in {'launching', 'running'}:
@@ -651,6 +679,11 @@ def _run(config_path, *, once=False, stop):
                 completion = out/'shared-stage-completion.json'
                 semantic_out=out
                 semantic_pending=False
+                if child is None and curriculum.get('snapshot_preparation') and completion.is_file():
+                    try:
+                        _,last_preparation=validate_snapshot_preparation(completion,published)
+                    except (ValueError,OSError,KeyError):
+                        pass  # New or interrupted preparation still needs actual work.
                 if not config.get('rl_bootstrap'):
                     # Recover a successfully published child even when the
                     # controller died before its following state commit.
@@ -715,7 +748,8 @@ def _run(config_path, *, once=False, stop):
                                 except OSError as error:
                                     retry = _retry_failure(retry, 'native-rl', execution_signature, interval, error=error)
                                     retry_ready = False
-                if child is None and (execution_signature != last_success or semantic_pending) and not once and not stop.requested and retry_ready:
+                if (child is None and (execution_signature != last_success or semantic_pending)
+                        and execution_signature!=last_preparation and not once and not stop.requested and retry_ready):
                     argv = [arg.replace('{participants}', str(participants)).replace('{out}', str(semantic_out)) for arg in command]
                     try:
                         child, launch = _launch_child(argv, 'native-semantic', config, out, execution_signature, None,semantic_completion=completion)
@@ -730,6 +764,7 @@ def _run(config_path, *, once=False, stop):
                      'last_successful_participants': last_success,
                      'last_successful_rl_bootstrap': rl_last_success,
                      'last_semantic_publication':semantic_publication,
+                     'last_snapshot_preparation':last_preparation,
                      'execution_signature': execution_signature, 'curriculum_signature': curriculum_signature,
                      'retry': retry, 'status': 'running' if child else 'retry_wait' if retry else 'monitoring'}
             if child is not None and stop.requested and not forwarded:
@@ -775,7 +810,11 @@ def _run(config_path, *, once=False, stop):
                     try:
                         if not completion.is_file():
                             raise RuntimeError('shared-stage command exited without actual completion/exposure receipt')
-                        proof, last_success = validate_completion(completion, published)
+                        if curriculum.get('snapshot_preparation'):
+                            proof,last_preparation=validate_snapshot_preparation(completion,published)
+                            state['last_snapshot_preparation']=last_preparation
+                        else:
+                            proof, last_success = validate_completion(completion, published)
                     except Exception as error:
                         retry = _retry_failure(retry, child_kind, execution_signature, interval, exit_code=0)
                         retry['reason'] = 'shared completion rejected: ' + type(error).__name__ + ': ' + str(error)
@@ -786,8 +825,9 @@ def _run(config_path, *, once=False, stop):
                         time.sleep(interval)
                         continue
                     state['last_successful_participants'] = last_success
-                    semantic_publication={'path':str(completion.resolve()),'sha256':sha256_file_hex_cached(completion)}
-                    state['last_semantic_publication']=semantic_publication
+                    if not curriculum.get('snapshot_preparation'):
+                        semantic_publication={'path':str(completion.resolve()),'sha256':sha256_file_hex_cached(completion)}
+                        state['last_semantic_publication']=semantic_publication
                 retry = None
                 state['retry'] = None
                 state['child_pid'] = None

@@ -473,3 +473,38 @@ def test_declared_semantic_participants_use_actual_complete_checkpoint_closure(t
     Path(checkpoint['path']).write_text('changed')
     with pytest.raises(ValueError):
         deps.dependency_closure({'semantic_participants':[checkpoint]},namespace=str(tmp_path))
+
+
+def test_foundation_request_is_an_exact_optional_worker_input(tmp_path):
+    request=write(tmp_path/'request.json',{'schema':'natlang.native-foundation-qualification-request/1'})
+    config=write(tmp_path/'config.json',{'foundation_qualification_request':request,
+        'trainer_parameters':{'foundation_qualification_request':request['path']}})
+    closure=deps.dependency_closure({'config':config},namespace=str(tmp_path))
+    assert {row['path'] for row in closure['files']}=={config['path'],request['path']}
+    config=write(tmp_path/'config.json',{'trainer_parameters':{'foundation_qualification_request':request['path']}})
+    with pytest.raises(ValueError,match='lacks its exact bound input'):
+        deps.dependency_closure({'config':config},namespace=str(tmp_path))
+    config=write(tmp_path/'config.json',{'foundation_qualification_request':{**request,'bytes':request['bytes']+1}})
+    with pytest.raises(ValueError,match='size changed'):
+        deps.dependency_closure({'config':config},namespace=str(tmp_path))
+    config=write(tmp_path/'config.json',{})
+    assert deps.dependency_closure({'config':config},namespace=str(tmp_path))['files']==[config]
+
+
+def test_snapshot_adoption_ferries_exact_current_status_pointer_and_proof(tmp_path):
+    from natlang_neuralese.rl import native_role_release as roles
+    exchange=tmp_path/'exchange';exchange.mkdir()
+    assignment={name:{'source_host_id':name+'-fixture','owned_models':[name]} for name in ('lfm','mellum')}
+    plan=write(tmp_path/'plan.json',{'models':[{'model':name}for name in assignment],
+        'owned_models':['mellum'],'role_exchange':{'schema':roles.EXCHANGE,'role':'mellum',
+            'semantic_consumer':'mellum','directory':str(exchange),'roles':assignment}})
+    release=write(exchange/'release.json',{'schema':roles.SCHEMA,'role':'lfm','kind':'released',
+        'optimizer_released':True,'scope':'typed closure fixture; not numerical qualification'})
+    pointer=write(exchange/'lfm-status.json',release)
+    config=write(tmp_path/'config.json',{'snapshot_adoption':{'schema':'natlang.native-snapshot-adoption/1',
+        'plan':plan,'releases':[release]}})
+    closure=deps.dependency_closure({'config':config},namespace=str(tmp_path))
+    assert {row['path']for row in closure['files']}=={row['path']for row in (config,plan,release,pointer)}
+    write(exchange/'lfm-status.json',{**release,'sha256':'a'*64})
+    with pytest.raises(ValueError,match='retired role release'):
+        deps.dependency_closure({'config':config},namespace=str(tmp_path))

@@ -1044,6 +1044,9 @@ def _main(argv=None, *, requested_refresh):
     saved_options = saved_training.get('options') or {}
     checkpoint_options['foundation_qualification_history'] = list(saved_options.get('foundation_qualification_history') or [])
     snapshot_ancestors = list(saved_options.get('native_snapshot_ancestors') or [])
+    if any(not isinstance(value,str) or len(value)!=64 or any(char not in '0123456789abcdef' for char in value)
+           for value in snapshot_ancestors):
+        raise ValueError('native snapshot ancestry must retain exact loaded checkpoint identities')
     if resume is not None or shared_resume is not None:
         loaded_snapshot = sha256_file_hex_cached(args.continue_from if parent_continuation else policy.slot)
         if loaded_snapshot not in snapshot_ancestors:
@@ -1990,7 +1993,7 @@ def _main(argv=None, *, requested_refresh):
         'request':qualification_request, 'requested':qualification_request is not None,
         'candidate':bool(foundation and foundation.get('complete') is True),
         'readiness_granted':foundation_ready,
-        'historical_quality':'independent-export-async-monitor' if args.foundation_readiness_policy == 'on-shared-request'
+        'historical_quality':'external-monitor-required; trainer does not attest monitor health' if args.foundation_readiness_policy == 'on-shared-request'
             else 'trainer-cadence'}
     resident_receipt = ({'generation': resident.generation, 'directory': str(resident.directory.resolve()),
                          'history': resident.state['history']} if resident and resident.state else None)

@@ -28,6 +28,8 @@ def binding(path):
 
 
 def ownership(plan):
+    if type(plan.get('snapshot_preparation',False)) is not bool:
+        raise ValueError('snapshot preparation must be explicitly selected')
     names={row['model']for row in plan['models']}
     owned=plan.get('owned_models',sorted(names))
     if (not isinstance(owned,list)or not owned or any(not isinstance(name,str)for name in owned)
@@ -170,6 +172,9 @@ def publish(plan_path,state_path,*,kind):
             'report':_inline(receipt['training_receipt']),
             'runtime':_inline(receipt['runtime_certificate']),
             'task':_inline(receipt['task_execution_receipt'])}
+        if plan.get('snapshot_preparation'):
+            evidence[name]['snapshot_checkpoint']=pin_checkpoint(checked['checkpoint'],
+                Path(exchange['directory'])/'qualified-checkpoints')
         task=_evidence(evidence[name]['task'])
         if task.get('schema')=='natlang.native-task-execution-receipt/2':
             evidence[name]['task_score']=_inline({'path':task['score_path'],'sha256':task['score_sha256']})
@@ -180,6 +185,15 @@ def publish(plan_path,state_path,*,kind):
         'plan':_inline(binding(plan_path)),'raw_state':_inline(binding(state_path)),
         'controller':state['owner'],'models':evidence,
         'optimizer_released':kind=='released','production_complete':False}
+    from ..train.native_readiness import validate_foundation_candidate,_bound
+    proof['foundation_candidates']={}
+    for name in sorted(owned):
+        requirement=ready[plan_model(plan,name)['handoff_requirement']['model_id']]['readiness_requirement']
+        if requirement.get('readiness_boundary')=='communication-foundation':
+            proof['foundation_candidates'][name]=validate_foundation_candidate(
+                _bound(ready[requirement['model_id']]['readiness']),requirement)
+    proof['foundation_attempts']={name:value['foundation_qualification_attempt']
+        for name,value in state['models'].items() if value.get('foundation_qualification_attempt')}
     return _commit(exchange,proof)
 
 
@@ -289,6 +303,13 @@ def validate(reference,plan,*,kind):
             gradient_atol=cohort['gradient_atol'],execution_profile=report.get('qualification_profile'))
         result[checked['model_id']]={**checked,'source_role_release':reference,
             'source_host_id':proof['source_host_id']}
+        if item.get('snapshot_checkpoint'):
+            snapshot=item['snapshot_checkpoint']
+            if (snapshot.get('sha256')!=checked['checkpoint']['sha256']
+                    or not snapshot.get('path') or type(snapshot.get('bytes'))is not int or snapshot['bytes']<=0
+                    or ('bytes'in checked['checkpoint'] and checked['checkpoint']['bytes']!=snapshot['bytes'])):
+                raise ValueError('qualified snapshot pin changed the actual trained checkpoint')
+            result[checked['model_id']]['snapshot_checkpoint']=snapshot
     return role,result
 
 
@@ -323,13 +344,71 @@ def withdraw(plan,state_path):
     _,exchange=ownership(plan)
     if exchange is None:return None
     state=json.loads(Path(state_path).read_text())
+    candidates={}
+    from ..train.native_readiness import validate_foundation_candidate,_bound
+    from .native_raw_rounds import _release_requirement
+    for name,value in state.get('models',{}).items():
+        if value.get('foundation_candidate'):
+            requirement=_release_requirement(plan_model(plan,name),value)
+            candidate=validate_foundation_candidate(_bound(value['foundation_candidate']),requirement)
+            if candidate is not None:
+                if candidate['checkpoint']['sha256']!=value['checkpoint']['sha256']:
+                    raise ValueError('foundation candidate is not the current published checkpoint')
+                candidates[name]=candidate
     return _commit(exchange,{'schema':SCHEMA,'kind':'pending','optimizer_released':False,
         'role':exchange['role'],'source_host_id':exchange['roles'][exchange['role']]['source_host_id'],
         'contract':contract(plan),'mechanism':_publishing_mechanism(plan),'controller':state['owner'],
-        'raw_state':_inline(binding(state_path)),'production_complete':False})
+        'raw_state':_inline(binding(state_path)),'production_complete':False,
+        'foundation_candidates':candidates,
+        'foundation_attempts':{name:value['foundation_qualification_attempt']
+            for name,value in state.get('models',{}).items() if value.get('foundation_qualification_attempt')}})
 
 
-def import_proof(reference,plan):
+def foundation_candidates(plan):
+    """Read source-host exposure attestations; these never grant readiness."""
+    from ..train.native_readiness import validate_foundation_candidate_document
+    _,exchange=ownership(plan)
+    if exchange is None:return {},{}
+    expected=contract(plan);candidates={};attempts={}
+    for role,assignment in exchange['roles'].items():
+        _,proof=_status(exchange,role)
+        if proof is None:continue
+        if (proof.get('schema')!=SCHEMA or proof.get('contract')!=expected
+                or proof.get('mechanism')!=_expected_mechanism(plan,role)
+                or proof.get('role')!=role or proof.get('source_host_id')!=assignment['source_host_id']):
+            raise ValueError('foundation rendezvous changed source-host authority')
+        rows=proof.get('foundation_candidates',{})
+        if set(rows)-set(assignment['owned_models']):
+            raise ValueError('foundation candidate came from another optimizer owner')
+        for name,candidate in rows.items():
+            validate_foundation_candidate_document(candidate,expected['models'][name])
+            candidates[candidate['model_id']]=candidate
+        for name,attempt in proof.get('foundation_attempts',{}).items():
+            if name not in assignment['owned_models']:
+                raise ValueError('foundation attempt came from another optimizer owner')
+            attempts[name]=attempt
+    return candidates,attempts
+
+
+def foundation_request(plan,out,*,generation):
+    """Seal one full check per declared repair generation, after two exposures."""
+    if not isinstance(generation,str) or not generation:
+        raise ValueError('foundation qualification needs its explicit scheduling generation')
+    expected=contract(plan)
+    signature=canonical_json_sha256_hex({'contract':expected,'generation':generation})
+    path=Path(out)/(signature+'.json')
+    if path.exists():
+        request=json.loads(path.read_text())
+        if request.get('contract')!=expected or request.get('generation')!=generation:
+            raise ValueError('sealed foundation rendezvous changed its contract')
+        return binding(path)
+    candidates,_=foundation_candidates(plan)
+    if len(candidates)<2:return None
+    return _immutable(path,{'schema':'natlang.native-foundation-qualification-request/1',
+        'contract':expected,'generation':generation,'candidates':candidates,'readiness_granted':False})
+
+
+def import_proof(reference,plan,*,snapshot_only=False):
     """Commit a verified transported object monotonically; never roll back status."""
     from ..train.native_readiness import _bound
     proof=json.loads(_bound(reference).read_text());_,exchange=ownership(plan);role=proof.get('role')
@@ -342,9 +421,27 @@ def import_proof(reference,plan):
     if proof['kind']in('eligible','released'):validate(reference,plan,kind=proof['kind'])
     elif proof['kind']!='pending' or proof.get('optimizer_released')is not False:
         raise ValueError('imported source-host role status has an unknown qualification scope')
+    from ..train.native_readiness import validate_foundation_candidate_document
+    for name,candidate in proof.get('foundation_candidates',{}).items():
+        if name not in exchange['roles'][role]['owned_models']:
+            raise ValueError('foundation candidate came from another optimizer owner')
+        validate_foundation_candidate_document(candidate,contract(plan)['models'][name])
     root=Path(exchange['directory']);root.mkdir(parents=True,exist_ok=True)
     with (root/(role+'.lock')).open('a')as lease:
         fcntl.flock(lease,fcntl.LOCK_EX)
+        if snapshot_only:
+            if proof['kind'] not in ('eligible','released'):
+                raise ValueError('snapshot transport needs a genuinely qualified immutable proof')
+            pointer=root/(role+'-eligible.json')
+            if pointer.is_file():
+                previous_ref=json.loads(pointer.read_text());previous=json.loads(_bound(previous_ref).read_text())
+                if previous['revision']>proof['revision']:return previous_ref
+                if previous['revision']==proof['revision']:
+                    if previous_ref['sha256']!=reference['sha256']:raise ValueError('snapshot role revision equivocation')
+                    return previous_ref
+            local=_immutable(root/'objects'/(canonical_json_sha256_hex(proof)+'.json'),proof)
+            write_json_durable(pointer,local)
+            return local  # Historical snapshots NEVER roll back current owner status.
         previous_ref,previous=_status(exchange,role)
         if previous is not None:
             if proof['revision']<previous['revision']:raise ValueError('source-host role status rollback')
@@ -358,11 +455,27 @@ def import_proof(reference,plan):
 
 
 def exchanged(plan,*,kind):
+    from ..train.native_readiness import _bound
     _,exchange=ownership(plan)
     if exchange is None:return {},[]
     found={};pending=[]
     for role in exchange['roles']:
         reference,proof=_status(exchange,role)
+        if kind=='snapshot':
+            pointer=Path(exchange['directory'])/(role+'-eligible.json')
+            if pointer.is_file():
+                reference=json.loads(pointer.read_text());proof=json.loads(_bound(reference).read_text())
+            if proof is not None and proof.get('kind') in ('eligible','released'):
+                actual,models=validate(reference,plan,kind=proof['kind'])
+                if actual!=role or set(found)&set(models):raise ValueError('snapshot exchange repeated a participant')
+                if plan.get('snapshot_preparation'):
+                    for model in models.values():
+                        if not model.get('snapshot_checkpoint'):
+                            raise ValueError('live snapshot preparation needs a genuinely pinned checkpoint bundle')
+                        model['checkpoint']={**model['checkpoint'],**model['snapshot_checkpoint']}
+                        model['source_role_plan']=plan
+                found.update(models);continue
+            pending.append({'role':role,'reason':'source host has no genuinely qualified snapshot'});continue
         if proof is None or proof.get('kind')not in(('eligible','released')if kind=='eligible'else('released',)):
             pending.append({'role':role,'reason':'source host has not published '+kind});continue
         actual,models=validate(reference,plan,kind=proof['kind'])
@@ -378,7 +491,7 @@ def eligible(plan):
 
 def aggregate(plan,*,assets=None):
     """Qualified roles are distinct from locally consumable semantic assets."""
-    found,pending=exchanged(plan,kind='released')
+    found,pending=exchanged(plan,kind='snapshot' if plan.get('snapshot_preparation') else 'released')
     if len(found)<2:return [],pending
     result=[];assets=assets or {}
     from ..train.native_readiness import _bound
@@ -397,25 +510,27 @@ def aggregate(plan,*,assets=None):
     return result,pending
 
 
-def receive(raw,plan_path):
+def receive(raw,plan_path,*,snapshot_only=False):
     """Import exact transported bytes through the same strict proof validator."""
     plan=json.loads(Path(plan_path).read_text());proof=json.loads(raw)
     _,exchange=ownership(plan)
     reference=_immutable(Path(exchange['directory'])/'incoming'/
         (canonical_json_sha256_hex(proof)+'.json'),proof)
-    return import_proof(reference,plan)
+    return import_proof(reference,plan,snapshot_only=snapshot_only)
 
 
 def semantic_request(plan):
     """Only the designated semantic owner requests assets after genuine releases."""
     _,exchange=ownership(plan)
     if exchange is None or exchange['role']!=exchange['semantic_consumer']:return None
-    found,pending=exchanged(plan,kind='released')
+    found,pending=exchanged(plan,kind='snapshot' if plan.get('snapshot_preparation') else 'released')
     if len(found)<2:return None
     request={'schema':'natlang.native-role-semantic-assets-request/1','contract':contract(plan),
         'participants':{name:{'role_release':row['source_role_release'],
             'checkpoint':row['checkpoint'],'source_host_id':row['source_host_id']}
             for name,row in sorted(found.items())}}
+    if plan.get('snapshot_preparation'):
+        request['snapshot_preparation']=True
     write_json_durable(Path(exchange['directory'])/'semantic-assets-request.json',request)
     return request
 
@@ -497,6 +612,10 @@ def consumed_metadata(ready):
     """Exact files read by the unchanged semantic participant/readiness loader."""
     from ..train.native_readiness import _bound
     from ..train.recipe import native_source_dependencies,recipe_file_dependencies,recipe_identity_sha256
+    if ready.get('source_role_plan'):
+        # All readiness/report/task/numerical bytes are inline in the exact
+        # source-host proof. Do not reread a rolling historical source path.
+        return [binding(_bound(ready['source_role_release']))]
     receipt=json.loads(_bound(ready['readiness']).read_text())
     recipe=ready['recipe']
     recipe_path=_bound({'path':recipe['path'],'sha256':recipe.get('file_sha256',recipe['sha256'])})

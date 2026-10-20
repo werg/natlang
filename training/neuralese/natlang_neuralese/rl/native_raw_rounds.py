@@ -63,6 +63,9 @@ def _seed_quantum(config,record):
     config['seed_trainer_parameters']={**config.get('trainer_parameters',{}),
         **config.get('seed_trainer_parameters',{}),'refresh_at_checkpoint':True,
         'stage_id':config['production_stage']}
+    if config.get('foundation_readiness_policy'):
+        for key in ('trainer_parameters','seed_trainer_parameters'):
+            config.setdefault(key,{})['foundation_readiness_policy']=config['foundation_readiness_policy']
     if record.get('resident'):
         directory=record['resident']['directory']
         config['resident_data_directory']=directory
@@ -118,6 +121,14 @@ def _scheduling_controls(config,declaration,plan_path,record,*,pending=False):
         if set(mapping)-ids:raise ValueError('supervised stage quantum names an undeclared recipe stage')
         config['supervised_stage_quantum_updates']=mapping
         config['supervised_stage_quantum_control']={'plan':binding(plan_path),'updates':mapping}
+    if 'foundation_readiness_policy' in declaration:
+        policy=declaration['foundation_readiness_policy']
+        if policy not in ('at-boundary','on-shared-request'):
+            raise ValueError('unknown foundation readiness scheduling policy')
+        config['foundation_readiness_policy']=policy
+        config['foundation_qualification_generation']=declaration.get('foundation_qualification_generation','initial')
+        if not isinstance(config['foundation_qualification_generation'],str) or not config['foundation_qualification_generation']:
+            raise ValueError('foundation qualification generation must name its explicit repair attempt')
     _seed_quantum(config,record)
     return config
 
@@ -1525,6 +1536,17 @@ def student_cycle(plan_path,declaration,handoff,directory,*,stop):
             raise StudentConfigurationError('owned completed work requires its actual current runtime configuration')
         reconciliation['runtime_configuration_required']=False;write_json_durable(cursor_path,cursor)
     cycle=cursor['cycle'];work=cycle_work_directory(directory,cursor)
+    qualification_request=None
+    if config.get('foundation_readiness_policy')=='on-shared-request':
+        from . import native_role_release as roles
+        plan=json.loads(Path(plan_path).read_text())
+        if roles.ownership(plan)[1] is None:
+            raise StudentConfigurationError('on-request RAW qualification requires its source-host candidate exchange')
+        request=roles.foundation_request(plan,directory/'foundation-requests',
+            generation=config['foundation_qualification_generation'])
+        attempted=cursor.get('foundation_qualification_attempt') or {}
+        if request and attempted.get('request',{}).get('sha256')!=request['sha256']:
+            qualification_request=request
     if cursor['phase']=='rl':
         if stop.requested:return cursor
         production_state=Path(config['out'])/'state.json'
@@ -1556,10 +1578,16 @@ def student_cycle(plan_path,declaration,handoff,directory,*,stop):
         parameters=continuation['trainer_parameters']
         _supervised_quantum(config,parameters)
         is_foundation=stage['id']==config['production_stage']
+        if config.get('foundation_readiness_policy')=='on-shared-request':
+            parameters['foundation_readiness_policy']='on-shared-request'
+            if is_foundation and qualification_request:
+                parameters['foundation_qualification_request']=str(_bound(qualification_request))
+                continuation['foundation_qualification_request']=qualification_request
         # Once the cohort is ready, ordinary mandatory deficits still receive
         # useful finite quanta; a final existing foundation qualification below
         # binds the resulting actual weights before rendezvous.
-        parameters['communication_foundation']=bool(is_foundation and not cursor.get('foundation_qualified'))
+        parameters['communication_foundation']=bool(is_foundation and
+            (not cursor.get('foundation_qualified') or config.get('foundation_readiness_policy')=='on-shared-request'))
         if is_foundation and config.get('resident_data_directory'):
             parameters['resident_data_directory']=config['resident_data_directory']
         if is_foundation and cursor.get('foundation_readiness_repair'):
@@ -1573,7 +1601,7 @@ def student_cycle(plan_path,declaration,handoff,directory,*,stop):
             if stop.requested:return cursor
         cursor.update(next_stage=index+1,current_checkpoint=_current_checkpoint(config))
         write_json_durable(cursor_path,cursor)
-    if cursor.get('foundation_qualified'):
+    if cursor.get('foundation_qualified') and config.get('foundation_readiness_policy')!='on-shared-request':
         # This is the same shared trainer, not a fabricated copy of an old
         # certificate. It may do zero updates when the exact cohort is complete,
         # but rechecks runtime/task behavior against current post-RL weights.
@@ -1644,10 +1672,21 @@ def _publish_supervised_result(continuation,jobdir,config,cursor,result):
     checkpoint=binding(pending);report_path=Path(pending).parent/'native-training-receipt.json'
     _publish_checkpoint(config,checkpoint)
     cursor.pop('readiness',None)
+    if config.get('foundation_readiness_policy')=='on-shared-request':
+        cursor.pop('foundation_qualified',None)
+    cursor.pop('foundation_candidate',None)
     if report_path.is_file():
         report=json.loads(report_path.read_text())
         if report['checkpoint']['sha256']!=checkpoint['sha256']:
             raise ValueError('raw supervised readiness belongs to another checkpoint')
+        if (report.get('communication_foundation') or {}).get('complete') is True:
+            cursor['foundation_candidate']=binding(report_path)
+        request=continuation.get('foundation_qualification_request')
+        if request:
+            cursor['foundation_qualification_attempt']={'request':request,
+                'generation':json.loads(_bound(request).read_text())['generation'],
+                'status':'passed' if report.get('foundation_ready') else 'failed',
+                'checkpoint':checkpoint,'report':binding(report_path)}
         if continuation.get('raw_foundation_qualification') and (report.get('foundation_ready') or report.get('completed')):
             cursor.update(readiness=binding(report_path),foundation_qualified=True)
             cursor.pop('foundation_readiness_repair',None)
@@ -1930,6 +1969,8 @@ def run(plan_path,out,*,cycles=None,stop=None,poll_seconds=60):
                                 'production_state':binding(Path(config['out'])/'state.json'),
                                 **({'resident_current':cursor['resident_current']} if cursor.get('resident_current') else {}),
                                 **({'readiness':cursor['readiness']} if cursor.get('readiness') else {})}
+                            for key in ('foundation_candidate','foundation_qualification_attempt'):
+                                if cursor.get(key):state['models'][name][key]=cursor[key]
                             if cursor.get('readiness'):eligible.add(name)
                             else:eligible.discard(name)
                         # Do not idle the first eligible student. Only after every
