@@ -1475,3 +1475,62 @@ and rechecks it before granting continuation, removing repeated filesystem work
 without changing intrinsic parser/classifier identities or cached row classes.
 Independent review, 41 focused tests and quick checks passed. The optimization
 is for future runtime continuations and does not delay or alter frozen R4.
+
+
+### 2026-10-20 10:12 UTC — actual R4 SGD, data-admission repair and semantic scheduling
+
+LFM completed all 29 capacity cases and began genuine R4 optimizer updates at
+09:31 UTC. At 10:11 it reached global 19,595, with the H100 fully occupied.
+Communication exposure is 33,034 / 114,794 graph visits and remains incomplete;
+the earlier fixed foundation's completion is not completion of this larger
+communication cohort or of the production recipe. Learned sparse rows have
+measurable parameter changes, not only nonzero gradients.
+
+Mellum's old worker finished at global 25,692 / local 24,426. Its genuine
+48,219,206,457-byte saved checkpoint is
+`60358645736ef502ff3cf68174db2ce44d0a5898ed041ce13b53bfa271093af2`.
+Normal shared publication passed at 09:55:49; the SDK successor passed at
+09:56:51. The old worker's long post-save delay was an actual legacy full
+runtime-gradient qualification, followed by publication hashing, rather than
+an incomplete checkpoint write. R4 avoids repeating that routine qualification
+when readiness is on shared request. An explicit official Node v24.0.1
+installation and the normal binder baseline passed at 10:03. The completed-parent
+handover is still progressing; no Mellum R4 restore or optimizer update is
+claimed in this entry. Guard failures before mutation are not cutover success.
+
+A further 3,211 LFM / 3,210 Mellum verified teacher rows are prepared across
+14 components. Attempted resident admission stopped before any pending-pointer
+commit: the frozen resident rejected an additive complete CE policy, and the
+trainer would otherwise have continued using its old closed-over policy. The
+shared repair must validate unchanged prior coefficients/masks/held declarations,
+complete appended source coverage, install the preloaded new policy with the
+source transaction before another batch, and recover that policy on restart.
+Actual tiny LFM and Mellum live-adoption tests match complete-source reference
+parameters, optimizer, RNG and exposure exactly. Independent review identified
+optional-byte and source-alias gaps, corrected and independently cleared before
+deployment. The final shared fix passed 161 focused tests, including both real
+model architectures; quick checks also passed. Existing
+R4 SGD continues while a minimal, explicitly reviewed runtime successor is
+prepared; no live function patch or new-row exposure is claimed.
+
+The Search-Owl renderer completed at 09:24:23: PH 658,396 and WT 215,009 documents
+per model, with zero merge omissions. Final rendering is not training admission.
+The strong self-hosted teacher remains active; batch 76 is measuring the actual
+runtime repair, and the next computed-result curriculum has not yet earned live
+measurement or admission credit.
+
+The prospective automatic role scheduler now connects frozen VAE preparation,
+genuine descendant owner handoff, joint adaptation and existing full-graph
+policy training. Root's independent full review found a recovery gap: an expired
+handoff lease followed by useful SGD could permanently suppress requalification
+for the same request. The author is implementing explicit renewed rendezvous
+attempts before approval. The scheduler is not deployed, and no cross-model
+readiness is inferred from code availability or an aggregate visit count.
+
+Main `e0703038ce` is undergoing the standing full suite. The prior `2e0fac697a`
+check's sole duplicate-readonly-root fixture failure was fixed in `880f331aa`
+and focused checks passed. Storage cleanup removed 1,003,253,760 bytes of exact
+inactive synthetic browser fixtures; future fixture cleanup is committed.
+Private storage audit measured LFM 52.5 GB and Mellum 1.597 TB. Refresh discarded
+checkpoint cleanup after actual Mellum cutover and dependency checks, preserving
+current parents, pending exports, reusable sources and protected evaluation.
