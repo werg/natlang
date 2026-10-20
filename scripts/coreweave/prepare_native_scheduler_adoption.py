@@ -16,6 +16,8 @@ sys.path[:0]=[str(REPOSITORY/'training/neuralese'),str(REPOSITORY/'scripts/corew
 from natlang_neuralese.common.jsonio import write_json_durable
 from natlang_neuralese.train.native_deployment import binding, prepare_role_scheduler
 from natlang_neuralese.rl import native_role_release as roles
+from natlang_neuralese.train.recipe import resolve_recipe_data,effective_stage_parameters
+from natlang_neuralese.eval.task_cadence import parse_task_eval
 from compose_native_actor_runtime import bound
 from verify_native_actor_runtime import verify_files
 
@@ -59,6 +61,21 @@ def owned_bootstrap(reference,plans):
     return bootstrap
 
 
+def check_foundation_task_policy(row,curriculum):
+    """Joint overrides alone cannot repair a null RAW foundation reference."""
+    model=row['handoff_requirement']['model_id']
+    selected=parse_task_eval(curriculum['models'][model]['task_eval'])
+    recipe=resolve_recipe_data(bound(row['production_recipe']))
+    stages={stage['id']:stage for stage in recipe['stages']}
+    for name in row['handoff_requirement']['stage_ids']:
+        actual=parse_task_eval(effective_stage_parameters(stages[name],[],recipe).get('task_eval'))
+        if (actual is None or actual['reference_successes'] is None
+                or any(actual.get(key)!=selected.get(key)for key in
+                       ('reference_successes','reference_provenance','cases','prompt_rendering'))
+                or actual['packet']['sha256']!=selected['packet']['sha256']):
+            raise ValueError('normal foundation recipe must adopt its selected actual task reference: '+row['model'])
+
+
 def prepare(spec_path,out):
     spec=json.loads(Path(spec_path).read_bytes())
     if (set(spec)!={'schema','composition','roles','scheduler'} or spec['schema']!=SCHEMA
@@ -97,6 +114,7 @@ def prepare(spec_path,out):
             raise ValueError('normal role inputs disagree on actual source-host assignments')
         assignment=actual
         own[role]=copy.deepcopy(next(row for row in plan['models']if row['model']==role))
+        check_foundation_task_policy(own[role],read(spec['scheduler']['curriculum']))
         if own[role].get('actor_runtime')!=str(construction.parent):
             raise ValueError('normal role invocation has not selected the reviewed later runtime')
     authorities=[read(materials[role]['role_mechanism_authorities'])for role in source]
@@ -151,6 +169,7 @@ def reconcile(prepared_path,published_path,out):
         if any(plan.get(key)is not True for key in ('snapshot_preparation','consumer_preparation_handoff')):
             raise ValueError('normal owner has not adopted scheduler preparation flags')
         row=next(row for row in plan['models']if row['model']==role)
+        check_foundation_task_policy(row,read(spec['scheduler']['curriculum']))
         previous=next(row for row in expected[role]['models']if row['model']==role)
         if row.get('commands')!=previous.get('commands'):
             raise ValueError('adopted normal role commands differ from reviewed future commands')

@@ -93,3 +93,10 @@ other student's baseline may substitute for its actual policy. The admitted
 train curriculum/cases, exact held packet and genuine communication prerequisites
 remain inputs of the existing deployment verifier. Historical task diagnostics
 are not training cases, qualified snapshots or current-weight task certificates.
+
+The actual foundation stage recipe must carry the selected per-model reference
+and provenance too. Semantic overrides do not reach the RAW trainer: on-request
+qualification still uses its existing recipe's `task_eval`. Preparation and
+reconciliation therefore reject null/mismatched RAW references, packet/cases or
+prompt rendering instead of scheduling qualification that cannot pass. Apply the
+explicit normal task-reference recipe continuation before sealing those inputs.

@@ -17,9 +17,18 @@ from natlang_neuralese.train.native_resident import code_inventory
 def setup(tmp):
     plans,_,curriculum,provider,states,runtime=source(tmp)
     materials={};inputs={}
+    for role in plans:
+        recipe=tmp/(role+'-recipe.json')
+        policy=m.read(m.binding(curriculum))['models'][role+':base']['task_eval']
+        write(recipe,{'id':role+'-normal-recipe','stages':[{'id':'full','kind':'native_state_sft','parameters':{'task_eval':policy}}]})
+    boot_path=tmp/'rl-bootstrap.json';boot=json.loads(boot_path.read_text())
+    for row in boot['models']:row['production_recipe']=m.binding(tmp/(row['model']+'-recipe.json'))
+    write(boot_path,boot)
     for role,ref in list(plans.items()):
         plan=m.read(ref)
-        for row in plan['models']:row['actor_runtime']=str(runtime)
+        for row in plan['models']:
+            row['actor_runtime']=str(runtime)
+            row['production_recipe']=m.binding(tmp/(row['model']+'-recipe.json'))
         write(Path(ref['path']),plan);plans[role]=m.binding(ref['path'])
     def emit(p,v):p.parent.mkdir(parents=True,exist_ok=True);write(p,v);return m.binding(p)
     for role in plans:
@@ -174,3 +183,14 @@ def test_normal_role_cannot_silently_keep_old_actor_package(tmp_path):
     path=tmp_path/'old-plan.json';write(path,plan);inputs['bootstrap']=m.binding(path)
     ip=tmp_path/'old-inputs.json';write(ip,inputs);item['inputs']=m.binding(ip);write(spec,value)
     with pytest.raises(ValueError,match='later runtime'):m.prepare(spec,tmp_path/'proposal')
+
+
+def test_semantic_override_does_not_hide_unmeasured_raw_foundation(tmp_path):
+    spec,runtime,plans=setup(tmp_path);value=json.loads(spec.read_text())
+    inputs=m.read(value['roles']['mellum']['inputs']);plan=m.read(inputs['bootstrap'])
+    row=next(row for row in plan['models']if row['model']=='mellum')
+    recipe=m.read(row['production_recipe']);recipe['stages'][0]['parameters']['task_eval']['reference_successes']=None
+    path=tmp_path/'unmeasured-recipe.json';write(path,recipe);row['production_recipe']=m.binding(path)
+    pp=tmp_path/'unmeasured-plan.json';write(pp,plan);inputs['bootstrap']=m.binding(pp)
+    ip=tmp_path/'unmeasured-inputs.json';write(ip,inputs);value['roles']['mellum']['inputs']=m.binding(ip);write(spec,value)
+    with pytest.raises(ValueError,match='foundation recipe'):m.prepare(spec,tmp_path/'proposal')
