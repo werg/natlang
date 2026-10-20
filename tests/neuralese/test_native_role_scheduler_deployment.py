@@ -8,6 +8,14 @@ from natlang_neuralese.train.native_deployment import binding, prepare_role_sche
 from natlang_neuralese.rl import native_role_release as roles
 
 
+def attempt_for(plan,request,offers):
+    consumer=copy.deepcopy(plan)
+    role=consumer['role_exchange']['semantic_consumer']
+    consumer['role_exchange']['role']=role
+    consumer['owned_models']=consumer['role_exchange']['roles'][role]['owned_models']
+    return roles.select_handoff_attempt(consumer,request,offers,lease_seconds=180)
+
+
 def source(tmp_path):
     runtime=tmp_path/'runtime';package=runtime/'training/neuralese/natlang_neuralese'
     (package/'train').mkdir(parents=True);(package/'train/native_readiness.py').write_text('# actual fixture module\n')
@@ -22,6 +30,10 @@ def source(tmp_path):
         'checkpoint_every':1,'eval_every':1,
         'pairs':binding(pairs),'held_pairs':binding(held),'task_eval':{'packet':binding(held)},
         'policy_schedule':{'id':'policy','epochs':1,'every_semantic_updates':1,'updates_per_refresh':1},
+        'models':{name+':base':{'task_eval':{'packet':binding(held),'cases':[0],
+            'reference_successes':floor,'reference_provenance':label}}for name,floor,label in
+            [('lfm',0,'explicit owner historical zero floor fixture'),
+             ('mellum',1,'separately bound baseline fixture')]},
         'phases':[{'id':kind,'kind':kind,'epochs':1}for kind in ('vae','joint','distill')]})
     assignment={name:{'owned_models':[name],'source_host_id':name+'-existing',
         'verification_mechanism':{key:'a'*64 for key in roles.MECHANISM_FILES}}for name in ('lfm','mellum')}
@@ -184,14 +196,17 @@ def test_two_provider_handoff_lease_expiry_cancels_hold_without_any_training_cre
     request=json.loads(Path(waiting['awaiting_descendant_handoff']['path']).read_text())
     from natlang_neuralese.common.hashing import canonical_json_sha256_hex
     offers={name:{'role':name,'contract':roles.contract(plan),'mechanism':roles.mechanism(),
-        'owner':process_owner(),'released':False,'request_sha256':canonical_json_sha256_hex(request)}for name in plans}
-    roles.renew_handoff(plan,request,offers,expires_at=time.time()+180)
+        'owner':process_owner(),'released':False,'request_sha256':canonical_json_sha256_hex(request),
+        'checkpoints':{name:binding(Path(plans[name]['path']))},
+        'qualification_generations':{name:'repair'},'provider_inputs':{name:{}}}for name in plans}
+    attempt=attempt_for(plan,request,offers)
+    roles.renew_handoff(plan,request,offers,expires_at=time.time()+180,attempt=attempt)
     assert roles.handoff_active(plan)
     assert not roles.handoff_hold(plan)  # Arm/lease is NOT actual current qualification.
-    with pytest.raises(ValueError):roles.renew_handoff(plan,request,{'mellum':offers['mellum']},expires_at=time.time()+180)
+    with pytest.raises(ValueError):roles.renew_handoff(plan,request,{'mellum':offers['mellum']},expires_at=time.time()+180,attempt=attempt)
     roles.cancel_handoff(plan,request)
     assert roles.handoff_active(plan)is None and not roles.handoff_hold(plan)
-    roles.renew_handoff(plan,request,offers,expires_at=time.time()+.01)
+    roles.renew_handoff(plan,request,offers,expires_at=time.time()+.01,attempt=attempt)
     later=time.time()+300
     monkeypatch.setattr(roles.time,'time',lambda:later)
     assert roles.handoff_active(plan)is None and not roles.handoff_hold(plan)
@@ -249,3 +264,17 @@ def test_actual_relay_preflights_joint_assets_before_it_can_arm_any_owner(tmp_pa
     with pytest.raises(ValueError,match='joint asset missing'):module.tick(relay,io)
     assert all(not (Path(json.loads(Path(ref['path']).read_text())['role_exchange']['directory'])/
         'joint-handoff-live.json').exists()for ref in plans.values())
+
+
+def test_joint_task_specs_preserve_distinct_declared_floors_and_reject_global_substitution(tmp_path):
+    from natlang_neuralese.train.native_deployment import validate_joint_task_specs
+    plans,controls,path,provider,states,runtime=source(tmp_path)
+    value=json.loads(path.read_text());before=copy.deepcopy(value)
+    assert validate_joint_task_specs(value,['lfm:base','mellum:base'])==before
+    assert value['models']['lfm:base']['task_eval']['reference_successes']==0
+    assert value['models']['mellum:base']['task_eval']['reference_successes']==1
+    value['models']['lfm:base'].pop('task_eval')
+    value['task_eval']=before['models']['mellum:base']['task_eval']
+    with pytest.raises(ValueError,match='explicit participant'):validate_joint_task_specs(value,['lfm:base','mellum:base'])
+    value=copy.deepcopy(before);value['models']['mellum:base']['task_eval']['reference_successes']=None
+    with pytest.raises(ValueError,match='undeclared'):validate_joint_task_specs(value,['lfm:base','mellum:base'])

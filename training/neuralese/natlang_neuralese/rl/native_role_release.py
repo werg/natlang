@@ -396,9 +396,10 @@ def foundation_request(plan,out,*,generation):
     if not isinstance(generation,str) or not generation:
         raise ValueError('foundation qualification needs its explicit scheduling generation')
     expected=contract(plan)
+    foundation_generation=generation
     handoff=handoff_active(plan)
     if handoff:
-        generation=canonical_json_sha256_hex({'foundation_generation':generation,'handoff':handoff['request_sha256']})
+        generation=canonical_json_sha256_hex({'foundation_generation':generation,'handoff':handoff['attempt_sha256']})
     signature=canonical_json_sha256_hex({'contract':expected,'generation':generation})
     path=Path(out)/(signature+'.json')
     if path.exists():
@@ -409,7 +410,10 @@ def foundation_request(plan,out,*,generation):
     candidates,_=foundation_candidates(plan)
     if len(candidates)<2:return None
     return _immutable(path,{'schema':'natlang.native-foundation-qualification-request/1',
-        'contract':expected,'generation':generation,'candidates':candidates,'readiness_granted':False})
+        'contract':expected,'generation':generation,'candidates':candidates,'readiness_granted':False,
+        **({'foundation_generation':foundation_generation,
+            'handoff_request_sha256':handoff['request_sha256'],
+            'rendezvous_attempt_sha256':handoff['attempt_sha256']}if handoff else{})})
 
 
 def import_proof(reference,plan,*,snapshot_only=False):
@@ -494,8 +498,8 @@ def eligible(plan):
     if plan.get('snapshot_preparation'):
         _,exchange=ownership(plan)
         for role in exchange['roles']:
-            _,proof=_status(exchange,role)
-            if not _handoff_proof_matches(plan,proof):return False
+            reference,proof=_status(exchange,role)
+            if not _handoff_proof_matches(plan,proof,reference):return False
     return len(found)>=2
 
 
@@ -752,6 +756,8 @@ def post_vae_request(plan,completion,controller):
     full=json.loads(_bound(controller['curriculum']).read_text())
     from ..train.native_semantic_stage import validate_config
     validate_config(full)
+    from ..train.native_deployment import validate_joint_task_specs
+    validate_joint_task_specs(full,[row['model_id']for row in contract(plan)['models'].values()])
     if full.get('snapshot_preparation') or not full.get('task_eval') or not full.get('policy_schedule'):
         raise ValueError('post-VAE adoption needs actual joint/task/policy work')
     request={'schema':'natlang.native-post-vae-handoff/1','contract':contract(plan),
@@ -797,37 +803,138 @@ def handoff_offer(plan,state_path,request):
         return None
     attempts={name:value.get('foundation_qualification_attempt') for name,value in state.get('models',{}).items()}
     from ..train.native_readiness import _bound
-    for name,attempt in attempts.items():
-        if not attempt:continue
-        expected=canonical_json_sha256_hex({'foundation_generation':plan_model(plan,name)['foundation_qualification_generation'],
-            'handoff':canonical_json_sha256_hex(request)})
-        if json.loads(_bound(attempt['request']).read_text())['generation']==expected:
-            if (attempt.get('status')!='passed' or
-                    attempt.get('checkpoint',{}).get('sha256')!=state['models'][name]['checkpoint']['sha256']):return None
+    from ..train.native_deployment import binding as checked
+    metadata={};checkpoints={};generations={}
+    for name in owned:
+        row=plan_model(plan,name);value=state['models'][name]
+        checkpoints[name]=value['checkpoint'];generations[name]=row['foundation_qualification_generation']
+        # Both providers must prove their actual current config and immutable
+        # recipe/task/source inputs exist before any GPU is held. No Torch load.
+        refs={key:row[key]for key in ('production_recipe','cases','seed_native_graphs','held_native_graphs')}
+        refs['config']=value['config']
+        metadata[name]={key:checked(ref['path'],{k:ref[k]for k in ('path','sha256','bytes')if k in ref})
+            for key,ref in refs.items()}
+        attempt=attempts.get(name)
+        if attempt:
+            selected=json.loads(_bound(attempt['request']).read_text())
+            scope=selected.get('rendezvous_attempt_sha256')
+            expected=canonical_json_sha256_hex({'foundation_generation':generations[name],'handoff':scope})
+            if (selected.get('handoff_request_sha256')==canonical_json_sha256_hex(request)
+                    and selected.get('generation')==expected and attempt.get('status')!='passed'):return None
+    qualification=None
+    if proof is not None and proof.get('kind')in('eligible','released'):
+        _,ready=validate(reference,plan,kind=proof['kind'])
+        if all(ready[plan_model(plan,name)['handoff_requirement']['model_id']]['checkpoint']['sha256']==
+                checkpoints[name]['sha256']for name in owned):qualification=reference
     return {'role':exchange['role'],'mechanism':_publishing_mechanism(plan),
         'contract':contract(plan),'request_sha256':canonical_json_sha256_hex(request),
-        'owner':state['owner'],'released':state.get('released')is True,'attempts':attempts}
+        'owner':state['owner'],'released':state.get('released')is True,'attempts':attempts,
+        'checkpoints':checkpoints,'qualification_generations':generations,
+        'provider_inputs':metadata,'current_qualification':qualification,
+        'active_attempt':(handoff_active(plan)or{}).get('attempt_sha256')}
 
 
-def renew_handoff(plan,request,offers,*,expires_at):
+def _handoff_offers(plan,request,offers):
+    _,exchange=ownership(plan);digest=canonical_json_sha256_hex(request)
+    if set(offers)!=set(exchange['roles']):raise ValueError('handoff omitted an actual provider')
+    for role,offer in offers.items():
+        names=set(exchange['roles'][role]['owned_models'])
+        if (not offer or offer.get('role')!=role or offer.get('contract')!=contract(plan)
+                or offer.get('mechanism')!=_expected_mechanism(plan,role)
+                or offer.get('request_sha256')!=digest or set(offer.get('checkpoints',{}))!=names
+                or set(offer.get('qualification_generations',{}))!=names
+                or set(offer.get('provider_inputs',{}))!=names):
+            raise ValueError('descendant handoff provider offer changed')
+    return offers
+
+
+def _offer_progress(offers):
+    return {role:{key:offer.get(key)for key in ('owner','checkpoints','qualification_generations','current_qualification')}
+        for role,offer in offers.items()}
+
+
+def select_handoff_attempt(plan,request,offers,*,lease_seconds):
+    """Seal renewed rendezvous after actual progress, under the same VAE request."""
+    from ..train.native_readiness import _bound
+    validate_handoff_request(plan,request);_,exchange=ownership(plan)
+    _handoff_offers(plan,request,offers)
+    if exchange['role']!=exchange['semantic_consumer']:
+        raise ValueError('only actual semantic owner seals a rendezvous attempt')
+    if type(lease_seconds)not in(int,float)or not math.isfinite(lease_seconds)or lease_seconds<=0:
+        raise ValueError('handoff attempt needs its explicit renewable lease')
+    root=Path(exchange['directory']);root.mkdir(parents=True,exist_ok=True)
+    with (root/'handoff-attempt.lock').open('a')as lease:
+        fcntl.flock(lease,fcntl.LOCK_EX)
+        path=root/'handoff-attempt.json';previous=None;ordinal=1;now=time.time()
+        if path.is_file():
+            pointer=json.loads(path.read_text());previous=pointer['attempt']
+            old=json.loads(_bound(previous).read_text());ordinal=old['ordinal']+1
+            if old['request_sha256']==canonical_json_sha256_hex(request):
+                live_path=root/'joint-handoff-live.json'
+                live=json.loads(live_path.read_text())if live_path.is_file()else None
+                same_live=live is not None and live.get('attempt_sha256')==previous['sha256']
+                expiry=live['expires_at']if same_live else pointer['issued_until']
+                same_owners=all(all(old['offers'][role][key]==offer[key]
+                    for key in ('owner','qualification_generations'))for role,offer in offers.items())
+                if expiry>now and same_owners and (not same_live or all(offer.get('active_attempt')==previous['sha256']
+                        for offer in offers.values())):return _inline(previous)
+                if _offer_progress(old['offers'])==_offer_progress(offers):return None
+        attempt={'schema':'natlang.native-post-vae-rendezvous-attempt/1',
+            'request_sha256':canonical_json_sha256_hex(request),'contract':contract(plan),
+            'consumer':exchange['semantic_consumer'],'mechanism':_publishing_mechanism(plan),
+            'ordinal':ordinal,'superseded_attempt':previous,'offers':offers,'readiness_granted':False}
+        reference=_immutable(root/'handoff-attempts'/(canonical_json_sha256_hex(attempt)+'.json'),attempt)
+        write_json_durable(path,{'attempt':reference,'issued_until':now+lease_seconds})
+        return _inline(reference)
+
+
+def _validate_handoff_attempt(plan,request,envelope):
+    attempt=_evidence(envelope);_,exchange=ownership(plan)
+    if (attempt.get('schema')!='natlang.native-post-vae-rendezvous-attempt/1'
+            or attempt.get('request_sha256')!=canonical_json_sha256_hex(request)
+            or attempt.get('contract')!=contract(plan) or attempt.get('consumer')!=exchange['semantic_consumer']
+            or attempt.get('mechanism')!=_expected_mechanism(plan,exchange['semantic_consumer'])
+            or type(attempt.get('ordinal'))is not int or attempt['ordinal']<1
+            or attempt.get('readiness_granted')is not False):
+        raise ValueError('rendezvous attempt changed authenticated VAE/provider authority')
+    _handoff_offers(plan,request,attempt['offers'])
+    predecessor=attempt.get('superseded_attempt')
+    if (attempt['ordinal']==1)!=(predecessor is None):
+        raise ValueError('rendezvous attempt lost its superseded attempt')
+    return attempt
+
+
+def renew_handoff(plan,request,offers,*,expires_at,attempt):
     """Existing relay grants a renewable ownership handshake, not quality credit."""
     validate_handoff_request(plan,request);_,exchange=ownership(plan)
     if (set(offers)!=set(exchange['roles']) or type(expires_at)not in(int,float)
             or not math.isfinite(expires_at) or expires_at<=time.time()):
         raise ValueError('descendant handoff needs both current providers and a live lease')
     digest=canonical_json_sha256_hex(request)
-    for role,offer in offers.items():
-        if (not offer or offer.get('role')!=role or offer.get('contract')!=contract(plan)
-                or offer.get('mechanism')!=_expected_mechanism(plan,role)
-                or offer.get('request_sha256')!=digest):
-            raise ValueError('descendant handoff provider offer changed')
+    _handoff_offers(plan,request,offers)
+    _validate_handoff_attempt(plan,request,attempt)
     own=offers[exchange['role']]
     from ..train.native_resident import owner_alive
     if not own['released'] and not owner_alive(own['owner']):
         raise ValueError('descendant handoff owner ended before arm')
-    value={'request':request,'request_sha256':digest,'offers':offers,'expires_at':expires_at}
+    value={'request':request,'request_sha256':digest,'offers':offers,'expires_at':expires_at,
+        'attempt':attempt,'attempt_sha256':attempt['source']['sha256']}
     directory=Path(exchange['directory']);directory.mkdir(parents=True,exist_ok=True)
-    write_json_durable(directory/'joint-handoff-live.json',value)
+    with (directory/'handoff-lease.lock').open('a')as lease:
+        fcntl.flock(lease,fcntl.LOCK_EX)
+        path=directory/'joint-handoff-live.json'
+        if path.is_file():
+            old=json.loads(path.read_text())
+            if old['request_sha256']==digest:
+                prior=_validate_handoff_attempt(plan,request,old['attempt'])
+                current=_evidence(attempt)
+                if current['ordinal']<prior['ordinal'] or (current['ordinal']==prior['ordinal']
+                        and old['attempt_sha256']!=attempt['source']['sha256']):
+                    raise ValueError('handoff cannot roll back or equivocate a rendezvous attempt')
+                if current['ordinal']==prior['ordinal']+1 and (
+                        current['superseded_attempt']['sha256']!=old['attempt_sha256']):
+                    raise ValueError('handoff changed its superseded rendezvous attempt')
+        write_json_durable(path,value)
     return value
 
 
@@ -839,18 +946,26 @@ def handoff_active(plan):
     value=json.loads(path.read_text());validate_handoff_request(plan,value['request'])
     if canonical_json_sha256_hex(value['request'])!=value.get('request_sha256'):
         raise ValueError('descendant handoff request changed')
+    _validate_handoff_attempt(plan,value['request'],value['attempt'])
+    if value['attempt_sha256']!=value['attempt']['source']['sha256']:
+        raise ValueError('handoff lease changed its rendezvous attempt')
     if value['expires_at']<=time.time():return None
     return value
 
 
-def _handoff_proof_matches(plan,proof):
+def _handoff_proof_matches(plan,proof,reference):
     active=handoff_active(plan)
     if not active or proof is None or proof.get('kind') not in ('eligible','released'):return False
+    carried=_evidence(active['attempt'])['offers'][proof['role']].get('current_qualification')
+    if carried and carried['sha256']==reference['sha256']:
+        offered=_evidence(active['attempt'])['offers'][proof['role']]['checkpoints']
+        return all(offered[name]['sha256']==proof['models'][name]['ready']['checkpoint']['sha256']
+            for name in proof['owned_models'])
     from ..train.native_readiness import _bound
     if set(proof.get('foundation_attempts',{}))!=set(proof['owned_models']):return False
     for name,attempt in proof['foundation_attempts'].items():
         expected=canonical_json_sha256_hex({'foundation_generation':plan_model(plan,name)['foundation_qualification_generation'],
-            'handoff':active['request_sha256']})
+            'handoff':active['attempt_sha256']})
         item=proof['models'][name];schedule=_evidence(item['report']).get('foundation_qualification_schedule')or{}
         if (attempt.get('status')!='passed'
                 or json.loads(_bound(attempt['request']).read_text())['generation']!=expected
@@ -877,4 +992,4 @@ def handoff_hold(plan):
     _,exchange=ownership(plan);reference,proof=_status(exchange,exchange['role'])
     if proof is None or proof.get('kind') not in ('eligible','released'):return False
     validate(reference,plan,kind=proof['kind'])
-    return _handoff_proof_matches(plan,proof)
+    return _handoff_proof_matches(plan,proof,reference)

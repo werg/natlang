@@ -158,7 +158,7 @@ def test_post_vae_offers_require_live_owned_per_row_candidates_and_failure_cance
     from natlang_neuralese.rl import native_role_release as roles
     from natlang_neuralese.train.native_resident import process_owner
     from natlang_neuralese.common.hashing import canonical_json_sha256_hex
-    from test_native_role_scheduler_deployment import prepared_snapshot
+    from test_native_role_scheduler_deployment import prepared_snapshot,attempt_for
     from natlang_neuralese.train.native_readiness import snapshot_successor
     metadata=tmp_path/'metadata';metadata.mkdir()
     config,_,_=prepared_snapshot(metadata)
@@ -171,8 +171,9 @@ def test_post_vae_offers_require_live_owned_per_row_candidates_and_failure_cance
     for name in ('lfm','mellum'):
         path,receipt,requirement=candidate_fixture(tmp_path,name)
         declarations.append({'model':name,'handoff_requirement':requirement,
-            'foundation_qualification_generation':'qualified-generation'})
-        values[name]={'foundation_candidate':roles.binding(path),'checkpoint':receipt['checkpoint']}
+            'foundation_qualification_generation':'qualified-generation',
+            **{key:roles.binding(path)for key in ('production_recipe','cases','seed_native_graphs','held_native_graphs')}})
+        values[name]={'foundation_candidate':roles.binding(path),'checkpoint':receipt['checkpoint'],'config':roles.binding(path)}
     assignments={name:{'owned_models':[name],'source_host_id':name+'-existing'}for name in values}
     for name in values:
         plan={'models':declarations,'owned_models':[name],'snapshot_preparation':True,
@@ -185,20 +186,36 @@ def test_post_vae_offers_require_live_owned_per_row_candidates_and_failure_cance
     request_hash=canonical_json_sha256_hex(request)
     offers={name:roles.handoff_offer(plan,states[name],request)for name,plan in plans.items()}
     assert all(offers.values())
+    # Each source-host call verifies its own metadata closure before arm; the
+    # consumer's semantic closure alone is insufficient provider availability.
+    original=Path(declarations[0]['production_recipe']['path'])
+    parked=original.with_suffix('.unavailable');original.rename(parked)
+    try:
+        with pytest.raises(OSError):roles.handoff_offer(plans['lfm'],states['lfm'],request)
+    finally:parked.rename(original)
     import time
     initial=roles.foundation_request(plans['lfm'],tmp_path/'requests',generation='qualified-generation')
-    for plan in plans.values():roles.renew_handoff(plan,request,offers,expires_at=time.time()+180)
+    attempt=attempt_for(plans['mellum'],request,offers)
+    for plan in plans.values():roles.renew_handoff(plan,request,offers,expires_at=time.time()+180,attempt=attempt)
     selected=roles.foundation_request(plans['lfm'],tmp_path/'requests',generation='qualified-generation')
     assert selected['sha256']!=initial['sha256']
     assert selected==roles.foundation_request(plans['lfm'],tmp_path/'requests',generation='qualified-generation')
     actual=json.loads(Path(selected['path']).read_text())
-    assert actual['generation']==canonical_json_sha256_hex({'foundation_generation':'qualified-generation','handoff':request_hash})
+    assert actual['generation']==canonical_json_sha256_hex({'foundation_generation':'qualified-generation','handoff':attempt['source']['sha256']})
     # A genuine failed qualification attempt ends this rendezvous; it cannot
     # be relabeled passed or reset by an ordinary progress counter.
     value=json.loads(states['lfm'].read_text());value['models']['lfm']['foundation_qualification_attempt']={
-        'request':selected,'status':'failed'}
+        'request':selected,'status':'failed','checkpoint':value['models']['lfm']['checkpoint']}
     states['lfm'].write_text(json.dumps(value))
     assert roles.handoff_offer(plans['lfm'],states['lfm'],request)is None
+    # Useful SGD alone must not trigger another identical failed full task
+    # window every quantum. A declared repair generation explicitly permits it.
+    value['models']['lfm']['checkpoint']=declarations[0]['production_recipe']
+    states['lfm'].write_text(json.dumps(value))
+    assert roles.handoff_offer(plans['lfm'],states['lfm'],request)is None
+    declarations[0]['foundation_qualification_generation']='after-authenticated-repair'
+    repaired=roles.handoff_offer(plans['lfm'],states['lfm'],request)
+    assert repaired['qualification_generations']['lfm']=='after-authenticated-repair'
     for plan in plans.values():roles.cancel_handoff(plan,request)
     assert all(not roles.handoff_active(plan)for plan in plans.values())
     value['owner']['start_ticks']='0';states['lfm'].write_text(json.dumps(value))

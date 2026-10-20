@@ -548,7 +548,7 @@ def test_source_host_relay_loads_actual_bound_publishing_controls(tmp_path,monke
 
 
 def test_historical_eligibility_cannot_release_and_fresh_descendant_pause_needs_both_lease_providers(tmp_path,monkeypatch):
-    from test_native_role_scheduler_deployment import prepared_snapshot
+    from test_native_role_scheduler_deployment import prepared_snapshot,attempt_for
     from natlang_neuralese.train.native_readiness import snapshot_successor
     from natlang_neuralese.train.native_resident import process_owner
     from natlang_neuralese.common.hashing import canonical_json_sha256_hex
@@ -561,6 +561,41 @@ def test_historical_eligibility_cannot_release_and_fresh_descendant_pause_needs_
         waiting=snapshot_successor(config,Path(config['out']))
     request=json.loads(Path(waiting['awaiting_descendant_handoff']['path']).read_text())
     rows=fixture(tmp_path,monkeypatch)
+    # Real tiny native actor/optimizer states are advanced below. The surrounding
+    # runtime/task certificates remain explicit protocol fixtures, not CUDA or
+    # behavioral qualification; their ordinary strict validators still execute.
+    import torch
+    from test_native_semantic import setup_pair
+    from natlang_neuralese.train.native_state_sft import make_native_optimizer
+    from natlang_neuralese.data.native_graph import graph_loss
+    from natlang_neuralese.train.native_semantic import parse_pair
+    actors,episode,_=setup_pair()
+    actors['mellum'].model.port.hf.natlang_precision='bf16'
+    optimizers={name:make_native_optimizer(entry.model,lr=1e-3,in_backward=False)[0]for name,entry in actors.items()}
+    def install_checkpoint(row,path):
+        previous=row['receipt']['checkpoint'];replacement=raw.binding(path)
+        def replace(value):
+            if isinstance(value,dict):return {key:replace(item)for key,item in value.items()}
+            if isinstance(value,list):return [replace(item)for item in value]
+            if value==previous['sha256']:return replacement['sha256']
+            if value==previous['path']:return replacement['path']
+            return value
+        receipt=replace(row['receipt'])
+        for key in ('training_receipt','runtime_certificate','task_execution_receipt'):
+            target=Path(receipt[key]['path']);body=replace(json.loads(target.read_text()))
+            if key=='training_receipt':body.pop('foundation_qualification_schedule',None)
+            write_json_durable(target,body);receipt[key]=roles.binding(target)
+        value=row['state']['models'][row['plan']['owned_models'][0]]
+        receipt_path=Path(value['readiness']['path']);write_json_durable(receipt_path,receipt)
+        value.update(readiness=roles.binding(receipt_path),checkpoint=replacement)
+        production=Path(value['production_state']['path']);write_json_durable(production,{'checkpoint':str(path)})
+        value['production_state']=roles.binding(production);row['receipt']=receipt
+        write_json_durable(row['state_path'],row['state'])
+    for name,row in rows.items():
+        path=Path(row['receipt']['checkpoint']['path']).parent/'native-step-0.pt'
+        torch.save({'model':actors[name].model.state_dict(),'optimizer':optimizers[name].state_dict(),
+            'rng':torch.get_rng_state(),'earned_updates':0},path)
+        install_checkpoint(row,path)
     monkeypatch.setattr(roles,'pin_checkpoint',lambda reference,directory:roles.binding(reference['path']))
     for name,row in rows.items():
         row['plan']['snapshot_preparation']=True
@@ -572,13 +607,16 @@ def test_historical_eligibility_cannot_release_and_fresh_descendant_pause_needs_
         value['config']=raw.binding(path);write_json_durable(row['state_path'],row['state'])
     request['contract']=roles.contract(rows['mellum']['plan']);request['mechanism']=roles.mechanism()
     offers={name:{'role':name,'contract':roles.contract(row['plan']),'mechanism':roles.mechanism(),
-        'owner':process_owner(),'released':False,'request_sha256':canonical_json_sha256_hex(request)}for name,row in rows.items()}
-    for row in rows.values():roles.renew_handoff(row['plan'],request,offers,expires_at=time.time()+180)
+        'owner':process_owner(),'released':False,'request_sha256':canonical_json_sha256_hex(request),
+        'checkpoints':{name:row['state']['models'][name]['checkpoint']},
+        'qualification_generations':{name:'same-actual-repair'},'provider_inputs':{name:{}}}for name,row in rows.items()}
+    attempt=attempt_for(rows['mellum']['plan'],request,offers)
+    for row in rows.values():roles.renew_handoff(row['plan'],request,offers,expires_at=time.time()+180,attempt=attempt)
     exchange(rows['lfm'],rows['mellum'],kind='eligible');exchange(rows['mellum'],rows['lfm'],kind='eligible')
     assert not roles.eligible(rows['mellum']['plan']) and not roles.handoff_hold(rows['lfm']['plan'])
     for name,row in rows.items():
         generation=canonical_json_sha256_hex({'foundation_generation':'same-actual-repair',
-            'handoff':canonical_json_sha256_hex(request)})
+            'handoff':attempt['source']['sha256']})
         path=tmp_path/(name+'-actual-request.json');write_json_durable(path,{'generation':generation})
         report_path=Path(row['receipt']['training_receipt']['path'])
         report=json.loads(report_path.read_text());report['foundation_qualification_schedule']={
@@ -596,7 +634,52 @@ def test_historical_eligibility_cannot_release_and_fresh_descendant_pause_needs_
     assert not roles.eligible(rows['lfm']['plan'])  # Peer still has only historical eligibility.
     exchange(rows['mellum'],rows['lfm'],kind='eligible')
     assert roles.eligible(rows['lfm']['plan']) and roles.handoff_hold(rows['mellum']['plan'])
-    # A failed/stale relay releases the pause automatically. No current proof
-    # is made obsolete and no optimizer/source checkpoint is rewritten here.
-    roles.cancel_handoff(rows['lfm']['plan'],request)
+    # A stale relay's natural lease expiry releases both pauses automatically.
+    # No current proof or optimizer/source checkpoint is rewritten by expiry.
+    expired=time.time()+181
+    monkeypatch.setattr(roles.time,'time',lambda:expired)
     assert not roles.handoff_hold(rows['lfm']['plan']) and not roles.eligible(rows['lfm']['plan'])
+
+    # Expiry then real useful SGD advances exactly the same tiny
+    # actor and its optimizer. That must allow a NEW authenticated rendezvous.
+    old_attempt=attempt
+    first=rows['lfm'];roles.withdraw(first['plan'],first['state_path'])
+    before={name:value.detach().clone()for name,value in actors['lfm'].model.named_parameters()}
+    examples=parse_pair(episode,actors)
+    loss,_=graph_loss(actors['lfm'].model,examples['lfm'][0],checkpoint_layers=False)
+    loss.backward();optimizers['lfm'].step();optimizers['lfm'].zero_grad(set_to_none=True)
+    assert any(not torch.equal(before[name],value)for name,value in actors['lfm'].model.named_parameters())
+    path=Path(first['receipt']['checkpoint']['path']).parent/'native-step-1.pt'
+    torch.save({'model':actors['lfm'].model.state_dict(),'optimizer':optimizers['lfm'].state_dict(),
+        'rng':torch.get_rng_state(),'earned_updates':1},path)
+    install_checkpoint(first,path)
+    roles.withdraw(first['plan'],first['state_path'])
+    peer_reference,_=roles._status(rows['mellum']['plan']['role_exchange'],'mellum')
+    offers['lfm'].update(checkpoints={'lfm':first['state']['models']['lfm']['checkpoint']},
+        active_attempt=None,current_qualification=None)
+    offers['mellum'].update(current_qualification=peer_reference,active_attempt=None)
+    attempt=attempt_for(rows['mellum']['plan'],request,offers)
+    assert attempt['source']['sha256']!=old_attempt['source']['sha256']
+    document=roles._evidence(attempt)
+    assert document['ordinal']==2 and document['superseded_attempt']==old_attempt['source']
+    for row in rows.values():roles.renew_handoff(row['plan'],request,offers,expires_at=time.time()+180,attempt=attempt)
+    # Unchanged current peer proof may be carried exactly; advanced LF cannot.
+    assert roles.handoff_hold(rows['mellum']['plan']) and not roles.handoff_hold(first['plan'])
+    generation=canonical_json_sha256_hex({'foundation_generation':'same-actual-repair',
+        'handoff':attempt['source']['sha256']})
+    request_path=tmp_path/'lfm-fresh-rendezvous-request.json';write_json_durable(request_path,{'generation':generation})
+    report_path=Path(first['receipt']['training_receipt']['path']);report=json.loads(report_path.read_text())
+    report['foundation_qualification_schedule']={'request':roles.binding(request_path),'requested':True,'readiness_granted':True}
+    write_json_durable(report_path,report);first['receipt']['training_receipt']=roles.binding(report_path)
+    value=first['state']['models']['lfm'];receipt_path=Path(value['readiness']['path'])
+    write_json_durable(receipt_path,first['receipt']);value['readiness']=roles.binding(receipt_path)
+    value['foundation_qualification_attempt']={'request':roles.binding(request_path),'status':'passed',
+        'checkpoint':value['checkpoint'],'report':roles.binding(report_path)}
+    write_json_durable(first['state_path'],first['state'])
+    exchange(first,rows['mellum'],kind='eligible')
+    assert roles.handoff_hold(first['plan']) and roles.eligible(rows['mellum']['plan'])
+    actual=torch.load(path,weights_only=False,map_location='cpu')
+    assert actual['earned_updates']==1 and actual['optimizer']
+    with pytest.raises(ValueError,match='roll back'):
+        roles.renew_handoff(first['plan'],request,offers,expires_at=time.time()+180,attempt=old_attempt)
+    assert roles.handoff_active(first['plan'])['attempt_sha256']==attempt['source']['sha256']

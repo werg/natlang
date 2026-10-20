@@ -28,6 +28,20 @@ def binding(path, expected=None):
     return value
 
 
+def validate_joint_task_specs(curriculum, model_ids):
+    """Never substitute one participant's task baseline for another's policy."""
+    from ..eval.task_cadence import parse_task_eval
+    for name in model_ids:
+        declaration=curriculum.get('models',{}).get(name,{}).get('task_eval')
+        if not declaration:
+            raise ValueError('joint curriculum requires explicit participant task policy: '+name)
+        spec=parse_task_eval(json.dumps(declaration))
+        if spec['reference_successes'] is None:
+            raise ValueError('joint participant task reference/floor is undeclared: '+name)
+        _bound(spec['packet'])
+    return curriculum
+
+
 def prepare_role_scheduler(plans, controls, curriculum_path, provider_path, out, *,
                            raw_states, runtime, rl_bootstrap, handoff_lease_seconds, python=sys.executable):
     """Bind existing external owners to the existing passive semantic scheduler.
@@ -80,6 +94,7 @@ def prepare_role_scheduler(plans, controls, curriculum_path, provider_path, out,
     if semantic.get('policy_training'):
         raise ValueError('new snapshot preparation cannot inherit an unrelated policy episode batch')
     for key in ('pairs','held_pairs'):_bound(semantic[key])
+    validate_joint_task_specs(semantic,[row['handoff_requirement']['model_id']for row in owned_rows.values()])
     if not semantic.get('task_eval') or not semantic.get('policy_schedule'):
         raise ValueError('joint scheduling needs actual task checks and whole-graph policy cadence')
     if type(handoff_lease_seconds)not in(int,float) or not 30<handoff_lease_seconds:

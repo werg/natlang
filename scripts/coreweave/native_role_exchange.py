@@ -106,9 +106,12 @@ def tick(config,io):
         io.verify_assets(sid,closure['assets'])
         offers={name:call(io,row['source_host_id'],'roles.handoff_offer('+repr(plans[name])+','+
             repr(row['raw_state'])+','+repr(handoff)+')') for name,row in hosts.items()}
+        attempt=(call(io,sid,'roles.select_handoff_attempt('+repr(plans[consumer])+','+
+            repr(handoff)+','+repr(offers)+',lease_seconds='+repr(lease)+')') if all(offers.values()) else None)
+        expires=time.time()+lease
         for name,row in hosts.items():
             expression=('roles.renew_handoff('+repr(plans[name])+','+repr(handoff)+','+repr(offers)+
-                ',expires_at='+repr(time.time()+lease)+')' if all(offers.values()) else
+                ',expires_at='+repr(expires)+',attempt='+repr(attempt)+')' if attempt is not None else
                 'roles.cancel_handoff('+repr(plans[name])+','+repr(handoff)+')')
             call(io,row['source_host_id'],expression)
     request_raw=io.read_optional(sid,plans[consumer]['role_exchange']['directory']+'/semantic-assets-request.json')

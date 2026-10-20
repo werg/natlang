@@ -97,3 +97,27 @@ remain responsible for failed work. Additional useful sealed-policy collection
 or frozen adaptation during this handoff is a throughput opportunity, not an
 implemented zero-idle claim. There is no implicit branch merge or earned-SGD
 rollback to hide this cost.
+
+Renewal correction: the VAE request is immutable, but each rendezvous has a
+separate authenticated attempt containing both actual provider offers, current
+checkpoint bindings, repair generations and the superseded attempt reference.
+A live attempt renews; after expiry, actual SGD/owner/repair progress permits a
+new attempt. Its SHA determines the fresh qualification generation. An unchanged
+**current** eligible proof may be explicitly carried; a historical snapshot or
+an advanced checkpoint cannot use that carry. Stale attempt rollback and
+same-ordinal equivocation are rejected.
+
+A failed task/runtime check is actionable repair evidence, not model rejection.
+Useful SGD continues, but merely adding another SGD quantum does not rerun the
+same failed two-hour check. Changing the existing explicit
+`foundation_qualification_generation` after investigation/repair permits a new
+attempt. Successful attempts interrupted by expired provider handshakes renew
+automatically after real progress. Both source-host offers check their own
+actual config/recipe/task/source file closure without decoding a checkpoint;
+the consumer additionally uses the normal semantic dependency preflight.
+
+Joint task declarations are explicit for each participant under
+`models[model_id].task_eval`; no global Mellum baseline substitutes for LF.
+LF's owner-authorized historical zero-success floor and its provenance are
+honest policy, not a matched QAD measurement (DECISIONS.md, 2026-10-13). Mellum's
+separately bound actual reference is retained. No new base evaluation is run.
