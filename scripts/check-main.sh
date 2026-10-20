@@ -40,6 +40,9 @@ export PATH="$HOME/.local/bin:$PATH"
 # Python tests must not depend on a warm Hugging Face cache (the ts-host Neuralese tests do use the local tiny model).
 HF_EMPTY=$(mktemp -d)
 trap 'rm -rf "$HF_EMPTY"' EXIT
+# Disposable fixture identities must not enlarge the production hash index.
+# See CHECK_MAIN_HASH_CACHE_DECOMPOSITION_20261020.md.
+export NATLANG_HASH_CACHE="${NATLANG_HASH_CACHE:-$HF_EMPTY/natlang-sha256-cache.jsonl}"
 
 quick=0 python=1 ts=1
 for arg in "$@"; do

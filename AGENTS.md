@@ -420,6 +420,10 @@ afterwards. The rules below are consequences of this one.
   code, run the full `scripts/check-main.sh` under the memory ledger (usage in
   its header). Main stays green: a red step is fixed or routed to its owner via
   coord, never skipped.
+- Give standalone tests a disposable, unit-specific `NATLANG_HASH_CACHE`.
+  `check-main.sh` supplies one by default. Test fixture identities accumulated
+  millions of entries in the shared production cache and caused real metadata
+  job memory failures; cache isolation preserves the same exact hash verifiers.
 - When resolving a merge conflict, keep both sides unless you know a side was
   removed on purpose; a dropped section of AGENTS.md or a plan is lost silently.
 - Stop processes by systemd unit name or an explicit PID, never by pattern.
