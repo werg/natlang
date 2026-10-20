@@ -109,3 +109,16 @@ compact rendering witness against the unchanged original row. No target token is
 removed, no source is skipped, and whole-trajectory masking remains unchanged.
 Rendering reconstruction is needed only for this exceptional target geometry;
 existing role-valid manifests retain their exact spans and evidence.
+
+Already admitted native decision renderings can lack the later teacher-source
+field while retaining their original approved native records and registered
+renderer receipts. For those explicit inputs, reuse the same producer and mask
+consumer. Verify the original receipt's exact native JSON file, record identity,
+approved native admission, TRAIN split/groups, template/history policy and the
+complete shared gold rendering (tokens, text and target boundary). The receipt's
+corpus ID and declared full/program-header view must exactly reproduce the
+native-view-qualified row identity. Derive masks only after those proofs; never
+infer approval from context attestations, source names or a feedback substring.
+This is an objective correction to the existing immutable row, not new data or
+new native/whole-graph admission. Other source families still need their own
+existing custody and remain explicitly pending until verified.

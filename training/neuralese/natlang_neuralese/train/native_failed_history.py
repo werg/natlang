@@ -120,6 +120,28 @@ def validate_source_evidence(row,evidence,*,target_render_binding=None):
                 and value.get('policy')=='no-embedded-renderer-chat-boundaries'
                 and value.get('forbidden_markers')==['<|im_start|>','<|im_sep|>','<|im_end|>']
                 and re.fullmatch('[0-9a-f]{64}',str(value.get('input_sha256',''))))
+        if not teacher and evidence.get('kind')=='verified-native-record-render':
+            origin=evidence.get('native_record')or{};render=evidence.get('native_render')or{}
+            refs=(origin.get('source')or{},evidence.get('native_render_receipt')or{})
+            actual=target_render_binding if target_render_binding is not None else {
+                'token_ids_sha256':digest(row['nodes'][0]['token_ids']),
+                'source_text_sha256':conversion.get('source_text_sha256'),
+                'source_suffix_start':conversion.get('source_suffix_start')}
+            expected=f"text:native-view-qualified:{render.get('prompt_rendering')}:{render.get('corpus_id')}:{origin.get('id')}"
+            if (not checked_guard(guard)or not all(isinstance(ref.get('path'),str)and ref['path']
+                    and re.fullmatch('[0-9a-f]{64}',str(ref.get('sha256','')))
+                    and type(ref.get('bytes'))is int and ref['bytes']>0 for ref in refs)
+                    or not re.fullmatch('[0-9a-f]{64}',str(origin.get('line_sha256','')))
+                    or not re.fullmatch('[0-9a-f]{64}',str(origin.get('record_sha256','')))
+                    or origin.get('split')!='train' or origin.get('source_groups')!=row.get('source_groups')
+                    or (origin.get('training_admission')or{}).get('approved')is not True
+                    or conversion.get('source_record_ids')!=[origin.get('id')]
+                    or render.get('prompt_rendering')not in('full','program-header')
+                    or not isinstance(render.get('corpus_id'),str)or not render['corpus_id']
+                    or render.get('history_reasoning_policy')not in('keep','last_turn_only')
+                    or render.get('binding')!=actual or row['id']!=expected):
+                raise ValueError('failed-history native record lacks exact approved full rendering custody')
+            return
         scoped=False
         if guard.get('schema')=='natlang.failed-history-prefix-input-guard/1':
             witness=evidence.get('captured_target_render')or{}
