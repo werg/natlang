@@ -406,3 +406,26 @@ def test_actual_resume_drops_setup_metadata_before_next_update(tmp_path, monkeyp
     assert final['training']['global_step']==2
     assert final['training']['exposure_counts']=={'a':1,'b':1}
     assert final['training']['rng'] and final['training']['optimizer']
+
+
+@pytest.mark.parametrize('damage',['deficit','unadmitted','binding','total','epoch','source','counter-type'])
+def test_transported_foundation_requires_each_exact_completed_row(tmp_path,damage):
+    from natlang_neuralese.train.native_continuation import validate_communication_foundation
+    path=source_manifest(tmp_path,[dict(graph('ordinary'),tokenizer_fingerprint='1'*64)],
+                         [authenticated_pair('a'),authenticated_pair('b')])
+    source=NativeGraphSource(path,'1'*64,required_split='train',role_ids=(58,59,60,61))
+    value=communication_foundation(source,{'lfm:a':1,'lfm:b':1},epochs=1,trained_bindings=source.bindings)
+    expected=value['sources']['sha256']
+    assert validate_communication_foundation(value,epochs=1,source_sha256=expected) is value
+    changed=copy.deepcopy(value)
+    if damage=='deficit':
+        changed['rows']['lfm:a']['graph_visits']=2
+        changed['rows']['lfm:b']['graph_visits']=0  # unchanged aggregate is not completed exposure
+    elif damage=='unadmitted':changed['rows']['lfm:b']['admitted_to_training']=False
+    elif damage=='binding':changed['rows']['lfm:b']['binding']='wrong-row'
+    elif damage=='total':changed['graph_visits']+=1
+    elif damage=='epoch':changed['epochs']=2
+    elif damage=='source':changed['sources']['sha256']='f'*64
+    else:changed['rows']['lfm:b']['graph_visits']=True
+    with pytest.raises(ValueError,match='communication foundation'):
+        validate_communication_foundation(changed,epochs=1,source_sha256=expected)

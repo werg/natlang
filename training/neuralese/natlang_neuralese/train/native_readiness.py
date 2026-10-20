@@ -125,13 +125,15 @@ def validate_ready(path, requirement):
         raise ValueError('native readiness requires complete genuine producer/consumer communication training before VAE')
     if foundation_boundary:
         from ..data.native_sources import NativeGraphSource
-        from .native_continuation import communication_foundation
+        from .native_continuation import communication_foundation, validate_communication_foundation
         declared = NativeGraphSource(_bound(requirement['foundation_sources']), identity['tokenizer_fingerprint'],
             required_split='train', role_ids=report['model_config']['marker_ids'])
         foundation = receipt.get('communication_foundation') or {}
         if foundation != report.get('communication_foundation') or foundation.get('complete') is not True:
             raise ValueError('native foundation has no exact complete admitted-cohort receipt')
-        rows = foundation.get('rows') or {}
+        validate_communication_foundation(foundation, epochs=requirement.get('foundation_epochs',1.),
+            source_sha256=requirement['foundation_sources']['sha256'])
+        rows = foundation['rows']
         expected = communication_foundation(declared,
             {key: value['graph_visits'] for key,value in rows.items()},
             epochs=requirement.get('foundation_epochs',1.),

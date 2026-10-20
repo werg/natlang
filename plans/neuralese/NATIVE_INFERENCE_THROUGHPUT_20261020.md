@@ -404,3 +404,15 @@ tree entirely before installation. The sealed overlay includes the installer
 and existing clone companion as exact source files. CLI operation receipts record
 in-progress, passed or failed status explicitly, so partial physical copies are
 reconciled deliberately before retrying an immutable destination.
+
+The future controller's old five-module private loader did not match LFM's
+actual eight-control publishing closure. The repaired controller calls the same
+reviewed publishing loader directly, with explicit binder/spec/manifest bindings.
+It retains the true historical interrupted verifier actors at their recorded
+paths when supplied by the preparer with identical reviewed SHA/bytes. An actual
+4395 subprocess loaded all eight controls, preserved the exact six-map including
+LFM's final raw-handoff override, and passed two real interrupted-state custody
+protocol fixtures. The fixtures do not verify the production 722-update history;
+that source-host metadata check remains required before activation. The numerical
+package is unchanged. The v8 overlay seals these metadata utilities and controller
+repair; a genuine owner-bound controller preflight remains a separate requirement.

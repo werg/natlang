@@ -259,7 +259,6 @@ def verify_initial_foundation_cohort(train, foundation, *, already_declared=Fals
 
 def communication_foundation(source,counts,*,epochs,trained_bindings):
     """Exact full declared communication cohort; ordinary rows do not gate it."""
-    from ..common.hashing import canonical_json_sha256_hex
     from .native_operation_report import source_receipt
     quotas=required_visits(source.ordered_ids(),epochs)
     rows={}
@@ -270,14 +269,45 @@ def communication_foundation(source,counts,*,epochs,trained_bindings):
         rows[key]={'binding':entry['binding'],'required_visits':quotas[key],
             'graph_visits':int(counts.get(key,0)) if compatible else 0,
             'admitted_to_training':compatible}
-    cohort={key:{name:row[name] for name in ('binding','required_visits')} for key,row in rows.items()}
     return {'schema':'natlang.native-communication-foundation/1',
-        'cohort_sha256':canonical_json_sha256_hex(cohort),'sources':source_receipt(source),
-        'epochs':epochs,'rows':rows,'graphs':len(rows),
+        'sources':source_receipt(source), 'epochs':epochs, 'rows':rows,
+        **_foundation_summary(rows)}
+
+
+def _foundation_summary(rows):
+    """One row-completion law for the producer and transported proof verifier."""
+    from ..common.hashing import canonical_json_sha256_hex
+    cohort={key:{name:row[name] for name in ('binding','required_visits')} for key,row in rows.items()}
+    return {'cohort_sha256':canonical_json_sha256_hex(cohort),'graphs':len(rows),
         'required_graph_visits':sum(row['required_visits'] for row in rows.values()),
         'graph_visits':sum(row['graph_visits'] for row in rows.values()),
         'complete':bool(rows) and all(row['admitted_to_training'] and
             row['graph_visits']>=row['required_visits']>0 for row in rows.values())}
+
+
+def validate_communication_foundation(value, *, epochs, source_sha256):
+    """Verify inline completed row evidence without reading a remote source path."""
+    if (not isinstance(source_sha256,str) or len(source_sha256)!=64
+            or any(char not in '0123456789abcdef' for char in source_sha256)
+            or not isinstance(value,dict) or value.get('schema')!='natlang.native-communication-foundation/1'
+            or type(value.get('epochs')) not in (int,float) or not math.isfinite(value['epochs'])
+            or value['epochs']<=0 or value['epochs']!=epochs
+            or (value.get('sources') or {}).get('sha256')!=source_sha256
+            or not isinstance(value.get('rows'),dict) or not value['rows']):
+        raise ValueError('communication foundation did not consume the entire declared admitted cohort: source/epochs/rows mismatch')
+    for key,row in value['rows'].items():
+        if (not isinstance(key,str) or not key or not isinstance(row,dict)
+                or not isinstance(row.get('binding'),str) or not row['binding']
+                or type(row.get('required_visits')) is not int or row['required_visits']<=0
+                or type(row.get('graph_visits')) is not int or row['graph_visits']<row['required_visits']
+                or row.get('admitted_to_training') is not True):
+            raise ValueError('communication foundation requires completed exact exposure for every row')
+    expected=_foundation_summary(value['rows'])
+    if (expected['complete'] is not True or any(value.get(key)!=item for key,item in expected.items())
+            or any(type(value.get(key)) is not int for key in ('graphs','required_graph_visits','graph_visits'))
+            or value.get('complete') is not True):
+        raise ValueError('communication foundation aggregate/cohort differs from its per-row exposure')
+    return value
 
 
 def raw_communication_rows(progress):
