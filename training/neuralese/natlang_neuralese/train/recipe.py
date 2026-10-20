@@ -1831,9 +1831,15 @@ def _classification_proof(inputs):
         raise ValueError('classification continuation proof differs from current source or metadata-only work')
     if proof.get('held', {}).get('sha256') != inputs.get('held_native_graphs', {}).get('sha256'):
         raise ValueError('classification continuation held source differs')
+    current_producer = _binding(producer.__file__)
     for part in proof['indexes'] + proof['held_indexes']:
-        if part.get('producer') != _binding(producer.__file__) or set(part.get('old_policy', {})) != set(POLICY_FILES):
+        historical_producer = part.get('producer') or {}
+        if (any(historical_producer.get(key) != current_producer[key] for key in ('sha256', 'bytes'))
+                or set(part.get('old_policy', {})) != set(POLICY_FILES)):
             raise ValueError('classification continuation producer/policy differs')
+        # Historical provenance is the original bound source, even when the
+        # exact same classifier now lives in a different runtime directory.
+        _checked(historical_producer)
         for value in (part['source'], part['old_index'], part['new_index'], *part['old_policy'].values()):
             _checked(value)
     return proof

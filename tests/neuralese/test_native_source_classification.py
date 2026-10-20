@@ -280,3 +280,29 @@ def test_empty_semantic_pair_migration_keeps_zero_communication_credit(tmp_path,
     result = migration.migrate_index(source, old, old_package=old_package, new_package=package)
     entry = migration._index(result['new_index'])['entries'][0]
     assert not any(entry[name] for name in migration.CLASS_FIELDS)
+
+
+@pytest.mark.parametrize('damage',[None,'changed-code','missing-origin','wrong-bytes'])
+def test_recipe_historical_classifier_retains_origin_with_identical_code(tmp_path,monkeypatch,damage):
+    from natlang_neuralese.train.recipe import _classification_proof
+    source,old,old_package,package,current=fixture(tmp_path,monkeypatch)
+    part=migration.migrate_index(source,old,old_package=old_package,new_package=package)
+    origin=tmp_path/'historical-runtime/train/native_source_classification.py';origin.parent.mkdir(parents=True)
+    origin.write_bytes(Path(migration.__file__).read_bytes())
+    part['producer']=migration._binding(origin)
+    if damage=='changed-code':
+        origin.write_bytes(origin.read_bytes()+b'\n# other producer\n');part['producer']=migration._binding(origin)
+    elif damage=='missing-origin':origin.unlink()
+    elif damage=='wrong-bytes':part['producer']['bytes']+=1
+    proof={'schema':migration.SCHEMA,'train_sha256':current.receipt()['sha256'],
+           'held':current.receipt(),'indexes':[part],'held_indexes':[part],
+           'optimizer_updates':0,'student_pointer_writes':0,'model_allocations':0,'graph_position_expansions':0}
+    path=tmp_path/'proof.json';path.write_text(json.dumps(proof));before=path.read_bytes()
+    inputs={'native_graphs':current.receipt(),'held_native_graphs':current.receipt(),
+            'source_classification_migration':{**migration._binding(path),'binding':'historical'}}
+    if damage:
+        with pytest.raises((ValueError,FileNotFoundError)):_classification_proof(inputs)
+    else:
+        assert _classification_proof(inputs)==proof
+        assert Path(proof['indexes'][0]['producer']['path'])==origin
+    assert path.read_bytes()==before
