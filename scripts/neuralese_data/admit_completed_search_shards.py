@@ -17,6 +17,7 @@ from scripts.neuralese_data import render_native_turn_corpus as renderer
 from scripts.neuralese_data.build_verified_teacher_trajectory_graphs import current_protection
 from scripts.neuralese_data.decision_holds import load_decision_holds
 from scripts.neuralese_data.register_corpora import register
+from scripts.neuralese_data.verify_completed_search_parent import verify as verify_parent, verified_artifacts
 
 ROOT=Path(__file__).resolve().parents[2]
 PARENT='external-expansion-search-owl-native-20261015-v1'
@@ -52,17 +53,24 @@ def convert_one(source,destination,tokenizer,model):
     return json.loads(receipt_path.read_text())
 
 
-def admit(shard,*,launch,launch_path,state,work,tokenizers,input_binding,protection,protection_path):
+def admit(shard,*,launch,launch_path,state,work,tokenizers,input_binding,protection,protection_path,parent_composition=None):
     out=work.parent/f'shard{shard}-native-graphs'
     done={alias:json.loads((work/'done'/alias/f'{shard}.json').read_text()) for alias in MODELS}
     renderer_sha=sha(Path(renderer.__file__))
-    if not all(eligible(row,renderer_sha) for row in done.values()):return None
+    parent_verification=None
+    if parent_composition is not None:
+        parent_verification=verify_parent(shard,launch_path=launch_path,composition_path=parent_composition,
+            output=work/'admission-parent-verifications'/f'{shard}.json')
+    elif not all(eligible(row,renderer_sha) for row in done.values()):return None
     selected=work/'selected'/f'{shard}.jsonl.zst'
     held=set(state['test_groups'])|set(state['reserved_groups'])|renderer.held_groups_from([Path(launch['held_text'])])
     for alias,row in done.items():
         job=(str(selected),str(work),alias,state['blocked'],PARENT,held,set(),False,set(),
             tuple(launch['renderings']),True,set(),None,input_binding,None)
-        renderer._verify_trajectory_receipts(job,row,{renderer_sha,renderer.LEGACY_SEARCH_RENDERER_SHA256})
+        if parent_verification is None:
+            renderer._verify_trajectory_receipts(job,row,{renderer_sha,renderer.LEGACY_SEARCH_RENDERER_SHA256})
+        elif parent_verification['parents'][alias]['marker']['sha256']!=sha(work/'done'/alias/f'{shard}.json'):
+            raise ValueError('historical Search marker changed before conversion')
         if any(row.get(key)!=0 for key in ('decontaminated','decision_excluded','target_excluded')):
             raise ValueError('Search shard has exclusions needing an explicit admission decision')
     if len({row['source_sha256'] for row in done.values()})!=1:
@@ -109,6 +117,10 @@ def admit(shard,*,launch,launch_path,state,work,tokenizers,input_binding,protect
     snapshots={'selection-state.json':work/'selection-state.json','launch-binding.json':launch_path,
         f'selected-shard-{shard}.jsonl.zst':selected}
     for name,path in snapshots.items():shutil.copy2(path,out/name);include.append(name)
+    if parent_verification is not None:
+        verified_artifacts(parent_verification,shard=shard,launch_path=launch_path,composition_path=parent_composition)
+        write_json_durable(out/'historical-parent-verification.json',parent_verification)
+        include.append('historical-parent-verification.json')
     proof={'schema':'natlang.search-owl-native-graph-shard-admission/2','status':'passed','shard':shard,
         'source_corpus':PARENT,'selected_source_records':len(selected_ids),'source_selection_complete':True,
         'full_source_conversion_complete':False,'earned_graph_visits':0,'views':views,
@@ -120,6 +132,10 @@ def admit(shard,*,launch,launch_path,state,work,tokenizers,input_binding,protect
         'launch_binding':{'path':'launch-binding.json','sha256':sha(out/'launch-binding.json')},
         'selected_shard':{'path':f'selected-shard-{shard}.jsonl.zst','bytes':selected.stat().st_size,'sha256':sha(selected)},
         'transformation':'Existing role-aware ordinary native text conversion; no inferred communication edges'}
+    if parent_verification is not None:
+        proof['historical_parent_verification']={'path':'historical-parent-verification.json',
+            'sha256':sha(out/'historical-parent-verification.json')}
+        proof['historical_renderer_code_sha256s']={alias:item['renderer'] for alias,item in parent_verification['parents'].items()}
     write_json_durable(out/'admission-proof.json',proof);include.append('admission-proof.json')
     entry={'id':PREFIX+shard,'owner':'dgx','path':str(out.relative_to(ROOT)),'include':include,
         'source_class':'static-role-aware-native-graph-conversion-of-approved-search-owl-shard',
@@ -135,6 +151,8 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--launch-binding',type=Path,required=True)
     parser.add_argument('--protection',type=Path,required=True)
+    parser.add_argument('--qualified-parent-composition',type=Path)
+    parser.add_argument('--shard',action='append',default=[],help='Only these exact completed shard identities')
     parser.add_argument('--watch-seconds',type=float,default=0)
     args=parser.parse_args()
     launch=json.loads(args.launch_binding.read_text());work=ROOT/launch['out_dir']/'work'
@@ -155,10 +173,13 @@ def main():
         protection=current_protection(args.protection)
         registered={row['id'] for row in json.loads((ROOT/'training/neuralese_corpora.json').read_text())['corpora']}
         shards=set.intersection(*[{p.stem for p in (work/'done'/alias).glob('*.json')} for alias in MODELS])
+        if args.shard:
+            if not set(args.shard)<=shards:raise ValueError('requested Search shard is not completed for both students')
+            shards=set(args.shard)
         for shard in sorted(shards):
             if PREFIX+shard in registered:continue
             result=admit(shard,launch=launch,launch_path=args.launch_binding,state=state,work=work,
-                tokenizers=tokenizers,input_binding=input_binding,protection=protection,protection_path=args.protection)
+                tokenizers=tokenizers,input_binding=input_binding,protection=protection,protection_path=args.protection,parent_composition=args.qualified_parent_composition)
             if result:print(json.dumps(result),flush=True)
         if not args.watch_seconds:break
         time.sleep(args.watch_seconds)
