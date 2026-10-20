@@ -133,7 +133,10 @@ def test_recipe_and_publication_recursively_bind_actual_proof_dependencies(combi
     cfg=put(tmp_path/'config.json',{'source_classification_migration':ref,
         'trainer_parameters':{'source_classification_migration':ref['path']}})
     checkout=Path(__file__).resolve().parents[2]
-    closure=dependency_closure({'config':cfg},namespace=tmp_path,readonly_input_roots=[str(checkout)])
+    # A composed runtime can live outside the source checkout under test.
+    runtime_checkout = Path(c.__file__).resolve().parents[2]
+    closure=dependency_closure({'config':cfg},namespace=tmp_path,
+        readonly_input_roots=[str(checkout), str(runtime_checkout)])
     actual={x['path']for x in closure['files']+closure['assets']}
     assert wanted<=actual
     Path(wd['filter_proof']['path']).write_text('tampered filter')
