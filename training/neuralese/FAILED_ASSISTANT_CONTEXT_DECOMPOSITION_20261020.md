@@ -98,3 +98,14 @@ decoder cache therefore loads one tokenizer for equivalent snapshot copies,
 instead of churning when a production policy combines several source families.
 Distinct content remains distinct, and a damaged later copy still fails before
 the shared cache is used. This changes no masks, row identities or objective law.
+
+Literal control-token spellings in an assistant target do not become context
+messages. Ordinary failure masks derive only from the authenticated prefix before
+the saved suffix boundary. When the legacy full-target role check encounters a
+literal marker, the producer must reconstruct that exact captured full rendering
+with the existing teacher renderer and declared history profile, binding the full
+token sequence, decoded text and suffix coordinate. The consumer checks that
+compact rendering witness against the unchanged original row. No target token is
+removed, no source is skipped, and whole-trajectory masking remains unchanged.
+Rendering reconstruction is needed only for this exceptional target geometry;
+existing role-valid manifests retain their exact spans and evidence.

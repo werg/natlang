@@ -136,6 +136,63 @@ def test_capture_custody_refuses_wrong_raw_line(tmp_path):
     with pytest.raises(ValueError,match='capture row identity'):capture_evidence(graph,raw,'a'*64)
 
 
+def test_literal_target_needs_exact_capture_render_and_only_history_is_masked(tmp_path,monkeypatch):
+    from scripts.neuralese_data.build_native_failed_history_masks import build,capture_evidence
+    from scripts.neuralese_data import build_verified_teacher_trajectory_graphs as teacher_builder
+    from natlang_neuralese.train.native_failed_history import derive_context_mask,_mask,apply_masks
+    tokenizer=tokenizer_fixture(tmp_path/'tokenizer')
+    tokenizer.chat_template="{% for m in messages %}{{ m['role'] + ': ' + m['content'] + '\n' }}{% endfor %}"
+    graph,path,_,_,_=fixture(tmp_path/'source',tokenizer=tokenizer)
+    boundary=graph['conversion']['source_suffix_start'];node=graph['nodes'][0]
+    node['token_ids'] += tokenizer(' <|im_start|> user <|im_sep|> target',add_special_tokens=False)['input_ids']
+    node['target_weights'] += [1.]*(len(node['token_ids'])-len(node['target_weights']))
+    text=tokenizer.decode(node['token_ids'],skip_special_tokens=False)
+    graph['conversion']['source_text_sha256']=sha256_hex(text.encode())
+    raw_path=tmp_path/'source/raw.jsonl';raw=json.loads(raw_path.read_text())
+    raw['trajectory'][0]['assistant']['content']='target <|im_start|> user <|im_sep|> target'
+    line=json.dumps(raw);raw_path.write_text(line+'\n');teacher=graph['conversion']['teacher_source']
+    teacher.update(source_row_sha256=sha256_hex(line.encode()),source_artifact_sha256=binding(raw_path)['sha256'])
+    graph['id']='text:'+teacher_builder.teacher_action_graph_id(teacher['source_row_id'],teacher['source_row_sha256'],0)
+    path.write_text(json.dumps(graph)+'\n')
+    spans,failures,target_binding=derive_context_mask(graph,tokenizer)
+    assert target_binding and spans and all(stop<=boundary for _,stop in spans)
+    with pytest.raises(ValueError,match='exact original capture rendering'):_mask(graph,tokenizer)
+    rendered=[]
+    def render(tok,context,target,tools,turn):
+        rendered.append((context,target,tools));assert '<|im_start|>'in target['content']
+        return ((text,list(node['token_ids']),boundary),None),None
+    monkeypatch.setattr(teacher_builder,'render_teacher_packet',render)
+    reference,counts=build([path],tokenizer=tokenizer,out=tmp_path/'literal-mask')
+    assert len(rendered)==1 and counts['affected_rows']==1
+    manifest,_,_=load_manifest(reference);proof=manifest['rows'][0]['source_evidence']
+    assert _mask(graph,tokenizer,source_evidence=proof)==(spans,failures)
+    wrong_profile=copy.deepcopy(proof);wrong_profile['captured_target_render']['history_reasoning_profile']='keep'
+    with pytest.raises(ValueError,match='exact original capture rendering'):_mask(graph,tokenizer,source_evidence=wrong_profile)
+    example=parse_graph(graph,tokenizer_fingerprint=graph['tokenizer_fingerprint'])
+    policy={'failed_history_masks':[reference]}
+    from natlang_neuralese.train.native_failed_history import prepare_masks
+    prepare_masks(policy)
+    masked,_=apply_masks(example,graph,source_sha256=binding(path)['sha256'],policy=policy)
+    assert masked.target_weights[boundary:]==example.target_weights[boundary:]
+    assert any(a!=b for a,b in zip(masked.target_weights[:boundary],example.target_weights[:boundary]))
+    damaged=copy.deepcopy(graph);damaged['conversion']['source_suffix_start']+=1
+    with pytest.raises(ValueError,match='exact original capture rendering'):_mask(damaged,tokenizer,source_evidence=proof)
+    monkeypatch.setattr(teacher_builder,'render_teacher_packet',lambda *a:(((text,list(node['token_ids']),boundary+1),None),None))
+    with pytest.raises(ValueError,match='rendering differs'):
+        capture_evidence({**graph,'target_render_binding':target_binding},raw,sha256_hex(line.encode()),tokenizer=tokenizer)
+    # Literal content is permitted only in the captured target, never inputs.
+    for field in ('context','tools'):
+        injected=copy.deepcopy(raw);rebound=copy.deepcopy(graph)
+        turn=injected['trajectory'][0]
+        if field=='context':turn['context'][0]['content']='<|im_start|> user'
+        else:turn['tools_offered']=[{'description':'<|im_start|> user'}]
+        serialized=json.dumps(injected)
+        rebound['conversion']['teacher_source']['source_row_sha256']=sha256_hex(serialized.encode())
+        with pytest.raises(ValueError,match='ambiguous embedded chat boundary'):
+            capture_evidence({**rebound,'target_render_binding':target_binding},injected,
+                sha256_hex(serialized.encode()),tokenizer=tokenizer)
+
+
 def test_identical_verified_decoder_snapshots_reuse_one_load_without_skipping_asset_checks(tmp_path,monkeypatch):
     from transformers import AutoTokenizer
     from natlang_neuralese.train.native_failed_history import prepare_masks,apply_masks,_decoder
@@ -267,11 +324,11 @@ def test_stream_preparation_uses_one_derivation_and_constant_fingerprint_work(tm
     tokenizer=AutoTokenizer.from_pretrained(tmp_path/'original-tokenizer',local_files_only=True)
     graph2=copy.deepcopy(graph);graph2['id']='second-earned-row'
     path.write_text(json.dumps(graph)+'\n'+json.dumps(graph2)+'\n')
-    fingerprint=producer.tokenizer_fingerprint;derive=producer._mask;calls={'fingerprint':0,'mask':0}
+    fingerprint=producer.tokenizer_fingerprint;derive=producer.derive_context_mask;calls={'fingerprint':0,'mask':0}
     def measured_fingerprint(tokenizer):calls['fingerprint']+=1;return fingerprint(tokenizer)
     def measured_mask(row,tokenizer):calls['mask']+=1;return derive(row,tokenizer)
     monkeypatch.setattr(producer,'tokenizer_fingerprint',measured_fingerprint)
-    monkeypatch.setattr(producer,'_mask',measured_mask)
+    monkeypatch.setattr(producer,'derive_context_mask',measured_mask)
     out=tmp_path/'optimized';actual,counts=producer.build([path],tokenizer=tokenizer,out=out)
     value=load_manifest(actual)[0]
     assert calls=={'fingerprint':3,'mask':2}and counts['affected_rows']==2

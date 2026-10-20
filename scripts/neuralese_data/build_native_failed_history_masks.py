@@ -14,10 +14,10 @@ from natlang_neuralese.common.jsonio import write_json_durable,write_bytes_durab
 from natlang_neuralese.data.native_sources import _jsonl
 from natlang_neuralese.data.text_corpus import tokenizer_fingerprint
 from natlang_neuralese.train.native_failed_history import (
-    SCHEMA,binding,mask_law,mask_record,validate_source_evidence,_mask,load_manifest)
+    SCHEMA,binding,mask_law,mask_record,validate_source_evidence,derive_context_mask,load_manifest)
 
 
-def capture_evidence(graph,raw,line_sha256):
+def capture_evidence(graph,raw,line_sha256,*,tokenizer=None):
     """Original collector custody and the shared no-embedded-boundary verifier."""
     from scripts.neuralese_data.build_verified_teacher_trajectory_graphs import reviewed_teacher_context_guard
     from natlang_neuralese.common.hashing import canonical_json_sha256_hex as digest
@@ -30,9 +30,43 @@ def capture_evidence(graph,raw,line_sha256):
     target={'role':'assistant','content':assistant.get('content',''),
             'tool_calls':turn['model_response']['raw_calls']}
     if assistant.get('reasoning'):target['reasoning_content']=assistant['reasoning']
-    guard=reviewed_teacher_context_guard(turn,turn['context'],target,turn['tools_offered'])
-    return {'kind':'verified-teacher-capture','teacher_source_sha256':digest(teacher),
-            'structured_input_guard':guard}
+    target_binding=graph.get('target_render_binding')
+    if target_binding is None:
+        guard=reviewed_teacher_context_guard(turn,turn['context'],target,turn['tools_offered'])
+    else:
+        from scripts.neuralese_data.build_verified_teacher_trajectory_graphs import captured_text_emulation_context
+        from natlang_neuralese.data.native_graph_conversion import unambiguous_chat_input_guard
+        resolved,tools,_,omission=captured_text_emulation_context(turn,turn['context'],turn['tools_offered'])
+        if omission is not None:raise ValueError('failed-history original resolved prefix is unavailable')
+        guard={'schema':'natlang.failed-history-prefix-input-guard/1',
+            'policy':'unambiguous-rendered-context-with-exact-captured-target',
+            'prefix':unambiguous_chat_input_guard(resolved,None,tools),
+            'target_render_binding_sha256':digest(target_binding)}
+    evidence={'kind':'verified-teacher-capture','teacher_source_sha256':digest(teacher),
+              'structured_input_guard':guard}
+    if target_binding is not None:
+        from scripts.neuralese_data.build_verified_teacher_trajectory_graphs import render_teacher_packet,teacher_action_graph_id
+        from natlang_neuralese.serve.chat import bind_history_reasoning
+        profiles=[]
+        for profile in (None,'keep','last_turn_only'):
+            for mask in ('preserve','mask-runtime-failures'):
+                modern='text:'+teacher_action_graph_id(teacher['source_row_id'],teacher['source_row_sha256'],index,profile,mask)
+                legacy=f"text:{teacher['source_row_id']}:action:{index:04d}"
+                if profile is not None:legacy+=':history-reasoning:'+profile
+                if mask!='preserve':legacy+=':assistant-history:'+mask
+                if graph['id']in(modern,legacy):profiles.append(profile)
+        if tokenizer is None or len(profiles)!=1:
+            raise ValueError('failed-history target render needs exact tokenizer and source-bound history profile')
+        profile=profiles[0];bind_history_reasoning(tokenizer,policy=profile,allow_transition=True)
+        packet,omission=render_teacher_packet(tokenizer,turn['context'],target,turn['tools_offered'],turn)
+        if omission is not None:raise ValueError('failed-history original captured target render is unavailable')
+        (text,ids,boundary),_=packet
+        actual={'token_ids_sha256':digest(ids),'source_text_sha256':sha256_hex(text.encode()),
+                'source_suffix_start':boundary}
+        if actual!=target_binding:raise ValueError('failed-history original captured rendering differs from raw graph')
+        evidence['captured_target_render']={'schema':'natlang.failed-history-captured-target-render/1',
+            'binding':actual,'teacher_source_sha256':digest(teacher),'history_reasoning_profile':profile}
+    return evidence
 
 
 def build(sources,*,tokenizer,out,capture_overrides=()):
@@ -60,7 +94,7 @@ def build(sources,*,tokenizer,out,capture_overrides=()):
                 continue
             if graph.get('tokenizer_fingerprint')!=fingerprint:
                 raise ValueError('failed-history decoder differs from actual source row tokenizer')
-            spans,failure_evidence=_mask(graph,tokenizer)
+            spans,failure_evidence,target_binding=derive_context_mask(graph,tokenizer)
             if not spans:continue
             if conversion.get('role_interpretation')=='ordinary-text':
                 teacher=conversion.get('teacher_source')or{}
@@ -76,7 +110,8 @@ def build(sources,*,tokenizer,out,capture_overrides=()):
             record=mask_record(graph,source_sha256=source['sha256'],source_evidence=evidence,
                 zero_spans=spans,failure_evidence=failure_evidence)
             # Never retain full token/weight arrays across the streamed corpus.
-            candidates.append({'graph':{'conversion':conversion},'record':record})
+            candidates.append({'graph':{'id':graph['id'],'conversion':conversion,
+                **({'target_render_binding':target_binding}if target_binding is not None else{})},'record':record})
         if binding(path)!=source:raise ValueError('failed-history TRAIN source changed during preparation')
     # Resolve requested capture turns while streaming each raw file once. Neither
     # full graph arrays nor entire captured trajectories accumulate in memory.
@@ -97,8 +132,9 @@ def build(sources,*,tokenizer,out,capture_overrides=()):
                     if raw['id']in seen_rows:raise ValueError('ambiguous original capture row')
                     seen_rows.add(raw['id']);line_sha=sha256_hex(line.rstrip(b'\r\n'))
                     for candidate in request['rows'][raw['id']]:
-                        evidence=capture_evidence(candidate['graph'],raw,line_sha)
-                        validate_source_evidence(candidate['graph'],evidence)
+                        evidence=capture_evidence(candidate['graph'],raw,line_sha,tokenizer=tokenizer)
+                        validate_source_evidence(candidate['graph'],evidence,
+                            target_render_binding=candidate['graph'].get('target_render_binding'))
                         candidate['record']['source_evidence']=evidence
         if seen_rows!=set(request['rows'])or binding(path)!=before:
             raise ValueError('missing or changed original capture rows')

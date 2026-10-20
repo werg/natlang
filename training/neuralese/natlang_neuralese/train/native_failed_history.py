@@ -37,7 +37,7 @@ def mask_law():
         'failure_patterns':[(pattern.pattern,pattern.flags)for pattern in text_supervision.FAILED_TOOL_FEEDBACK]})
 
 
-def _mask(row,tokenizer):
+def derive_context_mask(row,tokenizer):
     """Derive exact role/failure evidence from original immutable token rows."""
     conversion=row.get('conversion')or{}
     if (row.get('split')!='train' or len(row.get('nodes')or[])!=1
@@ -52,24 +52,43 @@ def _mask(row,tokenizer):
     prefixes=tuple(tuple(tokenizer(text,add_special_tokens=False)['input_ids'])
         for text in ('\n<tool_response>','\n\n<tool_response>'))
     labels=text_supervision.chat_roles(ids,start_id=start,role_ids=roles,tool_response_prefixes=prefixes)
-    evidence=[]
-    mask=text_supervision.failed_assistant_mask(ids,labels,
-        lambda values:tokenizer.decode(values,skip_special_tokens=False),evidence=evidence)
     boundary=conversion.get('source_suffix_start') if conversion.get('role_interpretation')=='ordinary-text' else len(ids)
     if type(boundary)is not int or not 0<=boundary<=len(ids):
         raise ValueError('failed-history ordinary row needs exact original suffix coordinates')
-    if (conversion.get('role_interpretation')=='ordinary-text'
-            and any(label not in (text_supervision.ROLE_CODES.index('assistant_reply'),
-                text_supervision.ROLE_CODES.index('assistant_reasoning'))for label in labels[boundary:])):
-        raise ValueError('failed-history current suffix is not entirely the actual assistant target')
+    assistant=(text_supervision.ROLE_CODES.index('assistant_reply'),text_supervision.ROLE_CODES.index('assistant_reasoning'))
+    ordinary=conversion.get('role_interpretation')=='ordinary-text'
+    if ordinary and (not boundary or labels[boundary-1]not in assistant):
+        raise ValueError('failed-history suffix boundary does not follow the actual assistant header')
+    target_binding=({'token_ids_sha256':digest(ids),'source_text_sha256':conversion.get('source_text_sha256'),
+        'source_suffix_start':boundary}if ordinary and any(label not in assistant for label in labels[boundary:])else None)
     if sha256_hex(tokenizer.decode(ids,skip_special_tokens=False).encode())!=conversion.get('source_text_sha256'):
         raise ValueError('failed-history row is not its exact authenticated rendered source text')
+    evidence=[]
+    mask=text_supervision.failed_assistant_mask(ids[:boundary],labels[:boundary],
+        lambda values:tokenizer.decode(values,skip_special_tokens=False),evidence=evidence)
     positions=[index for index in range(boundary)if mask[index]and node['target_weights'][index]>0]
-    if any(mask[boundary:]):raise ValueError('failed-history mask would remove the current assistant target')
     spans=[]
     for index in positions:
         if spans and spans[-1][1]==index:spans[-1][1]=index+1
         else:spans.append([index,index+1])
+    return spans,evidence,target_binding
+
+
+def _target_render_valid(row,witness,target_binding):
+    profile=re.search(r':history-reasoning:(keep|last_turn_only)(?::assistant-history:mask-runtime-failures)?$',row['id'])
+    expected_profile=profile.group(1)if profile else None
+    return (witness.get('schema')=='natlang.failed-history-captured-target-render/1'
+        and witness.get('binding')==target_binding
+        and witness.get('teacher_source_sha256')==digest(row['conversion'].get('teacher_source')or{})
+        and 'history_reasoning_profile'in witness and witness['history_reasoning_profile']==expected_profile)
+
+
+def _mask(row,tokenizer,*,source_evidence=None):
+    spans,evidence,target_binding=derive_context_mask(row,tokenizer)
+    if target_binding is not None:
+        witness=(source_evidence or{}).get('captured_target_render')or{}
+        if not _target_render_valid(row,witness,target_binding):
+            raise ValueError('failed-history literal target requires exact original capture rendering')
     return spans,evidence
 
 
@@ -77,7 +96,7 @@ def row_mask_record(row,tokenizer,*,source_sha256,source_evidence):
     from ..data.text_corpus import tokenizer_fingerprint
     if tokenizer_fingerprint(tokenizer)!=row.get('tokenizer_fingerprint'):
         raise ValueError('failed-history decoder differs from actual row tokenizer')
-    spans,evidence=_mask(row,tokenizer)
+    spans,evidence=_mask(row,tokenizer,source_evidence=source_evidence)
     if not spans:return None
     return mask_record(row,source_sha256=source_sha256,source_evidence=source_evidence,
                        zero_spans=spans,failure_evidence=evidence)
@@ -91,19 +110,31 @@ def mask_record(row,*,source_sha256,source_evidence,zero_spans,failure_evidence)
         'source_evidence':source_evidence}
 
 
-def validate_source_evidence(row,evidence):
+def validate_source_evidence(row,evidence,*,target_render_binding=None):
     conversion=row.get('conversion')or{}
     if conversion.get('role_interpretation')=='ordinary-text':
         teacher=conversion.get('teacher_source')or{}
         guard=evidence.get('structured_input_guard')or{}
+        def checked_guard(value):
+            return (value.get('schema')=='natlang.reviewed-chat-input-guard/1'
+                and value.get('policy')=='no-embedded-renderer-chat-boundaries'
+                and value.get('forbidden_markers')==['<|im_start|>','<|im_sep|>','<|im_end|>']
+                and re.fullmatch('[0-9a-f]{64}',str(value.get('input_sha256',''))))
+        scoped=False
+        if guard.get('schema')=='natlang.failed-history-prefix-input-guard/1':
+            witness=evidence.get('captured_target_render')or{}
+            actual=target_render_binding if target_render_binding is not None else {'token_ids_sha256':digest(row['nodes'][0]['token_ids']),
+                'source_text_sha256':conversion.get('source_text_sha256'),
+                'source_suffix_start':conversion.get('source_suffix_start')}
+            scoped=(guard.get('policy')=='unambiguous-rendered-context-with-exact-captured-target'
+                and checked_guard(guard.get('prefix')or{})
+                and guard.get('target_render_binding_sha256')==digest(actual)
+                and _target_render_valid(row,witness,actual))
         if (evidence.get('kind')!='verified-teacher-capture'
                 or evidence.get('teacher_source_sha256')!=digest(teacher)
                 or not all(re.fullmatch('[0-9a-f]{64}',str(teacher.get(key,'')))
                     for key in ('source_row_sha256','source_artifact_sha256'))
-                or guard.get('schema')!='natlang.reviewed-chat-input-guard/1'
-                or guard.get('policy')!='no-embedded-renderer-chat-boundaries'
-                or guard.get('forbidden_markers')!=['<|im_start|>','<|im_sep|>','<|im_end|>']
-                or not re.fullmatch('[0-9a-f]{64}',str(guard.get('input_sha256','')))):
+                or not(checked_guard(guard)or scoped)):
             raise ValueError('failed-history ordinary source lacks structured capture custody')
     else:
         intent=conversion.get('supervision_policy')or{}
@@ -201,7 +232,7 @@ def apply_masks(example,row,*,source_sha256,policy):
         raise ValueError('failed-history mask differs from the original TRAIN row binding')
     validate_source_evidence(row,declared.get('source_evidence')or{})
     tokenizer=_decoder(*entry['decoder'])
-    spans,evidence=_mask(row,tokenizer)
+    spans,evidence=_mask(row,tokenizer,source_evidence=declared.get('source_evidence'))
     if spans!=declared['zero_spans']or evidence!=declared.get('failure_evidence'):
         raise ValueError('failed-history spans or actual failure evidence mismatch')
     weights=list(example.target_weights)
