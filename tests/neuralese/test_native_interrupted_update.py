@@ -21,8 +21,9 @@ from natlang_neuralese.common.jsonio import write_json_durable as write
 
 
 @pytest.fixture
-def stopped(owned,tmp_path):
+def stopped(owned,tmp_path,request):
     x=owned;W=tmp_path/'interrupted';W.mkdir();out=x['slot'].parent
+    boundary_options=getattr(request,'param',{})
     runtime=W/'runtime';package=runtime/'training/neuralese/natlang_neuralese'
     (package/'train').mkdir(parents=True)
     for p in (package/'__init__.py',package/'train/__init__.py'):p.write_text('')
@@ -44,6 +45,8 @@ def stopped(owned,tmp_path):
         '--held-native-graphs',str(x['slot']),
         '--stage-id','sft','--recipe-binding',json.dumps(rb),'--resident-data-directory',str(N),
         '--resident-geometry-qualification',str(capacity)]
+    if boundary_options.get('quantum',3)is not None:
+        child.extend(['--refresh-after-updates',str(boundary_options.get('quantum',3))])
     argv=[sys.executable,'-u',str(entry),'--request',str(request_path),'--result',str(result_path),'--fixture-child',json.dumps(child)]
     spec=W/'worker-spec.json';write(spec,{'request_id':request['request_id'],'kind':'round','runtime':str(runtime),
         'argv':argv,'env':{'NATLANG_WORKER_ENTRY_SHA256':binding(entry)['sha256']}})
@@ -81,7 +84,8 @@ def stopped(owned,tmp_path):
     training['options']['continuation']={'checkpoint_sha256':parent['sha256']}
     torch.save(saved,x['slot']);shutil.copyfile(x['slot'],x['pin']);sha=binding(x['pin'])['sha256']
     receipt=json.loads(x['operation_receipt'].read_text());receipt.update(checkpoint=binding(x['slot']),completed=False)
-    receipt['continuation_boundary'].update(reached=False,checkpoint_sha256=sha)
+    receipt['continuation_boundary'].update(reached=boundary_options.get('reached',False),
+        kind=boundary_options.get('kind','semantic-refresh'),checkpoint_sha256=sha)
     receipt['native_identity']['checkpoint_sha256']=sha;write(x['operation_receipt'],receipt)
     identity={'model_config':saved['model_config']};evidence=W/'capacity-proof.json';write(evidence,{'scope':'CPU protocol fixture, not GPU capacity'})
     write(capacity,{'schema':'natlang.native-resident-geometry-qualification/1','passed':True,'identity':identity,
@@ -116,6 +120,7 @@ def stopped(owned,tmp_path):
         observation=observation,pin=x['pin'],saved=saved,stop=stop,capacity=capacity,entry=entry)
 
 
+@pytest.mark.parametrize('stopped',[{'quantum':None},{'quantum':3}],indirect=True)
 def test_versioned_interruption_recovers_earned_state_without_completed_boundary(stopped):
     x=stopped;original=x['result'].read_bytes();pin=x['pin'].read_bytes()
     ack=h.prepare_saved_update_acknowledgement(binding(x['recovery']),x['receipt'],x['ack'])
@@ -125,6 +130,29 @@ def test_versioned_interruption_recovers_earned_state_without_completed_boundary
     assert json.loads(Path(ack['path']).read_text())['payload_verification']['independent']is True
     assert x['result'].read_bytes()==original and x['pin'].read_bytes()==pin
     with pytest.raises(ValueError):h.verify_handoff_controls(ack)
+
+
+@pytest.mark.parametrize('stopped',[{'reached':True,'quantum':3}],indirect=True)
+def test_reached_refresh_with_interrupted_evaluation_retains_failed_operation(stopped):
+    x=stopped;failed=x['result'].read_bytes();pin=x['pin'].read_bytes()
+    ack=h.prepare_saved_update_acknowledgement(binding(x['recovery']),x['receipt'],x['ack'])
+    record=h.verify_saved_update_acknowledgement(ack,receipt=x['receipt'])
+    assert record['outcome']=={'status':'failed','returncode':1,'recovered_optimizer_updates':3,
+                              'communication_runtime_qualified':False}
+    assert x['result'].read_bytes()==failed and x['pin'].read_bytes()==pin
+    with pytest.raises(ValueError):h.verify_handoff_controls(ack)
+
+
+@pytest.mark.parametrize('stopped',[
+    {'reached':True,'quantum':4},{'reached':True,'quantum':0},
+    {'reached':True,'quantum':None},{'reached':True,'quantum':3,'kind':'completed'},
+    {'reached':1,'quantum':3},{'reached':'true','quantum':3},
+],indirect=True)
+def test_reached_operational_boundary_requires_boolean_and_actual_earned_quantum(stopped):
+    x=stopped
+    with pytest.raises(ValueError):
+        h.prepare_saved_update_acknowledgement(binding(x['recovery']),x['receipt'],x['ack'])
+    assert not x['ack'].exists()
 
 
 @pytest.mark.parametrize('tamper',[None,'history','rows','source','profile'])
