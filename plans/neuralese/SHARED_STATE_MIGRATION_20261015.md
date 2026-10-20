@@ -1282,3 +1282,66 @@ hydrations completed with original groups and zero rerender. The final merge is
 running under measured storage protection with the next24.3GB Mellum compact
 actor reservation plus20GiB free floor. Later source-ready teacher additions
 remain explicit future continuation work, not silently credited exposure.
+
+### DGX supervision update — 2026-10-20 06:52 UTC
+
+LFM still has **global step 19,368** as its earned parent. Replacement Q1
+failed before model allocation because pending runtime configuration paired a
+new actor command with the retained factory environment. Shared fix 736da07e4
+keeps the old actor command/environment/inventory together while pending, and
+derives the activated triple through the normal factory. Root's 77 focused
+checks passed. The external metadata helper carries that fix without changing
+the frozen numerical runtime `4655bb2f…cab4`.
+
+Q2 launched at 06:30:42 and passed actual parent restoration, normal runtime
+join, bitwise actor parity and complete parameter-gradient checks. Its RAW
+cursor remained unchanged and the join decoded no additional parent. It then
+failed before SGD because a capacity case index did not identify the declared
+row in the loaded source. All evidence is retained. The current repair compares
+every case and numerical reference against the actual cache-backed source DAG,
+retaining exact row ID, binding and geometry while investigating index order.
+There is no capacity pass, new optimizer update or new data exposure to claim.
+The same metadata check must protect both students before expensive restores.
+
+Mellum's existing learner continues useful work: the actual 06:39 observation
+was **global step 25,280**, loss 0.1071 and 1,302.6 supervised tokens/second.
+Its next recipe has 1,376,137 TRAIN rows: the actual current 1,372,949 plus
+3,189 additions minus the single authenticated V5 withdrawal. Historical
+exposure remains recorded. The pending 1,761-row declaration is not credited
+as adopted. Capacity preparation is resolving an exact pending-long source
+alias before the normal refresh; the old learner has not been interrupted.
+The handoff reuses the genuine completed request's shared publisher and
+resident-adoption logic, preserving optimizer/RNG state and remaining recipe
+obligations rather than manufacturing a completed stage.
+
+Failed-history correction now includes prepared 21-teacher cohorts containing
+104,298 rows per student, with 19,133 affected rows each. The exact active V5
+cohort is 9,534 rows after withdrawal; earlier 9,535-row receipts remain only
+historical authorities. The broad LF teacher mask overlaps the earlier KEEP
+mask and must replace it rather than duplicate it. Shared fix ea9a4bbf0 permits
+literal chat markers inside a legitimate current answer only with a clean
+actual structured prefix/tools guard and exact reconstruction of the entire
+original captured answer. Target tokens and weights remain untouched. The
+retained real failing row qualified with 1,507 failed prefix positions; existing
+manifest compatibility and root's 32 focused checks passed. Broader source
+preparation and separate native-record custody work continue; these counts
+remain preparation, not active training exposure or behavioral lift.
+
+The old-runtime 19,006 held evaluation finished with 1/16 successes, 12
+repetition outcomes, three budget exhaustions and zero infrastructure errors.
+Its scores were ingested. It does not qualify current weights. The new
+no-action recovery runtime has actual physical workspace tests and CLI checks;
+its immutable inventory is `7f4e8f04…be86`. It is staged on the existing GEN
+sandbox for a future 12 × 4 TRAIN teacher window. All 12 references passed.
+Current generation slots keep their original runtime and first-finished sample
+bindings until the explicit future sequence handoff. Held answers are excluded
+from training. D09 still returned 403 at 06:45; scheduled checks continue.
+
+The b2e4eb016 full suite actually passed; the f52ddee16 full suite is running.
+Later mask and index changes have focused and quick/TypeScript validation.
+Search's final merge is advancing through exact source authentication without
+rerendering, under the unchanged 46.052 GB reservation. Completed 19,006 local
+evaluation weights were removed after ingestion and live-reference checks,
+reclaiming 2,565,996,544 allocated bytes. Its scores, assigned repair weights
+from other steps, and the independently verified private 19,368 full recovery
+checkpoint remain.
