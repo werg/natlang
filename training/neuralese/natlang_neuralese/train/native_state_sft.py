@@ -1823,7 +1823,32 @@ def _main(argv=None, *, requested_refresh):
             if policy.signaled or step >= total_end:
                 break
             update_started = time.monotonic()
-            visit, indices, pass_end, batch = next(schedule)
+            fetch_rng = capture_training_rng_state(args.device)
+            try:
+                visit, indices, pass_end, batch = next(schedule)
+            except Exception as error:
+                # The previous update and its exposure are complete. The next
+                # batch has not reached native_training_update and earns nothing.
+                restore_training_rng_state(fetch_rng, args.device)
+                if step > resumed_step:
+                    failure_metrics = {'train_loss': train_loss, 'step': step,
+                        'epoch': epoch, 'cursor': cursor,
+                        'elapsed_seconds': time.time() - started,
+                        'source_fetch_failure': {'type': type(error).__name__, 'message': str(error)},
+                        'previous_evaluation_metrics': metrics}
+                    try:
+                        _save(policy, model, optimizer, config=config, identity=training_identity, step=step,
+                            global_step=global_step, epoch=epoch, cursor=cursor, source_receipts=source_receipts,
+                            source_hash=source_hash, source_row_bindings=source_row_bindings,
+                            held_row_bindings=held_row_bindings, exposure_counts=exposure_counts,
+                            rng=fetch_rng, metrics=failure_metrics,
+                            architecture=config['architecture'], options={**checkpoint_options, '_source_row_order': source_order},
+                            fp8_state=backend.extra_state() if backend is not None else None, sft_progress=carried_progress)
+                    except Exception as save_error:
+                        error.add_note(f'Completed-update recovery checkpoint failed: {save_error!r}')
+                    finally:
+                        restore_training_rng_state(fetch_rng, args.device)
+                raise
             batch_tokens = sum(train.entries[index]['forward_tokens'] for index in indices)
             cursor = indices[-1] + 1
             loss, details = native_training_update(model, optimizer, batch, backend=backend,
