@@ -120,6 +120,7 @@ def stopped(owned,tmp_path,request):
         observation=observation,pin=x['pin'],saved=saved,stop=stop,capacity=capacity,entry=entry)
 
 
+@pytest.mark.parametrize('stopped',[{'quantum':None},{'quantum':3}],indirect=True)
 def test_versioned_interruption_recovers_earned_state_without_completed_boundary(stopped):
     x=stopped;original=x['result'].read_bytes();pin=x['pin'].read_bytes()
     ack=h.prepare_saved_update_acknowledgement(binding(x['recovery']),x['receipt'],x['ack'])
