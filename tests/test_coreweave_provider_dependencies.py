@@ -439,6 +439,59 @@ def test_readonly_root_configuration_rejects_broad_relative_and_symlink_roots(tm
         with pytest.raises(ValueError):deps.verify_assets([],readonly_input_roots=roots)
 
 
+@pytest.mark.parametrize('target_kind',['production','other-readonly'])
+def test_consumed_readonly_alias_preserves_binding_across_declared_namespaces(tmp_path,target_kind):
+    import torch
+    namespace=tmp_path/'production';namespace.mkdir()
+    readonly=tmp_path/'historical-cache';readonly.mkdir()
+    target_root=namespace if target_kind=='production' else tmp_path/'canonical-readonly'
+    target=write(target_root/'rows.jsonl','{"id":"complete-source"}\n')
+    alias=readonly/'rows.jsonl';alias.symlink_to(target['path'])
+    source={**target,'path':str(alias)}
+    objective=write(readonly/'objective.json',{'rows':{}})
+    frame={'required_visits':{'pair':1},'exposure_counts':{},'source_receipts':[source],
+        'identity':{'objective_kind':'native-offline-pairwise','objective':objective}}
+    checkpoint=namespace/'state.pt';torch.save({'sft_progress':{'preference':frame}},checkpoint)
+    binding={'path':str(checkpoint),'sha256':deps.sha256_file_hex_cached(checkpoint)}
+    roots=[str(readonly)]+([str(target_root)]if target_kind=='other-readonly'else[])
+    closure=deps.dependency_closure({'parent_checkpoint':binding},namespace=str(namespace),readonly_input_roots=roots)
+    asset=next(item for item in closure['assets']if item['path']==str(alias))
+    assert asset=={**source,'kind':'input-file'}
+    deps.verify_assets(closure['assets'],namespace=str(namespace),readonly_input_roots=roots)
+    # A declared target never authorizes an undeclared lexical source path.
+    with pytest.raises(ValueError,match='escaped'):
+        deps.verify_assets([asset],namespace=str(namespace),readonly_input_roots=[])
+    outside=tmp_path/'outside';outside.write_bytes(Path(target['path']).read_bytes())
+    alias.unlink();alias.symlink_to(outside)
+    with pytest.raises(ValueError,match='escaped'):
+        deps.verify_assets([asset],namespace=str(namespace),readonly_input_roots=roots)
+    with pytest.raises(ValueError,match='escaped'):
+        deps.dependency_closure({'parent_checkpoint':binding},namespace=str(namespace),readonly_input_roots=roots)
+
+
+def test_private_readonly_helper_retains_same_root_contract_without_namespace(tmp_path):
+    left=tmp_path/'left';left.mkdir()
+    target=write(tmp_path/'right'/'index.pkl','exact index')
+    alias=left/'index.pkl';alias.symlink_to(target['path'])
+    roots=(left,tmp_path/'right')
+    with pytest.raises(ValueError,match='escaped'):deps._readonly_file(alias,roots)
+    assert deps._readonly_file(alias,roots,namespace=tmp_path/'production')==alias
+
+
+@pytest.mark.parametrize('change',['hash','size','boolean-size'])
+def test_declared_production_alias_still_requires_exact_content(tmp_path,change):
+    namespace=tmp_path/'production'
+    target=write(namespace/'cache.pkl','exact serialized source index')
+    readonly=tmp_path/'historical-cache';readonly.mkdir()
+    alias=readonly/'cache.pkl';alias.symlink_to(target['path'])
+    asset={**target,'path':str(alias),'kind':'input-file'}
+    if change=='hash':asset['sha256']='0'*64
+    elif change=='size':asset['bytes']+=1
+    else:asset['bytes']=True
+    with pytest.raises(ValueError,match='content differs'):
+        deps.verify_assets([asset],namespace=str(namespace),readonly_input_roots=[str(readonly)])
+
+
 
 def test_checkpoint_dependency_cannot_use_readonly_input_escape(tmp_path):
     namespace=tmp_path/'production';readonly=tmp_path/'d24'

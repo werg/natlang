@@ -29,10 +29,15 @@ def _readonly_roots(values):
     return tuple(roots)
 
 
-def _readonly_file(path, roots):
+def _readonly_file(path, roots, *, namespace=None):
     path = Path(path)
+    resolved = path.resolve()
+    targets = (*roots, *((Path(namespace),) if namespace is not None else ()))
+    allowed = (any(root in path.parents and root in resolved.parents for root in roots)
+        if namespace is None else
+        any(root in path.parents for root in roots) and any(root in resolved.parents for root in targets))
     if (not path.is_absolute() or '..' in path.parts or
-            not any(root in path.parents and root in path.resolve().parents for root in roots)):
+            not allowed):
         raise ValueError('provider input file escaped its declared readonly roots: ' + str(path))
     if not path.is_file():
         raise ValueError('provider readonly input file is missing: ' + str(path))
@@ -56,7 +61,7 @@ def dependency_closure(request, *, namespace='/work/native-production', readonly
         if '..' in path.parts or (external and not readonly_roots):
             raise ValueError('provider consumed file escaped its declared namespace: ' + str(path))
         if external:
-            _readonly_file(path, readonly_roots)
+            _readonly_file(path, readonly_roots, namespace=root)
         digest = sha256_file_hex_cached(path)
         if expected is not None and digest != expected:
             raise ValueError('provider consumed dependency hash changed: ' + str(path))
@@ -439,13 +444,13 @@ def dependency_closure(request, *, namespace='/work/native-production', readonly
     return {'files': list(files.values()), 'assets': list(assets.values())}
 
 
-def verify_assets(assets, *, readonly_input_roots=()):
+def verify_assets(assets, *, readonly_input_roots=(), namespace='/work/native-production'):
     """Verify pre-staged external assets; this never accepts path existence alone."""
     roots = _readonly_roots(readonly_input_roots)
     for item in assets:
         path = Path(item['path'])
         if item['kind'] == 'input-file':
-            _readonly_file(path, roots)
+            _readonly_file(path, roots, namespace=Path(namespace).absolute())
             if (type(item.get('bytes')) is not int or item['bytes'] < 0
                     or path.stat().st_size != item['bytes']
                     or sha256_file_hex_cached(path) != item['sha256']):
