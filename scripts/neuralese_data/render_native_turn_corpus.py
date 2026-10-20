@@ -1538,8 +1538,25 @@ def _verify_trajectory_receipts(job, done_result, allowed_renderer_shas, expecte
                        LEGACY_SEARCH_TEXT_CORPUS_DEFAULT_PROFILE_TRANSITION['historical_sha256'])
                        for value in legacy_text.values())):
             raise ValueError('done marker historical text dependency inventory differs')
+    legacy_witnesses = done_result.get('trajectory_legacy_equation_witnesses')
+    if legacy_text is not None and (not isinstance(legacy_witnesses, dict) or set(legacy_witnesses) != set(legacy_text)):
+        raise ValueError('done marker historical equation witness inventory differs')
     for path in receipts:
         receipt = json.loads(path.read_text())
+        if legacy_text is not None and path.stem in legacy_text:
+            witness = legacy_witnesses[path.stem]
+            source_ids = receipt.get('source_record_ids')
+            if not isinstance(witness, dict) or set(witness) != {'trajectory', 'source_record_hashes'}:
+                raise ValueError('historical equation witness shape differs')
+            trajectory, hashes = witness['trajectory'], witness['source_record_hashes']
+            if (not isinstance(trajectory, str) or sha(trajectory.encode()) != path.stem
+                    or not isinstance(source_ids, list) or not isinstance(hashes, list) or len(hashes) != len(source_ids)
+                    or any(not isinstance(h, str) or len(h) != 64 or any(c not in '0123456789abcdef' for c in h) for h in hashes)):
+                raise ValueError('historical equation source witness differs')
+            old_job = _legacy_render_job_binding(job, source_digest, LEGACY_SEARCH_RENDERER_SHA256,
+                                                 historical_text_sha256=legacy_text[path.stem])
+            if _trajectory_render_binding(old_job, trajectory, source_ids, hashes) != receipt.get('binding'):
+                raise ValueError('historical text dependency does not match receipt equation')
         if receipt.get('binding') != trajectory_bindings[path.stem]:
             raise ValueError(f'trajectory source binding differs from done marker: {path}')
         if receipt.get('trajectory_sha256') != path.stem:
@@ -1788,7 +1805,7 @@ def render_shard(job):
                      'source_sha256': source_file_sha, 'renderer_code_sha256': renderer_code_sha,
                      'render_job_binding': job_binding}
         group_renderer_shas = set()
-        trajectory_bindings, trajectory_renderers, trajectory_legacy_text = {}, {}, {}
+        trajectory_bindings, trajectory_renderers, trajectory_legacy_text, trajectory_legacy_witnesses = {}, {}, {}, {}
 
         def accumulate(result):
             for key, value in result.items():
@@ -1839,6 +1856,8 @@ def render_shard(job):
                     if len(matches) != 1:
                         raise ValueError('legacy text dependency witness is ambiguous')
                     trajectory_legacy_text[group_id] = matches[0]
+                    trajectory_legacy_witnesses[group_id] = {
+                        'trajectory': trajectory, 'source_record_hashes': source_record_hashes}
                     receipt_renderer_sha = expected_receipt.get('renderer_code_sha256', legacy_renderer_sha)
                     if receipt_renderer_sha != legacy_renderer_sha:
                         raise ValueError(f'legacy trajectory receipt renderer identity changed: {trajectory}')
@@ -1997,6 +2016,7 @@ def render_shard(job):
         aggregate['trajectory_bindings'] = dict(sorted(trajectory_bindings.items()))
         aggregate['trajectory_renderers'] = dict(sorted(trajectory_renderers.items()))
         aggregate['trajectory_legacy_text_dependencies'] = dict(sorted(trajectory_legacy_text.items()))
+        aggregate['trajectory_legacy_equation_witnesses'] = dict(sorted(trajectory_legacy_witnesses.items()))
         write_done(out_dir, tok_name, stem, aggregate)
         return aggregate
 

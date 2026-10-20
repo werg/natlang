@@ -395,6 +395,15 @@ def test_streamed_resume_preserves_old_group_receipt_and_records_mixed_renderer_
     with __import__('pytest').raises(ValueError, match='historical text dependency'):
         renderer._verify_trajectory_receipts(job, bad, {old_renderer_sha, current_renderer_sha})
     renderer._verify_trajectory_receipts(job, result, {old_renderer_sha, current_renderer_sha})
+    other_text = (renderer.LEGACY_SEARCH_TEXT_CORPUS_DEFAULT_PROFILE_TRANSITION['historical_sha256']
+                  if legacy_text else renderer.LEGACY_SEARCH_ORIGINAL_TEXT_SHA256)
+    swapped = {**result, 'trajectory_legacy_text_dependencies': {group_id: other_text}}
+    with __import__('pytest').raises(ValueError, match='does not match receipt equation'):
+        renderer._verify_trajectory_receipts(job, swapped, {old_renderer_sha, current_renderer_sha})
+    bad_witness = {**result, 'trajectory_legacy_equation_witnesses': {
+        group_id: {'trajectory': trajectory_id, 'source_record_hashes': ['a'*64]*len(source_hashes)}}}
+    with __import__('pytest').raises(ValueError, match='does not match receipt equation'):
+        renderer._verify_trajectory_receipts(job, bad_witness, {old_renderer_sha, current_renderer_sha})
     assert result['group_renderer_code_sha256s'] == sorted({
         old_renderer_sha, current_renderer_sha})
     assert _read(out / 'whole-trajectory' / 'lfm25' / 'selected.jsonl') == original_output
