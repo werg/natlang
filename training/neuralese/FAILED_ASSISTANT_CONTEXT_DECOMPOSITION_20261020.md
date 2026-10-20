@@ -122,3 +122,18 @@ infer approval from context attestations, source names or a feedback substring.
 This is an objective correction to the existing immutable row, not new data or
 new native/whole-graph admission. Other source families still need their own
 existing custody and remain explicitly pending until verified.
+
+## Resumable preparation and custody census (2026-10-20)
+
+The natural-language preparation service derives only authenticated TRAIN-row
+candidates, then closes original capture custody. A failed capture must not
+throw away completed derivation or obscure other custody errors. The crisp
+mechanism stores one durable, checksum-bound NON-ADMITTED work file per exact
+source SHA, decoder fingerprint and derivation/mask law. Each candidate retains
+its original row SHA; normal admission and independent consumer rederivation
+remain mandatory. No candidate-work schema is accepted by the learner. Source
+bytes are rechecked on resume; changed decoder/law/source selects fresh work.
+Capture resolution visits every requested row and records every failed source,
+row and turn in a durable non-admitted report, then fails before writing a
+normal manifest. A repaired capture resumes saved derivation; it never grants
+credit or weakens capture verification.

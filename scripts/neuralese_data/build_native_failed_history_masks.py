@@ -139,7 +139,7 @@ def native_record_evidence(candidates,receipts,tokenizer,overrides):
         raise ValueError('failed-history native row lacks an exact original renderer receipt')
 
 
-def build(sources,*,tokenizer,out,capture_overrides=(),native_render_receipts=()):
+def build(sources,*,tokenizer,out,capture_overrides=(),native_render_receipts=(),work=None):
     """Bounded by explicit selected leaves; one pass per original capture file."""
     from natlang_neuralese.common.hashing import canonical_json_sha256_hex as digest
     out=Path(out)
@@ -150,11 +150,35 @@ def build(sources,*,tokenizer,out,capture_overrides=(),native_render_receipts=()
         if item['sha256']in overrides:raise ValueError('ambiguous capture relocation')
         overrides[item['sha256']]=Path(path)
     fingerprint=tokenizer_fingerprint(tokenizer)
+    work=Path(work)if work is not None else None
+    if work is not None:work.mkdir(parents=True,exist_ok=True)
+    derivation={'version':1,'mask_law_sha256':mask_law(),
+        'mask_module_sha256':binding(__import__(derive_context_mask.__module__,fromlist=['__file__']).__file__)['sha256'],
+        'tokenizer_fingerprint':fingerprint,'native_custody_enabled':bool(native_render_receipts)}
     candidates=[];source_bindings=[];seen=set();counts={'rows':0,'affected_rows':0,'zeroed_tokens':0}
     for path in sources:
         path=Path(path).resolve(strict=True);source=binding(path)
         if source['sha256']in seen:raise ValueError('duplicate failed-history source leaf')
         seen.add(source['sha256']);source_bindings.append({**source,'split':'train'})
+        key=digest({'source_sha256':source['sha256'],**derivation})
+        cache=work/(key+'.json')if work is not None else None
+        if cache is not None and cache.exists():
+            saved=json.loads(cache.read_text());payload=saved.get('payload')or{}
+            if (saved.get('schema')!='natlang.failed-history-candidate-work/1'
+                    or saved.get('admitted')is not False or saved.get('payload_sha256')!=digest(payload)
+                    or payload.get('key')!=key or payload.get('derivation')!=derivation
+                    or payload.get('source_sha256')!=source['sha256']or payload.get('source_bytes')!=source['bytes']):
+                raise ValueError('failed-history NON-ADMITTED candidate work binding mismatch')
+            restored=payload.get('candidates')
+            if (not isinstance(restored,list)or type(payload.get('rows'))is not int
+                    or payload['rows']<len(restored)or any(
+                        item['record']['source_sha256']!=source['sha256']
+                        or item['record']['tokenizer_fingerprint']!=fingerprint
+                        or item['graph']['id']!=item['record']['id']for item in restored)):
+                raise ValueError('failed-history candidate work row identity mismatch')
+            candidates.extend(restored);counts['rows']+=payload['rows']
+            continue
+        first_candidate=len(candidates);first_row=counts['rows']
         for graph in _jsonl(path):
             counts['rows']+=1
             if graph.get('schema')!='natlang.neuralese-native-graph/1' or graph.get('split')!='train':
@@ -190,6 +214,12 @@ def build(sources,*,tokenizer,out,capture_overrides=(),native_render_receipts=()
                     'source_text_sha256':conversion['source_text_sha256'],'source_suffix_start':conversion['source_suffix_start']}}if native else{})},
                 'record':record,'custody':'native'if native else'teacher'})
         if binding(path)!=source:raise ValueError('failed-history TRAIN source changed during preparation')
+        if cache is not None:
+            payload={'key':key,'derivation':derivation,'source_sha256':source['sha256'],
+                'source_bytes':source['bytes'],'rows':counts['rows']-first_row,
+                'candidates':candidates[first_candidate:]}
+            write_json_durable(cache,{'schema':'natlang.failed-history-candidate-work/1',
+                'admitted':False,'payload_sha256':digest(payload),'payload':payload})
     # Resolve requested capture turns while streaming each raw file once. Neither
     # full graph arrays nor entire captured trajectories accumulate in memory.
     requested={}
@@ -198,23 +228,41 @@ def build(sources,*,tokenizer,out,capture_overrides=(),native_render_receipts=()
         teacher=candidate['graph']['conversion']['teacher_source'];sha=teacher['source_artifact_sha256']
         entry=requested.setdefault(sha,{'path':overrides.get(sha,Path(teacher['source_artifact'])),'rows':{}})
         entry['rows'].setdefault(teacher['source_row_id'],[]).append(candidate)
+    custody_errors=[]
     for sha,request in requested.items():
-        path=request['path'];before=binding(path)
-        if before['sha256']!=sha:raise ValueError('original capture artifact hash mismatch')
-        seen_rows=set()
-        with path.open('rb')as stream:
-            for line in stream:
-                raw=json.loads(line)
-                if raw.get('id')in request['rows']:
+        path=request['path'];seen_rows=set()
+        try:
+            before=binding(path)
+            if before['sha256']!=sha:raise ValueError('original capture artifact hash mismatch')
+            with path.open('rb')as stream:
+                for line in stream:
+                    raw=json.loads(line)
+                    if raw.get('id')not in request['rows']:continue
                     if raw['id']in seen_rows:raise ValueError('ambiguous original capture row')
                     seen_rows.add(raw['id']);line_sha=sha256_hex(line.rstrip(b'\r\n'))
                     for candidate in request['rows'][raw['id']]:
-                        evidence=capture_evidence(candidate['graph'],raw,line_sha,tokenizer=tokenizer)
-                        validate_source_evidence(candidate['graph'],evidence,
-                            target_render_binding=candidate['graph'].get('target_render_binding'))
-                        candidate['record']['source_evidence']=evidence
-        if seen_rows!=set(request['rows'])or binding(path)!=before:
-            raise ValueError('missing or changed original capture rows')
+                        try:
+                            evidence=capture_evidence(candidate['graph'],raw,line_sha,tokenizer=tokenizer)
+                            validate_source_evidence(candidate['graph'],evidence,
+                                target_render_binding=candidate['graph'].get('target_render_binding'))
+                            candidate['record']['source_evidence']=evidence
+                        except (ValueError,KeyError,IndexError,TypeError)as error:
+                            custody_errors.append({'source_sha256':candidate['record']['source_sha256'],
+                                'raw_row_sha256':candidate['record']['raw_row_sha256'],
+                                'id':candidate['graph']['id'],'capture_sha256':sha,
+                                'capture_row_id':raw['id'],'error_type':type(error).__name__,'error':str(error)})
+            if seen_rows!=set(request['rows'])or binding(path)!=before:
+                raise ValueError('missing or changed original capture rows')
+        except (OSError,ValueError,KeyError,TypeError)as error:
+            custody_errors.append({'capture_sha256':sha,'path':str(path),
+                'missing_row_ids':sorted(set(request['rows'])-seen_rows),
+                'error_type':type(error).__name__,'error':str(error)})
+    if work is not None:
+        write_json_durable(work/'custody-report.json',{'schema':'natlang.failed-history-custody-census/1',
+            'admitted':False,'derivation':derivation,'sources':source_bindings,
+            'candidate_rows':len(candidates),'requested_captures':len(requested),'errors':custody_errors})
+    if custody_errors:
+        raise ValueError(f'failed-history original capture custody incomplete: {len(custody_errors)} errors; no manifest admitted')
     native_record_evidence(candidates,native_render_receipts,tokenizer,overrides)
     records=[candidate['record']for candidate in candidates]
     counts['zeroed_tokens']=sum(stop-start for record in records for start,stop in record['zero_spans'])
@@ -245,6 +293,7 @@ def main(argv=None):
     parser.add_argument('--capture',type=Path,action='append',default=[],
         help='optional locally relocated original capture, matched by exact original SHA')
     parser.add_argument('--out',type=Path,required=True)
+    parser.add_argument('--work',type=Path,help='durable NON-ADMITTED candidate preparation cache and custody census')
     parser.add_argument('--native-render-receipt',type=Path,action='append',default=[],
         help='existing native-turn renderer receipt binding original approved native records and source view')
     args=parser.parse_args(argv)
@@ -253,7 +302,7 @@ def main(argv=None):
     tokenizer=AutoTokenizer.from_pretrained(args.tokenizer,local_files_only=True,trust_remote_code=False)
     provision_role_tokenizer(tokenizer)
     reference,counts=build(args.source,tokenizer=tokenizer,out=args.out,capture_overrides=args.capture,
-        native_render_receipts=args.native_render_receipt)
+        native_render_receipts=args.native_render_receipt,work=args.work)
     print(json.dumps({'failed_history_mask':reference,**counts},sort_keys=True))
     return 0
 
