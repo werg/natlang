@@ -1198,3 +1198,47 @@ Exactly11 old canonical and19 explicitly discarded owned publications were
 removed and their absence verified, reclaiming350,413,993,062 bytes altogether.
 Current/recovery/assigned parents, source and held data remain protected. The
 regular full-check timer is active; the last complete PASS is still7edc9078c.
+
+### DGX source continuation and runtime closure, 2026-10-20 04:59 UTC
+
+Both sandboxes now contain the independently reviewed shared runtime4655bb2f
+and its complete on-request foundation/publication/recipe dependency closure.
+Installation is not learner adoption: LFM's current4395 entry reached19,198;
+Mellum's R14 preference entry published25,081. Both retain their actual earned
+optimizer/RNG/exposure state. The new source continuation passed cache-only
+classification and CE-policy preparation for LFM407 train/14 held leaves
+(1,461,160/25,955 rows) and Mellum361/14 (1,376,137/25,968). No exposure is
+credited by preparation. One genuinely unexecuted V5 action was withdrawn;
+all other usable rows and protected held data remain. Later651 newly admitted
+teacher graphs per model are separate additions for the next continuation.
+
+Actual normal recipe handoff/dependency preview and current-source capacity
+mapping are closing before the learner change. A historical D32 capacity row
+was absent from the proposed source; its exact old declaration/source is being
+localized rather than silently dropped or granted old qualification credit.
+The LF SDK is genuinely running the new default worker behind a future-controller
+guard; Mellum's active old SDK remains until its authenticated idle boundary.
+Neither guard readiness nor copied runtime bytes mean new SGD has occurred.
+
+The LF owned-publication follower was repaired to follow the actual Q6 writer.
+Its full19,188 checkpoint has independent private PUT/full-GET verification;
+Mellum's follower verified24,987. The current19,006 LF held-task evaluation is
+running locally; historical18,619 measured1/16 and Mellum24,575 measured8/16
+with the same runtime02b. These remain poor task scores requiring improvement,
+not an assertion that declining training loss is sufficient. Source-bound CE
+weighting correction is installed for the impending continuation, not yet active.
+
+Shared source-builder eligibility now agrees with runtime retention of direct
+native graphs, and checkpoint setup releases a retained CE-options object before
+updates. Twenty combined focused tests passed. The full suite is running against
+6e707cf8b2; the earlier0482 suite failed precisely the two setup-lifetime tests
+subsequently fixed. The last complete full-suite PASS remains7edc9078c.
+
+SearchOWL has all256 aggregate shard/model receipts; ten historical top-level
+markers are being authenticated using their exact historical text dependency.
+Only missing metadata is regenerated. Final merge remains subject to measured
+storage, including the next Mellum compact actor and20GiB free floor. Completed
+local LF16,397/18,619 evaluation transfers were removed after locked ingestion,
+complete results and process-reference checks, reclaiming3,980,906,496 allocated
+bytes; verified private recovery, all scores and assigned repair parents remain.
+Strong self-hosted Qwen generation continues with batches71/72 supplied.
