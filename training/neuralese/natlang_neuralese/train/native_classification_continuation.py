@@ -86,8 +86,18 @@ def verify_objective_proof_extension(old_inputs, new_inputs, prior, current):
     qualification = prove_ce_objective_extension(extension['old_package'], extension['new_package'])
     before_policy, after_policy = qualification['old_policy_sha256'], qualification['new_policy_sha256']
     expected_producer = m._binding(Path(extension['new_package']) / 'train/native_source_classification.py')
+    # Hundreds of source parts commonly name the same seven policy files.
+    # Reuse only within this operation, with strict authentication at both ends.
+    policies = {}
+    def policy_digest(refs):
+        key = json.dumps(refs, sort_keys=True, separators=(',', ':'))
+        if key not in policies:
+            snapshot = json.loads(key)
+            value = digest({name:m._binding(m._checked(ref))['sha256'] for name,ref in snapshot.items()})
+            policies[key] = (snapshot, value)
+        return policies[key][1]
     for part in current['indexes'] + current['held_indexes']:
-        policy = digest({name:m._binding(m._checked(ref))['sha256'] for name,ref in part['old_policy'].items()})
+        policy = policy_digest(part['old_policy'])
         if part['producer'] != expected_producer or policy != before_policy:
             raise ValueError('objective classification rekey producer/prior policy differs')
     if current.get('held') != prior.get('held') or len(current['held_indexes']) != len(prior['held_indexes']):
@@ -171,7 +181,7 @@ def verify_objective_proof_extension(old_inputs, new_inputs, prior, current):
             # New sources still use the normal classifier's identity/class law;
             # actual graph binding is checked again by migration_classes at load.
             a, b = _indexed(part, 'old_index'), _indexed(part, 'new_index')
-            prior_policy = digest({name:m._binding(m._checked(ref))['sha256'] for name,ref in part['old_policy'].items()})
+            prior_policy = policy_digest(part['old_policy'])
             record('current',field,part,b)
             if (a['key']['split'] != 'train' or a['key']['policy_sha256'] != prior_policy
                     or b['key'] != {**a['key'], 'policy_sha256':after_policy}
@@ -198,6 +208,9 @@ def verify_objective_proof_extension(old_inputs, new_inputs, prior, current):
         for role, field in (('native_graphs','indexes'), ('held_native_graphs','held_indexes')):
             if leaf_keys[which][field] != _leaves(inputs[role]):
                 raise ValueError('objective classification source proof is not a complete leaf inventory')
+    for refs, expected in policies.values():
+        if digest({name:m._binding(m._checked(ref))['sha256'] for name,ref in refs.items()}) != expected:
+            raise ValueError('objective classification policy changed during verification')
     return True
 
 

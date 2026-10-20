@@ -136,7 +136,7 @@ def test_recipe_and_publication_recursively_bind_actual_proof_dependencies(combi
     # A composed runtime can live outside the source checkout under test.
     runtime_checkout = Path(c.__file__).resolve().parents[2]
     closure=dependency_closure({'config':cfg},namespace=tmp_path,
-        readonly_input_roots=[str(checkout), str(runtime_checkout)])
+        readonly_input_roots=sorted({str(checkout), str(runtime_checkout)}))
     actual={x['path']for x in closure['files']+closure['assets']}
     assert wanted<=actual
     Path(wd['filter_proof']['path']).write_text('tampered filter')
@@ -171,3 +171,49 @@ def test_rekey_cached_source_hash_reuse_and_same_mtime_mutation_rejection(case,m
         assert c.continue_classified_objective_index(source_ref,index_ref,old_package=old,new_package=new)==first
     state=source.stat();raw=source.read_bytes();source.write_bytes(bytes([raw[0]^1])+raw[1:]);os.utime(source,ns=(state.st_atime_ns,state.st_mtime_ns))
     with pytest.raises(ValueError):c.continue_classified_objective_index(source_ref,index_ref,old_package=old,new_package=new)
+
+
+def test_shared_policy_maps_are_authenticated_twice_per_call(combined, monkeypatch):
+    from natlang_neuralese.train import native_classification_continuation as continuation
+    old,save,current,prior,*_=combined;new=save()
+    paths={ref['path'] for ref in current['indexes'][0]['old_policy'].values()}
+    calls=[];original=m._checked
+    def checked(ref):
+        if ref['path'] in paths:calls.append(ref['path'])
+        return original(ref)
+    monkeypatch.setattr(m,'_checked',checked)
+    for invocation in range(2):
+        assert continuation.verify_objective_proof_extension(old,new,prior,current)
+        assert all(calls.count(path)==2*(invocation+1) for path in paths)
+
+
+@pytest.mark.parametrize('fault', ['bytes', 'sha256'])
+def test_reused_policy_map_does_not_hide_changed_reference(combined, fault):
+    from natlang_neuralese.train import native_classification_continuation as continuation
+    old,save,current,prior,*_=combined;new=save()
+    # An independently copied later source map must retain all its authority.
+    refs=current['held_indexes'][0]['old_policy']=copy.deepcopy(current['held_indexes'][0]['old_policy'])
+    ref=next(iter(refs.values()))
+    ref[fault]=ref['bytes']+1 if fault=='bytes' else '0'*64
+    with pytest.raises(ValueError,match='artifact changed'):
+        continuation.verify_objective_proof_extension(old,new,prior,current)
+
+
+def test_policy_mutation_during_source_inventory_fails_final_recheck(combined, monkeypatch):
+    import os
+    from natlang_neuralese.train import native_classification_continuation as continuation
+    old,save,current,prior,*_=combined;new=save()
+    target=Path(next(iter(current['indexes'][0]['old_policy'].values()))['path'])
+    original=continuation._leaves;mutated=False
+    def leaves(ref):
+        nonlocal mutated
+        result=original(ref)
+        if not mutated:
+            state=target.stat();raw=target.read_bytes()
+            target.write_bytes(bytes([raw[0]^1])+raw[1:])
+            os.utime(target,ns=(state.st_atime_ns,state.st_mtime_ns));mutated=True
+        return result
+    monkeypatch.setattr(continuation,'_leaves',leaves)
+    with pytest.raises(ValueError,match='artifact changed'):
+        continuation.verify_objective_proof_extension(old,new,prior,current)
+    assert mutated

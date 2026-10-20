@@ -1438,3 +1438,40 @@ completed full-suite check is now `78e7b2d4b3` (pass); the subsequent `7d0681037
 full check is still running. Additional verified teacher data remains tracked
 separately from actual training exposure, and the stronger self-hosted teacher
 continues generating.
+
+### 2026-10-20 09:23 UTC — genuine LFM recovery and Mellum cutover preparation
+
+LFM Q4 restored the preserved Q3 checkpoint exactly once at 08:56 UTC. Its
+actual saved state is global 19,369 / local 18,363; the eleven subsequently
+reported but unsaved Q3 updates are explicitly lost. Optimizer, RNG and earned
+exposure resume from that saved state. Actor prefill, incremental execution and
+cache parity passed with zero maximum error. The complete parameter-gradient
+transition passed at 09:01, followed by ordinary capacity checks (20 of 29
+passed at 09:20, H100 fully occupied). These checks grant no new SGD exposure;
+the supervisor has not yet confirmed an R4 optimizer update. The old RAW runtime
+proof remains historical until genuine child publication enables its transition.
+
+Both physical R4 runtimes and complete source-bound CE policies are installed.
+The Mellum source-only preflight covered all 361 train and 14 held source leaves
+without model allocation or graph replay. Mellum continues useful R14 SGD while
+the normal completed-worker publication and R4 restore are finalized; it reached
+global 25,668 at 09:18. The old finite worker must publish its genuine saved
+state before provider succession and the completed-parent API can restore it.
+The current frozen API requires canonical path/SHA recipe references; optional
+byte annotations must not be mistaken for a different recipe identity.
+
+Additional verified teacher data is ready for explicit resident continuation:
+2,838 LFM / 2,837 Mellum rows at 09:14. Readiness and transport do not claim
+training exposure. New policies must use the canonical complete-contract host
+builder. The computed-result curriculum adds twelve new TRAIN tasks, each with
+four self-hosted teacher samples, to the future source sequence. Reference
+execution passed all twelve tasks; live measurement and admission remain pending.
+The future-only handoff preserves each active batch's actual runtime, including
+older batches that legitimately span the previous runtime epoch.
+
+Main's full check at `7d06810379` passed all steps. A shared metadata optimization
+now verifies each identical seven-file objective policy map once per operation
+and rechecks it before granting continuation, removing repeated filesystem work
+without changing intrinsic parser/classifier identities or cached row classes.
+Independent review, 41 focused tests and quick checks passed. The optimization
+is for future runtime continuations and does not delay or alter frozen R4.
