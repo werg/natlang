@@ -51,13 +51,25 @@ def build(sources, *, legacy_pair_context_weight, held_sources=(), expected_spli
                 encodings.add(('ordinary-suffix-raw-v1', conversion.get('context_weight')))
             elif graph.get('source_pairing'):
                 encodings.add(('witnessed-pair-raw-v1', legacy_pair_context_weight))
+            elif (conversion.get('role_interpretation') != 'ordinary-text'
+                    and 'source_suffix_start' not in conversion and 'source_pairing' not in graph):
+                # Direct admitted native objectives already carry explicit node
+                # masks. Validate those fields with the shared schema law without
+                # compiling KV positions, and retain their weights exactly.
+                from natlang_neuralese.data.native_graph_schema import _graph_fields
+                if not graph.get('nodes'):
+                    raise ValueError('retained native CE source needs explicit node masks: ' + str(path))
+                _graph_fields(graph, tokenizer_fingerprint=graph.get('tokenizer_fingerprint'))
+                encodings.add(('retained-native-node-objective', None))
             else:
                 raise ValueError('CE source lacks authenticated target intent: ' + str(path))
         if len(encodings) != 1:
             raise ValueError('CE source contains incompatible model-view supervision declarations')
         encoding, weight = encodings.pop()
-        if encoding == 'already-declared':
-            skipped.append({**binding, 'reason':'existing trajectory supervision retained exactly'})
+        if encoding in {'already-declared', 'retained-native-node-objective'}:
+            reason = ('existing trajectory supervision retained exactly' if encoding == 'already-declared'
+                      else 'explicit native node target masks retained exactly; no raw legacy CE encoding')
+            skipped.append({**binding, 'reason':reason})
             continue
         declaration = {'sha256':binding['sha256'],'encoding':encoding,'context_weight':weight}
         if declaration['sha256'] in declarations and declarations[declaration['sha256']] != declaration:
