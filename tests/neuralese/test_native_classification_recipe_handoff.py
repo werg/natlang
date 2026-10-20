@@ -73,3 +73,28 @@ def test_classification_input_rejects_changed_authority_before_handoff(tmp_path,
     elif fault == 'empty': proof['indexes'] = []
     with pytest.raises(ValueError, match='classification'):
         recipe._classification_input_continuation(old, save())
+
+
+def test_ce_continuation_composes_real_same_source_classification_proof(tmp_path, monkeypatch):
+    from natlang_neuralese.train.native_supervision import SCHEMA
+    old, save, proof, part = prepared(tmp_path, monkeypatch)
+    policy = tmp_path / 'ce.json'
+    policy.write_text(json.dumps({'schema': SCHEMA, 'require_eligible_sources': True,
+        'sources': [{'sha256': old['native_graphs']['sha256'],
+                     'encoding': 'native-row-objectives-v1', 'context_weight': .05}]}))
+    new = {**save(), 'ce_supervision_policy':
+        {**migration._binding(policy), 'binding': 'ce'}}
+    assert recipe._ce_supervision_input_continuation(old, new)
+    # Existing source and proof verifiers remain authoritative when composed.
+    for role in ('native_graphs', 'held_native_graphs'):
+        changed = copy.deepcopy(new)
+        changed[role]['sha256'] = 'a' * 64
+        assert not recipe._ce_supervision_input_continuation(old, changed)
+    changed = copy.deepcopy(new)
+    changed['source_classification_migration']['sha256'] = 'a' * 64
+    with pytest.raises(ValueError):
+        recipe._ce_supervision_input_continuation(old, changed)
+    proof['optimizer_updates'] = 1
+    changed = {**save(), 'ce_supervision_policy': new['ce_supervision_policy']}
+    with pytest.raises(ValueError, match='classification'):
+        recipe._ce_supervision_input_continuation(old, changed)

@@ -1820,7 +1820,8 @@ def _ce_supervision_input_continuation(old, new):
     if before != after and not (_data_continuation(before, after)
             or _priority_only_native_source_continuation(before, after)
             or _pending_source_continuation(before, after)
-            or _combined_native_source_continuation(before, after)):
+            or _combined_native_source_continuation(before, after)
+            or _classification_input_continuation(before, after)):
         return False
     from .native_supervision import load_policy
     reference = new[role]
