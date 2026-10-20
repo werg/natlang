@@ -1063,3 +1063,48 @@ modern owned publications, reusable source data and held data were retained.
 The rolling retention service was relaunched through the memory ledger after
 its transient unit unloaded. Modern owned-publication retention still needs
 extension; historical canonical step frontiers are not current training progress.
+
+### DGX useful training and shared repair, 2026-10-20 03:03 UTC
+
+LFM Q6 passed all28 unique fresh capacity cases (29 logical references) and
+resumed genuine SGD from18,619, reaching18,661 in the current observation.
+Actual learned FP32 rows changed; foundation exposure is26,312/26,312 and
+communication exposure30,204/114,794. These are progress counters, not complete
+recipe or task-quality qualification. The corrected waiting-controller/SDK
+cache handoff is metadata-only and leaves its canonical learner untouched.
+
+Mellum24,831 completed its256-update recovery continuation. The full
+48,220,799,097-byte checkpoint passed private PUT and independent complete GET.
+The controller reached the next declared offline-preference stage, but a worker
+rejected its request before model allocation: the shared provider configuration
+copied the publication selector while dropping four required owner fields.
+Repair is preserving the same checkpoint, recipe, optimizer/RNG and exposure.
+No new preference update or completed recipe is claimed. Both models still need
+completed genuine communication exposure before cross-model readiness. Shared
+on-request foundation checks, frozen trained-snapshot VAE preparation, drained
+continuation and exact child-runtime plumbing have been reviewed and published;
+adoption into the frozen cloud runtimes remains explicit work.
+
+The loss audit found a concrete supervision inconsistency: ordinary and paired
+raw context weights let long prompts dominate each normalized graph. Sampled
+ordinary full sources devote only8.87%/9.44% median loss mass to the LF/Mellum
+answer, versus96.2–96.3% for already segmented whole trajectories. The shared
+source-bound correction is being implemented and checked against exact
+full-graph losses and derivatives. It preserves node mass, immutable rows and
+completed exposure; policy-RL likelihoods are outside this CE correction.
+
+An additional7,721 LFM graphs now pass strict static validation with explicit
+KEEP reasoning history. Every emitted answer token and suffix weight matches
+its original admitted target; current captured-action approval, holds, global
+source closure and normal deduplication pass. Existing LF/Mellum rows remain,
+Mellum needs no duplicate KEEP view, and one newly rejected action is excluded.
+This is admission evidence, not trained exposure or a causal task-success claim.
+Strong self-hosted Qwen generation remains supplied; SearchOWL has253/256
+shard/model receipts and a resource-only external-disk SQLite successor running.
+
+Modern owned-publication retention is implemented and independently reviewed,
+including reciprocal protection across old canonical and new owned aliases.
+Exactly11 old canonical and19 explicitly discarded owned publications were
+removed and their absence verified, reclaiming350,413,993,062 bytes altogether.
+Current/recovery/assigned parents, source and held data remain protected. The
+regular full-check timer is active; the last complete PASS is still7edc9078c.
