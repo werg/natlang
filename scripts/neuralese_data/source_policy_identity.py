@@ -9,7 +9,7 @@ import symtable
 from pathlib import Path
 
 
-def scoped_python_policy(path, functions):
+def scoped_python_policy(path, functions, *, allow_imports=False):
     """Bind selected functions and their recursively resolved module globals.
 
     This is an identity, not a file binding. Callers retain physical provenance
@@ -23,11 +23,13 @@ def scoped_python_policy(path, functions):
     stamp = lambda s: (s.st_dev, s.st_ino, s.st_size, s.st_mtime_ns, s.st_ctime_ns)
     if stamp(before) != stamp(after):
         raise ValueError('source policy changed while reading')
-    return scoped_python_policy_bytes(raw, functions, filename=str(path))
+    return scoped_python_policy_bytes(raw, functions, filename=str(path), allow_imports=allow_imports)
 
 
-def scoped_python_policy_bytes(raw, functions, *, filename='<bound-source-policy>'):
+def scoped_python_policy_bytes(raw, functions, *, filename='<bound-source-policy>', allow_imports=False):
     tree = ast.parse(raw, filename=filename)
+    if allow_imports and any(isinstance(node, ast.ImportFrom) and any(alias.name == '*' for alias in node.names) for node in ast.walk(tree)):
+        raise ValueError('wildcard imports cannot authenticate a facade binding')
     symbols = symtable.symtable(raw.decode(), filename, 'exec')
     functions = tuple(sorted(set(functions)))
     definitions = {}
@@ -121,7 +123,8 @@ def scoped_python_policy_bytes(raw, functions, *, filename='<bound-source-policy
         if not discovered:
             break
     for name in functions:
-        if name not in selected or not any(isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) for n in definitions[name]):
+        allowed = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Import, ast.ImportFrom) if allow_imports else (ast.FunctionDef, ast.AsyncFunctionDef)
+        if name not in selected or not any(isinstance(n, allowed) for n in definitions[name]):
             raise ValueError('source policy entry must be a function: ' + name)
     value = {'schema': 'natlang.scoped-python-source-policy/1', 'functions': list(functions),
              'definitions': dict(sorted(selected.items())), 'module_effects': [effects[index] for index in sorted(effects)]}

@@ -983,8 +983,11 @@ def test_content_cache_policy_tracks_law_not_unrelated_admission(tmp_path,monkey
 
 def test_changed_parser_law_cannot_migrate_legacy(tmp_path,monkeypatch):
     path,expected,old,original=_legacy_content_cache(tmp_path,monkeypatch)
-    sha=converter.sha256_file
-    monkeypatch.setattr(converter,'sha256_file',lambda p:'0'*64 if str(p).endswith('/data/native_graph.py')else sha(p))
+    read=converter.Path.read_bytes
+    def changed_parser(path, *a, **kw):
+        raw=read(path,*a,**kw)
+        return raw.replace(b'from .native_graph_schema import SCHEMA, NativeGraphExample, parse_graph', b'from .changed_schema import SCHEMA, NativeGraphExample, parse_graph') if str(path).endswith('/data/native_graph.py') else raw
+    monkeypatch.setattr(converter.Path,'read_bytes',changed_parser)
     assert converter._content_index_policy_sha256()!=converter._REVIEWED_LEGACY_CONTENT_CACHE['policy_sha256']
     calls=[];parse=converter.parse_graph
     monkeypatch.setattr(converter,'parse_graph',lambda *a,**kw:calls.append(True)or parse(*a,**kw))
@@ -1151,3 +1154,43 @@ def test_actual_changed_graph_content_cannot_reuse_reviewed_legacy(tmp_path,monk
     path.write_text(json.dumps(value)+'\n')
     actual=converter.seed_content_fingerprints([path],'tokenizer-a')
     assert actual[0]!=expected[0] and old.read_bytes()==original
+
+
+def test_content_policy_ignores_unrelated_graph_loss_telemetry(monkeypatch):
+    original=converter._content_index_policy_sha256()
+    read=converter.Path.read_bytes
+    def telemetry(path,*a,**kw):
+        raw=read(path,*a,**kw)
+        return raw+b"\ndef unrelated_loss_telemetry(value):\n    return value + 19\n" if str(path).endswith('/data/native_graph.py') else raw
+    monkeypatch.setattr(converter.Path,'read_bytes',telemetry)
+    assert converter._content_index_policy_sha256()==original
+
+
+def test_actual_previous_facade_policy_cache_continues_without_parse(tmp_path,monkeypatch):
+    from natlang_neuralese.common import row_index
+    path,expected,old,original=_legacy_content_cache(tmp_path,monkeypatch)
+    value=row_index.load(old);old.unlink()
+    value['key']['policy_sha256']='2ebde0101c9d93116285ae9f7deedacadfaca151e81943002e6317b47fef96d4'
+    old=row_index.entry_path('teacher-content',converter.canonical_json_sha256_hex(value['key']))
+    row_index.save(old,value);original=old.read_bytes()
+    def forbidden(*a,**kw): raise AssertionError('unchanged source parser must not run')
+    monkeypatch.setattr(converter,'parse_graph',forbidden)
+    assert converter.seed_content_fingerprints([path],'tokenizer-a')==expected
+    assert old.read_bytes()==original
+
+
+def test_previous_whole_facade_policy_derives_from_unchanged_validation_law():
+    from scripts.neuralese_data.source_policy_identity import scoped_python_policy, scoped_python_policy_bytes
+    package=converter.Path(converter.__file__).resolve().parents[2]/'training/neuralese/natlang_neuralese'
+    functions={'graph_content_sha256','_validated_content_fingerprints','_valid_content_index'}
+    previous={'schema':'natlang.teacher-content-index-law/3',
+        'functions':scoped_python_policy_bytes(converter.Path(converter.__file__).read_bytes(),functions),
+        'parser':scoped_python_policy(package/'data/native_graph_schema.py',('parse_graph',)),
+        # Exact facade before held-only telemetry commit 1c7d150fc. The parser
+        # import authority is unchanged; all other old key inputs are real.
+        'graph_facade':'5562cb8edb88edaa9c22fcaafacf3966a7f9d9ed91014318a515683496ae252d',
+        'graph_plan':converter.sha256_file(package/'model/native_graph_plan.py'),
+        'jsonio':converter.sha256_file(package/'common/jsonio.py'),
+        'hashing':scoped_python_policy(package/'common/hashing.py',('canonical_json_sha256_hex',))}
+    assert converter.canonical_json_sha256_hex(previous)=='2ebde0101c9d93116285ae9f7deedacadfaca151e81943002e6317b47fef96d4'
+    assert converter._content_index_policy_sha256()==converter._REVIEWED_LEGACY_CONTENT_CACHE['policy_sha256']

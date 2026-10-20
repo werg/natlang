@@ -102,3 +102,28 @@ def current_protection(path): return file_rows(path)
     assert left['current_protection'](None) == {'x': 1}
     assert right['current_protection'](None) == {}
     assert identity(tmp_path, before) != identity(tmp_path, after)
+
+
+def test_import_entry_requires_explicit_opt_in(tmp_path):
+    p=tmp_path/'facade.py';p.write_text('from .schema import parse_graph\n')
+    with pytest.raises(ValueError,match='entry must be a function'):
+        scoped_python_policy(p,('parse_graph',))
+    before=scoped_python_policy(p,('parse_graph',),allow_imports=True)
+    p.write_text('from .schema import parse_graph\ndef loss(x): return x + 1\n')
+    assert scoped_python_policy(p,('parse_graph',),allow_imports=True)==before
+    p.write_text('from .other_schema import parse_graph\n')
+    assert scoped_python_policy(p,('parse_graph',),allow_imports=True)!=before
+
+
+def test_import_entry_rejects_dynamic_namespace_mutation(tmp_path):
+    p=tmp_path/'facade.py'
+    p.write_text("from .schema import parse_graph\nglobals().update({'parse_graph': None})\n")
+    with pytest.raises(ValueError,match='dynamic module namespace'):
+        scoped_python_policy(p,('parse_graph',),allow_imports=True)
+
+
+def test_import_entry_rejects_wildcard_alias_overwrite(tmp_path):
+    p=tmp_path/'facade.py'
+    p.write_text('from .schema import parse_graph\nfrom .other import *\n')
+    with pytest.raises(ValueError,match='wildcard imports'):
+        scoped_python_policy(p,('parse_graph',),allow_imports=True)
