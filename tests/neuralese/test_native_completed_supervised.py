@@ -12,7 +12,7 @@ from natlang_neuralese.train.native_continuation import TRAINING_SCHEMA
 from test_native_state_sft import graph
 
 
-def fixture(tmp_path):
+def fixture(tmp_path,quantum=2):
     root=tmp_path/'rounds'/'lfm';root.mkdir(parents=True);train=tmp_path/'train.jsonl';held=tmp_path/'held.jsonl'
     train.write_text(json.dumps(graph('old'))+'\n');h=graph('held');h['split']='test';held.write_text(json.dumps(h)+'\n')
     recipe={'schema':'natlang.neuralese-training-recipe/1','id':'lineage','identity_qualification':'native_state_runtime_qualified',
@@ -23,10 +23,11 @@ def fixture(tmp_path):
             for name in('dpo','full')]}
     recipe_path=tmp_path/'recipe.json';write(recipe_path,recipe);rb=native_recipe_binding(recipe_path,'e'*64)
     parent=tmp_path/'parent.pt';parent.write_bytes(b'actual protocol parent')
+    bootstrap=tmp_path/'historical-bootstrap.json';write(bootstrap,{'retained':'original bootstrap provenance'})
     config={'native_state':True,'native_actor_mode':'raw-state','out':str(root/'production'),
-        'supervised_stage_quantum_updates':{'dpo':2,'full':1000},'checkpoint':str(parent),'production_recipe':str(recipe_path),'production_stage':'full',
+        'supervised_stage_quantum_updates':{'dpo':quantum,'full':1000},'checkpoint':str(parent),'production_recipe':str(recipe_path),'production_stage':'full',
         'raw_model_id':'fixture:'+('a'*64),'recipe_lineage_sha256':'e'*64,
-        'bootstrap_binding':{'handoff':{'path':'historical-bootstrap','sha256':'b'*64}},
+        'bootstrap_binding':{'handoff':adapt.binding(bootstrap)},
         'seed_command':['python','-m','natlang_neuralese.train.native_state_sft','{seed_trainer_args}'],
         'trainer_parameters':{'recipe_binding':rb},'seed_trainer_parameters':{'recipe_binding':rb}}
     config_path=root/'config.json';write(config_path,config)
@@ -34,7 +35,7 @@ def fixture(tmp_path):
     write(root/'cycle.json',{'phase':'sft','cycle':3,'next_stage':0,'current_checkpoint':adapt.binding(parent)})
     job=root/'cycles/000003/supervised/000';job.mkdir(parents=True)
     continuation={**config,'mandatory_sft_only':True,'production_stage':'dpo','out':str(job),
-        'trainer_parameters':{'stage_id':'dpo'}};write(job/'config.json',continuation)
+        'trainer_parameters':{'stage_id':'dpo','refresh_after_updates':quantum}};write(job/'config.json',continuation)
     request=bridge.write_request(job/'bridge',kind='round',out=job,config=job/'config.json')
     learner=job/'learner';learner.mkdir();checkpoint=learner/'checkpoint.pt'
     parameter=torch.nn.Parameter(torch.tensor([.3,.7]));optimizer=torch.optim.AdamW([parameter],lr=.01)
@@ -431,3 +432,178 @@ def test_cached_configuration_repairs_missing_unstarted_plan_without_decode(tmp_
     target.write_bytes(b'unknown successor')
     with pytest.raises(ValueError):raw.configure_model(global_plan,declaration,bootstrap,config.parent)
     assert target.read_bytes()==b'unknown successor'and config.read_bytes()==before
+
+
+def test_qualified_early_refresh_uses_one_preloaded_saved_object_under_owned_lease(tmp_path,monkeypatch):
+    import fcntl
+    from natlang_neuralese.train.checkpoint_policy import CheckpointPolicy
+    root,config,request,result,controller,plan,recipe=fixture(tmp_path,quantum=3)
+    checkpoint=Path(json.loads(result.read_text())['checkpoint']['path'])
+    receipt=checkpoint.parent/'native-training-receipt.json';value=json.loads(receipt.read_text())
+    value['continuation_boundary']['requested_signals']=['SIGUSR2'];write(receipt,value)
+    result_value=json.loads(result.read_text());result_value['artifacts']=bridge.inventory(checkpoint.parent.parent,exclude=[result]);write(result,result_value)
+    pair=(bridge.binding(checkpoint),CheckpointPolicy.load(checkpoint))
+    def forbidden(*a,**k):raise AssertionError('an owned completed parent may not be decoded again')
+    monkeypatch.setattr(CheckpointPolicy,'load',staticmethod(forbidden))
+    lease=(root.parent/'controller.lock').open('a');fcntl.flock(lease,fcntl.LOCK_EX|fcntl.LOCK_NB)
+    try:
+        consumed,returned=adapt.consume(config,bridge.binding(request),bridge.binding(result),tmp_path/'consumed.json',controller=controller,verified_checkpoint=pair,owned_controller_fd=lease.fileno())
+        assert returned[1]is pair[1]and consumed['new_optimizer_updates']==2
+        assert json.loads((root/'cycle.json').read_text())['next_stage']==1
+        with (root.parent/'controller.lock').open('a')as probe:
+            with pytest.raises(BlockingIOError):fcntl.flock(probe,fcntl.LOCK_EX|fcntl.LOCK_NB)
+    finally:lease.close()
+
+
+def test_explicit_old_to_new_runtime_keeps_exact_optimizer_rng_and_requires_new_qualification(tmp_path):
+    root,config,request,result,controller,plan,recipe=fixture(tmp_path)
+    consumed_path=tmp_path/'consumed.json'
+    _,pair=adapt.consume(config,bridge.binding(request),bridge.binding(result),consumed_path,controller=controller)
+    old=tmp_path/'old-package';old.mkdir();(old/'identity.py').write_text('VALUE=1\n')
+    new=tmp_path/'new-package';new.mkdir();(new/'identity.py').write_text('VALUE=2\n')
+    future=tmp_path/'future.json';write(future,json.loads(recipe.read_text()))
+    optimizer=copy.deepcopy(pair[1]['training']['optimizer']);rng=pair[1]['training']['rng']['torch_cpu'].clone() if 'torch_cpu'in pair[1]['training']['rng']else None
+    proof=adapt.prepare(config,plan,'lfm',adapt.binding(future),adapt.binding(consumed_path),pair,tmp_path/'adaptation/proof.json',package=new,old_package=old)
+    checked=adapt.verify(proof)
+    assert checked['old_code']==adapt.code_inventory(old)and checked['code']==adapt.code_inventory(new)
+    assert checked['fresh_runtime_qualification_required']is True
+    assert pair[1]['training']['optimizer']['param_groups']==optimizer['param_groups']
+    if rng is not None:assert torch.equal(pair[1]['training']['rng']['torch_cpu'],rng)
+    assert checked['whole_recipe_completed']is False and checked['new_sources_earned_visits']==0
+
+
+def test_runtime_configuration_requires_exact_future_global_and_rebinds_factory_pair(tmp_path,monkeypatch):
+    root,config,request,result,controller,plan,recipe=fixture(tmp_path)
+    consumed_path=tmp_path/'consumed.json'
+    _,pair=adapt.consume(config,bridge.binding(request),bridge.binding(result),consumed_path,controller=controller)
+    old=tmp_path/'old-runtime/training/neuralese/natlang_neuralese';old.mkdir(parents=True);(old/'identity.py').write_text('VALUE=1\n')
+    package=tmp_path/'new-runtime/training/neuralese/natlang_neuralese';package.mkdir(parents=True);(package/'identity.py').write_text('VALUE=2\n')
+    future=tmp_path/'future.json';write(future,json.loads(recipe.read_text()))
+    target=json.loads(plan.read_text());row=target['models'][0];row.update(actor_runtime=str(package.parents[2]),production_recipe=adapt.binding(future),
+        commands={'seed_command':['env','PYTHONPATH='+str(package.parent),'python','-m','natlang_neuralese.train.native_state_sft','{seed_trainer_args}']})
+    target_path=tmp_path/'future-global.json';write(target_path,target)
+    from natlang_neuralese.rl import production,native_bootstrap_metadata
+    monkeypatch.setattr(production,'actor_runtime_configuration',lambda repository:{'actor_command':['new-actor'],
+        'actor_environment':{'NATLANG_REPO':repository},'native_actor_python_runtime':{'exact':'new-runtime'}})
+    monkeypatch.setattr(native_bootstrap_metadata,'save',lambda *a:None)
+    proof=adapt.prepare(config,plan,'lfm',adapt.binding(future),adapt.binding(consumed_path),pair,tmp_path/'adaptation/proof.json',package=package,old_package=old,future_global_plan=adapt.binding(target_path))
+    checked=adapt.verify(proof);assert checked['fresh_runtime_qualification_required']
+    target['models'][0]['completed_supervised_adaptation']=proof;write(plan,target)
+    before=(root/'cycle.json').read_bytes(),(root/'production/state.json').read_bytes()
+    adapt.configure(plan,target['models'][0],json.loads(config.read_text())['bootstrap_binding']['handoff'],config)
+    configured=json.loads(config.read_text())
+    assert configured['actor_command']==['new-actor']
+    assert configured['actor_environment']['NATLANG_REPO']==str(package.parents[2])
+    assert configured['native_actor_python_runtime']=={'exact':'new-runtime'}
+    assert configured['seed_command'][1]=='PYTHONPATH='+str(package.parent)
+    assert before==((root/'cycle.json').read_bytes(),(root/'production/state.json').read_bytes())
+
+
+def applied_publication(tmp_path,monkeypatch):
+    from natlang_neuralese.rl import native_raw_rounds as raw
+    from natlang_neuralese.train.checkpoint_policy import CheckpointPolicy
+    root,config_path,request,result,controller,plan,recipe=fixture(tmp_path)
+    paths={'config':config_path,'state':root/'production/state.json','cursor':root/'cycle.json'}
+    directory=tmp_path/'publication';directory.mkdir()
+    before={key:adapt.binding(path)for key,path in paths.items()}
+    for key,path in paths.items():adapt.write_bytes_durable(directory/(key+'-before.json'),path.read_bytes())
+    config=json.loads(config_path.read_text());cursor=json.loads(paths['cursor'].read_text());state=json.loads(paths['state'].read_text())
+    request_value=bridge.read_request(request);continuation=json.loads(Path(request_value['config']['path']).read_text());result_value=json.loads(result.read_text());operation=json.loads(Path(result_value['state']['path']).read_text())
+    checkpoint=result_value['checkpoint'];pair=(checkpoint,CheckpointPolicy.load(checkpoint['path']));effects={}
+    def capture_json(path,value):effects[Path(path)]=json.dumps(value,indent=2,sort_keys=True).encode()
+    with monkeypatch.context()as patch:
+        patch.setattr(raw,'_publish_checkpoint',lambda cfg,cp:capture_json(paths['state'],raw._published_checkpoint_state(state,cp)))
+        patch.setattr(raw,'write_json_durable',capture_json)
+        raw._publish_supervised_result(continuation,Path(request_value['out']),config,cursor,operation)
+    cursor.update(next_stage=cursor['next_stage']+1,current_checkpoint=adapt.binding(checkpoint['path']))
+    capture_json(paths['cursor'],cursor)
+    if paths['config']not in effects:capture_json(paths['config'],config)
+    candidates={}
+    for key,path in paths.items():
+        target=directory/(key+'-candidate.json');adapt.write_bytes_durable(target,effects[path]);candidates[key]=adapt.binding(target);adapt.write_bytes_durable(path,effects[path])
+    intent={'schema':'natlang.completed-worker-normal-publication-commit/1','request':adapt.binding(request),'result':adapt.binding(result),'checkpoint':checkpoint,
+        'before':before,'candidates':candidates,'global_step':4,'actual_request_updates':2,
+        'full_decodes':0,'new_optimizer_updates':0,'new_exposure':0,'whole_recipe_completed':False,'normal_shared_publisher_reused':True}
+    write(directory/'intent.json',intent)
+    publication={**intent,'passed':True,'intent':adapt.binding(directory/'intent.json'),'after':{key:adapt.binding(path)for key,path in paths.items()}}
+    write(directory/'result.json',publication)
+    return root,config_path,controller,pair,adapt.binding(directory/'result.json'),plan,recipe
+
+
+def test_already_applied_publication_reuses_real_publisher_and_never_advances_again(tmp_path,monkeypatch):
+    from natlang_neuralese.train.checkpoint_policy import CheckpointPolicy
+    root,config,controller,pair,publication,plan,recipe=applied_publication(tmp_path,monkeypatch)
+    before=tuple(path.read_bytes()for path in(config,root/'cycle.json',root/'production/state.json'))
+    def forbidden(*a,**k):raise AssertionError('registering real publication cannot decode another checkpoint')
+    monkeypatch.setattr(CheckpointPolicy,'load',staticmethod(forbidden))
+    record,returned=adapt.register_publication(config,publication,tmp_path/'registered.json',controller=controller,verified_checkpoint=pair)
+    assert returned[1]is pair[1]and record['cursor_advances_from_registration']==0
+    assert before==tuple(path.read_bytes()for path in(config,root/'cycle.json',root/'production/state.json'))
+    adapt.register_publication(config,publication,tmp_path/'registered.json',controller=controller,verified_checkpoint=pair)
+    package=tmp_path/'package';package.mkdir();(package/'identity.py').write_text('VALUE=1\n')
+    proof=adapt.prepare(config,plan,'lfm',adapt.binding(recipe),adapt.binding(tmp_path/'registered.json'),pair,tmp_path/'adaptation/proof.json',package=package)
+    assert adapt.verify(proof)['new_sources_earned_visits']==0
+
+
+@pytest.mark.parametrize('mutation',['counter','successor','candidate'])
+def test_bad_publication_reconciliation_cannot_touch_current_controls(tmp_path,monkeypatch,mutation):
+    root,config,controller,pair,publication,_,_=applied_publication(tmp_path,monkeypatch)
+    published=json.loads(Path(publication['path']).read_text())
+    if mutation=='counter':
+        intent_path=Path(published['intent']['path']);intent=json.loads(intent_path.read_text());intent['actual_request_updates']=3;write(intent_path,intent)
+        published.update(actual_request_updates=3,intent=adapt.binding(intent_path));write(Path(publication['path']),published);publication=adapt.binding(publication['path'])
+    elif mutation=='successor':write(root/'cycle.json',{'unknown':'newer owner'})
+    else:Path(published['candidates']['state']['path']).write_text('{}')
+    before=tuple(path.read_bytes()for path in(config,root/'cycle.json',root/'production/state.json'))
+    with pytest.raises(ValueError):adapt.register_publication(config,publication,tmp_path/'registered.json',controller=controller,verified_checkpoint=pair)
+    assert before==tuple(path.read_bytes()for path in(config,root/'cycle.json',root/'production/state.json'))
+    assert not(tmp_path/'registered.json').exists()
+
+
+def test_dependency_closure_keeps_nested_publisher_controls_and_exact_packages(tmp_path,monkeypatch):
+    old=tmp_path/'old';old.mkdir();(old/'old.py').write_text('OLD=1\n')
+    new=tmp_path/'new';new.mkdir();(new/'new.py').write_text('NEW=1\n')
+    source=tmp_path/'external-control.py';source.write_text('CONTROL=1\n')
+    material=tmp_path/'control-material.json';write(material,{'controls':{'module':adapt.binding(source)}})
+    future=tmp_path/'future-global.json';write(future,{'models':[{'publisher_manifest':adapt.binding(material)}]})
+    candidate=tmp_path/'candidate.json';write(candidate,{'exact':'normal publisher effect'})
+    before=tmp_path/'snapshot.json';write(before,{'native_state':True,'supervised_quantum_control':{'plan':{'path':'retired-plan','sha256':'a'*64}}})
+    publication=tmp_path/'publication.json';write(publication,{'schema':'natlang.completed-worker-normal-publication-commit/1',
+        'before':{'config':{'path':'mutable-config','sha256':'b'*64}},'after':{'config':{'path':'mutable-config','sha256':'c'*64}},
+        'snapshots':{'config':adapt.binding(before)},'candidates':{'config':adapt.binding(candidate)}})
+    runtime=tmp_path/'runtime-proof.json';write(runtime,{'schema':'natlang.native-raw-runtime-handoff/1',
+        'sources':{'config':{'path':'mutable-config','sha256':'d'*64}},'snapshots':{'config':adapt.binding(before)}})
+    proof_path=tmp_path/'proof.json';proof={'schema':adapt.SCHEMA,'package':str(new),'code':adapt.code_inventory(new),
+        'old_package':str(old),'old_code':adapt.code_inventory(old),'future_global_plan':adapt.binding(future),
+        'consumption':adapt.binding(publication),'runtime_handoff':adapt.binding(runtime),
+        'controls':{'config':{'path':'mutable-config','sha256':'e'*64}}}
+    write(proof_path,proof);monkeypatch.setattr(adapt,'verify',lambda reference:proof)
+    refs=adapt.dependencies(adapt.binding(proof_path))
+    for path in(source,material,future,candidate,before,publication,runtime,old/'old.py',new/'new.py'):
+        assert refs[str(path)]['sha256']==adapt.binding(path)['sha256']
+    assert 'mutable-config'not in refs and 'retired-plan'not in refs
+    source.write_text('CONTROL=2\n')
+    with pytest.raises(ValueError):adapt.dependencies(adapt.binding(proof_path))
+
+
+def test_dependency_closure_rejects_missing_future_authority(tmp_path,monkeypatch):
+    package=tmp_path/'package';package.mkdir();(package/'module.py').write_text('VALUE=1\n')
+    missing=tmp_path/'missing.json';proof={'schema':adapt.SCHEMA,'package':str(package),'code':adapt.code_inventory(package),
+        'future_global_plan':{'path':str(missing),'sha256':'a'*64}}
+    path=tmp_path/'proof.json';write(path,proof);monkeypatch.setattr(adapt,'verify',lambda reference:proof)
+    with pytest.raises((ValueError,FileNotFoundError)):adapt.dependencies(adapt.binding(path))
+
+
+@pytest.mark.parametrize('mutation',['signal-string','wrong-signal','wrong-kind','false-reached','integer-reached','wrong-target','boolean-updates'])
+def test_early_refresh_requires_actual_typed_request_and_exact_declared_target(mutation):
+    config={'supervised_stage_quantum_updates':{'full':1000}}
+    receipt={'continuation_boundary':{'kind':'semantic-refresh','reached':True,'requested_signals':['SIGUSR2'],'new_optimizer_updates':749}}
+    continuation={'trainer_parameters':{'refresh_after_updates':1000}}
+    if mutation=='signal-string':receipt['continuation_boundary']['requested_signals']='SIGUSR2'
+    elif mutation=='wrong-signal':receipt['continuation_boundary']['requested_signals']=['SIGTERM']
+    elif mutation=='wrong-kind':receipt['continuation_boundary']['kind']='operational-stop'
+    elif mutation=='false-reached':receipt['continuation_boundary']['reached']=False
+    elif mutation=='integer-reached':receipt['continuation_boundary']['reached']=1
+    elif mutation=='wrong-target':continuation['trainer_parameters']['refresh_after_updates']=999
+    else:receipt['continuation_boundary']['new_optimizer_updates']=True
+    with pytest.raises(ValueError):adapt._qualified_refresh_updates(config,{'id':'full'},receipt,continuation)

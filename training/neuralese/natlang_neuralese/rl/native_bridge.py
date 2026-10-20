@@ -109,12 +109,20 @@ def read_request(path):
     return value
 
 
-def verify_raw_checkpoint(reference,parent):
+def verify_raw_checkpoint(reference,parent,*,verified_checkpoint=None):
     """The shared trainer's full continuation proves the published raw parent."""
     from ..model.native_model import CHECKPOINT_SCHEMA
     from ..train.native_continuation import TRAINING_SCHEMA
     from ..train.checkpoint_policy import CheckpointPolicy
-    state=CheckpointPolicy.load(_bound(reference))
+    if verified_checkpoint is None:
+        state=CheckpointPolicy.load(_bound(reference))
+    else:
+        verified,state=verified_checkpoint
+        core=lambda ref:{key:ref[key]for key in('path','sha256')}
+        actual=binding(_bound(reference))
+        if (core(verified)!=core(reference)or core(actual)!=core(reference)
+                or ('bytes'in reference and reference['bytes']!=actual['bytes'])):
+            raise ValueError('preloaded raw checkpoint differs from its actual bound result')
     training=state.get('training') or {}
     if (state.get('schema')!=CHECKPOINT_SCHEMA or state.get('optimizer_pruned')
             or training.get('schema')!=TRAINING_SCHEMA or not training.get('optimizer') or not training.get('rng')
@@ -158,7 +166,7 @@ def verify_result_inventory(request_path, result_path):
     return request,result
 
 
-def verify_result(request_path, result_path, *, return_raw_checkpoint=False):
+def verify_result(request_path, result_path, *, return_raw_checkpoint=False,verified_raw_checkpoint=None):
     request,result=verify_result_inventory(request_path,result_path)
     verified_raw=None
     for item in result['artifacts']:
@@ -180,7 +188,7 @@ def verify_result(request_path, result_path, *, return_raw_checkpoint=False):
             namespace=selected['namespace'],readonly_input_roots=selected['readonly_input_roots'])
     def raw_checkpoint():
         if publication and not return_raw_checkpoint:return None
-        return verify_raw_checkpoint(result['checkpoint'],request['parent_checkpoint'])
+        return verify_raw_checkpoint(result['checkpoint'],request['parent_checkpoint'],verified_checkpoint=verified_raw_checkpoint)
     if request['kind'] == 'round' and result.get('state'):
         state = json.loads(_bound(result['state']).read_text())
         advanced=sha256_file_hex_cached(state['checkpoint']) != request['parent_checkpoint']['sha256']

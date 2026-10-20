@@ -95,11 +95,14 @@ def evidence(plan_path,declaration,handoff,config):
                     raise ValueError('later runtime proof package identity changed')
     adaptation=declaration.get('completed_supervised_adaptation')
     if adaptation:
-        from .native_completed_supervised import verify
+        from .native_completed_supervised import verify,dependencies as completed_dependencies
         proof=verify(adaptation)
-        for key in('consumption','old_plan','future_plan','lineage_handoff','future_config','old_config','old_global_plan','recipe'):
-            add(proof[key])
-        add(adaptation)
+        for reference in completed_dependencies(adaptation).values():add(reference)
+        for key,code in(('package','code'),('old_package','old_code')):
+            path=Path(proof.get(key,proof['package']))
+            packages['completed_'+key]=code_inventory(path)
+            if packages['completed_'+key]!=proof.get(code,proof['code']):
+                raise ValueError('completed bootstrap package identity changed')
     cursor_path=Path(config['out']).parent/'cycle.json'
     if cursor_path.exists():
         cursor=json.loads(cursor_path.read_text())

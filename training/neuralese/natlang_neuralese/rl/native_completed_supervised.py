@@ -5,6 +5,7 @@ It creates neither optimizer-owner evidence nor earned visits for new sources.
 """
 from __future__ import annotations
 import copy
+import contextlib
 import fcntl
 import json
 from pathlib import Path
@@ -147,7 +148,125 @@ def _raw_receipt(saved,checkpoint,parent):
         'graphs':binding(graphs),'mandatory_sft_sha256':canonical_json_sha256_hex(expected)}
 
 
-def consume(config_path,request_ref,result_ref,out,*,controller):
+
+def _qualified_refresh_updates(config,stage,receipt,continuation=None):
+    boundary=receipt.get('continuation_boundary')or{}
+    updates=boundary.get('new_optimizer_updates')
+    quantum=config.get('supervised_stage_quantum_updates',{}).get(stage['id'],config.get('supervised_quantum_updates'))
+    if type(quantum)is not int or quantum<=0 or type(updates)is not int or not 0<updates<=quantum:
+        raise ValueError('completed supervised result differs from its declared finite update quantum')
+    if updates<quantum and (boundary.get('kind')!='semantic-refresh'
+            or boundary.get('reached')is not True
+            or not isinstance(boundary.get('requested_signals'),list)
+            or 'SIGUSR2'not in boundary['requested_signals']
+            or type((continuation or{}).get('trainer_parameters',{}).get('refresh_after_updates'))is not int
+            or (continuation or{}).get('trainer_parameters',{}).get('refresh_after_updates')!=quantum):
+        raise ValueError('completed finite update quantum requires its actual qualified requested early refresh')
+    return updates
+
+
+@contextlib.contextmanager
+def _completed_leases(config_path,owned_controller_fd=None,*,production=True):
+    from .native_runtime_handoff import _runtime_leases
+    config,paths=_controls(config_path)
+    canonical=paths['config'].parent.parent/'controller.lock'
+    locks=(canonical,paths['state'].parent/'controller.lock')if production else(canonical,)
+    with _runtime_leases(locks,canonical,owned_controller_fd):
+        yield config,paths
+
+
+def _verified_completed_pair(request_ref,result_ref,verified_checkpoint=None):
+    from .native_bridge import verify_result
+    if verified_checkpoint is None:
+        return verify_result(_bound(request_ref),_bound(result_ref),return_raw_checkpoint=True)
+    return verify_result(_bound(request_ref),_bound(result_ref),return_raw_checkpoint=True,
+                         verified_raw_checkpoint=verified_checkpoint)
+
+
+def register_publication(config_path,publication,out,*,controller,verified_checkpoint,owned_controller_fd=None):
+    """Authenticate a real already-applied ordinary publication without replaying effects.
+
+    The supervisor's bounded publisher receipt is evidence, never a substitute
+    for the original request/result, before snapshots, or exact normal effects.
+    """
+    from . import native_raw_rounds as raw
+    with _completed_leases(config_path,owned_controller_fd)as(current,paths):
+        _no_owner(controller);_no_active_operation(paths['config'].parent)
+        published=_read(publication)
+        if (published.get('schema')!='natlang.completed-worker-normal-publication-commit/1'
+                or published.get('passed')is not True
+                or published.get('normal_shared_publisher_reused')is not True
+                or published.get('whole_recipe_completed')is not False
+                or any(published.get(name)!=0 for name in('full_decodes','new_optimizer_updates','new_exposure'))):
+            raise ValueError('completed publication lost its honest finite-request authority')
+        intent=_read(published['intent'])
+        if any(intent[key]!=published[key]for key in intent):
+            raise ValueError('completed publication changed its durable intent')
+        directory=Path(publication['path']).parent
+        snapshots={}
+        for key,path in paths.items():
+            if (published['before'][key]['path']!=str(path)
+                    or binding(path)!=published['after'][key]
+                    or binding(path)['sha256']!=published['candidates'][key]['sha256']):
+                raise ValueError('completed publication has a later or unknown successor')
+            snapshot=directory/(key+'-before.json')
+            if binding(snapshot)['sha256']!=published['before'][key]['sha256']:
+                raise ValueError('completed publication lost its original control snapshot')
+            _bound(published['candidates'][key]);snapshots[key]=binding(snapshot)
+        config=_read(snapshots['config']);cursor=_read(snapshots['cursor']);state=_read(snapshots['state'])
+        request,result,continuation,stage=_operation(config,cursor,published['request'],published['result'])
+        result,pair=_verified_completed_pair(published['request'],published['result'],verified_checkpoint)
+        receipt_path=Path(pair[0]['path']).parent/'native-training-receipt.json'
+        receipt=json.loads(receipt_path.read_text());updates=_qualified_refresh_updates(config,stage,receipt,continuation)
+        if (pair[1]['training'].get('global_step')!=published['global_step']
+                or published['actual_request_updates']!=updates
+                or receipt.get('stage_id')!=stage['id']
+                or receipt.get('checkpoint',{}).get('sha256')!=pair[0]['sha256']
+                or receipt.get('continuation',{}).get('checkpoint_sha256')!=request['parent_checkpoint']['sha256']
+                or receipt.get('continuation_boundary',{}).get('checkpoint_sha256')!=pair[0]['sha256']):
+            raise ValueError('completed publication lost its actual saved update boundary')
+        operation=_read(result['state']);effects={}
+        originals=(raw._publish_checkpoint,raw.write_json_durable,raw.write_bytes_durable)
+        def capture(path,data):
+            path=Path(path)
+            if path not in paths.values():
+                # Existing resident snapshots/recipe aliases must already be
+                # exact; no new writes are allowed during reconciliation.
+                if not path.is_file()or path.read_bytes()!=data:
+                    raise ValueError('completed reconciliation would create a new publication effect')
+                return
+            if path in effects and effects[path]!=data:
+                raise ValueError('completed publisher produced conflicting effects')
+            effects[path]=data
+        def capture_json(path,value):capture(path,json.dumps(value,indent=2,sort_keys=True).encode())
+        def capture_checkpoint(cfg,selected):
+            if cfg['out']!=config['out']:raise ValueError('completed publisher changed its production namespace')
+            capture_json(paths['state'],raw._published_checkpoint_state(state,selected))
+        try:
+            raw._publish_checkpoint=capture_checkpoint
+            raw.write_json_durable=capture_json;raw.write_bytes_durable=capture
+            raw._publish_supervised_result(continuation,Path(request['out']),config,cursor,operation)
+        finally:
+            raw._publish_checkpoint,raw.write_json_durable,raw.write_bytes_durable=originals
+        cursor.update(next_stage=cursor['next_stage']+1,current_checkpoint=binding(pair[0]['path']))
+        capture_json(paths['cursor'],cursor)
+        if paths['config']not in effects:capture_json(paths['config'],config)
+        for key,path in paths.items():
+            if effects.get(path)!=_bound(published['candidates'][key]).read_bytes():
+                raise ValueError('completed publication differs from the existing shared publisher')
+        value={'schema':CONSUMED,'controller':controller,'request':published['request'],'result':published['result'],
+            'before':published['before'],'after':published['after'],'snapshots':snapshots,
+            'candidates':published['candidates'],'checkpoint':result['checkpoint'],'stage_id':stage['id'],
+            'global_step':published['global_step'],'new_optimizer_updates':updates,
+            'training_receipt':binding(receipt_path),'publication':publication,
+            'cursor_advances_from_registration':0,'whole_recipe_completed':False}
+        out=Path(out)
+        if out.exists():
+            if json.loads(out.read_text())!=value:raise ValueError('completed registration changed its authority')
+        else:write_json_durable(out,value)
+        return value,pair
+
+def consume(config_path,request_ref,result_ref,out,*,controller,verified_checkpoint=None,owned_controller_fd=None):
     """Use the existing publication body, advancing this completed stage once.
 
     Return the same process's verified full checkpoint for subsequent preparation.
@@ -157,8 +276,7 @@ def consume(config_path,request_ref,result_ref,out,*,controller):
     from .native_raw_rounds import _publish_supervised_result,_current_checkpoint,_published_checkpoint_state
     out=Path(out);out.parent.mkdir(parents=True,exist_ok=True)
     config,paths=_controls(config_path);_no_owner(controller);_no_active_operation(paths['config'].parent)
-    with(paths['config'].parent.parent/'controller.lock').open('a')as lease:
-        fcntl.flock(lease,fcntl.LOCK_EX|fcntl.LOCK_NB)
+    with _completed_leases(config_path,owned_controller_fd,production=False):
         if out.exists():
             receipt=json.loads(out.read_text())
             if (receipt.get('schema')!=CONSUMED or receipt['request']!=request_ref
@@ -169,6 +287,9 @@ def consume(config_path,request_ref,result_ref,out,*,controller):
                     or binding(paths['state'])!=receipt['after']['state']):
                 raise ValueError('completed consumption has a later successor; do not rewind')
             from ..train.checkpoint_policy import CheckpointPolicy
+            if verified_checkpoint is not None:
+                _,pair=_verified_completed_pair(request_ref,result_ref,verified_checkpoint)
+                return receipt,pair
             return receipt,(receipt['checkpoint'],CheckpointPolicy.load(_bound(receipt['checkpoint'])))
         intent=out.with_name(out.stem+'-intent.json')
         recovery=json.loads(intent.read_text())if intent.exists()else None
@@ -187,15 +308,12 @@ def consume(config_path,request_ref,result_ref,out,*,controller):
         request,result,continuation,stage=_operation(config,cursor,request_ref,result_ref)
         if binding(state['checkpoint'])['sha256']!=request['parent_checkpoint']['sha256']:
             raise ValueError('completed consumption current production parent changed')
-        verified,pair=verify_result(_bound(request_ref),_bound(result_ref),return_raw_checkpoint=True)
+        verified,pair=_verified_completed_pair(request_ref,result_ref,verified_checkpoint)
         operation_state=_read(verified['state']);saved=pair[1];training=saved['training']
         options=training.get('options')or{}
         receipt_path=Path(verified['checkpoint']['path']).parent/'native-training-receipt.json'
         training_receipt=json.loads(receipt_path.read_text());boundary=training_receipt.get('continuation_boundary')or{}
-        updates=boundary.get('new_optimizer_updates')
-        quantum=config.get('supervised_stage_quantum_updates',{}).get(stage['id'],config.get('supervised_quantum_updates'))
-        if type(quantum)is not int or quantum<=0 or updates!=quantum:
-            raise ValueError('completed supervised result differs from its declared finite update quantum')
+        updates=_qualified_refresh_updates(config,stage,training_receipt,continuation)
         if (options.get('stage_id')!=stage['id'] or training_receipt.get('stage_id')!=stage['id']
                 or training_receipt.get('checkpoint',{}).get('sha256')!=pair[0]['sha256']
                 or training_receipt.get('continuation',{}).get('checkpoint_sha256')!=request['parent_checkpoint']['sha256']
@@ -300,7 +418,7 @@ def _stable(plan):
     return _stable_handoff_plan(plan)
 
 
-def _future_config(config,recipe_reference,recipe,checkpoint,lineage):
+def _future_config(config,recipe_reference,recipe,checkpoint,lineage,*,declaration=None,plan_reference=None):
     from .native_supervised import continuation_config,bind_recipe_lineage
     from .native_raw_rounds import _supervised_quantum
     foundation=next(stage for stage in recipe['stages']if stage['id']==config['production_stage'])
@@ -319,7 +437,43 @@ def _future_config(config,recipe_reference,recipe,checkpoint,lineage):
         future['seed_trainer_parameters']['resident_data_directory']=directory
     else:future.pop('resident_data_directory',None)
     bind_recipe_lineage(future,lineage)
+    if declaration is not None:
+        from .native_rounds import configure_provider
+        from .native_raw_rounds import _scheduling_controls
+        # This is a closed completed-request boundary, not an in-flight
+        # collection. Bind the new actor command/environment/inventory together.
+        from .production import actor_runtime_configuration
+        protected_fields=('cases','runtime','task_source','source_admission')
+        protected={key:copy.deepcopy(future[key])for key in protected_fields if key in future}
+        future.update(actor_runtime_configuration(declaration['actor_runtime']))
+        configure_provider(future,declaration,{},config['bootstrap_binding'],Path(config['out']).parent/'config.json',write=False)
+        for key in protected_fields:
+            if key in protected:future[key]=protected[key]
+            else:future.pop(key,None)
+        _scheduling_controls(future,declaration,_bound(plan_reference),{},pending=True)
+        future.pop('runtime_handoff',None)
     return future
+
+
+def _future_global(reference,old,role,recipe,model_id,package):
+    target=_read(reference)
+    old_rows={row['model']:row for row in old['models']}
+    rows={row['model']:row for row in target['models']}
+    if (len(rows)!=len(target['models'])or set(rows)!=set(old_rows)
+            or target.get('owned_models')!=old.get('owned_models')):
+        raise ValueError('completed runtime transition changed the owned student cohort')
+    for name,row in rows.items():
+        previous=old_rows[name]
+        if row.get('handoff_requirement',{}).get('model_id')!=previous.get('handoff_requirement',{}).get('model_id'):
+            raise ValueError('completed runtime transition substituted a student/base identity')
+    selected=rows[role]
+    if (selected['production_recipe']!=recipe
+            or selected.get('handoff_requirement',{}).get('model_id')!=model_id
+            or selected.get('actor_runtime')!=str(Path(package).resolve().parents[2])
+            or selected.get('production_stage')!=old_rows[role].get('production_stage')
+            or 'completed_supervised_adaptation'in selected):
+        raise ValueError('completed runtime transition lost its exact future owned invocation')
+    return target,selected
 
 
 def _closed_withdrawals(training,frames,old_plan):
@@ -346,7 +500,13 @@ def _closed_withdrawals(training,frames,old_plan):
     return verified
 
 
-def prepare(config_path,plan_path,role,recipe_reference,consumption,verified_checkpoint,out,*,package):
+def prepare(config_path,plan_path,role,recipe_reference,consumption,verified_checkpoint,out,*,package,old_package=None,future_global_plan=None,owned_controller_fd=None):
+    with _completed_leases(config_path,owned_controller_fd):
+        return _prepare(config_path,plan_path,role,recipe_reference,consumption,verified_checkpoint,out,
+                        package=package,old_package=old_package,future_global_plan=future_global_plan)
+
+
+def _prepare(config_path,plan_path,role,recipe_reference,consumption,verified_checkpoint,out,*,package,old_package=None,future_global_plan=None):
     """Validate the future recipe using this invocation's sole verified saved object."""
     from .native_raw_handoff import _recipe_plan
     from ..train.recipe import lineage_handoff,native_recipe_binding,native_recipe_provenance
@@ -365,7 +525,9 @@ def prepare(config_path,plan_path,role,recipe_reference,consumption,verified_che
             or saved['model_config']['architecture']+':'+saved['model_config']['base_inventory_sha256']!=config['raw_model_id']):
         raise ValueError('future adaptation saved recipe/model lineage changed')
     package=Path(package).resolve();code=code_inventory(package)
-    old_plan=_recipe_plan(Path(config['production_recipe']),'cuda');old_plan.update(code=code,recipe_sha256=lineage)
+    old_package=Path(old_package).resolve()if old_package is not None else package
+    old_code=code_inventory(old_package)
+    old_plan=_recipe_plan(Path(config['production_recipe']),'cuda');old_plan.update(code=old_code,recipe_sha256=lineage)
     proposed=_recipe_plan(_bound(recipe_reference),'cuda');proposed['code']=code
     frames=collect_sft_progress(training,borrow_frames=True)
     started=[stage['id']for stage in old_plan['recipe']['stages']if stage['id']in frames]
@@ -374,18 +536,29 @@ def prepare(config_path,plan_path,role,recipe_reference,consumption,verified_che
         raise ValueError('future adaptation lost its actual saved stage inventory')
     closed_withdrawals=_closed_withdrawals(training,frames,old_plan)
     out=Path(out);out.parent.mkdir(parents=True,exist_ok=True)
-    transitioned=lineage_handoff(old_plan,proposed,package,package,out.parent/'plan.json',
+    transitioned=lineage_handoff(old_plan,proposed,old_package,package,out.parent/'plan.json',
         out=out.parent,dry_run=True,started_stage_ids=started)
     if transitioned['recipe_sha256']!=lineage:raise ValueError('future adaptation reset its recipe lineage')
     # This seam changes future data/operational policy, never numerical code.
     if transitioned['code']!=code:raise ValueError('future adaptation changed its numerical package')
-    future=_future_config(config,recipe_reference,proposed['recipe'],reference,lineage)
+    declaration=None
+    if future_global_plan is not None:
+        _,declaration=_future_global(future_global_plan,json.loads(Path(plan_path).read_text()),role,
+                                    recipe_reference,config['raw_model_id'],package)
+    elif old_code!=code:
+        # A changed package can be inspected/qualified before activation, but
+        # configuration must have an explicit future invocation contract.
+        declaration=None
+    future=_future_config(config,recipe_reference,proposed['recipe'],reference,lineage,
+                          declaration=declaration,plan_reference=future_global_plan)
     for name,value in(('old-plan.json',old_plan),('future-plan.json',proposed),('lineage-handoff.json',transitioned),('future-config.json',future)):
         write_json_durable(out.parent/name,value)
     old_config=out.parent/'original-config.json';write_bytes_durable(old_config,Path(config_path).read_bytes())
     old_global=out.parent/'original-global-plan.json';write_bytes_durable(old_global,Path(plan_path).read_bytes())
     value={'schema':SCHEMA_RAW if consumed['schema']==CONSUMED_RAW else SCHEMA,'role':role,'consumption':consumption,'checkpoint':reference,
         'global_step':consumed['global_step'],'package':str(package),'code':code,'started_stage_ids':started,
+        'old_package':str(old_package),'old_code':old_code,'fresh_runtime_qualification_required':old_code!=code,
+        'future_global_plan':future_global_plan,
         'closed_prior_withdrawals':closed_withdrawals,'old_plan':binding(out.parent/'old-plan.json'),'future_plan':binding(out.parent/'future-plan.json'),
         'lineage_handoff':binding(out.parent/'lineage-handoff.json'),'future_config':binding(out.parent/'future-config.json'),
         'old_config':binding(old_config),'old_global_plan':binding(old_global),'recipe':recipe_reference,
@@ -437,15 +610,16 @@ def verify(reference):
         if consumed['after']['state']!=consumed['before']['state'] or consumed['after']['config']!=consumed['before']['config']:
             raise ValueError('completed raw consumption rewrote its production result/config')
     else:
-        request,result,_,stage=_operation(config,old_cursor,consumed['request'],consumed['result'])
+        operation_config=_read(consumed['snapshots']['config'])if consumed.get('publication')else config
+        request,result,_,stage=_operation(operation_config,old_cursor,consumed['request'],consumed['result'])
     if (stage['id']!=consumed['stage_id'] or result['checkpoint']!=value['checkpoint']
             or training_receipt.get('checkpoint',{}).get('sha256')!=value['checkpoint']['sha256']
             or training_receipt.get('continuation',{}).get('checkpoint_sha256')!=request['parent_checkpoint']['sha256']
             or training_receipt.get('continuation_boundary',{}).get('new_optimizer_updates')!=consumed['new_optimizer_updates']):
         raise ValueError('completed adaptation changed its exact consumed result/receipt')
-    package=Path(value['package']);old=_read(value['old_plan']);future=_read(value['future_plan'])
+    package=Path(value['package']);old_package=Path(value.get('old_package',value['package']));old_code=value.get('old_code',value['code']);old=_read(value['old_plan']);future=_read(value['future_plan'])
     from .native_raw_handoff import _recipe_plan
-    expected_old=_recipe_plan(Path(config['production_recipe']),'cuda');expected_old.update(code=value['code'],recipe_sha256=value['lineage'])
+    expected_old=_recipe_plan(Path(config['production_recipe']),'cuda');expected_old.update(code=old_code,recipe_sha256=value['lineage'])
     expected_future=_recipe_plan(_bound(value['recipe']),'cuda');expected_future['code']=value['code']
     if old!=expected_old or future!=expected_future:raise ValueError('completed adaptation changed its exact old/future recipe plans')
     declared=[ref for roles in old['stage_inputs'].values()for key,ref in roles.items()if key=='withdrawn_native_graphs']
@@ -455,24 +629,33 @@ def verify(reference):
         if len(_read(item['proof'])['rows'])!=item['rows']:raise ValueError('completed adaptation prior withdrawal count changed')
     recorded=set(training_receipt.get('mandatory_sft',{}).get('stages',{}))&{stage['id']for stage in old['recipe']['stages']}
     if set(value['started_stage_ids'])!=recorded:raise ValueError('completed adaptation changed actual started stages')
-    if code_inventory(package)!=value['code']or old['code']!=value['code']or future['code']!=value['code']:
+    if (code_inventory(package)!=value['code']or code_inventory(old_package)!=old_code
+            or old['code']!=old_code or future['code']!=value['code']
+            or value.get('fresh_runtime_qualification_required',False)!=(old_code!=value['code'])):
         raise ValueError('completed adaptation package changed')
-    reproduced=lineage_handoff(old,future,package,package,Path(reference['path']).parent/'recheck.json',
+    reproduced=lineage_handoff(old,future,old_package,package,Path(reference['path']).parent/'recheck.json',
         out=Path(reference['path']).parent,dry_run=True,started_stage_ids=value['started_stage_ids'])
     if _stable(reproduced)!=_stable(_read(value['lineage_handoff'])):
         raise ValueError('completed adaptation future policy differs from shared lineage verifier')
     future_config=_read(value['future_config'])
-    expected_config=_future_config(config,value['recipe'],future['recipe'],value['checkpoint'],value['lineage'])
+    original_global=_read(value['old_global_plan'])
+    declaration=None
+    if value.get('future_global_plan')is not None:
+        _,declaration=_future_global(value['future_global_plan'],original_global,value['role'],
+                                    value['recipe'],config['raw_model_id'],package)
+    expected_config=_future_config(config,value['recipe'],future['recipe'],value['checkpoint'],value['lineage'],
+                                   declaration=declaration,plan_reference=value.get('future_global_plan'))
     if future_config!=expected_config:raise ValueError('completed adaptation changed its declared future invocation')
     if (binding(future_config['production_recipe'])!=value['recipe']
             or future_config['raw_model_id']!=config['raw_model_id']
             or future_config['bootstrap_binding']!=config['bootstrap_binding']
-            or future_config.get('runtime_handoff')!=config.get('runtime_handoff')):
+            or (declaration is None and future_config.get('runtime_handoff')!=config.get('runtime_handoff'))
+            or (declaration is not None and 'runtime_handoff'in future_config)):
         raise ValueError('completed adaptation changed its original runtime/student authority')
     original_global=_read(value['old_global_plan'])
     declaration=next((item for item in original_global['models']if item['model']==value['role']),None)
     authority=config.get('runtime_binding',config.get('bootstrap_binding',{}))
-    if (declaration is None or declaration['production_recipe']!=binding(config['production_recipe'])
+    if (declaration is None or declaration['production_recipe']!=binding((_read(consumed['snapshots']['config'])if consumed.get('publication')else config)['production_recipe'])
             or authority.get('plan_sha256')!=value['old_global_plan']['sha256']):
         raise ValueError('completed adaptation old plan differs from its actual controller authority')
     return value
@@ -485,11 +668,64 @@ def verify_declaration(reference,declaration):
     matches=[row for row in old_global['models']if row['model']==proof['role']]
     if len(matches)!=1:
         raise ValueError('completed adaptation lost its exact owned declaration')
-    expected={**matches[0],'production_recipe':proof['recipe'],
+    base=matches[0]
+    if proof.get('future_global_plan')is not None:
+        _,base=_future_global(proof['future_global_plan'],old_global,proof['role'],proof['recipe'],
+                              _read(proof['old_config'])['raw_model_id'],proof['package'])
+    expected={**base,'production_recipe':proof['recipe'],
         'completed_supervised_adaptation':reference}
     if declaration!=expected:
         raise ValueError('completed adaptation declaration changed outside its owned recipe transition')
     return proof
+
+
+def dependencies(reference):
+    """Enumerate immutable proof replay inputs, retaining mutable controls as history.
+
+    Before/after logical paths and scheduling selectors are authenticated through
+    the proof's immutable snapshots, not dereferenced after later publication.
+    """
+    proof=verify(reference);found={};pending=[];seen=set()
+    def add(ref):
+        path=_bound(ref)
+        if 'bytes'in ref and path.stat().st_size!=ref['bytes']:
+            raise ValueError('completed dependency byte binding changed')
+        identity=(str(path),ref['sha256'])
+        if identity not in found:
+            found[identity]={**binding(path),'bytes':path.stat().st_size}
+            if path.suffix=='.json':pending.append((path,json.loads(path.read_text())))
+    add(reference);add(binding(__file__))
+    for path_name,code_name in(('package','code'),('old_package','old_code')):
+        package=Path(proof.get(path_name,proof['package']))
+        inventory=proof.get(code_name,proof['code'])
+        if code_inventory(package)!=inventory:raise ValueError('completed dependency package changed')
+        for relative,digest in inventory.items():add({'path':str(package/relative),'sha256':digest})
+    def walk(value,*,document=False):
+        if isinstance(value,dict):
+            if isinstance(value.get('path'),str)and isinstance(value.get('sha256'),str):
+                add(value);return
+            historical=set()
+            if document:
+                schema=value.get('schema')
+                if schema in(SCHEMA,SCHEMA_RAW):historical.add('controls')
+                if schema in(CONSUMED,CONSUMED_RAW,'natlang.completed-worker-normal-publication-commit/1'):
+                    historical.update(('before','after'))
+                if schema=='natlang.native-raw-runtime-handoff/1':historical.add('sources')
+                if value.get('native_state')is True:
+                    historical.update(('supervised_quantum_control','supervised_stage_quantum_control'))
+            for key,item in value.items():
+                if key not in historical:walk(item)
+        elif isinstance(value,list):
+            for item in value:walk(item)
+    while pending:
+        path,value=pending.pop()
+        if str(path)in seen:continue
+        seen.add(str(path));walk(value,document=True)
+        # Plans additionally bind files by a path-to-digest map.
+        if isinstance(value,dict):
+            for name,digest in(value.get('inputs')or{}).items():
+                if isinstance(name,str)and isinstance(digest,str):add({'path':name,'sha256':digest})
+    return {ref['path']:ref for ref in found.values()}
 
 
 def _install_resident_plan(proof,config):
@@ -552,13 +788,18 @@ def install_resident_plan(reference,config):
     return _install_resident_plan(verify(reference),config)
 
 
-def configure(plan_path,declaration,bootstrap,config_path):
+def configure(plan_path,declaration,bootstrap,config_path,*,owned_controller_fd=None):
+    with _completed_leases(config_path,owned_controller_fd):
+        return _configure(plan_path,declaration,bootstrap,config_path)
+
+
+def _configure(plan_path,declaration,bootstrap,config_path):
     """Apply only the proof-bound future invocation at the consumed boundary."""
     from .native_supervised import bind_recipe_lineage
     from .native_bootstrap_metadata import save
     reference=declaration['completed_supervised_adaptation'];proof=verify_declaration(reference,declaration)
     old_global=_read(proof['old_global_plan']);actual=json.loads(Path(plan_path).read_text())
-    expected=copy.deepcopy(old_global);role=proof['role']
+    expected=copy.deepcopy(_read(proof['future_global_plan'])if proof.get('future_global_plan')else old_global);role=proof['role']
     row=next(item for item in expected['models']if item['model']==role)
     row.update(production_recipe=proof['recipe'],completed_supervised_adaptation=reference)
     if actual!=expected or next(item for item in actual['models']if item['model']==role)!=declaration:
@@ -566,12 +807,18 @@ def configure(plan_path,declaration,bootstrap,config_path):
     path=Path(config_path);prior=json.loads(path.read_text());old=_read(proof['old_config']);future=_read(proof['future_config'])
     if bootstrap!=old['bootstrap_binding']['handoff']or path.resolve()!=Path(proof['controls']['config']['path']).resolve():
         raise ValueError('completed adaptation belongs to another controller/bootstrap')
+    if proof.get('fresh_runtime_qualification_required')and proof.get('future_global_plan')is None:
+        raise ValueError('completed runtime activation requires its explicit future provider declaration')
     future['completed_supervised_adaptation']=reference
     future['runtime_binding']={'plan_sha256':binding(plan_path)['sha256'],'handoff':bootstrap}
     for key in('supervised_quantum_control','supervised_stage_quantum_control'):
         if key in future:
-            if (future[key].get('plan',{}).get('sha256')!=proof['old_global_plan']['sha256']
-                    or Path(future[key]['plan']['path']).resolve()!=Path(plan_path).resolve()):
+            declared=future[key].get('plan',{})
+            old_authority=(declared.get('sha256')==proof['old_global_plan']['sha256']
+                           and Path(declared['path']).resolve()==Path(plan_path).resolve())
+            new_authority=(proof.get('future_global_plan')is not None
+                           and declared==proof['future_global_plan'])
+            if not(old_authority or new_authority):
                 raise ValueError('completed adaptation changed its declared scheduling authority')
             future[key]={**future[key],'plan':binding(plan_path)}
     if prior==future:
