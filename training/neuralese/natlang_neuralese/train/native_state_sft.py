@@ -322,12 +322,12 @@ def native_training_update(model, optimizer, batch, *, backend=None, checkpoint_
                     loss, details = packed_graph_loss(model, batch,
                         checkpoint_layers=checkpoint_layers, chunk_tokens=chunk_tokens,
                         objective=objective, share_causal_prefixes=getattr(model, 'share_causal_prefixes', False),
-                        collect_accuracy=False)
+                        collect_accuracy=False, allow_communication_prefixes=backend is None)
             else:
                 loss, details = packed_graph_loss(model, batch,
                     checkpoint_layers=checkpoint_layers, chunk_tokens=chunk_tokens,
                     objective=objective, share_causal_prefixes=getattr(model, 'share_causal_prefixes', False),
-                    collect_accuracy=False)
+                    collect_accuracy=False, allow_communication_prefixes=backend is None)
             loss.backward()
             cotangents.finish()
         if optimizer.latent is not None:
@@ -419,12 +419,17 @@ def _native_ce_sum(model, hidden, query_ids, target_ids, weights, *, chunk_token
 
 
 def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=128, objective=None,
-                      share_causal_prefixes=False, collect_accuracy=True):
+                      share_causal_prefixes=False, collect_accuracy=True, allow_communication_prefixes=True):
     """One backbone graph forward for a minibatch; mean the original per-graph losses."""
     if objective is None and any(not any(weight>0 for weight in example.target_weights) for example in examples):
         raise ValueError('native graph has no ordinary CE targets; its declared offline/policy objective is required')
     from .native_prefix_packing import pack_causal_prefixes
-    shared = pack_causal_prefixes(examples) if share_causal_prefixes and objective is None else None
+    # Physical raw-context aliasing is qualified for FP32 activations only.
+    # BF16 needs per-occurrence adjoint casts; retain its original episode rows.
+    allow_communication = (share_causal_prefixes and objective is None and allow_communication_prefixes
+                           and model.port.embedding_weight.dtype in (torch.float32,torch.float64))
+    shared = (pack_causal_prefixes(examples, allow_communication=allow_communication)
+              if share_causal_prefixes and objective is None else None)
     if shared is None:
         plan, target_weights, ownership, external_name_maps = pack_native_graphs(examples)
         physical_rows = tuple(tuple(range(plan.offsets[first],

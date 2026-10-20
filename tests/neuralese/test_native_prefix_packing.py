@@ -63,12 +63,19 @@ def test_prefix_logits_loss_and_all_gradients_match_disjoint_packing(family,chec
             torch.testing.assert_close(parameter.grad,other.grad,atol=3e-6,rtol=2e-4,msg=name)
 
 
-def test_authenticated_producing_or_imported_graphs_keep_existing_layout():
+def test_authenticated_producing_or_imported_graphs_alias_only_initial_raw_context():
     rows=examples()
     rows[0].plan=compile_graph([Invocation('writer',(2,3,4),producing=((1,3),)),
         Invocation('reader',(5,6),imports=(ImportSpan(0,'writer',1,3),))])
-    assert pack_causal_prefixes(rows) is None
-    rows[0].plan=compile_graph([Invocation('writer',(2,3,4),producing=((1,3),))])
+    for selected in (rows, [*rows[1:],rows[0]]):
+        plan,maps=pack_causal_prefixes(selected)
+        for row,mapping in zip(selected,maps):
+            for old,new in enumerate(mapping):
+                assert plan.producing[new]==row.plan.producing[old]
+                assert plan.history(new)==tuple(mapping[index]for index in row.plan.history(old))
+    external=compile_graph([Invocation('reader',(5,6),imports=(ImportSpan(0,'external',0,2),))],
+                           external_sizes={'external':2})
+    rows[0].plan=external
     assert pack_causal_prefixes(rows) is None
 
 
