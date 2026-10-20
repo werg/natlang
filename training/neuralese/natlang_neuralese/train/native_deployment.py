@@ -145,6 +145,9 @@ def prepare_role_scheduler(plans, controls, curriculum_path, provider_path, out,
         adoptions.append({'role':name,'previous':plans[name],'successor':source_plans[name],
             'owned_declaration_unchanged':True,'applied':False})
     snapshot=copy.deepcopy(semantic);snapshot['snapshot_preparation']=True
+    # Frozen preparation requires the full declared VAE epoch. Adaptive
+    # handback quanta apply after actual descendant ownership is adopted.
+    snapshot.pop('adaptive_refresh',None)
     snapshot['inherit_optimizer']=True
     curriculum=out/'snapshot-curriculum.json';write_json_durable(curriculum,snapshot)
     full=out/'joint-curriculum.json';write_json_durable(full,semantic)
@@ -169,6 +172,7 @@ def prepare_role_scheduler(plans, controls, curriculum_path, provider_path, out,
         'preparation_curriculum':binding(curriculum),
         'handoff_lease_seconds':handoff_lease_seconds})
     receipt={'schema':'natlang.native-role-scheduler-preparation/1',
+        'operational_inputs':[binding(__file__)],
         'controller':binding(controller),'relay':binding(relay),
         'source_plan_successions':adoptions,'contract':common,
         'inputs':{'plans':plans,'controls':controls,'curriculum':binding(curriculum_path),

@@ -575,3 +575,44 @@ def test_new_frozen_work_refreshes_vae_after_real_descendant_sgd_and_resumes_exa
     repeated=stage.run(path,manifest,tmp_path/'frozen-next',resume=checkpoint,refresh_participants=True,device='cpu')
     assert repeated['step']==3 and repeated['preparation_complete']
     equal_tree(CheckpointPolicy.load(checkpoint)['training']['exposure'],saved['training']['exposure'])
+
+
+def test_generated_snapshot_full_multirow_vae_epoch_resumes_after_quantum(tmp_path,monkeypatch):
+    from test_native_role_scheduler_deployment import source
+    from natlang_neuralese.train.native_deployment import prepare_role_scheduler,binding
+    metadata=tmp_path/'metadata';metadata.mkdir()
+    plans,controls,curriculum,provider,states,runtime=source(metadata)
+    declared=json.loads(curriculum.read_text());declared['adaptive_refresh']={'updates_per_phase':1}
+    curriculum.write_text(json.dumps(declared))
+    produced=prepare_role_scheduler(plans,controls,curriculum,provider,metadata/'prepared',
+        raw_states=states,runtime=runtime,rl_bootstrap=binding(metadata/'rl-bootstrap.json'),handoff_lease_seconds=180)
+    controller=json.loads(Path(produced['controller']['path']).read_text())
+    snapshot=json.loads(Path(controller['curriculum']).read_text())
+    assert 'adaptive_refresh'not in snapshot
+    actual=tmp_path/'actual';actual.mkdir()
+    path,manifest,config,row=_fixture(actual,monkeypatch)
+    train=Path(config['pairs']['path']);rows=[]
+    for i in range(3):
+        value=copy.deepcopy(row);value['id']='train:'+str(i);rows.append(value)
+    train.write_text(''.join(json.dumps(value)+'\n'for value in rows))
+    config['pairs']['sha256']=sha256_file_hex(train)
+    config['snapshot_preparation']=snapshot['snapshot_preparation']
+    if 'adaptive_refresh'in snapshot:config['adaptive_refresh']=snapshot['adaptive_refresh']
+    config['inherit_optimizer']=snapshot['inherit_optimizer']
+    monkeypatch.setattr(stage,'_qualified_snapshot',lambda name,binding:binding)
+    from natlang_neuralese.train import native_continuation
+    monkeypatch.setattr(native_continuation,'qualified_refresh_config',lambda *a,**k:(config,[]))
+    path.write_text(json.dumps(config));torch.manual_seed(314)
+    full=stage.run(path,manifest,actual/'full',device='cpu')
+    torch.manual_seed(314)
+    paused=stage.run(path,manifest,actual/'paused',device='cpu',max_updates=1)
+    assert paused['step']==1 and not paused['preparation_complete']
+    resumed=stage.run(path,manifest,actual/'paused',device='cpu',resume=actual/'paused/checkpoint.pt')
+    assert full['step']==resumed['step']==3 and full['preparation_complete'] and resumed['preparation_complete']
+    assert not resumed['completed'] and not resumed['production_ready']
+    assert resumed['semantic_obligations']['remaining_pair_visits']==6
+    a=CheckpointPolicy.load(actual/'full/checkpoint.pt');b=CheckpointPolicy.load(actual/'paused/checkpoint.pt')
+    _assert_same(a['vae_optimizer'],b['vae_optimizer']);_assert_same(a['vae_state'],b['vae_state'])
+    _assert_same(a['training']['rng'],b['training']['rng'])
+    _assert_same(a['participants'],b['participants'])
+    assert not any(b['training'].get('model_updates',{}).values())

@@ -320,3 +320,21 @@ def test_explicit_new_work_builder_resumes_actual_bound_frozen_checkpoint(tmp_pa
     assert '--refresh-participants'in command
     assert result['inputs']['snapshot_parent']==binding(completion)
     assert result['model_allocations']==result['checkpoint_decodes']==0
+
+
+def test_snapshot_owns_full_vae_epoch_and_keeps_later_adaptive_quanta(tmp_path):
+    plans,controls,curriculum,provider,states,runtime=source(tmp_path)
+    original=json.loads(curriculum.read_text());original['adaptive_refresh']={'updates_per_phase':16}
+    original['checkpoint_seconds']=3600.
+    write(curriculum,original)
+    result=prepare_role_scheduler(plans,controls,curriculum,provider,tmp_path/'prepared',
+        raw_states=states,runtime=runtime,rl_bootstrap=binding(tmp_path/'rl-bootstrap.json'),handoff_lease_seconds=180)
+    controller=json.loads(Path(result['controller']['path']).read_text())
+    snapshot=json.loads(Path(controller['curriculum']).read_text())
+    full=json.loads(Path(controller['snapshot_successor']['curriculum']['path']).read_text())
+    assert 'adaptive_refresh'not in snapshot
+    assert full==original and full['adaptive_refresh']['updates_per_phase']==16
+    assert snapshot=={**{k:v for k,v in full.items()if k!='adaptive_refresh'},
+        'snapshot_preparation':True,'inherit_optimizer':True}
+    from natlang_neuralese.train import native_deployment
+    assert result['operational_inputs']==[binding(native_deployment.__file__)]
