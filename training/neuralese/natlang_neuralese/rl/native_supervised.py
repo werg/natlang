@@ -159,8 +159,9 @@ def continuation_config(config,stage,*,checkpoint,adapter,out):
     parameters=effective_stage_parameters(stage,[],recipe)
     parameters={key:value for key,value in parameters.items() if value is not None}
     if adapter is not None:parameters.pop('communication_foundation',None)
-    if stage['kind']!='native_offline_preference':
-        parameters.pop('memory_qualification',None)  # ordinary CE uses its restored-parent qualification
+    # Keep the recipe's explicit capacity requests for ordinary SFT as well as
+    # preference training. Restoring optimizer progress does not restore a
+    # resident capacity certificate for this runtime/hardware/packing.
     if 'native_checkpoint_publication' in config:
         from ..model.native_checkpoint_control import publication_trainer_parameters
         parameters.update(publication_trainer_parameters(config['native_checkpoint_publication']))

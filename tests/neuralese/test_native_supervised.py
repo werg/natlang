@@ -223,7 +223,9 @@ def test_explicit_preference_capacity_survives_emitted_command_and_prepared_requ
             assert json.loads(args.memory_qualification)==qualification
             memory.run_prepared(None,None,source,None,{},args,backend=None,
                 checkpoint_sha256=sha256_file_hex(parent),objective=live_objective)
-        else:assert '--memory-qualification'not in command
+        else:
+            assert '--memory-qualification' in command
+            assert json.loads(command[command.index('--memory-qualification')+1])==qualification
         directory=tmp_path/'job/learner';directory.mkdir(parents=True,exist_ok=True)
         (directory/'checkpoint.pt').write_bytes(b'published update fixture')
         (directory/'report.json').write_text(json.dumps({'completed':True,'numerics_ok':True,'mandatory_sft':{'complete':True}}))
