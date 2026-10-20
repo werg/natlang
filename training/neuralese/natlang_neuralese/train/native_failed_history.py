@@ -79,9 +79,15 @@ def row_mask_record(row,tokenizer,*,source_sha256,source_evidence):
         raise ValueError('failed-history decoder differs from actual row tokenizer')
     spans,evidence=_mask(row,tokenizer)
     if not spans:return None
+    return mask_record(row,source_sha256=source_sha256,source_evidence=source_evidence,
+                       zero_spans=spans,failure_evidence=evidence)
+
+
+def mask_record(row,*,source_sha256,source_evidence,zero_spans,failure_evidence):
+    """Pure serialization; the consumer independently verifies every claimed span."""
     return {'source_sha256':source_sha256,'id':row['id'],'split':row['split'],
         'source_groups':row['source_groups'],'tokenizer_fingerprint':row['tokenizer_fingerprint'],
-        'raw_row_sha256':digest(row),'zero_spans':spans,'failure_evidence':evidence,
+        'raw_row_sha256':digest(row),'zero_spans':zero_spans,'failure_evidence':failure_evidence,
         'source_evidence':source_evidence}
 
 

@@ -14,7 +14,7 @@ from natlang_neuralese.common.jsonio import write_json_durable,write_bytes_durab
 from natlang_neuralese.data.native_sources import _jsonl
 from natlang_neuralese.data.text_corpus import tokenizer_fingerprint
 from natlang_neuralese.train.native_failed_history import (
-    SCHEMA,binding,mask_law,row_mask_record,validate_source_evidence,_mask,load_manifest)
+    SCHEMA,binding,mask_law,mask_record,validate_source_evidence,_mask,load_manifest)
 
 
 def capture_evidence(graph,raw,line_sha256):
@@ -45,6 +45,7 @@ def build(sources,*,tokenizer,out,capture_overrides=()):
         item=binding(path)
         if item['sha256']in overrides:raise ValueError('ambiguous capture relocation')
         overrides[item['sha256']]=Path(path)
+    fingerprint=tokenizer_fingerprint(tokenizer)
     candidates=[];source_bindings=[];seen=set();counts={'rows':0,'affected_rows':0,'zeroed_tokens':0}
     for path in sources:
         path=Path(path).resolve(strict=True);source=binding(path)
@@ -57,7 +58,9 @@ def build(sources,*,tokenizer,out,capture_overrides=()):
             conversion=graph.get('conversion')or{}
             if conversion.get('role_interpretation')not in ('ordinary-text','whole-trajectory-chat-roles'):
                 continue
-            spans,_=_mask(graph,tokenizer)
+            if graph.get('tokenizer_fingerprint')!=fingerprint:
+                raise ValueError('failed-history decoder differs from actual source row tokenizer')
+            spans,failure_evidence=_mask(graph,tokenizer)
             if not spans:continue
             if conversion.get('role_interpretation')=='ordinary-text':
                 teacher=conversion.get('teacher_source')or{}
@@ -70,7 +73,8 @@ def build(sources,*,tokenizer,out,capture_overrides=()):
                     'supervision_policy_sha256':digest(conversion.get('supervision_policy')or{}),
                     'source_text_sha256':conversion.get('source_text_sha256')}
                 validate_source_evidence(graph,evidence)
-            record=row_mask_record(graph,tokenizer,source_sha256=source['sha256'],source_evidence=evidence)
+            record=mask_record(graph,source_sha256=source['sha256'],source_evidence=evidence,
+                zero_spans=spans,failure_evidence=failure_evidence)
             # Never retain full token/weight arrays across the streamed corpus.
             candidates.append({'graph':{'conversion':conversion},'record':record})
         if binding(path)!=source:raise ValueError('failed-history TRAIN source changed during preparation')
@@ -104,8 +108,7 @@ def build(sources,*,tokenizer,out,capture_overrides=()):
     out.mkdir(parents=True);decoder=out/'tokenizer';tokenizer.save_pretrained(decoder)
     from transformers import AutoTokenizer
     restored=AutoTokenizer.from_pretrained(decoder,local_files_only=True,trust_remote_code=False)
-    fingerprint=tokenizer_fingerprint(tokenizer)
-    if tokenizer_fingerprint(restored)!=fingerprint:raise ValueError('saved decoder changes tokenizer identity')
+    if tokenizer_fingerprint(tokenizer)!=fingerprint or tokenizer_fingerprint(restored)!=fingerprint:raise ValueError('saved decoder changes tokenizer identity')
     files=[]
     for path in sorted(decoder.iterdir()):
         if not path.is_file():raise ValueError('tokenizer snapshot must contain explicit regular files')

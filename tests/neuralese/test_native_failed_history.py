@@ -233,3 +233,30 @@ def test_append_masks_to_existing_policy_without_rescanning_original_sources(tmp
     assert main(['--prior-policy',str(prior),'--failed-history-mask-manifest',reference['path'],'--out',str(out)])==0
     continued=json.loads(out.read_text())
     assert continued['sources']==original['sources']and continued['failed_history_masks']==[reference]
+
+
+def test_stream_preparation_uses_one_derivation_and_constant_fingerprint_work(tmp_path,monkeypatch):
+    from scripts.neuralese_data import build_native_failed_history_masks as producer
+    from natlang_neuralese.train.native_failed_history import row_mask_record
+    graph,path,reference,_,_=fixture(tmp_path)
+    from transformers import AutoTokenizer
+    tokenizer=AutoTokenizer.from_pretrained(tmp_path/'original-tokenizer',local_files_only=True)
+    graph2=copy.deepcopy(graph);graph2['id']='second-earned-row'
+    path.write_text(json.dumps(graph)+'\n'+json.dumps(graph2)+'\n')
+    fingerprint=producer.tokenizer_fingerprint;derive=producer._mask;calls={'fingerprint':0,'mask':0}
+    def measured_fingerprint(tokenizer):calls['fingerprint']+=1;return fingerprint(tokenizer)
+    def measured_mask(row,tokenizer):calls['mask']+=1;return derive(row,tokenizer)
+    monkeypatch.setattr(producer,'tokenizer_fingerprint',measured_fingerprint)
+    monkeypatch.setattr(producer,'_mask',measured_mask)
+    out=tmp_path/'optimized';actual,counts=producer.build([path],tokenizer=tokenizer,out=out)
+    value=load_manifest(actual)[0]
+    assert calls=={'fingerprint':3,'mask':2}and counts['affected_rows']==2
+    # Exact former per-row path is the reference, with unchanged full source binding.
+    for row,record in zip((graph,graph2),value['rows']):
+        expected=row_mask_record(row,tokenizer,source_sha256=binding(path)['sha256'],
+            source_evidence=record['source_evidence'])
+        assert record==expected
+    bad=copy.deepcopy(graph);bad['tokenizer_fingerprint']='a'*64
+    path.write_text(json.dumps(bad)+'\n')
+    with pytest.raises(ValueError,match='actual source row tokenizer'):
+        producer.build([path],tokenizer=tokenizer,out=tmp_path/'bad-fingerprint')

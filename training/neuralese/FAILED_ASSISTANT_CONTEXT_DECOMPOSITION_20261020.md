@@ -83,3 +83,10 @@ Fresh corrected static views and same-ID manifests are separate provisions:
 new conversions use the reviewed mask flag, while affected old rows receive
 only a declared future objective correction. Neither provision proves a held
 behavioral improvement before an actual subsequent evaluation.
+
+Preparation reuses one exact tokenizer fingerprint per owned producer invocation
+and checks every row against it, then checks both the unchanged tokenizer and
+saved snapshot again before publication. Each graph's role/failure derivation
+runs once. The pure record serializer grants no proof or training eligibility:
+the learner still independently rederives every claimed span from bound tokens.
+This avoids repeated full vocabulary hashing and duplicated long-context scans.
