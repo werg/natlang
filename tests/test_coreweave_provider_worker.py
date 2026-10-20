@@ -200,14 +200,15 @@ def test_detached_runner_lock_and_receipt_prevent_duplicate_execution(tmp_path,m
     client=worker.SDKIO({'receipts':str(tmp_path/'receipts'),'sandboxes':{
         'worker':{'runtime':repo,'env':{'NATLANG_REPO':'/another/retired-checkout'}}}})
     command = [sys.executable, '-c', 'import pathlib,time;from natlang_neuralese.common.paths import root;'
+               'from scripts.coreweave.native_controller_continuation import runtime_child_environment;'
+               'assert callable(runtime_child_environment);'
                'assert root("repo")==pathlib.Path('+repr(repo)+');'
                'assert (root("repo")/"scripts/run_bonsai_queue.py").is_file();'
                'p=pathlib.Path('+repr(str(counter))+');'
                "p.open('a').write('once\\n');time.sleep(.2)"]
     (tmp_path / 'worker-spec.json').write_text(json.dumps({'request_id': 'exact-request',
         'runtime': repo, 'kind': 'round', 'argv': command,
-        'env': {**client._runtime_environment('worker'),'CUDA_VISIBLE_DEVICES': '',
-                'PYTHONPATH':repo+'/training/neuralese'}}))
+        'env': {**client._runtime_environment('worker'),'CUDA_VISIBLE_DEVICES': ''}}))
     first = subprocess.Popen([sys.executable, str(script)], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     second = subprocess.Popen([sys.executable, str(script)], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     first_output=first.communicate(timeout=10);second_output=second.communicate(timeout=10)
@@ -369,12 +370,20 @@ def test_dependency_cpu_composition_rejects_incomplete_or_unscoped_bindings(tmp_
         client.dependency_code('worker')
 
 
-def test_dependency_code_without_cpu_composition_keeps_existing_runtime(tmp_path):
-    client=worker.SDKIO({'receipts':str(tmp_path),'sandboxes':{'worker':{'runtime':'/unchanged/runtime'}}})
-    source=Path(worker.__file__).with_name('provider_dependencies.py').read_text()
-    assert client.dependency_code('worker')==("import os;os.environ.update({'NATLANG_REPO': '/unchanged/runtime'});"+'import sys,json;sys.path.insert(0,'+
-        repr('/unchanged/runtime/training/neuralese')+');exec(compile('+repr(source)+
-        ',"provider-dependencies","exec"));')
+def test_dependency_code_imports_selected_package_and_repository_helpers_in_isolated_python(tmp_path,monkeypatch):
+    runtime=tmp_path/'runtime'
+    package=runtime/'training/neuralese/natlang_neuralese';package.mkdir(parents=True)
+    (package/'__init__.py').write_text('SELECTED="actual-package"\n')
+    helper=runtime/'scripts/neuralese_data';helper.mkdir(parents=True)
+    (helper/'probe.py').write_text('SELECTED="actual-repository-helper"\n')
+    client=worker.SDKIO({'receipts':str(tmp_path/'receipts'),'sandboxes':{
+        'worker':{'runtime':str(runtime),'env':{'PYTHONPATH':'/retired/checkout'}}}})
+    original=Path.read_text
+    body='from scripts.neuralese_data.probe import SELECTED;assert SELECTED=="actual-repository-helper";import natlang_neuralese;assert natlang_neuralese.SELECTED=="actual-package"'
+    monkeypatch.setattr(Path,'read_text',lambda path,*a,**kw:body if path.name=='provider_dependencies.py'else original(path,*a,**kw))
+    result=subprocess.run([sys.executable,'-I','-c',client.dependency_code('worker')],
+        cwd=tmp_path,capture_output=True,text=True,env={**os.environ,'PYTHONSAFEPATH':'1'})
+    assert result.returncode==0,result.stderr
 
 
 def test_metadata_environment_precedes_dependency_import_and_cpu_loader(tmp_path,monkeypatch):

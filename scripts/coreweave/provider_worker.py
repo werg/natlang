@@ -31,7 +31,7 @@ p=pathlib.Path(__file__).parent
 lock=(p/'worker.lock').open('a')
 try:fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
 except BlockingIOError:sys.exit(0)
-spec=json.loads((p/'worker-spec.json').read_text());os.environ.update(spec['env']);sys.path.insert(0,spec['runtime']+'/training/neuralese')
+spec=json.loads((p/'worker-spec.json').read_text());os.environ.update(spec['env']);sys.path[:0]=[spec['runtime']+'/training/neuralese',spec['runtime']]
 from natlang_neuralese.train.native_readiness import _launch_child,_recover_child,_RecoveredChild
 from natlang_neuralese.common.jsonio import write_json_durable
 child=None;stop=False
@@ -86,11 +86,16 @@ class SDKIO:
         env = dict(env)
         if resource.get('runtime'):
             env['NATLANG_REPO'] = resource['runtime']
+            env['PYTHONPATH'] = resource['runtime']+'/training/neuralese'+os.pathsep+resource['runtime']
         return env
 
     def _metadata_environment(self, sid):
         env = self._runtime_environment(sid)
-        return 'import os;os.environ.update('+repr(env)+');' if env else ''
+        prefix = 'import os;os.environ.update('+repr(env)+');' if env else ''
+        runtime = self.config['sandboxes'].get(sid, {}).get('runtime')
+        if runtime:
+            prefix += 'import sys;sys.path[:0]='+repr([runtime+'/training/neuralese',runtime])+';'
+        return prefix
 
     def _record_metadata_timing(self, timing):
         try:
@@ -368,8 +373,7 @@ print(json.dumps(value))
         spec = {'request_id': request['request_id'], 'kind': request['kind'], 'runtime': resource['runtime'],
                 'argv': [resource.get('python', 'python'), '-u', '-m', 'natlang_neuralese.rl.native_bridge',
                          '--request', request_path, '--result', result_path],
-                'env': {**self._runtime_environment(sid), 'PYTHONSAFEPATH': '1',
-                        'PYTHONPATH': resource['runtime']+'/training/neuralese'}}
+                'env': {**self._runtime_environment(sid), 'PYTHONSAFEPATH': '1'}}
         if resource.get('worker_entry'):
             entry = checked_binding(resource['worker_entry'])
             code = ('import pathlib,hashlib,json;p=pathlib.Path('+repr(entry['path'])+');'
