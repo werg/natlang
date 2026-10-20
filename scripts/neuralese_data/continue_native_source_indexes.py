@@ -13,7 +13,7 @@ import tempfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'training/neuralese'))
 from natlang_neuralese.common import row_index
-from natlang_neuralese.common.hashing import canonical_json_sha256_hex as digest, sha256_file_hex
+from natlang_neuralese.common.hashing import canonical_json_sha256_hex as digest, sha256_file_hex, sha256_file_hex_cached
 from natlang_neuralese.common.jsonio import write_json_durable
 
 POLICY_FILES = ('data/native_sources.py', 'data/native_graph_schema.py',
@@ -330,7 +330,14 @@ def continue_classified_objective_index(source, old_index, *, old_package, new_p
     """Rekey one explicit authenticated classified witness without reading graph JSON."""
     def binding(path):
         path = Path(path)
-        return {'path': str(path), 'sha256': sha256_file_hex(path), 'bytes': path.stat().st_size}
+        fields = ('st_dev','st_ino','st_size','st_mtime_ns','st_ctime_ns')
+        state = path.stat()
+        before = tuple(getattr(state, k) for k in fields)
+        sha = sha256_file_hex_cached(path, trust_archive_receipt=False)
+        state = path.stat()
+        after = tuple(getattr(state, k) for k in fields)
+        if before != after:raise ValueError('objective continuation file changed while hashing')
+        return {'path': str(path), 'sha256': sha, 'bytes': after[2]}
     def checked(ref):
         actual = binding(ref['path'])
         if actual != ref:

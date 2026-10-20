@@ -80,6 +80,12 @@ def dependency_closure(request, *, namespace='/work/native-production', readonly
         bound(reference)
         load_policy(reference)
 
+    def classification_input(reference):
+        from natlang_neuralese.train.native_classification_continuation import classification_proof_dependencies
+        path = bound(reference) if isinstance(reference, dict) else add(reference)
+        for item in classification_proof_dependencies({'path':str(path),'sha256':sha256_file_hex_cached(path)}):
+            bound(item)
+
     def training_inputs(training):
         if not isinstance(training, dict):
             return
@@ -103,6 +109,8 @@ def dependency_closure(request, *, namespace='/work/native-production', readonly
                 ce_policy_input(supervision)
             if sft_frame_complete(frame):
                 continue  # Completed historical source files are not read by mandatory SFT.
+            selected_classification = (frame.get('options') or {}).get('source_classification_migration')
+            if selected_classification is not None:classification_input(selected_classification)
             identity = frame.get('identity') or {}
             if identity.get('objective_kind') == 'native-offline-pairwise':
                 objective = identity.get('objective')
@@ -275,6 +283,19 @@ def dependency_closure(request, *, namespace='/work/native-production', readonly
         # Exact fields consumed by production.run/native semantic refresh.
         for reference in value.get('operational_inputs', []):
             bound(reference)
+        classification = value.get('source_classification_migration')
+        if classification is not None:classification_input(classification)
+        for parameters in (value.get('trainer_parameters') or {}, value.get('seed_trainer_parameters') or {}):
+            selected = parameters.get('source_classification_migration')
+            if selected is not None:classification_input(selected)
+        for command_name in ('seed_command','learner_command'):
+            command=value.get(command_name) or []
+            for index,argument in enumerate(command):
+                if argument=='--source-classification-migration':
+                    if index+1>=len(command):raise ValueError('provider classification command omitted its value')
+                    classification_input(command[index+1])
+                elif argument.startswith('--source-classification-migration='):
+                    classification_input(argument.split('=',1)[1])
         qualification=value.get('foundation_qualification_request')
         supervision=value.get('ce_supervision_policy')
         if supervision is not None:

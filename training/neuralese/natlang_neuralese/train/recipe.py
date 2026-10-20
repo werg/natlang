@@ -494,6 +494,10 @@ def native_source_dependencies(path, *, parents=()):
 
 
 def _bind_native_source_dependencies(inputs):
+    if 'source_classification_migration' in inputs:
+        from .native_classification_continuation import classification_proof_dependencies
+        inputs['source_classification_migration']['dependencies'] = classification_proof_dependencies(
+            inputs['source_classification_migration'])
     if 'pending_native_sources' in inputs:
         from .native_pending_sources import pending_source_dependencies
         inputs['pending_native_sources']['dependencies'] = pending_source_dependencies(inputs['pending_native_sources']['path'])
@@ -1860,9 +1864,12 @@ def _classification_proof(inputs):
             raise ValueError('classification continuation producer/policy differs')
         # Historical provenance is the original bound source, even when the
         # exact same classifier now lives in a different runtime directory.
-        _checked(historical_producer)
-        for value in (part['source'], part['old_index'], part['new_index'], *part['old_policy'].values()):
-            _checked(value)
+        try:
+            _checked(historical_producer)
+            for value in (part['source'], part['old_index'], part['new_index'], *part['old_policy'].values()):
+                _checked(value)
+        except OSError as error:
+            raise ValueError('classification continuation artifact unavailable') from error
     return proof
 
 
@@ -1876,8 +1883,11 @@ def _classification_proof_extension(old,new):
         return False
     prior,current=_classification_proof(old),_classification_proof(new)
     count=len(prior['indexes'])
-    return (len(current['indexes'])>count and current['indexes'][:count]==prior['indexes']
-            and current['held_indexes']==prior['held_indexes'] and current['held']==prior['held'])
+    if (len(current['indexes'])>count and current['indexes'][:count]==prior['indexes']
+            and current['held_indexes']==prior['held_indexes'] and current['held']==prior['held']):
+        return True
+    from .native_classification_continuation import verify_objective_proof_extension
+    return verify_objective_proof_extension(old, new, prior, current)
 
 
 def _combined_native_source_continuation(old, new):
