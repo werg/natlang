@@ -47,30 +47,37 @@ def extension_policy(old, new):
         raise ValueError('resident CE append changed source-contract semantics')
     train = new['native_graphs']
     from .native_resident import bound
-    path = bound(train)
+    def checked(reference):
+        p = bound(reference)
+        if 'bytes' in reference and (type(reference['bytes']) is not int
+                or reference['bytes'] < 0 or p.stat().st_size != reference['bytes']):
+            raise ValueError('resident CE source binding byte count differs')
+        return p
+    path = checked(train)
     leaves = native_source_dependencies(path)
     if not leaves:
         leaves = [{'path':str(path), 'sha256':train['sha256']}]
-    leaves = list({ref['sha256']:ref for ref in leaves
-                   if Path(ref['path']).suffix != '.json'}.values())
+    leaves = [ref for ref in leaves if Path(ref['path']).suffix != '.json']
     def identities(values):
         result = {}
         for ref in values:
             # Authenticate supplied optional bytes too; do not decode graph rows.
-            p = bound(ref)
+            p = checked(ref)
             key = (str(p), ref['sha256'])
             if key in result:
                 raise ValueError('resident CE contract repeats a source alias')
             result[key] = ref
         return result
     actual, declared = identities(leaves), identities(bc.get('active_sources', []))
-    if actual.keys() != declared.keys() or bc.get('active_source_count') != len({key[1] for key in actual}):
+    if (not declared.keys() <= actual.keys()
+            or {key[1] for key in actual} != {key[1] for key in declared}
+            or bc.get('active_source_count') != len({key[1] for key in actual})):
         raise ValueError('resident CE contract does not bind the complete appended source DAG')
     old_active = identities(ac.get('active_sources', []))
     if not old_active.keys() <= declared.keys():
         raise ValueError('resident CE contract removed prior active source custody')
     inventory = bc.get('inventory', [])
-    if len(inventory) != 1 or bound(inventory[0]) != path or inventory[0]['sha256'] != train['sha256']:
+    if len(inventory) != 1 or checked(inventory[0]) != path or inventory[0]['sha256'] != train['sha256']:
         raise ValueError('resident CE contract inventory differs from its train input')
     held = {ref['sha256'] for ref in b.get('held_sources', []) + b.get('retained_held_sources', [])}
     if held & {key[1] for key in actual}:

@@ -208,3 +208,30 @@ def test_loaded_policy_cannot_disagree_with_resident_plan():
     for binding,reference in [(None,{'sha256':'a'*64}),({'sha256':'a'*64},None),
                               ({'sha256':'a'*64},{'sha256':'b'*64})]:
         with pytest.raises(ValueError,match='loaded CE'):require_loaded_policy(binding,reference)
+
+
+@pytest.mark.parametrize('where',['active_sources','inventory'])
+@pytest.mark.parametrize('byte_count',[True,-1,0,999999])
+def test_complete_contract_optional_byte_counts_are_strict(tmp_path,where,byte_count):
+    paths,old,new=fixture(tmp_path)
+    doc=json.loads(paths['new_ce'].read_text());doc['source_contract'][where][0]['bytes']=byte_count
+    write_json(paths['new_ce'],doc);ref=resident.binding(paths['new_ce'])
+    new['recipe']['input_bindings']['ce']=ref
+    new['stage_inputs']['sft']['ce_supervision_policy']={**ref,'binding':'ce'}
+    with pytest.raises(ValueError,match='byte count'):resident._contract(old,new,'sft')
+
+
+@pytest.mark.parametrize('preserve_both_aliases',[False,True])
+def test_same_content_source_aliases_accept_both_builder_inventory_forms(tmp_path,preserve_both_aliases):
+    paths,old,new=fixture(tmp_path)
+    alias=tmp_path/'extra-alias.jsonl';alias.write_bytes(paths['extra'].read_bytes())
+    dag=json.loads(paths['train'].read_text());dag['sources'].append({'kind':'native-graphs',**resident.binding(alias)})
+    write_json(paths['train'],dag)
+    refs=[resident.binding(paths[name])for name in ('old','extra')]
+    if preserve_both_aliases:refs.append(resident.binding(alias))
+    policy=complete_source_contract(json.loads(paths['old_ce'].read_text()),refs,
+        context_weight=.05,inventory=[resident.binding(paths['train'])])
+    write_json(paths['new_ce'],policy)
+    for role,name in [('native_graphs','train'),('ce_supervision_policy','new_ce')]:
+        ref=resident.binding(paths[name]);new['stage_inputs']['sft'][role]={**ref,'binding':role}
+    assert extension_policy(old['stage_inputs']['sft'],new['stage_inputs']['sft']) is not None
