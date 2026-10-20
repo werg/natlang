@@ -471,12 +471,22 @@ def exchanged(plan,*,kind):
     from ..train.native_readiness import _bound
     _,exchange=ownership(plan)
     if exchange is None:return {},[]
+    frozen={}
+    if kind=='snapshot' and plan.get('consumer_preparation_handoff') and exchange['role']==exchange['semantic_consumer']:
+        pointer=Path(exchange['directory'])/'preparation-handoff.json'
+        if pointer.is_file():
+            preparation=json.loads(_bound(json.loads(pointer.read_text())).read_text())
+            if preparation.get('contract')!=contract(plan):raise ValueError('frozen snapshot request changed its contract')
+            frozen={row['source_host_id']:row['role_release']for row in preparation['snapshots']['participants'].values()}
     found={};pending=[]
     for role in exchange['roles']:
         reference,proof=_status(exchange,role)
         if kind=='snapshot':
             pointer=Path(exchange['directory'])/(role+'-eligible.json')
-            if pointer.is_file():
+            if exchange['roles'][role]['source_host_id']in frozen:
+                reference=frozen[exchange['roles'][role]['source_host_id']]
+                proof=json.loads(_bound(reference).read_text())
+            elif pointer.is_file():
                 reference=json.loads(pointer.read_text());proof=json.loads(_bound(reference).read_text())
             if proof is not None and proof.get('kind') in ('eligible','released'):
                 actual,models=validate(reference,plan,kind=proof['kind'])
@@ -774,6 +784,21 @@ def post_vae_request(plan,completion,controller):
         'role':exchange['role'],'mechanism':_publishing_mechanism(plan),
         'preparation':_inline(completion),'joint_controller':controller,
         'joint_curriculum':_inline(controller['curriculum']),'readiness_granted':False}
+    active=preparation_handoff(plan,check_assets=False)
+    if active:
+        # The VAE completion is already fully authenticated above. Consume only
+        # the exact allocation request whose curriculum and snapshots it used.
+        expected=json.loads(_bound(active['value']['curriculum']).read_text())
+        identities=(proof.get('snapshot_preparation')or{}).get('participants',{})
+        snapshots=active['value']['snapshots']['participants']
+        if (canonical_json_sha256_hex(expected)!=proof['curriculum_signature']
+                or set(identities)!=set(snapshots) or any(
+                    identities[name].get('checkpoint_sha256')!=value['checkpoint']['sha256']
+                    for name,value in snapshots.items())):
+            raise ValueError('completed VAE did not consume the requested snapshots/curriculum')
+        _immutable(Path(exchange['directory'])/'preparation-consumed'/
+            (active['source']['sha256']+'.json'),{'request':active['source'],
+            'completion':completion,'post_vae_request':canonical_json_sha256_hex(request)})
     return _immutable(Path(exchange['directory'])/'handoff-requests'/
         (canonical_json_sha256_hex(request)+'.json'),request)
 
@@ -1025,10 +1050,18 @@ def arm_preparation_handoff(plan,request,curriculum):
         'consumer':exchange['role'],'snapshots':request,'curriculum':curriculum,
         'repair_generations':generations,'backbone_updates':0,'readiness_granted':False}
     root=Path(exchange['directory'])
-    reference=_immutable(root/'preparation-requests'/(canonical_json_sha256_hex(value)+'.json'),value)
     cancelled=root/'preparation-cancelled.json'
-    if cancelled.is_file() and json.loads(cancelled.read_text()).get('request')==reference:
-        return None  # Repair generation must change before retrying failed preparation.
+    if cancelled.is_file():
+        cancellation=json.loads(cancelled.read_text())
+        previous=json.loads(_bound(cancellation['request']).read_text())
+        if {key:item for key,item in previous.items()if key!='ownership_attempt'}==value:
+            if cancellation.get('retry_requires_repair',True):return None
+            predecessor=_immutable(root/'preparation-cancellations'/
+                (canonical_json_sha256_hex(cancellation)+'.json'),cancellation)
+            value['ownership_attempt']={'ordinal':previous.get('ownership_attempt',{}).get('ordinal',1)+1,
+                'superseded_attempt':cancellation['request'],'cancellation':predecessor}
+    reference=_immutable(root/'preparation-requests'/(canonical_json_sha256_hex(value)+'.json'),value)
+    if (root/'preparation-consumed'/(reference['sha256']+'.json')).is_file():return None
     write_json_durable(root/'preparation-handoff.json',reference)
     return reference
 
@@ -1041,10 +1074,21 @@ def preparation_handoff(plan,*,check_assets=True):
     root=Path(exchange['directory']);pointer=root/'preparation-handoff.json'
     if not pointer.is_file():return None
     reference=json.loads(pointer.read_text());value=json.loads(_bound(reference).read_text())
+    if (root/'preparation-consumed'/(reference['sha256']+'.json')).is_file():return None
     if (value.get('schema')!='natlang.native-consumer-preparation-handoff/1'
             or value.get('contract')!=contract(plan) or value.get('consumer')!=exchange['role']
             or value.get('backbone_updates')!=0 or value.get('readiness_granted')is not False):
         raise ValueError('consumer preparation request changed its actual ownership')
+    if 'ownership_attempt'in value:
+        attempt=value['ownership_attempt'];previous=json.loads(_bound(attempt['superseded_attempt']).read_text())
+        cancellation=json.loads(_bound(attempt['cancellation']).read_text())
+        if (type(attempt.get('ordinal'))is not int or attempt['ordinal']<2
+                or attempt['ordinal']!=previous.get('ownership_attempt',{}).get('ordinal',1)+1
+                or cancellation.get('request')!=attempt['superseded_attempt']
+                or cancellation.get('retry_requires_repair')is not False
+                or {key:item for key,item in previous.items()if key!='ownership_attempt'}!=
+                   {key:item for key,item in value.items()if key!='ownership_attempt'}):
+            raise ValueError('consumer ownership attempt changed its cancellation/predecessor')
     if check_assets and value.get('repair_generations')!={row['model']:row.get('foundation_qualification_generation')for row in plan['models']}:
         return None  # An explicit hot repair needs a freshly staged request.
     if (root/'preparation-cancelled.json').is_file():
@@ -1057,9 +1101,10 @@ def preparation_handoff(plan,*,check_assets=True):
     return {'source':reference,'value':value}
 
 
-def cancel_preparation_handoff(config,*,reason):
+def cancel_preparation_handoff(config,*,reason,repair_required=True):
     """Reopen the genuine released RAW cursor after the semantic child drains."""
     from ..train.native_readiness import _bound
+    if type(repair_required)is not bool:raise ValueError('preparation cancellation repair policy must be explicit')
     from ..train.native_resident import owner_alive
     from .native_raw_rounds import raw_out
     plan_path=_bound(config['raw_rl_bootstrap']);plan=json.loads(plan_path.read_text())
@@ -1073,7 +1118,8 @@ def cancel_preparation_handoff(config,*,reason):
     # Keep the original released state as immutable recovery/ownership provenance.
     before=_immutable(root/'preparation-recovery'/(canonical_json_sha256_hex(state)+'.json'),state)
     cancellation={'request':active['source'],'released_state':before,'reason':reason,
-        'schema':'natlang.native-consumer-preparation-cancellation/1','optimizer_reset':False}
+        'schema':'natlang.native-consumer-preparation-cancellation/1','optimizer_reset':False,
+        'retry_requires_repair':repair_required}
     write_json_durable(root/'preparation-cancelled.json',cancellation)
     write_json_durable(path,{**state,'released':False,'preparation_cancellation':cancellation})
     withdraw(plan,path)

@@ -334,7 +334,9 @@ def snapshot_successor(config,out):
     from ..rl import native_role_release as roles
     plan=json.loads(_bound(config['raw_rl_bootstrap']).read_text())
     if plan.get('consumer_preparation_handoff') and roles.preparation_raw_recovery(config):
-        return config  # Failed preparation yields back to useful RAW work.
+        _,exchange=roles.ownership(plan)
+        cancellation=json.loads((Path(exchange['directory'])/'preparation-cancelled.json').read_text())
+        if cancellation.get('retry_requires_repair',True):return config
     preparation=Path(config.get('semantic_out',out))
     completion=preparation/'shared-stage-completion.json'
     manifest_path=preparation/'participants.json'
@@ -867,7 +869,7 @@ def _run(config_path, *, once=False, stop):
                 if stop.requested:
                     if child_kind=='native-semantic' and curriculum.get('snapshot_preparation'):
                         from ..rl.native_role_release import cancel_preparation_handoff
-                        cancel_preparation_handoff(config,reason='owned preparation cancelled after child drain')
+                        cancel_preparation_handoff(config,reason='owned preparation cancelled after child drain',repair_required=False)
                     state['child_pid'] = None
                     state['status'] = 'stopped-after-checkpoint-request'
                     write_json_durable(state_path, state)
@@ -931,7 +933,7 @@ def _run(config_path, *, once=False, stop):
                 if (config.get('snapshot_successor') and config.get('raw_rl_bootstrap')
                         and _role_local_released(config)):
                     from ..rl.native_role_release import cancel_preparation_handoff
-                    cancel_preparation_handoff(config,reason='preparation controller cancelled after owned child drain')
+                    cancel_preparation_handoff(config,reason='preparation controller cancelled after owned child drain',repair_required=False)
                 state['status'] = 'stopped-after-checkpoint-request'
             write_json_durable(state_path, state)
             if once:

@@ -52,6 +52,27 @@ def fixture(tmp_path,monkeypatch,names=('lfm','mellum')):
     return result
 
 
+def install_actual_checkpoint(row,path):
+    previous=row['receipt']['checkpoint'];replacement=raw.binding(path)
+    def replace(value):
+        if isinstance(value,dict):return {key:replace(item)for key,item in value.items()}
+        if isinstance(value,list):return [replace(item)for item in value]
+        if value==previous['sha256']:return replacement['sha256']
+        if value==previous['path']:return replacement['path']
+        return value
+    receipt=replace(row['receipt'])
+    for key in ('training_receipt','runtime_certificate','task_execution_receipt'):
+        target=Path(receipt[key]['path']);body=replace(json.loads(target.read_text()))
+        if key=='training_receipt':body.pop('foundation_qualification_schedule',None)
+        write_json_durable(target,body);receipt[key]=roles.binding(target)
+    value=row['state']['models'][row['plan']['owned_models'][0]]
+    receipt_path=Path(value['readiness']['path']);write_json_durable(receipt_path,receipt)
+    value.update(readiness=roles.binding(receipt_path),checkpoint=replacement)
+    production=Path(value['production_state']['path']);write_json_durable(production,{'checkpoint':str(path)})
+    value['production_state']=roles.binding(production);row['receipt']=receipt
+    write_json_durable(row['state_path'],row['state'])
+
+
 def exchange(source,target,kind='released'):
     reference=roles.publish(source['plan_path'],source['state_path'],kind=kind)
     assert reference
@@ -572,25 +593,7 @@ def test_historical_eligibility_cannot_release_and_fresh_descendant_pause_needs_
     actors,episode,_=setup_pair()
     actors['mellum'].model.port.hf.natlang_precision='bf16'
     optimizers={name:make_native_optimizer(entry.model,lr=1e-3,in_backward=False)[0]for name,entry in actors.items()}
-    def install_checkpoint(row,path):
-        previous=row['receipt']['checkpoint'];replacement=raw.binding(path)
-        def replace(value):
-            if isinstance(value,dict):return {key:replace(item)for key,item in value.items()}
-            if isinstance(value,list):return [replace(item)for item in value]
-            if value==previous['sha256']:return replacement['sha256']
-            if value==previous['path']:return replacement['path']
-            return value
-        receipt=replace(row['receipt'])
-        for key in ('training_receipt','runtime_certificate','task_execution_receipt'):
-            target=Path(receipt[key]['path']);body=replace(json.loads(target.read_text()))
-            if key=='training_receipt':body.pop('foundation_qualification_schedule',None)
-            write_json_durable(target,body);receipt[key]=roles.binding(target)
-        value=row['state']['models'][row['plan']['owned_models'][0]]
-        receipt_path=Path(value['readiness']['path']);write_json_durable(receipt_path,receipt)
-        value.update(readiness=roles.binding(receipt_path),checkpoint=replacement)
-        production=Path(value['production_state']['path']);write_json_durable(production,{'checkpoint':str(path)})
-        value['production_state']=roles.binding(production);row['receipt']=receipt
-        write_json_durable(row['state_path'],row['state'])
+    install_checkpoint=install_actual_checkpoint
     for name,row in rows.items():
         path=Path(row['receipt']['checkpoint']['path']).parent/'native-step-0.pt'
         torch.save({'model':actors[name].model.state_dict(),'optimizer':optimizers[name].state_dict(),
@@ -685,7 +688,8 @@ def test_historical_eligibility_cannot_release_and_fresh_descendant_pause_needs_
     assert roles.handoff_active(first['plan'])['attempt_sha256']==attempt['source']['sha256']
 
 
-def test_consumer_allocation_handoff_requires_staged_snapshots_and_dead_owner_then_reopens_raw(tmp_path,monkeypatch):
+@pytest.mark.parametrize('repair_required',[True,False])
+def test_consumer_allocation_handoff_requires_staged_snapshots_and_dead_owner_then_reopens_raw(tmp_path,monkeypatch,repair_required):
     from natlang_neuralese.train.native_resident import process_owner
     from natlang_neuralese.train import native_readiness
     from test_native_role_scheduler_deployment import source
@@ -705,6 +709,8 @@ def test_consumer_allocation_handoff_requires_staged_snapshots_and_dead_owner_th
     consumer['config']['raw_rl_bootstrap']=raw.binding(consumer['plan_path'])
     _,_,curriculum,_,_,_=source(tmp_path/'semantic-inputs')
     config=json.loads(curriculum.read_text());config['snapshot_preparation']=True
+    from natlang_neuralese.train.native_semantic_stage import validate_config
+    config=validate_config(config)
     write_json_durable(curriculum,config)
     request=roles.semantic_request(plan,snapshot=True)
     with pytest.raises(ValueError,match='assets must exist'):
@@ -730,12 +736,13 @@ def test_consumer_allocation_handoff_requires_staged_snapshots_and_dead_owner_th
     ready,pending=native_readiness.ready_participants(consumer['config'])
     assert len(ready)==2 and not pending
     before=copy.deepcopy(consumer['state']['models'])
-    cancellation=roles.cancel_preparation_handoff(consumer['config'],reason='owned VAE child failed after drain')
+    cancellation=roles.cancel_preparation_handoff(consumer['config'],reason='owned VAE child drained',repair_required=repair_required)
     assert cancellation and not cancellation['optimizer_reset']
     after=json.loads(consumer['state_path'].read_text())
     assert after['models']==before and after['released']is False
     assert not roles.preparation_handoff(plan) and native_readiness._manage_raw_bootstrap(consumer['config'])
-    assert roles.arm_preparation_handoff(plan,request,binding(curriculum))is None
+    if repair_required:
+        assert roles.arm_preparation_handoff(plan,request,binding(curriculum))is None
     assert not roles.eligible(plan)
     # Simulate process loss after cancellation intent but before cursor rewrite.
     original=json.loads(Path(cancellation['released_state']['path']).read_text())
@@ -744,9 +751,71 @@ def test_consumer_allocation_handoff_requires_staged_snapshots_and_dead_owner_th
     assert json.loads(consumer['state_path'].read_text())['released']is False
     # Neither full checkpoint bytes nor the optimizer/exposure-bearing cursor changed.
     assert json.loads(consumer['state_path'].read_text())['models']==before
+    if not repair_required:
+        # Actual whole-graph native SGD between operational cancellation and
+        # the next ownership attempt; no fake runtime/task numerical claim.
+        import torch
+        from test_native_semantic import setup_pair
+        from natlang_neuralese.train.native_state_sft import make_native_optimizer
+        from natlang_neuralese.train.native_semantic import parse_pair
+        from natlang_neuralese.data.native_graph import graph_loss
+        actors,episode,_=setup_pair();actor=actors['mellum']
+        actor.model.port.hf.natlang_precision='bf16'
+        optimizer=make_native_optimizer(actor.model,lr=1e-3,in_backward=False)[0]
+        parameters={key:value.detach().clone()for key,value in actor.model.named_parameters()}
+        graph=parse_pair(episode,actors)['mellum'][0]
+        loss,_=graph_loss(actor.model,graph,checkpoint_layers=False);loss.backward();optimizer.step();optimizer.zero_grad(set_to_none=True)
+        assert any(not torch.equal(parameters[key],value)for key,value in actor.model.named_parameters())
+        checkpoint=Path(consumer['receipt']['checkpoint']['path']).parent/'operational-descendant.pt'
+        torch.save({'model':actor.model.state_dict(),'optimizer':optimizer.state_dict(),
+            'rng':torch.get_rng_state(),'earned_updates':1},checkpoint)
+        consumer['state']=json.loads(consumer['state_path'].read_text())
+        install_actual_checkpoint(consumer,checkpoint);roles.withdraw(plan,consumer['state_path'])
+        successor=roles.arm_preparation_handoff(plan,request,binding(curriculum))
+        assert successor and successor['sha256']!=reference['sha256']
+        assert roles.preparation_handoff(plan)['value']['ownership_attempt']['ordinal']==2
+        assert not roles.eligible(plan)  # Pending advanced weights need actual fresh proof.
+        with monkeypatch.context()as local:
+            local.setattr(roles,'foundation_candidates',lambda plan:({'lfm':{},'mellum':{}},{}))
+            request_ref=roles.foundation_request(plan,tmp_path/'resumed-checks',generation='repair-1')
+        assert request_ref
+        generation=json.loads(Path(request_ref['path']).read_text())['generation']
+        from natlang_neuralese.common.hashing import canonical_json_sha256_hex
+        assert generation==canonical_json_sha256_hex({'foundation_generation':'repair-1','preparation':successor['sha256']})
+        assert roles.publish(consumer['plan_path'],consumer['state_path'],kind='eligible')
+        assert roles.semantic_request(plan,snapshot=True)==request  # Resume the SAME saved VAE parents.
+        assert roles.eligible(plan)
+        saved=torch.load(checkpoint,weights_only=False,map_location='cpu')
+        assert saved['earned_updates']==1 and saved['optimizer']
     # A changed repair generation invalidates the old request without blocking
     # useful RAW recovery before the fresh relay request has been staged.
     for declaration in plan['models']:declaration['foundation_qualification_generation']='repair-2'
     write_json_durable(consumer['plan_path'],plan)
     consumer['config']['raw_rl_bootstrap']=raw.binding(consumer['plan_path'])
     assert roles.preparation_handoff(plan)is None
+    if repair_required:
+        # Completion-format fixture: numerical VAE/optimizer execution is tested
+        # separately by the real shared semantic-stage integration test.
+        from natlang_neuralese.common.hashing import canonical_json_sha256_hex
+        active=roles.arm_preparation_handoff(plan,request,binding(curriculum))
+        assert active
+        full=json.loads(curriculum.read_text());full['snapshot_preparation']=False
+        full['models']={row['handoff_requirement']['model_id']:{'task_eval':{
+            **full['models'][row['model']+':base']['task_eval']}}for row in plan['models']}
+        joint=tmp_path/'actual-joint.json';write_json_durable(joint,full)
+        checkpoint=tmp_path/'vae.pt';checkpoint.write_text('protocol VAE checkpoint')
+        adapter=tmp_path/'vae-adapter.json';write_json_durable(adapter,{
+            'schema':'natlang.native-semantic-adapter/1','checkpoint':binding(checkpoint)})
+        complete=tmp_path/'frozen-complete.json';write_json_durable(complete,{
+            'schema':'natlang.native-shared-stage-completion/1','completed':False,
+            'production_ready':False,'preparation_complete':True,
+            'snapshot_preparation':{'participant_optimizer_updates':0,'participants':{
+                name:{'checkpoint_sha256':value['checkpoint']['sha256']}
+                for name,value in request['participants'].items()}},
+            'participants_signature':'fixture','curriculum_signature':canonical_json_sha256_hex(config),
+            'curriculum':binding(curriculum),'checkpoint':binding(checkpoint),'adapter':binding(adapter)})
+        roles.post_vae_request(plan,binding(complete),{'curriculum':binding(joint)})
+        assert roles.preparation_handoff(plan)is None
+        assert roles.arm_preparation_handoff(plan,request,binding(curriculum))is None
+        assert not roles.eligible(plan)  # No bypass of actual post-VAE lease/proof matching.
+        assert (Path(plan['role_exchange']['directory'])/'preparation-consumed'/(active['sha256']+'.json')).is_file()

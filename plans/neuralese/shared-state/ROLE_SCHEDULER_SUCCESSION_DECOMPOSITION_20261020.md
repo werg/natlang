@@ -135,3 +135,12 @@ On failed/cancelled preparation the consumer's preserved RAW cursor is reopened
 through the same RAW coordinator, without claiming a shared-stage release or
 resetting optimizer, RNG or exposure. A failed preparation needs explicit repair
 before another preparation allocation; useful RAW work continues meanwhile.
+
+Successful preparation consumes its exact allocation request through the existing
+validated post-VAE handoff publication. The consumed marker binds the actual VAE
+completion and checked source checkpoint identities; it cannot authorize backbone
+updates and prevents the relay lending the same allocation again. Normal
+operational cancellation is distinct from failed preparation: the next ownership
+attempt binds its immutable predecessor/cancellation and changes the foundation
+request generation after intervening RAW updates, while resuming the same saved
+VAE checkpoint/exposure. Genuine failed preparation still needs declared repair.
