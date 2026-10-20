@@ -259,8 +259,12 @@ def test_bridge_runtime_handoff_reaches_owed_sft_without_owned_operation_credit(
         'commands':{'actor_command':['new-actor']}}
     plan_path=tmp_path/'plan.json';write(plan_path,{'models':[declaration]})
     monkeypatch.setattr(raw,'_scheduling_controls',lambda *args,**kwargs:None)
+    provider_actor_overrides=[]
     def provider(config,declaration,*args,**kwargs):
-        config['actor_command']=declaration['commands']['actor_command']
+        actor=declaration.get('commands',{}).get('actor_command')
+        provider_actor_overrides.append(actor)
+        if actor is not None:
+            config['actor_command']=actor
     monkeypatch.setattr(native_rounds,'configure_provider',provider)
     import natlang_neuralese.rl.native_bootstrap_metadata as bootstrap_metadata
     monkeypatch.setattr(bootstrap_metadata,'save',lambda *args,**kwargs:None)
@@ -302,6 +306,8 @@ def test_bridge_runtime_handoff_reaches_owed_sft_without_owned_operation_credit(
     # A retry after the one-time config application must keep the same
     # authority and must not classify the consumed marker as a fresh boundary.
     retry=raw.student_cycle(plan_path,declaration,proof['bootstrap'],x['root'],stop=stop)
+    assert provider_actor_overrides[-1] is None
+    assert json.loads(configured.read_text())['actor_command']==['new-actor']
     assert retry['deferred_owner_handoff_bridge_consumed']==consumed
 
 
