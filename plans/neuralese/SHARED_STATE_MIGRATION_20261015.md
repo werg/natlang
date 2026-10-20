@@ -48,6 +48,36 @@ through the projected-value implementation.
 
 ## Current status
 
+October20, 03:29 UTC: both students are taking useful updates. LFM shared4395
+reached18,792 with26,312/26,312 foundation and30,574/114,794 communication
+visits; Mellum R14 reached24,844 in the next offline-preference stage. Neither
+has completed its entire recipe or qualified a trained shared dialect. The
+Mellum handoff's missing publication-owner fields are repaired and covered by
+the shared all-stage provider fix. Its full24,831 state remains independently
+private PUT/GET verified. Both backup services now follow actual owner manifests;
+the previous fixed Mellum export journal is retained as recovery evidence.
+
+The shared source-bound CE mass correction is independently reviewed and
+published in254da0c4b/f7154bf87, with integrated13 focused tests and quick checks
+passing. It preserves raw source bindings, completed exposure and optimizer/RNG,
+retains node mass, and leaves policy likelihoods and already segmented sources
+unchanged. A coherent successor for BOTH runtime inventories, role authorities,
+on-request foundation qualification and semantic preparation is being reviewed;
+useful current training continues during preparation. New LFM KEEP contexts
+have7,721 additional fully validated, staged graphs. Ready ordinary additions
+are14,029 LFM/1,428 Mellum, separately from Mellum's unadopted1,761-row pending
+generation. Prepared data is not trained exposure.
+
+The local shared checksum cache contained8,526,772 disposable test identities.
+Removing only those entries reduced2.286GB to113.85MB, preserving every other
+complete record verbatim and in original order, with independent replay and16
+actual shared-helper/digest checks. Source data and hash algorithms are unchanged.
+The actual subsequent data pipeline peaked at604MiB instead of several GiB.
+check-main now defaults to a disposable private cache, as recorded in AGENTS.
+The full-check timer remains active; the last complete PASS is7edc9078c.
+
+### Earlier operational record
+
 October 19, 17:50 UTC: LFM completed update16909 from16397. Exact full
 state was pinned and drained; the whole-recipe controller entered at17:43:46.
 Two launch defects were repaired: its handoff API needed the original bootstrap
