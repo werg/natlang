@@ -105,6 +105,8 @@ def _check_indexes(witnesses):
     from ..common import row_index
     for witness in witnesses:
         cache = bound(witness['cache'])
+        if 'bytes' in witness['cache'] and cache.stat().st_size!=witness['cache']['bytes']:
+            raise ValueError('resident source index byte count changed')
         if cache != row_index.entry_path('native-graphs', digest(witness['key'])).resolve():
             raise ValueError('resident cache must be staged in the learner row-index cache')
         value = row_index.load(cache)
@@ -124,6 +126,46 @@ def check_index_witness_union(index_lists, check_indexes):
    if identity not in seen:seen.add(identity);union.append(witness)
  check_indexes(union)
  return len(union)
+
+
+class IndexWitnessValidation:
+    """Call-local strict validation receipts for unchanged whole index witnesses."""
+    def __init__(self, check_indexes=None):
+        self.check_indexes=check_indexes or _check_indexes
+        self.completed={}
+        self.strict_runs=0
+        self.strict_witnesses=0
+        self.unchanged_uses=0
+
+    @staticmethod
+    def _stamp(witness):
+        from ..common import row_index
+        path=Path(witness['cache']['path']).resolve(strict=True)
+        stat=path.stat()
+        expected=row_index.entry_path('native-graphs',digest(witness['key'])).resolve()
+        return (str(path),str(expected),stat.st_dev,stat.st_ino,stat.st_size,
+                stat.st_mtime_ns,stat.st_ctime_ns)
+
+    def __call__(self, witnesses):
+        def verify(unique):
+            pending=[];before={}
+            for witness in unique:
+                identity=digest(witness);stamp=self._stamp(witness)
+                if self.completed.get(identity)==stamp:
+                    self.unchanged_uses+=1
+                else:
+                    pending.append(witness);before[identity]=stamp
+            if not pending:return
+            # Do not publish any receipt unless the normal verifier completes
+            # and every involved file remains exactly the one it checked.
+            self.check_indexes(pending)
+            after={digest(witness):self._stamp(witness)for witness in pending}
+            if after!=before:
+                raise ValueError('resident source index changed during strict validation')
+            self.completed.update(after)
+            self.strict_runs+=1
+            self.strict_witnesses+=len(pending)
+        return check_index_witness_union([witnesses],verify)
 
 
 def _contract(plan, proposed, stage_id):

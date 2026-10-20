@@ -401,7 +401,7 @@ def capacity_identity(config,args,backend):
                'input_gradient_precision':getattr(backend,'input_gradient_precision',None)}}
 
 
-def _run_one_prepared(model,optimizer,train,roles,config,args,*,backend,checkpoint_sha256,objective=None,reference_reuse=None):
+def _run_one_prepared(model,optimizer,train,roles,config,args,*,backend,checkpoint_sha256,objective=None,reference_reuse=None,index_validation=None):
     """Called once at the normal restore boundary, before any new optimizer step.
 
     Failed novel source checks cannot stop useful SGD on the existing source.
@@ -425,7 +425,7 @@ def _run_one_prepared(model,optimizer,train,roles,config,args,*,backend,checkpoi
     if (request.get('schema')!='natlang.native-memory-qualification-request/1'
             or request.get('identity')!=identity or request.get('runtime_code_sha256')!=code_sha):
         raise ValueError('memory qualification request differs from actual restored model/runtime/packing')
-    _check_indexes(request['indexes'])
+    (index_validation or _check_indexes)(request['indexes'])
     source_split=request.get('split','train')
     if source_split not in ('train','test'):
         raise ValueError('capacity source split must be train or test')
@@ -730,6 +730,10 @@ def run_prepared(model,optimizer,train,roles,config,args,*,backend,checkpoint_sh
             if bound(canonical_binding).read_bytes()!=path.read_bytes():
                 raise ValueError('memory qualification aliases must have identical request bytes')
             aliases.append({'requested_binding':requested,'resolved_binding':request,'canonical_binding':canonical_binding})
+        from ..train.native_resident import IndexWitnessValidation,check_index_witness_union
+        index_validation=IndexWitnessValidation()
+        check_index_witness_union([json.loads(bound(request).read_text())['indexes']
+            for request in resolved],index_validation)
         for request,alias in zip(resolved,aliases):
             # Recheck each logical file immediately before using its canonical
             # request; no alias can disappear/change behind a cached proof.
@@ -739,7 +743,7 @@ def run_prepared(model,optimizer,train,roles,config,args,*,backend,checkpoint_sh
             args.memory_qualification=json.dumps(canonical_request)
             checks.append(_run_one_prepared(model,optimizer,train,roles,config,args,
                 backend=backend,checkpoint_sha256=checkpoint_sha256,objective=objective,
-                reference_reuse=reference_reuse))
+                reference_reuse=reference_reuse,index_validation=index_validation))
             if 'numerical_reference' in checks[-1] and not (checks[-1]['numerical_reference'] or {}).get('passed'):
                 break  # Failed exact-reference qualification cannot certify a later cohort.
     finally:
@@ -756,6 +760,8 @@ def run_prepared(model,optimizer,train,roles,config,args,*,backend,checkpoint_sh
     result={'schema':'natlang.native-memory-cohort-qualification/1',
         'passed':len(checks)==len(requests) and all(check['passed'] for check in checks),
         'request':requests,'request_aliases':aliases,'parent_checkpoint_sha256':checkpoint_sha256,'checks':checks,
+        'index_witness_validation':{'strict_runs':index_validation.strict_runs,
+            'strict_witnesses':index_validation.strict_witnesses,'unchanged_uses':index_validation.unchanged_uses},
         'optimizer_updates':0,'retained_capacity':str(args.resident_geometry_qualification)
             if args.resident_geometry_qualification else None}
     from ..common.jsonio import write_json_durable
