@@ -10,6 +10,7 @@ import uuid
 from pathlib import Path
 
 from ..common.hashing import canonical_json_sha256_hex, sha256_file_hex_cached
+from ..common.checkpoint_digest import verified_checkpoint_digest
 from ..common.jsonio import write_json_durable
 from ..train.native_readiness import _bound
 
@@ -44,7 +45,7 @@ raise SystemExit(module.main(sys.argv[3:]))
 
 def binding(path):
     path = Path(path).absolute()
-    return {'path': str(path), 'sha256': sha256_file_hex_cached(path, trust_archive_receipt=False),
+    return {'path': str(path), 'sha256': verified_checkpoint_digest(path),
             'bytes': path.stat().st_size}
 
 

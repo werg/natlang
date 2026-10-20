@@ -191,6 +191,7 @@ def test_verified_hardlink_aliases_keep_all_bridge_paths_with_one_payload_read(t
 
 
 def test_old_verified_path_entry_promotes_to_physical_alias_identity(tmp_path, monkeypatch):
+    from natlang_neuralese.common.checkpoint_digest import verified_checkpoint_digest
     data = tmp_path / 'checkpoint.pt'; data.write_bytes(b'exact')
     alias = tmp_path / 'best.pt'; os.link(data, alias)
     cache = tmp_path / 'hashes.jsonl'; monkeypatch.setenv('NATLANG_HASH_CACHE', str(cache))
@@ -202,8 +203,8 @@ def test_old_verified_path_entry_promotes_to_physical_alias_identity(tmp_path, m
         assert Path(path) not in (data, alias), 'verified alias was needlessly reread'
         return original_open(path, *args, **kwargs)
     monkeypatch.setattr(hashing, 'open', no_payload, raising=False)
-    assert hashing.sha256_file_hex_cached(data, trust_archive_receipt=False) == digest
-    assert hashing.sha256_file_hex_cached(alias, trust_archive_receipt=False) == digest
+    assert verified_checkpoint_digest(data) == digest
+    assert verified_checkpoint_digest(alias) == digest
 
 
 def test_legacy_path_cache_never_authenticates_an_alias(tmp_path, monkeypatch):
