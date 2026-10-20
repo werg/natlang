@@ -360,3 +360,47 @@ An actual artifact-only smoke pins all utility/native package origins, verifies
 all 372 files, and runs each CLI's `--help` from `/tmp`. It records no preparation
 execution, root approval, model allocation, GPU run, cloud mutation or readiness.
 The source host can run the preparer against its real absolute references.
+
+The v6 artifact is an actor/coordinator **overlay**, not a complete SGD source
+runtime. `scripts/coreweave/install_native_actor_layout.py` now physically clones
+an explicitly authenticated full donor, replaces its entire Python package with
+4395, retains inherited nonpackage dependencies and relocates both roles into
+separate explicit production control roots. It rebuilds only JSON paths and
+bound JSON hashes; numerical/controller Python bytes remain unchanged. Inherited
+publication dependencies are separately hash-bound before and after the clone.
+The installer uses the existing `scripts/clone_runtime_tree.py` physical-copy
+mechanism; ship that companion alongside the installer, and use v6's reviewed
+compose/verifier utilities and package on PYTHONPATH. No broad whole-donor
+content inventory is claimed from a package-only inventory.
+
+A realistic local layout using the exact R15 package and actual captured cloud
+publication helper (`ae71ebb6…cc56`, 21,235 bytes; namespace initializer
+`a6b68461…2bd5`, 58 bytes) passed both relocated publishing closures and the
+actual checkpoint publication-selection/validation/trainer-parameter APIs.
+The captured helpers match both current LF R9 and M R15 full donors. This proves
+the new integration against those exact sources, not actual cloud full-tree
+staging. The first 2 GiB import probe exceeded its cgroup and earned no pass;
+the successful 4 GiB probe peaked at 3.2 GiB. Three focused layout tests and quick
+checks passed. No model/GPU qualification was repeated.
+
+On the source host, use `--donor` with that host's real complete donor and its
+`--donor-code`; pass a JSON list of the two explicit donor helper bindings as
+`--dependencies`. Select the accepted final runtime
+`/work/native-runtime/native-shared-production-4395-actor-role-v6-20261020` and
+explicit `--lfm-control`/`--mellum-control` roots below
+`/work/native-production/control`. Run the existing preparer with `--composition`
+pointing to this **installed full runtime**, actual reviewed `--inputs`, and
+`--out <role-control-root>/binder-config.json`. The physical binder's `H` then
+matches its config and eventual controller spec `out`. Actual bootstrap/provider
+inputs and review must bind the relocated files, not the overlay's host paths.
+No owner, readiness or source plan is synthesized: owner-bound `--preflight`
+remains pending until the genuine later-runtime handoff exists.
+
+Transport correction: archived overlays keep their original absolute construction
+root. The installer maps only that recorded root or the actual artifact root,
+authenticates each transported bound member's original SHA/bytes locally, and
+then rewrites its final metadata reference. A regression removes the original
+tree entirely before installation. The sealed overlay includes the installer
+and existing clone companion as exact source files. CLI operation receipts record
+in-progress, passed or failed status explicitly, so partial physical copies are
+reconciled deliberately before retrying an immutable destination.
