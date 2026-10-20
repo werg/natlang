@@ -21,16 +21,12 @@ claimed at the start of this migration.
 
 ## Ownership and completion evidence
 
-- Implementation agent `neuralese_shared_state`: graph decomposition/compiler,
-  graph executor, LFM and Mellum state adapters, embedding transform, exact
-  cached reference and forward/gradient checks. Architecture decomposition is
-  written before implementation. Unsupported recurrent forms fail explicitly.
-- Root supervisor: serving, durable block transport, natlang marker/harness
-  integration, trainer/recipe/data wiring, model-facing measurement and cutover.
-- Cloud supervisor: current diagnostic jobs, resource management, useful fixes,
-  staged data, then replacement launches on both sandboxes.
-- Data agent: existing source preparation/protections continue. Canonical native
-  trajectories, text and full contexts remain reusable migration inputs.
+- Root supervisor owns implementation, integration, training, inference, data,
+  evaluation and all sandbox operations in one primary-agent strand. The former
+  implementation/review/cloud/data agents have handed off and are completed.
+- Future delegation is sparse and Luna-only, for engineering work. Luna never
+  generates training data. The dedicated self-hosted Qwen3.8 Flash Next NVFP4
+  generation sandbox continues supplying verified trajectories for both students.
 
 Before switching, demonstrate real producer-to-consumer state transport through
 the native harness on both actual backbones, positionally correct attention,
@@ -48,42 +44,46 @@ through the projected-value implementation.
 
 ## Current status
 
-October 20, 04:13 UTC: both students continue taking optimizer updates
-(latest passive samples LFM 19,018 and Mellum 24,968, the latter in offline
-preference training). The protected historical LFM 18,619 task check finished
-1/16: two invalid actions, six repetitions, five budget exhaustions and two
-semantic mismatches, with no infrastructure failures. Mellum 24,575 remains
-8/16. These are historical actor measurements; neither qualifies current
-weights or comprehensive recipe completion.
+October 20, 14:12 UTC: both students are taking real optimizer updates.
+Mellum runs the shared R6v5 runtime on sandbox
+`c8a1da97-83cb-4a33-a0b3-f8611ed30acc`, direct owner PID3247273 /
+birth31983191, after the actual 12-case capacity, actor-parity and full-gradient
+checks passed. Latest observed global step25764, with21352/114793 genuine
+communication graph visits; whole-recipe and communication exposure remain
+incomplete. Warm observed physical throughput varies with the graph (latest
+1755 physical tokens/s); no cold-start measurement is used to claim throughput.
+LFM's full-state R4 SFT interval handed off naturally at20369 to the production
+controller's native preference stage. The actual preference learner PID810758
+was observed at20493, with optimizer/RNG and prior SFT progress retained.
+Its per-preference communication count0/0 is not a reset of prior SFT exposure.
+LFM's R6v5 runtime/recipe and source-fixed provider successor are prepared;
+actual LFM runtime migration remains outstanding and is not claimed complete.
 
-A concrete backup attachment gap was found: the active LFM export follower
-still selected the previous supervised owner rather than the live direct Q6
-learner. Its latest independently verified private fallback remains 18,619;
-local newer saves alone are not durable private backups. An authenticated
-metadata-only owner-pointer repair passed preview and is being applied. The
-passive monitor now also compares the selected owner manifest namespace with
-the observed learner output, so service activity cannot hide this mismatch.
+The provider metadata path now preserves bound historical completed-controller
+proofs, includes the repository root in detached child imports, and resolves
+legitimate internal parent-relative artifact references while rejecting changed
+symlink meaning. The actual LFM 654-asset closure passed and its normal worker
+launched useful training; the shared source fixes also reached Mellum's SDK
+without restarting its learner. Shared commits: a6cf6f2ec, b0a2578ea,
+a082a8cd0. The full cffe91e486 check passed; 124 focused provider tests and the
+quick checks passed after these fixes. The newer full check is still running.
 
-The final runtime composition now includes dual raw/target/declared-objective
-held metrics, the exact source-classification continuation guard, and the
-narrow FP32 prefix readout reuse port. Independent inventory review of v8
-confirmed the numerical package is unchanged from reviewed v6; v8 adds the
-existing owner-publication helper and explicitly ships the dual-held policy
-builder. Actual dispatch integration tests found additional missing publication
-plumbing in the frozen donor; completing that closure precedes deployment.
-Both useful current learners continue during this work. No final runtime
-cutover, new private backup or completed communication cohort is claimed.
+All19 ready data components (38643 LFM /38639 Mellum candidate rows before
+combined validation) passed registered source eligibility, normal consumer,
+classification and BOTH sandbox transport checks. Root launched resource-guarded
+normal Mellum resident preparation with publish=False, preserving the entire
+1376137-row prefix,25968 held rows, optimizer and exposure. Neither availability
+nor this preparation grants admission or earned visits; actual pending/adoption
+must still be verified. A further28207 rows per student passed normal fit with
+zero pending rows and entered normal consumer/classification processing.
 
-Shared fixes are published through 0482b63c1b. The full 50ae8cfc4c check finished
-with one missing-producer exception-normalization regression; the fix is on
-main with 120 focused tests passing, and the new full 0482b63c1b ledger run is
-active. The last complete full-check pass remains 7edc9078c3.
-
-The completed historical Mellum compact evaluation copy was removed after its
-16 results landed and full-parent private recovery was verified, reclaiming
-24.31 GB. Its reports and full parent remain. A new current-owner quality
-consumer is prepared and awaits a genuine compact publication from the next
-already-loaded-parent handoff; it has not been activated against absent data.
+Full-epoch VAE snapshot training and bound external scheduler producer fixes are
+integrated. The57144-train/11278-held semantic curriculum and reviewed scheduling
+assets are physically staged on BOTH sandboxes. No VAE training, completed
+participant communication cohort or shared-dialect lift is claimed. Finish the
+normal LFM runtime/controller handoff and automatic scheduler wiring while both
+students continue through their full recipes; VAE starts only after both genuine
+communication exposure requirements are met.
 
 October20, 03:45 UTC: actual observed updates reached18,861 LFM and24,889
 Mellum. Mellum's historical24,575 checkpoint finished the protected16-family
