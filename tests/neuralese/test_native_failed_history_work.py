@@ -87,3 +87,23 @@ def test_checked_prior_module_reuses_v1_work_only_for_identical_callable_law(tmp
     old.write_text(old.read_text().replace("node=row['nodes'][0];ids=node['token_ids']","node=row['nodes'][0];ids=node['token_ids'][:-1]"))
     with pytest.raises(ValueError,match='actual mask callable law'):
         producer.build([source],tokenizer=tok,out=tmp_path/'refused',native_render_receipts=[receipt_path],work=work,prior_derivation_modules=[old])
+
+
+def test_custody_only_module_edit_keeps_v2_work_but_mask_edit_invalidates(tmp_path,monkeypatch):
+    from pathlib import Path
+    from natlang_neuralese.train import native_failed_history as helper
+    tok,*_,source,receipt,receipt_path=fixture(tmp_path)
+    work=tmp_path/'work'
+    producer.build([source],tokenizer=tok,out=tmp_path/'first',native_render_receipts=[receipt_path],work=work)
+    original=Path(helper.__file__).read_text();changed=tmp_path/'updated-helper.py'
+    changed.write_text(original.replace('def validate_source_evidence(row,evidence,*,target_render_binding=None):',
+        'def validate_source_evidence(row,evidence,*,target_render_binding=None):\n    assert evidence is not None'))
+    assert changed.read_text()!=original
+    monkeypatch.setattr(helper,'__file__',str(changed))
+    def forbidden(*args,**kwargs):raise AssertionError('derivation executed')
+    monkeypatch.setattr(producer,'derive_context_mask',forbidden)
+    # Actual module bytes changed, but custody-only code is not a derivation law.
+    producer.build([source],tokenizer=tok,out=tmp_path/'resumed',native_render_receipts=[receipt_path],work=work)
+    changed.write_text(changed.read_text().replace("node=row['nodes'][0];ids=node['token_ids']","node=row['nodes'][0];ids=node['token_ids'][:-1]"))
+    with pytest.raises(AssertionError,match='derivation executed'):
+        producer.build([source],tokenizer=tok,out=tmp_path/'new-law',native_render_receipts=[receipt_path],work=work)
