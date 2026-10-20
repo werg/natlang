@@ -429,7 +429,8 @@ def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=1
     allow_communication = (share_causal_prefixes and objective is None and allow_communication_prefixes
                            and model.port.embedding_weight.dtype in (torch.float32,torch.float64))
     shared = (pack_causal_prefixes(examples, allow_communication=allow_communication)
-              if share_causal_prefixes and objective is None else None)
+              if share_causal_prefixes and objective is None
+              and model.port.embedding_weight.dtype != torch.bfloat16 else None)
     if shared is None:
         plan, target_weights, ownership, external_name_maps = pack_native_graphs(examples)
         physical_rows = tuple(tuple(range(plan.offsets[first],
@@ -453,8 +454,17 @@ def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=1
     else:
         forward_inputs = {}
     graph_forward = getattr(objective, 'forward_graph', None) if objective is not None else None
-    result = (graph_forward(model, context, forward_inputs or {}) if graph_forward is not None else
-              model(plan, retain_states=False, **(forward_inputs or {})))
+    from .native_prefix_packing import communication_primal_rows
+    from ..model.native_gradient_partitions import primal_row_reuse
+    primal_rows = (communication_primal_rows(examples) if shared is None and share_causal_prefixes
+        and objective is None and allow_communication_prefixes
+        and model.port.embedding_weight.dtype == torch.bfloat16 else None)
+    # Reuse native fixed linear primals only: all original occurrence rows,
+    # masks, activation casts and custom backward reductions remain intact.
+    with (primal_row_reuse(plan,primal_rows) if primal_rows is not None
+          else contextlib.nullcontext()) as primal_aliases:
+        result = (graph_forward(model, context, forward_inputs or {}) if graph_forward is not None else
+                  model(plan, retain_states=False, **(forward_inputs or {})))
     if objective is not None:
         loss, details = objective(model, result, context)
         if not isinstance(loss, torch.Tensor) or loss.ndim != 0 or not torch.isfinite(loss.detach()):
@@ -513,6 +523,9 @@ def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=1
                         'boundary_targets': boundary_targets,
                         'supervised_tokens': len(queries),
                         'packed_physical_tokens': plan.token_count,
+                        'primal_projection_rows': primal_aliases.forward_input_rows if primal_aliases else 0,
+                        'reused_primal_projection_rows': (primal_aliases.forward_input_rows-primal_aliases.forward_unique_rows)
+                            if primal_aliases else 0,
                         'original_physical_tokens': sum(item.plan.token_count for item in examples),
                         'accuracy': None})
     original_readout_rows = sum(item['supervised_tokens'] for item in details)
@@ -1856,6 +1869,8 @@ def _main(argv=None, *, requested_refresh):
                 physical_tokens = details[0]['packed_physical_tokens']
                 progress['physical_forward_tokens'] = physical_tokens
                 progress['reused_prefix_tokens'] = details[0]['original_physical_tokens'] - physical_tokens
+                progress['primal_projection_rows'] = details[0].get('primal_projection_rows',0)
+                progress['reused_primal_projection_rows'] = details[0].get('reused_primal_projection_rows',0)
                 progress['physical_forward_tokens_per_second'] = physical_tokens / max(seconds, 1e-9)
                 progress['readout_forward_rows'] = details[0]['readout_forward_rows']
                 progress['readout_original_rows'] = details[0]['readout_original_rows']

@@ -13,6 +13,7 @@ from itertools import count
 
 _ACTIVE = ContextVar('natlang_graph_gradient_partitions', default=None)
 _FRAME_IDS = count()
+_PRIMAL_ROWS = ContextVar('natlang_graph_primal_rows', default=None)
 
 
 @dataclass(frozen=True)
@@ -23,6 +24,7 @@ class GradientPartitions:
     chunk_offset: int | None = None
     invocation_length: int | None = None
     invocation_namespace: tuple[int, ...] | None = None
+    primal_rows: _PrimalRows | None = None
 
     def __post_init__(self):
         if any(type(n) is not int or n < 0 for n in self.lengths):
@@ -56,6 +58,63 @@ class GradientPartitions:
                 result.append(slice(start, start + count))
             start += count
         return tuple(reversed(result)) if reverse else tuple(result)
+
+
+
+class _PrimalRows:
+    """Forward-owned immutable aliases plus one bounded device index pair."""
+    def __init__(self,rows):
+        self.rows=rows
+        self.unique=tuple(index for index,row in enumerate(rows) if index==row)
+        lookup={row:index for index,row in enumerate(self.unique)}
+        self.inverse=tuple(lookup[row] for row in rows)
+        self.forward_input_rows=0
+        self.forward_unique_rows=0
+        self._device=None
+        self._indices=None
+
+    def indices(self,device):
+        import torch
+        if self._device!=device:
+            self._indices=(torch.tensor(self.unique,device=device),torch.tensor(self.inverse,device=device))
+            self._device=device
+        return self._indices
+
+
+@contextmanager
+def primal_row_reuse(plan, representatives):
+    """Bind checked raw-prefix primal aliases to exactly one original graph."""
+    rows = tuple(representatives)
+    if len(rows) != plan.token_count or any(type(row) is not int or not 0 <= row <= index
+            or rows[row] != row for index,row in enumerate(rows)):
+        raise ValueError('primal representatives must be earlier canonical physical rows')
+    aliases=_PrimalRows(rows)
+    token = _PRIMAL_ROWS.set((plan,aliases))
+    try:
+        yield aliases
+    finally:
+        _PRIMAL_ROWS.reset(token)
+
+
+def bound_primal_rows(plan):
+    binding = _PRIMAL_ROWS.get()
+    return binding[1] if binding is not None and binding[0] is plan else None
+
+
+def reused_linear_primal(x, partitions, operation):
+    """Reuse fixed-row CUDA forward arithmetic; original custom VJP is intact."""
+    import torch
+    rows = partitions.primal_rows if partitions is not None else None
+    if (rows is None or not x.is_cuda or x.dtype != torch.bfloat16
+            or x.ndim != 2 or len(rows.rows) != x.shape[0]):
+        return operation(x)
+    if len(rows.unique) == len(rows.rows):
+        return operation(x)
+    rows.forward_input_rows+=len(rows.rows)
+    rows.forward_unique_rows+=len(rows.unique)
+    unique,inverse=rows.indices(x.device)
+    output = operation(x.index_select(0,unique))
+    return output.index_select(0,inverse)
 
 
 

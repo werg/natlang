@@ -117,3 +117,17 @@ def _pack_initial_raw_contexts(examples):
                        for old,new in enumerate(mapping))):
             raise AssertionError('communication prefix packing changed own positions/producer flags')
     return plan,tuple(tuple(mapping) for mapping in rows)
+
+
+def communication_primal_rows(examples):
+    """Original full-row representatives proven by the same exact prefix plan."""
+    shared = pack_causal_prefixes(examples)
+    if shared is None:
+        return None
+    _, maps = shared
+    first, result = {}, []
+    for mapping in maps:
+        for physical in mapping:
+            first.setdefault(physical,len(result))
+            result.append(first[physical])
+    return tuple(result)

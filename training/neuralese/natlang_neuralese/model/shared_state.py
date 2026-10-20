@@ -168,9 +168,9 @@ def _fp32_kv_cotangents(port, tensor):
 
 def forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None = None, *, embeddings=None, external_blocks=None, external_identity=None, retain_states=True):
     """One layer-major graph traversal with immutable reduction provenance."""
-    from .native_gradient_partitions import GradientPartitions, gradient_partitions, new_gradient_namespace
+    from .native_gradient_partitions import GradientPartitions, gradient_partitions, new_gradient_namespace, bound_primal_rows
     partitions = GradientPartitions(tuple(len(node.token_ids) for node in plan.invocations),
-        invocation_namespace=new_gradient_namespace())
+        invocation_namespace=new_gradient_namespace(), primal_rows=bound_primal_rows(plan))
     with gradient_partitions(partitions):
         return _forward_graph(port, plan, adapter, embeddings=embeddings,
             external_blocks=external_blocks, external_identity=external_identity, retain_states=retain_states)

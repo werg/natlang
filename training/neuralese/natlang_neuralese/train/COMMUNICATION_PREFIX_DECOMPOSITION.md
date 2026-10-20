@@ -44,3 +44,38 @@ planner does not claim qualified RL occurrence/view routing. It is one shared
 packing mechanism for both students, with no detached producer, recursive replay,
 or partial consumer-only training. Future policy reuse needs its own complete
 original occurrence-row mapping through the existing objective contract.
+
+## BF16 primal reuse, original occurrence adjoints
+
+Actual CUDA evidence localizes the BF16 discrepancy to activation fan-in, not
+forward state: all mapped hidden/KV/hybrid values are bitwise equal, but merging
+physical rows merges cotangents before independent BF16 casts. FP32 sparse
+masters and FP32 parameter fan-in do not repair that activation rounding law.
+
+1. Keep the ORIGINAL expanded graph, edges, physical rows and backward topology.
+2. Derive a bound per-row primal equivalence proof from the existing raw-prefix
+   planner; representative rows must belong to this exact original plan.
+3. Carry that immutable proof through existing gradient-partition provenance.
+   Token-local reordered/expert/chunk operands must not inherit unqualified row
+   aliases. Bind the proof to one explicit forward frame, never a global cache.
+4. For fixed native linear operators only, compute identical primal rows once
+   and expand the result inside the existing custom forward. Save ORIGINAL
+   operands/partitions; the existing backward executes every occurrence and
+   original dtype cast, reduction and parameter contribution unchanged.
+5. Verify exact donor outputs and every derivative on both production profiles.
+   Expand operator coverage only after each original adjoint is preserved.
+
+This first extension saves selected forward projection work, not activation
+storage or backward work. It is not recursive replay or detached state; policy
+selection and complete source/exposure requirements are unchanged.
+
+The implemented BF16 path reuses fixed-linear CUDA primals only. FFN invocation
+chunks, attention, finite-history convolutions and all custom backward bodies
+remain original. Indices are allocated once per bound forward and reused during
+checkpoint recomputation; no global/session GPU cache is retained. FP32 uses the
+separately qualified physical DAG planner. Existing ordinary-only BF16 physical
+prefix aliasing exhibits the same cotangent-rounding defect, so it also uses the
+original-row primal path. Two actual shared-trainer updates on both BF16 ports
+preserve every weight, optimizer tensor and CPU/CUDA RNG bit exactly, for both
+ordinary and communication graphs. Telemetry distinguishes eliminated projection
+rows from physical forward tokens and actual data exposure.

@@ -700,7 +700,9 @@ class _InvariantLinear(torch.autograd.Function):
         w = w.to(forward_storage_dtype) if ctx.carrier else w
         ctx.save_for_backward(x, w)
         ctx.precision = precision
-        return _invariant_linear_forward(x, w, precision)
+        from ..model.native_gradient_partitions import reused_linear_primal
+        return reused_linear_primal(x, ctx.partitions,
+            lambda operand: _invariant_linear_forward(operand, w, precision))
 
     @staticmethod
     def backward(ctx, grad):
