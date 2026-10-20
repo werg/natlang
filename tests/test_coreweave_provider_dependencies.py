@@ -508,3 +508,50 @@ def test_snapshot_adoption_ferries_exact_current_status_pointer_and_proof(tmp_pa
     write(exchange/'lfm-status.json',{**release,'sha256':'a'*64})
     with pytest.raises(ValueError,match='retired role release'):
         deps.dependency_closure({'config':config},namespace=str(tmp_path))
+
+
+def test_snapshot_ferry_restores_only_declared_closure_with_original_host_unavailable(tmp_path):
+    """Actual Torch decode + same-namespace receiver, with no source files left.
+
+    This checks transport closure, not numerical CUDA model qualification.
+    """
+    import shutil
+    import torch
+    from natlang_neuralese.train.checkpoint_policy import CheckpointPolicy
+    from natlang_neuralese.train.native_continuation import collect_sft_progress
+    source=tmp_path/'production';source.mkdir()
+    ordinary=write(source/'ordinary.jsonl','ordinary mandatory training row\n')
+    pairs=write(source/'pairs.jsonl','genuine communication source row\n')
+    nested=write(source/'nested.json',{'schema':'natlang.native-graph-sources/1',
+        'sources':[{'kind':'native-graphs',**ordinary},{'kind':'semantic-pairs',**pairs,'model':'student'}]})
+    old_recipe=write(source/'old-recipe.json',{'policy':'historical identity; not read by metadata recovery'})
+    completed=write(source/'completed-source.jsonl','already consumed row\n')
+    frame={'required_visits':{'ordinary':2,'communication':1},'exposure_counts':{'ordinary':1},
+        'source_receipts':[nested]}
+    state={'training':{'options':{'recipe_binding':old_recipe},'sft_progress':{'mandatory':frame,
+        'completed':{'required_visits':{'done':1},'exposure_counts':{'done':1},'source_receipts':[completed]}},
+        'optimizer':{'actual-buffer':torch.arange(8.)},'rng':{'torch':torch.get_rng_state()}}}
+    path=source/'checkpoint.pt';torch.save(state,path)
+    binding={'path':str(path),'sha256':deps.sha256_file_hex_cached(path),'bytes':path.stat().st_size}
+    closure=deps.dependency_closure({'semantic_participants':[binding]},namespace=str(source))
+    expected={str(path),nested['path'],ordinary['path'],pairs['path']}
+    assert {row['path'] for row in closure['files']}==expected
+    transport=tmp_path/'transport';transport.mkdir()
+    for row in closure['files']:
+        shutil.copyfile(row['path'],transport/row['sha256'])
+    # Delete every original, then construct the receiver solely from the ferry
+    # inventory. Real sandboxes use the same /work/native-production namespace.
+    shutil.rmtree(source)
+    for row in closure['files']:
+        destination=Path(row['path']);destination.parent.mkdir(parents=True,exist_ok=True)
+        shutil.copyfile(transport/row['sha256'],destination)
+        assert destination.stat().st_size==row['bytes']
+        assert deps.sha256_file_hex_cached(destination)==row['sha256']
+    assert not Path(old_recipe['path']).exists() and not Path(completed['path']).exists()
+    checked=deps.dependency_closure({'semantic_participants':[binding]},namespace=str(source))
+    assert checked==closure
+    loaded=CheckpointPolicy.load(path)
+    assert collect_sft_progress(loaded['training'])['mandatory']==frame
+    torch.testing.assert_close(loaded['training']['optimizer']['actual-buffer'],
+        state['training']['optimizer']['actual-buffer'],rtol=0,atol=0)
+    assert torch.equal(loaded['training']['rng']['torch'],state['training']['rng']['torch'])

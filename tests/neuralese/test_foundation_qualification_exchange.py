@@ -105,3 +105,50 @@ def test_live_qualified_snapshot_pins_bytes_before_rolling_source_changes(tmp_pa
     assert Path(binding['checkpoint']['path']).read_bytes()==old
     assert _qualified_snapshot(name,binding)['native_identity']==binding['native_identity']
     assert roles.consumed_metadata(binding)==[roles.binding(Path(binding['source_role_release']['path']))]
+
+
+def test_snapshot_metadata_and_recipe_recovery_work_after_entire_source_host_is_removed(tmp_path,monkeypatch):
+    """Only transported bytes survive; source paths cannot satisfy a missing closure.
+
+    Runtime/task attestations and checkpoint decoding are protocol fixtures. The
+    actual role verifier, recipe recovery and optimizer construction run here.
+    """
+    import shutil
+    from test_native_role_release import fixture
+    from test_native_semantic import setup_pair
+    from natlang_neuralese.rl import native_role_release as roles
+    from natlang_neuralese.train import native_semantic_stage as stage
+    origin=tmp_path/'source-host';origin.mkdir()
+    source=fixture(origin,monkeypatch)['lfm']
+    reference=roles.publish(source['plan_path'],source['state_path'],kind='eligible')
+    _,qualified=roles.validate(reference,source['plan'],kind='eligible')
+    name=source['receipt']['model_id'];binding=qualified[name]
+    binding['source_role_plan']=source['plan']
+    # This is the exact relay metadata inventory, not an independently chosen
+    # list of extra recipe/cohort files that could mask a transport omission.
+    references=roles.consumed_metadata(binding)
+    assert references==[roles.binding(reference['path'])]
+    package=roles.metadata_package(references,tmp_path/'transport/metadata')
+    checkpoint=tmp_path/'receiver/checkpoint';checkpoint.parent.mkdir()
+    checkpoint.write_bytes(Path(binding['checkpoint']['path']).read_bytes())
+    proof=checkpoint.parent/'role-proof.json'
+    proof.write_bytes(Path(package[0]['transport']['path']).read_bytes())
+    binding.update(checkpoint={**binding['checkpoint'],**roles.binding(checkpoint)},
+        source_role_release=roles.binding(proof))
+    shutil.rmtree(origin)
+    assert not origin.exists() and not Path(binding['recipe']['path']).exists()
+    assert not Path(binding['readiness']['path']).exists()
+    assert stage._qualified_snapshot(name,binding)['native_identity']==binding['native_identity']
+    assert stage._source_readiness(name,binding)['recipe']==binding['recipe']
+    # Exercise the actual participant loader's old-checkpoint missing-recipe
+    # recovery branch. Only tiny model decoding/identity are protocol fixtures;
+    # no original recipe file is available or silently aliased on the receiver.
+    participant=setup_pair()[0]['lfm']
+    config={'architecture':'lfm2'}
+    monkeypatch.setattr(stage,'load_native_checkpoint',lambda *args,**kwargs:
+        (participant.model,participant.tokenizer,None,config,{'training':{}}))
+    monkeypatch.setattr(stage,'native_identity',lambda *args,**kwargs:binding['native_identity'])
+    loaded=stage.load_participant(name,binding,{'backbone_lr':1e-4},'cpu')
+    assert loaded.recipe_binding==binding['recipe']
+    assert loaded.optimizer is not None
+    assert roles.consumed_metadata(binding)==[roles.binding(proof)]

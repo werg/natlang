@@ -96,3 +96,15 @@ checkpoint/source/base closures. Preparation exports retain every participant
 optimizer plus its source RNG and earned progress; joint training retains its
 own shared RNG and VAE optimizer. No part of this prospective path establishes
 that current cloud learners have adopted it or passed current CUDA readiness.
+
+Snapshot transport has two distinct closures. The inline source-host role
+attestation contains the exact old readiness, report, task, runtime and per-row
+exposure evidence; its validator does not reread original recipes/cohort files.
+`native_recipe_provenance` recovers that exact saved metadata without binding an
+old recipe path. The legacy non-snapshot readiness path still transports recipe
+inheritance and all original readiness files. Separately, the standard provider
+checkpoint closure transports all *unfinished* mandatory source frames and
+nested source manifests. Source-removal tests rebuild the receiver solely from
+these two declared ferry inventories, then validate snapshot recipe recovery
+and decode the actual Torch optimizer/RNG/carried source state. These are CPU
+transport/recovery proofs, not production CUDA qualification.
