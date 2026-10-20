@@ -523,7 +523,7 @@ def main(argv=None):
                 from scripts.coreweave.owned_publication_export import owner_remote_code
             code=owner_remote_code(args.publication_owner_pointer,role=args.role,
                 known_generation=kwargs.get('known_owner_generation'),known_sha256=kwargs.get('known_sha256'),
-                known_step=kwargs.get('known_step',-1),production_root=args.root,
+                known_step=kwargs.get('known_step',-1),production_root=str(args.root),
                 control_root=str(pathlib.Path(args.root)/'control'))
         elif publication is not None:
             try:
