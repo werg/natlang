@@ -137,3 +137,14 @@ fields on a copied argv; preserve learner commands and the original declaration.
 Reject an unknown custom launcher instead of pretending its imports changed.
 Role/coordinator adoption follows the existing verified later-runtime handoff at
 a natural safe boundary; an old owner's source plan is never relabeled.
+
+## Transported communication exposure
+
+The recipe chooses a fixed admitted foundation and preserves later mandatory
+cohorts. Source-host readiness already reconstructs every declared row from the
+actual source. The peer must also verify the existing foundation receipt's
+per-row binding/admission/quota/counter law and recompute its cohort hash and
+rollups, without opening remote source paths. Share that exact receipt-summary
+mechanism with its producer; aggregate visits or a `complete` flag cannot replace
+missing row exposure. This is crisp evidence verification, not a new readiness
+policy, another trainer or permission to relabel an old role authority.

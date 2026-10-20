@@ -250,7 +250,11 @@ def validate(reference,plan,*,kind):
                     or communication['graph_visits']<communication['required_graph_visits']))):
             raise ValueError('role release lacks genuine complete communication exposure')
         if foundation:
+            from ..train.native_continuation import validate_communication_foundation
             completed=receipt.get('communication_foundation')or{}
+            validate_communication_foundation(completed, epochs=(cohort['foundation_epochs']
+                if cohort['foundation_epochs'] is not None else 1.),
+                source_sha256=cohort['foundation_sources_sha256'])
             if ((receipt.get('completed')is not True and receipt.get('foundation_ready')is not True)
                     or(report.get('completed')is not True and report.get('foundation_ready')is not True)
                     or completed.get('complete')is not True or not completed.get('rows')

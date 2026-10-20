@@ -475,3 +475,50 @@ def test_declared_mechanism_records_bound_external_control_source_not_installed_
     assert {k:v for k,v in actual.items()if k!='rl/native_raw_handoff.py'}=={k:v for k,v in installed.items()if k!='rl/native_raw_handoff.py'}
     path.write_text('# substituted control\n')
     with pytest.raises(ValueError,match='source binding changed'):roles.mechanism()
+
+
+def test_peer_rejects_unvisited_foundation_row_despite_complete_aggregate(tmp_path,monkeypatch):
+    """Exercise the actual transported verifier, independent of source-host flags."""
+    from natlang_neuralese.common.hashing import canonical_json_sha256_hex,sha256_hex
+    rows=fixture(tmp_path,monkeypatch);left,right=rows['lfm'],rows['mellum']
+    ref=roles.publish(left['plan_path'],left['state_path'],kind='released')
+    proof=json.loads(Path(ref['path']).read_text())
+    plan=copy.deepcopy(right['plan'])
+    requirement=next(x for x in plan['models'] if x['model']=='lfm')['handoff_requirement']
+    requirement.update(readiness_boundary='communication-foundation',foundation_epochs=1.,
+                       foundation_sources={'path':'/remote/foundation.json','sha256':'f'*64})
+    source_plan=roles._evidence(proof['plan'])
+    next(x for x in source_plan['models'] if x['model']=='lfm')['handoff_requirement']=copy.deepcopy(requirement)
+    def replace(item,value):
+        text=json.dumps(value);raw=text.encode();item['text']=text;item['source']['sha256']=sha256_hex(raw)
+        if 'bytes' in item['source']:item['source']['bytes']=len(raw)
+        return copy.deepcopy(item['source'])
+    replace(proof['plan'],source_plan)
+    proof['contract']=roles.contract(plan)
+    item=proof['models']['lfm'];checked=item['ready']
+    checked['readiness_requirement']=copy.deepcopy(requirement)
+    row_values={key:{'binding':key+'-binding','required_visits':1,'graph_visits':1,'admitted_to_training':True}
+                for key in ('producer-consumer-a','producer-consumer-b')}
+    cohort={key:{name:row[name] for name in ('binding','required_visits')}for key,row in row_values.items()}
+    foundation={'schema':'natlang.native-communication-foundation/1','epochs':1.,'rows':row_values,
+        'sources':{'sha256':'f'*64},'cohort_sha256':canonical_json_sha256_hex(cohort),
+        'graphs':2,'required_graph_visits':2,'graph_visits':2,'complete':True}
+    obligations={'schema':'natlang.native-sft-progress/1','stages':{'remaining-ce':{'complete':False}}}
+    def seal():
+        report=roles._evidence(item['report']);report.update(communication_foundation=foundation,mandatory_sft=obligations)
+        report_ref=replace(item['report'],report)
+        receipt=roles._evidence(item['readiness']);receipt.update(communication_foundation=foundation,
+            mandatory_sft=obligations,training_receipt=report_ref)
+        receipt_ref=replace(item['readiness'],receipt)
+        checked.update(readiness=receipt_ref,communication_foundation=copy.deepcopy(foundation))
+        state=roles._evidence(proof['raw_state']);state['plan_sha256']=proof['plan']['source']['sha256']
+        state['models']['lfm']['readiness']=receipt_ref;replace(proof['raw_state'],state)
+        path=tmp_path/'transported-foundation-proof.json';write_json_durable(path,proof)
+        return raw.binding(path)
+    valid=seal()
+    # Peer validation never needs the remote graph/checkpoint/source paths.
+    assert roles.validate(valid,plan,kind='released')[0]=='lfm'
+    foundation['rows']['producer-consumer-a']['graph_visits']=2
+    foundation['rows']['producer-consumer-b']['graph_visits']=0
+    with pytest.raises(ValueError,match='completed exact exposure for every row'):
+        roles.validate(seal(),plan,kind='released')

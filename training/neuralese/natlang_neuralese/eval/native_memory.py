@@ -708,8 +708,35 @@ def run_prepared(model,optimizer,train,roles,config,args,*,backend,checkpoint_sh
         for request in requests:
             resolved.append(_resolve_memory_qualification(request,model=model,optimizer=optimizer,train=train,
                 roles=roles,config=config,args=args,backend=backend,objective=objective))
-        for request in resolved:
-            args.memory_qualification=json.dumps(request)
+        from ..train.native_resident import bound,binding
+        canonical={};aliases=[]
+        for requested,request in zip(requests,resolved):
+            path=bound(request);actual=binding(path)
+            if 'bytes' in request and path.stat().st_size!=request['bytes']:
+                raise ValueError('memory qualification request byte count changed')
+            key=actual['sha256']
+            if key not in canonical:
+                # Existing immutable evidence retains its original request path.
+                # Reuse that checked identity across reordered/relocated aliases.
+                proof_path=args.out/'memory-qualifications'/key/checkpoint_sha256/'proof.json'
+                if proof_path.exists():
+                    previous=json.loads(proof_path.read_text()).get('request')
+                    prior=bound(previous)
+                    if previous.get('sha256')!=key or prior.read_bytes()!=path.read_bytes():
+                        raise ValueError('immutable memory qualification proof differs from its request')
+                    canonical[key]=binding(prior)
+                else:canonical[key]=actual
+            canonical_binding=canonical[key]
+            if bound(canonical_binding).read_bytes()!=path.read_bytes():
+                raise ValueError('memory qualification aliases must have identical request bytes')
+            aliases.append({'requested_binding':requested,'resolved_binding':request,'canonical_binding':canonical_binding})
+        for request,alias in zip(resolved,aliases):
+            # Recheck each logical file immediately before using its canonical
+            # request; no alias can disappear/change behind a cached proof.
+            path=bound(request);canonical_request=alias['canonical_binding']
+            if path.read_bytes()!=bound(canonical_request).read_bytes():
+                raise ValueError('memory qualification alias changed before its check')
+            args.memory_qualification=json.dumps(canonical_request)
             checks.append(_run_one_prepared(model,optimizer,train,roles,config,args,
                 backend=backend,checkpoint_sha256=checkpoint_sha256,objective=objective,
                 reference_reuse=reference_reuse))
@@ -720,14 +747,15 @@ def run_prepared(model,optimizer,train,roles,config,args,*,backend,checkpoint_sh
     passed=[check for check in checks if check['passed']]
     if len(passed)>1:
         from ..train.native_resident import binding
-        proofs=[binding(args.out/'memory-qualifications'/check['request']['sha256']/checkpoint_sha256/'proof.json')
-                for check in passed]
+        proofs=list({check['request']['sha256']:binding(
+            args.out/'memory-qualifications'/check['request']['sha256']/checkpoint_sha256/'proof.json')
+            for check in passed}.values())
         args.resident_geometry_qualification=combine_capacity_proofs(args.out,proofs,
             identity=passed[0]['identity'],code_sha=passed[0]['runtime_code_sha256'],
             checkpoint_sha256=checkpoint_sha256)
     result={'schema':'natlang.native-memory-cohort-qualification/1',
         'passed':len(checks)==len(requests) and all(check['passed'] for check in checks),
-        'request':requests,'parent_checkpoint_sha256':checkpoint_sha256,'checks':checks,
+        'request':requests,'request_aliases':aliases,'parent_checkpoint_sha256':checkpoint_sha256,'checks':checks,
         'optimizer_updates':0,'retained_capacity':str(args.resident_geometry_qualification)
             if args.resident_geometry_qualification else None}
     from ..common.jsonio import write_json_durable

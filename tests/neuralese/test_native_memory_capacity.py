@@ -520,3 +520,70 @@ def test_actual_sft_needs_capacity_but_keeps_smaller_pass_after_larger_failure(t
         assert updates==[] and (out/'memory-qualification.json').is_file()
         assert_exact(observed['weights'],observed['model'].state_dict())
         assert_exact(observed['moments'],observed['optimizer'].state_dict())
+
+
+@pytest.mark.parametrize('family',['lfm','mellum'])
+def test_identical_regular_request_aliases_measure_once_and_recheck_each_declaration(tmp_path,monkeypatch,family):
+    import json
+    from natlang_neuralese.eval import native_memory as memory
+    from natlang_neuralese.train import native_resident as resident
+    model,optimizer,train,roles,config,args=prepared_fixture(tmp_path,monkeypatch,family=family)
+    native_training_update(model,optimizer,list(train.iter_indices([0])),checkpoint_layers=True,chunk_tokens=3)
+    optimizer.zero_grad(set_to_none=True)
+    first=resident.bound(json.loads(args.memory_qualification));second=tmp_path/'pending-long-0.json'
+    second.write_bytes(first.read_bytes())
+    assert first.is_file() and second.is_file() and not first.is_symlink() and not second.is_symlink()
+    requests=[resident.binding(first),resident.binding(second)];args.memory_qualification=json.dumps(requests)
+    before=copy.deepcopy(model.state_dict()),copy.deepcopy(optimizer.state_dict()),torch.get_rng_state().clone(),random.getstate()
+    resolved=[];resolve=memory._resolve_memory_qualification
+    def resolve_each(reference,**kwargs):
+        value=resolve(reference,**kwargs);resolved.append(value);return value
+    monkeypatch.setattr(memory,'_resolve_memory_qualification',resolve_each)
+    checks=[];run=memory._run_one_prepared
+    def check_each(*arguments,**kwargs):
+        checks.append(json.loads(args.memory_qualification));return run(*arguments,**kwargs)
+    monkeypatch.setattr(memory,'_run_one_prepared',check_each)
+    selected=json.loads(first.read_text())['source'];measure=memory.qualify_capacity;measured=[]
+    def actual(*arguments,**kwargs):
+        if kwargs.get('source_binding')==selected:
+            assert len(resolved)==2
+            measured.append(1)
+        return measure(*arguments,**kwargs)
+    monkeypatch.setattr(memory,'qualify_capacity',actual)
+    result=memory.run_prepared(model,optimizer,train,roles,config,args,backend=None,checkpoint_sha256='a'*64)
+    assert result['passed'] and len(result['checks'])==2 and len(measured)==1
+    assert checks==[requests[0],requests[0]]
+    assert result['request']==requests
+    assert [item['resolved_binding']for item in result['request_aliases']]==requests
+    assert all(item['canonical_binding']==requests[0]for item in result['request_aliases'])
+    assert all(check['request']==requests[0]for check in result['checks'])
+    certificate=json.loads(args.resident_geometry_qualification.read_text())
+    combined=json.loads(resident.bound(certificate['evidence']).read_text())
+    assert len(combined['proofs'])==len(combined['capacity']['cases'])==1
+    # Reordering aliases retains the immutable original proof, with no remeasurement.
+    args.memory_qualification=json.dumps(list(reversed(requests)))
+    again=memory.run_prepared(model,optimizer,train,roles,config,args,backend=None,checkpoint_sha256='a'*64)
+    assert again['passed'] and len(measured)==1 and len(checks)==4
+    assert all(check['request']==requests[0]for check in again['checks'])
+    assert first.read_bytes()==second.read_bytes() and not second.is_symlink()
+    assert_exact(before[0],model.state_dict());assert_exact(before[1],optimizer.state_dict())
+    assert torch.equal(before[2],torch.get_rng_state()) and before[3]==random.getstate()
+
+
+def test_request_alias_changed_after_resolution_fails_before_cached_check(tmp_path,monkeypatch):
+    import json
+    from natlang_neuralese.eval import native_memory as memory
+    from natlang_neuralese.train.native_resident import binding,bound
+    model,optimizer,train,roles,config,args=prepared_fixture(tmp_path,monkeypatch)
+    first=bound(json.loads(args.memory_qualification));second=tmp_path/'alias.json';second.write_bytes(first.read_bytes())
+    args.memory_qualification=json.dumps([binding(first),binding(second)])
+    measure=memory.qualify_capacity;selected=json.loads(first.read_text())['source'];calls=[]
+    def change_alias(*arguments,**kwargs):
+        result=measure(*arguments,**kwargs)
+        if kwargs.get('source_binding')==selected:
+            calls.append(1);second.write_bytes(b'changed logical request after its source was resolved')
+        return result
+    monkeypatch.setattr(memory,'qualify_capacity',change_alias)
+    with pytest.raises(ValueError,match='resident artifact changed'):
+        memory.run_prepared(model,optimizer,train,roles,config,args,backend=None,checkpoint_sha256='a'*64)
+    assert len(calls)==1
