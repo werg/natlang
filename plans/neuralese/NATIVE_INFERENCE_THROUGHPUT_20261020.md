@@ -395,3 +395,12 @@ matches its config and eventual controller spec `out`. Actual bootstrap/provider
 inputs and review must bind the relocated files, not the overlay's host paths.
 No owner, readiness or source plan is synthesized: owner-bound `--preflight`
 remains pending until the genuine later-runtime handoff exists.
+
+Transport correction: archived overlays keep their original absolute construction
+root. The installer maps only that recorded root or the actual artifact root,
+authenticates each transported bound member's original SHA/bytes locally, and
+then rewrites its final metadata reference. A regression removes the original
+tree entirely before installation. The sealed overlay includes the installer
+and existing clone companion as exact source files. CLI operation receipts record
+in-progress, passed or failed status explicitly, so partial physical copies are
+reconciled deliberately before retrying an immutable destination.

@@ -1,5 +1,6 @@
 """Physical-layout metadata guards; no models, checkpoints or cloud resources."""
 import json
+import shutil
 from pathlib import Path
 import sys
 
@@ -36,7 +37,7 @@ def fixture_layout(tmp_path):
              for path in overlay.rglob('*') if path.is_file()}
     record = {'schema': 'natlang.native-actor-coordinator-composition/1', 'files': files,
               'inventory': inventory, 'code': canonical_json_sha256_hex(inventory),
-              'role_materials': {role: binding(overlay/'role-control'/role/'control-material.json')
+              'actor_runtime': str(overlay), 'role_materials': {role: binding(overlay/'role-control'/role/'control-material.json')
                                  for role in controls}}
     (overlay/'construction.json').write_text(json.dumps(record))
     return overlay, donor, canonical_json_sha256_hex(inventory), references, tmp_path/'runtime', controls
@@ -77,3 +78,39 @@ def test_layout_refuses_existing_control_root(tmp_path):
     with pytest.raises(FileExistsError):
         install(*arguments)
     assert not arguments[-2].exists()
+
+
+def test_moved_overlay_never_reads_original_host_paths(tmp_path):
+    arguments = list(fixture_layout(tmp_path))
+    original = arguments[0]
+    moved = tmp_path/'transported-overlay'
+    shutil.copytree(original, moved)
+    shutil.rmtree(original)
+    arguments[0] = moved
+    result = install(*arguments)
+    assert not original.exists()
+    assert result['actor_runtime'] == str(arguments[-2])
+    assert result['physical_layout']['overlay_original_root'] == str(original)
+    for role, root in arguments[-1].items():
+        material = json.loads((root/'control-material.json').read_bytes())
+        assert material['binder'] == binding(root/'bind-controller.py')
+        assert material['control_manifest'] == binding(root/'control-manifest.json')
+        assert result['role_materials'][role] == binding(root/'control-material.json')
+
+
+def test_failed_cli_leaves_explicit_operation_receipt(tmp_path, monkeypatch):
+    import install_native_actor_layout as module
+    overlay, donor, code, references, runtime, controls = fixture_layout(tmp_path)
+    controls['lfm'].mkdir(parents=True)
+    out = tmp_path/'operation.json'
+    monkeypatch.setattr(sys, 'argv', ['install-layout', '--overlay', str(overlay),
+        '--donor', str(donor), '--donor-code', code, '--dependencies', str(references),
+        '--runtime', str(runtime), '--lfm-control', str(controls['lfm']),
+        '--mellum-control', str(controls['mellum']), '--out', str(out)])
+    with pytest.raises(FileExistsError):
+        module.main()
+    receipt = json.loads(out.read_bytes())
+    assert receipt['status'] == 'failed'
+    assert receipt['partial_destinations_must_be_reconciled_before_retry'] is True
+    assert receipt['owner_started'] is False and receipt['readiness_granted'] is False
+    assert not runtime.exists()

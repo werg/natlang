@@ -289,3 +289,11 @@ The existing publisher verifies six-mechanism authority after relocation, and
 the inherited publication helper must import from the resulting runtime. These
 are crisp source/custody checks. They do not create an owner, approve readiness,
 relabel an old source plan, or change the existing continuation policy.
+
+Transported overlays retain an exact recorded construction root. Resolve each
+bound member through that root into the actual transported artifact and verify
+its original SHA/bytes locally before relocation; never read the original host
+path. Include installer and existing clone helper in the sealed artifact. The
+CLI writes a durable in-progress operation record before copying and an explicit
+failed record on error, leaving incomplete immutable destinations for exact
+operator reconciliation rather than automatic destructive retries.
