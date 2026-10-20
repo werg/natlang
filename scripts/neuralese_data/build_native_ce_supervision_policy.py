@@ -91,14 +91,32 @@ def build(sources, *, legacy_pair_context_weight, held_sources=(), expected_spli
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--source', action='append', type=Path, required=True)
-    parser.add_argument('--legacy-pair-context-weight', type=float, required=True,
+    parser.add_argument('--source', action='append', type=Path, default=[])
+    parser.add_argument('--prior-policy',type=Path,
+        help='append masks to this exact existing CE declaration without rescanning its source corpus')
+    parser.add_argument('--legacy-pair-context-weight', type=float,
         help='explicit original witnessed_pair_graph coefficient, never estimated from weights')
     parser.add_argument('--held-source', action='append', type=Path, default=[],
         help='exact protected test source; evaluation declaration only, never training exposure')
+    parser.add_argument('--failed-history-mask-manifest',type=Path,action='append',default=[],
+        help='source-bound same-ID TRAIN mask continuation, with exact tokenizer snapshot')
     parser.add_argument('--out', type=Path, required=True)
     args = parser.parse_args(argv)
-    value = build(args.source, legacy_pair_context_weight=args.legacy_pair_context_weight, held_sources=args.held_source)
+    if args.prior_policy:
+        if args.source or args.held_source or args.legacy_pair_context_weight is not None:
+            raise ValueError('prior-policy mask continuation preserves all existing source declarations')
+        from natlang_neuralese.train.native_failed_history import binding
+        value=load_policy(binding(args.prior_policy.resolve(strict=True)))
+        value={key:item for key,item in value.items()if not key.startswith('_')}
+        if not args.failed_history_mask_manifest:
+            raise ValueError('prior-policy continuation requires explicit failed-history manifests')
+    else:
+        if not args.source or args.legacy_pair_context_weight is None:
+            raise ValueError('source policy preparation requires sources and explicit legacy pair coefficient')
+        value = build(args.source, legacy_pair_context_weight=args.legacy_pair_context_weight, held_sources=args.held_source)
+    if args.failed_history_mask_manifest:
+        from natlang_neuralese.train.native_failed_history import binding
+        value['failed_history_masks']=value.get('failed_history_masks',[])+[binding(path.resolve(strict=True))for path in args.failed_history_mask_manifest]
     if args.out.exists():
         if json.loads(args.out.read_text()) != value:
             raise ValueError('existing CE policy differs; write a new explicit continuation artifact')
@@ -108,7 +126,7 @@ def main(argv=None):
     binding = {'path':str(args.out.resolve()),'sha256':sha256_file_hex(args.out)}
     load_policy(binding)
     print(json.dumps({'policy':binding,'declared_sources':len(value['sources']),
-                      'retained_sources':len(value['retained_sources'])}))
+                      'retained_sources':len(value.get('retained_sources',[]))}))
     return 0
 
 

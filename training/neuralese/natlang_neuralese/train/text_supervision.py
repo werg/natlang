@@ -67,7 +67,7 @@ def failed_feedback(body):
     return any(pattern.search(body) for pattern in FAILED_TOOL_FEEDBACK)
 
 
-def failed_assistant_mask(ids, labels, decode):
+def failed_assistant_mask(ids, labels, decode, *, evidence=None):
     """Per-token 1 on assistant turns (reasoning and reply) whose following tool response(s) are a runtime failure
     (``FAILED_TOOL_FEEDBACK``), else 0; ``ids`` and ``labels`` (``chat_roles`` codes) are aligned, ``decode`` maps token
     IDs to text. Masked turns stay in the context; ``balanced_position_weights(exclude=...)`` takes them out of every
@@ -84,6 +84,7 @@ def failed_assistant_mask(ids, labels, decode):
         while index < length and labels[index] in assistant:
             index += 1
         end, probe, failed = index, index, False
+        failed_feedbacks = []
         while probe < length and labels[probe] in (tool, other):  # every tool response before the next turn
             if labels[probe] == other:
                 probe += 1
@@ -101,7 +102,14 @@ def failed_assistant_mask(ids, labels, decode):
                 body = re.sub(r'\Atool(?:<\|im_sep\|>|\r?\n)', '', body, count=1).lstrip()
             if failed_feedback(body):
                 failed = True
+                if evidence is not None:
+                    from ..common.hashing import canonical_json_sha256_hex,sha256_hex
+                    failed_feedbacks.append({'span':[run,probe],
+                        'tokens_sha256':canonical_json_sha256_hex(list(ids[run:probe])),
+                        'body_sha256':sha256_hex(body.encode())})
         if failed:
+            if evidence is not None:
+                evidence.append({'assistant_span':[start,end],'feedbacks':failed_feedbacks})
             for position in range(start, end):
                 mask[position] = 1
     return mask

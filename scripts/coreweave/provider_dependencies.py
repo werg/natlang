@@ -76,9 +76,9 @@ def dependency_closure(request, *, namespace='/work/native-production', readonly
         return path
 
     def ce_policy_input(reference):
-        from natlang_neuralese.train.native_supervision import load_policy
-        bound(reference)
-        load_policy(reference)
+        from natlang_neuralese.train.native_supervision import ce_policy_dependencies
+        for item in ce_policy_dependencies(reference):
+            bound(item)
 
     def classification_input(reference):
         from natlang_neuralese.train.native_classification_continuation import classification_proof_dependencies

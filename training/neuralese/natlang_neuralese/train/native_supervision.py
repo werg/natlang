@@ -41,7 +41,7 @@ def load_policy(binding):
     value = json.loads(path.read_text())
     if sha256_file_hex(path) != digest:
         raise ValueError('CE supervision policy changed while reading')
-    if value.get('schema') != SCHEMA or not isinstance(value.get('sources'), list) or not value['sources']:
+    if value.get('schema') != SCHEMA or not isinstance(value.get('sources'), list) or (not value['sources'] and not value.get('failed_history_masks')):
         raise ValueError('CE supervision policy requires explicit source declarations')
     if type(value.get('require_eligible_sources', True)) is not bool:
         raise ValueError('CE policy eligible-source coverage must be explicitly boolean')
@@ -57,7 +57,26 @@ def load_policy(binding):
                 or not 0 <= weight < 1):
             raise ValueError('CE supervision source needs a unique SHA, exact raw encoding and context coefficient below one')
         seen.add(digest)
+    if not isinstance(value.get('failed_history_masks',[]),list):
+        raise ValueError('failed-history mask inputs must be an explicit list')
+    if value.get('failed_history_masks'):
+        from .native_failed_history import prepare_masks
+        prepare_masks(value)
+        held={item['sha256']for item in value.get('held_sources',[])}
+        if held.intersection(value.get('_failed_history_rows',{})):
+            raise ValueError('failed-history TRAIN masks overlap held declarations')
     return value
+
+
+def ce_policy_dependencies(binding):
+    """Exact policy plus portable failed-mask/decoder inputs for every consumer."""
+    policy=load_policy(binding)
+    result=[{'path':str(Path(binding['path'])),'sha256':sha256_file_hex(binding['path']),
+             'bytes':Path(binding['path']).stat().st_size}]
+    if policy.get('failed_history_masks'):
+        from .native_failed_history import prepare_masks
+        result.extend(prepare_masks(policy))
+    return result
 
 
 def apply_policy(example, row, *, source_sha256, policy):
@@ -74,6 +93,9 @@ def apply_policy(example, row, *, source_sha256, policy):
         return held_measurements(example, row, source_sha256=source_sha256, policy=policy)
     if not isinstance(source_sha256, str) or not re.fullmatch('[0-9a-f]{64}', source_sha256):
         raise ValueError('CE supervision requires an authenticated immutable source SHA')
+    if policy.get('_failed_history_rows'):
+        from .native_failed_history import apply_masks
+        example,row=apply_masks(example,row,source_sha256=source_sha256,policy=policy)
     conversion = row.get('conversion') or {}
     declarations = [entry for entry in policy['sources'] if entry['sha256'] == source_sha256]
     if not declarations:
