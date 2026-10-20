@@ -315,7 +315,8 @@ def _reviewed_legacy_dependency(monkeypatch):
         if Path(path) == dependency else actual_file_sha(path))
 
 
-def test_streamed_resume_preserves_old_group_receipt_and_records_mixed_renderer_ids(tmp_path, monkeypatch):
+@__import__('pytest').mark.parametrize('legacy_text', [None, '41b011ebc425839d62c50f9f9118b46c3749b1dfdbbf4e8979e4df92cbe356b3'])
+def test_streamed_resume_preserves_old_group_receipt_and_records_mixed_renderer_ids(tmp_path, monkeypatch, legacy_text):
     _reviewed_legacy_dependency(monkeypatch)
     from scripts.neuralese_data.strip_generic_system_prompt import strip_row
     tokenizer = _CharacterChatTokenizer()
@@ -335,7 +336,7 @@ def test_streamed_resume_preserves_old_group_receipt_and_records_mixed_renderer_
 
     source_digest = renderer.file_sha(selected)
     old_renderer_sha = renderer.LEGACY_SEARCH_RENDERER_SHA256
-    old_binding = renderer._legacy_render_job_binding(job, source_digest, old_renderer_sha)
+    old_binding = renderer._legacy_render_job_binding(job, source_digest, old_renderer_sha, historical_text_sha256=legacy_text)
     # The one text-corpus dependency transition is allowed only for the
     # unchanged default profile. A KEEP render must never reuse old default
     # receipts even when the renderer bytes match this reviewed transition.
@@ -389,6 +390,10 @@ def test_streamed_resume_preserves_old_group_receipt_and_records_mixed_renderer_
     current_renderer_sha = renderer.file_sha(Path(renderer.__file__).resolve())
     assert result['trajectory_bindings'][group_id] == old_group_binding
     assert result['trajectory_renderers'][group_id] == old_renderer_sha
+    assert result['trajectory_legacy_text_dependencies'][group_id] == (legacy_text or renderer.LEGACY_SEARCH_TEXT_CORPUS_DEFAULT_PROFILE_TRANSITION['historical_sha256'])
+    bad = {**result, 'trajectory_legacy_text_dependencies': {group_id: 'f' * 64}}
+    with __import__('pytest').raises(ValueError, match='historical text dependency'):
+        renderer._verify_trajectory_receipts(job, bad, {old_renderer_sha, current_renderer_sha})
     renderer._verify_trajectory_receipts(job, result, {old_renderer_sha, current_renderer_sha})
     assert result['group_renderer_code_sha256s'] == sorted({
         old_renderer_sha, current_renderer_sha})
@@ -743,3 +748,10 @@ def test_search_parent_chain_preserves_each_actual_text_dependency(monkeypatch):
                    renderer.SEARCH_LEGACY_EQUATION_RENDERER_SHA256):
         assert renderer._resource_parent_code_binding(parent)[path]==transition['historical_sha256']
     assert renderer._resource_parent_code_binding(renderer.SEARCH_PROFILE_AWARE_RENDERER_SHA256)[path]==transition['current_sha256']
+
+
+def test_legacy_search_rejects_unknown_historical_text_witness(tmp_path, monkeypatch):
+    _reviewed_legacy_dependency(monkeypatch)
+    job = (str(tmp_path/'source'), str(tmp_path/'out'), 'lfm25', {}, 'fixture', set(), set(), False, None, ('whole-trajectory',), False, set())
+    with __import__('pytest').raises(ValueError, match='witness is not approved'):
+        renderer._legacy_render_job_binding(job, 'a'*64, renderer.LEGACY_SEARCH_RENDERER_SHA256, historical_text_sha256='f'*64)

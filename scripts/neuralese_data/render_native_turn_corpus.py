@@ -88,6 +88,8 @@ SEARCH_REVIEWED_RESOURCE_PARENT_CHAIN = frozenset((SEARCH_RESOURCE_ONLY_PARENT_R
 from natlang_neuralese.common.paths import DEFAULTS as MACHINE_PATH_DEFAULTS  # noqa: E402
 
 _LEGACY_REPO = Path(MACHINE_PATH_DEFAULTS['repo'])
+# Exact text dependency of the original b054 groups (cd4140a5e5).
+LEGACY_SEARCH_ORIGINAL_TEXT_SHA256 = '41b011ebc425839d62c50f9f9118b46c3749b1dfdbbf4e8979e4df92cbe356b3'
 LEGACY_SEARCH_CODE_BINDING = {
     str(_LEGACY_REPO / 'scripts/neuralese_data/render_native_turn_corpus.py'):
         LEGACY_SEARCH_RENDERER_SHA256,
@@ -1436,9 +1438,14 @@ def _render_job_binding_from_job(job, source_digest, code_binding):
                                job[13] if len(job) > 13 else None)
 
 
-def _legacy_render_job_binding(job, source_sha, renderer_sha):
+def _legacy_render_job_binding(job, source_sha, renderer_sha, *, historical_text_sha256=None):
     if renderer_sha != LEGACY_SEARCH_RENDERER_SHA256:
         raise ValueError('legacy renderer SHA is not an approved historical migration witness')
+    text_path = str(_LEGACY_REPO / 'training/neuralese/natlang_neuralese/data/text_corpus.py')
+    historical_text_sha256 = historical_text_sha256 or LEGACY_SEARCH_CODE_BINDING[text_path]
+    if historical_text_sha256 not in (LEGACY_SEARCH_CODE_BINDING[text_path], LEGACY_SEARCH_ORIGINAL_TEXT_SHA256):
+        raise ValueError('legacy renderer text dependency witness is not approved')
+    legacy_code = {**LEGACY_SEARCH_CODE_BINDING, text_path: historical_text_sha256}
     dependency_paths = {
         'text_corpus.py': ROOT / 'training/neuralese/natlang_neuralese/data/text_corpus.py',
         'strip_generic_system_prompt.py': ROOT / 'scripts/neuralese_data/strip_generic_system_prompt.py',
@@ -1446,7 +1453,7 @@ def _legacy_render_job_binding(job, source_sha, renderer_sha):
     for name, path in dependency_paths.items():
         old_path = next(Path(key) for key in LEGACY_SEARCH_CODE_BINDING if key.endswith('/' + name))
         actual_sha = file_sha(path)
-        expected_sha = LEGACY_SEARCH_CODE_BINDING[str(old_path)]
+        expected_sha = legacy_code[str(old_path)]
         if actual_sha == expected_sha:
             continue
         if name == 'text_corpus.py':
@@ -1477,7 +1484,7 @@ def _legacy_render_job_binding(job, source_sha, renderer_sha):
         'header_as_full': header_as_full,
         'full_programs': None if full_programs is None else sorted(full_programs),
         'renderings': list(renderings), 'compress_text': compress_text,
-        'code': LEGACY_SEARCH_CODE_BINDING,
+        'code': legacy_code,
     }).encode())
 
 
@@ -1523,6 +1530,14 @@ def _verify_trajectory_receipts(job, done_result, allowed_renderer_shas, expecte
         raise ValueError(f'done marker lacks per-trajectory source/code identities: {stem}/{tok_name}')
     if set(trajectory_bindings) != {path.stem for path in receipts} or set(trajectory_renderers) != set(trajectory_bindings):
         raise ValueError(f'done marker trajectory identity inventory mismatch: {stem}/{tok_name}')
+    legacy_text = done_result.get('trajectory_legacy_text_dependencies')
+    if legacy_text is not None:
+        expected_legacy = {key for key, value in trajectory_renderers.items() if value == LEGACY_SEARCH_RENDERER_SHA256}
+        if (not isinstance(legacy_text, dict) or set(legacy_text) != expected_legacy
+                or any(value not in (LEGACY_SEARCH_ORIGINAL_TEXT_SHA256,
+                       LEGACY_SEARCH_TEXT_CORPUS_DEFAULT_PROFILE_TRANSITION['historical_sha256'])
+                       for value in legacy_text.values())):
+            raise ValueError('done marker historical text dependency inventory differs')
     for path in receipts:
         receipt = json.loads(path.read_text())
         if receipt.get('binding') != trajectory_bindings[path.stem]:
@@ -1681,9 +1696,12 @@ def render_shard(job):
                                       compress_text, code_binding, input_binding)
     legacy_renderer_sha = storage_options[2] if len(storage_options) > 2 else None
     resource_parent_sha = storage_options[5] if len(storage_options) > 5 else None
-    legacy_job_binding = None
+    legacy_job_bindings = {}
     if legacy_renderer_sha:
-        legacy_job_binding = _legacy_render_job_binding(job, source_file_sha, legacy_renderer_sha)
+        for text_sha in (LEGACY_SEARCH_CODE_BINDING[str(_LEGACY_REPO / 'training/neuralese/natlang_neuralese/data/text_corpus.py')],
+                         LEGACY_SEARCH_ORIGINAL_TEXT_SHA256):
+            legacy_job_bindings[text_sha] = _legacy_render_job_binding(
+                job, source_file_sha, legacy_renderer_sha, historical_text_sha256=text_sha)
     resource_parent_job_binding = None
     if resource_parent_sha:
         resource_parent_job_binding = _render_job_binding_from_job(
@@ -1770,7 +1788,7 @@ def render_shard(job):
                      'source_sha256': source_file_sha, 'renderer_code_sha256': renderer_code_sha,
                      'render_job_binding': job_binding}
         group_renderer_shas = set()
-        trajectory_bindings, trajectory_renderers = {}, {}
+        trajectory_bindings, trajectory_renderers, trajectory_legacy_text = {}, {}, {}
 
         def accumulate(result):
             for key, value in result.items():
@@ -1805,9 +1823,9 @@ def render_shard(job):
             source_ids = [row.get('id') for row in group_rows]
             binding = _trajectory_render_binding(job_binding, trajectory, source_ids,
                                                  source_record_hashes)
-            legacy_binding = (_trajectory_render_binding(legacy_job_binding, trajectory, source_ids,
-                                                          source_record_hashes)
-                              if legacy_job_binding is not None else None)
+            legacy_bindings = {text_sha: _trajectory_render_binding(old_job, trajectory, source_ids,
+                                                                      source_record_hashes)
+                               for text_sha, old_job in legacy_job_bindings.items()}
             expected_receipt = None
             if receipt_path.is_file():
                 expected_receipt = json.loads(receipt_path.read_text())
@@ -1816,7 +1834,11 @@ def render_shard(job):
                     receipt_renderer_sha = expected_receipt.get('renderer_code_sha256', renderer_code_sha)
                     if receipt_renderer_sha != renderer_code_sha:
                         raise ValueError(f'trajectory receipt renderer identity changed: {trajectory}')
-                elif legacy_binding is not None and receipt_binding == legacy_binding:
+                elif receipt_binding in legacy_bindings.values():
+                    matches = [text_sha for text_sha, value in legacy_bindings.items() if value == receipt_binding]
+                    if len(matches) != 1:
+                        raise ValueError('legacy text dependency witness is ambiguous')
+                    trajectory_legacy_text[group_id] = matches[0]
                     receipt_renderer_sha = expected_receipt.get('renderer_code_sha256', legacy_renderer_sha)
                     if receipt_renderer_sha != legacy_renderer_sha:
                         raise ValueError(f'legacy trajectory receipt renderer identity changed: {trajectory}')
@@ -1974,6 +1996,7 @@ def render_shard(job):
         aggregate['group_renderer_code_sha256s'] = sorted(group_renderer_shas)
         aggregate['trajectory_bindings'] = dict(sorted(trajectory_bindings.items()))
         aggregate['trajectory_renderers'] = dict(sorted(trajectory_renderers.items()))
+        aggregate['trajectory_legacy_text_dependencies'] = dict(sorted(trajectory_legacy_text.items()))
         write_done(out_dir, tok_name, stem, aggregate)
         return aggregate
 
@@ -2435,6 +2458,7 @@ def main(argv=None):
                 ({'shard': res['shard'], 'tokenizer': res['tokenizer'],
                   'source_sha256': res['source_sha256'],
                   'renderer_code_sha256': res['renderer_code_sha256'],
+                  'trajectory_legacy_text_dependencies': res.get('trajectory_legacy_text_dependencies'),
                   'group_renderer_code_sha256s': res.get('group_renderer_code_sha256s',
                                                          [res['renderer_code_sha256']])}
                  for res in results), key=lambda item: (item['shard'], item['tokenizer'])),
