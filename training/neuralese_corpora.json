@@ -265774,6 +265774,120 @@
         "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0070-tranche0000",
         "qwen-verified-positive-native-graphs-20261017-recovery7853-batch0067-tranche0003"
       ]
+    },
+    {
+      "id": "qwen-verified-positive-native-graphs-20261015-v5-lfm-history-keep-v1-20261020",
+      "owner": "dgx",
+      "path": "runs/qwen-verified-positive-native-graphs-20261015-v5-lfm-history-keep-v1-20261020",
+      "include": [
+        "lfm25/receipt.json",
+        "lfm25/train/native-graphs.jsonl.zst",
+        "lfm25/test/native-graphs.jsonl.zst",
+        "lfm25/content-cache-cold-allowlist-proof.json",
+        "validation-proof.json",
+        "conversion-manifest.json",
+        "conversion-completed.json"
+      ],
+      "source_class": "verified-strong-teacher-positive-native-whole-trajectory-ordinary-SFT-graphs",
+      "training_admission": true,
+      "model_views": [
+        "lfm25"
+      ],
+      "history_reasoning_policy": {
+        "lfm25": "keep"
+      },
+      "derived_from": [
+        "qwen-verified-positive-native-graphs-20261015-v5"
+      ],
+      "split": "Additional LF TRAIN-only context view of the unchanged original2749 train trajectories; test empty. Existing held/source/decision guards unchanged.",
+      "admission": "7721 additional LF context graphs;9571 currently qualified original decisions,1850 exact-content duplicates omitted normally. Original9572 historical semantic LF/M decisions authenticated; one newly failed/unexecuted action excluded by current guards. No new Mellum rows.",
+      "training_admission_reason": "Root-reviewed strict profile validator authenticates current source/global protection and decision/capture bindings, exact original suffix token IDs/weights, profile-aware distinct IDs, complete omission/dedup accounting, and semantic correspondence to existing Mellum KEEP. Existing LF/M rows and earned credits remain intact.",
+      "source_binding": {
+        "raw_source": {
+          "bytes": 889460337,
+          "path": "/home/werg/data/dgxops/qwen-verified-positive-trajectories-20261015-v5/native-trajectories.jsonl",
+          "sha256": "5759f85506435dfe46ae344d02b1f124f4ceeca24536533c5bfd31c9e1866b66"
+        },
+        "validation_proof": {
+          "path": "/mnt/external/natlang-development-data/teacher198-current-admission-20261019/qwen-v5-lfm-explicit-keep-view-v1/validation-proof.json",
+          "sha256": "f1eacb9b2d9d349a2d5543f82ccf5a0fc47f6adf2991e88aeb8f35d384df0bb5",
+          "bytes": 6247
+        },
+        "current_protection": {
+          "bytes": 5469555,
+          "path": "/home/werg/data/dgxops/acquired-connected-source-protection-20261017-d13-d14-d32-v3/protection-manifest.json",
+          "sha256": "f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349"
+        },
+        "current_global_source_closure": {
+          "bytes": 14025089,
+          "path": "/home/werg/data/dgxops/acquired-connected-source-protection-20261017-d13-d14-d32-v3/closure-receipt-full-20261019-source-storage-relocated-v1.json",
+          "sha256": "9d365218778c2999b5f97ef2b320aed930f9d66e248c2b28c46b315713632f9b"
+        },
+        "closure_transition": {
+          "bytes": 3320416,
+          "path": "/home/werg/data/dgxops/acquired-connected-source-protection-20261017-d13-d14-d32-v3/closure-code-transition-source-storage-relocated-v1.json",
+          "sha256": "ea6072574a7abe0cf60fd46adc5e72be26e14061cb0fd9bb031e447ea031caee"
+        },
+        "original_models": {
+          "lfm25": {
+            "receipt": {
+              "bytes": 4432496,
+              "path": "/home/werg/natlang/runs/qwen-verified-positive-native-graphs-20261015-v5/lfm25/receipt.json",
+              "sha256": "ab85ce1663ad6f280534db344ec2a36d247e59c0ae63d44cf4a6d947514d9c48"
+            },
+            "train": {
+              "bytes": 6405418,
+              "path": "/home/werg/natlang/runs/qwen-verified-positive-native-graphs-20261015-v5/lfm25/train/native-graphs.jsonl.zst",
+              "sha256": "d056056f9940b095d5a684cbe76c77e3176d31283769efdf490a907d58c542ad"
+            },
+            "validation": {
+              "bytes": 3215,
+              "path": "/home/werg/natlang/runs/qwen-verified-positive-native-graphs-20261015-v5/lfm25/validation-proof.json",
+              "sha256": "4000b467bafe26c67e607ed7c6aeb35799feeadd9cfe5a8e84ec749c2be49a44"
+            }
+          },
+          "mellum21": {
+            "receipt": {
+              "bytes": 4432630,
+              "path": "/home/werg/natlang/runs/qwen-verified-positive-native-graphs-20261015-v5/mellum21/receipt.json",
+              "sha256": "3066a7680f30b44d62a6f8ed9d0ad656c9f151503a8a31d5740bae641f5bba6d"
+            },
+            "train": {
+              "bytes": 6314387,
+              "path": "/home/werg/natlang/runs/qwen-verified-positive-native-graphs-20261015-v5/mellum21/train/native-graphs.jsonl.zst",
+              "sha256": "ba0bffd51f463322ef142683c7fc437d4c76c5d5aa00e2dd31bf62b399597180"
+            },
+            "validation": {
+              "bytes": 3215,
+              "path": "/home/werg/natlang/runs/qwen-verified-positive-native-graphs-20261015-v5/mellum21/validation-proof.json",
+              "sha256": "4000b467bafe26c67e607ed7c6aeb35799feeadd9cfe5a8e84ec749c2be49a44"
+            }
+          }
+        },
+        "conversion": {
+          "bytes": 856,
+          "path": "/mnt/external/natlang-development-data/teacher198-current-admission-20261019/qwen-v5-lfm-explicit-keep-view-v1/conversion-completed.json",
+          "sha256": "c4561c515be101a9a280c0baeb602041ecc65dffd06371b8a928af16db024693"
+        },
+        "decision_admission": {
+          "output_sha256": "3b3de46b2aa2691a6e52d844d034298afd5f4baf9b79fb1f34af92df35788ab2",
+          "path": "/home/werg/data/dgxops/qwen-verified-positive-trajectories-20261015-v5/decision-admission-cache/61b7ad45d2492ec48eccb4736d511763831bef414a9f298c2ec90d7c45f41f57/receipt.json",
+          "sha256": "7a91a250e7ea70522fc9e7b1708631b81f44e8ac60e9e70d00aa29577212da17",
+          "summary": {
+            "accepted_rows": 2749,
+            "authored_actions_held": 0,
+            "eligible_decisions": 9571,
+            "output": "decisions.jsonl",
+            "rejected_rows": 0,
+            "replayed_context_decisions": 0,
+            "training_decisions": 13260
+          }
+        },
+        "model": "lfm25",
+        "mellum_new_rows": 0
+      },
+      "license_provenance": "Same project-collected RadixArk/Qwen3.8-Flash-Next-NVFP4 stronger self-hosted base-teacher trajectories and immutable original license/revision/selection/transfer bindings; no new teacher generation.",
+      "note": "Additional runtime-aligned LF KEEP contexts only; preserved existing0.05 context/1 suffix weights. No new communication-edge, on-policy, task-success causality or earned-exposure claim. Mellum default KEEP view is reused through its original corpus, not readmitted."
     }
   ],
   "coverage_backlog": [
