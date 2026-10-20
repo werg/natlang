@@ -136,6 +136,30 @@ def test_capture_custody_refuses_wrong_raw_line(tmp_path):
     with pytest.raises(ValueError,match='capture row identity'):capture_evidence(graph,raw,'a'*64)
 
 
+def test_identical_verified_decoder_snapshots_reuse_one_load_without_skipping_asset_checks(tmp_path,monkeypatch):
+    from transformers import AutoTokenizer
+    from natlang_neuralese.train.native_failed_history import prepare_masks,apply_masks,_decoder
+    tokenizer=tokenizer_fixture(tmp_path/'original-tokenizer')
+    fixtures=[fixture(tmp_path/f'family-{index}',tokenizer=tokenizer)for index in range(4)]
+    policy={'failed_history_masks':[item[2]for item in fixtures]}
+    _decoder.cache_clear();calls=[];original=AutoTokenizer.from_pretrained
+    def load(*args,**kwargs):
+        calls.append(args[0]);return original(*args,**kwargs)
+    monkeypatch.setattr(AutoTokenizer,'from_pretrained',load)
+    prepare_masks(policy)
+    for graph,source,*_ in fixtures*2:
+        example=parse_graph(graph,tokenizer_fingerprint=graph['tokenizer_fingerprint'])
+        result,_=apply_masks(example,graph,source_sha256=binding(source)['sha256'],policy=policy)
+        assert result.target_weights!=example.target_weights
+    assert len(calls)==1
+    # Equivalent content never excuses checking each independent bound copy.
+    manifest,_,_=load_manifest(fixtures[-1][2])
+    asset=Path(fixtures[-1][2]['path']).parent/manifest['tokenizer']['files'][0]['path']
+    asset.write_bytes(asset.read_bytes()+b' ')
+    with pytest.raises(ValueError):prepare_masks({'failed_history_masks':policy['failed_history_masks']})
+    _decoder.cache_clear()
+
+
 def test_evidence_addition_leaves_old_mask_identical():
     from test_failed_assistant_context import fixture as old_fixture
     from natlang_neuralese.train.text_supervision import chat_roles,failed_assistant_mask

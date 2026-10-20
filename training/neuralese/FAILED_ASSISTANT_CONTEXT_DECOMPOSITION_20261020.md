@@ -90,3 +90,11 @@ saved snapshot again before publication. Each graph's role/failure derivation
 runs once. The pure record serializer grants no proof or training eligibility:
 the learner still independently rederives every claimed span from bound tokens.
 This avoids repeated full vocabulary hashing and duplicated long-context scans.
+
+Consumer preparation verifies every manifest and every declared decoder asset,
+then canonicalizes identical `(asset inventory, tokenizer fingerprint)` decoder
+bindings within that policy to the first verified snapshot. The existing bounded
+decoder cache therefore loads one tokenizer for equivalent snapshot copies,
+instead of churning when a production policy combines several source families.
+Distinct content remains distinct, and a damaged later copy still fails before
+the shared cache is used. This changes no masks, row identities or objective law.

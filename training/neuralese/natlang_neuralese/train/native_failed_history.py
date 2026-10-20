@@ -170,7 +170,7 @@ def _decoder(directory,inventory,fingerprint):
 
 def prepare_masks(policy):
     """Load only small immutable mask/decoder metadata; no intrinsic index change."""
-    rows={};dependencies=[]
+    rows={};dependencies=[];decoders={}
     references=policy.get('failed_history_masks',[])
     if not isinstance(references,list):raise ValueError('failed-history mask inputs must be a list')
     for reference in references:
@@ -178,10 +178,14 @@ def prepare_masks(policy):
         decoder=manifest['tokenizer']
         directory=str((Path(reference['path']).parent/decoder['directory']).resolve())
         inventory=tuple((item['path'],item['sha256'],item['bytes'])for item in decoder['files'])
+        # Every manifest's assets were checked above. Identical verified content
+        # can share the existing decoder cache despite separate snapshot paths.
+        identity=(inventory,decoder['fingerprint'])
+        decoder_binding=decoders.setdefault(identity,(directory,inventory,decoder['fingerprint']))
         for key,row in entries.items():
             source_rows=rows.setdefault(key[0],{})
             if key[1]in source_rows:raise ValueError('failed-history policies duplicate one original row')
-            source_rows[key[1]]={'row':row,'decoder':(directory,inventory,decoder['fingerprint'])}
+            source_rows[key[1]]={'row':row,'decoder':decoder_binding}
     if rows:policy['_failed_history_rows']=rows
     return dependencies
 
