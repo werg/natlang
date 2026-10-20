@@ -966,3 +966,49 @@ both task evaluation and the RAW RL collector, preserving the separate Python
 publication runtime. The complete runtime snapshot is prepared for deployment;
 existing learners have not silently adopted it. Continuous self-hosted Qwen
 generation and verified whole-trajectory admission continue.
+
+### Production continuation, 2026-10-20 01:27 UTC
+
+Mellum's R14 complete-gradient and capacity checks passed against the actual
+24,575 parent. Production SGD resumed and reached24,708. The active continuation
+has adopted1,372,949 training rows and25,968 protected held rows, including13,756
+additional prepared training graphs. Its latest recorded genuine communication
+exposure is20,835/114,793. Adoption does not count as exposure. The complete
+communication recipe and cross-model readiness remain unfinished.
+
+LFM earned18,619 before a synchronous end-of-quantum task evaluation delayed
+handoff. Its full checkpoint preserves optimizer, RNG, per-row exposure and the
+actual1,000-update quantum. The evaluation was operationally interrupted; its
+request remains failed and unqualified. Exact typed same-stage recovery retains
+the earned updates. The R8 successor's first start failed before checkpoint
+preload because immutable capacity requests named the old row-index cache
+directory. Recovery is restricted to byte-verified canonical cache aliases and
+explicit preservation/retirement of that failed startup before relaunch. No
+successor numerical qualification or resumed SGD is claimed yet. The prepared
+source generation contains1,447,132 training rows and25,955 held rows.
+
+Shared task collectors now honor cooperative training stops, drain their exact
+children and retain the pending frontier without scoring a cancellation as a
+task failure. The update-boundary acknowledgement accepts an operational stop
+only after the captured trainer's declared semantic-refresh quantum was really
+earned. Shared classifier validation authenticates the original historical
+producer bytes across runtime paths without rewriting historical proofs. The
+focused checks for these changes passed; the integrated full check is running.
+
+The corrected-runtime LFM18,006 protected evaluation completed0/16, with14
+repetition and2 budget outcomes and no unresolved infrastructure cases. This is
+historical checkpoint evidence, not a score for18,619. Its exact local payload
+and reports are retained for the assigned behavioral bug investigation. Cached
+reference output/gradient tests and prompt-prefix checks have not explained the
+failure; learned reasoning rows are finite FP32 and have actually changed.
+Repeated full readiness evaluation at every refresh quantum is also being
+replaced with explicit shared readiness requests; candidates must remain
+unqualified until their actual current-weight checks pass.
+
+The existing strong Qwen teacher remains busy. Its latest48-session curriculum
+measurement accepted48/48 complete trajectories with exact return oracles. The
+first946 converted graphs per model are admitted; the final494 per model await
+the strict source-closure verifier. The next verify-return curriculum has
+12/12 exact reference executions and48 queued teacher requests. Its guardian
+configuration is adopted with existing batches preserved, but those future
+requests have not yet been measured. No additional sandbox is allocated.
