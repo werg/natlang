@@ -768,6 +768,8 @@ def continuation_predecessors(training, declarations, *, stage_id):
 def build_parser():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--native-graphs', type=Path, required=True)
+    parser.add_argument('--ce-supervision-policy', type=Path,
+        help='explicit source-bound balanced CE continuation; preserves raw row credits and optimizer/RNG')
     parser.add_argument('--foundation-native-graphs', type=Path)
     parser.add_argument('--pending-native-sources', action='append', default=[])
     parser.add_argument('--refresh-at-checkpoint', action=argparse.BooleanOptionalAction, default=False,
@@ -934,6 +936,12 @@ def _main(argv=None, *, requested_refresh):
             args.source_classification_migration=resident_bound(proof) if proof else None
     checkpoint_options = {key: str(value) if isinstance(value, Path) else value
                           for key, value in vars(args).items()}
+    from .native_supervision import load_policy
+    ce_binding = ({'path':str(args.ce_supervision_policy.resolve()),
+                   'sha256':sha256_file_hex_cached(args.ce_supervision_policy)}
+                  if args.ce_supervision_policy else None)
+    ce_policy = load_policy(ce_binding)
+    checkpoint_options['ce_supervision_policy_binding'] = ce_binding
     if not (math.isfinite(args.epochs) and args.epochs > 0) or min(args.batch_graphs, args.eval_every,
             args.chunk_tokens, args.rank) < 1 or min(args.checkpoint_every, args.batch_tokens, args.held_eval_tokens, args.held_eval_graphs) < 0:
         raise ValueError('native SFT requires positive epochs/batch/eval/chunk/rank and nonnegative checkpoint cadence')
@@ -1239,6 +1247,23 @@ def _main(argv=None, *, requested_refresh):
     if restored_frame is not None:
         resume = restored_frame
         restored_progress = True
+    ce_prior_options = (resume or {}).get('options') or saved_options
+    previous_ce = ce_prior_options.get('ce_supervision_policy_binding')
+    inherited_ce = saved_options.get('ce_supervision_policy_binding') or previous_ce
+    if inherited_ce and ce_binding is None:
+        ce_binding = dict(inherited_ce)
+        ce_policy = load_policy(ce_binding)
+        args.ce_supervision_policy = Path(ce_binding['path'])
+        checkpoint_options['ce_supervision_policy'] = str(args.ce_supervision_policy)
+        checkpoint_options['ce_supervision_policy_binding'] = ce_binding
+    ce_history = list(ce_prior_options.get('ce_supervision_policy_history') or [])
+    if previous_ce != ce_binding:
+        ce_history.append({'from':previous_ce,'to':ce_binding,
+            'at_global_step':int(saved_training.get('global_step',saved_training.get('step',0))),
+            'weights_optimizer_rng_exposure':'preserved', 'held_ce':'original-corpus-weights'})
+    checkpoint_options['ce_supervision_policy_history'] = ce_history
+    train.set_ce_policy(ce_policy if objective is None else None)
+    checkpoint_options['ce_supervision_active'] = ce_policy is not None and objective is None
     from .native_source_classification import (migration_classes, reclassify_progress,
                                                require_explicit_reclassification)
     class_migration = (migration_classes(args.source_classification_migration, SourceIdentityView(train))
@@ -1647,6 +1672,7 @@ def _main(argv=None, *, requested_refresh):
                         'continued_native_graphs': source_receipts[0]['sha256'],
                         'continued_held_native_graphs': source_receipts[1]['sha256']}
                     train, held = expanded
+                    train.set_ce_policy(ce_policy if objective is None else None)
                     args.held_native_graphs = held.path
                     held_row_bindings = held.bindings
                     args.native_graphs = train.path

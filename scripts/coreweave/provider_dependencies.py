@@ -75,15 +75,32 @@ def dependency_closure(request, *, namespace='/work/native-production', readonly
             raise ValueError('provider consumed dependency size changed')
         return path
 
+    def ce_policy_input(reference):
+        from natlang_neuralese.train.native_supervision import load_policy
+        bound(reference)
+        load_policy(reference)
+
     def training_inputs(training):
         if not isinstance(training, dict):
             return
         policy_sources(training.get('policy_source_history', []))
+        history = training.get('config_history') or []
+        supervision = (history[-1].get('config') or {}).get('ce_supervision_policy') if history else None
+        if supervision is not None:
+            ce_policy_input(supervision)
+        # A shared participant carries the selected next-SFT policy outside
+        # historical per-stage frames, alongside its exact optimizer/RNG.
+        supervision = (training.get('training_options') or training.get('options') or {}).get('ce_supervision_policy_binding')
+        if supervision is not None:
+            ce_policy_input(supervision)
         if not training.get('sft_progress') and training.get('schema') != 'natlang.neuralese-native-sft-training/1':
             return
         from natlang_neuralese.train.native_continuation import collect_sft_progress, sft_frame_complete
         progress = collect_sft_progress(training, borrow_frames=True)
         for name, frame in progress.items():
+            supervision = (frame.get('options') or {}).get('ce_supervision_policy_binding')
+            if supervision is not None:
+                ce_policy_input(supervision)
             if sft_frame_complete(frame):
                 continue  # Completed historical source files are not read by mandatory SFT.
             identity = frame.get('identity') or {}
@@ -259,6 +276,13 @@ def dependency_closure(request, *, namespace='/work/native-production', readonly
         for reference in value.get('operational_inputs', []):
             bound(reference)
         qualification=value.get('foundation_qualification_request')
+        supervision=value.get('ce_supervision_policy')
+        if supervision is not None:
+            ce_policy_input(supervision)
+        for parameters in (value.get('trainer_parameters') or {}, value.get('seed_trainer_parameters') or {}):
+            selected = parameters.get('ce_supervision_policy')
+            if selected is not None and (supervision is None or selected != supervision['path']):
+                raise ValueError('provider CE policy needs the exact bound supervision declaration')
         if qualification is not None:
             if not isinstance(qualification,dict):
                 raise ValueError('provider foundation qualification request needs its exact binding')

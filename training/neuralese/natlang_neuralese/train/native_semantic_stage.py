@@ -35,6 +35,10 @@ def pair_key(first, second):
     return json.dumps(sorted((first, second)), separators=(',', ':'))
 
 
+class SourceBoundPair(dict):
+    """Exact JSON row plus authenticated container identity; no JSON mutation."""
+
+
 class PairedSource:
     """Compact row identities; tensors and graph plans remain streamed."""
     def __init__(self, binding, *, split):
@@ -62,7 +66,9 @@ class PairedSource:
         with open_jsonl_text(self.path) as handle:
             for line in handle:
                 if line.strip():
-                    yield json.loads(line)
+                    row = SourceBoundPair(json.loads(line))
+                    row.source_sha256 = self.binding['sha256']
+                    yield row
 
     def get(self, identity):
         # A whole phase streams sequentially below; this fallback supports a
@@ -106,6 +112,8 @@ def validate_config(config):
     declarations=[config,config.get('options') or {},*config.get('models',{}).values(),
                   *[phase.get('options') or {} for phase in phases]]
     for declaration in declarations:
+        if '_ce_supervision_policy' in declaration:
+            raise ValueError('semantic CE policy must use its bound configuration input, not internal loss options')
         validate_native_optimizer_migration(declaration.get('native_optimizer_migration'))
         if 'checkpoint_input_offload' in declaration and type(declaration['checkpoint_input_offload']) is not bool:
             raise ValueError('semantic checkpoint_input_offload must be a boolean')
@@ -402,6 +410,8 @@ def save_shared(policy, participants, vae, optimizer, *, training, device):
                 'source_rng':getattr(entry,'source_rng',None),
                 'training_options': {**checkpoint_input_storage_options(entry.model.port),
                     'native_snapshot_ancestors':list(getattr(entry,'snapshot_ancestors',[])),
+                    **({'ce_supervision_policy_binding':training['config_history'][-1]['config']['ce_supervision_policy']}
+                       if (training.get('config_history') or [{}])[-1].get('config',{}).get('ce_supervision_policy') else {}),
                     **({'recipe_binding':entry.recipe_binding} if entry.recipe_binding is not None else {})},
                 'fp8': entry.backend.extra_state() if entry.backend is not None else None}
                 for name, entry in participants.items()},
@@ -558,6 +568,8 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
     """Run the actual curriculum; max_updates is an explicit incomplete pause."""
     config_path, out = Path(config_path), Path(out)
     config = validate_config(json.loads(config_path.read_text()))
+    from .native_supervision import load_policy
+    ce_policy = load_policy(config.get('ce_supervision_policy'))
     manifest, bindings = _manifest(participants_path)
     semantic_parent=manifest.get('semantic_parent')
     if semantic_parent is not None:
@@ -580,6 +592,10 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
     if prior and prior.get('schema') != SHARED_CHECKPOINT_SCHEMA:
         raise ValueError('semantic continuation needs its complete shared model/VAE/optimizer checkpoint')
     training = dict(prior['training']) if prior else {'step': 0, 'exposure': {}, 'config_history': []}
+    prior_configs = training.get('config_history') or []
+    if (prior_configs and prior_configs[-1]['config'].get('ce_supervision_policy')
+            and not config.get('ce_supervision_policy')):
+        raise ValueError('semantic continuation cannot silently drop its declared CE supervision policy')
     qualification_cache = {}
     if semantic_parent is not None:
         parent_identity={role+'_sha256':binding['sha256'] for role,binding in semantic_parent.items()}
@@ -703,6 +719,9 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
             raise ValueError('snapshot ownership changes require checkpointed explicit adoption and resume')
         config_sha = canonical_json_sha256_hex(updated)
         if config_sha != last_config:
+            if config.get('ce_supervision_policy') and not updated.get('ce_supervision_policy'):
+                raise ValueError('semantic continuation cannot silently drop its declared CE supervision policy')
+            ce_policy = load_policy(updated.get('ce_supervision_policy'))
             prior_kinds={phase['id']:phase['kind'] for item in training.get('config_history',[]) for phase in item['config']['phases']}
             if any(phase['id'] in prior_kinds and prior_kinds[phase['id']]!=phase['kind'] for phase in updated['phases']):
                 raise ValueError('a changed semantic objective needs a new phase ID; retain earlier phase exposure')
@@ -814,6 +833,8 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
         if config.get('snapshot_preparation') and phase['kind']!='vae':
             break  # Structural phase boundary; all joint/distill obligations remain.
         options = {**config.get('options', {}), **phase.get('options', {})}
+        if ce_policy is not None:
+            options['_ce_supervision_policy'] = ce_policy
         for name, participant in participants.items():
             participant.optimizer.zero_grad(set_to_none=True)
             if name in active:participant.model.port.checkpoint_layers=True

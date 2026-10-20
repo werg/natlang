@@ -188,6 +188,12 @@ class NativeGraphSource:
     def __iter__(self):
         return self.iter_from(0)
 
+    def set_ce_policy(self, policy):
+        """Select an explicit objective without changing raw indexes/credits."""
+        self.ce_policy = policy
+        for child in getattr(self, 'children', ()):
+            child.set_ce_policy(policy)
+
     def iter_from(self, start=0, *, selected=None):
         from .native_graph_schema import parse_graph
         if not 0 <= start <= len(self.entries):
@@ -218,7 +224,10 @@ class NativeGraphSource:
                     entry = self.entries[index]
                     if (example.id != entry['id'] or binding != entry['binding']):
                         raise ValueError(f'{self.path}:{line_number}: graph source changed after index validation')
-                    yield example
+                    from ..train.native_supervision import apply_policy
+                    graph = row['models'][self.pair_model]['graph'] if self.kind == 'semantic-pairs' else row
+                    yield apply_policy(example, graph, source_sha256=self.file_sha256,
+                                       policy=getattr(self, 'ce_policy', None))
                 index += 1
             if index != len(self.entries):
                 raise ValueError(f'{self.path}: row count changed after index validation')

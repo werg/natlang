@@ -38,7 +38,7 @@ HANDLERS = {
     # graph files are already admitted and carry explicit split provenance.
     'native_state_sft': {'module': 'natlang_neuralese.train.native_state_sft',
                          'required_inputs': {'native_graphs', 'held_native_graphs'},
-                         'optional_inputs': {'continue_from', 'continued_native_graphs', 'continued_held_native_graphs', 'foundation_native_graphs', 'foundation_qualification_request', 'withdrawn_native_graphs', 'pending_native_sources', 'source_classification_migration'},
+                         'optional_inputs': {'continue_from', 'continued_native_graphs', 'continued_held_native_graphs', 'foundation_native_graphs', 'foundation_qualification_request', 'withdrawn_native_graphs', 'pending_native_sources', 'source_classification_migration', 'ce_supervision_policy'},
                          'parameters': {'base', 'rank', 'dtype', 'native_linear_precision', 'native_attention_precision', 'epochs', 'batch_graphs', 'batch_tokens', 'learning_rate', 'weight_decay',
                              'latent_ns', 'eval_every', 'held_eval_tokens', 'held_eval_graphs', 'checkpoint_every', 'checkpoint_seconds', 'checkpoint_layers', 'checkpoint_input_offload', 'checkpoint_input_offload_directory', 'chunk_tokens', 'ffn_chunk_tokens',
                              'fp8_training', 'fp8_recipe', 'fp8_amax_history_len', 'learned_row_learning_rate', 'interface_row_learning_rate', 'native_optimizer_migration', 'native_ordinary_precision', 'native_norm_execution', 'native_shared_execution', 'history_reasoning_policy', 'seed', 'task_eval',
@@ -549,7 +549,7 @@ def stage_input_args(resolved, kind):
             args += [flag, resolved[role]['path']]
     for role in ('rollouts', 'records', 'pieces', 'text_data', 'continued_text_data', 'native_graphs',
                  'held_native_graphs', 'continued_native_graphs', 'continued_held_native_graphs', 'foundation_native_graphs', 'foundation_qualification_request', 'withdrawn_native_graphs', 'pending_native_sources', 'source_classification_migration',
-                 'objective_spec', 'rl_block_bundle', 'continue_from', 'continue_identity',
+                 'ce_supervision_policy', 'objective_spec', 'rl_block_bundle', 'continue_from', 'continue_identity',
                  'continue_monitor_reference', 'student_checkpoint', 'warmup_checkpoint',
                  'warmup_manifest', 'warmup_heads', 'warmup_runtime_report', 'harness_records', 'harness_pieces',
                  'direct_parent_proof', 'aligned_projection'):
@@ -1800,6 +1800,27 @@ def _pending_source_continuation(old, new):
 
 
 
+def _ce_supervision_input_continuation(old, new):
+    """Bind explicit CE algebra while preserving the source continuation guards."""
+    role = 'ce_supervision_policy'
+    if 'native_graphs' not in old or role not in new or old.get(role) == new[role]:
+        return False
+    before = {key:value for key,value in old.items() if key != role}
+    after = {key:value for key,value in new.items() if key != role}
+    if before != after and not (_data_continuation(before, after)
+            or _priority_only_native_source_continuation(before, after)
+            or _pending_source_continuation(before, after)
+            or _combined_native_source_continuation(before, after)):
+        return False
+    from .native_supervision import load_policy
+    reference = new[role]
+    if not all(reference.get(key) for key in ('path', 'sha256', 'binding')):
+        raise ValueError('CE supervision continuation requires its exact declared input binding')
+    if load_policy(reference).get('require_eligible_sources', True) is not True:
+        raise ValueError('production CE supervision continuation requires eligible-source coverage')
+    return True
+
+
 def _classification_input_continuation(old, new):
     """Bind a metadata-only classification proof while preserving every data input.
 
@@ -1969,11 +1990,13 @@ def unstarted_stage_input_changes(existing, plan, out, *, started_stage_ids=()):
                     or _pending_source_continuation(old, new)
                     or _combined_native_source_continuation(old, new)
                     or (next(s for s in plan['recipe']['stages'] if s['id'] == stage_id)['kind'] == 'native_state_sft'
-                        and _classification_input_continuation(old, new))):
+                        and (_classification_input_continuation(old, new)
+                             or _ce_supervision_input_continuation(old, new)))):
                 raise ValueError('handoff refused: inputs of started stage ' + stage_id + ' changed; only a stage '
                                  'that has not started may take new inputs, and the active stage only by an explicit metadata classification or declared '
                                  'data continuation (' + DATA_CONTINUATION_ROLE + ' = the text data it trained on)')
-            changes[stage_id] = {'kind': ('metadata_classification_continuation'
+            changes[stage_id] = {'kind': ('ce_supervision_continuation'
+                if _ce_supervision_input_continuation(old, new) else 'metadata_classification_continuation'
                 if _classification_input_continuation(old, new) else 'scheduling_priority_continuation'
                 if _priority_only_native_source_continuation(old, new) else 'data_continuation'),
                 'old': old, 'new': new}
@@ -2009,7 +2032,7 @@ def _without_unstarted_bindings(old_recipe, new_recipe, changes):
         for name in changed:
             value.get('input_bindings', {}).pop(name, None)
         for stage in value.get('stages', []):
-            if changes.get(stage['id'], {}).get('kind') in {'data_continuation', 'scheduling_priority_continuation', 'metadata_classification_continuation'}:
+            if changes.get(stage['id'], {}).get('kind') in {'data_continuation', 'scheduling_priority_continuation', 'metadata_classification_continuation', 'ce_supervision_continuation'}:
                 stage.pop('inputs', None)  # exact old inputs are preserved by the continuation predecessor binding
     return old_value, new_value
 

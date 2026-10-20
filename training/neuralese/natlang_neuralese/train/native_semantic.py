@@ -172,7 +172,8 @@ def distillation_loss(model, student, teacher, consumer, *, temperature=1., chun
     return total / selected.sum()
 
 
-def joint_loss(vae, participants, row, *, phase='joint', options=None, fetch_external=None, reference=False):
+def joint_loss(vae, participants, row, *, phase='joint', options=None, fetch_external=None, reference=False,
+               ce_policy=None, source_sha256=None):
     """Differentiable bidirectional loss; this function never steps an optimizer."""
     options = options or {}
     for key in ('kl_weight', 'alignment_weight', 'cross_weight', 'reconstruction_weight',
@@ -183,6 +184,13 @@ def joint_loss(vae, participants, row, *, phase='joint', options=None, fetch_ext
     if phase not in {'vae', 'joint', 'distill'}:
         raise ValueError('semantic phase must be vae, joint or distill')
     parsed = parse_pair(row, participants)
+    ce_policy = ce_policy if ce_policy is not None else options.get('_ce_supervision_policy')
+    source_sha256 = source_sha256 or getattr(row, 'source_sha256', None)
+    if ce_policy is not None:
+        from .native_supervision import apply_policy
+        parsed = {name: (apply_policy(example, row['models'][name]['graph'],
+            source_sha256=source_sha256, policy=ce_policy), view)
+            for name, (example, view) in parsed.items()}
     if len(parsed) < 2:
         raise ValueError('semantic training row has fewer than two currently ready participants')
     chunk_tokens = options.get('chunk_tokens', 128)
