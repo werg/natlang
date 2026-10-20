@@ -107,6 +107,16 @@ service liveness or a saved checkpoint alone; keep useful training running with
 the existing full-state fallback while repairing publication. Retain original
 artifact hashes and exact path validation.
 
+Retention follows active lineages (engineering finding, 2026-10-20): a larger
+step number from an old lineage does not supersede a current model's artifacts.
+At every owner/runtime cutover, bind cloud retention to the current full-backup
+and inference states, current evaluation consumers and in-flight publications.
+Protect required current parents explicitly. Check actual remote presence after
+publication; a successful GET can finish after a concurrent retention deletion.
+An old readback receipt alone does not prove that recovery still exists. If a
+current export disappears, stop the exact retention service, repair its active
+dependencies and restore useful exports before resuming verified cleanup.
+
 Native token learnability (engineering qualification, 2026-10-15): existing
 tokenizer entries are not evidence of usable frozen output rows. The QAD
 thinking boundaries were almost identical, imposing a fixed output-probability

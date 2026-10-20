@@ -44,12 +44,12 @@ through the projected-value implementation.
 
 ## Current status
 
-October 20, 14:51 UTC: supervision and all implementation are consolidated in
+October 20, 15:24 UTC: supervision and all implementation are consolidated in
 root. Mellum R6v5 owner3247273 remains active on c8a1, with observed updates
-past25862 and genuine communication exposure21415/114793. LFM's preference
+past25955; genuine communication exposure remains incomplete. LFM's preference
 interval completed at20619; its normal production controller launched the next
 full-SFT continuation from that exact trained checkpoint (learner861211, observed
-past20641). LFM still uses R4. Its genuine R6 runtime/controller migration and
+past20749). LFM still uses R4. Its genuine R6 runtime/controller migration and
 admission of the ready additions remain outstanding; neither full recipe nor
 communication exposure is complete.
 
@@ -76,14 +76,31 @@ also has the corresponding R9 package root prepared, not activated.
 
 Full checkpoints are saved, but failed optional publication controls are not
 successful private backups. A normal fallback exporter now pins and privately
-exports actual Mellum25803 full state. At last check upload succeeded and
-independent full readback was running; verification is not yet claimed. A separate
-actual CPU derivation is writing its bitwise-verified inference view and corrected
-controls using the current shared dependency producer and explicit R10 root. An
-existing actor-view publisher is queued behind independently verified full backup
-and the actual ready view, then updates the state followed by the current quality
-service. These processes must be checked to completion; continuous corrected
-in-process publication and LFM R6 handoff are still required.
+exports actual Mellum full state. Independent full readback initially passed for25803
+(48.229GB,2081f108…) and25853 (48.235GB,3d6e37d8…). Actual CPU derivation
+completed its bitwise-verified25803 inference view and corrected controls using
+the current shared dependency producer and explicit R10 root. The existing
+actor-view publisher completed independent private readback of that24.309GB
+view (6fffed5b…) and updated the current quality service's followed state to25803.
+Subsequent live retrieval found25803 inference missing (W&B404,size0), and the
+retention journal proves the applying old29861-lineage frontier selected it
+and full25853 for deletion while their independent readbacks were in flight.
+Those earlier readbacks no longer establish present private recovery. Root
+stopped `root-shared-wandb-retention-restored-20261017`, changed its Mellum
+full/inference states to the actual current R6 pointers, added the current quality
+consumer and explicit current identities, and started25803 inference re-export.
+The existing full fallback is uploading25949. Keep retention stopped until
+present-object custody, completed new backup and a corrected dry-run pass are
+verified. Sandbox checkpoints remain available. Evidence is in
+`retention-r6-current-lineage-frontier-correction-root-20261020.json` and
+`wandb-storage-audit-20261016/mellum-rolling-intent-{1792508503376082882,1792509106746049741}.json`
+under `/home/werg/data/dgxops`.
+
+Local quality ingestion was also waiting for disk headroom. Verified relocation of
+the4.498GB BIRD codebase_comments source database to the external disk completed,
+preserving its original path with a symlink and raising root free space to5.2GB;
+the existing quality service has started its next ingestion attempt. Continuous corrected in-process publication and
+LFM R6 handoff are still required.
 
 Mellum25692's16 protected tasks are fully accounted:12 successes,2 invalid
 actions,1 semantic mismatch,1 repetition,0 infrastructure errors. The report is
@@ -98,10 +115,30 @@ The real R6 update profile measured29.34/75.52 seconds in pageable CPU/GPU
 copies. Root found that file storage ignored the wrapper's pin_memory flag and
 implemented bounded reusable pinned staging in the shared file store.55 focused
 checks passed, including both native graph gradients, next optimizer updates,
-RNG, higher derivatives and stride/lifetime cases. Target-device speed/capacity
-and actual runtime deployment remain required; current cloud learners still use
-their original frozen storage code. See
+RNG, higher derivatives and stride/lifetime cases. The small target-device copy
+measurement in the actual offload directory had a variable1.0192x median; this
+is not an end-to-end training speed claim. The composed R6v6 runtime60a26ec7…
+is now physically staged and verified on BOTH sandboxes,396 transport members.
+Its isolated141-check run passed: all112 loaded Neuralese modules came from
+the composed runtime, including both models' complete-gradient tests. Earlier
+tests whose conftest prepended main are not used as composed-runtime evidence.
+Current cloud learners still use their original frozen storage code. See
 [transfer decomposition](shared-state/CHECKPOINT_FILE_TRANSFER_DECOMPOSITION_20261020.md).
+
+LFM's current-source R6v6 continuation preview passed against actual controller
+602333 and learner861211: all1461160 TRAIN/25955 held rows,407+14 source indexes
+and every recipe stage remain intact; no source graph reparse or checkpoint
+decode. Receipt457e798c… is at
+`/work/native-production/control/lfm-r4-r6-live-source-policy-preview-20261020-v7/prepared-request.json`.
+The normal prepared provider successor for Q6/H9 passed the actual sandbox
+dependency/guard preflight (2904 unique dependencies), remains inactive, and
+preserves the R9 historical policy root. Capacity metadata reuse also passed
+(28 actual case requests plus1 pending-only request,aaea9c8e…); this grants no
+fresh numerical qualification or source admission. The trainer's existing SIGUSR2
+normal refresh and completed-supervised transition support an early useful
+quantum, so a cooperative migration need not fabricate a failed operation.
+Next work is actual qualified handoff and prompt admission of66850 prepared LFM
+additions, retaining optimizer/RNG/exposure. Preparation is not adoption.
 
 Full-epoch VAE snapshot training and bound external scheduler producer fixes are
 integrated. The57144-train/11278-held semantic curriculum and reviewed scheduling
