@@ -110,8 +110,14 @@ def test_a_key_added_to_one_running_chain_fails(tmp_path):
     repo = _repo_copy(tmp_path)
     parity_file = repo / 'training' / 'neuralese' / 'line-parity.json'
     parity = json.loads(parity_file.read_text())
-    leaf = line_parity._recipe_file(parity['stages']['direct']['lines']['lfm']['active'], repo)
-    recipe = json.loads(leaf.read_text())  # one more handoff setting, on the LFM chain only
+    # A historical production chain may already be retired. Construct a real
+    # active descendant in this fixture instead of depending on that history.
+    declaration = parity['stages']['direct']['lines']['lfm']
+    recipe = {'schema': 'natlang.neuralese-training-recipe/1',
+              'id': 'test-active-lfm-parity', 'extends': declaration['recipe'], 'overrides': {}}
+    declaration['active'] = recipe['id']
+    parity_file.write_text(json.dumps(parity))
+    leaf = repo / 'training' / 'neuralese' / 'recipes' / (recipe['id'] + '.json')
     recipe['overrides'].setdefault('stage_parameter_defaults', {}).setdefault('neuralese_direct', {}).setdefault(
         'task_eval', {})['identical_turn_limit'] = 3
     leaf.write_text(json.dumps(recipe))
@@ -123,18 +129,28 @@ def test_a_key_added_to_one_running_chain_fails(tmp_path):
 
 
 def test_every_leaf_setting_is_compared():
-    kind, config = line_parity.effective_config({'recipe': parity_active('lfm')})
+    # Historical recipes retain their exact execution identity after retirement.
+    kind, config = line_parity.effective_config({
+        'recipe': 'neuralese-direct-lfm-qad-broad-20261013-v1-context-recovery-identity-fix'})
     assert any(key.startswith('runtime.package_code.') for key in config)
     assert 'outputs.directory' in config
 
 
-def parity_active(line):
-    return line_parity.load_parity()['stages']['direct']['lines'][line]['active']
-
-
-def test_line_specific_entries_expire():
+def test_line_specific_entries_expire(tmp_path):
     import datetime
-    errors = line_parity.check(today=datetime.date(2099, 1, 1))
+    repo = _repo_copy(tmp_path)
+    parity_file = repo / 'training' / 'neuralese' / 'line-parity.json'
+    parity = json.loads(parity_file.read_text())
+    declaration = parity['stages']['direct']['lines']['lfm']
+    recipe = {'schema': 'natlang.neuralese-training-recipe/1',
+              'id': 'test-expiring-lfm-parity', 'extends': declaration['recipe'],
+              'overrides': {'stage_parameter_defaults': {'neuralese_direct': {'seed': 42}}}}
+    declaration['active'] = recipe['id']
+    parity['line_specific'].append({'stage': 'direct', 'lines': ['lfm'], 'key': 'parameters.seed',
+        'recipe': recipe['id'], 'date': '2026-10-20', 'expires': '2026-10-20', 'reason': 'test exception'})
+    parity_file.write_text(json.dumps(parity))
+    (repo / 'training' / 'neuralese' / 'recipes' / (recipe['id'] + '.json')).write_text(json.dumps(recipe))
+    errors = line_parity.check(repo, today=datetime.date(2099, 1, 1))
     assert errors and all('expired on' in e for e in errors)
 
 

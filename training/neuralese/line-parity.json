@@ -13,7 +13,7 @@
    "base": {"recipe": "neuralese-direct-v3"},
    "lines": {
     "mellum": {"recipe": "neuralese-direct-mellum-v4"},
-    "lfm": {"recipe": "neuralese-direct-lfm-v3", "active": "neuralese-direct-lfm-qad-broad-20261013-v1-context-recovery-identity-fix"}
+    "lfm": {"recipe": "neuralese-direct-lfm-v3"}
    }
   },
   "e2e": {
@@ -25,12 +25,7 @@
    }
   }
  },
- "line_specific": [
-  {"stage": "direct", "lines": ["lfm"], "keys": ["stages.direct_warmup.parameters.epochs", "stages.direct_warmup.derived.supervision"], "recipe": "neuralese-direct-lfm-qad-broad-20261013-v1-context-recovery-identity-fix", "date": "2026-10-13", "expires": "2026-10-27",
-   "reason": "historical one-off: the LFM QAD broad lineage's completed warm-up ran 0.015 epoch (~400 updates; Pop: matching the owner-shortened earlier warm-up) against the shared base's 0.5; finished, not redone. Open for the coordinator: whether the shared base's next fresh launch keeps 0.5 for both lines"},
-  {"stage": "direct", "lines": ["lfm"], "key": "stages.direct_sft.parameters.merge_prefix_rows", "recipe": "neuralese-direct-lfm-qad-broad-20261013-v1-context-recovery-identity-fix", "date": "2026-10-13", "expires": "2026-10-20",
-   "reason": "Pop's in-memory prefix merging of the 365,784-document r3 program-header phase exceeded its discrete host RAM cap before any update (stream-header handoff), so the LFM direct_sft forwards each decision row on its own. Not fit-only: merged chains are weighted per decision inside one normalized window, so window composition and position weights differ. Coordinator 2026-10-13: merging stays shared; the bounded-memory merge (text_warmup.stream_merge_prefix_rows, same rows and windows) now serves the stage, and Pop's next LFM handoff drops merge_prefix_rows=false, then this entry is removed"}
- ],
+ "line_specific": [],
  "lineage_keys_reason": "identity of one running lineage, not a setting: its heads, where it resumes from (continuation checkpoint, identity check, monitor reference, the data it already consumed), its frozen package and container pins (runtime.package_code, repo_commit, image) and its output directory and evidence (outputs, lineage). A fresh launch on either line replaces them.",
  "lineage_keys": {
   "direct": ["inputs.heads", "inputs.continue_from", "inputs.continue_identity", "inputs.continue_monitor_reference",
@@ -91,12 +86,6 @@
    "reason": "LFM2.5-350M drifts at the shared 7.5e-6 (V6 drift-stopped at update 260, gate 16/48 vs base 26/48); 7.5e-7 finished (V8 gate 22/48, response KL 0.018); Mellum passes at 7.5e-6"},
   {"stage": "direct", "lines": ["mellum"], "key": "parameters.latent_lr", "kind": "backbone-inherent",
    "reason": "MuonSR 1e-5 on Mellum (bakeoff 2026-10-11: gate 0.75 = base at update 100, response KL 0.30, train CE per wall-clock hour at or above LionSR 3e-6); the shared 3e-6 is LFM's measured MuonSR rate (gate 26/48 = base at 300); plans/neuralese/OPTIMIZER_BAKEOFF_20261011.md"},
-  {"stage": "direct", "lines": ["mellum", "lfm"], "key": "parameters.task_eval.async", "kind": "fit-only",
-   "reason": "an asynchronous task evaluation loads a second model copy beside training, which fits neither Mellum's run (~96 of 121 GB unified memory) nor Pop's 8 GiB discrete GPU, so both lines evaluate synchronously (plans/neuralese/DECISIONS.md \"Asynchronous in-run task evaluation\"); the base keeps async for a machine with room"},
-  {"stage": "direct", "lines": ["lfm"], "key": "parameters.task_eval.workers", "kind": "fit-only",
-   "reason": "Pop runs 4 task-eval workers next to its training on the 8 GiB GPU (measured-task-eval handoff); DGX runs the shared 8"},
-  {"stage": "direct", "lines": ["lfm"], "key": "runtime.cuda_allocator_config", "kind": "fit-only",
-   "reason": "PyTorch's expandable segments against fragmentation on Pop's 8 GiB discrete GPU; allocator only, same math"},
   {"stage": "e2e", "lines": ["lfm"], "key": "parameters.backbone_lr", "kind": "backbone-inherent",
    "reason": "the direct stage's evidence-backed LFM rate, 7.5e-7"},
   {"stage": "e2e", "lines": ["mellum"], "key": "parameters.latent_lr", "kind": "backbone-inherent",
