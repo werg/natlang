@@ -131,6 +131,33 @@ def test_adopted_recipe_rejoins_earned_cursor_from_original_launch_recipe(extern
     assert x['pin'].read_bytes()==before
 
 
+@pytest.mark.parametrize('changed_package', [False, True])
+def test_adopted_history_uses_its_real_reader_after_reader_implementation_changes(external, monkeypatch, changed_package):
+    x = external
+    record = json.loads(Path(x['handoff']['path']).read_text())
+    state = json.loads(Path(record['resident']['current']['path']).read_text())
+    intent = json.loads(Path(record['intent']['path']).read_text())
+    child = next(c for c in intent['children'] if '--recipe-binding' in handoff.process_argv(c))
+    original = handoff._recipe_plan
+    def new_reader(*args):
+        plan = original(*args)
+        for inputs in plan['stage_inputs'].values():
+            inputs['new_reader_metadata'] = 'current implementation differs'
+        return plan
+    monkeypatch.setattr(handoff, '_recipe_plan', new_reader)
+    if changed_package:
+        with (x['newpackage']/'__init__.py').open('a') as stream:
+            stream.write('\n# changed after the real owner was captured\n')
+    def verify():
+        return raw._owned_recipe_invocation(handoff.process_argv(child), child, record,
+            state['payload']['recipe'], 'sft', json.loads(x['config'].read_text())['recipe_lineage_sha256'])
+    if changed_package:
+        with pytest.raises(ValueError, match='captured import path/code'):
+            verify()
+    else:
+        assert verify()
+
+
 @pytest.mark.parametrize('tamper',['external-path','launch-env','schema','history-recipe','history-source'])
 def test_external_resident_cannot_borrow_a_runtime_or_rewrite_adoption(external,tamper,tmp_path):
     x=external;value=json.loads(Path(x['transition']['path']).read_text())

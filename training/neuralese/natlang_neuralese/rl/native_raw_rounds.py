@@ -1176,6 +1176,19 @@ def _owned_recipe_invocation(argv, child, record, actual_recipe, stage_id, linea
     same_inputs = (before.keys() == after.keys() and all(
         before[key] == after[key] or _classification_reader_relocation(before[key], after[key])
         for key in before))
+    if not same_inputs:
+        from .native_raw_handoff import _external_recipe_plans
+        historical = _external_recipe_plans(record, plan, [declared, *[e['recipe'] for e in history]])
+        previous = historical[0]
+        previous['code'] = plan['code']
+        for entry, proposed in zip(history, historical[1:]):
+            proposed['code'] = plan['code']
+            resident._contract(previous, proposed, stage_id)
+            if (entry['train'] != {k:proposed['stage_inputs'][stage_id]['native_graphs'][k] for k in ('path','sha256')}
+                    or entry['held'] != {k:proposed['stage_inputs'][stage_id]['held_native_graphs'][k] for k in ('path','sha256')}):
+                raise ValueError('historical reader changed actual adopted source bindings')
+            previous = proposed
+        same_inputs = previous['stage_inputs'] == plan['stage_inputs']
     if (history[-1]['recipe']!=actual_recipe or previous['recipe']!=plan['recipe']
             or not same_inputs):
         raise ValueError('owned resident current plan lost its complete initial-to-adopted history')

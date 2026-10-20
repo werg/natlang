@@ -308,6 +308,16 @@ immutable publisher manifest for those real origins. It never spoofs `__file__`,
 relaxes an old acknowledgement, changes numerical modules or replaces the owner.
 # Explicit reviewed role-control continuation (2026-10-20)
 
+Historical adopted recipe checks retain the actual owner's parser semantics.
+If the current reader's metadata dependencies differ, reconstruct the complete
+initial/adopted recipe sequence in one CPU child using the immutable runtime
+named by the authenticated original launch. Verify that full package against
+the recorded plan before and after execution, every recipe binding, every
+adoption contract and the final exact input inventory. This is metadata
+verification; never decode an optimizer, allocate a GPU, replace historical
+reader identities with current ones, or relax a different implementation into
+the byte-identical reader relocation rule.
+
 The existing role owner decides when an authenticated operational recovery needs
 new control code. `prepare_native_actor_role` performs only exact metadata
 plumbing: an optional SHA-bound `control_material` must be covered by the actual

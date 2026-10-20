@@ -757,7 +757,8 @@ def test_tranche_receipt_resumes_after_archive_was_committed(tmp_path):
     assert json.loads((directory/'tranche-0000.json').read_text())['keys'] == sealed['keys']
 
 
-def test_owner_exporter_checkpoints_chunks_and_resumes_sealed_tranche(tmp_path):
+@pytest.mark.parametrize('prune', [False, True])
+def test_owner_exporter_checkpoints_chunks_and_resumes_sealed_tranche(tmp_path, prune):
     entries, queue, journal, context, outputs, _ = _fixture()
     context_paths = {'teacher-source.json': '/batch/teacher-source.json',
                      'source-cases.jsonl': '/batch/source-cases.jsonl',
@@ -776,11 +777,15 @@ def test_owner_exporter_checkpoints_chunks_and_resumes_sealed_tranche(tmp_path):
                  'sha256': tranche['archive_receipt']['archive_sha256']}
         if len(calls) == 1:
             raise RuntimeError('simulate owner process interruption after sealing')
-        return {**tranche, 'private_export': {'identity': ident}}
+        receipt_path.parent.mkdir(parents=True, exist_ok=True)
+        receipt_path.write_text(json.dumps({'private': True, 'identity': ident,
+            'independent_verification': ident, 'run': 'werg/natlang/test',
+            'name': 'tranche.tar.zst', 'verified_at': 124.0}))
+        return accept_private_receipt(receipt_path, tranche)
     kwargs = {'batch': 19, 'queue_path': '/batch/queue.jsonl',
         'journal_path': '/batch/journal.jsonl', 'context_paths': context_paths,
         'directory': tmp_path/'exports', 'read_file': remote.__getitem__,
-        'export_file': export, 'chunk_size': 2}
+        'export_file': export, 'chunk_size': 2, 'prune_after_private_verification': prune}
     with pytest.raises(RuntimeError, match='interruption'):
         export_finished_tranches(**kwargs)
     sealed = json.loads((tmp_path/'exports/tranche-0000/tranche-0000.json').read_text())
@@ -789,6 +794,9 @@ def test_owner_exporter_checkpoints_chunks_and_resumes_sealed_tranche(tmp_path):
     result = export_finished_tranches(**kwargs)
     assert result['durable_completed_keys'] == 2
     assert calls[0] == calls[1] == [row['key'] for row in entries]
+    if prune:
+        assert not Path(sealed['archive_receipt']['archive']).exists()
+        assert sorted(p.name for p in Path(sealed['directory']).iterdir()) == ['tranche-0000.json']
     assert export_finished_tranches(**kwargs)['durable_completed_keys'] == 2
     with pytest.raises(ValueError, match='different batch or queue'):
         export_finished_tranches(**{**kwargs, 'batch': 20})

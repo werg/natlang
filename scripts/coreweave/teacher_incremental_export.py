@@ -690,7 +690,7 @@ def export_finished_tranches(*, batch: int, queue_path: str, journal_path: str,
                     'private_identity': accepted['private_export']['identity']})
                 _write(state_path, (json.dumps(state, sort_keys=True, indent=2) + '\n').encode())
                 if prune_after_private_verification:
-                    prune_verified_local_tranche(tranche)
+                    prune_verified_local_tranche(accepted)
                 continue
 
             journal_raw = journal_snapshot if journal_snapshot is not None else read_file(journal_path)

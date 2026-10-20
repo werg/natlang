@@ -592,6 +592,52 @@ def _external_frozen_package(record, package, old_plan, snapshots=None):
     return references
 
 
+def _external_recipe_plans(record, old_plan, recipes):
+    """Reconstruct metadata with the actual captured historical implementation.
+
+    A changed classifier reader can legitimately enumerate different code
+    dependencies. Never reinterpret its historical plan with today's reader or
+    treat different reader bytes as a path relocation. No checkpoint is loaded.
+    """
+    import os
+    import subprocess
+    import sys
+    from .native_runtime_handoff import _owned_launch_chain, _read
+    from ..train.native_resident import code_inventory
+    _, _, references = _owned_launch_chain(record)
+    intent = _read(references['intent'])
+    paths = (intent.get('env') or {}).get('PYTHONPATH', '').split(':')
+    package = next((Path(path)/'natlang_neuralese' for path in paths
+                    if path and (Path(path)/'natlang_neuralese').is_dir()), None)
+    if package is None:
+        raise ValueError('historical recipe reconstruction lost its captured runtime')
+    _external_frozen_package(record, package, old_plan)
+    root = package.resolve().parents[2]
+    program = '''import sys,json
+from pathlib import Path
+package=Path(sys.argv[1]);sys.path[:0]=[str(package.parent),str(package.parents[2])]
+from natlang_neuralese.rl.native_raw_handoff import _recipe_plan
+from natlang_neuralese.train.native_readiness import _bound
+request=json.load(sys.stdin)
+print(json.dumps([_recipe_plan(_bound(ref),request['device'])for ref in request['recipes']]))
+'''
+    request = {'device': old_plan['device'], 'recipes': [
+        {'path': ref['path'], 'sha256': ref.get('file_sha256', ref['sha256'])}
+        for ref in recipes]}
+    result = subprocess.run([sys.executable, '-c', program, str(package)],
+        input=json.dumps(request), capture_output=True, text=True,
+        env={**os.environ, 'CUDA_VISIBLE_DEVICES': '', 'NATLANG_REPO': str(root),
+             'PYTHONPATH': str(package.parent)+':'+str(root)})
+    if result.returncode:
+        raise ValueError('historical recipe reconstruction failed: '+result.stderr[-2000:])
+    if code_inventory(package) != old_plan['code']:
+        raise ValueError('historical recipe runtime changed during reconstruction')
+    plans = json.loads(result.stdout)
+    if not isinstance(plans, list) or len(plans) != len(recipes):
+        raise ValueError('historical recipe reconstruction lost its exact inventory')
+    return plans
+
+
 
 def _external_started_stage_layout(record, saved, old_plan, stage_id, *, snapshots=None, receipt_snapshot=None):
     """Authenticate a real external owner's output without inventing recipe-runner markers."""

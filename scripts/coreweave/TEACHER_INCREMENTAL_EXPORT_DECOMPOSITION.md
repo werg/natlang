@@ -24,6 +24,11 @@ exports; it neither resumes the run nor grants verification. Continue to require
 the independently downloaded complete object's original SHA-256 and size before
 publishing any durability receipt or advancing a frontier.
 
+When recovering a sealed tranche whose private upload previously failed, prune
+only the returned accepted tranche after its receipt and frontier are durable.
+The pre-upload in-memory tranche still has no private receipt and cannot authorize
+cleanup. A restart after the frontier commit verifies the saved accepted manifest.
+
 Idle flushing measures absence of new eligible completed outputs, independently of activity heartbeats from still-running workers. Keep the complete journal SHA as telemetry. Both existing publisher loops use one exact completed-output identity helper; completion/accounting validation and every repeated queue job remain unchanged.
 
 Canonical guardian repair queues namespace original jobs as

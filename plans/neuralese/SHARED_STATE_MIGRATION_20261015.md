@@ -1787,3 +1787,32 @@ and original-path symlinks. No reusable source was deleted. Root/external free
 space was25/40 GiB at18:29; other megatoken work was not touched. A fresh private
 model-storage metadata inventory is running to check remaining storage, without
 deleting further files yet.
+
+### 2026-10-20 19:22 UTC: fix historical reader and teacher custody recovery
+
+LFM is making actual preference optimizer updates through the normal dispatcher
+from its earned 21143 parent. Mellum drained normally at 26658, retaining the
+full independent 48,235,499,281-byte checkpoint. Its R11 handoff exposed a genuine
+metadata reconstruction bug: R6v5 used a different classifier-reader implementation.
+Current reconstruction added different reader dependencies; source and held bytes
+were unchanged. Reconstruct the complete initial/adopted recipe sequence with the
+actual immutable runtime from the captured launch, authenticate its full code
+before/after, and compare exact historical inputs. Do not loosen byte-identical
+relocation into accepting different implementations. The shared regression checks
+include a real CPU subprocess and reject altered historical code.
+
+Teacher PUT200/metadata0/GET404 was repaired by the supported SDK upload-commit
+notification: the existing exact object became independently readable without
+another PUT. Shared exporter adoption applies to teacher and both students. The
+next recovered sealed tranche exposed a stale in-memory cleanup argument; prune
+the accepted verified tranche after durable frontier publication. Focused checks
+cover both sides of the interruption with cleanup enabled and disabled. Combined
+history/reconciliation/export tests: 153 passed. Production controller cutover
+and whole-recipe completion remain unproven; no extra exposure or readiness credit.
+
+The next source-only backlog contains 814 verified positive trajectories in 53
+tranches. Convert with both models' KEEP reasoning view and explicit masking of
+runtime-failed assistant history. Seed authenticated dedup indexes for newly
+admitted corpora before successor conversion. Strictly verified tranches are
+registered, published, and made visible to the next tranche immediately. These
+new registrations still have zero student exposure until actual continuation.
