@@ -1042,6 +1042,13 @@ def _main(argv=None, *, requested_refresh):
         config['native_attention_precision'] = attention_precision
     saved_training = resume or shared_resume or {}
     saved_options = saved_training.get('options') or {}
+    checkpoint_options['foundation_qualification_history'] = list(saved_options.get('foundation_qualification_history') or [])
+    snapshot_ancestors = list(saved_options.get('native_snapshot_ancestors') or [])
+    if resume is not None or shared_resume is not None:
+        loaded_snapshot = sha256_file_hex_cached(args.continue_from if parent_continuation else policy.slot)
+        if loaded_snapshot not in snapshot_ancestors:
+            snapshot_ancestors.append(loaded_snapshot)
+    checkpoint_options['native_snapshot_ancestors'] = snapshot_ancestors
     previous_cotangent_backend = saved_options.get('cotangent_accumulator_backend', 'cpu_file')
     args.cotangent_accumulator_backend = (previous_cotangent_backend
         if args.cotangent_accumulator_backend is None else args.cotangent_accumulator_backend)
@@ -1604,11 +1611,17 @@ def _main(argv=None, *, requested_refresh):
                                         trained_bindings=source_row_bindings)
     foundation_template = foundation_exposure() if args.communication_foundation else None
     qualification_request = None
+    previous_qualification_history = checkpoint_options['foundation_qualification_history']
+    qualification_history = list(previous_qualification_history)
     if args.foundation_qualification_request:
         from .native_readiness import validate_foundation_qualification_request
         qualification_request = validate_foundation_qualification_request(args.foundation_qualification_request,
             config['architecture'] + ':' + config['base_inventory_sha256'], foundation_template)
         checkpoint_options['foundation_qualification_request_binding'] = qualification_request
+        if qualification_request not in qualification_history:
+            qualification_history.append(qualification_request)
+    checkpoint_options['foundation_qualification_history'] = qualification_history
+    metadata_dirty = metadata_dirty or qualification_history != previous_qualification_history
     foundation_missing = {key for key,row in (foundation_template or {}).get('rows',{}).items()
         if not row['admitted_to_training'] or row['required_visits']<=0 or row['graph_visits']<row['required_visits']}
     # An explicitly owned refresh continues an already exposed cohort through

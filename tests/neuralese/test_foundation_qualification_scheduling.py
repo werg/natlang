@@ -80,7 +80,7 @@ def test_actual_deferred_foundation_continues_and_exactly_resumes_optimizer(tmp_
     base=tmp_path/'base';tiny_source(base)
     _,_,roles,config=load_native_model(base,dtype=torch.float32,rank=4)
     fp=config['tokenizer_fingerprint']
-    manifest=source_manifest(tmp_path,[dict(graph(n),tokenizer_fingerprint=fp) for n in ('a','b','c')],
+    manifest=source_manifest(tmp_path,[dict(graph(n),tokenizer_fingerprint=fp) for n in ('a','b','c','d','e')],
         [authenticated_pair('real',roles=roles.ids,fingerprint=fp)])
     held=tmp_path/'held.jsonl';held.write_text(json.dumps(dict(graph('held'),split='test',tokenizer_fingerprint=fp))+'\n')
     calls=[]
@@ -114,7 +114,46 @@ def test_actual_deferred_foundation_continues_and_exactly_resumes_optimizer(tmp_
     receipt=json.loads((split/'native-training-receipt.json').read_text())
     assert receipt['foundation_qualification_schedule']['candidate'] is True
     assert not receipt['foundation_ready'] and not receipt['completed']
-    assert receipt['mandatory_sft']['remaining_graph_visits']==2
+    assert receipt['mandatory_sft']['remaining_graph_visits']==4
     assert not any(frame.get('completed_foundations') for frame in collect_sft_progress(actual['training']).values())
     runtime=json.loads((split/'native-runtime-certificate.json').read_text())
     assert runtime['deferred'] and runtime['reason']=='shared qualification request pending'
+    # Issue a two-candidate scheduling request, then remove it on the next
+    # ordinary continuation. Peer metadata is a transport fixture, not proof
+    # that a second CUDA model was qualified in this test.
+    own=receipt['model_id']
+    candidate={'schema':'natlang.native-foundation-candidate/1','qualified':False,
+        **{key:receipt[key] for key in ('model_id','stage_id','checkpoint','native_identity',
+            'communication_foundation','mandatory_sft')}}
+    peer=copy.deepcopy(candidate);peer['model_id']='peer-protocol-fixture'
+    requirement={'model_id':own,'stage_ids':['full'],'readiness_boundary':'communication-foundation',
+        'foundation_epochs':1,'foundation_sources_sha256':sha256_file_hex(manifest)}
+    request=tmp_path/'qualified-request.json'
+    request.write_text(json.dumps({'schema':'natlang.native-foundation-qualification-request/1',
+        'readiness_granted':False,'contract':{'models':{'own':requirement,'peer':{
+            **requirement,'model_id':peer['model_id']}}},'candidates':{own:candidate,peer['model_id']:peer}}))
+    from natlang_neuralese.eval import native_backend
+    original=native_backend.qualify_complete_runtime;checks=[]
+    def qualify(*a,**kw):
+        checks.append(kw['checkpoint_sha256'])
+        return original(*a,**kw)
+    monkeypatch.setattr(native_backend,'qualify_complete_runtime',qualify)
+    assert trainer.main([*args,'--out',str(split),'--refresh-after-updates','1',
+        '--foundation-qualification-request',str(request),'--forward-atol','1e-4','--gradient-atol','1e-5'])==0
+    assert len(calls)==len(checks)==1
+    checked=torch.load(split/'checkpoint.pt',weights_only=False)
+    binding=checked['training']['options']['foundation_qualification_request_binding']
+    assert binding['sha256']==sha256_file_hex(request)
+    assert trainer.main([*args,'--out',str(split),'--refresh-after-updates','1'])==0
+    after=torch.load(split/'checkpoint.pt',weights_only=False)
+    assert after['training']['step']==4
+    assert after['training']['options']['foundation_qualification_history']==[binding]
+    assert 'foundation_qualification_request_binding' not in after['training']['options']
+    assert len(calls)==len(checks)==1
+    assert trainer.main([*args,'--out',str(reference),'--refresh-after-updates','2'])==0
+    expected=torch.load(reference/'checkpoint.pt',weights_only=False)
+    for key in ('optimizer','rng','exposure_counts','global_step','cursor'):
+        equal(after['training'][key],expected['training'][key])
+    for key in ('backbone_state','interface_state'):equal(after[key],expected[key])
+
+
