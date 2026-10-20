@@ -137,3 +137,26 @@ def test_two_actual_shared_updates_preserve_complete_optimizer_history(family,mo
     # oracle; only replace its ordinary examples with complete real-edge DAGs.
     monkeypatch.setattr(checks,'examples',lambda:episodes(empty_relay=True))
     checks.test_two_actual_muon_updates_and_optimizer_histories_match_disjoint_reference(family)
+
+
+@pytest.mark.parametrize('family',['lfm','mellum'])
+def test_cuda_two_fp32_production_profile_updates_preserve_optimizer_law(family,monkeypatch):
+    if not torch.cuda.is_available():pytest.skip('CUDA unavailable')
+    import test_native_prefix_packing as checks
+    from natlang_neuralese.model.native_parameter_precision import configure_norm_precision
+    from natlang_neuralese.model.native_precision import set_native_linear_precision
+    from natlang_neuralese.train.backbone_policy import configure_backbone_training
+    def production(port,markers,**kwargs):
+        model=SharedStateModel(port.to(device='cuda',dtype=torch.float32),markers,
+            native_norm_execution='stable-v1',**kwargs)
+        if family=='mellum':model.port.hf.natlang_precision='bf16'
+        configure_norm_precision(model,'fp32-norms-v1')
+        set_native_linear_precision(model,'bf16x6')
+        configure_backbone_training(model.port,'latent')
+        with torch.no_grad():model.adapter.up.weight.normal_(std=.1)
+        return model
+    monkeypatch.setattr(checks,'SharedStateModel',production)
+    monkeypatch.setattr(checks,'examples',lambda:episodes(empty_relay=True))
+    # Existing exact per-matrix BF16 momentum recurrence/cast oracle and strict
+    # every-parameter raw-gradient/update/state tolerances remain unchanged.
+    checks.test_two_actual_muon_updates_and_optimizer_histories_match_disjoint_reference(family)
