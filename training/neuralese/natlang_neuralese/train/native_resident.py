@@ -114,6 +114,18 @@ def _check_indexes(witnesses):
             raise ValueError('resident warmed source index changed')
 
 
+def check_index_witness_union(index_lists, check_indexes):
+ # Exact canonical whole witnesses include cache binding, key and metadata.
+ # Distinct conflicting declarations remain distinct and reach the verifier.
+ union=[];seen=set()
+ for witnesses in index_lists:
+  for witness in witnesses:
+   identity=digest(witness)
+   if identity not in seen:seen.add(identity);union.append(witness)
+ check_indexes(union)
+ return len(union)
+
+
 def _contract(plan, proposed, stage_id):
     """One stage may append active data and/or mandatory pending declarations."""
     from .recipe import _data_continuation, _pending_source_continuation
