@@ -331,3 +331,55 @@ def test_current_policy_owner_uses_carried_source_plan_without_impersonating_old
     assert json.loads(x['config'].read_text())['runtime_handoff']==proof
     assert json.loads((x['out']/'state.json').read_text())['checkpoint']==str(pin)
     assert runtime.verify_runtime_handoff(proof,bootstrap=x['bootstrap'])['checkpoint']==resident.binding(pin)
+
+
+def test_direct_owner_joins_runtime_without_releasing_lease_or_changing_debt(later,tmp_path):
+    import fcntl
+    x=later;cursor=x['root']/'cycle.json';state=x['out']/'state.json'
+    before=(cursor.read_bytes(),state.read_bytes())
+    lock=x['root'].parent/'controller.lock'
+    with lock.open('a')as held:
+        fcntl.flock(held,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        proof=runtime.prepare_runtime_handoff(x['bootstrap'],x['handoff'],x['transition'],x['config'],
+            tmp_path/'owned-runtime-proof.json',owned_controller_fd=held.fileno())
+        declaration={**x['declaration'],'runtime_handoff':proof}
+        runtime.configure_runtime_handoff(x['plan'],declaration,x['bootstrap'],x['config'],owned_controller_fd=held.fileno())
+        assert (cursor.read_bytes(),state.read_bytes())==before
+        with lock.open('a')as competing:
+            with pytest.raises(BlockingIOError):fcntl.flock(competing,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        # Existing-proof retry must still authenticate any supplied descriptor.
+        with pytest.raises(ValueError,match='lease'):
+            runtime.prepare_runtime_handoff(x['bootstrap'],x['handoff'],x['transition'],x['config'],
+                Path(proof['path']),owned_controller_fd=-1)
+    with lock.open('a')as released:fcntl.flock(released,fcntl.LOCK_EX|fcntl.LOCK_NB)
+    config=json.loads(x['config'].read_text())
+    assert config['runtime_handoff']==proof and config['task_source']=={'sealed':True}
+
+
+@pytest.mark.parametrize('mode',['unheld','shared','wrong-path','invalid'])
+def test_runtime_join_rejects_unowned_descriptor(later,tmp_path,mode):
+    import fcntl
+    x=later;lock=x['root'].parent/'controller.lock';path=tmp_path/'other.lock'if mode=='wrong-path'else lock
+    with path.open('a')as lease:
+        if mode=='shared':fcntl.flock(lease,fcntl.LOCK_SH|fcntl.LOCK_NB)
+        elif mode=='wrong-path':fcntl.flock(lease,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        fd=-1 if mode=='invalid'else lease.fileno()
+        with pytest.raises(ValueError,match='lease'):
+            runtime.prepare_runtime_handoff(x['bootstrap'],x['handoff'],x['transition'],x['config'],
+                tmp_path/'rejected-owned-proof.json',owned_controller_fd=fd)
+        with pytest.raises(ValueError,match='lease'):
+            runtime.configure_runtime_handoff(x['plan'],x['declaration'],x['bootstrap'],x['config'],owned_controller_fd=fd)
+    assert not(tmp_path/'rejected-owned-proof.json').exists()
+
+
+def test_borrowed_controller_lease_still_requires_production_lock(later,tmp_path):
+    import fcntl
+    x=later
+    with(x['root'].parent/'controller.lock').open('a')as owner,(x['out']/'controller.lock').open('a')as producer:
+        fcntl.flock(owner,fcntl.LOCK_EX|fcntl.LOCK_NB);fcntl.flock(producer,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        with pytest.raises(BlockingIOError):
+            runtime.prepare_runtime_handoff(x['bootstrap'],x['handoff'],x['transition'],x['config'],
+                tmp_path/'blocked-production-proof.json',owned_controller_fd=owner.fileno())
+        with pytest.raises(BlockingIOError):
+            runtime.configure_runtime_handoff(x['plan'],x['declaration'],x['bootstrap'],x['config'],owned_controller_fd=owner.fileno())
+    assert not(tmp_path/'blocked-production-proof.json').exists()

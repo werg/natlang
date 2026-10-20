@@ -148,3 +148,16 @@ rollups, without opening remote source paths. Share that exact receipt-summary
 mechanism with its producer; aggregate visits or a `complete` flag cannot replace
 missing row exposure. This is crisp evidence verification, not a new readiness
 policy, another trainer or permission to relabel an old role authority.
+
+## Join a runtime handoff under the existing direct owner's lease
+
+The adaptive recipe decides when to refresh and which admitted sources to use.
+A live direct owner can publish its genuinely loaded drained parent with the
+existing no-credit import, then join normal runtime/recipe authority before SGD.
+This is exact control plumbing: authenticate the actual inherited canonical
+lock descriptor by device/inode, exclusive FLOCK and a fresh conflicting-open
+probe; retain that lease continuously. Acquire every other existing production
+and operation lock normally. Reuse one descriptor verifier across owner import,
+retirement, deferred bridges and runtime joins. Preserve all cursor/case/task
+and stage debt through the normal pending continuation law. A passed metadata
+join grants no model qualification, extra exposure or completed recipe stage.

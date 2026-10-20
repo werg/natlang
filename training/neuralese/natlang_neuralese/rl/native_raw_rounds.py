@@ -19,6 +19,27 @@ from .native_raw_handoff import binding,verify_handoff
 SCHEMA='natlang.native-raw-rounds/1'
 
 
+def verify_controller_fd(fd,path):
+    """Authenticate a continuously held inherited canonical controller lease."""
+    path=Path(path)
+    if type(fd)is not int or fd<0 or not path.is_file() or not os.path.isfile(f'/proc/self/fd/{fd}'):
+        raise ValueError('inherited canonical controller lease descriptor is invalid')
+    opened=os.fstat(fd);actual=path.stat();identity=(opened.st_dev,opened.st_ino)
+    if identity!=(actual.st_dev,actual.st_ino):
+        raise ValueError('inherited descriptor is not the canonical controller lease')
+    locks=[line for line in Path('/proc/self/fdinfo',str(fd)).read_text().splitlines()
+           if line.startswith('lock:')and'FLOCK'in line]
+    if len(locks)!=1 or'WRITE'not in locks[0]:
+        raise ValueError('inherited descriptor has no exclusive controller lease')
+    with path.open('a')as probe:
+        try:fcntl.flock(probe,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        except BlockingIOError:pass
+        else:raise ValueError('inherited canonical controller lease is not held')
+    current=path.stat();held=os.fstat(fd)
+    if identity!=(current.st_dev,current.st_ino)or identity!=(held.st_dev,held.st_ino):
+        raise ValueError('canonical controller lease identity changed during verification')
+
+
 class StudentConfigurationError(Exception):
     """No operation has been launched by this cycle; other students remain useful."""
 
@@ -330,18 +351,6 @@ def import_current_owner_checkpoint(config_path,cursor_path,selected_checkpoint,
         if value.get('current_checkpoint')!=current_before:
             raise ValueError('current-owner import intent lost its exact predecessor checkpoint binding')
         return value
-
-    def verify_controller_fd(fd,path):
-        if type(fd)is not int or fd<0:raise ValueError('current-owner import controller descriptor is invalid')
-        if not path.is_file() or not os.path.isfile(f'/proc/self/fd/{fd}'):
-            raise ValueError('current-owner import descriptor is not the existing canonical controller lock')
-        opened=os.fstat(fd);actual=path.stat()
-        if opened.st_dev!=actual.st_dev or opened.st_ino!=actual.st_ino:
-            raise ValueError('current-owner import descriptor is not the existing canonical controller lock')
-        info=Path('/proc/self/fdinfo',str(fd)).read_text().splitlines()
-        locks=[line for line in info if line.startswith('lock:') and 'FLOCK' in line]
-        if len(locks)!=1 or 'WRITE' not in locks[0]:
-            raise ValueError('current-owner import descriptor does not hold the existing exclusive controller lease')
 
     config_path=Path(config_path).resolve(strict=True);cursor_path=Path(cursor_path).resolve(strict=True)
     out=Path(out).resolve();config=json.loads(config_path.read_text())
@@ -712,14 +721,7 @@ def bridge_deferred_owner_handoff(config_path,cursor_path,deferred_reference,han
     controller_lock=root.parent/'controller.lock';locks={Path(config['out']).resolve()/'controller.lock'}
     with contextlib.ExitStack() as stack:
         if owned_controller_fd is not None:
-            fd=owned_controller_fd;path=controller_lock
-            if type(fd)is not int or fd<0 or not path.is_file() or not os.path.isfile(f'/proc/self/fd/{fd}'):
-                raise ValueError('deferred owner bridge lacks its existing canonical controller lease')
-            opened=os.fstat(fd);actual=path.stat()
-            rows=[line for line in Path('/proc/self/fdinfo',str(fd)).read_text().splitlines()
-                  if line.startswith('lock:') and 'FLOCK' in line]
-            if (opened.st_dev,opened.st_ino)!=(actual.st_dev,actual.st_ino) or len(rows)!=1 or 'WRITE' not in rows[0]:
-                raise ValueError('deferred owner bridge descriptor is not the existing exclusive controller lease')
+            verify_controller_fd(owned_controller_fd,controller_lock)
         else:locks.add(controller_lock)
         for lock_path in sorted(locks):
             lock_path.parent.mkdir(parents=True,exist_ok=True);lease=stack.enter_context(lock_path.open('a'))
@@ -954,17 +956,6 @@ def retire_stale_pending_raw_round(config_path,cursor_path,authority,out,*,owned
         path=original_path.resolve()
         if original_path.is_symlink() or not path.is_dir():
             raise ValueError('stale RAW retirement operation directory is not an intact directory')
-
-    def verify_controller_fd(fd,path):
-        if type(fd)is not int or fd<0 or not path.is_file() or not os.path.isfile(f'/proc/self/fd/{fd}'):
-            raise ValueError('stale RAW retirement lacks the inherited canonical controller lease')
-        opened=os.fstat(fd);actual=path.stat()
-        if opened.st_dev!=actual.st_dev or opened.st_ino!=actual.st_ino:
-            raise ValueError('stale RAW retirement inherited descriptor is not the canonical controller lease')
-        info=Path('/proc/self/fdinfo',str(fd)).read_text().splitlines()
-        locks=[line for line in info if line.startswith('lock:') and 'FLOCK' in line]
-        if len(locks)!=1 or 'WRITE' not in locks[0]:
-            raise ValueError('stale RAW retirement inherited descriptor has no exclusive controller lease')
 
     def verify_permitted_owner_fd(fd,path,identity):
         """Verify the live in-process trainer's lease without taking it over."""

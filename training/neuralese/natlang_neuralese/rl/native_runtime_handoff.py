@@ -6,9 +6,26 @@ import json
 from pathlib import Path
 from ..common.jsonio import write_bytes_durable,write_json_durable
 from .native_raw_handoff import binding,verify_handoff,verify_handoff_metadata,verify_drained_recipe_handoff
+from .native_raw_rounds import verify_controller_fd
 from ..train.native_readiness import _bound
 
 SCHEMA='natlang.native-raw-runtime-handoff/1'
+
+
+@contextlib.contextmanager
+def _runtime_leases(paths,canonical,owned_controller_fd=None):
+    canonical=Path(canonical)
+    with contextlib.ExitStack()as stack:
+        if owned_controller_fd is not None:
+            verify_controller_fd(owned_controller_fd,canonical)
+        for path in sorted(set(map(Path,paths))):
+            if path==canonical and owned_controller_fd is not None:continue
+            path.parent.mkdir(parents=True,exist_ok=True)
+            lease=stack.enter_context(path.open('a'));fcntl.flock(lease,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        try:yield
+        finally:
+            if owned_controller_fd is not None:
+                verify_controller_fd(owned_controller_fd,canonical)
 
 
 def _read(reference):return json.loads(_bound(reference).read_text())
@@ -210,9 +227,11 @@ def _loaded_handoff(reference,verified=None):
     return record,saved
 
 
-def prepare_runtime_handoff(bootstrap,handoff,recipe_handoff,config_path,out,*,operation=None,bare_direct_owner=None,owned_operations=None,deferred_owner_bridge=None,verified_handoff=None):
+def prepare_runtime_handoff(bootstrap,handoff,recipe_handoff,config_path,out,*,operation=None,bare_direct_owner=None,owned_operations=None,deferred_owner_bridge=None,verified_handoff=None,owned_controller_fd=None):
     """Snapshot an actual later drain under the existing coordinator/worker leases."""
     config_path=Path(config_path);out=Path(out)
+    if owned_controller_fd is not None:
+        verify_controller_fd(owned_controller_fd,config_path.resolve().parent.parent/'controller.lock')
     if out.exists():
         value=verify_runtime_handoff(binding(out),bootstrap=bootstrap,verified_handoff=verified_handoff)
         if (value['handoff']!=handoff or value['recipe_handoff']!=recipe_handoff
@@ -229,10 +248,7 @@ def prepare_runtime_handoff(bootstrap,handoff,recipe_handoff,config_path,out,*,o
     locks=[root.parent/'controller.lock',Path(config['out'])/'controller.lock']
     if operation:
         request=_read(operation['request']);locks.append(Path(request['out'])/'controller.lock')
-    with contextlib.ExitStack() as stack:
-        for path in sorted(set(locks)):
-            path.parent.mkdir(parents=True,exist_ok=True)
-            lease=stack.enter_context(path.open('a'));fcntl.flock(lease,fcntl.LOCK_EX|fcntl.LOCK_NB)
+    with _runtime_leases(locks,root.parent/'controller.lock',owned_controller_fd):
         sources={'config':binding(config_path),'cursor':binding(cursor),'state':binding(state)}
         current=json.loads(state.read_text());published=binding(current['checkpoint'])
         record,saved=_loaded_handoff(handoff,verified_handoff)
@@ -509,7 +525,17 @@ def _owned_cycle_boundary(proof,cursor,state,recipe,production_stage):
             and not state.get('pending_native_checkpoint') and not state.get('pending_semantic_source'))
 
 
-def configure_runtime_handoff(plan_path,declaration,bootstrap,config_path,*,verified_handoff=None):
+def configure_runtime_handoff(plan_path,declaration,bootstrap,config_path,*,verified_handoff=None,owned_controller_fd=None):
+    """Keep normal outer-owner locking, or authenticate the direct owner's FD."""
+    if owned_controller_fd is None:
+        return _configure_runtime_handoff(plan_path,declaration,bootstrap,config_path,verified_handoff=verified_handoff)
+    path=Path(config_path);config=json.loads(path.read_text());root,_,_=_paths(path,config)
+    with _runtime_leases([root.parent/'controller.lock',Path(config['out'])/'controller.lock'],
+                         root.parent/'controller.lock',owned_controller_fd):
+        return _configure_runtime_handoff(plan_path,declaration,bootstrap,config_path,verified_handoff=verified_handoff)
+
+
+def _configure_runtime_handoff(plan_path,declaration,bootstrap,config_path,*,verified_handoff=None):
     """Rebind invocation metadata; never republish a parent or rewrite a cursor."""
     reference=declaration['runtime_handoff'];proof=verify_runtime_handoff(reference,bootstrap=bootstrap,verified_handoff=verified_handoff)
     path=Path(config_path);prior=json.loads(path.read_text());old=_read(proof['snapshots']['config'])
