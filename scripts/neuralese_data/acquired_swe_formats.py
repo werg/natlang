@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import json
+import hashlib
+import re
 from .common import Reject
 from .trajectory import tool_call
 
@@ -38,7 +40,7 @@ def compact_context(records,session_id):
 
 def codex_context(records,session_id):
     from .acquired_granted import complete_messages
-    messages=[];rows=[];redacted=[];models=set();seen=set()
+    messages=[];rows=[];redacted=[];models=set();seen=set();auxiliary=[];history=[]
     for index,event in records:
         payload=event.get('payload',event.get('item'))
         if event.get('type')=='session_meta' and isinstance(payload,dict):
@@ -49,6 +51,8 @@ def codex_context(records,session_id):
             session_id=payload.get('session_id') or payload.get('id') or session_id
         if event.get('type')=='turn_context' and isinstance(payload,dict) and payload.get('model'):
             models.add(str(payload['model']))
+        if event.get('type')=='event_msg' and isinstance(payload,dict) and payload.get('type') in ('thread_rolled_back','turn_aborted'):
+            history.append({'row':index,'kind':payload['type'],'payload_sha256':hashlib.sha256(json.dumps(payload,sort_keys=True,separators=(',',':'),ensure_ascii=False).encode()).hexdigest()})
         if event.get('type')!='response_item':continue
         if not isinstance(payload,dict):raise Reject('missing SWE Codex original response item')
         identifier=payload.get('id')
@@ -56,7 +60,18 @@ def codex_context(records,session_id):
             if identifier in seen:raise Reject('duplicate SWE Codex response item identity')
             seen.add(identifier)
         kind=payload.get('type');message=None
-        if kind=='message':
+        if kind=='ghost_snapshot':
+            # Released Codex Git bookkeeping is not model conversation. Preserve
+            # its source identity without manufacturing a tool observation.
+            commit=payload.get('ghost_commit')
+            if set(payload)!={'type','ghost_commit'} or not isinstance(commit,dict) or set(commit)!={'id','parent','preexisting_untracked_files','preexisting_untracked_dirs'}:
+                raise Reject('unsupported SWE Codex ghost snapshot shape')
+            if not isinstance(commit['id'],str) or re.fullmatch('[0-9a-f]{40}',commit['id']) is None or not (commit['parent'] is None or isinstance(commit['parent'],str) and re.fullmatch('[0-9a-f]{40}',commit['parent'])):
+                raise Reject('invalid SWE Codex ghost commit identity')
+            if any(not isinstance(commit[key],list) or any(not isinstance(value,str) for value in commit[key]) for key in ('preexisting_untracked_files','preexisting_untracked_dirs')):
+                raise Reject('invalid SWE Codex ghost file inventory')
+            auxiliary.append({'row':index,'kind':kind,'payload_sha256':hashlib.sha256(json.dumps(payload,sort_keys=True,separators=(',',':'),ensure_ascii=False).encode()).hexdigest()})
+        elif kind=='message':
             message={'role':payload['role'],'content':payload.get('content')}
         elif kind=='agent_message':
             message={'role':'user','content':payload.get('content')}
@@ -85,7 +100,8 @@ def codex_context(records,session_id):
     if not any(message['role']=='user' for message in messages) or not any(message['role']=='assistant' for message in messages):
         raise Reject('SWE Codex source lacks original request/assistant context')
     return records[-1][0],messages,{'session_id':session_id,'leaf_uuid':'codex-source',
-        'original_message_rows':rows,'missing_ancestry':{},'original_models':sorted(models),
+        'original_message_rows':rows,'missing_ancestry':({'unresolved_codex_history_events':history} if history else {}),'original_models':sorted(models),
+        'auxiliary_source_rows':auxiliary,
         'redacted_context_rows':redacted,'source_format':'codex-response-items',
         'raw_context_not_normalized_table':True,'custom_tool_argument_adaptation':'exact-input-field'}
 
