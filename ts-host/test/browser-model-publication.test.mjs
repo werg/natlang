@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { mkdtemp, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promoteBrowserModel } from '../../scripts/publish_browser_model.mjs';
 
-async function fixture() {
+async function fixture(t) {
   const root = await mkdtemp(join(tmpdir(), 'natlang-browser-publish-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
   await mkdir(join(root, 'runs/demo/merged'), { recursive: true });
   await mkdir(join(root, 'models/templates'), { recursive: true });
   await mkdir(join(root, 'ts-host/src'), { recursive: true });
@@ -21,8 +22,8 @@ async function fixture() {
   return root;
 }
 
-test('publication verifies GGUF and provenance, then atomically changes one shared default', async () => {
-  const root = await fixture();
+test('publication verifies GGUF and provenance, then atomically changes one shared default', async (t) => {
+  const root = await fixture(t);
   const first = await promoteBrowserModel({ root, run: 'runs/demo', artifact: 'models/candidate.gguf',
     name: 'demo', downloadUrl: 'https://models.example/demo.gguf' });
   assert.equal(first.entry.quant, 'Q4_K_M');
@@ -66,8 +67,8 @@ test('browser catalog falls back only when no publication exists', async () => {
     }) })), /invalid published browser model catalog/);
 });
 
-test('invalid artifact cannot replace the published pointer', async () => {
-  const root = await fixture();
+test('invalid artifact cannot replace the published pointer', async (t) => {
+  const root = await fixture(t);
   await writeFile(join(root, 'models/candidate.gguf'), Buffer.alloc(1_000_000));
   await assert.rejects(promoteBrowserModel({ root, run: 'runs/demo',
     artifact: 'models/candidate.gguf', name: 'invalid' }), /GGUF header/);
