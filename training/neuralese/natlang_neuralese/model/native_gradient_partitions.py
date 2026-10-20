@@ -88,6 +88,25 @@ def primal_row_reuse(plan, representatives):
     if len(rows) != plan.token_count or any(type(row) is not int or not 0 <= row <= index
             or rows[row] != row for index,row in enumerate(rows)):
         raise ValueError('primal representatives must be earlier canonical physical rows')
+    # Independent linear-time proof: a prefix key contains its canonical
+    # predecessor, so equal keys attest the entire raw causal chain without
+    # expanding any per-row history. Actual adapted/imported suffix rows never
+    # alias, even when their visible token text happens to match.
+    canonical={}
+    for node,offset in zip(plan.invocations,plan.offsets):
+        split=min([len(node.token_ids),*[edge.at for edge in node.imports],
+            *[start for start,_ in node.producing],*[start for start,_ in node.logical_producing]])
+        for local,token_id in enumerate(node.token_ids):
+            row=offset+local
+            if local>=split:
+                expected=row
+            else:
+                if plan.producing[row] or plan.own_positions[row]!=local:
+                    raise ValueError('primal representatives require initial raw positions')
+                key=(token_id,local,rows[row-1] if local else -1)
+                expected=canonical.setdefault(key,row)
+            if rows[row]!=expected:
+                raise ValueError('primal representatives do not attest the original raw prefix')
     aliases=_PrimalRows(rows)
     token = _PRIMAL_ROWS.set((plan,aliases))
     try:
