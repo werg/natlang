@@ -22,3 +22,7 @@ Generated operational inputs and normal frozen refs retain the source, review,
 base and loader. Default selection is unchanged; malformed or unreviewed sources
 fail closed. The external source can prepare future scheduling while useful
 student SGD continues on its unchanged numerical inventory.
+
+Source execution compiles the authenticated bytes directly. Python timestamp
+bytecode caches are not authority; a stale same-size/same-mtime cache must not
+replace the reviewed source during a later preparation.

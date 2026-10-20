@@ -14,6 +14,7 @@ import sys
 REPOSITORY=Path(os.environ.get('NATLANG_REPO',Path(__file__).resolve().parents[2])).resolve()
 sys.path[:0]=[str(REPOSITORY/'training/neuralese'),str(REPOSITORY/'scripts/coreweave')]
 from natlang_neuralese.common.jsonio import write_json_durable
+from natlang_neuralese.common.hashing import sha256_hex
 from natlang_neuralese.train.native_deployment import binding, prepare_role_scheduler
 from natlang_neuralese.rl import native_role_release as roles
 from natlang_neuralese.train.recipe import resolve_recipe_data,effective_stage_parameters
@@ -47,8 +48,11 @@ def scheduling_producer(spec):
     binding(source,selected['source']);binding(base,selected['base_source'])
     actual=Path(spec['scheduler']['runtime'])/'training/neuralese/natlang_neuralese/train/native_deployment.py'
     if binding(base)!=binding(actual):raise ValueError('scheduler producer base differs from actual runtime')
-    if (not {'schema','passed','source','base_source'}<=set(review)
+    if (not isinstance(review,dict)
+            or not {'schema','passed','source','base_source'}<=set(review)
             or review.get('schema')!='natlang.native-scheduler-producer-review/1' or review.get('passed')is not True
+            or any(not isinstance(review.get(key),dict) or not {'path','sha256'}<=set(review[key])
+                for key in ('source','base_source'))
             or binding(source,review.get('source'))!=binding(source,selected['source'])
             or binding(base,review.get('base_source'))!=binding(base,selected['base_source'])):
         raise ValueError('scheduler producer lacks its exact reviewed source/base authority')
@@ -57,7 +61,11 @@ def scheduling_producer(spec):
     import importlib.util
     name='natlang_neuralese.train._reviewed_scheduler_'+selected['source']['sha256']
     module_spec=importlib.util.spec_from_file_location(name,source)
-    module=importlib.util.module_from_spec(module_spec);module_spec.loader.exec_module(module)
+    module=importlib.util.module_from_spec(module_spec)
+    raw=source.read_bytes()
+    if sha256_hex(raw)!=selected['source']['sha256']:
+        raise ValueError('scheduler producer source changed before execution')
+    exec(compile(raw,str(source),'exec'),module.__dict__)
     return module.prepare_role_scheduler,[selected['source'],selected['base_source'],selected['review'],binding(__file__)]
 
 

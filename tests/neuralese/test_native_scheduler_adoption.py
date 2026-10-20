@@ -196,12 +196,21 @@ def test_semantic_override_does_not_hide_unmeasured_raw_foundation(tmp_path):
     with pytest.raises(ValueError,match='foundation recipe'):m.prepare(spec,tmp_path/'proposal')
 
 
-@pytest.mark.parametrize('fault',[None,'source','base','review','unpassed','missing-source'])
+@pytest.mark.parametrize('fault',[None,'source','base','review','unpassed','missing-source',
+    'null-source','null-base-source','empty-source','null-review','stale-pyc'])
 def test_explicit_host_snapshot_producer_preserves_numerical_package_and_binds_inputs(tmp_path,fault):
     spec,runtime,plans=setup(tmp_path)
     # This is the actual shared producer, loaded under its own source origin.
     from natlang_neuralese.train import native_deployment
     source=tmp_path/'snapshot-producer.py';source.write_bytes(Path(native_deployment.__file__).read_bytes())
+    if fault=='stale-pyc':
+        import os,py_compile
+        body=source.read_bytes().replace(b'from __future__ import annotations\n',
+            b'from __future__ import annotations\nHOST_SOURCE_REVISION=1\n')+b'\nassert HOST_SOURCE_REVISION==2\n'
+        source.write_bytes(body)
+        stat=source.stat();py_compile.compile(str(source),doraise=True)
+        source.write_bytes(body.replace(b'HOST_SOURCE_REVISION=1',b'HOST_SOURCE_REVISION=2'))
+        os.utime(source,ns=(stat.st_atime_ns,stat.st_mtime_ns))
     base=runtime/'training/neuralese/natlang_neuralese/train/native_deployment.py'
     base.parent.mkdir(parents=True,exist_ok=True);base.write_text('BASE=1\n')
     record=json.loads((runtime/'construction.json').read_text())
@@ -219,15 +228,19 @@ def test_explicit_host_snapshot_producer_preserves_numerical_package_and_binds_i
     request['scheduling_producer']={'source':m.binding(source),'base_source':m.binding(base),'review':m.binding(review)}
     if fault=='source':source.write_text('BAD=1\n')
     elif fault=='base':request['scheduling_producer']['base_source']=m.binding(source)
-    elif fault in ('review','unpassed','missing-source'):
+    elif fault in ('review','unpassed','missing-source','null-source','null-base-source','empty-source','null-review'):
         value=json.loads(review.read_text())
         if fault=='review':value['source']=m.binding(base)
         elif fault=='missing-source':value.pop('source')
+        elif fault=='null-source':value['source']=None
+        elif fault=='null-base-source':value['base_source']=None
+        elif fault=='empty-source':value['source']={}
+        elif fault=='null-review':value=None
         else:value['passed']=False
         write(review,value);request['scheduling_producer']['review']=m.binding(review)
     write(spec,request)
     before=base.read_bytes()
-    if fault:
+    if fault not in (None,'stale-pyc'):
         with pytest.raises(ValueError):m.prepare(spec,tmp_path/'prepared')
     else:
         result=m.read(m.prepare(spec,tmp_path/'prepared'));proposal=m.read(result['proposal'])
