@@ -40,14 +40,14 @@ may differ; it does not redefine the old authority. Serialized transition tests
 exercise both destination layouts and both reference forms without cursor,
 optimizer, exposure or checkpoint changes. Invalid optional byte counts fail.
 
-## Non-admitting preference capacity history
+## Typed replay dependencies replace the historical capacity workaround
 
-Policy: preserve actual current admission and replay inputs; a diagnostic capacity
-case audit reference explicitly marked `training_admission: false` grants no
-data admission. Its historical `provenance.admission_audit` is retained in the authenticated
-descriptor bytes but is not a current replay dependency. The crisp closure walker
-recognizes only that exact top-level schema and the direct audit reference's
-explicit false flag, then skips only that exact provenance field. A flag on the
-document itself does not authorize skipping an unmarked audit reference. Other provenance, source, inputs, cases and
-runtime references remain strict, including nested same-named fields. No general
-provenance exemption, certificate rewrite or training credit is introduced.
+The first real Mellum drycheck found a discarded non-admitting preference audit;
+a wider census then proved that generic recursion also followed historical
+upstream preference archives, teacher captures and mutable past resident slots.
+The initial one-field schema workaround is superseded by the [typed replay
+collector](../../../training/neuralese/COMPLETED_DEPENDENCY_DECOMPOSITION.md).
+Normal proof verification and typed recipe/loader collectors define actual
+inputs; opaque receipts retain authenticated provenance without fetching every
+nested reference. Selected future publisher controls remain strict. No training
+admission, numerical proof, optimizer history or exposure changes.

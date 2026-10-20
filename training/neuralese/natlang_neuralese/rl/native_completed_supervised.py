@@ -715,62 +715,102 @@ def verify_declaration(reference,declaration):
 
 
 def dependencies(reference):
-    """Enumerate immutable proof replay inputs, retaining mutable controls as history.
+    """Exact verifier/recipe/loader inputs; bound JSON provenance is not executable.
 
-    Before/after logical paths and scheduling selectors are authenticated through
-    the proof's immutable snapshots, not dereferenced after later publication.
+    Normal recipe collectors define source, index, CE and admission dependencies.
+    Opaque objectives/receipts keep all original bytes without recursively fetching
+    historic source paths or mutable resident pointers recorded inside them.
     """
-    proof=verify(reference);found={};pending=[];seen=set()
+    from ..train.recipe import recipe_file_dependencies, _binding_files
+    from .native_raw_handoff import _recipe_plan
+    proof=verify(reference);found={};loaded_controls=set()
     def add(ref):
         path=_bound(ref)
-        if 'bytes'in ref and path.stat().st_size!=ref['bytes']:
+        if 'bytes'in ref and (type(ref['bytes'])is not int or ref['bytes']<0
+                or path.stat().st_size!=ref['bytes']):
             raise ValueError('completed dependency byte binding changed')
-        identity=(str(path),ref['sha256'])
-        if identity not in found:
-            found[identity]={**binding(path),'bytes':path.stat().st_size}
-            if path.suffix=='.json':pending.append((path,json.loads(path.read_text())))
+        actual={**binding(path),'bytes':path.stat().st_size}
+        if str(path)in found and found[str(path)]!=actual:
+            raise ValueError('completed dependency changed during enumeration')
+        found[str(path)]=actual
+        return path
+    def read(ref):return json.loads(add(ref).read_text())
+    def controls(ref):
+        path=add(ref)
+        marker=(str(path),ref['sha256'])
+        if marker in loaded_controls:return
+        loaded_controls.add(marker)
+        value=json.loads(path.read_text());schema=value.get('schema')
+        if schema=='natlang.source-host-publishing-control-closure/1':
+            add(value['base_loader']);controls(value['base_manifest'])
+            add(value['role_authorities'])
+            for item in value['controls'].values():add(item)
+        elif schema=='natlang.external-owned-controller-closure/1':
+            for item in value['modules']:add(item['source'])
+        elif schema=='natlang.owned-whole-recipe-controller/1':
+            selected_controls(value)
+        else:raise ValueError('completed dependency control manifest schema differs')
+    def selected_controls(value):
+        # These are the exact outside-world loaders selected by the current
+        # controller/publisher contract, not arbitrary provenance references.
+        for key in ('controller','binder','control_loader','publisher_loader',
+                    'role_mechanism_authorities','entry_wrapper'):
+            if value.get(key):add(value[key])
+        for key in ('control_manifest','publisher_manifest','controller_controls'):
+            if value.get(key):controls(value[key])
+        for item in value.get('controls',{}).values():add(item)
+        for item in value.get('frozen_refs',[]):add(item)
+        for item in value.get('operational_inputs',[]):add(item)
+        if value.get('native_checkpoint_publication') is not None:
+            from ..model.native_checkpoint_control import validate_publication_selection
+            selection=validate_publication_selection(value['native_checkpoint_publication'])
+            add(selection['producer']);add(selection['dependency_producer'])
+    def global_plan(ref):
+        value=read(ref)
+        selected_controls(value)
+        for declaration in value['models']:selected_controls(declaration)
+        return value
+    def recipe(path):
+        # _recipe_plan uses resolve_stage_inputs, whose typed role collectors
+        # authenticate CE masks/classification/withdrawal/pending/source DAGs.
+        for item in recipe_file_dependencies(path):add(item)
+        plan=_recipe_plan(Path(path),'cuda')
+        for inputs in plan['stage_inputs'].values():
+            for value in inputs.values():
+                for item in _binding_files(value):add(item)
     add(reference);add(binding(__file__))
-    for path_name,code_name in(('package','code'),('old_package','old_code')):
+    for path_name,code_name in (('package','code'),('old_package','old_code')):
         package=Path(proof.get(path_name,proof['package']))
         inventory=proof.get(code_name,proof['code'])
         if code_inventory(package)!=inventory:raise ValueError('completed dependency package changed')
         for relative,digest in inventory.items():add({'path':str(package/relative),'sha256':digest})
-    def walk(value,*,document=False):
-        if isinstance(value,dict):
-            if isinstance(value.get('path'),str)and isinstance(value.get('sha256'),str):
-                add(value);return
-            historical=set()
-            if document:
-                schema=value.get('schema')
-                if schema in(SCHEMA,SCHEMA_RAW):historical.add('controls')
-                if schema in(CONSUMED,CONSUMED_RAW,'natlang.completed-worker-normal-publication-commit/1'):
-                    historical.update(('before','after'))
-                if schema=='natlang.native-raw-runtime-handoff/1':historical.add('sources')
-                if value.get('native_state')is True:
-                    historical.update(('supervised_quantum_control','supervised_stage_quantum_control'))
-            for key,item in value.items():
-                if key in historical:continue
-                if (document and value.get('schema')=='natlang.native-preference-capacity-case/1'
-                        and key=='provenance' and isinstance(item,dict)):
-                    # This diagnostic explicitly grants no training admission.
-                    # Retain its original audit in the descriptor's bound bytes;
-                    # every other current/provenance dependency stays strict.
-                    for name,reference in item.items():
-                        if (name=='admission_audit' and isinstance(reference,dict)
-                                and reference.get('training_admission')is False):continue
-                        walk(reference)
-                else:walk(item)
-        elif isinstance(value,list):
-            for item in value:walk(item)
-    while pending:
-        path,value=pending.pop()
-        if str(path)in seen:continue
-        seen.add(str(path));walk(value,document=True)
-        # Plans additionally bind files by a path-to-digest map.
-        if isinstance(value,dict):
-            for name,digest in(value.get('inputs')or{}).items():
-                if isinstance(name,str)and isinstance(digest,str):add({'path':name,'sha256':digest})
-    return {ref['path']:ref for ref in found.values()}
+    consumed=read(proof['consumption'])
+    old_config=read(proof['old_config'])
+    for key in ('old_plan','future_plan','lineage_handoff','checkpoint'):add(proof[key])
+    future_config=read(proof['future_config']);selected_controls(future_config)
+    add(proof['old_global_plan'])
+    # An explicit later plan supersedes old publisher source ownership. When
+    # absent, the original plan is also the selected future declaration.
+    global_plan(proof.get('future_global_plan') or proof['old_global_plan'])
+    recipe(old_config['production_recipe']);recipe(add(proof['recipe']))
+    for item in proof['closed_prior_withdrawals']:add(item['proof'])
+    for key in ('training_receipt','operation_state','candidate_cursor'):
+        if consumed.get(key):add(consumed[key])
+    # Snapshot/candidate bindings are immutable. before/after/controls name the
+    # rolling slots only and must never be read after a newer owner publishes.
+    for key in ('snapshots','candidates'):
+        for item in consumed.get(key,{}).values():add(item)
+    if consumed.get('publication'):
+        publication=read(consumed['publication'])
+        if publication.get('intent'):add(publication['intent'])
+        for key in ('snapshots','candidates'):
+            for item in publication.get(key,{}).values():add(item)
+    request=read(consumed['request']);add(consumed['result'])
+    add(request['config'])
+    if consumed['schema']==CONSUMED_RAW and request.get('state'):add(request['state'])
+    for key in ('admission','objective','graphs'):
+        if consumed.get('raw_admission'):add(consumed['raw_admission'][key])
+    return found
 
 
 def _install_resident_plan(proof,config):

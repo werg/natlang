@@ -21,7 +21,7 @@ def test_scheduling_artifact_identity_validates_optional_bytes(tmp_path,bad_byte
         adapt._artifact_binding({**complete,'bytes':bad_bytes})
 
 
-def fixture(tmp_path,quantum=2,recipe_with_bytes=False):
+def fixture(tmp_path,quantum=2,recipe_with_bytes=False,opaque_inputs=False):
     root=tmp_path/'rounds'/'lfm';root.mkdir(parents=True);train=tmp_path/'train.jsonl';held=tmp_path/'held.jsonl'
     train.write_text(json.dumps(graph('old'))+'\n');h=graph('held');h['split']='test';held.write_text(json.dumps(h)+'\n')
     recipe={'schema':'natlang.neuralese-training-recipe/1','id':'lineage','identity_qualification':'native_state_runtime_qualified',
@@ -30,6 +30,21 @@ def fixture(tmp_path,quantum=2,recipe_with_bytes=False):
             'inputs':{'native_graphs':'train','held_native_graphs':'held'},
             'parameters':{'epochs':1,'learning_rate':3e-6,'checkpoint_every':2,'eval_every':1}}
             for name in('dpo','full')]}
+    if opaque_inputs:
+        historical={'path':'dpo/retired-original.json','sha256':'a'*64}
+        objective=tmp_path/'objective.json'
+        write(objective,{'schema':'natlang.native-offline-pairwise-objective/1',
+            'rows':{'row':{'source_preference':{'source_file':historical}}}})
+        # A bound receipt is an opaque input, not a request to replay generation.
+        teacher=tmp_path/'teacher.json';write(teacher,{'schema':'natlang.verified-teacher-clean-action-repair/1',
+            'source':historical,'ordinary_partition':{'resident_current':historical}})
+        recipe['input_bindings'].update(objective=adapt.binding(objective),teacher=adapt.binding(teacher))
+        recipe['stages'][0]['kind']='native_offline_preference'
+        recipe['stages'][0]['inputs']['objective_spec']='objective'
+        # This role is declared by the shared SFT handler and binds bytes only.
+        recipe['input_bindings'].pop('teacher')
+        body=json.loads(objective.read_text());body['teacher_receipt']=adapt.binding(teacher);write(objective,body)
+        recipe['input_bindings']['objective']=adapt.binding(objective)
     recipe_path=tmp_path/'recipe.json';write(recipe_path,recipe);rb=native_recipe_binding(recipe_path,'e'*64)
     parent=tmp_path/'parent.pt';parent.write_bytes(b'actual protocol parent')
     bootstrap=tmp_path/'historical-bootstrap.json';write(bootstrap,{'retained':'original bootstrap provenance'})
@@ -120,8 +135,8 @@ def test_bad_completed_authority_does_not_change_controls(tmp_path,mutation):
     assert before==[p.read_bytes()for p in (config,root/'cycle.json',root/'production/state.json')]
 
 
-def prepared(tmp_path,new_lr=1e-5,old_declaration_overrides=None,runtime_package=None,bootstrap_handoff=None):
-    root,config,request,result,controller,plan,recipe=fixture(tmp_path)
+def prepared(tmp_path,new_lr=1e-5,old_declaration_overrides=None,runtime_package=None,bootstrap_handoff=None,opaque_inputs=False,future_declaration_overrides=None):
+    root,config,request,result,controller,plan,recipe=fixture(tmp_path,opaque_inputs=opaque_inputs)
     if bootstrap_handoff:
         configured=json.loads(config.read_text());configured['bootstrap_binding']['handoff']=bootstrap_handoff
         configured['runtime_binding']['handoff']=bootstrap_handoff;write(config,configured)
@@ -138,7 +153,14 @@ def prepared(tmp_path,new_lr=1e-5,old_declaration_overrides=None,runtime_package
     else:package=Path(runtime_package)
     new=json.loads(recipe.read_text());new['stages'][1]['parameters']['learning_rate']=new_lr
     future=tmp_path/'future.json';write(future,new)
-    proof=adapt.prepare(config,plan,'lfm',adapt.binding(future),adapt.binding(consumption),pair,tmp_path/'adaptation/proof.json',package=package)
+    target=None
+    if future_declaration_overrides is not None:
+        updated=json.loads(plan.read_text());updated['models'][0].update(
+            production_recipe=adapt.binding(future),actor_runtime=str(package.resolve().parents[2]),
+            **future_declaration_overrides)
+        target=tmp_path/'future-global.json';write(target,updated)
+    proof=adapt.prepare(config,plan,'lfm',adapt.binding(future),adapt.binding(consumption),pair,tmp_path/'adaptation/proof.json',package=package,
+        future_global_plan=adapt.binding(target)if target else None)
     return root,config,plan,proof
 
 
@@ -588,38 +610,90 @@ def test_bad_publication_reconciliation_cannot_touch_current_controls(tmp_path,m
     assert not(tmp_path/'registered.json').exists()
 
 
-def test_dependency_closure_keeps_nested_publisher_controls_and_exact_packages(tmp_path,monkeypatch):
-    old=tmp_path/'old';old.mkdir();(old/'old.py').write_text('OLD=1\n')
-    new=tmp_path/'new';new.mkdir();(new/'new.py').write_text('NEW=1\n')
+def publisher_fixture(tmp_path):
     source=tmp_path/'external-control.py';source.write_text('CONTROL=1\n')
-    material=tmp_path/'control-material.json';write(material,{'controls':{'module':adapt.binding(source)}})
-    future=tmp_path/'future-global.json';write(future,{'models':[{'publisher_manifest':adapt.binding(material)}]})
-    candidate=tmp_path/'candidate.json';write(candidate,{'exact':'normal publisher effect'})
-    before=tmp_path/'snapshot.json';write(before,{'native_state':True,'supervised_quantum_control':{'plan':{'path':'retired-plan','sha256':'a'*64}}})
-    publication=tmp_path/'publication.json';write(publication,{'schema':'natlang.completed-worker-normal-publication-commit/1',
-        'before':{'config':{'path':'mutable-config','sha256':'b'*64}},'after':{'config':{'path':'mutable-config','sha256':'c'*64}},
-        'snapshots':{'config':adapt.binding(before)},'candidates':{'config':adapt.binding(candidate)}})
-    runtime=tmp_path/'runtime-proof.json';write(runtime,{'schema':'natlang.native-raw-runtime-handoff/1',
-        'sources':{'config':{'path':'mutable-config','sha256':'d'*64}},'snapshots':{'config':adapt.binding(before)}})
-    proof_path=tmp_path/'proof.json';proof={'schema':adapt.SCHEMA,'package':str(new),'code':adapt.code_inventory(new),
-        'old_package':str(old),'old_code':adapt.code_inventory(old),'future_global_plan':adapt.binding(future),
-        'consumption':adapt.binding(publication),'runtime_handoff':adapt.binding(runtime),
-        'controls':{'config':{'path':'mutable-config','sha256':'e'*64}}}
-    write(proof_path,proof);monkeypatch.setattr(adapt,'verify',lambda reference:proof)
-    refs=adapt.dependencies(adapt.binding(proof_path))
-    for path in(source,material,future,candidate,before,publication,runtime,old/'old.py',new/'new.py'):
+    loader=tmp_path/'loader.py';loader.write_text('LOADER=1\n')
+    authority=tmp_path/'authority.json';write(authority,{'actual':'both role maps'})
+    base=tmp_path/'base.json';write(base,{'schema':'natlang.external-owned-controller-closure/1',
+        'modules':[{'module':'rl.native_completed_supervised','source':adapt.binding(source)}]})
+    manifest=tmp_path/'publisher.json';write(manifest,{'schema':'natlang.source-host-publishing-control-closure/1',
+        'base_loader':adapt.binding(loader),'base_manifest':adapt.binding(base),
+        'role_authorities':adapt.binding(authority),'controls':{'actual':adapt.binding(source)}})
+    return manifest,source,authority,base,loader
+
+
+def test_dependency_closure_keeps_nested_publisher_controls_and_exact_packages(tmp_path):
+    manifest,source,authority,base,loader=publisher_fixture(tmp_path)
+    root,config,plan,proof=prepared(tmp_path,old_declaration_overrides={'publisher_manifest':adapt.binding(manifest)})
+    refs=adapt.dependencies(proof)
+    for path in(source,manifest,authority,base,loader,Path(proof['path'])):
         assert refs[str(path)]['sha256']==adapt.binding(path)['sha256']
-    assert 'mutable-config'not in refs and 'retired-plan'not in refs
+    value=adapt.verify(proof)
+    for package,code in(('package','code'),('old_package','old_code')):
+        for relative in value[code]:assert str(Path(value[package])/relative)in refs
+    consumed=json.loads(Path(value['consumption']['path']).read_text())
+    for item in consumed['snapshots'].values():assert item['path']in refs
     source.write_text('CONTROL=2\n')
-    with pytest.raises(ValueError):adapt.dependencies(adapt.binding(proof_path))
+    with pytest.raises(ValueError):adapt.dependencies(proof)
 
 
-def test_dependency_closure_rejects_missing_future_authority(tmp_path,monkeypatch):
-    package=tmp_path/'package';package.mkdir();(package/'module.py').write_text('VALUE=1\n')
-    missing=tmp_path/'missing.json';proof={'schema':adapt.SCHEMA,'package':str(package),'code':adapt.code_inventory(package),
-        'future_global_plan':{'path':str(missing),'sha256':'a'*64}}
-    path=tmp_path/'proof.json';write(path,proof);monkeypatch.setattr(adapt,'verify',lambda reference:proof)
-    with pytest.raises((ValueError,FileNotFoundError)):adapt.dependencies(adapt.binding(path))
+def test_dependency_closure_rejects_missing_future_authority(tmp_path):
+    manifest,source,authority,base,loader=publisher_fixture(tmp_path)
+    _,_,_,proof=prepared(tmp_path,old_declaration_overrides={'publisher_manifest':adapt.binding(manifest)})
+    authority.unlink()
+    with pytest.raises((ValueError,FileNotFoundError)):adapt.dependencies(proof)
+
+
+def test_superseded_publisher_is_history_but_selected_future_controls_remain_strict(tmp_path,monkeypatch):
+    from natlang_neuralese.rl import production
+    monkeypatch.setattr(production,'actor_runtime_configuration',lambda repository:{})
+    old=tmp_path/'old-controls';old.mkdir();new=tmp_path/'new-controls';new.mkdir()
+    previous,old_source,*_=publisher_fixture(old)
+    current,new_source,*_=publisher_fixture(new)
+    _,_,_,proof=prepared(tmp_path,old_declaration_overrides={'publisher_manifest':adapt.binding(previous)},
+        future_declaration_overrides={'publisher_manifest':adapt.binding(current)})
+    previous.unlink();old_source.unlink()
+    refs=adapt.dependencies(proof)
+    assert str(current)in refs and str(new_source)in refs
+    assert str(previous)not in refs and str(old_source)not in refs
+    new_source.write_text('CONTROL=wrong\n')
+    with pytest.raises(ValueError):adapt.dependencies(proof)
+
+
+@pytest.mark.parametrize('missing',['producer','dependency_producer','operational'])
+def test_completed_current_publication_selection_is_a_strict_dependency(tmp_path,missing):
+    files={}
+    for name in ('producer','dependency_producer','operational'):
+        path=tmp_path/(name+'.py');path.write_text(name+'=1\n');files[name]=bridge.binding(path)
+    selection={'schema':'natlang.native-checkpoint-publication-selection/1',
+        'producer':files['producer'],'dependency_producer':files['dependency_producer'],
+        'namespace':str(tmp_path),'readonly_input_roots':[]}
+    _,_,_,proof=prepared(tmp_path,old_declaration_overrides={
+        'native_checkpoint_publication':selection,'operational_inputs':[files['operational']]})
+    refs=adapt.dependencies(proof)
+    assert all(item['path']in refs for item in files.values())
+    Path(files[missing]['path']).unlink()
+    with pytest.raises((ValueError,FileNotFoundError)):adapt.dependencies(proof)
+
+
+@pytest.mark.parametrize('mutation',[None,'objective','train','held','snapshot','recipe'])
+def test_actual_completed_replay_uses_typed_inputs_not_opaque_history(tmp_path,mutation):
+    _,_,_,proof=prepared(tmp_path,opaque_inputs=True)
+    value=adapt.verify(proof)
+    if mutation:
+        selected={'objective':tmp_path/'objective.json','train':tmp_path/'train.jsonl',
+            'held':tmp_path/'held.jsonl','snapshot':Path(json.loads(Path(value['consumption']['path']).read_text())['snapshots']['cursor']['path']),
+            'recipe':Path(value['recipe']['path'])}[mutation]
+        selected.write_text('{}')
+        with pytest.raises((ValueError,FileNotFoundError,KeyError)):adapt.dependencies(proof)
+    else:
+        refs=adapt.dependencies(proof)
+        assert str(tmp_path/'objective.json')in refs
+        assert str(tmp_path/'teacher.json')not in refs
+        assert not any('retired-original'in path for path in refs)
+        # Historical operation parent is not a checkpoint that replay decodes.
+        assert str(tmp_path/'parent.pt')not in refs
+        assert value['checkpoint']['path']in refs
 
 
 @pytest.mark.parametrize('mutation',['signal-string','wrong-signal','wrong-kind','false-reached','integer-reached','wrong-target','boolean-updates'])
@@ -687,33 +761,3 @@ def test_early_refresh_accepts_actual_stop_signal_records_without_rewriting_rece
     assert adapt._qualified_refresh_updates({'supervised_quantum_updates':1000},
         {'id':'full'},receipt,{'trainer_parameters':{'refresh_after_updates':1000}})==611
     assert receipt==original
-
-
-@pytest.mark.parametrize('mutation',[None,'schema','missing-false','top-false-only','true','zero','other-provenance','nested-audit','nested-descriptor','current-input'])
-def test_nonadmitting_capacity_history_skips_only_exact_historical_audit(tmp_path,monkeypatch,mutation):
-    package=tmp_path/'package';package.mkdir();(package/'module.py').write_text('VALUE=1\n')
-    current=tmp_path/'current-admission.json';write(current,{'actual':'current admission remains required'})
-    missing={'path':str(tmp_path/'discarded-historical-audit.json'),'sha256':'a'*64,'all_pair_token_render_verified':True,'training_admission':False}
-    descriptor={'schema':'natlang.native-preference-capacity-case/1',
-        'provenance':{'admission_audit':missing,'current_admission':adapt.binding(current)}}
-    if mutation=='schema':descriptor['schema']='natlang.other-capacity-case/1'
-    elif mutation=='missing-false':missing.pop('training_admission')
-    elif mutation=='top-false-only':
-        descriptor['training_admission']=False;missing.pop('training_admission')
-    elif mutation=='true':missing['training_admission']=True
-    elif mutation=='zero':missing['training_admission']=0
-    elif mutation=='other-provenance':descriptor['provenance']['current_admission']=missing
-    elif mutation=='nested-audit':descriptor['provenance']['nested']={'admission_audit':missing}
-    elif mutation=='nested-descriptor':descriptor={'nested':descriptor}
-    elif mutation=='current-input':descriptor['inputs']={'required':missing}
-    case=tmp_path/'capacity.json';write(case,descriptor)
-    proof={'schema':adapt.SCHEMA,'package':str(package),'code':adapt.code_inventory(package),'capacity':adapt.binding(case)}
-    path=tmp_path/'proof.json';write(path,proof);monkeypatch.setattr(adapt,'verify',lambda reference:proof)
-    if mutation:
-        with pytest.raises((ValueError,FileNotFoundError)):adapt.dependencies(adapt.binding(path))
-    else:
-        refs=adapt.dependencies(adapt.binding(path))
-        assert refs[str(case)]['sha256']==adapt.binding(case)['sha256']
-        assert str(current)in refs and missing['path']not in refs
-        current.write_text('changed current admission')
-        with pytest.raises(ValueError):adapt.dependencies(adapt.binding(path))
