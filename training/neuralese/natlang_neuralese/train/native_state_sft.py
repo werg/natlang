@@ -2192,7 +2192,8 @@ def _main(argv=None, *, requested_refresh):
                                       'sha256': sha256_file_hex_cached(runtime_path),
                                       'passed': runtime_report.get('passed') is True},
               'base_kl': {'status': 'telemetry-only', 'measured': False}}
-    from .native_operation_report import compact_training_report,compact_exposure
+    from .native_operation_report import compact_training_report,compact_exposure,finite_training_state_receipt
+    report['progress_numerics'] = finite_training_state_receipt(model, optimizer, checkpoint_sha)
     checkpoint_detail={'path':str(policy.slot.resolve()),'sha256':checkpoint_sha,'bytes':policy.slot.stat().st_size}
     report=compact_training_report(report,checkpoint_detail)
     mandatory_sft=report['mandatory_sft']

@@ -295,7 +295,10 @@ def execute(config,state,state_path,control):
             for stage in ((report.get('mandatory_sft') or {}).get('stages') or {}).values()))
     usable=(metadata_admitted or report.get('completed') is True or (boundary.get('kind')=='semantic-refresh'
         and boundary.get('reached') is True and boundary.get('new_optimizer_updates',0)>0))
-    if not usable or report.get('numerics_ok') is not True:
+    from ..train.native_operation_report import supervised_progress_numerics_ok
+    numerics_ok = supervised_progress_numerics_ok(report,
+        {'path': str(checkpoint), 'sha256': sha256_file_hex_cached(checkpoint)})
+    if not usable or not numerics_ok:
         state.update(phase='mandatory_sft_pending',last_learner_progress=summary)
         write_json_durable(state_path,state)
         if control is not None and control.stop.requested:return state

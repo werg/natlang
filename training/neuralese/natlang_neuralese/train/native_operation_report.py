@@ -249,3 +249,79 @@ def compact_controller_state(state,report_path):
             raise ValueError('controller mandatory sources differ from actual learner report')
         result['mandatory_sft']=compact['mandatory_sft']
     return result
+
+
+def finite_training_state_receipt(model, optimizer, checkpoint_sha256):
+    """Check saved-boundary numerics without granting runtime qualification."""
+    import math
+    import torch
+    from .optim_restore import _children
+    tensors = {'model': 0, 'optimizer': 0}
+    failures = []
+    seen = set()
+
+    def check(value, scope, path):
+        if torch.is_tensor(value):
+            if id(value) in seen:
+                return
+            seen.add(id(value))
+            if value.is_floating_point() or value.is_complex():
+                tensors[scope] += 1
+                selected = value.detach()
+                # Float8 has no isfinite kernel on some supported backends.
+                if str(selected.dtype).startswith('torch.float8_'):
+                    selected = selected.float()
+                if not bool(torch.isfinite(selected).all()):
+                    failures.append(path)
+        elif isinstance(value, dict):
+            for index, item in enumerate(value.values()):
+                check(item, scope, path + '/' + str(index))
+        elif isinstance(value, (tuple, list)):
+            for index, item in enumerate(value):
+                check(item, scope, path + '/' + str(index))
+        elif isinstance(value, float) and not math.isfinite(value):
+            failures.append(path)
+
+    for name, parameter in model.named_parameters():
+        check(parameter, 'model', 'parameter/' + name)
+    for name, buffer in model.named_buffers():
+        check(buffer, 'model', 'buffer/' + name)
+    for name, child in _children(optimizer):
+        check(child.state, 'optimizer', 'optimizer/' + name)
+    return {'schema': 'natlang.native-finite-training-state/1',
+            'checkpoint_sha256': checkpoint_sha256,
+            'passed': not failures and tensors['model'] > 0,
+            'floating_tensors': tensors, 'nonfinite': failures,
+            'runtime_qualification_granted': False}
+
+
+def supervised_progress_numerics_ok(report, checkpoint):
+    """A deferred runtime check may accompany genuinely finite earned work."""
+    if 'progress_numerics' not in report:
+        return report.get('numerics_ok') is True
+    from ..train.native_readiness import _bound
+    evidence = report.get('progress_numerics')
+    if not isinstance(evidence, dict):
+        return False
+    if (evidence.get('schema') != 'natlang.native-finite-training-state/1'
+            or evidence.get('passed') is not True
+            or evidence.get('checkpoint_sha256') != checkpoint['sha256']
+            or evidence.get('runtime_qualification_granted') is not False
+            or evidence.get('nonfinite') != []):
+        return False
+    counts = evidence.get('floating_tensors') or {}
+    if (set(counts) != {'model', 'optimizer'}
+            or any(type(value) is not int or value < 0 for value in counts.values())
+            or counts['model'] == 0):
+        return False
+    if report.get('numerics_ok') is True:
+        return True
+    reference = report.get('runtime_certificate') or {}
+    if set(reference) != {'path', 'sha256', 'passed'} or reference['passed'] is not False:
+        return False
+    certificate = json.loads(_bound({key: reference[key] for key in ('path', 'sha256')}).read_text())
+    return (certificate.get('passed') is False
+            and certificate.get('deferred') is True
+            and certificate.get('reason') == 'shared qualification request pending'
+            and certificate.get('checkpoint_sha256') == checkpoint['sha256']
+            and not certificate.get('error'))
