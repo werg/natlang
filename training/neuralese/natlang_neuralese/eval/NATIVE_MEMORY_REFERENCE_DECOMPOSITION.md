@@ -9,3 +9,13 @@ The existing supervisor policy selects complete source-authenticated capacity ca
 5. Always execute every requested complete capacity case. Keep the existing per-case certificates and state-preservation checks. Discard the reference reuse table when this call ends.
 
 The identity verifier, call-local table, exact evidence links and adversarial regression tests are crisp mechanisms: they perform equality and durability checks, not model-facing or discretionary policy. There is no persistent cross-owner cache, new readiness claim, changed tolerance, or inherited capacity-case execution.
+
+Byte-identical request declarations (2026-10-20): distinct regular files may
+legitimately declare the same exact capacity case. Resolve every declaration
+first, authenticate both SHA and bytes, and choose one checked canonical binding
+before calling the existing per-request runner. Call that runner for every
+logical declaration so source/index/row checks and immutable-proof validation
+still execute. Record the actual requested and resolved aliases outside the
+unchanged original proof. Combine each genuine proof once, rather than counting
+identical cases twice. This is exact evidence identity plumbing; it changes no
+case-selection policy, numerical tolerance, model state or qualification scope.
