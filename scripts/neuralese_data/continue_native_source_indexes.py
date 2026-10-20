@@ -292,6 +292,96 @@ def continue_indexes(proof, source_hashes):
             'indexes': results, 'missing_source_sha256': sorted(wanted - {item['source_sha256'] for item in results})}
 
 
+
+_CE_SETTER = '\n    def set_ce_policy(self, policy):\n        """Select an explicit objective without changing raw indexes/credits."""\n        self.ce_policy = policy\n        for child in getattr(self, \'children\', ()):\n            child.set_ce_policy(policy)\n'
+_CE_YIELD = """                    from ..train.native_supervision import apply_policy
+                    graph = row['models'][self.pair_model]['graph'] if self.kind == 'semantic-pairs' else row
+                    yield apply_policy(example, graph, source_sha256=self.file_sha256,
+                                       policy=getattr(self, 'ce_policy', None))"""
+
+
+def prove_ce_objective_extension(old_package, new_package):
+    """Certify only the exact iteration-time CE adapter; index semantics stay fixed."""
+    old, new = map(Path, (old_package, new_package))
+    inventories = [{name: sha256_file_hex(root / name) for name in POLICY_FILES}
+                   for root in (old, new)]
+    if digest(inventories[0]) != 'e6fce2c3752397ef71dc09a8b8689345583b2d99c2a79d8a6731f0cd7b3064e7':
+        raise ValueError('CE continuation requires the exact reviewed classified predecessor policy')
+    if any(inventories[0][name] != inventories[1][name]
+           for name in POLICY_FILES if name != 'data/native_sources.py'):
+        raise ValueError('CE continuation changed another intrinsic policy file')
+    before = (old / 'data/native_sources.py').read_text()
+    after = (new / 'data/native_sources.py').read_text()
+    if (after.count(_CE_SETTER) != 1 or after.count(_CE_YIELD) != 1
+            or after.replace(_CE_SETTER, '', 1).replace(_CE_YIELD, '                    yield example', 1) != before):
+        raise ValueError('source adapter is not the exact reviewed CE-only extension')
+    producer = 'train/native_source_classification.py'
+    if not (sha256_file_hex(old / producer) == sha256_file_hex(new / producer)
+            == '636944d3ea0efb87dc657dab9caed66f05d32777f0ea944480ba0eed7bd261d9'):
+        raise ValueError('CE continuation changed classification verifier')
+    return {'qualification': 'source-bound-ce-objective-only-20261020',
+            'policy_files': inventories, 'old_policy_sha256': digest(inventories[0]),
+            'new_policy_sha256': digest(inventories[1]),
+            'old_package': str(old), 'new_package': str(new),
+            'classification_producer_sha256': sha256_file_hex(new / producer)}
+
+
+def continue_classified_objective_index(source, old_index, *, old_package, new_package):
+    """Rekey one explicit authenticated classified witness without reading graph JSON."""
+    def binding(path):
+        path = Path(path)
+        return {'path': str(path), 'sha256': sha256_file_hex(path), 'bytes': path.stat().st_size}
+    def checked(ref):
+        actual = binding(ref['path'])
+        if actual != ref:
+            raise ValueError('objective continuation witness changed')
+        return Path(ref['path'])
+    qualification = prove_ce_objective_extension(old_package, new_package)
+    path, index_path = checked(source), checked(old_index)
+    value = row_index.load(index_path)
+    if value is None:
+        raise ValueError('objective continuation needs a valid own index')
+    key, entries = value.get('key'), value.get('entries')
+    if (not isinstance(key, dict) or set(key) != {'source_sha256', 'tokenizer', 'split',
+            'policy_sha256', 'kind', 'pair_model', 'role_ids'}
+            or key['source_sha256'] != source['sha256']
+            or key['policy_sha256'] != qualification['old_policy_sha256']
+            or key['kind'] not in ('native-graphs', 'semantic-pairs')
+            or key['split'] not in ('train', 'held', 'test', 'validation')
+            or (key['kind'] == 'native-graphs' and key['pair_model'] is not None)
+            or (key['kind'] == 'semantic-pairs' and not isinstance(key['pair_model'], str))
+            or not isinstance(entries, list) or not entries
+            or value.get('metadata_sha256') != digest(entries)):
+        raise ValueError('objective continuation source/key/metadata differs')
+    seen = set()
+    for entry in entries:
+        if (not isinstance(entry.get('id'), str) or entry['id'] in seen
+                or any(type(entry.get(field)) is not bool for field in
+                    ('communication', 'producer_consumer', 'external_state_consumption'))
+                or entry['communication'] != (entry['producer_consumer'] or entry['external_state_consumption'])):
+            raise ValueError('objective continuation needs complete exact classification')
+        seen.add(entry['id'])
+    new_key = {**key, 'policy_sha256': qualification['new_policy_sha256']}
+    result = {**value, 'key': new_key}
+    target = row_index.entry_path('native-graphs', digest(new_key))
+    # Recheck all authority immediately before publishing; source bytes are hashed, never parsed.
+    checked(source); checked(old_index)
+    if prove_ce_objective_extension(old_package, new_package) != qualification:
+        raise ValueError('objective continuation package changed')
+    _publish_index_without_replacement(target, result)
+    if row_index.load(target) != result:
+        raise ValueError('objective continuation destination differs')
+    checked(source); checked(old_index)
+    if prove_ce_objective_extension(old_package, new_package) != qualification:
+        raise ValueError('objective continuation package changed after publication')
+    return {'source': source, 'old_index': old_index, 'new_index': binding(target),
+            'rows': len(entries), 'producer': binding(Path(new_package) / 'train/native_source_classification.py'),
+            'old_policy': {name: binding(Path(old_package) / name) for name in POLICY_FILES},
+            'graph_position_expansions': 0, 'optimizer_updates': 0, 'ordinary_partition': None,
+            'objective_policy_continuation': {'qualification': qualification,
+                'producer': binding(__file__), 'entries_unchanged': True,
+                'metadata_sha256': value['metadata_sha256'], 'raw_graph_parses': 0}}
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--old-package', type=Path, required=True)
