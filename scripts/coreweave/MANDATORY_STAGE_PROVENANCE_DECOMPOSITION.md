@@ -24,3 +24,9 @@ Set the same two roots in the current interpreter's path and the child
 `PYTHONPATH`; setting an environment variable after interpreter startup alone
 does not repair the current interpreter. Isolated-Python and real detached-child
 checks verify these imports without depending on the caller's working directory.
+
+Some authenticated admission manifests use parent-relative paths inside the
+production namespace. Normalize those paths lexically only after confirming the
+original and normalized paths resolve to the same existing file. Keep the usual
+namespace/readonly-root and content checks. Preserve ordinary offload aliases;
+reject parent traversal that changes symlink meaning or escapes allowed roots.

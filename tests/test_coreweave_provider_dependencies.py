@@ -67,6 +67,28 @@ def test_withdrawal_relative_evidence_stays_in_exact_provider_closure(tmp_path):
     closure=deps.dependency_closure({'config':config},namespace=str(tmp_path))
     assert {x['path'] for x in closure['files']}=={x['path'] for x in [evidence,proof,config]}
 
+
+def test_internal_bound_parent_reference_normalizes_without_losing_content_authority(tmp_path):
+    directory=tmp_path/'admission';directory.mkdir()
+    source=write(tmp_path/'source.jsonl','same immutable source\n')
+    relative={**source,'path':str(directory/'..'/'source.jsonl')}
+    config=write(tmp_path/'config.json',{'operational_inputs':[relative]})
+    closure=deps.dependency_closure({'config':config},namespace=str(tmp_path))
+    assert {x['path']for x in closure['files']}=={config['path'],source['path']}
+    Path(source['path']).write_text('changed')
+    with pytest.raises(ValueError,match='hash changed'):deps.dependency_closure({'config':config},namespace=str(tmp_path))
+
+
+def test_parent_traversal_cannot_change_symlink_meaning_or_escape_namespace(tmp_path):
+    root=tmp_path/'root';root.mkdir();outside=tmp_path/'outside';(outside/'child').mkdir(parents=True)
+    source=write(root/'source.jsonl','same source\n');write(outside/'source.jsonl','same source\n')
+    alias=root/'alias';alias.symlink_to(outside/'child',target_is_directory=True)
+    ref={**source,'path':str(alias/'..'/'source.jsonl')}
+    config=write(root/'config.json',{'operational_inputs':[ref]})
+    with pytest.raises(ValueError,match='symlink target'):deps.dependency_closure({'config':config},namespace=str(root))
+    ref['path']=str(root/'..'/'outside'/'source.jsonl');config=write(root/'config.json',{'operational_inputs':[ref]})
+    with pytest.raises(ValueError,match='escaped'):deps.dependency_closure({'config':config},namespace=str(root))
+
 def test_asset_preflight_verifies_content_not_directory_existence(tmp_path):
     task=tmp_path/'ts-host';write(task/'dist/teacher/cli.js','actual compiled runtime')
     write(task/'package.json',{'name':'task-runtime'});write(tmp_path/'package.json',{'name':'root'});write(tmp_path/'package-lock.json',{'lockfileVersion':3})

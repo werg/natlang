@@ -6,6 +6,7 @@ are verified in place; ferry files stay in the native-production namespace.
 """
 from __future__ import annotations
 import json
+import os
 from pathlib import Path
 
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex, sha256_file_hex_cached
@@ -57,6 +58,13 @@ def dependency_closure(request, *, namespace='/work/native-production', readonly
     def add(path, expected=None):
         # Preserve the declared lexical namespace of valid offload symlinks.
         path = Path(path).absolute()
+        if '..' in path.parts:
+            normalized = Path(os.path.normpath(path))
+            if root not in normalized.parents and not readonly_roots:
+                raise ValueError('provider consumed file escaped its declared namespace: ' + str(path))
+            if path.resolve(strict=True) != normalized.resolve(strict=True):
+                raise ValueError('provider dependency traversal changes its symlink target: ' + str(path))
+            path = normalized
         external = root not in path.parents
         if '..' in path.parts or (external and not readonly_roots):
             raise ValueError('provider consumed file escaped its declared namespace: ' + str(path))
