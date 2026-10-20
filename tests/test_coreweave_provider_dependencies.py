@@ -25,6 +25,40 @@ def test_mandatory_sft_seed_closure_contains_nested_ordinary_and_raw_pairs(tmp_p
         deps.dependency_closure({'config':config},namespace=str(tmp_path))
 
 
+def test_round_mandatory_stage_keeps_inherited_adaptation_opaque_and_actual_inputs_strict(tmp_path,monkeypatch):
+    from natlang_neuralese.rl import native_completed_supervised as completed
+    def no_replay(*args,**kwargs):
+        raise AssertionError('worker must not replay its historical controller invocation')
+    monkeypatch.setattr(completed,'verify',no_replay)
+    historical=write(tmp_path/'historical.json',{'unconsumed_old_invocation':'preserved exactly'})
+    train=write(tmp_path/'train.jsonl','actual admitted source\n')
+    seed=write(tmp_path/'seed.json',{'schema':'natlang.native-graph-sources/1',
+        'sources':[{'kind':'native-graphs',**train}]})
+    held=write(tmp_path/'held.jsonl','protected held source\n')
+    config=write(tmp_path/'stage.json',{'mandatory_sft_only':True,
+        'completed_supervised_adaptation':historical,'seed_native_graphs':seed['path'],
+        'held_native_graphs':held['path']})
+    request={'kind':'round','config':config}
+    closure=deps.dependency_closure(request,namespace=str(tmp_path))
+    assert {r['path']for r in closure['files']}=={r['path']for r in [config,historical,seed,train,held]}
+    Path(historical['path']).write_text('changed provenance')
+    with pytest.raises(ValueError,match='consumed dependency hash changed'):deps.dependency_closure(request,namespace=str(tmp_path))
+    write(Path(historical['path']),{'unconsumed_old_invocation':'preserved exactly'})
+    Path(train['path']).write_text('changed current training source')
+    with pytest.raises(ValueError,match='hash mismatch'):deps.dependency_closure(request,namespace=str(tmp_path))
+
+
+@pytest.mark.parametrize('kind,mandatory',[('round',False),('round',1),('semantic',True),(None,True)])
+def test_other_contexts_still_validate_completed_adaptation(tmp_path,monkeypatch,kind,mandatory):
+    from natlang_neuralese.rl import native_completed_supervised as completed
+    def reject(reference):raise ValueError('active controller adaptation rejected')
+    monkeypatch.setattr(completed,'verify',reject)
+    proof=write(tmp_path/'proof.json',{'preserved':True})
+    config=write(tmp_path/'config.json',{'mandatory_sft_only':mandatory,'completed_supervised_adaptation':proof})
+    with pytest.raises(ValueError,match='active controller adaptation rejected'):
+        deps.dependency_closure({'kind':kind,'config':config},namespace=str(tmp_path))
+
+
 def test_withdrawal_relative_evidence_stays_in_exact_provider_closure(tmp_path):
     evidence=write(tmp_path/'receipt.json',{'audit':'rejected targets'})
     proof=write(tmp_path/'model/withdrawal.json',{'schema':'natlang.native-graph-withdrawal/1',

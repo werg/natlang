@@ -271,11 +271,17 @@ def dependency_closure(request, *, namespace='/work/native-production', readonly
         active_configs.add(marker)
         adaptation=value.get('completed_supervised_adaptation')
         if adaptation is not None:
-            from natlang_neuralese.rl.native_completed_supervised import verify,dependencies as completed_dependencies
-            proof=verify(adaptation)
-            for reference in completed_dependencies(adaptation).values():bound(reference)
-            config_value(json.loads(bound(proof['future_config']).read_text()),
-                         'completed-future:'+adaptation['sha256'])
+            if request.get('kind') == 'round' and value.get('mandatory_sft_only') is True:
+                # production.run dispatches this directly to supervised.execute.
+                # Its inherited controller adaptation is provenance, not an
+                # instruction to replay that old invocation under current defaults.
+                bound(adaptation)
+            else:
+                from natlang_neuralese.rl.native_completed_supervised import verify,dependencies as completed_dependencies
+                proof=verify(adaptation)
+                for reference in completed_dependencies(adaptation).values():bound(reference)
+                config_value(json.loads(bound(proof['future_config']).read_text()),
+                             'completed-future:'+adaptation['sha256'])
         controls=value.get('native_checkpoint_controls', {})
         if not isinstance(controls,dict):
             raise ValueError('native checkpoint controls must map full source SHA256 to explicit bindings')
