@@ -83,11 +83,20 @@ SEARCH_RESOURCE_ONLY_PARENT_RENDERER_SHA256 = '6b59b92914a93139215d7a22f0129d59a
 # default-profile/canonical-label continuation (frozen Search worker).
 SEARCH_LEGACY_EQUATION_RENDERER_SHA256 = 'a38f99146199cfb26774ff20ac888bd22bc0dff9677f9b18eefdadd310c6b618'
 SEARCH_PROFILE_AWARE_RENDERER_SHA256 = '6db50069b1bdaf5c8cf96d8a5cb3908148f7f00ea084c1d9d8c350f6c0bd5aa5'
+SEARCH_LEGACY_HYDRATION_RENDERER_SHA256 = '03d3398c33ad34d406e8bd20820b87aa1a5aef30895ce08da61ccbc87fdfd84d'
 SEARCH_REVIEWED_RESOURCE_PARENT_CHAIN = frozenset((SEARCH_RESOURCE_ONLY_PARENT_RENDERER_SHA256,
-    SEARCH_LEGACY_EQUATION_RENDERER_SHA256, SEARCH_PROFILE_AWARE_RENDERER_SHA256))
+    SEARCH_LEGACY_EQUATION_RENDERER_SHA256, SEARCH_PROFILE_AWARE_RENDERER_SHA256,
+    SEARCH_LEGACY_HYDRATION_RENDERER_SHA256))
 from natlang_neuralese.common.paths import DEFAULTS as MACHINE_PATH_DEFAULTS  # noqa: E402
 
 _LEGACY_REPO = Path(MACHINE_PATH_DEFAULTS['repo'])
+# This exact successor produced its own new receipts from a frozen checkout;
+# unlike its older parents, their code labels were never canonicalized.
+SEARCH_PROFILE_AWARE_BINDING_ROOT = _LEGACY_REPO.parent / 'data/wt-root-search-ram-current-20261018'
+SEARCH_FROZEN_PARENT_BINDING_ROOTS = {
+    SEARCH_PROFILE_AWARE_RENDERER_SHA256: SEARCH_PROFILE_AWARE_BINDING_ROOT,
+    SEARCH_LEGACY_HYDRATION_RENDERER_SHA256: Path('/tmp/wt-search-parent-chain-frozen-text-execution-v2-20261020'),
+}
 # Exact text dependency of the original b054 groups (cd4140a5e5).
 LEGACY_SEARCH_ORIGINAL_TEXT_SHA256 = '41b011ebc425839d62c50f9f9118b46c3749b1dfdbbf4e8979e4df92cbe356b3'
 LEGACY_SEARCH_CODE_BINDING = {
@@ -1403,15 +1412,16 @@ def _resource_parent_code_binding(parent_renderer_sha256, job=None):
     if parent_renderer_sha256 not in SEARCH_REVIEWED_RESOURCE_PARENT_CHAIN:
         raise ValueError('renderer parent SHA lacks the exact reviewed resource-only continuation')
     current = _render_code_binding()
-    # Historical receipts bind canonical checkout labels even when this
-    # continuation executes from a frozen worktree.
+    # Preserve each exact historical producer's labels independently of the
+    # worktree executing this continuation.
     paths = ('scripts/neuralese_data/render_native_turn_corpus.py',
              'training/neuralese/natlang_neuralese/data/text_corpus.py',
              'scripts/neuralese_data/strip_generic_system_prompt.py',
              'scripts/neuralese_data/conversion_output_lease.py')
-    binding = {str(_LEGACY_REPO / path): current[str(ROOT / path)] for path in paths}
-    renderer_path = str(_LEGACY_REPO / paths[0])
-    text_corpus_path = str(_LEGACY_REPO / paths[1])
+    binding_root = SEARCH_FROZEN_PARENT_BINDING_ROOTS.get(parent_renderer_sha256, _LEGACY_REPO)
+    binding = {str(binding_root / path): current[str(ROOT / path)] for path in paths}
+    renderer_path = str(binding_root / paths[0])
+    text_corpus_path = str(binding_root / paths[1])
     binding[renderer_path] = parent_renderer_sha256
     # The active Search done receipts were created before the KEEP profile
     # integration, with the exact default-profile text-corpus dependency from
@@ -1419,7 +1429,7 @@ def _resource_parent_code_binding(parent_renderer_sha256, job=None):
     # tokenizer has no explicit profile; explicit KEEP jobs must never borrow
     # the default-profile output identity.
     transition = LEGACY_SEARCH_TEXT_CORPUS_DEFAULT_PROFILE_TRANSITION
-    if (parent_renderer_sha256 != SEARCH_PROFILE_AWARE_RENDERER_SHA256
+    if (parent_renderer_sha256 not in SEARCH_FROZEN_PARENT_BINDING_ROOTS
             and binding.get(text_corpus_path) == transition['current_sha256']):
         profiles = [part.get('history_reasoning_policies') for part in (job or ())
                     if isinstance(part, dict) and 'history_reasoning_policies' in part]

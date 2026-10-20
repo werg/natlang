@@ -576,8 +576,9 @@ def test_resource_only_renderer_parent_continues_exact_trajectory_receipts(tmp_p
     job = (str(selected), str(out), 'lfm25', {}, 'fixture', set(), set(), False,
            None, ('whole-trajectory',), False, set(), None, input_binding, None, parent_sha)
     parent_code = renderer._resource_parent_code_binding(parent_sha, job)
-    text_corpus_path = str(renderer._LEGACY_REPO / 'training/neuralese/natlang_neuralese/data/text_corpus.py')
-    expected_text_dependency = ('current_sha256' if parent_sha == renderer.SEARCH_PROFILE_AWARE_RENDERER_SHA256 else 'historical_sha256')
+    binding_root = renderer.SEARCH_FROZEN_PARENT_BINDING_ROOTS.get(parent_sha,renderer._LEGACY_REPO)
+    text_corpus_path = str(binding_root / 'training/neuralese/natlang_neuralese/data/text_corpus.py')
+    expected_text_dependency = ('current_sha256' if parent_sha in renderer.SEARCH_FROZEN_PARENT_BINDING_ROOTS else 'historical_sha256')
     assert parent_code[text_corpus_path] == renderer.LEGACY_SEARCH_TEXT_CORPUS_DEFAULT_PROFILE_TRANSITION[expected_text_dependency]
     explicit_inputs = dict(input_binding)
     explicit_inputs['history_reasoning_policies'] = {'lfm25': 'keep'}
@@ -756,7 +757,27 @@ def test_search_parent_chain_preserves_each_actual_text_dependency(monkeypatch):
     for parent in (renderer.SEARCH_RESOURCE_ONLY_PARENT_RENDERER_SHA256,
                    renderer.SEARCH_LEGACY_EQUATION_RENDERER_SHA256):
         assert renderer._resource_parent_code_binding(parent)[path]==transition['historical_sha256']
-    assert renderer._resource_parent_code_binding(renderer.SEARCH_PROFILE_AWARE_RENDERER_SHA256)[path]==transition['current_sha256']
+    profile_path=str(renderer.SEARCH_PROFILE_AWARE_BINDING_ROOT/'training/neuralese/natlang_neuralese/data/text_corpus.py')
+    binding=renderer._resource_parent_code_binding(renderer.SEARCH_PROFILE_AWARE_RENDERER_SHA256)
+    assert binding[profile_path]==transition['current_sha256']
+    assert path not in binding
+
+
+@__import__('pytest').mark.parametrize('parent',sorted(renderer.SEARCH_FROZEN_PARENT_BINDING_ROOTS))
+def test_profile_aware_parent_preserves_exact_frozen_labels_in_receipt_equation(monkeypatch,parent):
+    _reviewed_legacy_dependency(monkeypatch)
+    code=renderer._resource_parent_code_binding(parent)
+    expected_root=renderer.SEARCH_FROZEN_PARENT_BINDING_ROOTS[parent]
+    assert len(code)==4 and all(Path(path).is_relative_to(expected_root)for path in code)
+    assert code[str(expected_root/'scripts/neuralese_data/render_native_turn_corpus.py')]==parent
+    job=('source','out','lfm25',{},'fixture',set(),set(),False,set(),('program-header','whole-trajectory'),True,set(),None,{'tokenizers':{}})
+    exact=renderer._render_job_binding_from_job(job,'a'*64,code)
+    for other_root in (renderer._LEGACY_REPO,expected_root.parent/'unreviewed-frozen-copy'):
+        changed={str(other_root/Path(path).relative_to(expected_root)):value for path,value in code.items()}
+        assert renderer._render_job_binding_from_job(job,'a'*64,changed)!=exact
+    # Older parents still use their original canonical labels.
+    for older in (renderer.SEARCH_RESOURCE_ONLY_PARENT_RENDERER_SHA256,renderer.SEARCH_LEGACY_EQUATION_RENDERER_SHA256):
+        assert all(Path(path).is_relative_to(renderer._LEGACY_REPO)for path in renderer._resource_parent_code_binding(older))
 
 
 def test_legacy_search_rejects_unknown_historical_text_witness(tmp_path, monkeypatch):
