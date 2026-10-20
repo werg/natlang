@@ -12,6 +12,15 @@ from natlang_neuralese.train.native_continuation import TRAINING_SCHEMA
 from test_native_state_sft import graph
 
 
+@pytest.mark.parametrize('bad_bytes',[-1,True,0,'12',None])
+def test_scheduling_artifact_identity_validates_optional_bytes(tmp_path,bad_bytes):
+    path=tmp_path/'global-plan.json';write(path,{'models':[]})
+    plain=adapt.binding(path);complete=bridge.binding(path)
+    assert adapt._artifact_binding(complete)==adapt._artifact_binding(plain)
+    with pytest.raises(ValueError,match='byte count'):
+        adapt._artifact_binding({**complete,'bytes':bad_bytes})
+
+
 def fixture(tmp_path,quantum=2,recipe_with_bytes=False):
     root=tmp_path/'rounds'/'lfm';root.mkdir(parents=True);train=tmp_path/'train.jsonl';held=tmp_path/'held.jsonl'
     train.write_text(json.dumps(graph('old'))+'\n');h=graph('held');h['split']='test';held.write_text(json.dumps(h)+'\n')
@@ -134,23 +143,26 @@ def prepared(tmp_path,new_lr=1e-5,old_declaration_overrides=None,runtime_package
 
 
 @pytest.mark.parametrize('new_lr',[1e-5,1e-6])
-def test_configuration_changes_future_lr_only_and_does_not_repeat_completed_stage(tmp_path,monkeypatch,new_lr):
+@pytest.mark.parametrize('separate_configured_plan',[False,True])
+def test_configuration_changes_future_lr_only_and_does_not_repeat_completed_stage(tmp_path,monkeypatch,new_lr,separate_configured_plan):
     root,config,plan,proof=prepared(tmp_path,new_lr)
     from natlang_neuralese.rl import native_bootstrap_metadata
     monkeypatch.setattr(native_bootstrap_metadata,'save',lambda *args:None)
     value=adapt.verify(proof);p=json.loads(plan.read_text());p['models'][0].update(
-        production_recipe=value['recipe'],completed_supervised_adaptation=proof);write(plan,p)
+        production_recipe=value['recipe'],completed_supervised_adaptation=proof)
+    configured_plan=tmp_path/'configured-global.json'if separate_configured_plan else plan
+    write(configured_plan,p)
     before=(root/'cycle.json').read_bytes(),(root/'production/state.json').read_bytes()
     old=json.loads(config.read_text())
-    adapt.configure(plan,p['models'][0],old['bootstrap_binding']['handoff'],config)
+    adapt.configure(configured_plan,p['models'][0],old['bootstrap_binding']['handoff'],config)
     future=json.loads(config.read_text())
     assert future['seed_trainer_parameters']['resident_data_directory']==str(Path(value['recipe']['path']).parent/'resident-data')
     assert future['resident_data_directory']==future['seed_trainer_parameters']['resident_data_directory']
     assert future['seed_trainer_parameters']['learning_rate']==new_lr
-    assert future['supervised_stage_quantum_control']['plan']==adapt.binding(plan)
+    assert future['supervised_stage_quantum_control']['plan']==adapt.binding(configured_plan)
     assert before==((root/'cycle.json').read_bytes(),(root/'production/state.json').read_bytes())
     assert json.loads((root/'cycle.json').read_text())['next_stage']==1
-    adapt.configure(plan,p['models'][0],old['bootstrap_binding']['handoff'],config)
+    adapt.configure(configured_plan,p['models'][0],old['bootstrap_binding']['handoff'],config)
 
 
 @pytest.mark.parametrize('mutation',['future-command','started-stage','future-credit','other-role'])
@@ -484,7 +496,9 @@ def test_explicit_old_to_new_runtime_keeps_exact_optimizer_rng_and_requires_new_
 
 
 @pytest.mark.parametrize('future_recipe_bytes',[False,True])
-def test_runtime_configuration_requires_exact_future_global_and_rebinds_factory_pair(tmp_path,monkeypatch,future_recipe_bytes):
+@pytest.mark.parametrize('future_plan_bytes',[False,True])
+@pytest.mark.parametrize('separate_configured_plan',[False,True])
+def test_runtime_configuration_requires_exact_future_global_and_rebinds_factory_pair(tmp_path,monkeypatch,future_recipe_bytes,future_plan_bytes,separate_configured_plan):
     root,config,request,result,controller,plan,recipe=fixture(tmp_path)
     consumed_path=tmp_path/'consumed.json'
     _,pair=adapt.consume(config,bridge.binding(request),bridge.binding(result),consumed_path,controller=controller)
@@ -498,11 +512,13 @@ def test_runtime_configuration_requires_exact_future_global_and_rebinds_factory_
     monkeypatch.setattr(production,'actor_runtime_configuration',lambda repository:{'actor_command':['new-actor'],
         'actor_environment':{'NATLANG_REPO':repository},'native_actor_python_runtime':{'exact':'new-runtime'}})
     monkeypatch.setattr(native_bootstrap_metadata,'save',lambda *a:None)
-    proof=adapt.prepare(config,plan,'lfm',adapt.binding(future),adapt.binding(consumed_path),pair,tmp_path/'adaptation/proof.json',package=package,old_package=old,future_global_plan=adapt.binding(target_path))
+    proof=adapt.prepare(config,plan,'lfm',adapt.binding(future),adapt.binding(consumed_path),pair,tmp_path/'adaptation/proof.json',package=package,old_package=old,future_global_plan=(bridge.binding(target_path)if future_plan_bytes else adapt.binding(target_path)))
     checked=adapt.verify(proof);assert checked['fresh_runtime_qualification_required']
-    target['models'][0]['completed_supervised_adaptation']=proof;write(plan,target)
+    target['models'][0]['completed_supervised_adaptation']=proof
+    configured_plan=tmp_path/'configured-global.json'if separate_configured_plan else plan
+    write(configured_plan,target)
     before=(root/'cycle.json').read_bytes(),(root/'production/state.json').read_bytes()
-    adapt.configure(plan,target['models'][0],json.loads(config.read_text())['bootstrap_binding']['handoff'],config)
+    adapt.configure(configured_plan,target['models'][0],json.loads(config.read_text())['bootstrap_binding']['handoff'],config)
     configured=json.loads(config.read_text())
     assert configured['actor_command']==['new-actor']
     assert configured['actor_environment']['NATLANG_REPO']==str(package.parents[2])

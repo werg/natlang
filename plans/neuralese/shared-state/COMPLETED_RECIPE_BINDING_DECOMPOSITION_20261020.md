@@ -25,3 +25,17 @@ existing reached boundary, earned update count and declared quantum. This
 extends the existing verifier; it neither rewrites historical receipts nor
 creates completion or exposure credit. Tests exercise the actual signal
 producer and reject malformed records before any publication changes.
+
+## Scheduling artifact identity (2026-10-20)
+
+The completed transition also accepts either checked artifact-reference form for
+the declared future scheduling plan. Its shared verifier checks every supplied
+byte count, path and SHA before comparing identity; the normal scheduling
+producer emits path/SHA while the immutable future-plan proof can include bytes.
+The exact future-global content and owned declaration still authenticate the
+transition before any configuration write. For a preserved old scheduling plan,
+authenticate its exact declaration from the immutable original configuration and
+its SHA from the original global snapshot. The destination configured-plan path
+may differ; it does not redefine the old authority. Serialized transition tests
+exercise both destination layouts and both reference forms without cursor,
+optimizer, exposure or checkpoint changes. Invalid optional byte counts fail.
