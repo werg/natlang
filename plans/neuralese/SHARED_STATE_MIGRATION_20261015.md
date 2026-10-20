@@ -1390,3 +1390,51 @@ current cutover. The 19,368 held evaluation remains in flight. Full-suite f52
 failed only an outdated actor-command fixture; the fixture was corrected and
 57 focused checks passed. The replacement full check at 78e7 is still running;
 b2e4 remains the latest completed full-suite pass.
+
+### 2026-10-20 08:29 UTC — mixed-source recovery and shared R4
+
+LFM Q3 failed at 08:02 after reporting global step 19,380 because source
+`78e645145c95c460ffe3f7a494cf50a64bfcc73ecc3041f43ac4d7c175ffe058`
+contains segmented trajectories followed by ordinary reasoning rows. The CE
+builder had inferred the whole source's objective from its first row. This was
+a producer bug, not evidence against the model or the shared-state approach.
+The genuine saved Q3 checkpoint is preserved read-only:
+`62ec820183b8689aaaaf7a631f60dd08a5d355667aa6d1e54c6b55604be38614`
+(2,569,897,967 bytes). Its saved global step will be read during the next owned
+restore; reported updates after its last save do not earn saved-progress credit.
+
+The shared consumer now dispatches each declared source row through its existing
+ordinary, witnessed-pair or explicit native-mask objective. Complete policies
+cover all 407 LFM and 361 Mellum active source leaves while retaining prior
+coefficients, held declarations and failed-history masks. Both policies were
+physically staged and hash verified at 08:16. The canonical producer now creates
+complete contracts by default; a first-row observation cannot exempt later rows.
+Existing frozen cloud producer scripts must not be used to create future source
+continuations: use the current canonical host producer and stage its bound policy.
+
+R4 changes exactly two runtime modules from the validated R3 package: the shared
+CE consumer and the composition of the existing CE/classification continuation
+verifiers. The classifier and seven parser-policy files remain unchanged. The
+package code is `ea24e5ca8471e790739748e5b8818195635024fd06105fa0d731fdf96632ff1f`;
+its construction is `d6f2fcea182eff34856fc4f0410f88909afe32ca1875526f54c6c6a27e518c29`.
+Independent full review, both physical role loaders, 93 actual composed-runtime
+checks, and quick ratchets/TypeScript passed. An initial test correctly rejected
+an undeclared relocated runtime root; the fixture now explicitly declares the
+actual producer checkout, with the production guard unchanged.
+
+The sole cloud actuator is staging R4. LFM will restore its actual preserved Q3
+checkpoint with fresh index-optimized capacity checks. A proposed descendant
+geometry certificate was timeboxed and deferred because old optimizer-layout
+witnesses were insufficient; no unverified capacity credit is carried. Its old
+RAW runtime proof remains historical until a genuine current-child drain permits
+the normal whole-recipe transition. Mellum continues useful SGD until the final
+R4 objective continuation and completed-parent operators are ready. Neither a
+finite worker publication nor staging is whole-recipe completion. No R4 SGD or
+cross-model readiness is claimed yet.
+
+Main includes the shared mixed-source fix, exact continuation composition, and
+complete-by-default producer (`072d05bc4`, `68dd6b709`, `46f0d81e9`). The last
+completed full-suite check is now `78e7b2d4b3` (pass); the subsequent `7d06810379`
+full check is still running. Additional verified teacher data remains tracked
+separately from actual training exposure, and the stronger self-hosted teacher
+continues generating.
