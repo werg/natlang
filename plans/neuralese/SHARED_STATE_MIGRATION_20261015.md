@@ -1662,3 +1662,128 @@ rendezvous, operational cancellation with useful SGD, fixed saved-VAE parents,
 and successful preparation consumption. Final review and coherent deployment
 remain pending; code and protocol fixtures do not grant production readiness.
 The full main suite for `e0703038ce` passed; `353b56d084` is running.
+
+
+### 2026-10-20 17:23 UTC — resumed LFM, complete ready-data admission and controller repair
+
+LFM restored exact saved20840 including the221 earned updates from the failed
+legacy deferred-qualification bridge. The original failure remains recorded.
+All28 actual parent/capacity checks passed; genuine SGD resumed. At20860 the
+resident transaction adopted all66850 currently ready additional rows: active
+TRAIN1528010, held25955, generation
+`23a46311ddd1b3e9406bfe3b1f5e2820511e1d58fa2952756da63d8d2f3b1f6e`.
+There were no admission rejections. Adoption is not completed exposure. Existing
+device FP32 cotangent accumulation and causal-prefix reuse are active. Mellum's
+66846 corresponding additions were already adopted; its active TRAIN1442983
+and held25968 remain unchanged. Last inspected Mellum progress26256 and LFM20897
+were genuine updates, not run-completion claims. Communication exposure remains
+incomplete on both models; cross-model readiness is not granted.
+
+`d56304b36` separates finite earned progress from explicitly deferred runtime
+qualification. `b116ee953` authenticates a reviewed recovery wrapper's normal
+return through a predeclared live-owner contract, without inventing an OS exit
+status or granting completion. `c2c57390f` reuses the existing exact classifier
+continuation verifier during owned-operation reconciliation, retaining all data,
+held and other-role input identities and preserving old earned contracts.
+The full d56304b36 and b116ee953 repository checks passed; c2c57390f full validation
+is running. Focused owned/classification checks51 passed. The old d894f40182
+server-test failure was an actual CUDA OOM; later full checks passed that suite.
+
+A deeper integration gap was found before activation: sealed base and publisher
+control sources could overwrite repaired default modules, including the deferred
+progress consumer. The shared constructor now rebases BOTH layers for BOTH roles
+against the authenticated common base, preserving other reviewed operational
+changes and recomputing effective mechanism authorities. The resulting R6v9
+package code is
+`ed05d3954afed6c721b35d1ce4e2f3d9ea2205f961a2a0999016e755282e6212`;
+construction SHA is
+`8607e9790e5442a9cc760bc0be11bb6b7fc12667143776f501e6984fd442d1c7`.
+All390 tests passed after the actual sealed publisher/controller loader ran,
+including numerical/device tests;137 imported modules had correct origins.
+R6v9 is a staged successor, not active training yet. Current useful R6v6 LFM and
+R6v5 Mellum training continue while normal exact-state controller handoffs are
+prepared. Earlier default-only R6v8 tests did not prove operative controller
+integration and must not be used to claim it. The latest full-recipe LFM preview
+includes every adopted source and all existing stages; it creates no update,
+readiness or future exposure credit.
+
+Local cleanup reclaimed31590383616 bytes from79 unused integrated worktrees and
+temporary hash caches, preserving active checkpoints, source/held data and dirty
+or unique work. Corrected one-shot private retention removed the superseded
+48235499217-byte Mellum26004 snapshot after26054 recovery was independently
+verified and actual parents were protected. Periodic applying retention remains
+disabled. Inference25949 is downloading for independent task evaluation; the
+live transfer is preserved. An additional verified source relocation to NVMe
+is running to restore external-disk headroom without deleting reusable data.
+Single supervisor strand remains in force; former agents are completed. No Luna
+data generation is running. The self-hosted Qwen teacher remains fed.
+
+### 2026-10-20 18:52 UTC — full dispatcher recovery and real preference updates
+
+LFM drained normally at21143 into the independent full pin
+`a434220feed53c70014aaa4b3b687d26e159e65be0dce440cdb14d380ee830cd`.
+The entire1528010-row recipe and the actual66850-row adoption were preserved.
+R10 incorporated `aecf964c4`: historical adopted plans may move byte-identical
+classification readers while their proof, data/cache dependencies and other
+roles remain exact. Focused52 and actual sealed-controller307 tests passed;
+the full repository check for aecf964c4 finished with exit0.
+
+The first dispatcher exposed two operational problems. Its source-host exchange
+still belonged to an older mechanism contract, so the successor uses an explicit
+contract-addressed exchange directory. The next attempt reused an already
+completed operation under retry3, publishing its historical69cf checkpoint over
+the genuine21143 continuation. The supervisor stopped that actual coordinator,
+verified that no new optimizer work or pending bridge remained, and proved that
+the production-state change was exactly the historical checkpoint publication.
+It restored the verified21143 state and kept legitimate current metadata/debts,
+then reserved unusedretry4 using the shared mechanism in `7ab6df6c4`.
+That commit makes future retained-schedule reconciliations reserve unused work
+directories automatically, within the existing lineage. Focused63 passed with
+one skipped test; each actual R11 role loader subsequently passed73 with one
+skip. The full7ab repository check is running, without a pass claim yet.
+
+The actual LFM optimizer child is1065388/birth52040329, executing the published
+native-preference command from the verified21143 parent. It reached21193 with
+100% H100 utilization: this is the full recipe's preference stage, not another
+standalone SFT recovery wrapper. The retained native-full-SFT frame still has
+38421/114794 communication visits; the preference stage's own0/0 communication
+counter does not erase that frame or establish communication completion.
+Its coordinator1060969/birth51997703 and SDK3920449/birth163331444 use the
+reviewed resumable normal wrapper and actual canonical-lease guard.
+
+R11 package code is
+`ac512ba4ea1793b14391cc869925dc2fee16ab4d0453426e213f1251173b5bfe`.
+It is physically staged and layout-verified on both students. Mellum's current
+R6v5 owner3247273/birth31983191 remains in useful training, last26605, with all
+1442983 TRAIN/25968 held rows and21890/114793 communication visits. Its full R11
+prospective recipe passed, including all twelve actual-identity capacity
+requests and the pending long-source case. Its normal-return contract was
+captured while that owner was live. No Mellum stop has been issued: finish the
+concrete shared normal-controller/provider transition before draining it.
+
+Quality is not claimed from loss. LFM20840 scored0/16:12 repetitions, two budget
+exhaustions and two semantic mismatches, with no infrastructure failures.
+Both actual failed requests were checked on the H100: full-graph, full cached
+and chunked cached prefill outputs/logits were bit-identical. The diagnostic
+finished after the API observation timed out; its real completed report was
+fetched without restarting the work. This rules out that prefill discrepancy
+for those requests, not all possible decoding or training bugs. Mellum25949
+scored10/16 versus the earlier25692 result12/16; investigate the task delta.
+
+One shared publication-owner observer now follows actual trainer handles and
+progress on both students, including native-preference children. Obsolete
+LFM Q4 watchers/quality follower and the duplicate Mellum direct watcher were
+stopped. Qwen generation remains self-hosted and supplied; batches82,83 and84
+were observed active. A source-only backlog drain for newly private-verified
+tranches68–84 is running and has already recovered additional positive rows.
+Those rows still need current conversion and explicit admission; recovery is
+not training exposure. Teacher82 tranche2 private upload independently returned
+404 with metadata size0 despite PUT success; keep that failure visible and
+repair custody before admitting it as privately verified. HF access was checked
+again18:45: D09 remains403; the scheduled watch continues through October22.
+
+The source-custody relocation completed11019984922 bytes with SHA verification
+and original-path symlinks. No reusable source was deleted. Root/external free
+space was25/40 GiB at18:29; other megatoken work was not touched. A fresh private
+model-storage metadata inventory is running to check remaining storage, without
+deleting further files yet.

@@ -238,6 +238,18 @@ comprehensive training on the entire evolving production recipe.
   evaluators and recipe inheritance instead of creating per-model forks.
   Keep only necessary architecture-specific behavior/settings separate, state
   why they differ, and communicate shared decisions through coordination.
+- **Verify the effective control code after loaders.** A fix in the installed
+  package can be overwritten by a sealed controller or publisher source closure.
+  Rebase every control layer onto shared fixes, preserve required operational
+  behavior, update mechanism identities, and test after the complete loader has
+  run. A passing default-module test does not prove that the production
+  controller executes the fix. This applies to both model lines.
+- **Keep recovered work ahead of historical operations.** Restarting the full
+  mandatory schedule after an external optimizer continuation must reserve an
+  unused operation namespace in the same lineage. Never let a completed bridge
+  result from an older attempt replace the newer earned parent. Verify the
+  actual checkpoint and cursor, and observe the real optimizer child advancing;
+  a live coordinator or a launched request alone is not resumed training.
 
 These instructions supersede earlier requirements for frozen experimental
 runs, base-drift hard stops or clean-run comparisons where they conflict.
