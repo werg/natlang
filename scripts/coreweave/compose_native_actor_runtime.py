@@ -78,6 +78,15 @@ def bound(reference):
     return path
 
 
+def controller_publishing_closure(raw):
+    """Use the existing exact publisher loader for the controller's same closure."""
+    start = raw.index(' # Explicit external control closure')
+    stop = raw.index(' from natlang_neuralese.common.jsonio import write_json_durable as write', start)
+    raw = raw[:start] + ' control_load=load_controls(spec)\n' + raw[stop:]
+    helper = 'def load_controls(spec):\n """Load exactly the same reviewed control actors used by role publication."""\n loader=bound(spec[\'publisher_loader\'])\n if spec[\'publisher_loader\'][\'sha256\']!=\'03c432696073458523a9ae3e7f2f4e1d8f4a766dff25c21eb6493c46b03467d8\':\n  raise ValueError(\'Controller requires its reviewed shared publishing loader\')\n manifest=json.loads(bound(spec[\'publisher_manifest\']).read_bytes())\n if (manifest[\'base_loader\']!=spec[\'control_loader\'] or manifest[\'base_manifest\']!=spec[\'control_manifest\']\n     or manifest[\'controls\']!=spec[\'controls\'] or Path(manifest[\'package\'])!=Path(spec[\'numerical_package\'])\n     or manifest[\'code_sha256\']!=spec[\'numerical_code_sha256\'] or manifest[\'role\']!=spec[\'model\']):\n  raise ValueError(\'Controller and publisher must bind the same complete role closure\')\n scope={\'__file__\':str(loader),\'__name__\':\'owned_controller_publishing_loader\'}\n exec(compile(loader.read_bytes(),str(loader),\'exec\'),scope)\n return scope[\'load\'](spec[\'publisher_manifest\'])\n\n\n'
+    return raw.replace('def main():', helper + 'def main():', 1)
+
+
 def compose(base_construction, base_sha256, source, out, closures, publisher_loader, controller=None, binder=None):
     base_construction, source, out = Path(base_construction), Path(source), Path(out).resolve()
     base_reference = {'path': str(base_construction.resolve()), 'sha256': base_sha256}
@@ -154,10 +163,11 @@ def compose(base_construction, base_sha256, source, out, closures, publisher_loa
             write_bytes_durable(target,git('show','d1ef19931:'+name))
         # These helpers run on the real source host where /work bindings exist.
         # Keep their sibling imports self-contained and pinned to reviewed bytes.
+        utility_commit = git('rev-parse', 'HEAD').decode().strip()
         for name in ('compose_native_actor_runtime.py', 'prepare_native_actor_role.py',
                      'verify_native_actor_runtime.py'):
             target = pending/'scripts/coreweave'/name
-            write_bytes_durable(target,git('show','04bd86020:scripts/coreweave/'+name))
+            write_bytes_durable(target,git('show',utility_commit+':scripts/coreweave/'+name))
         # Transport the installer and its existing physical-clone companion as
         # exact source files too. No dependence on a supervisor worktree remains.
         layout_tools_commit = git('rev-parse', 'HEAD').decode().strip()
@@ -241,6 +251,8 @@ def compose(base_construction, base_sha256, source, out, closures, publisher_loa
                 "future['owned_models']==['mellum']": "future['owned_models']==[config['model']]",
                 "if x['model']=='mellum'": "if x['model']==config['model']",
                 "model='mellum',entry_root": "model=config['model'],entry_root",
+                "controls=config['controls'],bootstrap=":
+                    "controls=config['controls'],publisher_loader=config['publisher_loader'],publisher_manifest=config['publisher_manifest'],bootstrap=",
                 "  task_runtime=config.get('task_runtime')":
                     "  declaration['actor_runtime']=config['actor_runtime']\n  task_runtime=config.get('task_runtime')",
                 "assert root_review['passed']and root_review['controller']==config['controller']and root_review['binder']==binding(__file__)":
@@ -253,11 +265,15 @@ def compose(base_construction, base_sha256, source, out, closures, publisher_loa
             for role, controls in control_records.items():
                 folder=pending/'role-control'/role
                 controller_reference=copied(controller,folder/'controller.py')
+                write_bytes_durable(folder/'controller.py',controller_publishing_closure(
+                    (folder/'controller.py').read_text()).encode())
+                controller_reference=reference(folder/'controller.py')
                 write_bytes_durable(folder/'bind-controller.py',original_binder.encode())
                 material={'schema':'natlang.role-aware-controller-control-material/1',
                     'model':role,'runtime':str(out),'runtime_code_sha256':digest(inventory),
                     'actor_runtime':str(out),'controller':controller_reference,
                     'binder':reference(folder/'bind-controller.py'),
+                    'publisher_loader':loader_reference,'publisher_manifest':controls['publisher_manifest'],
                     'control_loader':controls['loader'],'control_manifest':controls['manifest'],
                     'controls':controls['controls'],'role_mechanism_authorities':authority_reference,
                     'requires_verified_later_runtime_handoff':True,
@@ -274,7 +290,7 @@ def compose(base_construction, base_sha256, source, out, closures, publisher_loa
             'fused_inference_rebase':{'reviewed_commit':'cb46b28de','exact_units':list(FUSED_UNITS),
                 'r15_adjoints_byte_unchanged':True,'unrelated_deferred_gradient_machinery_imported':False},
             'role_controls':control_records,'role_mechanism_authorities':authority,
-            'preparation_utilities_commit':'04bd86020','layout_tools_commit':layout_tools_commit,
+            'preparation_utilities_commit':utility_commit,'layout_tools_commit':layout_tools_commit,
             'external_control_commits':{'native_supervised_boundary':'5778b3422'},
             'role_materials':materials,'controller_source':controller,'binder_source':binder,
             'publisher_loader':loader_reference,'actor_entrypoint':reference(pending/entry),
