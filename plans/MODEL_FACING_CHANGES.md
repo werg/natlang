@@ -1288,3 +1288,15 @@ train breadth and ordinary correct-return reward remain intact; no communication
 edge is required.
 
 - 2026-10-20: prospective completed-truncated-no-action repair accounting reuses the existing cut-off retry sentence and existing explicit budgets. New terminal detail `model_incomplete: truncated_without_action` may reach a parent invocation after its declared repairs are exhausted; recovery is one executable next-step call or the actual typed return. Synthetic runtime/collector checks precede adoption; about48 executing-model cases in the next useful self-hosted teacher/student window remain empirical debt. Active19006 and frozen4655 runtimes remain unchanged.
+
+### Computed typed-result recovery TRAIN candidates (2026-10-20)
+
+`build_execution_recovery_curriculum.py --profile computed-result` adds twelve
+independently authored TRAIN task prompts with number/boolean/string/record
+results. It teaches actual computation, successful saved-result verification
+and one-error recovery. This is candidate source text; no runtime prompt,
+existing profile, reward or current source is changed. Pending adoption requires
+exact-source current-protection/reference qualification and twelve times four
+actual own-Qwen teacher executions in the existing GEN sequence. Teacher
+trajectory admission and trained-student RL measurement are separate. No held
+content or answer is included, and no task success requires Neuralese use.

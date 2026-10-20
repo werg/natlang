@@ -135,3 +135,40 @@ def test_verify_return_lane_is_short_typed_and_has_no_communication_gate():
             assert json.loads(semantics['expected_files']['result.json']) == {'value': semantics['expected']}
             assert 'failure_seed' not in semantics
             assert ('writeText(' in code) == (variant == 'write-readback-return')
+
+
+def test_computed_result_worlds_require_actual_values_and_preserve_existing_profiles():
+    from scripts.neuralese_data.build_execution_recovery_curriculum import computed_result_worlds
+    rows = list(computed_result_worlds())
+    assert rows == list(computed_result_worlds())
+    assert len(rows) == len({row['id'] for row in rows}) == 12
+    assert {row['curriculum']['shape'] for row in rows} == {'number', 'boolean', 'string', 'record'}
+    assert not {row['id'] for row in rows} & {row['id'] for row in termination_worlds()}
+    for row in rows:
+        s = row['semantics']; kind = row['curriculum']['shape']; variant = row['curriculum']['variant']
+        facts = json.loads(s['services']['facts'].split('read():Facts {return ', 1)[1].split(';}', 1)[0])
+        total = facts['first'] + facts['second'] - facts['cost']
+        ready = facts['first'] + facts['cost'] < facts['second']
+        expected = {'number': total, 'boolean': ready, 'string': f'{facts["label"]}:{total}',
+                    'record': {'label': facts['label'], 'total': total, 'ready': ready}}[kind]
+        assert s['expected'] == expected
+        assert row['split'] == 'train' and row['generation']['provider_calls'] == 0
+        assert row['generation']['teacher_trajectory'] is False
+        assert row['curriculum']['reference']['root'][-1][1]['value'] == expected
+        assert row['curriculum']['reference']['children'] == []
+        assert 'trajectory_contract' not in row['curriculum']
+        assert s['inputs'] == {}
+        code = row['curriculum']['reference']['root'][0][1]['code']
+        assert 'await facts.read()' in code
+        if variant == 'compute-return':
+            assert 'failure_seed' not in s and 'folder_files' not in s
+        else:
+            assert json.loads(s['expected_files']['result.json']) == expected
+            assert 'JSON.stringify(saved)!==JSON.stringify(result)' in code
+            assert 'readText()' in code
+        if variant == 'recover-write-verify-return':
+            assert s['failure_seed']['code'] == 'const broken: number = "unavailable"; return broken;'
+            assert 'writeText(' in code
+            assert s['folder_files']['result.json'] == 'null\n'
+        else:
+            assert 'failure_seed' not in s

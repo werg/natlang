@@ -22,11 +22,77 @@ from scripts.neuralese_data.decision_holds import load_decision_holds
 REVISION = 'authored-short-execution-recovery-20261019/1'
 GRAPH_REVISION = 'authored-private-state-execution-recovery-20261019/1'
 TERMINATION_REVISION = 'authored-verify-return-execution-recovery-20261020/1'
+COMPUTED_REVISION = 'authored-computed-typed-result-recovery-20261020/1'
 TYPES = ('export type Row = { id:string; category:string; value:number; active:boolean; '
          'blocked:boolean; waiver:boolean };\n'
          'export type Policy = { category:string; minimum:number };\n'
          'export type Summary = { ids:string[]; total:number; count:number };\n')
 VARIANTS = ('page-range-recovery', 'reserved-service-binding', 'typed-result-recovery')
+
+
+def computed_result_worlds(*, revision: str = COMPUTED_REVISION):
+    """Fresh typed computations, saved-result verification and one-error recovery."""
+    for kind in ('number', 'boolean', 'string', 'record'):
+        rng = random.Random(f'{revision}:{kind}')
+        a, b, cost = rng.randrange(10, 35), rng.randrange(40, 70), rng.randrange(2, 9)
+        label = f'cargo-{rng.randrange(100, 999)}'
+        facts = {'first': a, 'second': b, 'cost': cost, 'label': label}
+        total = a + b - cost
+        expected = {'number': total, 'boolean': a + cost < b,
+                    'string': f'{label}:{total}',
+                    'record': {'label': label, 'total': total, 'ready': a + cost < b}}[kind]
+        expression = {'number': 'fact.first + fact.second - fact.cost',
+                      'boolean': 'fact.first + fact.cost < fact.second',
+                      'string': 'fact.label + ":" + (fact.first + fact.second - fact.cost)',
+                      'record': '{label:fact.label,total:fact.first+fact.second-fact.cost,ready:fact.first+fact.cost<fact.second}'}[kind]
+        result_type = {'record': '"Result"'}.get(kind, kind)
+        types = ('export type Facts = { first:number; second:number; cost:number; label:string };\n'
+                 'export type Result = { label:string; total:number; ready:boolean };\n')
+        policy = {'number': 'Return first plus second minus cost as a number.',
+                  'boolean': 'Return whether first plus cost is strictly less than second as a boolean.',
+                  'string': 'Return the label, a colon, and first plus second minus cost as a string.',
+                  'record': 'Return a record with label equal to the fact label, total equal to first plus second minus cost, and ready equal to whether first plus cost is strictly less than second.'}[kind]
+        service = types + '/** Read the complete computation facts. */\nexport function read():Facts {return ' + json.dumps(facts, separators=(',', ':')) + ';}\n'
+        saved = json.dumps(expected, separators=(',', ':')) + '\n'
+        group = f'{revision}:{kind}'
+        for variant in ('compute-return', 'verify-saved-return', 'recover-write-verify-return'):
+            task_id = f'{group}:{variant}'
+            instruction = 'Read facts.read(). ' + policy + ' Return the computed value as the declared type.'
+            compute = 'const fact = await facts.read(); const result = ' + expression + '; '
+            code = compute + 'return result;'
+            semantics = {'root': 'compute.nl', 'inputs': {}, 'expected': expected, 'operation': 'exact',
+                         'services': {'facts': service}, 'files': {'types.ts': types}}
+            if variant == 'verify-saved-return':
+                instruction += ' result.json already contains a saved result. Read it, verify it against the facts, and return its typed value once it agrees.'
+                code = compute + "const saved = JSON.parse(await folder.file('result.json').readText()); if(JSON.stringify(saved)!==JSON.stringify(result))throw new Error('Saved result differs from computed facts'); return saved;"
+                semantics.update(folder_files={'result.json': saved}, expected_files={'result.json': saved})
+            elif variant == 'recover-write-verify-return':
+                instruction += ' Continue from runtime type feedback. Save the computed value as JSON in result.json with a final newline, read it back, and return its typed value once verified.'
+                # A compiler-rejected declaration provides genuine failure feedback
+                # without embedding a wrong form in the model-facing instructions.
+                semantics['failure_seed'] = {'code': 'const broken: number = "unavailable"; return broken;'}
+                semantics.update(folder_files={'result.json': 'null\n'}, expected_files={'result.json': saved})
+                code = compute + "await folder.file('result.json').writeText(JSON.stringify(result)+'\\n'); const saved = JSON.parse(await folder.file('result.json').readText()); if(JSON.stringify(saved)!==JSON.stringify(result))throw new Error('Saved result differs from computed facts'); return saved;"
+            semantics['files']['compute.nl'] = ('---\nargs: {}\nreturns: ' + result_type +
+                '\nkind: directory-reducer\n---\n' + instruction + '\n')
+            yield {'version': 'natlang.program/2', 'id': task_id, 'kind': 'lambda_source',
+                'family': 'curriculum_computed_typed_result_recovery',
+                'source': 'natlang-authored-computed-typed-result-recovery', 'split': 'train',
+                'source_ids': [task_id], 'source_groups': [group], 'source_revisions': [revision],
+                'license': 'project-generated', 'gold_sources': ['constructed-world-oracle'],
+                'generation': {'generator': revision, 'independent_world': group,
+                    'authorship': 'fresh constructed TRAIN facts; no held input, answer, or trace used',
+                    'provider_calls': 0, 'teacher_trajectory': False},
+                'curriculum': {'version': 'natlang.inline_curriculum/1',
+                    'family': 'computed_typed_result_recovery', 'family_version': 1,
+                    'shape': kind, 'variant': variant, 'pair_group': None, 'split_group': group,
+                    'slice': 'computed_result', 'domain': 'other', 'mode': 'single_call', 'inline': 'optional',
+                    'evidence': {'world': ['fresh service facts'], 'retrieved': [], 'background': []},
+                    'assumptions': [], 'decisive': [], 'plausible_actions': [],
+                    'minimum_sequence': ['compute from actual facts', 'verify any saved result', 'return the typed value'],
+                    'reference': {'root': [['eval', {'code': code}],
+                        ['return_result', {'status': 'success', 'value': expected}]], 'children': []}},
+                'semantics': semantics}
 
 
 def termination_worlds(*, revision: str = TERMINATION_REVISION):
@@ -279,17 +345,17 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--protection', type=Path, required=True)
-    parser.add_argument('--profile', choices=('existing', 'verify-return'), default='existing')
+    parser.add_argument('--profile', choices=('existing', 'verify-return', 'computed-result'), default='existing')
     args = parser.parse_args()
     out = args.out.resolve()
     if out.exists() and any(out.iterdir()):
         raise FileExistsError('curriculum output must be a new immutable directory')
     out.mkdir(parents=True, exist_ok=True)
     protection = current_protection(args.protection.resolve(strict=True))
-    if args.profile == 'verify-return':
-        rows = list(termination_worlds())
+    if args.profile in ('verify-return', 'computed-result'):
+        rows = list(computed_result_worlds() if args.profile == 'computed-result' else termination_worlds())
         if len(rows) != 12: raise ValueError('verify-return curriculum cardinality changed')
-        packets = {'verify-return': write_packet(out, 'verify-return', rows, root_mode='student', group=4,
+        packets = {args.profile: write_packet(out, args.profile, rows, root_mode='student', group=4,
             selection_protection=protection_check(rows, protection), generator=Path(__file__).resolve())}
     else:
         ordinary = list(short_worlds())
@@ -305,7 +371,7 @@ def main():
                 selection_protection=graph_protection, generator=Path(__file__).resolve()),
         }
     receipt = {'schema': 'natlang.lfm-execution-recovery-curriculum/1',
-        'revision': TERMINATION_REVISION if args.profile == 'verify-return' else REVISION,
+        'revision': COMPUTED_REVISION if args.profile == 'computed-result' else (TERMINATION_REVISION if args.profile == 'verify-return' else REVISION),
         'graph_revision': GRAPH_REVISION, 'packets': packets,
         'teacher_responses_generated': 0, 'model_calls': 0, 'training_admission': False,
         'held_content_used': False, 'current_protection': protection['proof']}
