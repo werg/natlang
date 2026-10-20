@@ -33,7 +33,7 @@ def _bound(binding):
     return path
 
 
-def validate_ready(path, requirement):
+def _validate_training_receipt(path, requirement, *, exposure_only=False):
     if requirement.get('trainer_exit'):
         terminal = Path(requirement['trainer_exit'])
         if not terminal.is_file():
@@ -68,7 +68,9 @@ def validate_ready(path, requirement):
                 or receipt.get('recipe') != adoption['payload']['recipe']):
             return None  # Prior-generation readiness never certifies a new data adoption.
     foundation_boundary = requirement.get('readiness_boundary') == 'communication-foundation'
-    if receipt.get('completed') is not True and not (foundation_boundary and receipt.get('foundation_ready') is True):
+    candidate = bool(exposure_only and foundation_boundary and
+                     (receipt.get('communication_foundation') or {}).get('complete') is True)
+    if receipt.get('completed') is not True and not (foundation_boundary and receipt.get('foundation_ready') is True) and not candidate:
         return None
     if receipt.get('model_id') != requirement['model_id']:
         raise ValueError('native readiness model differs from its declared participant')
@@ -105,7 +107,7 @@ def validate_ready(path, requirement):
         raise ValueError('native readiness is missing required production stages')
     report = json.loads(_bound(receipt['training_receipt']).read_text())
     exposure = receipt.get('exposure') or {}
-    if ((report.get('completed') is not True and not (foundation_boundary and report.get('foundation_ready') is True))
+    if ((report.get('completed') is not True and not (foundation_boundary and report.get('foundation_ready') is True) and not candidate)
             or report.get('checkpoint_sha256') != checkpoint['sha256']
             or exposure.get('consumed_updates', 0) <= 0 or exposure.get('supervised_token_visits', 0) <= 0):
         raise ValueError('native readiness has no bound completed optimizer/data exposure')
@@ -145,6 +147,74 @@ def validate_ready(path, requirement):
         if (not isinstance(obligations,dict) or obligations != report.get('mandatory_sft')
                 or obligations.get('schema') != 'natlang.native-sft-progress/1' or not obligations.get('stages')):
             raise ValueError('native foundation must retain all unfinished mandatory supervised exposure')
+    return path, receipt, report
+
+
+def validate_foundation_candidate(path, requirement):
+    """Authenticate earned per-row exposure only; never qualify or release a model."""
+    if requirement.get('readiness_boundary') != 'communication-foundation':
+        raise ValueError('deferred qualification requires its explicit finite communication foundation')
+    validated = _validate_training_receipt(path, requirement, exposure_only=True)
+    if validated is None:
+        return None
+    path, receipt, _ = validated
+    return {'schema': 'natlang.native-foundation-candidate/1', 'qualified': False,
+            'model_id': receipt['model_id'], 'stage_id': receipt['stage_id'],
+            'training_receipt': {'path': str(path), 'sha256': sha256_file_hex_cached(path)},
+            'checkpoint': receipt['checkpoint'], 'native_identity': receipt['native_identity'],
+            'recipe': receipt['recipe'], 'communication_foundation': receipt['communication_foundation'],
+            'mandatory_sft': receipt['mandatory_sft']}
+
+
+def validate_foundation_candidate_document(candidate, requirement):
+    """Verify transported exposure evidence without turning it into readiness."""
+    from .native_continuation import validate_communication_foundation
+    def digest(value):
+        return isinstance(value,str) and len(value)==64 and all(char in '0123456789abcdef' for char in value)
+    identity=(candidate or {}).get('native_identity') or {}
+    if not all(digest(identity.get(key)) for key in ('checkpoint_sha256','tokenizer_fingerprint','embedding_weight_sha256')):
+        raise ValueError('foundation candidate lacks exact checkpoint/tokenizer/embedding identities')
+    if (not isinstance(candidate, dict) or candidate.get('schema') != 'natlang.native-foundation-candidate/1'
+            or candidate.get('qualified') is not False or candidate.get('model_id') != requirement['model_id']
+            or requirement.get('readiness_boundary') != 'communication-foundation'
+            or candidate.get('stage_id') not in requirement['stage_ids']
+            or (candidate.get('checkpoint') or {}).get('sha256') != (candidate.get('native_identity') or {}).get('checkpoint_sha256')
+            or (candidate.get('checkpoint') or {}).get('schema') != CHECKPOINT_SCHEMA
+            or (candidate.get('mandatory_sft') or {}).get('schema') != 'natlang.native-sft-progress/1'
+            or not candidate['mandatory_sft'].get('stages')):
+        raise ValueError('foundation candidate changed its unqualified participant/exposure contract')
+    source = requirement.get('foundation_sources_sha256') or (requirement.get('foundation_sources') or {}).get('sha256')
+    if not digest(source):
+        raise ValueError('foundation candidate needs its declared admitted source identity')
+    validate_communication_foundation(candidate.get('communication_foundation'),
+        epochs=requirement.get('foundation_epochs') or 1., source_sha256=source)
+    return candidate
+
+
+def validate_foundation_qualification_request(path, model_id, foundation):
+    """Check an explicit shared scheduling request, never a qualification certificate."""
+    path = Path(path).resolve(strict=True)
+    request = json.loads(path.read_bytes())
+    contract = request.get('contract') or {}
+    models = {value['model_id']:value for value in (contract.get('models') or {}).values()}
+    candidates = request.get('candidates') or {}
+    if (request.get('schema') != 'natlang.native-foundation-qualification-request/1'
+            or request.get('readiness_granted') is not False or len(candidates) < 2
+            or not set(candidates) <= set(models) or model_id not in candidates):
+        raise ValueError('shared qualification request needs two actual declared participant candidates')
+    for name,candidate in candidates.items():
+        validate_foundation_candidate_document(candidate,models[name])
+    if candidates[model_id]['communication_foundation']['cohort_sha256'] != (foundation or {}).get('cohort_sha256'):
+        raise ValueError('shared qualification request names another current communication cohort')
+    return {'path':str(path),'sha256':sha256_file_hex_cached(path),'bytes':path.stat().st_size}
+
+
+def validate_ready(path, requirement):
+    validated = _validate_training_receipt(path, requirement)
+    if validated is None:
+        return None
+    path, receipt, report = validated
+    checkpoint, identity = receipt['checkpoint'], receipt['native_identity']
     runtime = json.loads(_bound(receipt['runtime_certificate']).read_text())
     if (runtime.get('schema') != 'natlang.native-runtime-certificate/1' or runtime.get('passed') is not True
             or runtime.get('native_identity') != identity or runtime.get('backbone_optimizer_tested') is not True
