@@ -27,7 +27,7 @@ def attach_held_measurements(example, weights, binding):
 
 
 SCHEMA = 'natlang.native-ce-supervision-policy/1'
-ENCODINGS = {'ordinary-suffix-raw-v1', 'witnessed-pair-raw-v1'}
+ENCODINGS = {'ordinary-suffix-raw-v1', 'witnessed-pair-raw-v1', 'native-row-objectives-v1'}
 
 
 def load_policy(binding):
@@ -108,7 +108,34 @@ def apply_policy(example, row, *, source_sha256, policy):
     return _apply_declaration(example, row, declaration)
 
 
+def row_declaration(row, declaration):
+    """Resolve an explicit mixed-source contract from authenticated row intent."""
+    if declaration['encoding'] != 'native-row-objectives-v1':
+        return declaration
+    conversion = row.get('conversion') or {}
+    if conversion.get('supervision_policy'):
+        return None
+    if conversion.get('role_interpretation') == 'ordinary-text':
+        if row.get('source_pairing'):
+            raise ValueError('mixed native CE row has ambiguous target intent')
+        if type(conversion.get('source_suffix_start')) is not int:
+            raise ValueError('mixed ordinary CE row lacks an authenticated suffix')
+        encoding = 'ordinary-suffix-raw-v1'
+    elif row.get('source_pairing'):
+        encoding = 'witnessed-pair-raw-v1'
+    else:
+        # NativeGraphSource already authenticated and validated this complete
+        # graph and its explicit node masks. It has no legacy raw CE encoding.
+        if 'source_suffix_start' in conversion or 'source_pairing' in row:
+            raise ValueError('mixed native CE row has ambiguous target intent')
+        return None
+    return {**declaration, 'encoding': encoding}
+
+
 def _apply_declaration(example, row, declaration):
+    declaration = row_declaration(row, declaration)
+    if declaration is None:
+        return example
     conversion = row.get('conversion') or {}
     coefficient = declaration['context_weight']
     kind = declaration['encoding']
@@ -163,6 +190,9 @@ def held_measurements(example, row, *, source_sha256, policy):
     if not declarations:
         return example
     declaration, = declarations
+    declaration = row_declaration(row, declaration)
+    if declaration is None:
+        return example
     weighted = _apply_declaration(example, row, declaration)
     if declaration['encoding'] == 'ordinary-suffix-raw-v1':
         suffixes = [row['conversion']['source_suffix_start']]

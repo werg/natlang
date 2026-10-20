@@ -6,7 +6,9 @@ Use the same source manifests the two production recipes actually consume.
 """
 from __future__ import annotations
 import argparse
+import copy
 import json
+import math
 from pathlib import Path
 
 from natlang_neuralese.common.hashing import sha256_file_hex_cached as sha256_file_hex
@@ -14,6 +16,49 @@ from natlang_neuralese.common.jsonio import write_json_durable
 from natlang_neuralese.data.native_sources import _jsonl
 from natlang_neuralese.train.native_supervision import SCHEMA, load_policy
 from natlang_neuralese.train.recipe import native_source_dependencies
+
+
+def complete_source_contract(prior, bindings, *, context_weight, inventory):
+    """Declare row intent for every exact active leaf, without inventing a census.
+
+    The caller supplies the authenticated active DAG's leaf bindings. This is an
+    explicit objective contract, not source admission: normal source/index and
+    per-row decoding checks remain mandatory at consumption.
+    """
+    if type(context_weight) not in (float, int) or not math.isfinite(context_weight) or not 0 <= context_weight < 1:
+        raise ValueError('complete CE contract requires an explicit raw context coefficient')
+    result = copy.deepcopy({key:value for key,value in prior.items() if not key.startswith('_')})
+    previous = {entry['sha256']:entry for entry in result['sources']}
+    held = {entry['sha256'] for entry in result.get('held_sources', []) + result.get('retained_held_sources', [])}
+    seen = {}
+    for binding in bindings:
+        digest = binding['sha256']
+        if (not isinstance(digest, str) or len(digest) != 64
+                or any(char not in '0123456789abcdef' for char in digest)
+                or not isinstance(binding.get('path'), str)):
+            raise ValueError('complete CE contract requires exact source bindings')
+        if digest in held:
+            raise ValueError('complete TRAIN contract overlaps protected held declarations')
+        if digest in seen:
+            continue  # Identical immutable bytes can have multiple DAG aliases.
+        old = previous.get(digest)
+        coefficient = old['context_weight'] if old else context_weight
+        seen[digest] = {'sha256':digest, 'encoding':'native-row-objectives-v1',
+                        'context_weight':coefficient}
+    if not seen:
+        raise ValueError('complete CE contract requires a nonempty active source set')
+    # Keep old declared sources too: objective continuation never silently
+    # removes a prior declaration or any mask/held/source custody.
+    previous.update(seen)
+    result['sources'] = [previous[key] for key in sorted(previous)]
+    result['require_eligible_sources'] = True
+    result['source_contract'] = {'encoding':'native-row-objectives-v1',
+        'inventory':copy.deepcopy(inventory), 'active_sources':copy.deepcopy(list(bindings)),
+        'active_source_count':len(seen), 'default_raw_context_weight':context_weight,
+        'scope':'Explicit per-row intent contract; not a full row census or new source admission. '
+                'Existing source coefficients preserved; undeclared segmented/native masks retained; '
+                'every consumed raw row validates exact coefficient, suffix and provenance.'}
+    return result
 
 
 def build(sources, *, legacy_pair_context_weight, held_sources=(), expected_split='train'):
@@ -94,6 +139,10 @@ def main(argv=None):
     parser.add_argument('--source', action='append', type=Path, default=[])
     parser.add_argument('--prior-policy',type=Path,
         help='append masks to this exact existing CE declaration without rescanning its source corpus')
+    parser.add_argument('--complete-source-contract', action='store_true',
+        help='explicitly cover every leaf in --source with mixed row objectives; requires prior policy')
+    parser.add_argument('--expected-source-count', type=int,
+        help='require this exact unique leaf count for the complete active DAG')
     parser.add_argument('--legacy-pair-context-weight', type=float,
         help='explicit original witnessed_pair_graph coefficient, never estimated from weights')
     parser.add_argument('--held-source', action='append', type=Path, default=[],
@@ -103,14 +152,29 @@ def main(argv=None):
     parser.add_argument('--out', type=Path, required=True)
     args = parser.parse_args(argv)
     if args.prior_policy:
-        if args.source or args.held_source or args.legacy_pair_context_weight is not None:
+        if not args.complete_source_contract and (args.source or args.held_source or args.legacy_pair_context_weight is not None):
             raise ValueError('prior-policy mask continuation preserves all existing source declarations')
         from natlang_neuralese.train.native_failed_history import binding
         value=load_policy(binding(args.prior_policy.resolve(strict=True)))
         value={key:item for key,item in value.items()if not key.startswith('_')}
-        if not args.failed_history_mask_manifest:
+        if args.complete_source_contract:
+            if not args.source or args.held_source or args.legacy_pair_context_weight is None:
+                raise ValueError('complete source contract needs actual TRAIN sources and explicit raw coefficient; held stays unchanged')
+            leaves, roots = {}, []
+            for source in args.source:
+                root = binding(source.resolve(strict=True)); roots.append(root)
+                for child in native_source_dependencies(source) or [root]:
+                    if Path(child['path']).suffix != '.json':
+                        leaves[child['sha256']] = child
+            if args.expected_source_count is not None and len(leaves) != args.expected_source_count:
+                raise ValueError('complete CE active source count differs from the declared DAG')
+            value = complete_source_contract(value, list(leaves.values()),
+                context_weight=args.legacy_pair_context_weight, inventory=roots)
+        elif not args.failed_history_mask_manifest:
             raise ValueError('prior-policy continuation requires explicit failed-history manifests')
     else:
+        if args.complete_source_contract or args.expected_source_count is not None:
+            raise ValueError('complete source contract requires an existing bound policy')
         if not args.source or args.legacy_pair_context_weight is None:
             raise ValueError('source policy preparation requires sources and explicit legacy pair coefficient')
         value = build(args.source, legacy_pair_context_weight=args.legacy_pair_context_weight, held_sources=args.held_source)
