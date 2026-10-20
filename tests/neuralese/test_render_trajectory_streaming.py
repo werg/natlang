@@ -544,7 +544,8 @@ def test_done_receipts_verify_output_checksums_without_rewriting_them(tmp_path):
             renderer.file_sha(Path(renderer.__file__).resolve()), old_sha})
 
 
-def test_resource_only_renderer_parent_continues_exact_trajectory_receipts(tmp_path, monkeypatch):
+@__import__('pytest').mark.parametrize('parent_sha', sorted(renderer.SEARCH_REVIEWED_RESOURCE_PARENT_CHAIN))
+def test_resource_only_renderer_parent_continues_exact_trajectory_receipts(tmp_path, monkeypatch, parent_sha):
     _reviewed_legacy_dependency(monkeypatch)
     from scripts.neuralese_data.strip_generic_system_prompt import strip_row
     renderer._G.clear()
@@ -558,13 +559,12 @@ def test_resource_only_renderer_parent_continues_exact_trajectory_receipts(tmp_p
             stream.write(renderer.canonical(row) + '\n')
     out = tmp_path / 'work'
     input_binding = renderer._render_input_binding({'lfm25': tmp_path}, {})
-    parent_sha = renderer.SEARCH_RESOURCE_ONLY_PARENT_RENDERER_SHA256
     job = (str(selected), str(out), 'lfm25', {}, 'fixture', set(), set(), False,
            None, ('whole-trajectory',), False, set(), None, input_binding, None, parent_sha)
     parent_code = renderer._resource_parent_code_binding(parent_sha, job)
     text_corpus_path = str(renderer._LEGACY_REPO / 'training/neuralese/natlang_neuralese/data/text_corpus.py')
-    assert parent_code[text_corpus_path] == renderer.LEGACY_SEARCH_TEXT_CORPUS_DEFAULT_PROFILE_TRANSITION[
-        'historical_sha256']
+    expected_text_dependency = ('current_sha256' if parent_sha == renderer.SEARCH_PROFILE_AWARE_RENDERER_SHA256 else 'historical_sha256')
+    assert parent_code[text_corpus_path] == renderer.LEGACY_SEARCH_TEXT_CORPUS_DEFAULT_PROFILE_TRANSITION[expected_text_dependency]
     explicit_inputs = dict(input_binding)
     explicit_inputs['history_reasoning_policies'] = {'lfm25': 'keep'}
     explicit_job = (*job[:13], explicit_inputs, *job[14:])
@@ -719,3 +719,27 @@ def test_explicit_mellum_last_turn_only_ids_are_distinct_from_default_keep():
 def test_actual_render_input_profile_map_covers_all_configured_tokenizers():
     assert renderer._history_profiles_for_tokenizers({'lfm': 'a', 'mellum': 'b'}, {'lfm': 'keep'}) == {
         'lfm': 'keep', 'mellum': 'backbone-default'}
+
+
+def test_completed_search_parent_chain_requires_explicit_exact_ancestry():
+    import pytest
+    for parent in renderer.SEARCH_REVIEWED_RESOURCE_PARENT_CHAIN:
+        assert renderer._completed_renderer_parent(parent, 'actual-current',
+            renderer.SEARCH_RESOURCE_ONLY_PARENT_RENDERER_SHA256) == parent
+        with pytest.raises(ValueError, match='neither current nor explicitly continued'):
+            renderer._completed_renderer_parent(parent, 'actual-current', None)
+    for requested, actual in [('f'*64, renderer.SEARCH_LEGACY_EQUATION_RENDERER_SHA256),
+                              (renderer.SEARCH_RESOURCE_ONLY_PARENT_RENDERER_SHA256, 'f'*64)]:
+        with pytest.raises(ValueError, match='neither current nor explicitly continued'):
+            renderer._completed_renderer_parent(actual, 'actual-current', requested)
+    assert renderer._completed_renderer_parent('actual-current','actual-current',None) is None
+
+
+def test_search_parent_chain_preserves_each_actual_text_dependency(monkeypatch):
+    _reviewed_legacy_dependency(monkeypatch)
+    path=str(renderer._LEGACY_REPO/'training/neuralese/natlang_neuralese/data/text_corpus.py')
+    transition=renderer.LEGACY_SEARCH_TEXT_CORPUS_DEFAULT_PROFILE_TRANSITION
+    for parent in (renderer.SEARCH_RESOURCE_ONLY_PARENT_RENDERER_SHA256,
+                   renderer.SEARCH_LEGACY_EQUATION_RENDERER_SHA256):
+        assert renderer._resource_parent_code_binding(parent)[path]==transition['historical_sha256']
+    assert renderer._resource_parent_code_binding(renderer.SEARCH_PROFILE_AWARE_RENDERER_SHA256)[path]==transition['current_sha256']

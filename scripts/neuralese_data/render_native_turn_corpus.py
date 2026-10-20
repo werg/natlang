@@ -79,6 +79,12 @@ LEGACY_SEARCH_RENDERER_SHA256 = 'b054133ae53e7d86a9202ad84e60cabed1f79a26d18aa58
 # fix. The fix closes SQLite before temporary-directory cleanup and bounds
 # future submission; it does not alter selected rows, rendering, or outputs.
 SEARCH_RESOURCE_ONLY_PARENT_RENDERER_SHA256 = '6b59b92914a93139215d7a22f0129d59ade36b533a28126cd5e927dbc23fbc5b'
+# Exact already reviewed successors: legacy equation repair (39b0a4326) and
+# default-profile/canonical-label continuation (frozen Search worker).
+SEARCH_LEGACY_EQUATION_RENDERER_SHA256 = 'a38f99146199cfb26774ff20ac888bd22bc0dff9677f9b18eefdadd310c6b618'
+SEARCH_PROFILE_AWARE_RENDERER_SHA256 = '6db50069b1bdaf5c8cf96d8a5cb3908148f7f00ea084c1d9d8c350f6c0bd5aa5'
+SEARCH_REVIEWED_RESOURCE_PARENT_CHAIN = frozenset((SEARCH_RESOURCE_ONLY_PARENT_RENDERER_SHA256,
+    SEARCH_LEGACY_EQUATION_RENDERER_SHA256, SEARCH_PROFILE_AWARE_RENDERER_SHA256))
 from natlang_neuralese.common.paths import DEFAULTS as MACHINE_PATH_DEFAULTS  # noqa: E402
 
 _LEGACY_REPO = Path(MACHINE_PATH_DEFAULTS['repo'])
@@ -1382,8 +1388,17 @@ def _render_code_binding():
     return binding
 
 
+def _completed_renderer_parent(renderer_sha, current_sha, requested_parent):
+    if renderer_sha == current_sha:
+        return None
+    if (requested_parent not in SEARCH_REVIEWED_RESOURCE_PARENT_CHAIN
+            or renderer_sha not in SEARCH_REVIEWED_RESOURCE_PARENT_CHAIN):
+        raise ValueError('completed shard renderer identity is neither current nor explicitly continued')
+    return renderer_sha
+
+
 def _resource_parent_code_binding(parent_renderer_sha256, job=None):
-    if parent_renderer_sha256 != SEARCH_RESOURCE_ONLY_PARENT_RENDERER_SHA256:
+    if parent_renderer_sha256 not in SEARCH_REVIEWED_RESOURCE_PARENT_CHAIN:
         raise ValueError('renderer parent SHA lacks the exact reviewed resource-only continuation')
     current = _render_code_binding()
     # Historical receipts bind canonical checkout labels even when this
@@ -1402,7 +1417,8 @@ def _resource_parent_code_binding(parent_renderer_sha256, job=None):
     # tokenizer has no explicit profile; explicit KEEP jobs must never borrow
     # the default-profile output identity.
     transition = LEGACY_SEARCH_TEXT_CORPUS_DEFAULT_PROFILE_TRANSITION
-    if binding.get(text_corpus_path) == transition['current_sha256']:
+    if (parent_renderer_sha256 != SEARCH_PROFILE_AWARE_RENDERER_SHA256
+            and binding.get(text_corpus_path) == transition['current_sha256']):
         profiles = [part.get('history_reasoning_policies') for part in (job or ())
                     if isinstance(part, dict) and 'history_reasoning_policies' in part]
         tokenizer_name = job[2] if job and len(job) > 2 else None
@@ -2184,8 +2200,8 @@ def main(argv=None):
                    help='explicit prior renderer identity whose exact trajectory receipts may be reused on resume; '
                         'the final receipt preserves it separately from this renderer')
     p.add_argument('--resource-only-renderer-parent-sha256',
-                   help='exact pre-2026-10-17 renderer SHA whose output receipts may continue across the reviewed '
-                        'SQLite cleanup/fail-fast resource change')
+                   help='explicit anchor in the exact reviewed Search renderer ancestry chain; '
+                        'each completed receipt still requires its own complete source/job/output bindings')
     a = p.parse_args(argv)
     if a.render_only != (a.render_shards is not None):
         p.error('--render-only and --render-shards must be supplied together')
@@ -2196,7 +2212,7 @@ def main(argv=None):
     if a.legacy_renderer_sha256 is not None and not re.fullmatch(r'[0-9a-f]{64}', a.legacy_renderer_sha256):
         p.error('--legacy-renderer-sha256 must be a lowercase SHA-256 digest')
     if (a.resource_only_renderer_parent_sha256 is not None
-            and a.resource_only_renderer_parent_sha256 != SEARCH_RESOURCE_ONLY_PARENT_RENDERER_SHA256):
+            and a.resource_only_renderer_parent_sha256 not in SEARCH_REVIEWED_RESOURCE_PARENT_CHAIN):
         p.error('--resource-only-renderer-parent-sha256 must match the exact reviewed Search renderer parent')
     if a.verify_admission_only:
         verified = registered_candidate_selection_admission(a.corpus_id, a.source)
@@ -2311,11 +2327,10 @@ def main(argv=None):
                     continue
                 else:
                     current_renderer_sha = file_sha(Path(__file__).resolve())
-                    parent_sha = a.resource_only_renderer_parent_sha256
+                    requested_parent = a.resource_only_renderer_parent_sha256
+                    parent_sha = _completed_renderer_parent(result['renderer_code_sha256'], current_renderer_sha, requested_parent)
                     parent_binding = None
-                    if result['renderer_code_sha256'] != current_renderer_sha:
-                        if parent_sha is None or result['renderer_code_sha256'] != parent_sha:
-                            raise ValueError(f'completed shard renderer identity is neither current nor explicitly continued: {done}')
+                    if parent_sha is not None:
                         parent_binding = _render_job_binding_from_job(
                             job, source_digest, _resource_parent_code_binding(parent_sha, job))
                         if result.get('render_job_binding') != parent_binding:
@@ -2323,8 +2338,8 @@ def main(argv=None):
                     if result.get('source_sha256') is None:
                         raise ValueError(f'completed shard lacks its source identity: {done}')
                     allowed_renderer_shas = {current_renderer_sha}
-                    if parent_sha is not None:
-                        allowed_renderer_shas.add(parent_sha)
+                    if requested_parent is not None:
+                        allowed_renderer_shas.update(SEARCH_REVIEWED_RESOURCE_PARENT_CHAIN)
                     if a.legacy_renderer_sha256 is not None:
                         _legacy_render_job_binding(job, source_digest, a.legacy_renderer_sha256)
                         allowed_renderer_shas.add(a.legacy_renderer_sha256)
