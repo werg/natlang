@@ -1345,3 +1345,48 @@ evaluation weights were removed after ingestion and live-reference checks,
 reclaiming 2,565,996,544 allocated bytes. Its scores, assigned repair weights
 from other steps, and the independently verified private 19,368 full recovery
 checkpoint remain.
+
+### DGX continuation, 2026-10-20 07:38 UTC
+
+LFM Q3 launched at 07:10:55 from the same earned 19,368 parent (`f61c34af…`).
+The source-order error was corrected by resolving exact IDs and bindings against
+actual source-DAG order before parent restoration: 22 case indices changed,
+without changing rows or exposure. Parent, optimizer and runtime import completed.
+Five fresh capacity requests had passed by 07:32:32; the remaining cohort was
+still advancing, with no new SGD credit or failure. GPU pauses between checks
+were verified as ordinary transitions, not a stalled owner. The supervisor is
+investigating repeated whole-index authentication as a shared startup cost.
+Mellum continued R14 training, reaching actual global 25,410 at 07:30. Its normal
+214-row pending-source classification passed. The actual-source-order capacity
+projector is fully reviewed; cloud staging and execution remain supervisor-owned.
+
+The next shared runtime will combine the verified failure-history objective
+correction with the completed-parent transition API. Mellum will move directly
+from R14 to this runtime, preserving its earned optimizer, RNG and exposure,
+rather than paying for an intermediate restoration. The API must cover the
+real resident publication, inherited owner lease, one preloaded checkpoint,
+explicit old/new runtime identities, complete dependency closure and new actor
+command/environment binding. A synthetic owned-drain receipt is not acceptable.
+The default package and both role loaders must execute the same new API.
+
+The mask implementation now authenticates original approved native-record
+renders as well as teacher captures. Resumable candidate derivation is explicitly
+non-admitted and independently rechecks capture custody. Recipe plans carry
+all mask and decoder dependencies. Root reviewed and integrated these changes:
+49 focused tests and the quick ratchets/TypeScript checks passed. The prepared
+policy derivatives cover 117,035 existing TRAIN rows per model, including 3,203
+native rows with 216 affected decisions on each port. These are objective
+corrections, not new row exposure. Broader preparation retains its single known
+literal-context custody blocker explicitly; verified source data stays usable.
+
+GEN201 was adopted at 06:57 UTC with API/core unchanged. Matching publisher polls
+completed normally, including the 550-second poll at 07:27. Reserved slots 72–74
+retain their original runtime; future slot 75 starts the new runtime's 48-TRAIN
+measurement. That window has not yet started and earns no measurement credit.
+Search authenticated all 256 groups and is merging final outputs under the
+unchanged 46.052 GB storage reservation. A further 1,287 LFM / 1,286 Mellum rows
+are ready for a subsequent explicit continuation, separately tracked from the
+current cutover. The 19,368 held evaluation remains in flight. Full-suite f52
+failed only an outdated actor-command fixture; the fixture was corrected and
+57 focused checks passed. The replacement full check at 78e7 is still running;
+b2e4 remains the latest completed full-suite pass.
