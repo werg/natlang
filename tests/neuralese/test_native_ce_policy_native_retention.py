@@ -27,10 +27,10 @@ def source(tmp_path, rows):
 def test_direct_native_masks_are_source_bound_and_unchanged_at_runtime(tmp_path):
     row=native();before=copy.deepcopy(row);path=source(tmp_path,[row])
     policy=build([path],legacy_pair_context_weight=.05)
-    assert policy['sources']==[]
-    assert len(policy['retained_sources'])==1
-    assert policy['retained_sources'][0]['sha256']==sha256_file_hex(path)
-    assert 'explicit native node target masks' in policy['retained_sources'][0]['reason']
+    assert policy['sources']==[{'sha256':sha256_file_hex(path),'encoding':'native-row-objectives-v1','context_weight':.05}]
+    assert policy['retained_sources']==[]
+    assert policy['first_row_observations'][0]['sha256']==sha256_file_hex(path)
+    assert 'explicit native node target masks' in policy['first_row_observations'][0]['reason']
     example=parse_graph(row,tokenizer_fingerprint='f'*64)
     assert apply_policy(example,row,source_sha256=sha256_file_hex(path),policy=policy) is example
     assert row==before and example.target_weights==(0.,0.,1.,0.,0.,2.)
@@ -40,7 +40,8 @@ def test_semantic_pair_model_views_retain_direct_native_objectives(tmp_path):
     row={'schema':'natlang.native-semantic-pair/1','split':'train',
          'models':{model:{'graph':native(model)}for model in ('lfm25','mellum21')}}
     path=source(tmp_path,[row]);policy=build([path],legacy_pair_context_weight=.05)
-    assert policy['sources']==[] and policy['retained_sources'][0]['sha256']==sha256_file_hex(path)
+    assert policy['sources'][0]['encoding']=='native-row-objectives-v1'
+    assert policy['first_row_observations'][0]['sha256']==sha256_file_hex(path)
 
 
 @pytest.mark.parametrize('mutation',[
@@ -66,13 +67,17 @@ def test_incompatible_model_view_encoding_cannot_be_hidden_as_retained(tmp_path)
         build([path],legacy_pair_context_weight=.05)
 
 
-def test_later_eligible_row_still_requires_runtime_declaration(tmp_path):
+def test_later_eligible_row_gets_complete_source_contract(tmp_path):
     direct=native('direct');later=native('eligible')
     later['conversion']={'role_interpretation':'ordinary-text','source_suffix_start':2,'context_weight':.05}
+    later['nodes']=later['nodes'][:1]
+    later['nodes'][0]['target_weights']=[0.,.05,1.]
     path=source(tmp_path,[direct,later]);policy=build([path],legacy_pair_context_weight=.05)
     example=parse_graph(later,tokenizer_fingerprint='f'*64)
-    with pytest.raises(ValueError,match='eligible native CE source missing'):
-        apply_policy(example,later,source_sha256=sha256_file_hex(path),policy=policy)
+    weighted=apply_policy(example,later,source_sha256=sha256_file_hex(path),policy=policy)
+    assert weighted.target_weights!=example.target_weights
+    assert weighted.plan is example.plan
+    assert sum(weighted.target_weights)==pytest.approx(sum(example.target_weights))
 
 
 def test_mixed_eligible_and_direct_sources_seal_and_load_without_reweighting_native(tmp_path):
@@ -87,8 +92,9 @@ def test_mixed_eligible_and_direct_sources_seal_and_load_without_reweighting_nat
     assert main(['--source',str(path),'--source',str(eligible),
                  '--legacy-pair-context-weight','.05','--out',str(out)])==0
     policy=load_policy({'path':str(out),'sha256':sha256_file_hex(out)})
-    assert len(policy['sources'])==1 and policy['sources'][0]['sha256']==sha256_file_hex(eligible)
-    assert len(policy['retained_sources'])==1 and policy['retained_sources'][0]['sha256']==sha256_file_hex(path)
+    assert {entry['sha256']for entry in policy['sources']}=={sha256_file_hex(eligible),sha256_file_hex(path)}
+    assert all(entry['encoding']=='native-row-objectives-v1'for entry in policy['sources'])
+    assert policy['first_row_observations'][0]['sha256']==sha256_file_hex(path)
     example=parse_graph(direct,tokenizer_fingerprint='f'*64)
     assert apply_policy(example,direct,source_sha256=sha256_file_hex(path),policy=policy) is example
     assert example.target_weights==(0.,0.,1.,0.,0.,2.)

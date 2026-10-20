@@ -122,9 +122,14 @@ def build(sources, *, legacy_pair_context_weight, held_sources=(), expected_spli
         declarations[declaration['sha256']] = declaration
     value = {'schema':SCHEMA,'require_eligible_sources':True,
         'sources':[declarations[key] for key in sorted(declarations)],
-        'inventory':roots,'retained_sources':skipped,
-        'scope':'First-row source-intent classification; every consumed row validates the exact declared encoding.',
+        'inventory':roots,'retained_sources':[], 'first_row_observations':skipped,
+        'scope':'First-row preliminary schema/intent checks only; complete source-bound row-objective contract follows.',
         'history':'Original graph bytes, IDs, row credits, node mass, optimizer/RNG and raw held CE retained.'}
+    # In particular, full-session conversions intentionally put reasoning-turn
+    # raw rows after segmented whole trajectories in the SAME container. A
+    # first-row observation can never authorize source-wide retention.
+    value = complete_source_contract(value, list(leaves.values()),
+        context_weight=legacy_pair_context_weight, inventory=roots)
     if held_sources:
         held = build(held_sources, legacy_pair_context_weight=legacy_pair_context_weight, expected_split='test')
         if set(item['sha256'] for item in value['sources']) & set(item['sha256'] for item in held['sources']):
@@ -144,7 +149,7 @@ def main(argv=None):
     parser.add_argument('--expected-source-count', type=int,
         help='require this exact unique leaf count for the complete active DAG')
     parser.add_argument('--legacy-pair-context-weight', type=float,
-        help='explicit original witnessed_pair_graph coefficient, never estimated from weights')
+        help='explicit original raw context coefficient for witnessed pairs and mixed retained sources, never estimated from weights')
     parser.add_argument('--held-source', action='append', type=Path, default=[],
         help='exact protected test source; evaluation declaration only, never training exposure')
     parser.add_argument('--failed-history-mask-manifest',type=Path,action='append',default=[],

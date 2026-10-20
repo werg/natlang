@@ -132,3 +132,21 @@ def test_real_cli_mixed_first_row_and_exact_dag_count(tmp_path):
     with pytest.raises(ValueError,match='count'):
         wrong=list(args);wrong[wrong.index('--expected-source-count')+1]='2'
         wrong[-1]=str(tmp_path/'bad.json');main(wrong)
+
+
+@pytest.mark.parametrize('reverse', [False,True])
+def test_default_fresh_cli_never_assumes_first_row_retention(tmp_path,reverse):
+    rows=[segmented(),ordinary()]
+    if reverse:rows.reverse()
+    source=tmp_path/'actual-mixed.jsonl';source.write_text('\n'.join(json.dumps(row)for row in rows)+'\n')
+    out=tmp_path/'new-default.json'
+    assert main(['--source',str(source),'--legacy-pair-context-weight','.05','--out',str(out)])==0
+    result=load_policy({'path':str(out),'sha256':sha256_file_hex(out)})
+    assert result['source_contract']['active_source_count']==1
+    assert result['sources'][0]['encoding']=='native-row-objectives-v1'
+    assert not result['retained_sources']
+    for row in rows:
+        before=parse_graph(row,tokenizer_fingerprint='f'*64)
+        after=apply_policy(before,row,source_sha256=sha256_file_hex(source),policy=result)
+        if row['conversion'].get('supervision_policy'):assert after is before
+        else:assert after.target_weights!=before.target_weights

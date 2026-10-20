@@ -23,3 +23,13 @@ all later rows. Data admission, protected splits and earned exposure are separat
 This is exact objective plumbing, not a new scheduler, trainer, parser or model
 prompt. Existing policies keep their original semantics until an explicit
 continuation selects the new encoding. No frozen runtime is edited in place.
+
+Fresh policy preparation uses this complete contract by default, including the
+existing `build()` API and ordinary CLI path. The preliminary first-row schema
+and producer-intent checks are retained, but their results are observations only:
+no source is classified as permanently segmented from its first row. Existing
+bound policies retain their historical semantics. A new contract preserves a
+source's explicit first raw coefficient and uses the caller's explicit original
+raw coefficient when the first row is already segmented/native. Each later row
+must still satisfy that exact declaration. Complete mixed-source continuations
+remain the production path when the active DAG changes.

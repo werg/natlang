@@ -235,8 +235,9 @@ def test_materializer_binds_actual_container_inventory_and_retains_segmented(tmp
     segmented.write_text(json.dumps(wt) + '\n')
     result = build([source, segmented], legacy_pair_context_weight=.05)
     assert result['require_eligible_sources'] is True
-    assert result['sources'] == declared(digest=sha256_file_hex(source))['sources']
-    assert result['retained_sources'][0]['sha256'] == sha256_file_hex(segmented)
+    assert {entry['sha256'] for entry in result['sources']} == {sha256_file_hex(source),sha256_file_hex(segmented)}
+    assert all(entry['encoding']=='native-row-objectives-v1' for entry in result['sources'])
+    assert result['first_row_observations'][0]['sha256'] == sha256_file_hex(segmented)
     from scripts.neuralese_data.build_native_ce_supervision_policy import main
     out = tmp_path / 'policy.json'
     argv = ['--source',str(source),'--legacy-pair-context-weight','.05','--out',str(out)]
