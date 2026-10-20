@@ -1,5 +1,15 @@
 # Main goal: keep moving forward (owner, 2026-10-11)
 
+## Consolidated supervision (owner, 2026-10-20)
+
+Keep supervision, implementation and operations in one primary-agent strand.
+Close existing sub-agent strands after collecting their handoffs; preserve useful
+training, generation and conversion processes. Use sub-agents sparingly and only
+with the Luna model when delegation is needed. Luna is for engineering work,
+never training-data generation. New training data must continue to come from our
+self-hosted teacher in the CoreWeave generation sandbox. These instructions
+supersede earlier requests for parallel non-Luna implementation agents.
+
 ## Execution and generation ownership (owner, 2026-10-15)
 
 Pop is closed. The DGX supervisor now owns all remaining work and sandbox
