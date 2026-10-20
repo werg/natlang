@@ -44,7 +44,8 @@ raise SystemExit(module.main(sys.argv[3:]))
 
 def binding(path):
     path = Path(path).absolute()
-    return {'path': str(path), 'sha256': sha256_file_hex_cached(path), 'bytes': path.stat().st_size}
+    return {'path': str(path), 'sha256': sha256_file_hex_cached(path, trust_archive_receipt=False),
+            'bytes': path.stat().st_size}
 
 
 def inventory(out, *, exclude=()):

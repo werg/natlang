@@ -128,19 +128,27 @@ def sha256_file_hex_cached(path: str | os.PathLike[str], *, trust_archive_receip
     status = os.stat(real)
     signature = (status.st_dev, status.st_ino, status.st_size,
                  status.st_mtime_ns, status.st_ctime_ns)
-    key = (f"content|{real}|{status.st_dev}|{status.st_ino}|{status.st_size}|{status.st_mtime_ns}|{status.st_ctime_ns}"
+    key = (f"content-inode|{status.st_dev}|{status.st_ino}|{status.st_size}|{status.st_mtime_ns}|{status.st_ctime_ns}"
            if not trust_archive_receipt else f"{real}|{status.st_size}|{status.st_mtime_ns}")
     cache = _hash_cache_path()
     cached = _cached_file_digest(cache, key)
+    promote = False
+    if cached is None and not trust_archive_receipt:
+        # Older content-verified entries authenticate the same complete file
+        # identity. Promote them, never archive-trusting/path-only entries.
+        old_key = f"content|{real}|{status.st_dev}|{status.st_ino}|{status.st_size}|{status.st_mtime_ns}|{status.st_ctime_ns}"
+        cached = _cached_file_digest(cache, old_key)
+        promote = cached is not None
     if cached is not None and not trust_archive_receipt:
         current = os.stat(real)
         if (current.st_dev, current.st_ino, current.st_size,
                 current.st_mtime_ns, current.st_ctime_ns) != signature:
             raise RuntimeError(f"file changed while reusing cached digest: {real}")
+        if not promote:
+            return cached
+    if cached is not None and not promote:
         return cached
-    if cached is not None:
-        return cached
-    digest = _archive_receipt_digest(path, real, status.st_size) if trust_archive_receipt else None
+    digest = cached if promote else (_archive_receipt_digest(path, real, status.st_size) if trust_archive_receipt else None)
     if digest is None:
         hasher = hashlib.sha256()
         with open(real, "rb") as stream:
