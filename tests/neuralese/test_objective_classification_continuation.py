@@ -11,6 +11,62 @@ from test_source_objective_index_rekey import case
 from test_native_supervision_mass import declared
 
 
+def test_index_certificate_reuses_digest_but_loads_and_checks_authority(combined, monkeypatch):
+    from natlang_neuralese.train import native_classification_continuation as continuation
+    _,_,_,prior,*_=combined
+    part=prior['indexes'][0]; continuation._INDEX_CERTIFICATES.clear()
+    digests=[];loads=[];original_digest=continuation.digest;original_load=m.row_index.load
+    def digest(value):
+        digests.append(1);return original_digest(value)
+    def load(path):
+        loads.append(path);return original_load(path)
+    monkeypatch.setattr(continuation,'digest',digest);monkeypatch.setattr(m.row_index,'load',load)
+    first=continuation._indexed(part,'new_index')
+    assert continuation._indexed(part,'new_index')==first
+    assert len(digests)==1 and len(loads)==2
+    with pytest.raises(ValueError):continuation._indexed({**part,'rows':part['rows']+1},'new_index')
+    for field,value in [('sha256','0'*64),('bytes',part['new_index']['bytes']+1)]:
+        with pytest.raises(ValueError):
+            continuation._indexed({**part,'new_index':{**part['new_index'],field:value}},'new_index')
+
+
+@pytest.mark.parametrize('fault',['same-mtime','replacement','metadata','during-load'])
+def test_index_certificate_rejects_mutation_or_recertifies_replacement(combined,monkeypatch,fault):
+    import os
+    from natlang_neuralese.train import native_classification_continuation as continuation
+    _,_,_,prior,*_=combined;part=copy.deepcopy(prior['indexes'][0]);path=Path(part['new_index']['path'])
+    continuation._INDEX_CERTIFICATES.clear();continuation._indexed(part,'new_index')
+    raw=path.read_bytes();state=path.stat()
+    if fault=='same-mtime':
+        path.write_bytes(bytes([raw[0]^1])+raw[1:]);os.utime(path,ns=(state.st_atime_ns,state.st_mtime_ns))
+    elif fault=='metadata':
+        value=pickle.loads(raw);value['metadata_sha256']='0'*64
+        path.write_bytes(pickle.dumps(value));part['new_index']=m._binding(path)
+    elif fault=='replacement':
+        replacement=path.with_suffix('.replacement');replacement.write_bytes(raw)
+        os.utime(replacement,ns=(state.st_atime_ns,state.st_mtime_ns));replacement.replace(path)
+        digests=[];original=continuation.digest
+        def digest(value):digests.append(1);return original(value)
+        monkeypatch.setattr(continuation,'digest',digest)
+        continuation._indexed(part,'new_index');assert len(digests)==1
+        return
+    else:
+        original=m.row_index.load
+        def load(target):
+            value=original(target);target.write_bytes(raw);return value
+        monkeypatch.setattr(m.row_index,'load',load)
+    with pytest.raises(ValueError):continuation._indexed(part,'new_index')
+
+
+def test_index_certificate_cache_is_bounded(combined,monkeypatch):
+    from natlang_neuralese.train import native_classification_continuation as continuation
+    _,_,_,prior,*_=combined;continuation._INDEX_CERTIFICATES.clear()
+    monkeypatch.setattr(continuation,'_INDEX_CERTIFICATE_LIMIT',1)
+    continuation._indexed(prior['indexes'][0],'new_index')
+    continuation._indexed(prior['held_indexes'][0],'new_index')
+    assert len(continuation._INDEX_CERTIFICATES)==1
+
+
 @pytest.fixture
 def combined(case, tmp_path):
     oldpkg,newpkg,source,bind,entries,value,write,index=case

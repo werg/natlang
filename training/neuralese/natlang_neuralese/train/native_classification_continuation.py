@@ -2,12 +2,44 @@
 from __future__ import annotations
 
 import json
+from collections import OrderedDict
 from pathlib import Path
 
 from ..common.hashing import canonical_json_sha256_hex as digest
 from . import native_source_classification as m
 
 SCHEMA = 'natlang.native-classified-objective-continuation/1'
+_INDEX_CERTIFICATES = OrderedDict()
+_INDEX_CERTIFICATE_LIMIT = 1024
+
+
+def _index_signature(path):
+    state = path.stat()
+    return (state.st_dev, state.st_ino, state.st_size, state.st_mtime_ns, state.st_ctime_ns)
+
+
+def _authenticated_index(reference):
+    """Reuse only the entries digest; load and check actual authority every time."""
+    declared = Path(reference['path'])
+    path = declared.resolve(strict=True)
+    before = _index_signature(path)
+    m._checked(reference)
+    value = m.row_index.load(path)
+    identity = (str(path), reference['sha256'], before)
+    certificate = _INDEX_CERTIFICATES.get(identity)
+    if not value:
+        raise ValueError('source classification index metadata differs')
+    if certificate is None:
+        certificate = digest(value.get('entries'))
+    if value.get('metadata_sha256') != certificate:
+        raise ValueError('source classification index metadata differs')
+    if declared.resolve(strict=True) != path or _index_signature(path) != before:
+        raise ValueError('source classification index changed during verification')
+    _INDEX_CERTIFICATES[identity] = certificate
+    _INDEX_CERTIFICATES.move_to_end(identity)
+    while len(_INDEX_CERTIFICATES) > _INDEX_CERTIFICATE_LIMIT:
+        _INDEX_CERTIFICATES.popitem(last=False)
+    return value
 
 
 def _same_bytes(a, b):
@@ -48,7 +80,7 @@ def _leaves(reference):
 
 
 def _indexed(part, which):
-    value = m._index(part[which])
+    value = _authenticated_index(part[which])
     key = value['key']
     entries = value['entries']
     if (key.get('source_sha256') != part['source']['sha256']
