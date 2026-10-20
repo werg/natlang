@@ -1272,8 +1272,28 @@ def _owned_earned_stage_inventory(transition,stages,stage_id):
     future=_supervised_stage_inventory(new_plan['recipe'],stage_id)
     if future!=stages:raise ValueError('owned reconciliation future recipe differs from verified handoff')
     if ([(x['id'],x['kind'])for x in old]!=[(x['id'],x['kind'])for x in future]
-            or old_plan['stage_inputs']!=new_plan['stage_inputs']
-            or old_plan['inputs']!=new_plan['inputs']):
+            or set(old_plan['stage_inputs'])!=set(new_plan['stage_inputs'])):
+        raise ValueError('owned operational tuning cannot credit new sources or stages')
+    from ..train.recipe import _classification_input_continuation, _binding_files
+    changed={}
+    for sid,before in old_plan['stage_inputs'].items():
+        after=new_plan['stage_inputs'][sid]
+        if before==after:continue
+        if not _classification_input_continuation(before,after):
+            raise ValueError('owned operational tuning cannot credit new sources or stages')
+        changed[sid]=(before,after)
+    # Classification proofs also name the data they authenticate. Exempt only
+    # exclusive metadata files; a data/held/other-role digest must still match.
+    def retained_inputs(plan,side):
+        protected={item['path'] for sid,roles in plan['stage_inputs'].items()
+            for role,reference in roles.items()
+            if sid not in changed or role!='source_classification_migration'
+            for item in _binding_files(reference)}
+        metadata={item['path'] for pair in changed.values()
+            for item in _binding_files(pair[side].get('source_classification_migration',{}))
+            if item.get('path')}
+        return {path:sha for path,sha in plan['inputs'].items() if path not in metadata-protected}
+    if retained_inputs(old_plan,0)!=retained_inputs(new_plan,1):
         raise ValueError('owned operational tuning cannot credit new sources or stages')
     if old==future:return stages,None
     return old,{'old_plan':transition['old_plan'],'new_plan':transition['new_plan'],

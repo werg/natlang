@@ -18,3 +18,11 @@ late capture, changed wrapper/owner/launch, failure evidence, or completion
 credit. Tests use real child processes and consume the normal return through
 the existing verifier. The final drain still requires the owner to have exited
 and an independently pinned checkpoint.
+
+Owned reconciliation must also preserve earned work across the existing verified
+metadata classification continuation. Reuse the recipe's exact continuation
+validator; permit only that input role to differ. Normalize only its exclusive
+metadata dependencies, retaining every data/held/other-role input identity.
+Return the old earned stage contract and record future tuning without granting
+future-stage completion. Genuine data additions must be adopted and trained
+before this operational handoff; they cannot borrow old exposure here.

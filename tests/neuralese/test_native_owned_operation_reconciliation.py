@@ -418,3 +418,34 @@ def test_recovery_keeps_the_entire_mandatory_schedule_pending(owned):
     assert _owned_cycle_boundary(proof,cursor,state,recipe,'sft')
     cursor['next_stage']=1
     assert not _owned_cycle_boundary(proof,cursor,state,recipe,'sft')
+
+
+def test_owned_operational_tuning_accepts_real_metadata_classification_only(tmp_path,monkeypatch):
+    from test_native_classification_recipe_handoff import prepared
+    from natlang_neuralese.train import recipe
+    before,save,proof,part=prepared(tmp_path,monkeypatch);after=save()
+    def plan(roles):
+        stage={'id':'sft','kind':'native_state_sft','inputs':{k:v['binding']for k,v in roles.items()},'parameters':{}}
+        return {'recipe':{'stages':[stage]},'stage_inputs':{'sft':roles},
+                'inputs':{v['path']:v['sha256']for v in roles.values()}}
+    prior,future=plan(before),plan(after);old=tmp_path/'old-plan.json';new=tmp_path/'new-plan.json'
+    write(old,prior);write(new,future)
+    transition={'old_plan':resident.binding(old),'new_plan':resident.binding(new)}
+    stages=raw._supervised_stage_inventory(future['recipe'],'sft')
+    earned,evidence=raw._owned_earned_stage_inventory(transition,stages,'sft')
+    assert earned==raw._supervised_stage_inventory(prior['recipe'],'sft')
+    assert evidence['future_recipe_credit_granted']is False
+    assert recipe._classification_input_continuation(before,after)
+    # Data can be repeated inside proof dependencies: its identity stays strict.
+    future['stage_inputs']['sft']['source_classification_migration']['dependencies']=[before['native_graphs']]
+    future['inputs'][before['native_graphs']['path']]='0'*64;write(new,future)
+    transition['new_plan']=resident.binding(new)
+    with pytest.raises(ValueError,match='new sources or stages'):
+        raw._owned_earned_stage_inventory(transition,stages,'sft')
+    # Ordinary source changes and invalid classification authority remain errors.
+    future=plan(after);future['stage_inputs']['sft']['native_graphs']={**before['native_graphs'],'sha256':'0'*64};write(new,future);transition['new_plan']=resident.binding(new)
+    with pytest.raises(ValueError,match='new sources or stages'):
+        raw._owned_earned_stage_inventory(transition,stages,'sft')
+    future=plan(after);proof['optimizer_updates']=1;future['stage_inputs']['sft']=save();write(new,future);transition['new_plan']=resident.binding(new)
+    with pytest.raises(ValueError,match='classification'):
+        raw._owned_earned_stage_inventory(transition,stages,'sft')
