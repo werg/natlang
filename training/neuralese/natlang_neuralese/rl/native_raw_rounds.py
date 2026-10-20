@@ -1171,8 +1171,13 @@ def _owned_recipe_invocation(argv, child, record, actual_recipe, stage_id, linea
                 or entry.get('held')!={k:proposed['stage_inputs'][stage_id]['held_native_graphs'][k]for k in('path','sha256')}):
             raise ValueError('owned resident history changed its exact admitted source bindings')
         previous=proposed;last_step=step
+    from ..train.recipe import _classification_reader_relocation
+    before, after = previous['stage_inputs'], plan['stage_inputs']
+    same_inputs = (before.keys() == after.keys() and all(
+        before[key] == after[key] or _classification_reader_relocation(before[key], after[key])
+        for key in before))
     if (history[-1]['recipe']!=actual_recipe or previous['recipe']!=plan['recipe']
-            or previous['stage_inputs']!=plan['stage_inputs']):
+            or not same_inputs):
         raise ValueError('owned resident current plan lost its complete initial-to-adopted history')
     return True
 

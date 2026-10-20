@@ -1847,6 +1847,34 @@ def _classification_input_continuation(old, new):
     return True
 
 
+def _classification_reader_relocation(old, new):
+    """Compare the same historical proof after byte-identical reader relocation."""
+    role = 'source_classification_migration'
+    if (role not in old or role not in new
+            or {k:v for k,v in old.items() if k != role} !=
+               {k:v for k,v in new.items() if k != role}
+            or {k:v for k,v in old[role].items() if k != 'dependencies'} !=
+               {k:v for k,v in new[role].items() if k != 'dependencies'}):
+        return False
+    from . import native_classification_continuation as continuation
+    from scripts.neuralese_data import continue_native_source_indexes as adapter
+    from .native_source_classification import _binding, _checked
+    readers = {_binding(module.__file__)['sha256']: Path(module.__file__).name
+               for module in (continuation, adapter)}
+    def retained(reference):
+        result = {}
+        for value in reference.get('dependencies', []):
+            path = _checked(value)
+            if readers.get(value['sha256']) == path.name:
+                continue
+            result[str(path)] = value
+        return result
+    if retained(old[role]) != retained(new[role]):
+        return False
+    _classification_proof(new)
+    return True
+
+
 def _classification_proof(inputs):
     """Authenticate the existing metadata proof independently of input changes."""
     from .native_source_classification import SCHEMA, _checked, _binding, POLICY_FILES

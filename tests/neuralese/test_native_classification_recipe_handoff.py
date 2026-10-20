@@ -1,5 +1,6 @@
 import copy
 import json
+from pathlib import Path
 
 import pytest
 
@@ -98,3 +99,38 @@ def test_ce_continuation_composes_real_same_source_classification_proof(tmp_path
     changed = {**save(), 'ce_supervision_policy': new['ce_supervision_policy']}
     with pytest.raises(ValueError, match='classification'):
         recipe._ce_supervision_input_continuation(old, changed)
+
+
+def test_historical_classification_readers_may_relocate_without_changing_sources(tmp_path, monkeypatch):
+    from natlang_neuralese.train import native_classification_continuation as continuation
+    from scripts.neuralese_data import continue_native_source_indexes as adapter
+    _, save, _, _ = prepared(tmp_path, monkeypatch)
+    old = save()
+    role = 'source_classification_migration'
+    readers = []
+    for module in (continuation, adapter):
+        source = tmp_path / 'historical' / Path(module.__file__).name
+        source.parent.mkdir(exist_ok=True)
+        source.write_bytes(Path(module.__file__).read_bytes())
+        readers.append(migration._binding(source))
+    data = {k:old['native_graphs'][k] for k in ('path', 'sha256')}
+    old[role]['dependencies'] = [data, *readers]
+    new = copy.deepcopy(old)
+    new[role]['dependencies'] = [data, *[migration._binding(m.__file__) for m in (continuation, adapter)]]
+    assert recipe._classification_reader_relocation(old, new)
+    # A reader already present through another proof can be deduplicated.
+    old[role]['dependencies'] = [data, readers[0]]
+    assert recipe._classification_reader_relocation(old, new)
+    for fault in ('data-dependency', 'held', 'proof', 'reader-bytes'):
+        changed = copy.deepcopy(new)
+        if fault == 'data-dependency':
+            changed[role]['dependencies'] = changed[role]['dependencies'][1:]
+        elif fault == 'held':
+            changed['held_native_graphs']['sha256'] = 'a' * 64
+        elif fault == 'proof':
+            changed[role]['sha256'] = 'a' * 64
+        else:
+            wrong = tmp_path / Path(continuation.__file__).name
+            wrong.write_text('# different implementation\n')
+            changed[role]['dependencies'][1] = migration._binding(wrong)
+        assert not recipe._classification_reader_relocation(old, changed)
