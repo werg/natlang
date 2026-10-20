@@ -1534,3 +1534,68 @@ inactive synthetic browser fixtures; future fixture cleanup is committed.
 Private storage audit measured LFM 52.5 GB and Mellum 1.597 TB. Refresh discarded
 checkpoint cleanup after actual Mellum cutover and dependency checks, preserving
 current parents, pending exports, reusable sources and protected evaluation.
+
+
+### 2026-10-20 10:54 UTC — shared contract repairs, recoverable checkpoints and storage
+
+LFM continues genuine R4 SGD: global 19,774 at 10:48, H100 fully occupied,
+communication exposure 33,795 / 114,794 visits. Its normal publication hook
+failed because an explicitly declared historical row-index alias resolves into
+the canonical production cache. The verifier required one identical root for
+both paths. `353b56d08` preserves the declared lexical path and exact bytes/hash,
+allows the resolved target only within the explicit production/read-only union,
+and retains the private helper's old contract without an explicit namespace.
+Independent full review, 62 dependency tests and quick checks passed.
+
+The supervisor used the existing bound-output full-checkpoint ferry for LFM
+quality telemetry while the immutable R4 hook remains unchanged. Saved global
+19,639, full SHA `953c0680c4eec37275564b6511923eb27e2200c71a8c32f41e2dd98639993923`,
+2,571,957,999 bytes, passed independent private readback. Its task evaluation is
+pending; this is not a normal owner-publication certificate or readiness credit.
+
+Mellum's first R4 entry stopped before decoding because `_recipe_plan` deliberately
+omits the caller-supplied code inventory. The corrected ordinary preparer and
+its complete metadata preview passed. A genuine subsequent single parent decode
+and compact actor export passed at 10:30:58, preserving saved global 25,692 and
+all optimizer/RNG/exposure. The entry then stopped before model allocation/SGD:
+`_qualified_refresh_updates` expected signal-name strings, while actual
+`StopSignal` receipts contain `signal`/`unix` records. `57fbaf646` validates the
+actual producer format, including finite numeric times, without rewriting the
+historical receipt or replaying its 611 earned updates. Actual OS-signal tests,
+68 completed-API tests, independent review and quick checks passed.
+
+The Mellum compact actor payload (24,308,806,189 bytes,
+SHA `55e48d6c5c0ac6a07e74c02c258e0d0c353e280e6fbf259f0452c000cec7b8bd`)
+is independently privately readback verified. Local transfer/task evaluation is
+in progress; no new result or R4 optimizer update is claimed. A reviewed entry
+successor can reuse this verified payload after a genuine restore, preserving
+the full source's five-field stat including ctime and writing no duplicate view.
+
+R5v3 combines the shared resident CE addition fix (`300c33f30`, `969444054`),
+provider alias correction, and both reviewed completed-API corrections
+(optional recipe byte annotations and real signal records) in the default and
+both role bases. Package code is
+`a5982611de3c3877854f99c32d7943c4a7925906f754b3a073e6a53603330a81`;
+construction SHA is
+`db6b160b8d34bc63eabff1740a85ee714a761d90e30214c6f9a485622573b2c2`.
+All 291 composed CPU checks and four role-loader checks passed. Physical staging,
+actual SDK/preflight and safe owner succession remain separate from training.
+Mellum's next target is direct-owner v2 / whole-recipe controller v5. Prepared
+3,211 LFM / 3,210 Mellum teacher rows remain uncredited: preserve classification
+continuation laws and append promptly after the appropriate actual R5 context.
+
+Storage dependency review cleared thirteen superseded private Mellum full
+checkpoint copies. Strict dry-run equality, current verified recovery custody,
+all pending exports, and required parent protections preceded deletion.
+Actual reclaimed bytes: **626,761,117,093**. No source/held data, sandbox payload,
+active parent or compact view was selected. Receipt:
+`/home/werg/data/dgxops/mellum-owned-checkpoint-cleanup-result-successor-root-20261020.json`.
+The standing retention service is active with current global-25,692 recovery.
+
+The prospective semantic scheduler's independent review also required actual
+allocation ownership: the consumer must genuinely release RAW before loading
+frozen VAE while its peer keeps SGD. Further lifecycle repairs cover expired
+rendezvous, operational cancellation with useful SGD, fixed saved-VAE parents,
+and successful preparation consumption. Final review and coherent deployment
+remain pending; code and protocol fixtures do not grant production readiness.
+The full main suite for `e0703038ce` passed; `353b56d084` is running.
