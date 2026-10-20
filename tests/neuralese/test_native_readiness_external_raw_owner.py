@@ -20,9 +20,12 @@ def test_default_still_manages_raw():
 @pytest.mark.parametrize('ready_count',[0,2])
 def test_controller_checks_readiness_but_only_owned_mode_launches_raw(tmp_path,monkeypatch,manage,ready_count):
     curriculum=tmp_path/'curriculum.json';curriculum.write_text('{}')
+    from natlang_neuralese.rl.native_role_release import binding
+    release_plan=tmp_path/'release-plan.json'
+    release_plan.write_text(json.dumps({'models':[{'model':'fixture'}]}))
     config={'schema':'natlang.native-shared-stage-controller/1','out':str(tmp_path/'out'),
             'curriculum':str(curriculum),'command':['semantic'],
-            'raw_rl_bootstrap':{'path':'release-plan','sha256':'0'*64},
+            'raw_rl_bootstrap':binding(release_plan),
             'manage_raw_bootstrap':manage}
     path=tmp_path/'config.json';path.write_text(json.dumps(config))
     stop=SimpleNamespace(requested=False);checks=[];launches=[]
