@@ -369,3 +369,40 @@ def test_accepts_native_preference_adapter_that_forwards_publication_args(tmp_pa
     manifest, _ = owner.read_owner(config['native_checkpoint_publication_owner_pointer'], role='lfm')
     assert published['generation_sha256'] == manifest['generation_sha256']
     assert manifest['publication_spec']['effective_argv']['path']
+
+
+@pytest.mark.parametrize('role', ['lfm', 'mellum'])
+def test_raw_rl_actual_emit_preserves_unsorted_declared_roots(tmp_path, role):
+    from types import SimpleNamespace
+    from natlang_neuralese.rl import native_stage
+    parent=tmp_path/'parent.pt';parent.write_bytes(b'exact optimizer parent')
+    learner=tmp_path/'rounds'/role/'job'/'learner';learner.mkdir(parents=True)
+    pointer=tmp_path/'control'/'current-owner.json'
+    roots=list(reversed(D24_ROOTS))
+    assert roots != sorted(roots)
+    forwarded=['--checkpoint-publication','--checkpoint-publication-namespace','/work/native-production',
+        '--checkpoint-publication-readonly-input-roots',json.dumps(roots)]
+    actual=['--continue-from',str(parent),'--out',str(learner),*forwarded]
+    args=SimpleNamespace(publication_owner_pointer=pointer,publication_role=role,out=learner,
+        continue_from=parent,coefficient_policy=None)
+    observed={}
+    def writer(argv):
+        manifest,_=owner.read_owner(pointer,role=role)
+        observed.update(argv=list(argv),manifest=manifest)
+        return 23
+    assert native_stage._invoke_raw_trainer(args,forwarded,actual,writer)==23
+    assert observed['argv']==actual
+    spec=observed['manifest']['publication_spec']
+    assert spec['publication']['readonly_input_roots']==roots
+    command=json.loads(Path(spec['effective_argv']['path']).read_bytes())
+    assert command[-len(actual):]==actual
+
+
+def test_raw_rl_unsorted_root_transport_still_rejects_relative_roots(tmp_path):
+    from types import SimpleNamespace
+    from natlang_neuralese.rl import native_stage
+    args=SimpleNamespace(publication_owner_pointer=tmp_path/'owner.json',publication_role='lfm')
+    forwarded=['--checkpoint-publication','--checkpoint-publication-namespace','/work/native-production',
+        '--checkpoint-publication-readonly-input-roots',json.dumps(['/absolute','relative'])]
+    with pytest.raises(ValueError,match='absolute declared roots'):
+        native_stage._publication_values(args,forwarded)

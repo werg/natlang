@@ -193,12 +193,15 @@ def _publication_values(args, trainer):
         return trainer[found[0]+1]
     if '--checkpoint-publication' not in trainer:
         raise ValueError('owner publication trainer disabled checkpoint publication')
-    from ..model.native_checkpoint_control import publication_selection
+    from ..model.native_checkpoint_control import publication_selection, validate_publication_selection
     namespace=one('--checkpoint-publication-namespace')
     roots=json.loads(one('--checkpoint-publication-readonly-input-roots'))
     if not isinstance(roots,list) or not all(isinstance(value,str) for value in roots):
         raise ValueError('owner publication roots must be an explicit JSON string list')
-    return publication_selection(namespace=namespace,readonly_input_roots=roots)
+    selection=publication_selection(namespace=namespace,readonly_input_roots=roots)
+    # The verifier canonicalizes roots internally; the owner manifest must still
+    # preserve the exact list forwarded to the real, unchanged trainer command.
+    return validate_publication_selection({**selection,'readonly_input_roots':roots})
 
 
 def _invoke_raw_trainer(args, forwarded_trainer_args, actual_trainer_args, train):
