@@ -309,6 +309,25 @@ def verify_handoff_metadata(reference, *, requirement=None):
     return record
 
 
+def _verify_reached_operational_boundary(recovery,boundary,updates):
+    """A reached scheduling quantum can still have unfinished end evaluation."""
+    if boundary['reached'] is False:
+        return
+    stop=json.loads(_bound(recovery['operational_stop']).read_text())
+    argv=process_argv(stop['trainer'])
+    if (boundary.get('kind')!='semantic-refresh' or argv.count('-m')!=1
+            or argv[argv.index('-m')+1]!='natlang_neuralese.train.native_state_sft'):
+        raise ValueError('reached operational recovery requires its actual SFT refresh boundary')
+    from ..train.native_state_sft import build_parser
+    try:
+        args=build_parser().parse_args(argv[argv.index('-m')+2:])
+    except (SystemExit,TypeError,ValueError) as error:
+        raise ValueError('reached operational recovery lost its declared refresh quantum') from error
+    quantum=args.refresh_after_updates
+    if type(quantum)is not int or quantum<=0 or updates<quantum:
+        raise ValueError('reached operational recovery did not earn its declared refresh quantum')
+
+
 def _saved_update_recovery_controls(reference,receipt):
     """Authenticate earned historical work without treating failure as success."""
     from .native_bridge import verify_result_inventory
@@ -375,7 +394,8 @@ def _saved_update_recovery_controls(reference,receipt):
             or report.get('checkpoint')!=slot['path'] or report.get('checkpoint_sha256')!=checkpoint['sha256']
             or (report.get('continuation')or{}).get('checkpoint_sha256')!=parent
             or boundary.get('new_optimizer_updates')!=updates
-            or boundary.get('reached') is not (False if operational else True)
+            or type(boundary.get('reached'))is not bool
+            or (not operational and boundary['reached']is not True)
             or boundary.get('checkpoint_sha256')!=checkpoint['sha256']
             or (readiness.get('checkpoint')or{}).get('sha256')!=checkpoint['sha256']
             or (certificate.get('native_identity')or{}).get('checkpoint_sha256')!=checkpoint['sha256']):
@@ -387,6 +407,7 @@ def _saved_update_recovery_controls(reference,receipt):
         resident = interrupted.verify_controls(recovery,receipt=readiness,report=report,
             certificate=certificate,spec=spec,intent=intent,identities=identities,
             terminal=terminal,parent=parent)
+        _verify_reached_operational_boundary(recovery,boundary,updates)
     else:
         resident = None
         _saved_update_memory_controls(recovery,artifact,slot,parent,spec,report)
