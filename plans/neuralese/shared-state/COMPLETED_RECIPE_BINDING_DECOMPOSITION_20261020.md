@@ -39,3 +39,15 @@ its SHA from the original global snapshot. The destination configured-plan path
 may differ; it does not redefine the old authority. Serialized transition tests
 exercise both destination layouts and both reference forms without cursor,
 optimizer, exposure or checkpoint changes. Invalid optional byte counts fail.
+
+## Non-admitting preference capacity history
+
+Policy: preserve actual current admission and replay inputs; a diagnostic capacity
+case audit reference explicitly marked `training_admission: false` grants no
+data admission. Its historical `provenance.admission_audit` is retained in the authenticated
+descriptor bytes but is not a current replay dependency. The crisp closure walker
+recognizes only that exact top-level schema and the direct audit reference's
+explicit false flag, then skips only that exact provenance field. A flag on the
+document itself does not authorize skipping an unmarked audit reference. Other provenance, source, inputs, cases and
+runtime references remain strict, including nested same-named fields. No general
+provenance exemption, certificate rewrite or training credit is introduced.

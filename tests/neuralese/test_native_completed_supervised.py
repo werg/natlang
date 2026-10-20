@@ -687,3 +687,33 @@ def test_early_refresh_accepts_actual_stop_signal_records_without_rewriting_rece
     assert adapt._qualified_refresh_updates({'supervised_quantum_updates':1000},
         {'id':'full'},receipt,{'trainer_parameters':{'refresh_after_updates':1000}})==611
     assert receipt==original
+
+
+@pytest.mark.parametrize('mutation',[None,'schema','missing-false','top-false-only','true','zero','other-provenance','nested-audit','nested-descriptor','current-input'])
+def test_nonadmitting_capacity_history_skips_only_exact_historical_audit(tmp_path,monkeypatch,mutation):
+    package=tmp_path/'package';package.mkdir();(package/'module.py').write_text('VALUE=1\n')
+    current=tmp_path/'current-admission.json';write(current,{'actual':'current admission remains required'})
+    missing={'path':str(tmp_path/'discarded-historical-audit.json'),'sha256':'a'*64,'all_pair_token_render_verified':True,'training_admission':False}
+    descriptor={'schema':'natlang.native-preference-capacity-case/1',
+        'provenance':{'admission_audit':missing,'current_admission':adapt.binding(current)}}
+    if mutation=='schema':descriptor['schema']='natlang.other-capacity-case/1'
+    elif mutation=='missing-false':missing.pop('training_admission')
+    elif mutation=='top-false-only':
+        descriptor['training_admission']=False;missing.pop('training_admission')
+    elif mutation=='true':missing['training_admission']=True
+    elif mutation=='zero':missing['training_admission']=0
+    elif mutation=='other-provenance':descriptor['provenance']['current_admission']=missing
+    elif mutation=='nested-audit':descriptor['provenance']['nested']={'admission_audit':missing}
+    elif mutation=='nested-descriptor':descriptor={'nested':descriptor}
+    elif mutation=='current-input':descriptor['inputs']={'required':missing}
+    case=tmp_path/'capacity.json';write(case,descriptor)
+    proof={'schema':adapt.SCHEMA,'package':str(package),'code':adapt.code_inventory(package),'capacity':adapt.binding(case)}
+    path=tmp_path/'proof.json';write(path,proof);monkeypatch.setattr(adapt,'verify',lambda reference:proof)
+    if mutation:
+        with pytest.raises((ValueError,FileNotFoundError)):adapt.dependencies(adapt.binding(path))
+    else:
+        refs=adapt.dependencies(adapt.binding(path))
+        assert refs[str(case)]['sha256']==adapt.binding(case)['sha256']
+        assert str(current)in refs and missing['path']not in refs
+        current.write_text('changed current admission')
+        with pytest.raises(ValueError):adapt.dependencies(adapt.binding(path))

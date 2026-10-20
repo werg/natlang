@@ -749,7 +749,17 @@ def dependencies(reference):
                 if value.get('native_state')is True:
                     historical.update(('supervised_quantum_control','supervised_stage_quantum_control'))
             for key,item in value.items():
-                if key not in historical:walk(item)
+                if key in historical:continue
+                if (document and value.get('schema')=='natlang.native-preference-capacity-case/1'
+                        and key=='provenance' and isinstance(item,dict)):
+                    # This diagnostic explicitly grants no training admission.
+                    # Retain its original audit in the descriptor's bound bytes;
+                    # every other current/provenance dependency stays strict.
+                    for name,reference in item.items():
+                        if (name=='admission_audit' and isinstance(reference,dict)
+                                and reference.get('training_admission')is False):continue
+                        walk(reference)
+                else:walk(item)
         elif isinstance(value,list):
             for item in value:walk(item)
     while pending:
