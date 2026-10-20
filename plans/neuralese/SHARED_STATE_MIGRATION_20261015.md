@@ -48,6 +48,29 @@ through the projected-value implementation.
 
 ## Current status
 
+October20, 03:45 UTC: actual observed updates reached18,861 LFM and24,889
+Mellum. Mellum's historical24,575 checkpoint finished the protected16-family
+task evaluation:8 successes,5 semantic mismatches and3 repetitions, with no
+infrastructure errors. This is not a qualification of newer weights or a
+same-runtime comparison with the older24,508 result. LFM18,619 evaluation
+continues. Full recipes and communication-cohort exposure remain unfinished.
+
+The coherent122c runtime passed120 focused composed-package checks and both
+role-authority checks; its full physical mirror passed actual shipped CLI
+imports. Independent source review also cleared the sealed dependency
+replacement and exact CE-only index continuation, published as ade08e496 and
+66528d2ee. These preserve graph entries and exposure while explicitly changing
+the source-policy key. A newly found semantic held-evaluation seam must remove
+the training-only CE policy before deployment; its focused regression is
+passing. No new cloud-runtime adoption is claimed yet.
+
+FP32 prefix CE readout reuse is published in f73607865 after34 CPU and4 CUDA
+checks plus the integrated quick check. BF16 folding changed real derivatives,
+so BF16 retains the original path with bitwise derivative agreement. This
+optimization is excluded from the immediate122c bundle because its source
+context depends on earlier readout changes; that dependency is not silently
+imported. Useful CE/data/runtime adoption proceeds independently.
+
 October20, 03:29 UTC: both students are taking useful updates. LFM shared4395
 reached18,792 with26,312/26,312 foundation and30,574/114,794 communication
 visits; Mellum R14 reached24,844 in the next offline-preference stage. Neither
