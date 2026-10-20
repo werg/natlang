@@ -81,3 +81,28 @@ def test_retry_rejects_changed_policy(context):
     args['quantum_updates'] = 2000
     with pytest.raises(ValueError, match='changed on retry'):
         prepare_drained_supervised_continuation(**args)
+
+
+def test_actual_child_import_uses_bound_runtime_without_parent_sys_path(tmp_path):
+    import subprocess
+    import sys
+    from scripts.coreweave.native_controller_continuation import runtime_child_environment
+    package = tmp_path / 'training/neuralese/natlang_neuralese'
+    package.mkdir(parents=True)
+    (package / '__init__.py').write_text('BOUND_RUNTIME = "qualified"\n')
+    original = {'PYTHONPATH': '/obsolete/runtime', 'NATLANG_REPO': '/obsolete',
+                'CUDA_VISIBLE_DEVICES': '0', 'UNCHANGED_SETTING': 'preserved'}
+    environment = runtime_child_environment(tmp_path, original)
+    child = subprocess.run([sys.executable, '-c',
+        'import natlang_neuralese; print(natlang_neuralese.BOUND_RUNTIME)'],
+        cwd='/', env=environment, text=True, capture_output=True, check=True)
+    assert child.stdout.strip() == 'qualified'
+    assert original['PYTHONPATH'] == '/obsolete/runtime'
+    assert environment['CUDA_VISIBLE_DEVICES'] == '0'
+    assert environment['UNCHANGED_SETTING'] == 'preserved'
+
+
+def test_child_environment_rejects_incomplete_runtime(tmp_path):
+    from scripts.coreweave.native_controller_continuation import runtime_child_environment
+    with pytest.raises(ValueError, match='Python package'):
+        runtime_child_environment(tmp_path, {})

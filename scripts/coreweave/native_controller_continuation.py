@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 from pathlib import Path
 
 
@@ -53,3 +54,19 @@ def prepare_drained_supervised_continuation(record, saved, *, drain, resident,
              'whole_recipe_completed': False, 'exposure_credit': 0}
     emit(directory / 'drained-continuation-proof.json', proof)
     return reference
+
+
+def runtime_child_environment(runtime, environment=None):
+    """Propagate the exact bound runtime to controller subprocess imports.
+
+    The caller verifies the runtime inventory. Dynamic ``sys.path`` changes
+    affect only the current interpreter and cannot substitute for this binding.
+    """
+    root = Path(runtime).resolve(strict=True)
+    package = root / 'training/neuralese/natlang_neuralese'
+    if not (package / '__init__.py').is_file():
+        raise ValueError('controller child runtime lacks its Python package')
+    result = dict(os.environ if environment is None else environment)
+    result['NATLANG_REPO'] = str(root)
+    result['PYTHONPATH'] = str(root / 'training/neuralese') + os.pathsep + str(root)
+    return result

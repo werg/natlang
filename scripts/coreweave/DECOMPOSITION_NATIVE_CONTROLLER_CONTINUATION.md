@@ -9,3 +9,5 @@ The recipe and its owning bootstrap choose the supervised scheduling quantum. Th
 5. Commit the immutable recipe and provenance proof through the existing durable JSON mechanism. Matching retries reuse their contents; conflicting retries fail.
 
 Model-facing prompts and numerical execution are unchanged. Tests exercise the actual stage ID/kind distinction and preservation of the complete recipe.
+
+The bound runtime also supplies the subprocess environment. The shared launcher helper copies the caller environment, replaces only `NATLANG_REPO` and `PYTHONPATH` with that exact complete runtime, and preserves device selection and other settings. This is outside-world process plumbing, not scheduling policy. An actual fresh Python child import tests the distinction from the parent's in-process import path.
