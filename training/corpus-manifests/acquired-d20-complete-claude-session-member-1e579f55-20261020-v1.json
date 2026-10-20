@@ -1,0 +1,345 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "acquired-d20-complete-claude-session-member-1e579f55-20261020-v1",
+  "owner": "dgx",
+  "path": "runs/acquired-d20-complete-claude-session-member-1e579f55-20261020-v1",
+  "files": [
+    {
+      "path": "admission-acquired-d20-complete-claude-session-member-1e579f55-20261020-v1/audit.json",
+      "bytes": 20620,
+      "sha256": "f5f6ccac8974e9072989b93ed10d22379d145687985649ace15fe2e6c339d581"
+    },
+    {
+      "path": "admission-acquired-d20-complete-claude-session-member-1e579f55-20261020-v1/lfm25-train-sources.json",
+      "bytes": 318,
+      "sha256": "cec1d6270f494e773615433adac08ccfa6f729f0a027fb392550bf1bbca5d3ef"
+    },
+    {
+      "path": "admission-acquired-d20-complete-claude-session-member-1e579f55-20261020-v1/mellum21-train-sources.json",
+      "bytes": 321,
+      "sha256": "f40b5b0672dbde898a6894940a9e87a891a73e231d942873ebc1d2dd74cc221a"
+    },
+    {
+      "path": "admission-acquired-d20-complete-claude-session-member-1e579f55-20261020-v1/protection-continuation-evidence/90960ebfd6ebe8273558bf5af591a958f8697e244aab47381c5a606e0fa30a91/decision-holds/native-non-success-20261015-v1.jsonl",
+      "bytes": 2569,
+      "sha256": "56d841c7223daddad9768ff271b83bd22e803d486603a70139e2395892990177",
+      "lines": 7
+    },
+    {
+      "path": "admission-acquired-d20-complete-claude-session-member-1e579f55-20261020-v1/protection-continuation-evidence/90960ebfd6ebe8273558bf5af591a958f8697e244aab47381c5a606e0fa30a91/decision-holds/semantic-ticket-crisp-bypass-20261015-v3.jsonl",
+      "bytes": 2047232,
+      "sha256": "cdbe9673c9d702eb63eea54c4465a7089d996cc4eb7b79c2a8e8942d5c0410c9",
+      "lines": 4589
+    },
+    {
+      "path": "admission-acquired-d20-complete-claude-session-member-1e579f55-20261020-v1/protection-continuation-evidence/90960ebfd6ebe8273558bf5af591a958f8697e244aab47381c5a606e0fa30a91/held-union/acquired-connected-source-groups.jsonl",
+      "bytes": 914296,
+      "sha256": "1fea2eb0b4b30008d014025542aaef68d24be36af4804008133a29a9849eec34",
+      "lines": 1
+    },
+    {
+      "path": "admission-acquired-d20-complete-claude-session-member-1e579f55-20261020-v1/protection-continuation-evidence/90960ebfd6ebe8273558bf5af591a958f8697e244aab47381c5a606e0fa30a91/held-union/acquired-remaining-complete-source/source-groups.jsonl",
+      "bytes": 16694,
+      "sha256": "913d2335bcd3f158fe3059c80232313209ae639ad93384092abb33f9afe52c4b",
+      "lines": 1
+    },
+    {
+      "path": "admission-acquired-d20-complete-claude-session-member-1e579f55-20261020-v1/protection-continuation-evidence/90960ebfd6ebe8273558bf5af591a958f8697e244aab47381c5a606e0fa30a91/held-union/full/source-groups/text-data.jsonl",
+      "bytes": 866188,
+      "sha256": "84330b32a180aa8166e805a6bed434276c6e21f37cca779b42eef479701fb8ac",
+      "lines": 1
+    },
+    {
+      "path": "admission-acquired-d20-complete-claude-session-member-1e579f55-20261020-v1/protection-continuation-evidence/90960ebfd6ebe8273558bf5af591a958f8697e244aab47381c5a606e0fa30a91/held-union/program-header/source-groups/text-data.jsonl",
+      "bytes": 866188,
+      "sha256": "84330b32a180aa8166e805a6bed434276c6e21f37cca779b42eef479701fb8ac",
+      "lines": 1
+    },
+    {
+      "path": "admission-acquired-d20-complete-claude-session-member-1e579f55-20261020-v1/protection-continuation-evidence/90960ebfd6ebe8273558bf5af591a958f8697e244aab47381c5a606e0fa30a91/held-union/whole-trajectory/source-groups/text-data.jsonl",
+      "bytes": 866188,
+      "sha256": "84330b32a180aa8166e805a6bed434276c6e21f37cca779b42eef479701fb8ac",
+      "lines": 1
+    },
+    {
+      "path": "admission-acquired-d20-complete-claude-session-member-1e579f55-20261020-v1/protection-continuation-evidence/90960ebfd6ebe8273558bf5af591a958f8697e244aab47381c5a606e0fa30a91/inherited-components.jsonl",
+      "bytes": 1893062,
+      "sha256": "e657566ba165ce610e84b01cf46774d6caac0cd476f39be468eeda375c041377",
+      "lines": 7861
+    },
+    {
+      "path": "admission-acquired-d20-complete-claude-session-member-1e579f55-20261020-v1/protection-continuation-evidence/90960ebfd6ebe8273558bf5af591a958f8697e244aab47381c5a606e0fa30a91/inherited-projection.json",
+      "bytes": 5469555,
+      "sha256": "f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349"
+    },
+    {
+      "path": "admission-acquired-d20-complete-claude-session-member-1e579f55-20261020-v1/protection-continuation-evidence/90960ebfd6ebe8273558bf5af591a958f8697e244aab47381c5a606e0fa30a91/protection-manifest.json",
+      "bytes": 110316,
+      "sha256": "90960ebfd6ebe8273558bf5af591a958f8697e244aab47381c5a606e0fa30a91"
+    },
+    {
+      "path": "admission-acquired-d20-complete-claude-session-member-1e579f55-20261020-v1/protection-continuation-evidence/90960ebfd6ebe8273558bf5af591a958f8697e244aab47381c5a606e0fa30a91/quality-groups.jsonl",
+      "bytes": 3613577,
+      "sha256": "1fe15465ccae78e771e0e898e71745aaa5cd5fbae6cef16616ed6dc550de8ca9",
+      "lines": 1
+    },
+    {
+      "path": "admission-acquired-d20-complete-claude-session-member-1e579f55-20261020-v1/protection-continuation-evidence/90960ebfd6ebe8273558bf5af591a958f8697e244aab47381c5a606e0fa30a91/source-group-components.jsonl",
+      "bytes": 1893387,
+      "sha256": "80dcf2854cbae32ed2ea60d32a553539cb1668790eebb9d5e6aec068cf2a2705",
+      "lines": 7862
+    },
+    {
+      "path": "admission-acquired-d20-complete-claude-session-member-1e579f55-20261020-v1/protection-continuation-evidence/90960ebfd6ebe8273558bf5af591a958f8697e244aab47381c5a606e0fa30a91/source-reviews/datasets.json",
+      "bytes": 435,
+      "sha256": "b597f17436c7848ac693070d72d080036f57187cd764185e13738dd7783a901a"
+    },
+    {
+      "path": "admission-acquired-d20-complete-claude-session-member-1e579f55-20261020-v1/protection-continuation-evidence/90960ebfd6ebe8273558bf5af591a958f8697e244aab47381c5a606e0fa30a91/source-reviews/family-holds.json",
+      "bytes": 2106,
+      "sha256": "ae38254aa59a9422f7d5793427d44c1898adfc2268bfd9652865d8d653cfc8f0"
+    },
+    {
+      "path": "admission-acquired-d20-complete-claude-session-member-1e579f55-20261020-v1/protection-continuation-evidence/90960ebfd6ebe8273558bf5af591a958f8697e244aab47381c5a606e0fa30a91/source-reviews/holds.jsonl",
+      "bytes": 167126,
+      "sha256": "27b31f38b8d3b6108ea25eebb1cf1f614e204707a36b28b660b5484d9c2d9593",
+      "lines": 279
+    },
+    {
+      "path": "admission-acquired-d20-complete-claude-session-member-1e579f55-20261020-v1/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/decision-holds/native-non-success-20261015-v1.jsonl",
+      "bytes": 2569,
+      "sha256": "56d841c7223daddad9768ff271b83bd22e803d486603a70139e2395892990177",
+      "lines": 7
+    },
+    {
+      "path": "admission-acquired-d20-complete-claude-session-member-1e579f55-20261020-v1/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/decision-holds/semantic-ticket-crisp-bypass-20261015-v3.jsonl",
+      "bytes": 2047232,
+      "sha256": "cdbe9673c9d702eb63eea54c4465a7089d996cc4eb7b79c2a8e8942d5c0410c9",
+      "lines": 4589
+    },
+    {
+      "path": "admission-acquired-d20-complete-claude-session-member-1e579f55-20261020-v1/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/held-union/acquired-connected-source-groups.jsonl",
+      "bytes": 914296,
+      "sha256": "1fea2eb0b4b30008d014025542aaef68d24be36af4804008133a29a9849eec34",
+      "lines": 1
+    },
+    {
+      "path": "admission-acquired-d20-complete-claude-session-member-1e579f55-20261020-v1/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/held-union/acquired-remaining-complete-source/source-groups.jsonl",
+      "bytes": 16694,
+      "sha256": "913d2335bcd3f158fe3059c80232313209ae639ad93384092abb33f9afe52c4b",
+      "lines": 1
+    },
+    {
+      "path": "admission-acquired-d20-complete-claude-session-member-1e579f55-20261020-v1/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/held-union/full/source-groups/text-data.jsonl",
+      "bytes": 866188,
+      "sha256": "84330b32a180aa8166e805a6bed434276c6e21f37cca779b42eef479701fb8ac",
+      "lines": 1
+    },
+    {
+      "path": "admission-acquired-d20-complete-claude-session-member-1e579f55-20261020-v1/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/held-union/program-header/source-groups/text-data.jsonl",
+      "bytes": 866188,
+      "sha256": "84330b32a180aa8166e805a6bed434276c6e21f37cca779b42eef479701fb8ac",
+      "lines": 1
+    },
+    {
+      "path": "admission-acquired-d20-complete-claude-session-member-1e579f55-20261020-v1/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/held-union/whole-trajectory/source-groups/text-data.jsonl",
+      "bytes": 866188,
+      "sha256": "84330b32a180aa8166e805a6bed434276c6e21f37cca779b42eef479701fb8ac",
+      "lines": 1
+    },
+    {
+      "path": "admission-acquired-d20-complete-claude-session-member-1e579f55-20261020-v1/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/inherited-components.jsonl",
+      "bytes": 1387914,
+      "sha256": "e47985665088e83424aa3b21c3daba8e46fe610e682b02d6f6bfd3e1d0b532e2",
+      "lines": 1760
+    },
+    {
+      "path": "admission-acquired-d20-complete-claude-session-member-1e579f55-20261020-v1/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/inherited-projection.json",
+      "bytes": 4559106,
+      "sha256": "1f96c76a023a56a06e1aac0a6131e555762659be3c99731fd9fc97a3f44a9fbc"
+    },
+    {
+      "path": "admission-acquired-d20-complete-claude-session-member-1e579f55-20261020-v1/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/protection-manifest.json",
+      "bytes": 5469555,
+      "sha256": "f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349"
+    },
+    {
+      "path": "admission-acquired-d20-complete-claude-session-member-1e579f55-20261020-v1/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/quality-groups.jsonl",
+      "bytes": 3613577,
+      "sha256": "1fe15465ccae78e771e0e898e71745aaa5cd5fbae6cef16616ed6dc550de8ca9",
+      "lines": 1
+    },
+    {
+      "path": "admission-acquired-d20-complete-claude-session-member-1e579f55-20261020-v1/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/source-group-components.jsonl",
+      "bytes": 1893062,
+      "sha256": "e657566ba165ce610e84b01cf46774d6caac0cd476f39be468eeda375c041377",
+      "lines": 7861
+    },
+    {
+      "path": "admission-acquired-d20-complete-claude-session-member-1e579f55-20261020-v1/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/source-reviews/datasets.json",
+      "bytes": 435,
+      "sha256": "b597f17436c7848ac693070d72d080036f57187cd764185e13738dd7783a901a"
+    },
+    {
+      "path": "admission-acquired-d20-complete-claude-session-member-1e579f55-20261020-v1/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/source-reviews/family-holds.json",
+      "bytes": 2106,
+      "sha256": "ae38254aa59a9422f7d5793427d44c1898adfc2268bfd9652865d8d653cfc8f0"
+    },
+    {
+      "path": "admission-acquired-d20-complete-claude-session-member-1e579f55-20261020-v1/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/source-reviews/holds.jsonl",
+      "bytes": 167126,
+      "sha256": "27b31f38b8d3b6108ea25eebb1cf1f614e204707a36b28b660b5484d9c2d9593",
+      "lines": 279
+    },
+    {
+      "path": "admission-acquired-d20-complete-claude-session-member-1e579f55-20261020-v1/row-proof.jsonl",
+      "bytes": 4800,
+      "sha256": "3a6a39da180c612d243bc62e3059c91a433d94cbcbbf1361405d2b923bbeb818",
+      "lines": 4
+    },
+    {
+      "path": "admission-acquired-d20-complete-claude-session-member-1e579f55-20261020-v1/source-render-samples.json",
+      "bytes": 17643,
+      "sha256": "9013e2d13533eb3a92b64bafc9c1d18493d6f3506c893c8af0bf5ff8a4c32050"
+    },
+    {
+      "path": "first-complete-shard-materialization.json",
+      "bytes": 1376692,
+      "sha256": "bf472278f603d629fd81210d1240ec212475fbb46702c27869e95f9c2b266501"
+    },
+    {
+      "path": "native-full-session-both-v1/lfm25/omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "native-full-session-both-v1/lfm25/receipt.json",
+      "bytes": 8346,
+      "sha256": "42b7ec783350b007394ab6f5bf96ecc50e439119a1cf7fad8a812c2332098091"
+    },
+    {
+      "path": "native-full-session-both-v1/lfm25/resume-state.json",
+      "bytes": 6599,
+      "sha256": "2757acf5357a013cf7197f6b13b44b52a9af93a6d78ee9854d816ce576656d6c"
+    },
+    {
+      "path": "native-full-session-both-v1/lfm25/test/native-graphs.jsonl.zst",
+      "bytes": 13,
+      "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+    },
+    {
+      "path": "native-full-session-both-v1/lfm25/train/native-graphs.jsonl.zst",
+      "bytes": 17261,
+      "sha256": "9a16762eb76abe2e15da3ae1c406c8d3670347ccaa22574e9a60f9a445cff5ff"
+    },
+    {
+      "path": "native-full-session-both-v1/mellum21/omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "native-full-session-both-v1/mellum21/receipt.json",
+      "bytes": 8494,
+      "sha256": "7854acacf8c848ed5eaa37548ea537f83c17df6230673266d27d17d19c531b55"
+    },
+    {
+      "path": "native-full-session-both-v1/mellum21/resume-state.json",
+      "bytes": 6741,
+      "sha256": "e9892706584ac309518b3c5ccd172a29307254689ac119771364a2b56d861712"
+    },
+    {
+      "path": "native-full-session-both-v1/mellum21/test/native-graphs.jsonl.zst",
+      "bytes": 13,
+      "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+    },
+    {
+      "path": "native-full-session-both-v1/mellum21/train/native-graphs.jsonl.zst",
+      "bytes": 16200,
+      "sha256": "26e07d51396c6f5f8cde4341aecf74f5e5eb340d0a57933ce7abcce308429dcc"
+    },
+    {
+      "path": "ordinary-capacity-limits.json",
+      "bytes": 146,
+      "sha256": "555a5e60089905cbb94cb6411a43d3639a9f39ff29cd7bddc6fb51b03d9464d0"
+    },
+    {
+      "path": "ordinary-capacity-next2-v1/files/coverage.jsonl",
+      "bytes": 3244,
+      "sha256": "b6655aace17bf6a05ecb35b598693a7595c2bd6897cef01ccc18a23feca8c064",
+      "lines": 4
+    },
+    {
+      "path": "ordinary-capacity-next2-v1/files/lfm25/test/fit.jsonl.zst",
+      "bytes": 13,
+      "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+    },
+    {
+      "path": "ordinary-capacity-next2-v1/files/lfm25/test/remaining-long.jsonl.zst",
+      "bytes": 13,
+      "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+    },
+    {
+      "path": "ordinary-capacity-next2-v1/files/lfm25/train/fit-sources.json",
+      "bytes": 265,
+      "sha256": "9f453da4921310943093c6af516f673920c89948e54e41ecd7c43131dca547d2"
+    },
+    {
+      "path": "ordinary-capacity-next2-v1/files/lfm25/train/fit.jsonl.zst",
+      "bytes": 17708,
+      "sha256": "b423bca6348aab4120eefa95fea1a1fb3e52c12d6151da46e40eac1f16eb1596"
+    },
+    {
+      "path": "ordinary-capacity-next2-v1/files/lfm25/train/remaining-long.jsonl.zst",
+      "bytes": 13,
+      "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+    },
+    {
+      "path": "ordinary-capacity-next2-v1/files/mellum21/test/fit.jsonl.zst",
+      "bytes": 13,
+      "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+    },
+    {
+      "path": "ordinary-capacity-next2-v1/files/mellum21/test/remaining-long.jsonl.zst",
+      "bytes": 13,
+      "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+    },
+    {
+      "path": "ordinary-capacity-next2-v1/files/mellum21/train/fit-sources.json",
+      "bytes": 265,
+      "sha256": "4c15b3653b3a099ddb209bed7b67f8fc93f6fed7e5dcc016b92f27015a6bbfdb"
+    },
+    {
+      "path": "ordinary-capacity-next2-v1/files/mellum21/train/fit.jsonl.zst",
+      "bytes": 16586,
+      "sha256": "f9e81c5ed0c672e89b58e469ae77ff9ce63b8734881cb98aad97b7a233773000"
+    },
+    {
+      "path": "ordinary-capacity-next2-v1/files/mellum21/train/remaining-long.jsonl.zst",
+      "bytes": 13,
+      "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+    },
+    {
+      "path": "ordinary-capacity-next2-v1/files/pending-sources.json",
+      "bytes": 1393,
+      "sha256": "be1f8206696df5c7a8c630b937f531b95a5313c4aa05e84f9d5b84871452a326"
+    },
+    {
+      "path": "ordinary-capacity-next2-v1/receipt.json",
+      "bytes": 5681,
+      "sha256": "9e07bbda56dcd43967a17ad06c9bfc087d8eaeba667e620ac3d4c53895a04d03"
+    },
+    {
+      "path": "original-partition-producer.py",
+      "bytes": 23864,
+      "sha256": "9282654e7427f1435496ec863bc221222fcec2702ab6cc9115798f3fa0d45c09"
+    },
+    {
+      "path": "verified-members.json",
+      "bytes": 3793,
+      "sha256": "9fbbd40d54fb481d57e88dbd1a72df8ee6d247834f7fe9908008af44faa09ebc"
+    }
+  ],
+  "bytes": 42958239
+}
