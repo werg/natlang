@@ -146,12 +146,14 @@ def test_cuda_two_fp32_production_profile_updates_preserve_optimizer_law(family,
     from natlang_neuralese.model.native_parameter_precision import configure_norm_precision
     from natlang_neuralese.model.native_precision import set_native_linear_precision
     from natlang_neuralese.train.backbone_policy import configure_backbone_training
+    from natlang_neuralese.model.shared_execution import configure_shared_execution
     def production(port,markers,**kwargs):
         model=SharedStateModel(port.to(device='cuda',dtype=torch.float32),markers,
             native_norm_execution='stable-v1',**kwargs)
         if family=='mellum':model.port.hf.natlang_precision='bf16'
         configure_norm_precision(model,'fp32-norms-v1')
         set_native_linear_precision(model,'bf16x6')
+        configure_shared_execution(model,'stable-v1')
         configure_backbone_training(model.port,'latent')
         with torch.no_grad():model.adapter.up.weight.normal_(std=.1)
         return model
