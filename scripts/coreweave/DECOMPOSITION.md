@@ -274,3 +274,18 @@ their sibling imports from the exact reviewed source commit. The real host can
 therefore prepare its own absolute bootstrap/provider bindings without reaching
 back into a supervisor checkout. This adds source closure only, not a process,
 model allocation, mathematical change or readiness claim.
+
+## Full physical runtime and production control layout
+
+The operator supplies an actual complete donor and its exact package identity;
+the optimized composition is an overlay, never a standalone training tree.
+Reuse the physical runtime clone, replace the complete qualified Python package,
+and retain inherited nonpackage publication/provider dependencies. Bind those
+explicit dependencies before copying and again afterwards. Place each role's
+binder/controller and external controls in its explicitly selected production
+control root. Relocate only exact metadata path references and recompute bound
+JSON dependencies bottom-up; numerical and controller Python bytes stay fixed.
+The existing publisher verifies six-mechanism authority after relocation, and
+the inherited publication helper must import from the resulting runtime. These
+are crisp source/custody checks. They do not create an owner, approve readiness,
+relabel an old source plan, or change the existing continuation policy.
