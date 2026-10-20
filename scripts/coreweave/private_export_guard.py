@@ -12,6 +12,26 @@ import re
 import tempfile
 
 
+def commit_uploaded_run_file(api, run_path, name):
+    """Use the SDK's upload notification; callers still verify the full GET.
+
+    Match Run.upload_file without uploading again or changing a finished run's
+    state. Older servers retain their native object-store notification path.
+    Service errors propagate: notification failure is not verified custody.
+    """
+    from wandb.proto import wandb_api_pb2 as apb
+    from wandb.proto import wandb_internal_pb2 as pb
+
+    entity, project, run_id = run_path.split('/')
+    service = api.run(run_path)._service_api
+    if not service.feature_enabled(pb.MARK_RUN_FILES_UPLOADED):
+        return False
+    service.send_api_request(apb.ApiRequest(
+        mark_run_files_uploaded_request=apb.MarkRunFilesUploadedRequest(
+            entity=entity, project=project, run_id=run_id, files=[name])))
+    return True
+
+
 class CacheBoundedReader(io.FileIO):
     """Read unchanged file bytes while advising away consumed clean cache pages.
 

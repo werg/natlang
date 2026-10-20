@@ -16,6 +16,14 @@ Closed boundaries apply the same exact raw-source/student-root preparation verif
 
 Create the owned private-receipt directory before invoking the existing exporter: its upload-phase and verification receipts are durable children of that directory. A successful PUT without the subsequent full GET never advances the frontier.
 
+After a successful scoped PUT, notify the existing W&B SDK service that this
+exact run file was uploaded when the server supports `MARK_RUN_FILES_UPLOADED`.
+Object-store notifications can fail to register otherwise valid bytes. The
+shared export guard supplies this service mechanism for teacher and student
+exports; it neither resumes the run nor grants verification. Continue to require
+the independently downloaded complete object's original SHA-256 and size before
+publishing any durability receipt or advancing a frontier.
+
 Idle flushing measures absence of new eligible completed outputs, independently of activity heartbeats from still-running workers. Keep the complete journal SHA as telemetry. Both existing publisher loops use one exact completed-output identity helper; completion/accounting validation and every repeated queue job remain unchanged.
 
 Canonical guardian repair queues namespace original jobs as
