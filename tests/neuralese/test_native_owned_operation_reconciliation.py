@@ -399,14 +399,28 @@ def test_new_owner_retains_only_exact_previously_acknowledged_prefix():
             raw._acknowledged_owned_stage_ids(chain,[dpo,sft],acknowledged_prefix=prefix)
 
 
-def test_recovery_keeps_the_entire_mandatory_schedule_pending(owned):
+@pytest.mark.parametrize('generation', [0, 3])
+def test_recovery_keeps_the_entire_mandatory_schedule_pending(owned, generation):
     x=owned
+    cursor_path=x['root']/'cycle.json'
+    cursor=json.loads(cursor_path.read_text());cursor['raw_retry_generation']=generation
+    write(cursor_path,cursor)
+    historical=raw.cycle_work_directory(x['root'],cursor)/'supervised/000/bridge'
+    historical.mkdir(parents=True)
+    old_result=historical/'completed.result.json'
+    old_result.write_bytes(b'older completed operation must never become the current parent')
+    # A later occupied generation is historical too, regardless of its shape.
+    raw.cycle_work_directory(x['root'],{**cursor,'raw_retry_generation':generation+1}).mkdir(parents=True)
     result=raw.reconcile_owned_operations(x['config'],x['operations'],x['bare']['recipe'],
         x['reconciliation'],bare_direct_owner=x['bare'],retain_mandatory_schedule=True)
     receipt=json.loads(Path(result['path']).read_text())
     cursor=json.loads((x['root']/'cycle.json').read_text())
     intent=json.loads(Path(receipt['intent']['path']).read_text())
     assert cursor['next_stage']==0 and cursor['phase']=='sft'
+    assert cursor['raw_retry_generation']==generation+2
+    assert not raw.cycle_work_directory(x['root'],cursor).exists()
+    assert cursor['current_checkpoint']==resident.binding(x['pin'])
+    assert old_result.read_bytes()==b'older completed operation must never become the current parent'
     assert cursor['owned_operation_reconciliation']['retain_mandatory_schedule'] is True
     assert intent['mandatory_stage_ids']==['sft']
     assert receipt['whole_recipe_completed'] is False

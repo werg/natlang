@@ -1404,6 +1404,8 @@ def reconcile_owned_operations(config_path,operations,recipe_reference,out,*,bar
                     'recipe_sha256':recipe_reference['sha256'],'runtime_configuration_required':True,
                     'acknowledged_finite_stages':ids,
                     **({'retain_mandatory_schedule':True}if retain_mandatory_schedule else {})}}
+            if retain_mandatory_schedule:
+                next_cursor = _fresh_owned_work_cursor(root, next_cursor)
             next_cursor.pop('pending_rl_round',None);next_cursor.pop('readiness',None)
             directory.mkdir(parents=True,exist_ok=True)
             snapshots={};candidates={}
@@ -1507,6 +1509,16 @@ def cycle_work_directory(root,cursor):
         raise ValueError('RAW cycle work identity is malformed')
     path=Path(root)/'cycles'/f'{cycle:06d}'
     return path if generation==0 else path/f'retired-attempt-{generation:06d}'
+
+
+def _fresh_owned_work_cursor(root, cursor):
+    """An external successor must not replay an older completed operation."""
+    result = dict(cursor)
+    generation = result.get('raw_retry_generation', 0)
+    while cycle_work_directory(root, {**result, 'raw_retry_generation': generation}).exists():
+        generation += 1
+    result['raw_retry_generation'] = generation
+    return result
 
 
 def student_cycle(plan_path,declaration,handoff,directory,*,stop):

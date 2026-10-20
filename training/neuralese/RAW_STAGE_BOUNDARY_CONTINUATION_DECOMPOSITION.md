@@ -13,3 +13,11 @@ Crisp helpers perform byte bindings, exact comparisons, leases and atomic writes
 A fixed selector may also be explicitly installed in the authenticated role config, preserving an already sealed bootstrap-plan identity. Installing that selector is an owner-controlled metadata transition; the pointer grants no training credit. Restart first authenticates and consumes any existing sealed bridge request and its original config. It never reconstructs that request from the operation's advanced state; only after the earned cursor advances may the next stage apply a successor.
 
 A successor may bind a built task-runtime directory and its existing canonical runtime inventory digest. Verify that exact inventory and every effective task-evaluation runtime before changing the RAW collector runtime in the same durable boundary intent. Python trainer/package and publication runtime identities remain separately bound. Recovery rechecks the same task-runtime identity before completing or accepting the commit; no model execution, task success, or training credit is invented.
+# Recovered owned work and operation identity
+
+When the supervisor retains the entire pending schedule after an external
+optimizer continuation, reserve an unused attempt directory in the existing
+cycle. This crisp durability rule prevents an older completed bridge result
+from replacing the newer saved parent. Keep all old operation evidence and
+checkpoint exposure; changing the work namespace grants no training credit.
+
