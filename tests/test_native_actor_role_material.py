@@ -11,7 +11,7 @@ from natlang_neuralese.common.hashing import canonical_json_sha256_hex,sha256_fi
 from natlang_neuralese.train.native_resident import code_inventory
 
 
-def fixture(tmp_path,role):
+def fixture(tmp_path,role,*,publisher=False):
     composition=tmp_path/'runtime';composition.mkdir()
     package=composition/'training/neuralese/natlang_neuralese';package.mkdir(parents=True)
     (package/'__init__.py').write_text('# exact source\n')
@@ -23,6 +23,17 @@ def fixture(tmp_path,role):
           ('controller','binder','control_loader','control_manifest','role_mechanism_authorities')}
     material={**refs,'model':role,'runtime':str(composition),'actor_runtime':str(composition),
               'runtime_code_sha256':canonical_json_sha256_hex(code_inventory(package)),'controls':{}}
+    if publisher:
+        from compose_native_actor_runtime import MECHANISMS
+        material['controls']={'native_raw_handoff':emit(composition/'raw-source.json',{'version':'old'})}
+        material['role_mechanism_authorities']=emit(composition/'authorities.json',{
+            name:{key:(material['controls']['native_raw_handoff']['sha256'] if name==role and key.endswith('native_raw_handoff.py')
+                       else 'a'*64) for key in MECHANISMS} for name in ('lfm','mellum')})
+        material['publisher_loader']=emit(composition/'publisher-loader.json',{'source':'same-reviewed-loader'})
+        material['publisher_manifest']=emit(composition/'publisher-manifest.json',{
+            'role':role,'package':str(package),'code_sha256':material['runtime_code_sha256'],
+            'base_loader':material['control_loader'],'base_manifest':material['control_manifest'],
+            'controls':material['controls'],'role_authorities':material['role_mechanism_authorities']})
     material_ref=emit(composition/'material.json',material)
     inventory=code_inventory(package)
     files={str(path.relative_to(composition)):{'sha256':sha256_file_hex(path),'bytes':path.stat().st_size}
@@ -101,3 +112,50 @@ def test_historical_interrupted_actor_keeps_real_origin_and_exact_reviewed_bytes
     inputs['historical_controls']['native_interrupted_update']=changed;emit(path,inputs)
     with pytest.raises(ValueError,match='exact actual reviewed source'):
         prepare(composition,'lfm',path,out)
+
+
+@pytest.mark.parametrize('role',['lfm','mellum'])
+def test_explicit_reviewed_material_continuation_preserves_runtime_and_peer(tmp_path,role):
+    composition,path,inputs=fixture(tmp_path,role,publisher=True)
+    original=(composition/'construction.json').read_bytes()
+    material=json.loads((composition/'material.json').read_bytes())
+    def emit(name,value):
+        target=tmp_path/name;target.write_text(json.dumps(value))
+        return {'path':str(target),'sha256':sha256_file_hex(target),'bytes':target.stat().st_size}
+    new=json.loads(json.dumps(material))
+    new['controls']['native_raw_handoff']=emit('new-raw.json',{'version':'reached-operational'})
+    authority=json.loads(Path(material['role_mechanism_authorities']['path']).read_bytes())
+    authority[role]['rl/native_raw_handoff.py']=new['controls']['native_raw_handoff']['sha256']
+    new['role_mechanism_authorities']=emit('new-authorities.json',authority)
+    manifest=json.loads(Path(material['publisher_manifest']['path']).read_bytes())
+    manifest.update(controls=new['controls'],role_authorities=new['role_mechanism_authorities'])
+    new['publisher_manifest']=emit('new-publisher.json',manifest)
+    inputs['control_material']=emit('new-material.json',new)
+    review=json.loads(Path(inputs['root_review']['path']).read_bytes())
+    review['control_material']=inputs['control_material']
+    inputs['root_review']=emit('new-review.json',review);path.write_text(json.dumps(inputs))
+    out=composition/'binder-config.json';prepare(composition,role,path,out)
+    config=json.loads(out.read_bytes())
+    assert config['controls']==new['controls'] and config['publisher_manifest']==new['publisher_manifest']
+    assert config['role_mechanism_authorities']==new['role_mechanism_authorities']
+    assert inputs['control_material'] in config['frozen_refs']
+    assert (composition/'construction.json').read_bytes()==original
+    assert prepare(composition,role,path,out)['sha256']==sha256_file_hex(out)
+    review.pop('control_material');inputs['root_review']=emit('unreviewed.json',review);path.write_text(json.dumps(inputs))
+    with pytest.raises(ValueError,match='exact root review'):prepare(composition,role,path,out)
+    review['control_material']=inputs['control_material'];inputs['root_review']=emit('new-review.json',review)
+    # A new material binding alone cannot authorize numerical or peer changes.
+    for field,value in [('runtime_code_sha256','b'*64),('actor_runtime','/unrelated')]:
+        changed={**new,field:value};inputs['control_material']=emit('bad-material.json',changed)
+        review['control_material']=inputs['control_material'];inputs['root_review']=emit('bad-review.json',review)
+        path.write_text(json.dumps(inputs))
+        with pytest.raises(ValueError,match='composed runtime or control base'):prepare(composition,role,path,out)
+    bad_authority=json.loads(json.dumps(authority));peer=next(name for name in authority if name!=role)
+    bad_authority[peer]['rl/native_raw_handoff.py']='c'*64
+    changed={**new,'role_mechanism_authorities':emit('bad-authorities.json',bad_authority)}
+    bad_manifest={**manifest,'role_authorities':changed['role_mechanism_authorities']}
+    changed['publisher_manifest']=emit('bad-publisher.json',bad_manifest)
+    inputs['control_material']=emit('bad-material.json',changed)
+    review['control_material']=inputs['control_material'];inputs['root_review']=emit('bad-review.json',review)
+    path.write_text(json.dumps(inputs))
+    with pytest.raises(ValueError,match='changed a peer'):prepare(composition,role,path,out)

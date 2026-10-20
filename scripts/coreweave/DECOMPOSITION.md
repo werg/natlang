@@ -306,3 +306,14 @@ The preparer may retain only the two interrupted actors at explicitly bound
 historical locations with identical reviewed SHA/bytes, and seals a separate
 immutable publisher manifest for those real origins. It never spoofs `__file__`,
 relaxes an old acknowledgement, changes numerical modules or replaces the owner.
+# Explicit reviewed role-control continuation (2026-10-20)
+
+The existing role owner decides when an authenticated operational recovery needs
+new control code. `prepare_native_actor_role` performs only exact metadata
+plumbing: an optional SHA-bound `control_material` must be covered by the actual
+root review, preserve the composed model/runtime/actor/controller/binder/loader
+and base control manifest, and change only the explicit controls, matching
+publisher manifest, and selected role's mechanism authority. Peer authority stays
+unchanged. Reuse the same publisher loader and existing binder; never rewrite the
+immutable composition or the numerical package. Historical interrupted actors
+still retain their original paths through the existing historical-controls path.

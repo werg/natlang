@@ -23,7 +23,7 @@ def prepare(composition,role,inputs,out):
     composition=Path(composition).resolve(strict=True);record=verify_files(composition)
     material=json.loads(bound(record['role_materials'][role]).read_bytes())
     inputs=json.loads(Path(inputs).read_bytes())
-    if set(inputs)-REQUIRED-{'task_runtime','historical_controls'} or not REQUIRED<=set(inputs):
+    if set(inputs)-REQUIRED-{'task_runtime','historical_controls','control_material'} or not REQUIRED<=set(inputs):
         raise ValueError('future role binder requires its real owner, bootstrap, review and provider inputs')
     if not Path(inputs['entry_root']).is_absolute():
         raise ValueError('future owner requires its explicit absolute entry root')
@@ -37,6 +37,29 @@ def prepare(composition,role,inputs,out):
             or role not in (bootstrap.get('role_exchange') or {}).get('roles',{})):
         raise ValueError('future bootstrap belongs to another source-host role')
     review=json.loads(bound(inputs['root_review']).read_bytes())
+    if inputs.get('control_material'):
+        replacement=json.loads(bound(inputs['control_material']).read_bytes())
+        reviewed=review.get('control_material') or {}
+        if any(reviewed.get(key)!=inputs['control_material'].get(key) for key in ('path','sha256')):
+            raise ValueError('replacement control material requires its exact root review')
+        bound(reviewed)
+        mutable={'controls','publisher_manifest','role_mechanism_authorities'}
+        if (set(replacement)!=set(material) or any(replacement[key]!=material[key] for key in material if key not in mutable)
+                or not material.get('publisher_loader') or set(replacement['controls'])!=set(material['controls'])):
+            raise ValueError('replacement control material changed the composed runtime or control base')
+        for reference in replacement['controls'].values(): bound(reference)
+        old_manifest=json.loads(bound(material['publisher_manifest']).read_bytes())
+        new_manifest=json.loads(bound(replacement['publisher_manifest']).read_bytes())
+        if new_manifest!={**old_manifest,'controls':replacement['controls'],
+                          'role_authorities':replacement['role_mechanism_authorities']}:
+            raise ValueError('replacement publisher does not bind the same complete role closure')
+        old_authority=json.loads(bound(material['role_mechanism_authorities']).read_bytes())
+        new_authority=json.loads(bound(replacement['role_mechanism_authorities']).read_bytes())
+        expected={**old_authority,role:{name:replacement['controls'].get(Path(name).stem,{}).get('sha256',digest)
+                                      for name,digest in old_authority[role].items()}}
+        if new_authority!=expected:
+            raise ValueError('replacement authority changed a peer or differs from its actual role controls')
+        material=replacement
     if (review.get('passed') is not True or any(
             (review.get(name) or {}).get(key)!=material[name][key]
             for name in ('controller','binder') for key in ('path','sha256'))):
@@ -77,6 +100,8 @@ def prepare(composition,role,inputs,out):
     config['frozen_refs']=[*inputs['frozen_refs'],record['role_materials'][role],material['binder'],
         material['controller'],material['control_loader'],material['control_manifest'],
         material['role_mechanism_authorities'],*material['controls'].values()]
+    if inputs.get('control_material'):
+        config['frozen_refs'].append(inputs['control_material'])
     if material.get('publisher_loader'):
         config['frozen_refs'] += [config['publisher_loader'],config['publisher_manifest'],
                                   *config['controls'].values()]
