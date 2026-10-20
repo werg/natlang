@@ -171,6 +171,7 @@ class IndexWitnessValidation:
 def _contract(plan, proposed, stage_id):
     """One stage may append active data and/or mandatory pending declarations."""
     from .recipe import _data_continuation, _pending_source_continuation
+    from .native_resident_ce import extension_policy
     old_inputs, new_inputs = plan['stage_inputs'], proposed['stage_inputs']
     if plan['code'] != proposed['code'] or plan.get('device') != proposed.get('device'):
         raise ValueError('resident append cannot change runtime or device')
@@ -191,7 +192,11 @@ def _contract(plan, proposed, stage_id):
         raise ValueError('resident pending declarations must preserve all prior rows, quotas and dependencies')
     without_pending = lambda values: {k:v for k,v in values.items() if k != pending_role}
     active_changed = without_pending(old) != without_pending(new)
-    if active_changed and not _data_continuation(without_pending(old), without_pending(new)):
+    ce_changed = old.get('ce_supervision_policy') != new.get('ce_supervision_policy')
+    if ce_changed:
+        extension_policy(without_pending(old), without_pending(new))
+    if active_changed and not (_data_continuation(without_pending(old), without_pending(new))
+            or ce_changed):
         raise ValueError('resident append requires the exact training-source predecessor')
     if not active_changed and not pending_changed:
         raise ValueError('resident request must add active data or mandatory pending work')
@@ -206,6 +211,8 @@ def _contract(plan, proposed, stage_id):
                 for key in ('native_graphs', 'continued_native_graphs', 'held_native_graphs', 'continued_held_native_graphs', pending_role,
                             'source_classification_migration'):
                     stage.get('inputs', {}).pop(key, None)
+                if ce_changed:
+                    stage.get('inputs', {}).pop('ce_supervision_policy', None)
         recipes.append(value)
     if recipes[0] != recipes[1]:
         raise ValueError('resident append cannot change parameters, runtime, objective or policy')
@@ -1544,6 +1551,7 @@ class ResidentAdoption:
             (self.directory.parent/'recipe-plan.json').read_text())
         self.generation = self.state['generation'] if self.state else digest(self.plan)
         self.rejected = set()
+        self.ce_policy_update = None
         with locked(self.directory):
             initial = self.directory/'initial.json'
             prior = json.loads(initial.read_text()) if initial.exists() else None
@@ -1657,7 +1665,15 @@ class ResidentAdoption:
             validate_source_obligations(payload['plan'], self.stage_id, train, declarations,
                 self.withdrawal_history)
             validate_classification_append(self.plan,payload['plan'],self.stage_id,train,len(self.train),self.directory)
+            from .native_resident_ce import extension_policy
+            ce_policy = extension_policy(self.plan['stage_inputs'][self.stage_id],
+                payload['plan']['stage_inputs'][self.stage_id])
+            ce_update = ((payload['plan']['stage_inputs'][self.stage_id]['ce_supervision_policy'],
+                ce_policy) if ce_policy is not None else None)
             with locked(self.directory):
+                if ce_update is not None:
+                    bound(self.plan['stage_inputs'][self.stage_id]['ce_supervision_policy'])
+                    bound(ce_update[0])
                 current_pointer = self.directory / 'pending.json'
                 if not current_pointer.exists():
                     raise ValueError('resident pending request was withdrawn before commit')
@@ -1681,6 +1697,7 @@ class ResidentAdoption:
                 self.state, self.plan, self.generation = committed, payload['plan'], value['generation']
                 self.train, self.held, self.recipe_binding = train, held, recipe
                 self.pending_declarations = declarations
+                self.ce_policy_update = ce_update
                 return train, held
         except (ValueError, KeyError, TypeError, OSError) as error:
             # A post-commit projection error is fatal/recoverable, never continue

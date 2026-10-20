@@ -1032,6 +1032,9 @@ def _main(argv=None, *, requested_refresh):
             args.native_graphs = Path(resident_state['payload']['train']['path'])
             args.held_native_graphs = Path(resident_state['payload']['held']['path'])
             args.recipe_binding = json.dumps(resident_state['payload']['recipe'])
+            resident_ce = resident_state['payload']['plan']['stage_inputs'][args.stage_id].get('ce_supervision_policy')
+            if resident_ce is not None:
+                args.ce_supervision_policy = resident_bound(resident_ce)
             proof=resident_state['payload']['plan']['stage_inputs'][args.stage_id].get('source_classification_migration')
             args.source_classification_migration=resident_bound(proof) if proof else None
     checkpoint_options = {key: str(value) if isinstance(value, Path) else value
@@ -1702,6 +1705,9 @@ def _main(argv=None, *, requested_refresh):
             geometry_qualification=args.resident_geometry_qualification,
             geometry_identity=capacity_identity(config,args,backend),
             withdrawal_history=checkpoint_options['withdrawal_history'])
+        from .native_resident_ce import require_loaded_policy
+        require_loaded_policy(ce_binding,
+            resident.plan['stage_inputs'][args.stage_id].get('ce_supervision_policy'))
         if resident.state:
             checkpoint_options['resident_adoption'] = {'generation': resident.generation,
                 'history': resident.state['history']}
@@ -1773,6 +1779,12 @@ def _main(argv=None, *, requested_refresh):
                         'continued_native_graphs': source_receipts[0]['sha256'],
                         'continued_held_native_graphs': source_receipts[1]['sha256']}
                     train, held = expanded
+                    from .native_resident_ce import adopt_policy_update
+                    ce_update = adopt_policy_update(resident.ce_policy_update, current_binding=ce_binding,
+                        args=args, checkpoint_options=checkpoint_options, global_step=global_step)
+                    if ce_update is not None:
+                        ce_binding, ce_policy = ce_update
+                        checkpoint_options['ce_supervision_active'] = objective is None
                     train.set_ce_policy(ce_policy if objective is None else None)
                     held.set_ce_policy(ce_policy if objective is None else None)
                     args.held_native_graphs = held.path
