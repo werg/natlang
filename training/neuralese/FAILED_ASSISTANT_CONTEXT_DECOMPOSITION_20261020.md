@@ -145,3 +145,13 @@ always rerun without invalidating unchanged derivation. An explicitly supplied
 preceding module may locate version-1 work only after its actual callable law
 is proved identical; different mask code is rejected. No old cache is relabeled
 as admitted, and original consumer rederivation remains required.
+
+## Portable recipe continuation (2026-10-20)
+
+The existing recipe resolver enumerates the same CE manifest/decoder dependency
+closure as the provider. This is exact file plumbing, not a new policy or parser:
+masking still occurs after original row validation and before existing balanced
+mass weighting. Legacy policies without nested assets keep their original input
+binding shape. New mask policies carry every decoder file into source-host plans
+and immutable transfers; tampered assets fail before training. All seven source
+classification/parser files and all row/index/exposure identities stay unchanged.

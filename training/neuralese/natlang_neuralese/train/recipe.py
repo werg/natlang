@@ -494,6 +494,12 @@ def native_source_dependencies(path, *, parents=()):
 
 
 def _bind_native_source_dependencies(inputs):
+    if 'ce_supervision_policy' in inputs:
+        from .native_supervision import ce_policy_dependencies
+        reference=inputs['ce_supervision_policy']
+        dependencies=[item for item in ce_policy_dependencies(reference)
+            if Path(item['path']).resolve()!=Path(reference['path']).resolve()]
+        if dependencies:reference['dependencies']=dependencies
     if 'source_classification_migration' in inputs:
         from .native_classification_continuation import classification_proof_dependencies
         inputs['source_classification_migration']['dependencies'] = classification_proof_dependencies(
