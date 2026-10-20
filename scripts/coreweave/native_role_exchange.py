@@ -51,6 +51,15 @@ def _read_bound(io,sid,reference):
     return raw
 
 
+def _arm_preparation(config,io,sid,plan,request):
+    if not request.get('snapshot_preparation') or not plan.get('consumer_preparation_handoff'):return
+    curriculum=config.get('preparation_curriculum')
+    if not curriculum:raise ValueError('consumer allocation handoff needs its exact frozen curriculum')
+    closure=io.dependency_closure(sid,{'semantic_config':curriculum})
+    io.verify_assets(sid,closure['assets'])
+    call(io,sid,'roles.arm_preparation_handoff('+repr(plan)+','+repr(request)+','+repr(curriculum)+')')
+
+
 def tick(config,io):
     if config.get('schema')!='natlang.native-role-exchange-service/1':
         raise ValueError('unsupported source-host role exchange service')
@@ -121,7 +130,9 @@ def tick(config,io):
     expected=call(io,sid,'roles.semantic_request('+repr(plans[consumer])+',snapshot='+repr(mode)+')')
     if request!=expected:return {'status':'waiting-for-current-releases','roles':sorted(snapshots)}
     usable=call(io,sid,'roles.ready_participants('+repr(plans[consumer])+',snapshot='+repr(mode)+')[0]')
-    if len(usable)>=2:return {'status':'semantic-assets-ready','models':sorted(row['model_id']for row in usable),'transferred':[]}
+    if len(usable)>=2:
+        _arm_preparation(config,io,sid,plans[consumer],request)
+        return {'status':'semantic-assets-ready','models':sorted(row['model_id']for row in usable),'transferred':[]}
     # Explicit snapshot preparation copies exact qualified historical weights;
     # ordinary joint consumption continues to require actual optimizer release.
     checkpoints={};staged=[]
@@ -153,6 +164,7 @@ def tick(config,io):
             staged.append(model_id)
         checkpoints[model_id]=checkpoint
     call(io,sid,'roles.install_assets('+repr(host['plan']['path'])+','+repr(request)+','+repr(checkpoints)+')')
+    _arm_preparation(config,io,sid,plans[consumer],request)
     return {'status':'semantic-assets-ready','models':sorted(checkpoints),'transferred':staged}
 
 

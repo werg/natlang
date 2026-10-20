@@ -29,6 +29,8 @@ def binding(path):
 
 
 def ownership(plan):
+    if type(plan.get('consumer_preparation_handoff',False)) is not bool:
+        raise ValueError('consumer preparation ownership must be explicit')
     if type(plan.get('snapshot_preparation',False)) is not bool:
         raise ValueError('snapshot preparation must be explicitly selected')
     names={row['model']for row in plan['models']}
@@ -400,6 +402,9 @@ def foundation_request(plan,out,*,generation):
     handoff=handoff_active(plan)
     if handoff:
         generation=canonical_json_sha256_hex({'foundation_generation':generation,'handoff':handoff['attempt_sha256']})
+    elif (preparation:=preparation_handoff(plan)):
+        generation=canonical_json_sha256_hex({'foundation_generation':generation,
+            'preparation':preparation['source']['sha256']})
     signature=canonical_json_sha256_hex({'contract':expected,'generation':generation})
     path=Path(out)/(signature+'.json')
     if path.exists():
@@ -493,6 +498,11 @@ def exchanged(plan,*,kind):
 
 
 def eligible(plan):
+    if preparation_handoff(plan):
+        _,exchange=ownership(plan);reference,proof=_status(exchange,exchange['role'])
+        if proof is not None and proof.get('kind') in ('eligible','released'):
+            validate(reference,plan,kind=proof['kind'])
+            return True  # Only the consumer owns this request; peers keep SGD.
     if plan.get('snapshot_preparation') and not handoff_active(plan):return False
     found,_=exchanged(plan,kind='eligible')
     if plan.get('snapshot_preparation'):
@@ -993,3 +1003,102 @@ def handoff_hold(plan):
     if proof is None or proof.get('kind') not in ('eligible','released'):return False
     validate(reference,plan,kind=proof['kind'])
     return _handoff_proof_matches(plan,proof,reference)
+
+
+def arm_preparation_handoff(plan,request,curriculum):
+    """Stage-before-release: the consumer lends its existing allocation to VAE."""
+    from ..train.native_readiness import _bound
+    from ..train.native_semantic_stage import validate_config
+    _,exchange=ownership(plan)
+    if (not plan.get('consumer_preparation_handoff') or not plan.get('snapshot_preparation')
+            or exchange['role']!=exchange['semantic_consumer']):
+        raise ValueError('frozen preparation may borrow only its declared consumer allocation')
+    config=validate_config(json.loads(_bound(curriculum).read_text()))
+    if config.get('snapshot_preparation') is not True:
+        raise ValueError('consumer allocation request must be frozen VAE only')
+    if request!=semantic_request(plan,snapshot=True):
+        raise ValueError('preparation ownership changed its qualified snapshots')
+    ready,pending=ready_participants(plan,snapshot=True)
+    if len(ready)<2 or pending:raise ValueError('preparation assets must exist before consumer release')
+    generations={row['model']:row.get('foundation_qualification_generation')for row in plan['models']}
+    value={'schema':'natlang.native-consumer-preparation-handoff/1','contract':contract(plan),
+        'consumer':exchange['role'],'snapshots':request,'curriculum':curriculum,
+        'repair_generations':generations,'backbone_updates':0,'readiness_granted':False}
+    root=Path(exchange['directory'])
+    reference=_immutable(root/'preparation-requests'/(canonical_json_sha256_hex(value)+'.json'),value)
+    cancelled=root/'preparation-cancelled.json'
+    if cancelled.is_file() and json.loads(cancelled.read_text()).get('request')==reference:
+        return None  # Repair generation must change before retrying failed preparation.
+    write_json_durable(root/'preparation-handoff.json',reference)
+    return reference
+
+
+def preparation_handoff(plan,*,check_assets=True):
+    from ..train.native_readiness import _bound
+    _,exchange=ownership(plan)
+    if (not plan.get('consumer_preparation_handoff') or not plan.get('snapshot_preparation')
+            or exchange is None or exchange['role']!=exchange['semantic_consumer']):return None
+    root=Path(exchange['directory']);pointer=root/'preparation-handoff.json'
+    if not pointer.is_file():return None
+    reference=json.loads(pointer.read_text());value=json.loads(_bound(reference).read_text())
+    if (value.get('schema')!='natlang.native-consumer-preparation-handoff/1'
+            or value.get('contract')!=contract(plan) or value.get('consumer')!=exchange['role']
+            or value.get('backbone_updates')!=0 or value.get('readiness_granted')is not False):
+        raise ValueError('consumer preparation request changed its actual ownership')
+    if check_assets and value.get('repair_generations')!={row['model']:row.get('foundation_qualification_generation')for row in plan['models']}:
+        return None  # An explicit hot repair needs a freshly staged request.
+    if (root/'preparation-cancelled.json').is_file():
+        if json.loads((root/'preparation-cancelled.json').read_text()).get('request')==reference:return None
+    # Reauthenticate all staged assets each time; a stale pointer cannot release.
+    if check_assets:
+        _bound(value['curriculum'])
+        ready,pending=ready_participants(plan,snapshot=True)
+        if len(ready)<2 or pending:return None
+    return {'source':reference,'value':value}
+
+
+def cancel_preparation_handoff(config,*,reason):
+    """Reopen the genuine released RAW cursor after the semantic child drains."""
+    from ..train.native_readiness import _bound
+    from ..train.native_resident import owner_alive
+    from .native_raw_rounds import raw_out
+    plan_path=_bound(config['raw_rl_bootstrap']);plan=json.loads(plan_path.read_text())
+    active=preparation_handoff(plan,check_assets=False)
+    if active is None:return None
+    path=raw_out(config)/'state.json';state=json.loads(path.read_text())
+    if owner_alive(state.get('owner')or{}):raise ValueError('cannot reopen a live RAW owner')
+    if state.get('released')is not True or not local_released(config):
+        raise ValueError('preparation recovery requires its genuine consumer release')
+    _,exchange=ownership(plan);root=Path(exchange['directory'])
+    # Keep the original released state as immutable recovery/ownership provenance.
+    before=_immutable(root/'preparation-recovery'/(canonical_json_sha256_hex(state)+'.json'),state)
+    cancellation={'request':active['source'],'released_state':before,'reason':reason,
+        'schema':'natlang.native-consumer-preparation-cancellation/1','optimizer_reset':False}
+    write_json_durable(root/'preparation-cancelled.json',cancellation)
+    write_json_durable(path,{**state,'released':False,'preparation_cancellation':cancellation})
+    withdraw(plan,path)
+    return cancellation
+
+
+def preparation_raw_recovery(config):
+    from ..train.native_readiness import _bound
+    plan=json.loads(_bound(config['raw_rl_bootstrap']).read_text());_,exchange=ownership(plan)
+    if exchange is None or not plan.get('consumer_preparation_handoff'):return False
+    path=Path(exchange['directory'])/'preparation-cancelled.json'
+    if not path.is_file() or preparation_handoff(plan)is not None:return False
+    cancellation=json.loads(path.read_text())
+    request=json.loads(_bound(cancellation['request']).read_text())
+    if (cancellation.get('schema')!='natlang.native-consumer-preparation-cancellation/1'
+            or request.get('contract')!=contract(plan) or request.get('consumer')!=exchange['role']
+            or cancellation.get('optimizer_reset')is not False):
+        raise ValueError('RAW recovery cancellation changed its ownership')
+    from .native_raw_rounds import raw_out
+    from ..train.native_resident import owner_alive
+    state_path=raw_out(config)/'state.json';state=json.loads(state_path.read_text())
+    if state.get('released')is True:
+        original=json.loads(_bound(cancellation['released_state']).read_text())
+        if state!=original or owner_alive(state.get('owner')or{}):
+            raise ValueError('cannot reconcile cancellation over a changed/live RAW owner')
+        write_json_durable(state_path,{**state,'released':False,'preparation_cancellation':cancellation})
+        withdraw(plan,state_path)
+    return True

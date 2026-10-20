@@ -256,6 +256,9 @@ def _manage_raw_bootstrap(config):
         raise ValueError('manage_raw_bootstrap must be an explicit boolean')
     if not value and not config.get('raw_rl_bootstrap'):
         raise ValueError('external RAW ownership requires its bound release plan')
+    if not value and config.get('raw_rl_bootstrap'):
+        from ..rl.native_role_release import preparation_raw_recovery
+        if preparation_raw_recovery(config):return True
     return value
 
 
@@ -276,7 +279,11 @@ def ready_participants(config):
                 if raw_plan.get('snapshot_preparation'):
                     curriculum=json.loads(Path(config['curriculum']).read_text())
                     if curriculum.get('snapshot_preparation') is True:
-                        return roles.ready_participants(raw_plan,snapshot=True)
+                        ready,pending=roles.ready_participants(raw_plan,snapshot=True)
+                        if raw_plan.get('consumer_preparation_handoff') and not roles.local_released(config):
+                            return [],[{'reason':'frozen VAE awaits genuine consumer allocation release',
+                                'qualified_snapshots':len(ready)}]
+                        return ready,pending
                     if not config.get('snapshot_adoption_controller'):
                         raise ValueError('snapshot assets may only launch declared frozen-backbone VAE preparation')
                     if not roles.local_released(config):
@@ -324,6 +331,10 @@ def snapshot_successor(config,out):
     """
     declaration=config.get('snapshot_successor')
     if not declaration:return config
+    from ..rl import native_role_release as roles
+    plan=json.loads(_bound(config['raw_rl_bootstrap']).read_text())
+    if plan.get('consumer_preparation_handoff') and roles.preparation_raw_recovery(config):
+        return config  # Failed preparation yields back to useful RAW work.
     preparation=Path(config.get('semantic_out',out))
     completion=preparation/'shared-stage-completion.json'
     manifest_path=preparation/'participants.json'
@@ -337,8 +348,6 @@ def snapshot_successor(config,out):
         'participants':key[0],'curriculum':key[1]}),'models':[row['model_id']for row in manifest['models']]}}
     if json.loads(completion.read_text()).get('preparation_complete') is not True:return config
     proof,_=validate_snapshot_preparation(completion,published)
-    from ..rl import native_role_release as roles
-    plan=json.loads(_bound(config['raw_rl_bootstrap']).read_text())
     full_path=_bound(declaration['curriculum']);full=json.loads(full_path.read_text())
     controller={'curriculum':declaration['curriculum'],'command':declaration['command'],
         'workdir':config.get('workdir'),'out':str(Path(out)/'joint')}
@@ -666,6 +675,11 @@ def _run(config_path, *, once=False, stop):
                 child_kind = launch['child_kind']
                 active_rl_signature = launch.get('rl_signature')
             else:
+                abandoned=launch.get('semantic_controller')or config
+                if (launch.get('child_kind')=='native-semantic' and abandoned.get('snapshot_successor')
+                        and not Path(launch.get('semantic_completion')or out/'shared-stage-completion.json').is_file()):
+                    from ..rl.native_role_release import cancel_preparation_handoff
+                    cancel_preparation_handoff(abandoned,reason='owned preparation ended while controller was absent')
                 retry = _retry_failure(retry, launch['child_kind'], launch['execution_signature'], interval,
                                        error='previous owned child ended while controller was absent')
                 write_json_durable(launch_path, {**launch, 'status': 'ended-unobserved'})
@@ -851,11 +865,17 @@ def _run(config_path, *, once=False, stop):
                 launch={**launch,'status':'exited','exit_code':child.returncode}
                 write_json_durable(launch_path,launch)
                 if stop.requested:
+                    if child_kind=='native-semantic' and curriculum.get('snapshot_preparation'):
+                        from ..rl.native_role_release import cancel_preparation_handoff
+                        cancel_preparation_handoff(config,reason='owned preparation cancelled after child drain')
                     state['child_pid'] = None
                     state['status'] = 'stopped-after-checkpoint-request'
                     write_json_durable(state_path, state)
                     return state
                 if child.returncode != 0:
+                    if child_kind=='native-semantic' and curriculum.get('snapshot_preparation'):
+                        from ..rl.native_role_release import cancel_preparation_handoff
+                        cancel_preparation_handoff(config,reason='owned semantic child failed')
                     retry = _retry_failure(retry, child_kind, execution_signature, interval, exit_code=child.returncode)
                     state.update(retry=retry, status='retry_wait', child_pid=None, child_kind=None)
                     child, child_kind = None, None
@@ -887,6 +907,9 @@ def _run(config_path, *, once=False, stop):
                         else:
                             proof, last_success = validate_completion(completion, published)
                     except Exception as error:
+                        if curriculum.get('snapshot_preparation'):
+                            from ..rl.native_role_release import cancel_preparation_handoff
+                            cancel_preparation_handoff(config,reason='semantic completion rejected: '+type(error).__name__)
                         retry = _retry_failure(retry, child_kind, execution_signature, interval, exit_code=0)
                         retry['reason'] = 'shared completion rejected: ' + type(error).__name__ + ': ' + str(error)
                         state.update(retry=retry, status='retry_wait', child_pid=None, child_kind=None)
@@ -905,6 +928,10 @@ def _run(config_path, *, once=False, stop):
                 state['child_kind'] = None
                 child, child_kind = None, None
             if stop.requested and child is None:
+                if (config.get('snapshot_successor') and config.get('raw_rl_bootstrap')
+                        and _role_local_released(config)):
+                    from ..rl.native_role_release import cancel_preparation_handoff
+                    cancel_preparation_handoff(config,reason='preparation controller cancelled after owned child drain')
                 state['status'] = 'stopped-after-checkpoint-request'
             write_json_durable(state_path, state)
             if once:

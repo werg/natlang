@@ -72,6 +72,7 @@ def test_prepares_exact_external_owner_configs_without_claiming_adoption(tmp_pat
     for record in result['source_plan_successions']:
         old=json.loads(before[record['role']]);new=json.loads(Path(record['successor']['path']).read_text())
         assert new.pop('snapshot_preparation') is True
+        assert new.pop('consumer_preparation_handoff') is True
         assert old==new and record['applied'] is False
     config=json.loads(Path(result['controller']['path']).read_text())
     assert config['manage_raw_bootstrap'] is False
@@ -278,3 +279,25 @@ def test_joint_task_specs_preserve_distinct_declared_floors_and_reject_global_su
     with pytest.raises(ValueError,match='explicit participant'):validate_joint_task_specs(value,['lfm:base','mellum:base'])
     value=copy.deepcopy(before);value['models']['mellum:base']['task_eval']['reference_successes']=None
     with pytest.raises(ValueError,match='undeclared'):validate_joint_task_specs(value,['lfm:base','mellum:base'])
+
+
+def test_preparation_relay_checks_complete_semantic_closure_before_requesting_consumer_release(tmp_path,monkeypatch):
+    from test_native_role_release import _service
+    module=_service()
+    calls=[]
+    class IO:
+        broken=True
+        def dependency_closure(self,sid,value):
+            calls.append(('closure',sid,value));return {'assets':['both-model-bases-and-tokenizers']}
+        def verify_assets(self,sid,assets):
+            calls.append(('assets',sid,assets))
+            if self.broken:raise ValueError('missing actual peer base')
+    io=IO();monkeypatch.setattr(module,'call',lambda *args:calls.append(('arm',args[-1])))
+    config={'preparation_curriculum':{'path':str(tmp_path/'frozen.json'),'sha256':'a'*64}}
+    plan={'consumer_preparation_handoff':True};request={'snapshot_preparation':True}
+    with pytest.raises(ValueError,match='missing actual peer base'):
+        module._arm_preparation(config,io,'existing-consumer',plan,request)
+    assert [row[0]for row in calls]==['closure','assets']
+    io.broken=False;calls.clear()
+    module._arm_preparation(config,io,'existing-consumer',plan,request)
+    assert [row[0]for row in calls]==['closure','assets','arm']

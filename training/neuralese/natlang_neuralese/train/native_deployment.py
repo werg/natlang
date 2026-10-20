@@ -124,6 +124,7 @@ def prepare_role_scheduler(plans, controls, curriculum_path, provider_path, out,
     source_plans={};adoptions=[]
     for name,plan in loaded.items():
         successor=copy.deepcopy(plan);successor['snapshot_preparation']=True
+        successor['consumer_preparation_handoff']=True
         path=out/(name+'-snapshot-source-plan.json');write_json_durable(path,successor)
         source_plans[name]=binding(path)
         hosts[name]['plan']=source_plans[name]
@@ -134,9 +135,6 @@ def prepare_role_scheduler(plans, controls, curriculum_path, provider_path, out,
     curriculum=out/'snapshot-curriculum.json';write_json_durable(curriculum,snapshot)
     full=out/'joint-curriculum.json';write_json_durable(full,semantic)
     relay=out/'relay.json'
-    write_json_durable(relay,{'schema':'natlang.native-role-exchange-service/1',
-        'hosts':hosts,'provider':provider,'out':str(out/'relay-state'),'poll_seconds':15,
-        'handoff_lease_seconds':handoff_lease_seconds})
     controller=out/'controller.json'
     write_json_durable(controller,{'schema':'natlang.native-shared-stage-controller/1',
         'out':str(out/'semantic'),'semantic_out':str(out/'semantic/preparation'),
@@ -152,6 +150,10 @@ def prepare_role_scheduler(plans, controls, curriculum_path, provider_path, out,
             '--config',str(curriculum),'--participants','{participants}',
             '--out','{out}','--device','cuda'],
         'workdir':str(runtime)})
+    write_json_durable(relay,{'schema':'natlang.native-role-exchange-service/1',
+        'hosts':hosts,'provider':provider,'out':str(out/'relay-state'),'poll_seconds':15,
+        'preparation_curriculum':binding(curriculum),
+        'handoff_lease_seconds':handoff_lease_seconds})
     receipt={'schema':'natlang.native-role-scheduler-preparation/1',
         'controller':binding(controller),'relay':binding(relay),
         'source_plan_successions':adoptions,'contract':common,

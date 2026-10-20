@@ -683,3 +683,70 @@ def test_historical_eligibility_cannot_release_and_fresh_descendant_pause_needs_
     with pytest.raises(ValueError,match='roll back'):
         roles.renew_handoff(first['plan'],request,offers,expires_at=time.time()+180,attempt=old_attempt)
     assert roles.handoff_active(first['plan'])['attempt_sha256']==attempt['source']['sha256']
+
+
+def test_consumer_allocation_handoff_requires_staged_snapshots_and_dead_owner_then_reopens_raw(tmp_path,monkeypatch):
+    from natlang_neuralese.train.native_resident import process_owner
+    from natlang_neuralese.train import native_readiness
+    from test_native_role_scheduler_deployment import source
+    from natlang_neuralese.train.native_deployment import binding
+    rows=fixture(tmp_path,monkeypatch)
+    monkeypatch.setattr(roles,'pin_checkpoint',lambda ref,directory:roles.binding(ref['path']))
+    for name,row in rows.items():
+        row['plan'].update(snapshot_preparation=True,consumer_preparation_handoff=True)
+        for declaration in row['plan']['models']:declaration['foundation_qualification_generation']='repair-1'
+        write_json_durable(row['plan_path'],row['plan'])
+        row['state'].update(owner=process_owner(),released=False,plan_sha256=sha256_file_hex(row['plan_path']))
+        value=row['state']['models'][name];config_path=Path(value['config']['path'])
+        write_json_durable(config_path,{'runtime_binding':{'plan_sha256':sha256_file_hex(row['plan_path'])}})
+        value['config']=raw.binding(config_path);write_json_durable(row['state_path'],row['state'])
+    exchange(rows['lfm'],rows['mellum'],kind='eligible');exchange(rows['mellum'],rows['lfm'],kind='eligible')
+    consumer=rows['mellum'];plan=consumer['plan']
+    consumer['config']['raw_rl_bootstrap']=raw.binding(consumer['plan_path'])
+    _,_,curriculum,_,_,_=source(tmp_path/'semantic-inputs')
+    config=json.loads(curriculum.read_text());config['snapshot_preparation']=True
+    write_json_durable(curriculum,config)
+    request=roles.semantic_request(plan,snapshot=True)
+    with pytest.raises(ValueError,match='assets must exist'):
+        roles.arm_preparation_handoff(plan,request,binding(curriculum))
+    ready,_=roles.exchanged(plan,kind='snapshot')
+    roles.install_assets(consumer['plan_path'],request,{name:value['checkpoint']for name,value in ready.items()})
+    reference=roles.arm_preparation_handoff(plan,request,binding(curriculum))
+    assert reference and roles.eligible(plan)
+    assert not roles.eligible(rows['lfm']['plan'])  # Peer never pauses for preparation.
+    consumer['config'].update(curriculum=str(curriculum),manage_raw_bootstrap=False)
+    ready,pending=native_readiness.ready_participants(consumer['config'])
+    assert not ready and 'allocation release' in pending[0]['reason']
+    with pytest.raises(ValueError,match='live RAW owner'):
+        roles.cancel_preparation_handoff(consumer['config'],reason='cannot signal actual live owner')
+    # Model-free protocol fixture: actual RAW loop alone may set released, and
+    # publish(released) still refuses while its genuine process is alive.
+    consumer['state']['released']=True
+    write_json_durable(consumer['state_path'],consumer['state'])
+    assert roles.publish(consumer['plan_path'],consumer['state_path'],kind='released')is None
+    consumer['state']['owner']['start_ticks']='0'
+    write_json_durable(consumer['state_path'],consumer['state'])
+    assert roles.publish(consumer['plan_path'],consumer['state_path'],kind='released')
+    ready,pending=native_readiness.ready_participants(consumer['config'])
+    assert len(ready)==2 and not pending
+    before=copy.deepcopy(consumer['state']['models'])
+    cancellation=roles.cancel_preparation_handoff(consumer['config'],reason='owned VAE child failed after drain')
+    assert cancellation and not cancellation['optimizer_reset']
+    after=json.loads(consumer['state_path'].read_text())
+    assert after['models']==before and after['released']is False
+    assert not roles.preparation_handoff(plan) and native_readiness._manage_raw_bootstrap(consumer['config'])
+    assert roles.arm_preparation_handoff(plan,request,binding(curriculum))is None
+    assert not roles.eligible(plan)
+    # Simulate process loss after cancellation intent but before cursor rewrite.
+    original=json.loads(Path(cancellation['released_state']['path']).read_text())
+    write_json_durable(consumer['state_path'],original)
+    assert roles.preparation_raw_recovery(consumer['config'])
+    assert json.loads(consumer['state_path'].read_text())['released']is False
+    # Neither full checkpoint bytes nor the optimizer/exposure-bearing cursor changed.
+    assert json.loads(consumer['state_path'].read_text())['models']==before
+    # A changed repair generation invalidates the old request without blocking
+    # useful RAW recovery before the fresh relay request has been staged.
+    for declaration in plan['models']:declaration['foundation_qualification_generation']='repair-2'
+    write_json_durable(consumer['plan_path'],plan)
+    consumer['config']['raw_rl_bootstrap']=raw.binding(consumer['plan_path'])
+    assert roles.preparation_handoff(plan)is None

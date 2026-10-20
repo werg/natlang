@@ -121,3 +121,17 @@ Joint task declarations are explicit for each participant under
 LF's owner-authorized historical zero-success floor and its provenance are
 honest policy, not a matched QAD measurement (DECISIONS.md, 2026-10-13). Mellum's
 separately bound actual reference is retained. No new base evaluation is run.
+
+## Resource ownership before frozen preparation
+
+The scheduling policy is: stage both genuinely qualified snapshots and their
+semantic closure first; hand the consumer's RAW owner directly into useful VAE
+work while its peer keeps training. A snapshot is not permission to allocate a
+second consumer model. Exact plumbing authenticates the preparation request,
+requires the consumer's genuine dead-owner release before any semantic child
+starts, and binds the source request to the staged snapshots/curriculum. The
+existing RAW release validator and semantic child supervision remain authoritative.
+On failed/cancelled preparation the consumer's preserved RAW cursor is reopened
+through the same RAW coordinator, without claiming a shared-stage release or
+resetting optimizer, RNG or exposure. A failed preparation needs explicit repair
+before another preparation allocation; useful RAW work continues meanwhile.
