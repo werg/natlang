@@ -13,3 +13,12 @@ No new trainer, completion relaxation, data change or model-facing text is neede
 Bind the actual preparation producer source in its metadata receipt. An external
 host producer can generate this prospective configuration without replacing the
 student's frozen numerical runtime or pretending its source inventory changed.
+
+The normal host adoption utility optionally accepts an exact source/base/root-
+review binding for this producer. It authenticates the base against the actual
+composition, imports the reviewed source under a distinct private module name,
+and invokes the same interface. It never replaces the canonical runtime module.
+Generated operational inputs and normal frozen refs retain the source, review,
+base and loader. Default selection is unchanged; malformed or unreviewed sources
+fail closed. The external source can prepare future scheduling while useful
+student SGD continues on its unchanged numerical inventory.

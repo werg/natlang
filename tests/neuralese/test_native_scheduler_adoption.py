@@ -194,3 +194,48 @@ def test_semantic_override_does_not_hide_unmeasured_raw_foundation(tmp_path):
     pp=tmp_path/'unmeasured-plan.json';write(pp,plan);inputs['bootstrap']=m.binding(pp)
     ip=tmp_path/'unmeasured-inputs.json';write(ip,inputs);value['roles']['mellum']['inputs']=m.binding(ip);write(spec,value)
     with pytest.raises(ValueError,match='foundation recipe'):m.prepare(spec,tmp_path/'proposal')
+
+
+@pytest.mark.parametrize('fault',[None,'source','base','review','unpassed','missing-source'])
+def test_explicit_host_snapshot_producer_preserves_numerical_package_and_binds_inputs(tmp_path,fault):
+    spec,runtime,plans=setup(tmp_path)
+    # This is the actual shared producer, loaded under its own source origin.
+    from natlang_neuralese.train import native_deployment
+    source=tmp_path/'snapshot-producer.py';source.write_bytes(Path(native_deployment.__file__).read_bytes())
+    base=runtime/'training/neuralese/natlang_neuralese/train/native_deployment.py'
+    base.parent.mkdir(parents=True,exist_ok=True);base.write_text('BASE=1\n')
+    record=json.loads((runtime/'construction.json').read_text())
+    record['inventory']=code_inventory(runtime/'training/neuralese/natlang_neuralese')
+    record['code']=canonical_json_sha256_hex(record['inventory'])
+    record['files'][str(base.relative_to(runtime))]={'sha256':m.binding(base)['sha256'],'bytes':base.stat().st_size}
+    write(runtime/'construction.json',record)
+    request=json.loads(spec.read_text());request['composition']=m.binding(runtime/'construction.json')
+    request['scheduler']['curriculum']=m.binding(Path(request['scheduler']['curriculum']['path']))
+    curriculum=Path(request['scheduler']['curriculum']['path']);value=json.loads(curriculum.read_text())
+    value['adaptive_refresh']={'updates_per_phase':16};write(curriculum,value)
+    request['scheduler']['curriculum']=m.binding(curriculum)
+    review=tmp_path/'source-review.json';write(review,{'schema':'natlang.native-scheduler-producer-review/1',
+        'passed':True,'source':m.binding(source),'base_source':m.binding(base)})
+    request['scheduling_producer']={'source':m.binding(source),'base_source':m.binding(base),'review':m.binding(review)}
+    if fault=='source':source.write_text('BAD=1\n')
+    elif fault=='base':request['scheduling_producer']['base_source']=m.binding(source)
+    elif fault in ('review','unpassed','missing-source'):
+        value=json.loads(review.read_text())
+        if fault=='review':value['source']=m.binding(base)
+        elif fault=='missing-source':value.pop('source')
+        else:value['passed']=False
+        write(review,value);request['scheduling_producer']['review']=m.binding(review)
+    write(spec,request)
+    before=base.read_bytes()
+    if fault:
+        with pytest.raises(ValueError):m.prepare(spec,tmp_path/'prepared')
+    else:
+        result=m.read(m.prepare(spec,tmp_path/'prepared'));proposal=m.read(result['proposal'])
+        controller=m.read(proposal['controller']);snapshot=json.loads(Path(controller['curriculum']).read_text())
+        assert 'adaptive_refresh'not in snapshot
+        full=m.read(controller['snapshot_successor']['curriculum'])
+        assert full['adaptive_refresh']=={'updates_per_phase':16}
+        assert all(ref in result['operational_inputs']for ref in (*request['scheduling_producer'].values(),m.binding(m.__file__)))
+        for item in result['normal_inputs'].values():
+            assert all(ref in m.read(item)['frozen_refs']for ref in result['operational_inputs'])
+    assert base.read_bytes()==before

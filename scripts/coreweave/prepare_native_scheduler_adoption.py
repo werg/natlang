@@ -38,13 +38,42 @@ def emit(path,value):
     return binding(path)
 
 
+def scheduling_producer(spec):
+    selected=spec.get('scheduling_producer')
+    if selected is None:return prepare_role_scheduler,[]
+    if not isinstance(selected,dict)or set(selected)!={'source','base_source','review'}:
+        raise ValueError('scheduler producer needs exact source/base/review bindings')
+    source=bound(selected['source']);base=bound(selected['base_source']);review=read(selected['review'])
+    binding(source,selected['source']);binding(base,selected['base_source'])
+    actual=Path(spec['scheduler']['runtime'])/'training/neuralese/natlang_neuralese/train/native_deployment.py'
+    if binding(base)!=binding(actual):raise ValueError('scheduler producer base differs from actual runtime')
+    if (not {'schema','passed','source','base_source'}<=set(review)
+            or review.get('schema')!='natlang.native-scheduler-producer-review/1' or review.get('passed')is not True
+            or binding(source,review.get('source'))!=binding(source,selected['source'])
+            or binding(base,review.get('base_source'))!=binding(base,selected['base_source'])):
+        raise ValueError('scheduler producer lacks its exact reviewed source/base authority')
+    # A separately named host producer; never overwrite a loaded runtime module
+    # or claim that its file belongs to the numerical composition inventory.
+    import importlib.util
+    name='natlang_neuralese.train._reviewed_scheduler_'+selected['source']['sha256']
+    module_spec=importlib.util.spec_from_file_location(name,source)
+    module=importlib.util.module_from_spec(module_spec);module_spec.loader.exec_module(module)
+    return module.prepare_role_scheduler,[selected['source'],selected['base_source'],selected['review'],binding(__file__)]
+
+
 def scheduler(spec,plans,controls,out,bootstrap):
     common=spec['scheduler']
     for name in ('curriculum','provider'):read(common[name])
-    return prepare_role_scheduler(plans,controls,common['curriculum']['path'],common['provider']['path'],out,
+    producer,inputs=scheduling_producer(spec)
+    result=producer(plans,controls,common['curriculum']['path'],common['provider']['path'],out,
         raw_states={role:item['raw_state']for role,item in spec['roles'].items()},
         runtime=common['runtime'],python=common['python'],rl_bootstrap=bootstrap,
         handoff_lease_seconds=common['handoff_lease_seconds'],snapshot_parent=common.get('snapshot_parent'))
+    if inputs:
+        result['operational_inputs']=list({item['path']:item for item in
+            [*result.get('operational_inputs',[]),*inputs]}.values())
+        write_json_durable(out/'prepared.json',result)
+    return result
 
 
 def owned_bootstrap(reference,plans):
@@ -78,7 +107,7 @@ def check_foundation_task_policy(row,curriculum):
 
 def prepare(spec_path,out):
     spec=json.loads(Path(spec_path).read_bytes())
-    if (set(spec)!={'schema','composition','roles','scheduler'} or spec['schema']!=SCHEMA
+    if (set(spec)-{'scheduling_producer'}!={'schema','composition','roles','scheduler'} or spec['schema']!=SCHEMA
             or set(spec['roles'])!={'lfm','mellum'}):
         raise ValueError('scheduler adoption requires both explicit normal role inputs')
     construction=bound(spec['composition'])
@@ -132,13 +161,15 @@ def prepare(spec_path,out):
     commands={};normal={}
     for role in inputs:
         value=copy.deepcopy(inputs[role]);value['bootstrap']=successors[role]
-        value['frozen_refs'] += [spec['roles'][role]['inputs'],spec['composition'],plans[role],successors[role]]
+        value['frozen_refs'] += [spec['roles'][role]['inputs'],spec['composition'],plans[role],successors[role],
+            *result.get('operational_inputs',[])]
         normal[role]=emit(out/(role+'-normal-role-inputs.json'),value)
         commands[role]=[spec['scheduler']['python'],str(construction.parent/'scripts/coreweave/prepare_native_actor_role.py'),
             '--composition',str(construction.parent),'--role',role,'--inputs',normal[role]['path'],
             '--out',str(Path(materials[role]['binder']['path']).parent/'binder-config.json')]
     return emit(out/'prepared.json',{'schema':SCHEMA,'inputs':binding(spec_path),'normal_inputs':normal,
         'normal_prepare_commands':commands,'proposal':binding(out/'scheduler-proposal/prepared.json'),
+        'operational_inputs':result.get('operational_inputs',[]),
         'owner_changes':0,'activated':False,'readiness_granted':False})
 
 
@@ -189,6 +220,7 @@ def reconcile(prepared_path,published_path,out):
     result=scheduler(spec,plans,controls,out/'scheduler',bootstrap_ref)
     # Use the actual adopted paths, never the preparation copies, in ownership calls.
     relay=read(result['relay']);controller=read(result['controller'])
+    if result.get('operational_inputs'):controller['operational_inputs']=result['operational_inputs']
     for role,host in relay['hosts'].items():host['plan']=plans[role]
     consumer=result['contract']['semantic_consumer'];controller['raw_rl_bootstrap']=plans[consumer]
     relay_ref=emit(out/'relay-adopted.json',relay);controller_ref=emit(out/'controller-adopted.json',controller)
