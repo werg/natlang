@@ -212,3 +212,97 @@ def test_ahead_inference_requires_exact_private_parent_without_advancing_full_fr
         assert intent['verified_inference_export_state']==advanced
         assert name(4)in intent['protected_files']
     assert state_path.read_bytes()==before
+
+
+def owned_fixture(tmp_path):
+    _, _, files, deleted, api, _, path = setup_export(tmp_path, 'lfm')
+    name = lambda digest: f'lfm/{digest}/lfm-{digest}.pt'
+    for digest in ('c'*64, 'd'*64, 'e'*64):
+        file = SimpleNamespace(name=name(digest), size=50, md5='owned')
+        def remove(file=file):
+            assert list((tmp_path/'journal').glob('*-intent-*.json'))
+            deleted.append(file.name); del files[file.name]
+        file.delete = remove; files[file.name] = file
+    state = tmp_path/'owned-state.json'
+    state.write_text(json.dumps({'receipt': {'role':'lfm','run':'owner/project/run',
+        'private':True,'name':name('e'*64),'identity':{'sha256':'e'*64,'bytes':50},
+        'independent_verification':{'sha256':'e'*64,'bytes':50}}}))
+    policy = json.loads(path.read_text()); declaration = policy['models']['lfm']
+    declaration['owned_checkpoint_retention'] = {'recovery_states':[str(state)],
+        'protected_sha256':[], 'pending_exports':[], 'discarded_files':[
+            {'name':name('c'*64),'sha256':'c'*64,'bytes':50,'reason':'superseded; no active consumer'}]}
+    path.write_text(json.dumps(policy))
+    return name,files,deleted,api,path,policy,state
+
+
+def test_owned_retention_deletes_only_explicit_discard_and_keeps_unknown_publications(tmp_path):
+    name,files,deleted,api,path,_,_ = owned_fixture(tmp_path)
+    result=retention.tick(path,tmp_path/'journal',apply=True,api=api,ownership_directory=tmp_path/'owners')
+    assert result[0]['candidates']==1  # primary recovery aliases remain protected too
+    assert name('c'*64) in deleted and name('d'*64) in files and name('e'*64) in files
+    intents=[json.loads(p.read_text()) for p in (tmp_path/'journal').glob('*-intent-*.json')]
+    assert intents[0]['owned_checkpoint_retention']['protected_sha256']==['a'*64,'e'*64]
+    assert retention.tick(path,tmp_path/'journal',apply=True,api=api,
+        ownership_directory=tmp_path/'owners')[0]['candidates']==0
+
+
+@pytest.mark.parametrize('damage',['protected','pending','parent','bad_size','bad_readback','bad_run',
+    'unknown_name','empty_reason','duplicate','missing_recovery'])
+def test_owned_retention_refuses_invalid_or_current_custody_before_deletion(tmp_path,damage):
+    name,files,deleted,api,path,policy,state = owned_fixture(tmp_path)
+    declaration=policy['models']['lfm']['owned_checkpoint_retention']; item=declaration['discarded_files'][0]
+    if damage=='protected':declaration['protected_sha256']=['c'*64]
+    if damage in ('pending','parent'):
+        pending=tmp_path/'pending.json';value={'sha256':'c'*64 if damage=='pending' else 'f'*64,'bytes':50}
+        if damage=='parent':value['owned_parent']={'sha256':'c'*64,'bytes':50}
+        pending.write_text(json.dumps(value));declaration['pending_exports']=[str(pending)]
+    if damage=='bad_size':item['bytes']=51
+    if damage in ('bad_readback','bad_run'):
+        v=json.loads(state.read_text())
+        if damage=='bad_readback':v['receipt']['independent_verification']['sha256']='a'*64
+        else:v['receipt']['run']='other/project/run'
+        state.write_text(json.dumps(v))
+    if damage=='unknown_name':item['name']='lfm/source.tar'
+    if damage=='empty_reason':item['reason']=' '
+    if damage=='duplicate':declaration['discarded_files'].append(dict(item))
+    if damage=='missing_recovery':del files[name('e'*64)]
+    path.write_text(json.dumps(policy))
+    with pytest.raises(ValueError):
+        retention.tick(path,tmp_path/'journal',apply=True,api=api,ownership_directory=tmp_path/'owners')
+    assert not deleted
+
+
+@pytest.mark.parametrize('custody',['canonical_recovery','explicit_owned','inference_parent'])
+def test_owned_discard_preserves_existing_custody_across_aliases(tmp_path,custody):
+    name,files,deleted,api,path,policy,_=owned_fixture(tmp_path)
+    declaration=policy['models']['lfm'];item=declaration['owned_checkpoint_retention']['discarded_files'][0]
+    if custody=='canonical_recovery':
+        item.update(name=name('a'*64),sha256='a'*64,bytes=40)
+        files[item['name']]=SimpleNamespace(name=item['name'],size=40,md5='alias')
+    elif custody=='explicit_owned':declaration['protected_files'].append(name('c'*64))
+    else:
+        # This exact parent spelling is also supplied by inference_dependencies
+        # for current views/active requests. Its alternate owned alias is kept.
+        declaration['protected_files'].append(f'lfm/{"c"*64}/lfm-native-checkpoint-step-2.pt')
+    path.write_text(json.dumps(policy))
+    with pytest.raises(ValueError,match='protected'):
+        retention.tick(path,tmp_path/'journal',apply=True,api=api,ownership_directory=tmp_path/'owners')
+    assert not deleted
+
+
+@pytest.mark.parametrize('custody',['recovery','pending'])
+def test_owned_custody_also_protects_older_canonical_aliases(tmp_path,custody):
+    _,files,deleted,api,path,policy,_=owned_fixture(tmp_path)
+    digest='e'*64
+    if custody=='pending':
+        digest='f'*64;pending=tmp_path/'owned-pending.json'
+        pending.write_text(json.dumps({'sha256':digest,'bytes':50}))
+        policy['models']['lfm']['owned_checkpoint_retention']['pending_exports']=[str(pending)]
+    alias=f'lfm/{digest}/lfm-native-checkpoint-step-1.pt'
+    file=SimpleNamespace(name=alias,size=50,md5='alias')
+    def remove():deleted.append(alias);del files[alias]
+    file.delete=remove;files[alias]=file;path.write_text(json.dumps(policy))
+    retention.tick(path,tmp_path/'journal',apply=True,api=api,ownership_directory=tmp_path/'owners')
+    assert alias in files and alias not in deleted
+    proof=json.loads(next((tmp_path/'journal').glob('*-intent-*.json')).read_text())
+    assert alias in proof['protected_files']

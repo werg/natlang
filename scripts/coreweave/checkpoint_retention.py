@@ -129,6 +129,62 @@ def inference_dependencies(role, declaration):
     return protected,view
 
 
+def owned_candidates(role, declaration, files, *, protected_sha256=()):
+    """Verify explicit discarded owned publications against live recovery custody."""
+    policy = declaration.get('owned_checkpoint_retention')
+    if policy is None:
+        return [], None
+    present = {file.name: file for file in files}
+    protected = {*protected_sha256, *policy.get('protected_sha256', [])}
+    valid_sha = lambda value: isinstance(value, str) and re.fullmatch('[0-9a-f]{64}', value)
+    if any(not valid_sha(value) for value in protected):
+        raise ValueError('owned retention needs exact protected identities')
+    states = policy['recovery_states']
+    if not states:
+        raise ValueError('owned retention requires an actual verified recovery')
+    recovery = []
+    for path in states:
+        state = json.loads(Path(path).read_text())
+        receipt = state['receipt']; identity = receipt['identity']
+        expected = f"{role}/{identity['sha256']}/{role}-{identity['sha256']}.pt"
+        if (receipt.get('private') is not True or receipt.get('run') != declaration['run']
+                or receipt.get('role') != role or not valid_sha(identity.get('sha256'))
+                or type(identity.get('bytes')) is not int or identity['bytes'] <= 0
+                or receipt.get('name') != expected
+                or any(receipt.get('independent_verification', {}).get(key) != identity[key]
+                       for key in ('sha256', 'bytes'))
+                or expected not in present or present[expected].size != identity['bytes']):
+            raise ValueError('owned recovery lacks exact listed private full readback')
+        protected.add(identity['sha256']); recovery.append(state)
+    pending = []
+    for path in policy.get('pending_exports', []):
+        if not Path(path).exists():
+            continue
+        value = json.loads(Path(path).read_text())
+        identities = [value, *([value['owned_parent']] if value.get('owned_parent') else [])]
+        for identity in identities:
+            if (not valid_sha(identity.get('sha256')) or type(identity.get('bytes')) is not int
+                    or identity['bytes'] <= 0):
+                raise ValueError('owned pending export lacks its exact protected identity')
+            protected.add(identity['sha256'])
+        pending.append(value)
+    selected = []; seen = set()
+    for item in policy['discarded_files']:
+        digest = item['sha256']; name = item['name']
+        if (not valid_sha(digest) or name != f'{role}/{digest}/{role}-{digest}.pt'
+                or type(item.get('bytes')) is not int or item['bytes'] <= 0
+                or not isinstance(item.get('reason'), str) or not item['reason'].strip()
+                or name in seen or digest in protected):
+            raise ValueError('owned discard is ambiguous, protected or not an explicit full publication')
+        seen.add(name)
+        if name in present:
+            if present[name].size != item['bytes']:
+                raise ValueError('owned discarded publication changed its listed size')
+            selected.append(present[name])
+    return selected, {'recovery_states': recovery, 'pending_exports': pending,
+                      'protected_sha256': sorted(protected), 'discarded_files': policy['discarded_files']}
+
+
 def tick(policy_path, journal_directory, *, apply=False, api=None, ownership_directory=None):
     if api is None:
         import wandb
@@ -185,12 +241,27 @@ def _prune_run(role, declaration, root, apply, api, policy_binding, claim):
                 view['inference_source']['training_checkpoint_sha256']!=state['receipt']['identity']['sha256']):
             raise ValueError('inference pointer and full recovery disagree at the same step')
         selected += candidates(role,view,files,protected,kind='inference')
+    protected_identities = {state['receipt']['identity']['sha256']}
+    for name in protected:
+        match = re.match(rf'{role}/([0-9a-f]{{64}})/', name)
+        if match:
+            protected_identities.add(match[1])
+    owned, owned_authority = owned_candidates(role, declaration, files,
+        protected_sha256=protected_identities)
+    if owned_authority is not None:
+        custody = set(owned_authority['protected_sha256'])
+        retained = [file for file in selected if
+            (match := re.match(rf'{role}/([0-9a-f]{{64}})/', file.name)) and match[1] in custody]
+        protected.update(file.name for file in retained)
+        selected = [file for file in selected if file not in retained]
+    selected += owned
     if apply:
         claim()  # Only valid recovery under an applying policy may acquire ownership.
     intent = {'at': time.time(), 'role': role, 'run': declaration['run'],
               'verified_latest': state['receipt']['name'], 'apply': apply,
               'verified_export_state': state, 'policy': policy_binding,
               'protected_files': sorted(protected),
+              **({'owned_checkpoint_retention': owned_authority} if owned_authority is not None else {}),
               **({'verified_inference_export_state':view}if view is not None else {}),
               'files': [{'name': f.name, 'bytes': f.size, 'md5': f.md5} for f in selected]}
     path = root / f'{role}-rolling-intent-{time.time_ns()}.json'
