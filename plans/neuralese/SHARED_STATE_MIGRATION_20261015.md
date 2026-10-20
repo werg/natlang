@@ -1012,3 +1012,54 @@ the strict source-closure verifier. The next verify-return curriculum has
 12/12 exact reference executions and48 queued teacher requests. Its guardian
 configuration is adopted with existing batches preserved, but those future
 requests have not yet been measured. No additional sandbox is allocated.
+
+### DGX recovery and production follow-through, 2026-10-20 02:09 UTC
+
+The Q5 LFM attempt restored the exact18,619 optimizer/RNG/exposure parent and
+passed actual actor parity and the complete150-parameter/151-derivative
+FFN4096 gradient check. It subsequently failed before capacity measurement or
+SGD because historical geometry reports bound cache witnesses to the old
+row-index directory. All388 prequalified source indexes are now authenticated
+in the canonical cache. Six immutable successor geometry reports preserve the
+original report contents except for byte-identical cache locations. The Q6
+entry is staged; its frozen4395-runtime metadata-only gradient carry preflight
+passed against the original actual proofs, preserving the genuine null
+precision-transition report and requiring every capacity check afresh. The
+new SDK owner is waiting behind the authenticated Q6 controller guard. No Q6
+SGD or capacity completion is claimed at this point. Detailed stage, carry,
+SDK, and passive-monitor receipts are under `/home/werg/data/dgxops/`.
+
+Mellum completed its genuine256-update continuation at24,831, with an actual
+terminal receipt at02:08:16. The full-recipe controller handoff is being
+inspected so the next useful training stage follows promptly. The complete24,739 checkpoint was independently
+private PUT/full-GET verified, preserving48,220,799,353 bytes of recovery state.
+The next1,761-row source generation is pending through the sole supervisor's
+CAS; pointer installation is not exposure. Both current18,619 LFM and24,575
+Mellum historical held-task actors are running locally. The retained18,006
+behavioral diagnostic measured bitwise-equal training-versus-cached inference
+logits on the tested real sequences; this rules out that arithmetic mismatch
+there, not the remaining success-target/supervision investigation.
+
+Teacher199's full48 verified trajectories are now admitted as1,440 graphs per
+student. Teacher200's first48 trajectories passed the original execution and
+required-file oracles; their normal per-decision conversion and admission are
+still pending. The existing generation sandbox remains supplied. Low-priority
+CPU queue ordering was adjusted so completed-source conversions can run while
+the larger SearchOWL acquisition waits for sufficient memory.
+
+The on-request foundation qualification and frozen-snapshot VAE preparation
+work passed135 focused integration tests, with one existing skip, plus quick
+checks. Independent review of complete source-host dependency transport is
+still required before adopting it in both frozen production runtimes. VAE
+preparation does not grant readiness, release live optimizers, or permit joint
+backbone updates before exact descendant adoption. The regular full-check timer
+has been restored after yielding memory to urgent recovery and these focused
+checks; the latest complete full-check PASS remains7edc9078c.
+
+Storage cleanup removed exactly11 superseded canonical private checkpoints,
+with the candidate list checked before deletion and absence verified afterward,
+reclaiming210,568,386,261 bytes. Current recovery/quality/assigned-repair parents,
+modern owned publications, reusable source data and held data were retained.
+The rolling retention service was relaunched through the memory ledger after
+its transient unit unloaded. Modern owned-publication retention still needs
+extension; historical canonical step frontiers are not current training progress.
