@@ -279,6 +279,9 @@ def ready_participants(config):
                 if raw_plan.get('snapshot_preparation'):
                     curriculum=json.loads(Path(config['curriculum']).read_text())
                     if curriculum.get('snapshot_preparation') is True:
+                        if raw_plan.get('consumer_preparation_handoff'):
+                            roles.select_preparation_work(raw_plan,{'path':str(Path(config['curriculum']).resolve()),
+                                'sha256':sha256_file_hex_cached(config['curriculum'])})
                         ready,pending=roles.ready_participants(raw_plan,snapshot=True)
                         if raw_plan.get('consumer_preparation_handoff') and not roles.local_released(config):
                             return [],[{'reason':'frozen VAE awaits genuine consumer allocation release',

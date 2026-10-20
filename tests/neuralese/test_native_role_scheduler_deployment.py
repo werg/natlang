@@ -127,7 +127,8 @@ def prepared_snapshot(tmp_path):
         'checkpoint':binding(checkpoint)})
     completion=directory/'shared-stage-completion.json';write(completion,{
         'schema':'natlang.native-shared-stage-completion/1','completed':False,'production_ready':False,
-        'preparation_complete':True,'snapshot_preparation':{'participant_optimizer_updates':0},
+        'preparation_complete':True,'snapshot_preparation':{'participant_optimizer_updates':0,
+            'participants':{row['model_id']:row['native_identity']for row in models}},
         'participants_signature':manifest['signature'],'curriculum_signature':canonical_json_sha256_hex(snapshot),
         'checkpoint':binding(checkpoint),'curriculum':binding(exported),'adapter':binding(adapter)})
     return config,completion,plans
@@ -301,3 +302,21 @@ def test_preparation_relay_checks_complete_semantic_closure_before_requesting_co
     io.broken=False;calls.clear()
     module._arm_preparation(config,io,'existing-consumer',plan,request)
     assert [row[0]for row in calls]==['closure','assets','arm']
+
+
+def test_explicit_new_work_builder_resumes_actual_bound_frozen_checkpoint(tmp_path):
+    config,completion,_=prepared_snapshot(tmp_path/'prior')
+    plans,controls,curriculum,provider,states,runtime=source(tmp_path/'next')
+    adjusted=json.loads(curriculum.read_text());adjusted['snapshot_work_generation']='next-adaptation'
+    adjusted['adaptive_refresh']={'updates_per_phase':1}
+    write(curriculum,adjusted)
+    result=prepare_role_scheduler(plans,controls,curriculum,provider,tmp_path/'next-prepared',raw_states=states,
+        runtime=runtime,rl_bootstrap=binding(tmp_path/'next/rl-bootstrap.json'),handoff_lease_seconds=180,
+        snapshot_parent=binding(completion))
+    successor=json.loads(Path(result['controller']['path']).read_text())
+    proof=json.loads(completion.read_text())
+    command=successor['command']
+    assert command[command.index('--resume')+1]==proof['checkpoint']['path']
+    assert '--refresh-participants'in command
+    assert result['inputs']['snapshot_parent']==binding(completion)
+    assert result['model_allocations']==result['checkpoint_decodes']==0

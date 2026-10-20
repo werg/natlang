@@ -518,3 +518,60 @@ def test_frozen_snapshot_preparation_then_explicit_descendant_optimizer_adoption
         assert participant['source_identity']['checkpoint_sha256']=='b'*64
     # The first adopted update is a real VAE refresh; joint/distill still remain.
     assert continued['refresh_progress']['completed_updates']['vae']==1
+
+
+def test_new_frozen_work_refreshes_vae_after_real_descendant_sgd_and_resumes_exact_credit(tmp_path,monkeypatch):
+    """Actual tiny two-port optimizer/VAE work; readiness proofs are protocol fixtures."""
+    path,manifest,config,_=_fixture(tmp_path,monkeypatch)
+    config.update(snapshot_preparation=True,adaptive_refresh={'updates_per_phase':1})
+    bindings=json.loads(manifest.read_text())
+    for binding in bindings['models']:
+        binding.update(readiness={'path':'protocol-proof','sha256':'a'*64},
+            readiness_requirement={'model_id':binding['model_id']})
+    bindings['signature']=canonical_json_sha256_hex(bindings['models']);manifest.write_text(json.dumps(bindings))
+    monkeypatch.setattr(stage,'_qualified_snapshot',lambda name,binding:binding)
+    from natlang_neuralese.train import native_continuation
+    monkeypatch.setattr(native_continuation,'qualified_refresh_config',lambda *a,**k:(config,[]))
+    path.write_text(json.dumps(config))
+    first=stage.run(path,manifest,tmp_path/'frozen-first',device='cpu')
+    parent=tmp_path/'frozen-first/checkpoint.pt';old=CheckpointPolicy.load(parent)
+    assert first['step']==1 and first['preparation_complete']
+    assert first['refresh_progress']['required_updates']=={'vae':1}
+    original=stage.load_participant;optimizers={}
+    row=json.loads(Path(config['pairs']['path']).read_text())
+    from natlang_neuralese.data.native_graph import parse_graph,graph_loss
+    def descendant(name,binding,current,device):
+        participant=original(name,binding,current,device)
+        loss,_=graph_loss(participant.model,parse_graph(row['models'][name]['graph'],
+            tokenizer_fingerprint=participant.identity['tokenizer_fingerprint']),checkpoint_layers=False)
+        loss.backward();participant.optimizer.step();participant.optimizer.zero_grad(set_to_none=True)
+        participant.identity=binding['native_identity']
+        participant.snapshot_ancestors=[old['participants'][name]['source_identity']['checkpoint_sha256']]
+        participant.sft_progress={'actual_descendant':{'earned_updates':1,'remaining_ordinary_credit':3}}
+        optimizers[name]=copy.deepcopy(participant.optimizer.state_dict())
+        return participant
+    monkeypatch.setattr(stage,'load_participant',descendant)
+    for binding in bindings['models']:binding['native_identity']['checkpoint_sha256']='b'*64
+    bindings['signature']=canonical_json_sha256_hex(bindings['models']);manifest.write_text(json.dumps(bindings))
+    config.update(snapshot_work_generation='explicit-new-frozen-work',adaptive_refresh={'updates_per_phase':2})
+    path.write_text(json.dumps(config))
+    partial=stage.run(path,manifest,tmp_path/'frozen-next',resume=parent,refresh_participants=True,
+        device='cpu',max_updates=1)
+    checkpoint=tmp_path/'frozen-next/checkpoint.pt';middle=CheckpointPolicy.load(checkpoint)
+    assert partial['step']==2 and not partial['preparation_complete']
+    assert partial['refresh_progress']['required_updates']=={'vae':2}
+    assert partial['refresh_progress']['completed_updates']=={'vae':1}
+    from test_native_shared_checkpoint import equal_tree
+    for name,participant in middle['participants'].items():
+        equal_tree(participant['optimizer'],optimizers[name])
+        assert participant['sft_progress']['actual_descendant']['earned_updates']==1
+    final=stage.run(path,manifest,tmp_path/'frozen-next',resume=checkpoint,refresh_participants=True,device='cpu')
+    saved=CheckpointPolicy.load(checkpoint)
+    assert final['step']==3 and final['preparation_complete'] and not final['production_ready']
+    assert not any(saved['training'].get('model_updates',{}).values())
+    counts=saved['training']['exposure']['vae']
+    assert sum(sum(value.values())for value in counts.values())==3
+    assert any(not torch.equal(value,saved['vae_state'][key])for key,value in old['vae_state'].items())
+    repeated=stage.run(path,manifest,tmp_path/'frozen-next',resume=checkpoint,refresh_participants=True,device='cpu')
+    assert repeated['step']==3 and repeated['preparation_complete']
+    equal_tree(CheckpointPolicy.load(checkpoint)['training']['exposure'],saved['training']['exposure'])

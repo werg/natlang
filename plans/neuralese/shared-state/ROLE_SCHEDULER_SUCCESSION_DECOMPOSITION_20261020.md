@@ -144,3 +144,28 @@ operational cancellation is distinct from failed preparation: the next ownership
 attempt binds its immutable predecessor/cancellation and changes the foundation
 request generation after intervening RAW updates, while resuming the same saved
 VAE checkpoint/exposure. Genuine failed preparation still needs declared repair.
+
+Completed work is keyed by the declared normalized frozen curriculum and role
+contract, independent of subsequent model/checkpoint progress. The existing
+preparation request freezes snapshots only for that selected, unconsumed work.
+An explicit curriculum adjustment or snapshot_work_generation selects new work
+and fresh qualified snapshots after the prior request ends. Operational restart
+selects the same work and resumes its original parents. The relay verifies this
+work identity before staging/releasing; advancing SGD alone cannot rearm it.
+
+An explicit frozen-parent continuation also uses the existing adaptive phase
+quanta, restricted to VAE phases. Cumulative per-pair exposure stays intact;
+initial source deficits still complete, then declared refresh updates add useful
+adaptation for the newly qualified snapshots. An interrupted refresh cannot mark
+preparation complete until its VAE quantum finishes. No backbone update or joint
+runtime/task qualification is claimed by this frozen-only work.
+
+The existing role-scheduler input spec accepts optional `snapshot_parent`, an
+exact prior frozen-completion binding. With a declared `adaptive_refresh`, a
+fresh scheduler output binds that actual checkpoint and emits `--resume` plus
+`--refresh-participants`. Native semantic loading retains the existing ancestry,
+optimizer/RNG/exposure and geometry checks. An explicit `snapshot_work_generation`
+(or changed curriculum content) selects new work. A copied/relocated identical
+curriculum remains the same completed work. Old post-VAE leases are cancelled
+through the existing relay API when their preparation no longer matches the
+selected curriculum; no old release authorizes the new work.

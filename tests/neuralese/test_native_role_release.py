@@ -73,6 +73,27 @@ def install_actual_checkpoint(row,path):
     write_json_durable(row['state_path'],row['state'])
 
 
+def advance_actual_mellum(row):
+    import torch
+    from test_native_semantic import setup_pair
+    from natlang_neuralese.train.native_state_sft import make_native_optimizer
+    from natlang_neuralese.train.native_semantic import parse_pair
+    from natlang_neuralese.data.native_graph import graph_loss
+    actors,episode,_=setup_pair();actor=actors['mellum']
+    actor.model.port.hf.natlang_precision='bf16'
+    optimizer=make_native_optimizer(actor.model,lr=1e-3,in_backward=False)[0]
+    parameters={key:value.detach().clone()for key,value in actor.model.named_parameters()}
+    graph=parse_pair(episode,actors)['mellum'][0]
+    loss,_=graph_loss(actor.model,graph,checkpoint_layers=False);loss.backward();optimizer.step();optimizer.zero_grad(set_to_none=True)
+    assert any(not torch.equal(parameters[key],value)for key,value in actor.model.named_parameters())
+    checkpoint=Path(row['receipt']['checkpoint']['path']).parent/'operational-descendant.pt'
+    torch.save({'model':actor.model.state_dict(),'optimizer':optimizer.state_dict(),
+        'rng':torch.get_rng_state(),'earned_updates':1},checkpoint)
+    row['state']=json.loads(row['state_path'].read_text())
+    install_actual_checkpoint(row,checkpoint)
+    return checkpoint
+
+
 def exchange(source,target,kind='released'):
     reference=roles.publish(source['plan_path'],source['state_path'],kind=kind)
     assert reference
@@ -755,22 +776,7 @@ def test_consumer_allocation_handoff_requires_staged_snapshots_and_dead_owner_th
         # Actual whole-graph native SGD between operational cancellation and
         # the next ownership attempt; no fake runtime/task numerical claim.
         import torch
-        from test_native_semantic import setup_pair
-        from natlang_neuralese.train.native_state_sft import make_native_optimizer
-        from natlang_neuralese.train.native_semantic import parse_pair
-        from natlang_neuralese.data.native_graph import graph_loss
-        actors,episode,_=setup_pair();actor=actors['mellum']
-        actor.model.port.hf.natlang_precision='bf16'
-        optimizer=make_native_optimizer(actor.model,lr=1e-3,in_backward=False)[0]
-        parameters={key:value.detach().clone()for key,value in actor.model.named_parameters()}
-        graph=parse_pair(episode,actors)['mellum'][0]
-        loss,_=graph_loss(actor.model,graph,checkpoint_layers=False);loss.backward();optimizer.step();optimizer.zero_grad(set_to_none=True)
-        assert any(not torch.equal(parameters[key],value)for key,value in actor.model.named_parameters())
-        checkpoint=Path(consumer['receipt']['checkpoint']['path']).parent/'operational-descendant.pt'
-        torch.save({'model':actor.model.state_dict(),'optimizer':optimizer.state_dict(),
-            'rng':torch.get_rng_state(),'earned_updates':1},checkpoint)
-        consumer['state']=json.loads(consumer['state_path'].read_text())
-        install_actual_checkpoint(consumer,checkpoint);roles.withdraw(plan,consumer['state_path'])
+        checkpoint=advance_actual_mellum(consumer);roles.withdraw(plan,consumer['state_path'])
         successor=roles.arm_preparation_handoff(plan,request,binding(curriculum))
         assert successor and successor['sha256']!=reference['sha256']
         assert roles.preparation_handoff(plan)['value']['ownership_attempt']['ordinal']==2
@@ -814,8 +820,35 @@ def test_consumer_allocation_handoff_requires_staged_snapshots_and_dead_owner_th
                 for name,value in request['participants'].items()}},
             'participants_signature':'fixture','curriculum_signature':canonical_json_sha256_hex(config),
             'curriculum':binding(curriculum),'checkpoint':binding(checkpoint),'adapter':binding(adapter)})
-        roles.post_vae_request(plan,binding(complete),{'curriculum':binding(joint)})
+        post=roles.post_vae_request(plan,binding(complete),{'curriculum':binding(joint)})
+        handoff=json.loads(Path(post['path']).read_text())
+        assert roles.handoff_matches_preparation_work(plan,handoff,binding(curriculum))
         assert roles.preparation_handoff(plan)is None
         assert roles.arm_preparation_handoff(plan,request,binding(curriculum))is None
         assert not roles.eligible(plan)  # No bypass of actual post-VAE lease/proof matching.
         assert (Path(plan['role_exchange']['directory'])/'preparation-consumed'/(active['sha256']+'.json')).is_file()
+        # Actual model progress/new valid current proof cannot create more of
+        # the same declared VAE work. Explicit curriculum work can use it.
+        advance_actual_mellum(consumer)
+        consumer['state']['plan_sha256']=sha256_file_hex(consumer['plan_path'])
+        value=consumer['state']['models']['mellum'];config_path=Path(value['config']['path'])
+        write_json_durable(config_path,{'runtime_binding':{'plan_sha256':sha256_file_hex(consumer['plan_path'])}})
+        value['config']=raw.binding(config_path);write_json_durable(consumer['state_path'],consumer['state'])
+        assert roles.publish(consumer['plan_path'],consumer['state_path'],kind='eligible')
+        fresh=roles.semantic_request(plan,snapshot=True)
+        assert fresh!=request
+        assert roles.preparation_work_complete(plan,binding(curriculum))
+        assert roles.arm_preparation_handoff(plan,fresh,binding(curriculum))is None
+        relocated=tmp_path/'same-curriculum-new-path.json';write_json_durable(relocated,config)
+        assert roles.preparation_work_complete(plan,binding(relocated))
+        adjusted=tmp_path/'adjusted-frozen.json';adjusted_config=copy.deepcopy(config)
+        adjusted_config['snapshot_work_generation']='explicit-next-adaptation'
+        write_json_durable(adjusted,adjusted_config)
+        roles.select_preparation_work(plan,binding(adjusted))
+        assert not roles.handoff_matches_preparation_work(plan,handoff,binding(adjusted))
+        assert not roles.preparation_work_complete(plan,binding(adjusted))
+        assert roles.semantic_request(plan,snapshot=True)==fresh
+        selected,_=roles.exchanged(plan,kind='snapshot')
+        roles.install_assets(consumer['plan_path'],fresh,{name:row['checkpoint']for name,row in selected.items()})
+        successor=roles.arm_preparation_handoff(plan,fresh,binding(adjusted))
+        assert successor and roles.preparation_handoff(plan)['value']['snapshots']==fresh

@@ -765,10 +765,14 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
         if training.get('semantic_obligation_signature')!=obligation_signature:
             training['semantic_obligations']=refresh_schedule.exposure_summary(config['phases'],train,participants,training['exposure'])
             training['semantic_obligation_signature']=obligation_signature
-        refresh_cycle=None if config.get('snapshot_preparation') else refresh_schedule.initialize(training,config,manifest)
+        refresh_cycle=refresh_schedule.initialize(training,config,manifest)
         if config.get('snapshot_preparation'):
-            work=first_work([phase for phase in config['phases'] if phase['kind']=='vae'],
-                train.entries,participants,training['exposure'],cursors)
+            frozen_phases=[phase for phase in config['phases']if phase['kind']=='vae']
+            work=first_work(frozen_phases,train.entries,participants,training['exposure'],cursors)
+            if refresh_cycle is not None:
+                work=((*work,cursors[work[0]['id']])if work is not None else
+                    refresh_schedule.work(frozen_phases,train.entries,participants,training['exposure'],
+                        refresh_cycle,training.setdefault('refresh_source_cursors',{})))
         elif refresh_cycle is not None:
             work=refresh_schedule.work(config['phases'],train.entries,participants,training['exposure'],
                 refresh_cycle,training.setdefault('refresh_source_cursors',{}))
@@ -972,7 +976,7 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
     certificates = {}
     tasks = {}
     semantic_certificate=None
-    if not policy.signaled and (complete or refresh_reached):
+    if not config.get('snapshot_preparation') and not policy.signaled and (complete or refresh_reached):
         from ..eval.native_backend import qualify_complete_runtime
         from ..model.shared_state import RoleTokens
         tasks = measure_tasks(participants, export, config, out, training['step'], device, vae=vae, stop_requested=lambda: policy.signaled)
@@ -1032,7 +1036,7 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
         and semantic_certificate is not None and semantic_certificate['passed'])
     report = {'schema': 'natlang.native-shared-stage-completion/1', 'completed': complete,
         'snapshot_preparation':training.get('snapshot_preparation'),
-        'preparation_complete':bool(config.get('snapshot_preparation') and not policy.signaled
+        'preparation_complete':bool(config.get('snapshot_preparation') and not policy.signaled and publication_boundary
             and _exposure_complete([phase for phase in config['phases'] if phase['kind']=='vae'],
                 train,participants,training['exposure'])[0]),
         'exposure_complete':exposure_complete,'refresh_ready':bool(refresh_reached and current_checks),

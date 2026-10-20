@@ -477,7 +477,11 @@ def exchanged(plan,*,kind):
         if pointer.is_file():
             preparation=json.loads(_bound(json.loads(pointer.read_text())).read_text())
             if preparation.get('contract')!=contract(plan):raise ValueError('frozen snapshot request changed its contract')
-            frozen={row['source_host_id']:row['role_release']for row in preparation['snapshots']['participants'].values()}
+            current=Path(exchange['directory'])/'preparation-work.json'
+            consumed=Path(exchange['directory'])/'preparation-consumed'/(json.loads(pointer.read_text())['sha256']+'.json')
+            if (not consumed.is_file() and current.is_file()
+                    and json.loads(current.read_text())['identity']==preparation['work_identity']):
+                frozen={row['source_host_id']:row['role_release']for row in preparation['snapshots']['participants'].values()}
     found={};pending=[]
     for role in exchange['roles']:
         reference,proof=_status(exchange,role)
@@ -799,6 +803,9 @@ def post_vae_request(plan,completion,controller):
         _immutable(Path(exchange['directory'])/'preparation-consumed'/
             (active['source']['sha256']+'.json'),{'request':active['source'],
             'completion':completion,'post_vae_request':canonical_json_sha256_hex(request)})
+        _immutable(Path(exchange['directory'])/'preparation-completed-work'/
+            (active['value']['work_identity']+'.json'),{'identity':active['value']['work_identity'],
+            'request':active['source'],'completion':completion})
     return _immutable(Path(exchange['directory'])/'handoff-requests'/
         (canonical_json_sha256_hex(request)+'.json'),request)
 
@@ -1030,6 +1037,57 @@ def handoff_hold(plan):
     return _handoff_proof_matches(plan,proof,reference)
 
 
+def _preparation_work(plan,curriculum):
+    from ..train.native_readiness import _bound
+    from ..train.native_semantic_stage import validate_config
+    _,exchange=ownership(plan)
+    if exchange is None or exchange['role']!=exchange['semantic_consumer']:
+        raise ValueError('only the semantic consumer selects preparation work')
+    config=validate_config(json.loads(_bound(curriculum).read_text()))
+    generation=config.get('snapshot_work_generation','initial')
+    if config.get('snapshot_preparation')is not True or not isinstance(generation,str)or not generation:
+        raise ValueError('preparation work needs frozen curriculum and explicit valid generation')
+    return {'identity':canonical_json_sha256_hex({'contract':contract(plan),'curriculum':config}),
+        'curriculum':curriculum,'contract':contract(plan)}
+
+
+def select_preparation_work(plan,curriculum):
+    """Explicit declared work may advance; model progress alone is not new work."""
+    from ..train.native_readiness import _bound
+    work=_preparation_work(plan,curriculum);identity=work['identity']
+    _,exchange=ownership(plan)
+    root=Path(exchange['directory']);root.mkdir(parents=True,exist_ok=True)
+    pointer=root/'preparation-handoff.json'
+    if pointer.is_file():
+        reference=json.loads(pointer.read_text());previous=json.loads(_bound(reference).read_text())
+        cancelled=root/'preparation-cancelled.json'
+        ended=((root/'preparation-consumed'/(reference['sha256']+'.json')).is_file()or
+            (cancelled.is_file()and json.loads(cancelled.read_text()).get('request')==reference))
+        if previous['work_identity']!=identity and not ended:
+            raise ValueError('checkpoint/cancel the active consumer preparation before changing its work')
+    write_json_durable(root/'preparation-work.json',work)
+    return work
+
+
+def preparation_work_complete(plan,curriculum):
+    work=_preparation_work(plan,curriculum)
+    _,exchange=ownership(plan)
+    path=Path(exchange['directory'])/'preparation-completed-work'/(work['identity']+'.json')
+    if not path.is_file():return False
+    from ..train.native_readiness import _bound
+    value=json.loads(path.read_text());_bound(value['completion'])
+    if value.get('identity')!=work['identity']:raise ValueError('completed preparation work identity changed')
+    return True
+
+
+def handoff_matches_preparation_work(plan,request,curriculum):
+    validate_handoff_request(plan,request)
+    from ..train.native_readiness import _bound
+    from ..train.native_semantic_stage import validate_config
+    config=validate_config(json.loads(_bound(curriculum).read_text()))
+    return _evidence(request['preparation'])['curriculum_signature']==canonical_json_sha256_hex(config)
+
+
 def arm_preparation_handoff(plan,request,curriculum):
     """Stage-before-release: the consumer lends its existing allocation to VAE."""
     from ..train.native_readiness import _bound
@@ -1041,6 +1099,8 @@ def arm_preparation_handoff(plan,request,curriculum):
     config=validate_config(json.loads(_bound(curriculum).read_text()))
     if config.get('snapshot_preparation') is not True:
         raise ValueError('consumer allocation request must be frozen VAE only')
+    work=select_preparation_work(plan,curriculum)
+    if preparation_work_complete(plan,curriculum):return None
     if request!=semantic_request(plan,snapshot=True):
         raise ValueError('preparation ownership changed its qualified snapshots')
     ready,pending=ready_participants(plan,snapshot=True)
@@ -1048,6 +1108,7 @@ def arm_preparation_handoff(plan,request,curriculum):
     generations={row['model']:row.get('foundation_qualification_generation')for row in plan['models']}
     value={'schema':'natlang.native-consumer-preparation-handoff/1','contract':contract(plan),
         'consumer':exchange['role'],'snapshots':request,'curriculum':curriculum,
+        'work_identity':work['identity'],
         'repair_generations':generations,'backbone_updates':0,'readiness_granted':False}
     root=Path(exchange['directory'])
     cancelled=root/'preparation-cancelled.json'

@@ -107,6 +107,14 @@ def tick(config,io):
     handoff_pointer=io.read_optional(sid,plans[consumer]['role_exchange']['directory']+'/post-vae-handoff.json')
     if handoff_pointer is not None:
         handoff=json.loads(_read_bound(io,sid,json.loads(handoff_pointer)))
+        if config.get('preparation_curriculum') and not call(io,sid,
+                'roles.handoff_matches_preparation_work('+repr(plans[consumer])+','+repr(handoff)+','+
+                repr(config['preparation_curriculum'])+')'):
+            for name,row in hosts.items():
+                call(io,row['source_host_id'],'roles.cancel_handoff('+repr(plans[name])+','+repr(handoff)+')')
+            handoff=None
+    else:handoff=None
+    if handoff is not None:
         lease=config.get('handoff_lease_seconds')
         interval=config.get('poll_seconds',15)
         if type(lease) not in (int,float) or not 2*interval<lease:
@@ -127,6 +135,11 @@ def tick(config,io):
     if request_raw is None:return {'status':'waiting-for-semantic-consumption','roles':sorted(snapshots)}
     request=json.loads(request_raw)
     mode=request.get('snapshot_preparation',False)
+    if mode and plans[consumer].get('consumer_preparation_handoff'):
+        curriculum=config.get('preparation_curriculum')
+        if not curriculum:raise ValueError('snapshot relay needs its actual declared work')
+        if call(io,sid,'roles.preparation_work_complete('+repr(plans[consumer])+','+repr(curriculum)+')'):
+            return {'status':'preparation-work-complete','roles':sorted(snapshots)}
     expected=call(io,sid,'roles.semantic_request('+repr(plans[consumer])+',snapshot='+repr(mode)+')')
     if request!=expected:return {'status':'waiting-for-current-releases','roles':sorted(snapshots)}
     usable=call(io,sid,'roles.ready_participants('+repr(plans[consumer])+',snapshot='+repr(mode)+')[0]')

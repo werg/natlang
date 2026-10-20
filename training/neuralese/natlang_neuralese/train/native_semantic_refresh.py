@@ -13,7 +13,8 @@ def initialize(training,config,manifest):
     declaration=config.get('adaptive_refresh')
     if not declaration:return None
     default=declaration.get('updates_per_phase')
-    required={phase['id']:(phase.get('options') or {}).get('refresh_updates',default) for phase in config['phases']}
+    phases=[phase for phase in config['phases']if not config.get('snapshot_preparation')or phase['kind']=='vae']
+    required={phase['id']:(phase.get('options') or {}).get('refresh_updates',default) for phase in phases}
     if any(type(value) is not int or value<=0 for value in required.values()):
         raise ValueError('adaptive semantic refresh requires positive declared updates for every phase')
     signature=canonical_json_sha256_hex({'models':manifest['models'],'config':config,

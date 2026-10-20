@@ -43,7 +43,8 @@ def validate_joint_task_specs(curriculum, model_ids):
 
 
 def prepare_role_scheduler(plans, controls, curriculum_path, provider_path, out, *,
-                           raw_states, runtime, rl_bootstrap, handoff_lease_seconds, python=sys.executable):
+                           raw_states, runtime, rl_bootstrap, handoff_lease_seconds, python=sys.executable,
+                           snapshot_parent=None):
     """Bind existing external owners to the existing passive semantic scheduler.
 
     Run against mirrored metadata on the actual semantic consumer. The returned
@@ -117,6 +118,19 @@ def prepare_role_scheduler(plans, controls, curriculum_path, provider_path, out,
     consumer=common['semantic_consumer']
     if provider.get('coordinator_id')!=hosts[consumer]['source_host_id']:
         raise ValueError('semantic scheduling belongs to its existing declared consumer')
+    preparation_resume=[]
+    if snapshot_parent is not None:
+        if not semantic.get('adaptive_refresh'):
+            raise ValueError('new frozen work must declare actual adaptive VAE refresh updates')
+        from .native_readiness import validate_snapshot_preparation
+        parent_path=Path(binding(snapshot_parent['path'],snapshot_parent)['path'])
+        parent=json.loads(parent_path.read_text())
+        validate_snapshot_preparation(parent_path,{(parent.get('participants_signature'),parent.get('curriculum_signature')):
+            {'execution_signature':'explicit frozen VAE continuation'}})
+        if set((parent.get('snapshot_preparation')or{}).get('participants',{}))!={
+                row['handoff_requirement']['model_id']for row in owned_rows.values()}:
+            raise ValueError('new frozen work cannot replace its actual prepared participant set')
+        preparation_resume=['--resume',str(_bound(parent['checkpoint'])),'--refresh-participants']
     out=Path(out).resolve()
     if out.exists() and any(out.iterdir()):
         raise FileExistsError('role scheduler output must be a new immutable declaration')
@@ -148,7 +162,7 @@ def prepare_role_scheduler(plans, controls, curriculum_path, provider_path, out,
         'raw_rl_out':str(Path(raw_states[consumer]).parent),'manage_raw_bootstrap':False,
         'command':[python,'-m','natlang_neuralese.train.native_semantic_stage',
             '--config',str(curriculum),'--participants','{participants}',
-            '--out','{out}','--device','cuda'],
+            '--out','{out}','--device','cuda',*preparation_resume],
         'workdir':str(runtime)})
     write_json_durable(relay,{'schema':'natlang.native-role-exchange-service/1',
         'hosts':hosts,'provider':provider,'out':str(out/'relay-state'),'poll_seconds':15,
@@ -158,7 +172,8 @@ def prepare_role_scheduler(plans, controls, curriculum_path, provider_path, out,
         'controller':binding(controller),'relay':binding(relay),
         'source_plan_successions':adoptions,'contract':common,
         'inputs':{'plans':plans,'controls':controls,'curriculum':binding(curriculum_path),
-            'provider':binding(provider_path),'rl_bootstrap':rl_bootstrap},'owner_changes':0,'checkpoint_decodes':0,
+            'provider':binding(provider_path),'rl_bootstrap':rl_bootstrap,
+            **({'snapshot_parent':snapshot_parent}if snapshot_parent is not None else{})},'owner_changes':0,'checkpoint_decodes':0,
         'model_allocations':0,'readiness_granted':False,'activated':False}
     write_json_durable(out/'prepared.json',receipt)
     return receipt
@@ -307,13 +322,13 @@ def main(argv=None):
         parser.add_argument('--spec',type=Path,required=True)
         parser.add_argument('--out',type=Path,required=True)
         args=parser.parse_args(argv[1:]);spec=json.loads(args.spec.read_text())
-        if (set(spec)!={'schema','plans','controls','curriculum','provider','raw_states','runtime','python','rl_bootstrap','handoff_lease_seconds'}
+        if (set(spec)-{'snapshot_parent'}!={'schema','plans','controls','curriculum','provider','raw_states','runtime','python','rl_bootstrap','handoff_lease_seconds'}
                 or spec['schema']!='natlang.native-role-scheduler-inputs/1'):
             raise ValueError('role scheduling requires the complete explicit metadata input contract')
         for key in ('curriculum','provider'):binding(spec[key]['path'],spec[key])
         result=prepare_role_scheduler(spec['plans'],spec['controls'],spec['curriculum']['path'],
             spec['provider']['path'],args.out,raw_states=spec['raw_states'],runtime=spec['runtime'],python=spec['python'],
-            rl_bootstrap=spec['rl_bootstrap'],handoff_lease_seconds=spec['handoff_lease_seconds'])
+            rl_bootstrap=spec['rl_bootstrap'],handoff_lease_seconds=spec['handoff_lease_seconds'],snapshot_parent=spec.get('snapshot_parent'))
         print(json.dumps(result,sort_keys=True));return result
     parser = argparse.ArgumentParser(description=__doc__)
     for flag in ('release', 'curriculum', 'out', 'runtime'):
