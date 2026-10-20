@@ -389,11 +389,38 @@ def _loss_query_state_chunks(hidden, query_ids, chunk_tokens, *, unique_queries)
                  for start in range(0, query_ids.numel(), chunk_tokens))
 
 
+def _native_ce_sum(model, hidden, query_ids, target_ids, weights, *, chunk_tokens, collect_accuracy, unique_queries):
+    """The shared checkpointed readout kernel; callers own normalization."""
+    import torch.nn.functional as F
+    from torch.utils.checkpoint import checkpoint
+    state_chunks = _loss_query_state_chunks(hidden, query_ids, chunk_tokens,
+                                            unique_queries=unique_queries)
+    target_chunks = target_ids.split(chunk_tokens)
+    weight_chunks = weights.split(chunk_tokens)
+    total = hidden.new_zeros((), dtype=torch.float32)
+    correct = hidden.new_zeros((), dtype=torch.float32) if collect_accuracy else None
+    for states, labels, selected in zip(state_chunks, target_chunks, weight_chunks):
+        def loss_chunk(states, labels, selected, *, measure_accuracy):
+            logits = model.logits(states)
+            ce = F.cross_entropy(logits.float(), labels, reduction='none')
+            loss_sum = (ce * selected).sum()
+            if not measure_accuracy:
+                return loss_sum
+            return loss_sum, ((logits.argmax(-1) == labels).float() * selected).sum()
+        chunk = checkpoint(loss_chunk, states, labels, selected, measure_accuracy=collect_accuracy,
+            use_reentrant=False)
+        if collect_accuracy:
+            chunk_loss, chunk_correct = chunk
+            correct = correct + chunk_correct
+        else:
+            chunk_loss = chunk
+        total = total + chunk_loss
+    return total, correct
+
+
 def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=128, objective=None,
                       share_causal_prefixes=False, collect_accuracy=True):
     """One backbone graph forward for a minibatch; mean the original per-graph losses."""
-    import torch.nn.functional as F
-    from torch.utils.checkpoint import checkpoint
     if objective is None and any(not any(weight>0 for weight in example.target_weights) for example in examples):
         raise ValueError('native graph has no ordinary CE targets; its declared offline/policy objective is required')
     from .native_prefix_packing import pack_causal_prefixes
@@ -429,6 +456,12 @@ def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=1
             raise FloatingPointError('native policy objective must return a finite scalar loss')
         return loss, details
     hidden = result['h_final'][0]
+    # BF16 head adjoints round each original use before prefix fan-in. Folding
+    # those uses earlier changes that declared law, despite equal scalar CE.
+    # Keep its original path; the qualified FP32 case has no such cast boundary.
+    reuse_readouts = shared is not None and not collect_accuracy and hidden.dtype == torch.float32
+    readout_index, readout_queries, readout_targets, readout_groups, readout_weights = {}, [], [], [], []
+    readout_position = 0
     losses, details, detail_weights, detail_accuracies = [], [], [], []
     boundary_ids = set((*getattr(model, 'marker_ids', ()), *getattr(model, 'token_override_ids', ())))
     for graph_index, example in enumerate(examples):
@@ -451,30 +484,23 @@ def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=1
         query_ids = torch.tensor(queries, device=hidden.device)
         target_ids = torch.tensor(targets, device=hidden.device)
         token_weights = torch.tensor(weights, device=hidden.device, dtype=torch.float32)
-        state_chunks = _loss_query_state_chunks(hidden, query_ids, chunk_tokens,
-                                                unique_queries=len(set(queries)) == len(queries))
-        target_chunks = target_ids.split(chunk_tokens)
-        weight_chunks = token_weights.split(chunk_tokens)
-        total = hidden.new_zeros((), dtype=torch.float32)
-        correct = hidden.new_zeros((), dtype=torch.float32) if collect_accuracy else None
-        for states, labels, selected in zip(state_chunks, target_chunks, weight_chunks):
-            def loss_chunk(states, labels, selected, *, measure_accuracy):
-                logits = model.logits(states)
-                ce = F.cross_entropy(logits.float(), labels, reduction='none')
-                loss_sum = (ce * selected).sum()
-                if not measure_accuracy:
-                    return loss_sum
-                return loss_sum, ((logits.argmax(-1) == labels).float() * selected).sum()
-            chunk = checkpoint(loss_chunk, states, labels, selected, measure_accuracy=collect_accuracy,
-                use_reentrant=False)
-            if collect_accuracy:
-                chunk_loss, chunk_correct = chunk
-                correct = correct + chunk_correct
-            else:
-                chunk_loss = chunk
-            total = total + chunk_loss
         denominator = token_weights.sum()
-        losses.append(total / denominator)
+        if reuse_readouts:
+            for query, token in zip(queries, targets):
+                key = (query, token)
+                if key not in readout_index:
+                    readout_index[key] = len(readout_queries)
+                    readout_queries.append(query)
+                    readout_targets.append(token)
+                    readout_groups.append([])
+                readout_groups[readout_index[key]].append(readout_position)
+                readout_position += 1
+            readout_weights.append(token_weights / denominator / len(examples))
+        else:
+            total, correct = _native_ce_sum(model, hidden, query_ids, target_ids, token_weights,
+                chunk_tokens=chunk_tokens, collect_accuracy=collect_accuracy,
+                unique_queries=len(set(queries)) == len(queries))
+            losses.append(total / denominator)
         detail_weights.append(denominator.detach())
         if collect_accuracy:
             detail_accuracies.append((correct / denominator).detach())
@@ -484,6 +510,26 @@ def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=1
                         'packed_physical_tokens': plan.token_count,
                         'original_physical_tokens': sum(item.plan.token_count for item in examples),
                         'accuracy': None})
+    original_readout_rows = sum(item['supervised_tokens'] for item in details)
+    if reuse_readouts:
+        combined = torch.cat(readout_weights)
+        order = torch.tensor([position for group in readout_groups for position in group],
+                             dtype=torch.long, device=hidden.device)
+        lengths = torch.tensor([len(group) for group in readout_groups], dtype=torch.long, device=hidden.device)
+        # Fixed original graph/position order within each exact term. Avoid
+        # nondeterministic CUDA atomic addition when assembling coefficients.
+        selected = torch.segment_reduce(combined.index_select(0, order), 'sum', lengths=lengths)
+        total, _ = _native_ce_sum(model, hidden,
+            torch.tensor(readout_queries, dtype=torch.long, device=hidden.device),
+            torch.tensor(readout_targets, dtype=torch.long, device=hidden.device), selected,
+            chunk_tokens=chunk_tokens, collect_accuracy=False,
+            unique_queries=len(set(readout_queries)) == len(readout_queries))
+        # Coefficients already include each original graph's denominator and
+        # its 1/batch multiplicity. Do not normalize this scalar again.
+        losses = [total]
+    for detail in details:
+        detail['readout_forward_rows'] = len(readout_queries) if reuse_readouts else original_readout_rows
+        detail['readout_original_rows'] = original_readout_rows
     # Resolve per-graph scalars in one host transfer. Calling float(tensor)
     # inside the graph loop inserted a device synchronization for every graph
     # (and again for its accuracy), serializing the otherwise asynchronous
@@ -1768,6 +1814,9 @@ def _main(argv=None, *, requested_refresh):
                 progress['physical_forward_tokens'] = physical_tokens
                 progress['reused_prefix_tokens'] = details[0]['original_physical_tokens'] - physical_tokens
                 progress['physical_forward_tokens_per_second'] = physical_tokens / max(seconds, 1e-9)
+                progress['readout_forward_rows'] = details[0]['readout_forward_rows']
+                progress['readout_original_rows'] = details[0]['readout_original_rows']
+                progress['reused_readout_rows'] = details[0]['readout_original_rows'] - details[0]['readout_forward_rows']
                 progress['communication_graphs'] = sum(bool(train.entries[index].get('communication')) for index in indices)
                 progress['boundary_targets'] = {
                     token: {'count': sum(item['boundary_targets'][token]['count'] for item in details),
