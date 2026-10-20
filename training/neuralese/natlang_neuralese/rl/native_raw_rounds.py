@@ -1536,7 +1536,9 @@ def student_cycle(plan_path,declaration,handoff,directory,*,stop):
         request=roles.foundation_request(plan,directory/'foundation-requests',
             generation=config['foundation_qualification_generation'])
         attempted=cursor.get('foundation_qualification_attempt') or {}
-        if request and attempted.get('request',{}).get('sha256')!=request['sha256']:
+        history=cursor.get('foundation_qualification_history')or{}
+        if (request and attempted.get('request',{}).get('sha256')!=request['sha256']
+                and request['sha256']not in history):
             qualification_request=request
     if cursor['phase']=='rl':
         if stop.requested:return cursor
@@ -1674,10 +1676,14 @@ def _publish_supervised_result(continuation,jobdir,config,cursor,result):
             cursor['foundation_candidate']=binding(report_path)
         request=continuation.get('foundation_qualification_request')
         if request:
+            previous=cursor.get('foundation_qualification_attempt')
+            if previous:
+                cursor.setdefault('foundation_qualification_history',{})[previous['request']['sha256']]=previous
             cursor['foundation_qualification_attempt']={'request':request,
                 'generation':json.loads(_bound(request).read_text())['generation'],
                 'status':'passed' if report.get('foundation_ready') else 'failed',
                 'checkpoint':checkpoint,'report':binding(report_path)}
+            cursor.setdefault('foundation_qualification_history',{})[request['sha256']]=cursor['foundation_qualification_attempt']
         if continuation.get('raw_foundation_qualification') and (report.get('foundation_ready') or report.get('completed')):
             cursor.update(readiness=binding(report_path),foundation_qualified=True)
             cursor.pop('foundation_readiness_repair',None)
@@ -1917,6 +1923,7 @@ def run(plan_path,out,*,cycles=None,stop=None,poll_seconds=60):
                         if not stop.requested and not rendezvous:
                             for name,model in models.items():
                                 if name in active or (cycles is not None and counts[name]>=cycles):continue
+                                if exchange and roles.handoff_hold(plan):continue
                                 if blocked.get(name)==_configuration_signature(model,out/name):continue
                                 blocked.pop(name,None)
                                 state.get('configuration_errors',{}).pop(name,None)
@@ -1925,8 +1932,9 @@ def run(plan_path,out,*,cycles=None,stop=None,poll_seconds=60):
                                     candidate=out/'handoffs'/(name+'.json')
                                     if candidate.is_file():witness=binding(candidate)
                                 if witness is not None:
-                                    # Published eligibility is informational while this
-                                    # student's optimizer is owned by another cycle.
+                                    # Retire CURRENT eligibility before any descendant
+                                    # can update. The pinned snapshot pointer survives.
+                                    if exchange:roles.withdraw(plan,state_path)
                                     active[name]=(pool.submit(student_cycle,plan_path,model,witness,out/name,stop=stop),witness,model)
                         write_json_durable(state_path,state)
                         if not active:

@@ -520,3 +520,30 @@ def test_supervised_retry_rejects_output_mismatch_before_config_or_request(tmp_p
         raw._supervised_job(continuation,tmp_path/'fresh-retry',{}, {},SimpleNamespace(requested=False))
     assert not(tmp_path/'fresh-retry').exists()
     assert not(tmp_path/'old-operation').exists()
+
+
+def test_on_request_history_prevents_old_full_checks_repeating_after_handoff_cancellation(tmp_path,monkeypatch):
+    directory,config,stop,calls=fixture(tmp_path,monkeypatch)
+    from natlang_neuralese.rl import native_role_release as roles
+    config.update(foundation_readiness_policy='on-shared-request',foundation_qualification_generation='repair')
+    write_json_durable(directory/'config.json',config)
+    plan=tmp_path/'plan.json';write_json_durable(plan,{'models':[{'model':name}for name in ('lfm','mellum')],
+        'owned_models':['lfm'],'role_exchange':{'schema':roles.EXCHANGE,'role':'lfm',
+        'semantic_consumer':'mellum','directory':str(tmp_path/'exchange'),
+        'roles':{name:{'owned_models':[name],'source_host_id':name+'-actual'}for name in ('lfm','mellum')}}})
+    requests=[]
+    for generation in ('initial-snapshot','post-VAE-descendant'):
+        path=tmp_path/(generation+'.json');write_json_durable(path,{'generation':generation})
+        requests.append(roles.binding(path))
+    selected=[requests[0]]
+    monkeypatch.setattr(roles,'foundation_request',lambda *a,**kw:selected[0])
+    raw.student_cycle(plan,{},None,directory,stop=stop)
+    selected[0]=requests[1];raw.student_cycle(plan,{},None,directory,stop=stop)
+    # Returning to the original request after an expired/failed handoff must
+    # continue useful work, not rerun that already-consumed full task window.
+    selected[0]=requests[0];result=raw.student_cycle(plan,{},None,directory,stop=stop)
+    checked=[value['foundation_qualification_request']for kind,value in calls
+        if kind=='sft' and value.get('foundation_qualification_request')]
+    assert checked==requests
+    assert set(result['foundation_qualification_history'])=={reference['sha256']for reference in requests}
+    assert result['cycle']==3 and len([kind for kind,_ in calls if kind=='sft'])==3

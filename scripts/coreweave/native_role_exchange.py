@@ -26,6 +26,18 @@ from provider_bridge import checked_binding
 def call(io,sid,expression):
     # The same declared runtime/CPU composition and ENV precede imports.
     code=io.dependency_code(sid)
+    controls=io.config['sandboxes'][sid].get('role_controls')
+    if controls is not None:
+        # Reuse the actual source-host controller loader. Imported role proofs
+        # must never be published under a retired CPU-helper composition.
+        controls=checked_binding(controls)
+        code+=('import pathlib,hashlib,runpy;'
+            'p=pathlib.Path('+repr(controls['path'])+');raw=p.read_bytes();'
+            'assert len(raw)=='+str(controls['bytes'])+' and hashlib.sha256(raw).hexdigest()=='+repr(controls['sha256'])+';'
+            'role_controls=json.loads(raw);ref=role_controls["controller"];'
+            'p=pathlib.Path(ref["path"]);raw=p.read_bytes();'
+            'assert hashlib.sha256(raw).hexdigest()==ref["sha256"] and ("bytes"not in ref or len(raw)==ref["bytes"]);'
+            'runpy.run_path(str(p),run_name="qualified_role_controller")["load_controls"](role_controls);')
     return io.remote(sid,code+'from natlang_neuralese.rl import native_role_release as roles;'
         +'print(json.dumps('+expression+'))',timeout=900)
 
@@ -83,12 +95,29 @@ def tick(config,io):
             if source!=target:
                 call(io,host['source_host_id'],'roles.receive('+repr(raw)+','+repr(host['plan']['path'])+',snapshot_only=True)')
     consumer=contract['semantic_consumer'];host=hosts[consumer];sid=host['source_host_id']
+    handoff_pointer=io.read_optional(sid,plans[consumer]['role_exchange']['directory']+'/post-vae-handoff.json')
+    if handoff_pointer is not None:
+        handoff=json.loads(_read_bound(io,sid,json.loads(handoff_pointer)))
+        lease=config.get('handoff_lease_seconds')
+        interval=config.get('poll_seconds',15)
+        if type(lease) not in (int,float) or not 2*interval<lease:
+            raise ValueError('joint handoff requires its explicit renewable provider lease')
+        closure=io.dependency_closure(sid,{'semantic_config':handoff['joint_controller']['curriculum']})
+        io.verify_assets(sid,closure['assets'])
+        offers={name:call(io,row['source_host_id'],'roles.handoff_offer('+repr(plans[name])+','+
+            repr(row['raw_state'])+','+repr(handoff)+')') for name,row in hosts.items()}
+        for name,row in hosts.items():
+            expression=('roles.renew_handoff('+repr(plans[name])+','+repr(handoff)+','+repr(offers)+
+                ',expires_at='+repr(time.time()+lease)+')' if all(offers.values()) else
+                'roles.cancel_handoff('+repr(plans[name])+','+repr(handoff)+')')
+            call(io,row['source_host_id'],expression)
     request_raw=io.read_optional(sid,plans[consumer]['role_exchange']['directory']+'/semantic-assets-request.json')
     if request_raw is None:return {'status':'waiting-for-semantic-consumption','roles':sorted(snapshots)}
     request=json.loads(request_raw)
-    expected=call(io,sid,'roles.semantic_request('+repr(plans[consumer])+')')
+    mode=request.get('snapshot_preparation',False)
+    expected=call(io,sid,'roles.semantic_request('+repr(plans[consumer])+',snapshot='+repr(mode)+')')
     if request!=expected:return {'status':'waiting-for-current-releases','roles':sorted(snapshots)}
-    usable=call(io,sid,'roles.ready_participants('+repr(plans[consumer])+')[0]')
+    usable=call(io,sid,'roles.ready_participants('+repr(plans[consumer])+',snapshot='+repr(mode)+')[0]')
     if len(usable)>=2:return {'status':'semantic-assets-ready','models':sorted(row['model_id']for row in usable),'transferred':[]}
     # Explicit snapshot preparation copies exact qualified historical weights;
     # ordinary joint consumption continues to require actual optimizer release.

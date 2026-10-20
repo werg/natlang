@@ -9,6 +9,7 @@ import math
 import fcntl
 import re
 import os
+import time
 from pathlib import Path
 import socket
 import importlib
@@ -395,6 +396,9 @@ def foundation_request(plan,out,*,generation):
     if not isinstance(generation,str) or not generation:
         raise ValueError('foundation qualification needs its explicit scheduling generation')
     expected=contract(plan)
+    handoff=handoff_active(plan)
+    if handoff:
+        generation=canonical_json_sha256_hex({'foundation_generation':generation,'handoff':handoff['request_sha256']})
     signature=canonical_json_sha256_hex({'contract':expected,'generation':generation})
     path=Path(out)/(signature+'.json')
     if path.exists():
@@ -485,13 +489,19 @@ def exchanged(plan,*,kind):
 
 
 def eligible(plan):
+    if plan.get('snapshot_preparation') and not handoff_active(plan):return False
     found,_=exchanged(plan,kind='eligible')
+    if plan.get('snapshot_preparation'):
+        _,exchange=ownership(plan)
+        for role in exchange['roles']:
+            _,proof=_status(exchange,role)
+            if not _handoff_proof_matches(plan,proof):return False
     return len(found)>=2
 
 
-def aggregate(plan,*,assets=None):
+def aggregate(plan,*,assets=None,snapshot=None):
     """Qualified roles are distinct from locally consumable semantic assets."""
-    found,pending=exchanged(plan,kind='snapshot' if plan.get('snapshot_preparation') else 'released')
+    found,pending=exchanged(plan,kind='snapshot' if _snapshot_mode(plan,snapshot) else 'released')
     if len(found)<2:return [],pending
     result=[];assets=assets or {}
     from ..train.native_readiness import _bound
@@ -519,36 +529,42 @@ def receive(raw,plan_path,*,snapshot_only=False):
     return import_proof(reference,plan,snapshot_only=snapshot_only)
 
 
-def semantic_request(plan):
+def _snapshot_mode(plan,snapshot):
+    if snapshot is not None and type(snapshot)is not bool:
+        raise ValueError('semantic asset mode must be explicit')
+    return plan.get('snapshot_preparation',False) if snapshot is None else snapshot
+
+
+def semantic_request(plan,*,snapshot=None):
     """Only the designated semantic owner requests assets after genuine releases."""
     _,exchange=ownership(plan)
     if exchange is None or exchange['role']!=exchange['semantic_consumer']:return None
-    found,pending=exchanged(plan,kind='snapshot' if plan.get('snapshot_preparation') else 'released')
+    found,pending=exchanged(plan,kind='snapshot' if _snapshot_mode(plan,snapshot) else 'released')
     if len(found)<2:return None
     request={'schema':'natlang.native-role-semantic-assets-request/1','contract':contract(plan),
         'participants':{name:{'role_release':row['source_role_release'],
             'checkpoint':row['checkpoint'],'source_host_id':row['source_host_id']}
             for name,row in sorted(found.items())}}
-    if plan.get('snapshot_preparation'):
+    if _snapshot_mode(plan,snapshot):
         request['snapshot_preparation']=True
     write_json_durable(Path(exchange['directory'])/'semantic-assets-request.json',request)
     return request
 
 
-def ready_participants(plan):
+def ready_participants(plan,*,snapshot=None):
     _,exchange=ownership(plan)
     if exchange['role']!=exchange['semantic_consumer']:
         return [],[{'reason':'shared stage belongs to its explicit semantic consumer',
                     'semantic_consumer':exchange['semantic_consumer']}]
-    request=semantic_request(plan)
-    if request is None:return aggregate(plan)
+    request=semantic_request(plan,snapshot=snapshot)
+    if request is None:return aggregate(plan,snapshot=snapshot)
     path=Path(exchange['directory'])/'semantic-assets.json'
-    if not path.exists():return aggregate(plan)
+    if not path.exists():return aggregate(plan,snapshot=snapshot)
     manifest=json.loads(path.read_text())
     if manifest.get('schema')!='natlang.native-role-semantic-assets/1':
         raise ValueError('unsupported semantic assets manifest')
-    if manifest.get('request')!=request:return aggregate(plan)
-    return aggregate(plan,assets=manifest['checkpoints'])
+    if manifest.get('request')!=request:return aggregate(plan,snapshot=snapshot)
+    return aggregate(plan,assets=manifest['checkpoints'],snapshot=snapshot)
 
 
 def seal_local(config):
@@ -645,8 +661,9 @@ def consumed_metadata(ready):
 def install_assets(plan_path,request,checkpoints):
     """Commit only current joint-consumption assets after exact local verification."""
     plan=json.loads(Path(plan_path).read_text())
-    if semantic_request(plan)!=request:raise ValueError('semantic asset request was superseded')
-    ready,pending=aggregate(plan,assets=checkpoints)
+    snapshot=request.get('snapshot_preparation',False)
+    if semantic_request(plan,snapshot=snapshot)!=request:raise ValueError('semantic asset request was superseded')
+    ready,pending=aggregate(plan,assets=checkpoints,snapshot=snapshot)
     if (len(ready)<2 or any(row.get('semantic_assets_required')for row in pending)
             or set(checkpoints)!=set(request['participants'])):
         raise ValueError('semantic participant asset closure is incomplete')
@@ -720,3 +737,144 @@ def install_metadata(package):
             raise ValueError('semantic metadata changed during transport')
         _copy_immutable(_bound(source),target['path'],target['sha256'])
     return [item['source']for item in package]
+
+
+def post_vae_request(plan,completion,controller):
+    """Exact frozen preparation requests fresh descendant work, never release."""
+    from ..train.native_readiness import _bound,validate_snapshot_preparation
+    _,exchange=ownership(plan)
+    if exchange['role']!=exchange['semantic_consumer']:
+        raise ValueError('only the semantic owner can request descendant adoption')
+    path=_bound(completion);proof=json.loads(path.read_text())
+    published={(proof.get('participants_signature'),proof.get('curriculum_signature')):
+        {'execution_signature':canonical_json_sha256_hex(controller)}}
+    validate_snapshot_preparation(path,published)
+    full=json.loads(_bound(controller['curriculum']).read_text())
+    from ..train.native_semantic_stage import validate_config
+    validate_config(full)
+    if full.get('snapshot_preparation') or not full.get('task_eval') or not full.get('policy_schedule'):
+        raise ValueError('post-VAE adoption needs actual joint/task/policy work')
+    request={'schema':'natlang.native-post-vae-handoff/1','contract':contract(plan),
+        'role':exchange['role'],'mechanism':_publishing_mechanism(plan),
+        'preparation':_inline(completion),'joint_controller':controller,
+        'joint_curriculum':_inline(controller['curriculum']),'readiness_granted':False}
+    return _immutable(Path(exchange['directory'])/'handoff-requests'/
+        (canonical_json_sha256_hex(request)+'.json'),request)
+
+
+def validate_handoff_request(plan,request):
+    _,exchange=ownership(plan);consumer=exchange['semantic_consumer']
+    if (request.get('schema')!='natlang.native-post-vae-handoff/1'
+            or request.get('contract')!=contract(plan) or request.get('role')!=consumer
+            or request.get('mechanism')!=_expected_mechanism(plan,consumer)
+            or request.get('readiness_granted') is not False):
+        raise ValueError('descendant handoff changed actual role authority')
+    proof=_evidence(request['preparation']);curriculum=_evidence(request['joint_curriculum'])
+    if (proof.get('preparation_complete') is not True or proof.get('production_ready') is not False
+            or (proof.get('snapshot_preparation')or{}).get('participant_optimizer_updates')!=0
+            or curriculum.get('snapshot_preparation') or not curriculum.get('task_eval')
+            or not curriculum.get('policy_schedule')
+            or request['joint_controller'].get('curriculum')!=request['joint_curriculum']['source']):
+        raise ValueError('descendant handoff requires frozen VAE and executable joint work')
+    return request
+
+
+def handoff_offer(plan,state_path,request):
+    """Probe the actual owner on its own host before arming a pause."""
+    from ..train.native_resident import owner_alive
+    validate_handoff_request(plan,request);owned,exchange=ownership(plan)
+    state=json.loads(Path(state_path).read_text())
+    reference,proof=_status(exchange,exchange['role'])
+    if state.get('released') is True:
+        if proof is None or proof.get('kind')!='released':return None
+        if proof['raw_state']['source']!=binding(state_path):
+            raise ValueError('handoff offer changed released source state')
+        validate(reference,plan,kind='released')
+    elif not owner_alive(state.get('owner')or{}):return None
+    if state.get('configuration_errors'):return None
+    candidates,_=foundation_candidates(plan)
+    if not {plan_model(plan,name)['handoff_requirement']['model_id']for name in owned}<=set(candidates):
+        return None
+    attempts={name:value.get('foundation_qualification_attempt') for name,value in state.get('models',{}).items()}
+    from ..train.native_readiness import _bound
+    for name,attempt in attempts.items():
+        if not attempt:continue
+        expected=canonical_json_sha256_hex({'foundation_generation':plan_model(plan,name)['foundation_qualification_generation'],
+            'handoff':canonical_json_sha256_hex(request)})
+        if json.loads(_bound(attempt['request']).read_text())['generation']==expected:
+            if (attempt.get('status')!='passed' or
+                    attempt.get('checkpoint',{}).get('sha256')!=state['models'][name]['checkpoint']['sha256']):return None
+    return {'role':exchange['role'],'mechanism':_publishing_mechanism(plan),
+        'contract':contract(plan),'request_sha256':canonical_json_sha256_hex(request),
+        'owner':state['owner'],'released':state.get('released')is True,'attempts':attempts}
+
+
+def renew_handoff(plan,request,offers,*,expires_at):
+    """Existing relay grants a renewable ownership handshake, not quality credit."""
+    validate_handoff_request(plan,request);_,exchange=ownership(plan)
+    if (set(offers)!=set(exchange['roles']) or type(expires_at)not in(int,float)
+            or not math.isfinite(expires_at) or expires_at<=time.time()):
+        raise ValueError('descendant handoff needs both current providers and a live lease')
+    digest=canonical_json_sha256_hex(request)
+    for role,offer in offers.items():
+        if (not offer or offer.get('role')!=role or offer.get('contract')!=contract(plan)
+                or offer.get('mechanism')!=_expected_mechanism(plan,role)
+                or offer.get('request_sha256')!=digest):
+            raise ValueError('descendant handoff provider offer changed')
+    own=offers[exchange['role']]
+    from ..train.native_resident import owner_alive
+    if not own['released'] and not owner_alive(own['owner']):
+        raise ValueError('descendant handoff owner ended before arm')
+    value={'request':request,'request_sha256':digest,'offers':offers,'expires_at':expires_at}
+    directory=Path(exchange['directory']);directory.mkdir(parents=True,exist_ok=True)
+    write_json_durable(directory/'joint-handoff-live.json',value)
+    return value
+
+
+def handoff_active(plan):
+    _,exchange=ownership(plan)
+    if exchange is None:return None
+    path=Path(exchange['directory'])/'joint-handoff-live.json'
+    if not path.is_file():return None
+    value=json.loads(path.read_text());validate_handoff_request(plan,value['request'])
+    if canonical_json_sha256_hex(value['request'])!=value.get('request_sha256'):
+        raise ValueError('descendant handoff request changed')
+    if value['expires_at']<=time.time():return None
+    return value
+
+
+def _handoff_proof_matches(plan,proof):
+    active=handoff_active(plan)
+    if not active or proof is None or proof.get('kind') not in ('eligible','released'):return False
+    from ..train.native_readiness import _bound
+    if set(proof.get('foundation_attempts',{}))!=set(proof['owned_models']):return False
+    for name,attempt in proof['foundation_attempts'].items():
+        expected=canonical_json_sha256_hex({'foundation_generation':plan_model(plan,name)['foundation_qualification_generation'],
+            'handoff':active['request_sha256']})
+        item=proof['models'][name];schedule=_evidence(item['report']).get('foundation_qualification_schedule')or{}
+        if (attempt.get('status')!='passed'
+                or json.loads(_bound(attempt['request']).read_text())['generation']!=expected
+                or attempt.get('checkpoint',{}).get('sha256')!=item['ready']['checkpoint']['sha256']
+                or attempt.get('report')!=item['report']['source']
+                or schedule.get('request')!=attempt['request'] or schedule.get('requested')is not True
+                or schedule.get('readiness_granted')is not True):return False
+    return True
+
+
+def cancel_handoff(plan,request):
+    validate_handoff_request(plan,request);_,exchange=ownership(plan)
+    path=Path(exchange['directory'])/'joint-handoff-live.json'
+    if path.is_file():
+        value=json.loads(path.read_text())
+        if value['request_sha256']==canonical_json_sha256_hex(request):
+            write_json_durable(path,{**value,'expires_at':0})
+
+
+def handoff_hold(plan):
+    """Pause only a genuinely qualified current descendant under the live lease."""
+    active=handoff_active(plan)
+    if not active:return False
+    _,exchange=ownership(plan);reference,proof=_status(exchange,exchange['role'])
+    if proof is None or proof.get('kind') not in ('eligible','released'):return False
+    validate(reference,plan,kind=proof['kind'])
+    return _handoff_proof_matches(plan,proof)

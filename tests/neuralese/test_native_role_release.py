@@ -522,3 +522,81 @@ def test_peer_rejects_unvisited_foundation_row_despite_complete_aggregate(tmp_pa
     foundation['rows']['producer-consumer-b']['graph_visits']=0
     with pytest.raises(ValueError,match='completed exact exposure for every row'):
         roles.validate(seal(),plan,kind='released')
+
+
+def test_source_host_relay_loads_actual_bound_publishing_controls(tmp_path,monkeypatch):
+    service=_service(monkeypatch)
+    marker=tmp_path/'loaded.txt'
+    controller=tmp_path/'controller.py'
+    controller.write_text('from pathlib import Path\ndef load_controls(spec):\n    Path(spec["marker"]).write_text("actual-load")\n')
+    spec=tmp_path/'controls.json'
+    write_json_durable(spec,{'controller':{**raw.binding(controller),'bytes':controller.stat().st_size},'marker':str(marker)})
+    class IO:
+        config={'sandboxes':{'actual':{'role_controls':{**raw.binding(spec),'bytes':spec.stat().st_size}}}}
+        def dependency_code(self,sid):return 'import json;'
+        def remote(self,sid,code,**kwargs):
+            from contextlib import redirect_stdout
+            from io import StringIO
+            stream=StringIO()
+            with redirect_stdout(stream):exec(code,{})
+            return json.loads(stream.getvalue())
+    assert service.call(IO(),'actual','{"passed":True}')=={'passed':True}
+    assert marker.read_text()=='actual-load'
+    marker.unlink();controller.write_text('raise AssertionError("untrusted controller must not execute")\n')
+    with pytest.raises(AssertionError):service.call(IO(),'actual','{"passed":True}')
+    assert not marker.exists()
+
+
+def test_historical_eligibility_cannot_release_and_fresh_descendant_pause_needs_both_lease_providers(tmp_path,monkeypatch):
+    from test_native_role_scheduler_deployment import prepared_snapshot
+    from natlang_neuralese.train.native_readiness import snapshot_successor
+    from natlang_neuralese.train.native_resident import process_owner
+    from natlang_neuralese.common.hashing import canonical_json_sha256_hex
+    import time
+    metadata=tmp_path/'metadata';metadata.mkdir()
+    config,_,_=prepared_snapshot(metadata)
+    with monkeypatch.context() as local:
+        local.setattr(roles,'mechanism',lambda:{key:'a'*64 for key in roles.MECHANISM_FILES})
+        local.setattr(roles,'ready_participants',lambda *a,**kw:([],[]))
+        waiting=snapshot_successor(config,Path(config['out']))
+    request=json.loads(Path(waiting['awaiting_descendant_handoff']['path']).read_text())
+    rows=fixture(tmp_path,monkeypatch)
+    monkeypatch.setattr(roles,'pin_checkpoint',lambda reference,directory:roles.binding(reference['path']))
+    for name,row in rows.items():
+        row['plan']['snapshot_preparation']=True
+        for declaration in row['plan']['models']:declaration['foundation_qualification_generation']='same-actual-repair'
+        write_json_durable(row['plan_path'],row['plan'])
+        row['state'].update(owner=process_owner(),released=False,plan_sha256=sha256_file_hex(row['plan_path']))
+        value=row['state']['models'][name];path=Path(value['config']['path'])
+        write_json_durable(path,{'runtime_binding':{'plan_sha256':sha256_file_hex(row['plan_path'])}})
+        value['config']=raw.binding(path);write_json_durable(row['state_path'],row['state'])
+    request['contract']=roles.contract(rows['mellum']['plan']);request['mechanism']=roles.mechanism()
+    offers={name:{'role':name,'contract':roles.contract(row['plan']),'mechanism':roles.mechanism(),
+        'owner':process_owner(),'released':False,'request_sha256':canonical_json_sha256_hex(request)}for name,row in rows.items()}
+    for row in rows.values():roles.renew_handoff(row['plan'],request,offers,expires_at=time.time()+180)
+    exchange(rows['lfm'],rows['mellum'],kind='eligible');exchange(rows['mellum'],rows['lfm'],kind='eligible')
+    assert not roles.eligible(rows['mellum']['plan']) and not roles.handoff_hold(rows['lfm']['plan'])
+    for name,row in rows.items():
+        generation=canonical_json_sha256_hex({'foundation_generation':'same-actual-repair',
+            'handoff':canonical_json_sha256_hex(request)})
+        path=tmp_path/(name+'-actual-request.json');write_json_durable(path,{'generation':generation})
+        report_path=Path(row['receipt']['training_receipt']['path'])
+        report=json.loads(report_path.read_text());report['foundation_qualification_schedule']={
+            'request':roles.binding(path),'requested':True,'readiness_granted':True}
+        write_json_durable(report_path,report)
+        row['receipt']['training_receipt']=roles.binding(report_path)
+        receipt_path=Path(row['state']['models'][name]['readiness']['path'])
+        write_json_durable(receipt_path,row['receipt'])
+        row['state']['models'][name]['readiness']=roles.binding(receipt_path)
+        row['state']['models'][name]['foundation_qualification_attempt']={'request':roles.binding(path),
+            'status':'passed','checkpoint':row['state']['models'][name]['checkpoint'],'report':roles.binding(report_path)}
+        write_json_durable(row['state_path'],row['state'])
+    exchange(rows['lfm'],rows['mellum'],kind='eligible')
+    assert roles.handoff_hold(rows['lfm']['plan'])
+    assert not roles.eligible(rows['lfm']['plan'])  # Peer still has only historical eligibility.
+    exchange(rows['mellum'],rows['lfm'],kind='eligible')
+    assert roles.eligible(rows['lfm']['plan']) and roles.handoff_hold(rows['mellum']['plan'])
+    # A failed/stale relay releases the pause automatically. No current proof
+    # is made obsolete and no optimizer/source checkpoint is rewritten here.
+    roles.cancel_handoff(rows['lfm']['plan'],request)
+    assert not roles.handoff_hold(rows['lfm']['plan']) and not roles.eligible(rows['lfm']['plan'])

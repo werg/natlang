@@ -152,3 +152,54 @@ def test_snapshot_metadata_and_recipe_recovery_work_after_entire_source_host_is_
     assert loaded.recipe_binding==binding['recipe']
     assert loaded.optimizer is not None
     assert roles.consumed_metadata(binding)==[roles.binding(proof)]
+
+
+def test_post_vae_offers_require_live_owned_per_row_candidates_and_failure_cancels(tmp_path,monkeypatch):
+    from natlang_neuralese.rl import native_role_release as roles
+    from natlang_neuralese.train.native_resident import process_owner
+    from natlang_neuralese.common.hashing import canonical_json_sha256_hex
+    from test_native_role_scheduler_deployment import prepared_snapshot
+    from natlang_neuralese.train.native_readiness import snapshot_successor
+    metadata=tmp_path/'metadata';metadata.mkdir()
+    config,_,_=prepared_snapshot(metadata)
+    with monkeypatch.context() as local:
+        local.setattr(roles,'mechanism',lambda:{key:'a'*64 for key in roles.MECHANISM_FILES})
+        local.setattr(roles,'ready_participants',lambda *a,**kw:([],[]))
+        waiting=snapshot_successor(config,Path(config['out']))
+    request=json.loads(Path(waiting['awaiting_descendant_handoff']['path']).read_text())
+    declarations=[];values={};states={};plans={}
+    for name in ('lfm','mellum'):
+        path,receipt,requirement=candidate_fixture(tmp_path,name)
+        declarations.append({'model':name,'handoff_requirement':requirement,
+            'foundation_qualification_generation':'qualified-generation'})
+        values[name]={'foundation_candidate':roles.binding(path),'checkpoint':receipt['checkpoint']}
+    assignments={name:{'owned_models':[name],'source_host_id':name+'-existing'}for name in values}
+    for name in values:
+        plan={'models':declarations,'owned_models':[name],'snapshot_preparation':True,
+            'role_exchange':{'schema':roles.EXCHANGE,'role':name,'directory':str(tmp_path/'exchange'),
+                'semantic_consumer':'mellum','roles':assignments}}
+        state=tmp_path/(name+'-state.json');state.write_text(json.dumps({'models':{name:values[name]},
+            'owner':process_owner(),'released':False}))
+        roles.withdraw(plan,state);plans[name]=plan;states[name]=state
+    request['contract']=roles.contract(plans['mellum']);request['mechanism']=roles.mechanism()
+    request_hash=canonical_json_sha256_hex(request)
+    offers={name:roles.handoff_offer(plan,states[name],request)for name,plan in plans.items()}
+    assert all(offers.values())
+    import time
+    initial=roles.foundation_request(plans['lfm'],tmp_path/'requests',generation='qualified-generation')
+    for plan in plans.values():roles.renew_handoff(plan,request,offers,expires_at=time.time()+180)
+    selected=roles.foundation_request(plans['lfm'],tmp_path/'requests',generation='qualified-generation')
+    assert selected['sha256']!=initial['sha256']
+    assert selected==roles.foundation_request(plans['lfm'],tmp_path/'requests',generation='qualified-generation')
+    actual=json.loads(Path(selected['path']).read_text())
+    assert actual['generation']==canonical_json_sha256_hex({'foundation_generation':'qualified-generation','handoff':request_hash})
+    # A genuine failed qualification attempt ends this rendezvous; it cannot
+    # be relabeled passed or reset by an ordinary progress counter.
+    value=json.loads(states['lfm'].read_text());value['models']['lfm']['foundation_qualification_attempt']={
+        'request':selected,'status':'failed'}
+    states['lfm'].write_text(json.dumps(value))
+    assert roles.handoff_offer(plans['lfm'],states['lfm'],request)is None
+    for plan in plans.values():roles.cancel_handoff(plan,request)
+    assert all(not roles.handoff_active(plan)for plan in plans.values())
+    value['owner']['start_ticks']='0';states['lfm'].write_text(json.dumps(value))
+    assert roles.handoff_offer(plans['lfm'],states['lfm'],request)is None

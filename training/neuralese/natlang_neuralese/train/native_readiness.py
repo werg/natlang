@@ -275,9 +275,13 @@ def ready_participants(config):
             try:
                 if raw_plan.get('snapshot_preparation'):
                     curriculum=json.loads(Path(config['curriculum']).read_text())
-                    if curriculum.get('snapshot_preparation') is not True:
+                    if curriculum.get('snapshot_preparation') is True:
+                        return roles.ready_participants(raw_plan,snapshot=True)
+                    if not config.get('snapshot_adoption_controller'):
                         raise ValueError('snapshot assets may only launch declared frozen-backbone VAE preparation')
-                    return roles.ready_participants(raw_plan)
+                    if not roles.local_released(config):
+                        return [],[{'reason':'descendant optimizer remains usefully owned until actual release'}]
+                    return roles.ready_participants(raw_plan,snapshot=False)
                 if not roles.local_released(config):
                     return [],[{'reason':'local source-host optimizer has not released current checkpoint'}]
                 return roles.ready_participants(raw_plan)
@@ -310,6 +314,58 @@ def ready_participants(config):
             raise ValueError('shared-stage participants must be distinct native models')
         ready[value['model_id']] = value
     return [ready[key] for key in sorted(ready)], pending
+
+
+def snapshot_successor(config,out):
+    """Advance actual frozen preparation to current released descendant adoption.
+
+    Controller output/lease ownership stays unchanged. Only the semantic child's
+    output and curriculum change; the prepared checkpoint remains immutable.
+    """
+    declaration=config.get('snapshot_successor')
+    if not declaration:return config
+    preparation=Path(config.get('semantic_out',out))
+    completion=preparation/'shared-stage-completion.json'
+    manifest_path=preparation/'participants.json'
+    if not completion.is_file() or not manifest_path.is_file():return config
+    manifest=json.loads(manifest_path.read_text())
+    curriculum=json.loads(Path(config['curriculum']).read_text())
+    signature=canonical_json_sha256_hex(manifest['models'])
+    if signature!=manifest['signature']:raise ValueError('prepared VAE participants changed')
+    key=(signature,canonical_json_sha256_hex(curriculum))
+    published={key:{'execution_signature':canonical_json_sha256_hex({'controller':config,
+        'participants':key[0],'curriculum':key[1]}),'models':[row['model_id']for row in manifest['models']]}}
+    if json.loads(completion.read_text()).get('preparation_complete') is not True:return config
+    proof,_=validate_snapshot_preparation(completion,published)
+    from ..rl import native_role_release as roles
+    plan=json.loads(_bound(config['raw_rl_bootstrap']).read_text())
+    full_path=_bound(declaration['curriculum']);full=json.loads(full_path.read_text())
+    controller={'curriculum':declaration['curriculum'],'command':declaration['command'],
+        'workdir':config.get('workdir'),'out':str(Path(out)/'joint')}
+    reference=roles.post_vae_request(plan,{'path':str(completion.resolve()),
+        'sha256':sha256_file_hex_cached(completion)},controller)
+    _,exchange=roles.ownership(plan)
+    write_json_durable(Path(exchange['directory'])/'post-vae-handoff.json',reference)
+    # The relay now arms both real owners. Historical preparation is not a
+    # current-weight release and cannot be passed to the joint trainer.
+    ready,pending=roles.ready_participants(plan,snapshot=False)
+    if len(ready)<2:return {**config,'awaiting_descendant_handoff':reference}
+    releases=list({row['source_role_release']['sha256']:row['source_role_release']for row in ready}.values())
+    full['snapshot_preparation']=False
+    full['snapshot_adoption']={'schema':'natlang.native-snapshot-adoption/1',
+        'plan':config['raw_rl_bootstrap'],'releases':releases}
+    destination=Path(out)/'joint-curricula'/canonical_json_sha256_hex(full)
+    destination.mkdir(parents=True,exist_ok=True)
+    path=destination/'curriculum.json';write_json_durable(path,full)
+    # Existing snapshot_adoption validates actual releases, ancestor identities
+    # and preserves the descendants' complete optimizer/RNG/exposure at resume.
+    command=[arg.replace('{joint_curriculum}',str(path)) for arg in declaration['command']]
+    command.extend(['--resume',str(_bound(proof['checkpoint'])),'--refresh-participants'])
+    result={**config,'curriculum':str(path),'command':command,'semantic_out':str(Path(out)/'joint'),
+        'snapshot_adoption_controller':reference}
+    result.pop('snapshot_successor',None)
+    if declaration.get('rl_bootstrap'):result['rl_bootstrap']=declaration['rl_bootstrap']
+    return result
 
 
 def validate_snapshot_preparation(path,published):
@@ -528,7 +584,9 @@ def _launch_child(argv, kind, config, out, signature, rl_signature, *, semantic_
     launch = {'schema': 'natlang.native-controller-child/1', 'status': 'launching',
         'token': uuid.uuid4().hex, 'argv': argv, 'cwd': str(Path(config.get('workdir') or '.').resolve()),
         'out': str(out), 'child_kind': kind, 'execution_signature': signature,
-        'rl_signature': rl_signature, 'semantic_completion':str(semantic_completion) if semantic_completion else None}
+        'rl_signature': rl_signature, 'semantic_completion':str(semantic_completion) if semantic_completion else None,
+        **({'semantic_controller':config}if kind=='native-semantic' and
+            (config.get('snapshot_successor') or config.get('snapshot_adoption_controller'))else{})}
     path = out/'child-launch.json'
     write_json_durable(path, launch)
     try:
@@ -620,7 +678,9 @@ def _run(config_path, *, once=False, stop):
             updated = json.loads(Path(config_path).read_text())
             if updated.get('schema') != config['schema'] or Path(updated['out']).resolve() != out:
                 raise ValueError('live shared controller cannot change its schema/output ownership')
-            config = updated
+            config = (launch['semantic_controller'] if child is not None and
+                child_kind=='native-semantic' and (launch or {}).get('semantic_controller')
+                else snapshot_successor(updated,out))
             command = config['command']
             if not isinstance(command, list) or not command or any(not isinstance(arg, str) for arg in command):
                 raise ValueError('shared-stage launch must be an explicit argv')
@@ -629,6 +689,9 @@ def _run(config_path, *, once=False, stop):
                 raise ValueError('shared-stage readiness must be checked at least once per minute')
             manage_raw = _manage_raw_bootstrap(config)
             ready, pending = ready_participants(config)
+            if config.get('awaiting_descendant_handoff'):
+                pending.append({'reason':'prepared frozen VAE awaits actual descendant optimizer handoff'})
+                ready=[]
             curriculum = (json.loads(Path(config['curriculum']).read_text()) if config.get('curriculum') else {})
             # Pending external owners need polling, not a full paired-row index.
             # Once two owners qualify, validate every train/held row before launch.
@@ -657,7 +720,9 @@ def _run(config_path, *, once=False, stop):
             curriculum_signature = canonical_json_sha256_hex(curriculum)
             execution_signature = canonical_json_sha256_hex({'controller': config,
                 'participants': signature, 'curriculum': curriculum_signature})
-            participants = out/'participants.json'
+            semantic_root=Path(config.get('semantic_out',out)).resolve()
+            semantic_root.mkdir(parents=True,exist_ok=True)
+            participants = semantic_root/'participants.json'
             retry_ready = retry is None or time.time() >= retry['next_retry_at']
             if (manage_raw and child is None and len(ready)<2 and config.get('raw_rl_bootstrap') and not last_success
                     and not semantic_publication and not once and not stop.requested and retry_ready
@@ -673,11 +738,17 @@ def _run(config_path, *, once=False, stop):
                 # The shared trainer polls this exact appendable participant
                 # manifest at update boundaries; a third ready model can join
                 # without waiting for the current shared stage to finish.
-                write_json_durable(participants, manifest)
+                if config.get('snapshot_successor') and participants.is_file():
+                    manifest=json.loads(participants.read_text())
+                    ready=manifest['models'];signature=manifest['signature']
+                    execution_signature=canonical_json_sha256_hex({'controller':config,
+                        'participants':signature,'curriculum':curriculum_signature})
+                else:
+                    write_json_durable(participants, manifest)
                 published[(signature, curriculum_signature)] = {
                     'execution_signature': execution_signature, 'models': [item['model_id'] for item in ready]}
-                completion = out/'shared-stage-completion.json'
-                semantic_out=out
+                completion = semantic_root/'shared-stage-completion.json'
+                semantic_out=semantic_root
                 semantic_pending=False
                 if child is None and curriculum.get('snapshot_preparation') and completion.is_file():
                     try:
