@@ -7,6 +7,7 @@ from pathlib import Path
 from ..common.jsonio import write_bytes_durable,write_json_durable
 from .native_raw_handoff import binding,verify_handoff,verify_handoff_metadata,verify_drained_recipe_handoff
 from .native_raw_rounds import verify_controller_fd
+from .production import actor_runtime_configuration
 from ..train.native_readiness import _bound
 
 SCHEMA='natlang.native-raw-runtime-handoff/1'
@@ -616,10 +617,18 @@ def _configure_runtime_handoff(plan_path,declaration,bootstrap,config_path,*,ver
     config['runtime_handoff']=reference
     config['runtime_binding']={'plan_sha256':binding(plan_path)['sha256'],'handoff':bootstrap}
     original=config['bootstrap_binding']
-    protected={key:config[key] for key in ('cases','runtime','task_source','source_admission','actor_command','before_collect','after_actor_ready') if key in config}
-    configure_provider(config,declaration,{},original,path,write=False)
+    protected_fields=('cases','runtime','task_source','source_admission','actor_command',
+                      'actor_environment','native_actor_python_runtime','before_collect','after_actor_ready')
+    protected={key:config[key] for key in protected_fields if key in config}
+    provider_declaration=declaration
     if pending:
-        for key in ('cases','runtime','task_source','source_admission','actor_command','before_collect','after_actor_ready'):
+        provider_declaration={**declaration,'commands':{key:value for key,value in
+            (declaration.get('commands')or{}).items()if key!='actor_command'}}
+    elif declaration.get('actor_runtime'):
+        config.update(actor_runtime_configuration(declaration['actor_runtime']))
+    configure_provider(config,provider_declaration,{},original,path,write=False)
+    if pending:
+        for key in protected_fields:
             if key in protected:config[key]=protected[key]
             else:config.pop(key,None)
     else:

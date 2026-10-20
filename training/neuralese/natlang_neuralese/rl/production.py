@@ -896,6 +896,17 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
         return state
 
 
+def actor_runtime_configuration(repository):
+    """The shared factory's exact serving entry, environment and Python closure."""
+    from ..common.runtime_inventory import python_runtime_binding
+    repository = Path(repository).resolve(strict=True)
+    if not (repository/'scripts/neuralese_data/serve_direct_checkpoint.py').is_file():
+        raise ValueError('native actor runtime requires its actual serving entry point')
+    return {'native_actor_python_runtime': python_runtime_binding(repository/'training/neuralese/natlang_neuralese'),
+            'actor_environment': {'NATLANG_REPO': str(repository),
+                'PYTHONPATH': str(repository/'training/neuralese') + ':' + str(repository)}}
+
+
 def configure_native(args):
     """Declare both cloud/local native learners using the same trainer and refresh."""
     from ..train.recipe import resolve_recipe_data, effective_stage_parameters, HANDLERS
@@ -934,11 +945,8 @@ def configure_native(args):
     if not parameters.get('task_eval') or type(cadence) is not int or cadence < 0:
         raise ValueError('native production must retain real task evaluation and its cadence')
     repo, python = str(root('repo')), sys.executable
-    from ..common.runtime_inventory import python_runtime_binding
-    actor_repo = Path(getattr(args, 'actor_runtime', None) or repo).resolve(strict=True)
-    if not (actor_repo/'scripts/neuralese_data/serve_direct_checkpoint.py').is_file():
-        raise ValueError('native actor runtime requires its actual serving entry point')
-    actor_python_runtime = python_runtime_binding(actor_repo/'training/neuralese/natlang_neuralese')
+    actor_configuration = actor_runtime_configuration(getattr(args, 'actor_runtime', None) or repo)
+    actor_repo = Path(actor_configuration['actor_environment']['NATLANG_REPO'])
     endpoint = 'http://127.0.0.1:' + str(args.port)
     if semantic:
         actor_profile = expected_native_actor(args.semantic_adapter, args.native_participant,
@@ -955,9 +963,7 @@ def configure_native(args):
               '--held-native-graphs', '{held_native_graphs}', '--out', '{learner_out}', '{trainer_args}']
     config = {'schema': 'natlang.rl-production-config/1', 'id': 'native-rl-' + args.model,
         'native_state': True, 'model': args.model, 'out': str(args.out.resolve()),
-        'native_actor_python_runtime': actor_python_runtime,
-        'actor_environment': {'NATLANG_REPO': str(actor_repo),
-            'PYTHONPATH': str(actor_repo/'training/neuralese') + ':' + str(actor_repo)},
+        **actor_configuration,
         'checkpoint': str(args.checkpoint.resolve()),
         'native_actor_mode': 'shared-semantic' if semantic else 'raw-state',
         **({'history_reasoning_policy': history_policy} if history_policy is not None else {}),

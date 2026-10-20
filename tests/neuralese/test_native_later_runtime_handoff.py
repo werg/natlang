@@ -157,6 +157,57 @@ def test_later_actual_owner_rebinds_recipe_without_rebootstrap_or_cursor_reset(l
     assert torch.equal(restored['training']['rng']['torch_rng'],x['saved']['training']['rng']['torch_rng'])
 
 
+@pytest.mark.parametrize('pending',[True,False])
+def test_actor_command_environment_and_runtime_move_only_at_free_boundary(later,tmp_path,pending):
+    from natlang_neuralese.rl.production import actor_runtime_configuration
+    x=later
+    roots=[]
+    for name in ('old-actor','new-actor'):
+        root=tmp_path/name
+        entry=root/'scripts/neuralese_data/serve_direct_checkpoint.py'
+        entry.parent.mkdir(parents=True);entry.write_text('# '+name+'\n')
+        package=root/'training/neuralese/natlang_neuralese';package.mkdir(parents=True)
+        (package/'__init__.py').write_text('# '+name+'\n')
+        roots.append(root)
+    old_actor,new_actor=roots
+    config=json.loads(x['config'].read_text());config.update(actor_runtime_configuration(old_actor))
+    write(x['config'],config)
+    cursor=json.loads((x['root']/'cycle.json').read_text())
+    if not pending:
+        cursor['phase']='collect';cursor.pop('pending_rl_round',None)
+        write(x['root']/'cycle.json',cursor)
+    state=(x['out']/'state.json').read_bytes();cursor_bytes=(x['root']/'cycle.json').read_bytes()
+    proof=runtime.prepare_runtime_handoff(x['bootstrap'],x['handoff'],x['transition'],
+        x['config'],tmp_path/'actor-runtime-handoff.json')
+    declaration=copy.deepcopy(x['declaration']);declaration.update(runtime_handoff=proof,actor_runtime=str(new_actor))
+    declaration['commands']['actor_command']=['env','NATLANG_REPO='+str(old_actor),
+        'PYTHONPATH=stale-imports','python',str(old_actor/'scripts/neuralese_data/serve_direct_checkpoint.py')]
+    original=copy.deepcopy(declaration);write(x['plan'],{'models':[declaration]})
+    runtime.configure_runtime_handoff(x['plan'],declaration,x['bootstrap'],x['config'])
+    actual=json.loads(x['config'].read_text())
+    assert declaration==original and (x['out']/'state.json').read_bytes()==state
+    assert (x['root']/'cycle.json').read_bytes()==cursor_bytes
+    expected=actor_runtime_configuration(old_actor if pending else new_actor)
+    for key,value in expected.items():assert actual[key]==value
+    if pending:
+        assert actual['actor_command']==config['actor_command']
+        assert actual['cases']==config['cases'] and actual['runtime']==config['runtime']
+    else:
+        assert actual['actor_command'][-1]==str(new_actor/'scripts/neuralese_data/serve_direct_checkpoint.py')
+        assert 'NATLANG_REPO='+str(new_actor) in actual['actor_command']
+        assert 'PYTHONPATH='+expected['actor_environment']['PYTHONPATH'] in actual['actor_command']
+
+
+def test_actor_runtime_factory_requires_real_entry_and_python_inventory(tmp_path):
+    from natlang_neuralese.rl.production import actor_runtime_configuration
+    with pytest.raises(ValueError,match='serving entry'):
+        actor_runtime_configuration(tmp_path)
+    entry=tmp_path/'scripts/neuralese_data/serve_direct_checkpoint.py'
+    entry.parent.mkdir(parents=True);entry.write_text('# real entry\n')
+    with pytest.raises(ValueError,match='no source inventory'):
+        actor_runtime_configuration(tmp_path)
+
+
 @pytest.mark.parametrize('change',['config','cursor','state','bootstrap','old-package','drop'])
 def test_later_authority_rejects_changed_control_or_forged_origin(later,change):
     x=later

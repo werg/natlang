@@ -161,3 +161,13 @@ and operation lock normally. Reuse one descriptor verifier across owner import,
 retirement, deferred bridges and runtime joins. Preserve all cursor/case/task
 and stage debt through the normal pending continuation law. A passed metadata
 join grants no model qualification, extra exposure or completed recipe stage.
+
+## Keep pending actors paired with their runtime
+
+Adaptive continuation preserves sealed case/task debt. During pending work,
+retain the actor command, environment and Python runtime binding together; do
+not apply the future actor override and then attempt to restore the old command.
+At a genuine free boundary, derive all actor runtime metadata through the same
+factory used by initial configuration, then use the normal provider verifier.
+The complete future declaration remains durable in both cases. These are crisp
+binding operations; they neither bypass command validation nor complete stages.
