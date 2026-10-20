@@ -1242,3 +1242,43 @@ local LF16,397/18,619 evaluation transfers were removed after locked ingestion,
 complete results and process-reference checks, reclaiming3,980,906,496 allocated
 bytes; verified private recovery, all scores and assigned repair parents remain.
 Strong self-hosted Qwen generation continues with batches71/72 supplied.
+
+
+### DGX supervision update — 2026-10-20 05:46 UTC
+
+LFM's requested normal SIGUSR2 refresh completed at **global19,368**, preserving
+749 earned optimizer updates since18,619. The saved checkpoint is
+`f61c34af2ca27102195e9f56d984d1231310c02a0ec1d4b95b6ed126784da9d6`.
+The final task evaluation reported missing Node on PATH; that infrastructure
+failure supplies no task-quality result. The replacement launch explicitly
+propagates the verified Node directory through direct and future learner commands.
+Earned-parent pinning and full-recipe objective/source continuation are in progress;
+installation and metadata readiness are not new SGD or completed stage exposure.
+
+The shared runtime handoff now accepts an authenticated inherited canonical
+controller FD, retaining the continuous exclusive lease while normal production
+locks and runtime configuration are joined before SGD. Exact FD/inode/flock and
+separate-open contention checks protect the borrowed authority. This preserves
+RAW cycle4, stage1, retry3 and pending task/case debt rather than resetting the
+schedule. Commit47145cc90 passed55 focused tests and quick checks.
+
+Source-bound failed-assistant-history correction is implemented through the
+existing CE policy continuation for BOTH students (b9148bbf7/073428530). It checks
+original TRAIN row/capture custody, exact tokenizer assets and independently
+rederived failed spans, then zeros only those positive positions before balanced
+CE. Original rows, source IDs, held data, completed exposure, optimizer and RNG
+remain intact. Root integrated36 focused tests and quick checks passed. The
+selected LFM KEEP cohort has7,721 rows,6,519 affected and1,187,434 failed-token
+positions; selected V5 cohorts have9,535 raw rows each,6,504 affected and
+1,058,860 LF /1,267,307 Mellum positions. These are prepared correction counts,
+not active-row admission, training exposure or measured behavioral improvement.
+The known one-row V5 withdrawal remains in force. Remaining source families are
+being inventoried; a selected cohort does not complete whole-recipe repair.
+
+The6e707cf8b2 full-suite check actually finished with exit0, superseding the old
+7ed complete result. Later shared changes have focused/quick validation and await
+the next timer-managed full check. All ten historical SearchOWL metadata
+hydrations completed with original groups and zero rerender. The final merge is
+running under measured storage protection with the next24.3GB Mellum compact
+actor reservation plus20GiB free floor. Later source-ready teacher additions
+remain explicit future continuation work, not silently credited exposure.
