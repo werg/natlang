@@ -94,7 +94,7 @@ def worker(shard, *, launch_path, composition_path, output):
  if Path(renderer.__file__).resolve()!=tree/'scripts/neuralese_data/render_native_turn_corpus.py':
   raise ValueError('historical Search renderer import escaped its composition')
  launch_ref=binding(launch_path);launch=json.loads(check(launch_ref).read_bytes());work=Path(launch['out_dir'])/'work'
- if not work.is_absolute():work=Path(launch['cwd']if 'cwd'in launch else '/home/werg/natlang')/work
+ if not work.is_absolute():work=Path(launch['cwd'])/work if 'cwd'in launch else Path(__file__).resolve().parents[2]/work
  state_ref=binding(work/'selection-state.json');state=json.loads(check(state_ref).read_bytes())
  if state['next_source']!=len(launch['source_turn_files']):raise ValueError('Search source selection remains incomplete')
  source_manifest=binding(launch['corpus_manifest'])
