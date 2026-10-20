@@ -66,3 +66,24 @@ def test_capture_census_reports_every_requested_failed_row_without_admitting(tmp
     assert {error['id']for error in report['errors']}=={'one','two'}
     assert all(error['source_sha256']==binding(source)['sha256']for error in report['errors'])
     assert not(tmp_path/'out').exists()
+
+
+def test_checked_prior_module_reuses_v1_work_only_for_identical_callable_law(tmp_path,monkeypatch):
+    from natlang_neuralese.common.hashing import canonical_json_sha256_hex as digest
+    from natlang_neuralese.train import native_failed_history as helper
+    from pathlib import Path
+    tok,*_,source,receipt,receipt_path=fixture(tmp_path)
+    work=tmp_path/'work'
+    producer.build([source],tokenizer=tok,out=tmp_path/'first',native_render_receipts=[receipt_path],work=work)
+    cache=next(p for p in work.glob('*.json')if p.name!='custody-report.json')
+    value=json.loads(cache.read_text());payload=value['payload'];old=tmp_path/'old-helper.py'
+    old.write_text(Path(helper.__file__).read_text())
+    payload['derivation'].pop('callable_law_sha256');payload['derivation'].update(version=1,mask_module_sha256=binding(old)['sha256'])
+    payload['key']=digest({'source_sha256':binding(source)['sha256'],**payload['derivation']})
+    value['payload_sha256']=digest(payload);cache.unlink();(work/(payload['key']+'.json')).write_text(json.dumps(value))
+    def forbidden(*args,**kwargs):raise AssertionError('old completed derivation repeated')
+    forbidden.__module__=helper.__name__;monkeypatch.setattr(producer,'derive_context_mask',forbidden)
+    producer.build([source],tokenizer=tok,out=tmp_path/'resumed',native_render_receipts=[receipt_path],work=work,prior_derivation_modules=[old])
+    old.write_text(old.read_text().replace("node=row['nodes'][0];ids=node['token_ids']","node=row['nodes'][0];ids=node['token_ids'][:-1]"))
+    with pytest.raises(ValueError,match='actual mask callable law'):
+        producer.build([source],tokenizer=tok,out=tmp_path/'refused',native_render_receipts=[receipt_path],work=work,prior_derivation_modules=[old])

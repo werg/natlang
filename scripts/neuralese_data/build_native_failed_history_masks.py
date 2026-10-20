@@ -139,7 +139,7 @@ def native_record_evidence(candidates,receipts,tokenizer,overrides):
         raise ValueError('failed-history native row lacks an exact original renderer receipt')
 
 
-def build(sources,*,tokenizer,out,capture_overrides=(),native_render_receipts=(),work=None):
+def build(sources,*,tokenizer,out,capture_overrides=(),native_render_receipts=(),work=None,prior_derivation_modules=()):
     """Bounded by explicit selected leaves; one pass per original capture file."""
     from natlang_neuralese.common.hashing import canonical_json_sha256_hex as digest
     out=Path(out)
@@ -152,9 +152,20 @@ def build(sources,*,tokenizer,out,capture_overrides=(),native_render_receipts=()
     fingerprint=tokenizer_fingerprint(tokenizer)
     work=Path(work)if work is not None else None
     if work is not None:work.mkdir(parents=True,exist_ok=True)
-    derivation={'version':1,'mask_law_sha256':mask_law(),
-        'mask_module_sha256':binding(__import__(derive_context_mask.__module__,fromlist=['__file__']).__file__)['sha256'],
+    from scripts.neuralese_data.source_policy_identity import scoped_python_policy
+    from natlang_neuralese.train import native_failed_history as mask_helper
+    mask_module=mask_helper.__file__
+    callable_law=scoped_python_policy(mask_module,('derive_context_mask','mask_record'),allow_imports=True)['policy_sha256']
+    derivation={'version':2,'mask_law_sha256':mask_law(),'callable_law_sha256':callable_law,
         'tokenizer_fingerprint':fingerprint,'native_custody_enabled':bool(native_render_receipts)}
+    prior_derivations=[]
+    for path in prior_derivation_modules:
+        original=binding(path)
+        if scoped_python_policy(path,('derive_context_mask','mask_record'),allow_imports=True)['policy_sha256']!=callable_law:
+            raise ValueError('prior candidate derivation changes the actual mask callable law')
+        prior_derivations.append({'version':1,'mask_law_sha256':derivation['mask_law_sha256'],
+            'mask_module_sha256':original['sha256'],'tokenizer_fingerprint':fingerprint,
+            'native_custody_enabled':bool(native_render_receipts)})
     candidates=[];source_bindings=[];seen=set();counts={'rows':0,'affected_rows':0,'zeroed_tokens':0}
     for path in sources:
         path=Path(path).resolve(strict=True);source=binding(path)
@@ -162,11 +173,18 @@ def build(sources,*,tokenizer,out,capture_overrides=(),native_render_receipts=()
         seen.add(source['sha256']);source_bindings.append({**source,'split':'train'})
         key=digest({'source_sha256':source['sha256'],**derivation})
         cache=work/(key+'.json')if work is not None else None
+        selected_derivation=derivation;selected_key=key
+        if cache is not None and not cache.exists():
+            for old_derivation in prior_derivations:
+                old_key=digest({'source_sha256':source['sha256'],**old_derivation})
+                old_cache=work/(old_key+'.json')
+                if old_cache.exists():
+                    cache=old_cache;selected_derivation=old_derivation;selected_key=old_key;break
         if cache is not None and cache.exists():
             saved=json.loads(cache.read_text());payload=saved.get('payload')or{}
             if (saved.get('schema')!='natlang.failed-history-candidate-work/1'
                     or saved.get('admitted')is not False or saved.get('payload_sha256')!=digest(payload)
-                    or payload.get('key')!=key or payload.get('derivation')!=derivation
+                    or payload.get('key')!=selected_key or payload.get('derivation')!=selected_derivation
                     or payload.get('source_sha256')!=source['sha256']or payload.get('source_bytes')!=source['bytes']):
                 raise ValueError('failed-history NON-ADMITTED candidate work binding mismatch')
             restored=payload.get('candidates')
@@ -294,6 +312,8 @@ def main(argv=None):
         help='optional locally relocated original capture, matched by exact original SHA')
     parser.add_argument('--out',type=Path,required=True)
     parser.add_argument('--work',type=Path,help='durable NON-ADMITTED candidate preparation cache and custody census')
+    parser.add_argument('--prior-derivation-module',type=Path,action='append',default=[],
+        help='exact preceding mask module for a checked equal-callable-law candidate-work migration')
     parser.add_argument('--native-render-receipt',type=Path,action='append',default=[],
         help='existing native-turn renderer receipt binding original approved native records and source view')
     args=parser.parse_args(argv)
@@ -302,7 +322,7 @@ def main(argv=None):
     tokenizer=AutoTokenizer.from_pretrained(args.tokenizer,local_files_only=True,trust_remote_code=False)
     provision_role_tokenizer(tokenizer)
     reference,counts=build(args.source,tokenizer=tokenizer,out=args.out,capture_overrides=args.capture,
-        native_render_receipts=args.native_render_receipt,work=args.work)
+        native_render_receipts=args.native_render_receipt,work=args.work,prior_derivation_modules=args.prior_derivation_module)
     print(json.dumps({'failed_history_mask':reference,**counts},sort_keys=True))
     return 0
 

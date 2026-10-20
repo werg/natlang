@@ -137,3 +137,11 @@ Capture resolution visits every requested row and records every failed source,
 row and turn in a durable non-admitted report, then fails before writing a
 normal manifest. A repaired capture resumes saved derivation; it never grants
 credit or weakens capture verification.
+
+Candidate work version 2 scopes the existing AST source-law verifier to the
+actual derive_context_mask and mask_record callables, plus the complete shared
+text_supervision failure law and decoder fingerprint. Capture-custody changes
+always rerun without invalidating unchanged derivation. An explicitly supplied
+preceding module may locate version-1 work only after its actual callable law
+is proved identical; different mask code is rejected. No old cache is relabeled
+as admitted, and original consumer rederivation remains required.
