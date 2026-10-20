@@ -170,7 +170,8 @@ def configure_model(plan_path,declaration,handoff,out,*,verified_handoff=None):
         if prior.get('supervised_boundary_configuration'):
             from .native_supervised_boundary import recover_configuration
             if recover_configuration(path,plan_path,declaration,handoff):return path
-        if prior.get('runtime_handoff') and not declaration.get('runtime_handoff'):
+        if (prior.get('runtime_handoff') and not declaration.get('runtime_handoff')
+                and not declaration.get('completed_supervised_adaptation')):
             raise ValueError('raw continuation cannot discard its later runtime authority')
         owner={'plan_sha256':sha256_file_hex_cached(plan_path),'handoff':handoff}
         if prior.get('runtime_binding',prior.get('bootstrap_binding'))==owner and unchanged(verification,plan_path,declaration,handoff,prior):

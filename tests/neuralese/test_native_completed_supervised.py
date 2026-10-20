@@ -187,6 +187,26 @@ def test_configuration_changes_future_lr_only_and_does_not_repeat_completed_stag
     adapt.configure(configured_plan,p['models'][0],old['bootstrap_binding']['handoff'],config)
 
 
+def test_raw_dispatch_applies_verified_completed_successor_to_runtime_handoff(tmp_path,monkeypatch):
+    from natlang_neuralese.rl import native_raw_rounds as raw,native_bootstrap_metadata
+    historical=tmp_path/'historical-runtime.json';write(historical,{'retained':'original authority'})
+    root,config,plan,proof=prepared(tmp_path,runtime_package=Path(adapt.__file__).parents[1],
+        old_declaration_overrides={'runtime_handoff':adapt.binding(historical)},
+        future_declaration_overrides={'runtime_handoff':None})
+    value=adapt.verify(proof);future=json.loads(Path(value['future_global_plan']['path']).read_text())
+    declaration=future['models'][0];declaration['completed_supervised_adaptation']=proof
+    current=tmp_path/'current-global.json';write(current,future)
+    original=json.loads(config.read_text());before=(root/'cycle.json').read_bytes(),(root/'production/state.json').read_bytes()
+    # Task admission has separate coverage; this serialized fixture isolates dispatch.
+    monkeypatch.setattr(raw,'_task_cases',lambda declaration:None)
+    monkeypatch.setattr(native_bootstrap_metadata,'save',lambda *args:None)
+    assert raw.configure_model(current,declaration,original['bootstrap_binding']['handoff'],root)==config
+    applied=json.loads(config.read_text())
+    assert applied['completed_supervised_adaptation']==proof and not applied.get('runtime_handoff')
+    assert applied['production_recipe']==value['recipe']['path']
+    assert before==((root/'cycle.json').read_bytes(),(root/'production/state.json').read_bytes())
+
+
 @pytest.mark.parametrize('mutation',['future-command','started-stage','future-credit','other-role'])
 def test_adaptation_tampering_rejects_without_changing_current_controls(tmp_path,mutation,monkeypatch):
     root,config,plan,proof=prepared(tmp_path)

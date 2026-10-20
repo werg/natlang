@@ -1816,3 +1816,41 @@ runtime-failed assistant history. Seed authenticated dedup indexes for newly
 admitted corpora before successor conversion. Strictly verified tranches are
 registered, published, and made visible to the next tranche immediately. These
 new registrations still have zero student exposure until actual continuation.
+
+### DGX recovery and adaptive continuation — 2026-10-21 01:05 Berlin
+
+LFM retained a genuine SIGUSR2 semantic-refresh checkpoint at global22283,
+SHA ec07d5efbbc19c35f3d0afc8e167cf6b70875629583d9c144cddf0ecc4848933,
+including890 earned updates. Completed consumption/adaptation297985eca35d
+preserved optimizer/RNG/exposure and the whole mandatory recipe. Physical R13
+code5fa2b608 was independently installed and its actual loaded controllers had
+104passing checks plus one skip per role. Luna's read-only cutover review is
+recorded in dgxops/lfm-r6v13-independent-cutover-review-root-20261021.json.
+An outer RAW runtime-authority guard rejected the verified completed successor
+before dispatch. The shared routing fix retains the ordinary downgrade guard
+and routes completed successors through the existing full verifier;114 focused
+checks pass, one skipped. Applying that existing verified configuration directly
+under canonical leases restores the current R13 route without changing tensors.
+Do not infer resumed optimizer updates from a live coordinator.
+
+All53 positive backlog814 tranches are now strict-admitted and registered for
+both students. Their full delta has9400LFM/9397Mellum rows, zero held/pending
+rows, exact original masked-KEEP trajectories, and passed the unchanged actual
+consumer. Both sandboxes verified all326 transport files from the independently
+private-readback archive09c86b774faba4f4d0f58ad01f93614abe81e37afa4f801fd7262ad765d4f2ed.
+Source classification parts659a958e4188 and inventory8605bca41aac are complete.
+Staging/admission are not learner exposure; append this whole delta promptly.
+
+Both the Mellum replacementfa6f6e08 and teacher78530f71 unexpectedly restarted
+and lost ephemeral working files. The new boots are1360ca6d and6b9f17ce,
+respectively; cause remains undetermined. Prior physical-installation receipts
+are historical. Mellum's independent full26320 backup, pinned base, complete
+646-file training/held closure and full R13 runtime were restored and verified
+on the new boot. Recovery still needs the remaining recipe/classification/index
+closure. The inaccessible oldc8a1da97 sandbox and unrescued26658 state remain
+protected. No replacement SGD or cross-model readiness is claimed. Teacher
+restoration reuses the exact pinned102.26GB Qwen source, original task/runtime
+archives and last measured optimized serving arguments. Fresh actor custody
+and honest unfinished-generation accounting are required before new generation.
+The full10e7df20e7 repository check passed before the new dispatch fix; the new
+fix has passing focused/quick checks and requires its normal full check.

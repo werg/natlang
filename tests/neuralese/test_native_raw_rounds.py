@@ -52,6 +52,22 @@ def fixture(tmp_path,monkeypatch):
     return directory,config,stop,calls
 
 
+@pytest.mark.parametrize('forged_adaptation',[False,True])
+def test_runtime_authority_cannot_be_dropped_without_verified_completed_successor(tmp_path,monkeypatch,forged_adaptation):
+    root=tmp_path/'student';root.mkdir();(root/'production').mkdir()
+    config=root/'config.json';write_json_durable(config,{'out':str(root/'production'),
+        'runtime_handoff':{'path':'historic authority','sha256':'a'*64}})
+    plan=tmp_path/'plan.json';write_json_durable(plan,{'models':[]})
+    declaration={}
+    if forged_adaptation:
+        declaration['completed_supervised_adaptation']={'path':str(tmp_path/'invented.json'),'sha256':'b'*64}
+    monkeypatch.setattr(raw,'_task_cases',lambda declaration:None)
+    before=config.read_bytes()
+    with pytest.raises((ValueError,FileNotFoundError)):
+        raw.configure_model(plan,declaration,{'path':'bootstrap','sha256':'c'*64},root)
+    assert config.read_bytes()==before and not(root/'cycle.json').exists()
+
+
 def test_raw_policy_publish_stop_restart_does_not_recollect_and_interleaves_same_parent(tmp_path,monkeypatch):
     directory,config,stop,calls=fixture(tmp_path,monkeypatch)
     stop.interrupt_after_policy=True
