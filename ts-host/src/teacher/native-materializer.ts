@@ -443,13 +443,15 @@ function softReturnResultActionMatches(modelArguments: unknown, actionArguments:
   const action = actionArguments && typeof actionArguments === 'object' && !Array.isArray(actionArguments) ? actionArguments as Dict : {};
   if (model.status !== 'success' || action.status !== 'success') return false;
   const parts = Array.isArray(action.value) ? action.value : undefined;
-  const callableTransport = parts?.length === 1 && parts[0] && typeof parts[0] === 'object' &&
+  // The structured reference is transport, not evidence of a callable element.
+  // Its exact declared type is authenticated against the writer and host below.
+  const structuredTransport = parts?.length === 1 && parts[0] && typeof parts[0] === 'object' &&
     Object.keys(parts[0]).sort().join(',') === 'id,type' && parts[0].type === 'neuralese' &&
     typeof parts[0].id === 'string' && /^nz1_[a-z2-7]{20,}$/.test(parts[0].id);
-  if (typeof model.value !== 'string' || (typeof action.value !== 'string' && !callableTransport))
+  if (typeof model.value !== 'string' || (typeof action.value !== 'string' && !structuredTransport))
     return nestedNeuraleseReturnMatches(model, action, row, invocationId, actionEvent);
   const markers = [...model.value.matchAll(/^<\|neuralese\|>([\s\S]*)<\|\/neuralese\|>$/g)];
-  const blockId = callableTransport ? parts![0].id as string :
+  const blockId = structuredTransport ? parts![0].id as string :
     /^(nz1_[a-z2-7]{20,})$/.exec(action.value as string)?.[1];
   if (markers.length !== 1 || !blockId || /<\|neuralese\|>|<\|\/neuralese\|>/.test(markers[0]![1]!)) return false;
   const expectedAction: Dict = { ...model, value: action.value };
@@ -462,11 +464,11 @@ function softReturnResultActionMatches(modelArguments: unknown, actionArguments:
   const resultRef = resultValue?.$neuralese && typeof resultValue.$neuralese === 'object' ? resultValue.$neuralese as Dict : undefined;
   const declaredType = (invocation?.inline_instruction_site as Dict | undefined)?.returns;
   const runtimeType = declaredType && typeof declaredType === 'object' ? (declaredType as Dict).natlang : undefined;
-  if (callableTransport) {
+  if (structuredTransport) {
     if (typeof runtimeType !== 'string') return false;
     try {
       const type = parseType(runtimeType);
-      if (type.kind !== 'neuralese' || type.element.kind !== 'lambda') return false;
+      if (type.kind !== 'neuralese') return false;
     } catch { return false; }
     if (hostResult?.value_sha256 !== hexDigest(JSON.stringify(hostResult?.value))) return false;
     const steps = (row.trajectory as Dict[]).filter(step => step.invocation_id === invocationId);
@@ -493,7 +495,7 @@ function softReturnResultActionMatches(modelArguments: unknown, actionArguments:
   }
   if (hostResult?.kind !== 'host_capture' || hostResult.capture_kind !== 'invocation_output' ||
       hostResult.call_id !== invocationId || hostResult.complete !== true ||
-      hostResult.result_type !== runtimeType || (!callableTransport && runtimeType !== 'Neuralese<string>') ||
+      hostResult.result_type !== runtimeType || (!structuredTransport && runtimeType !== 'Neuralese<string>') ||
       !resultRef || resultRef.type !== runtimeType || resultRef.id !== blockId) return false;
   const actionLedger = Array.isArray(row.outcome.action_ledger) ? row.outcome.action_ledger as Dict[] : [];
   const returnAction = actionLedger.find((event: Dict) =>

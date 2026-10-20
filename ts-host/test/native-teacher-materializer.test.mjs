@@ -1622,3 +1622,54 @@ for (const quality of ['quality_pending_partial_files', 'quality_pending_partial
     assert.ok(materializeNativeRows([row], { decisionApprovals: [rootApproval] }).turns.every(turn => !turn.training_admission.approved));
   });
 }
+
+
+test('links structured Neuralese value returns using exact declared type and captured writer custody', () => {
+  const sha = value => createHash('sha256').update(value).digest('hex');
+  const make = (type = 'Neuralese<"green" | "blue">', body = 'green') => {
+    const row = softReturnRow('structured-value-return');
+    const marker = `<|neuralese|>${body}<|/neuralese|>`;
+    const event = row.outcome.action_ledger[0];
+    event.tool_call_id = 'exact-structured-value-return';
+    event.arguments.value = [{ type: 'neuralese', id: softBlock }];
+    const step = row.trajectory[0];
+    step.assistant.calls[0].arguments.value = marker;
+    step.model_response.raw_calls[0].id = event.tool_call_id;
+    step.model_response.raw_calls[0].function.arguments = JSON.stringify(step.assistant.calls[0].arguments);
+    const invocation = row.outcome.invocation_ledger[0];
+    invocation.inline_instruction_site.returns.natlang = type;
+    const host = invocation.host_result;
+    host.result_type = type; host.value.$neuralese.type = type;
+    host.value_sha256 = sha(JSON.stringify(host.value));
+    Object.assign(row.outcome.execution_graph[1], { result_type: type, truncated: false,
+      marker_context: 'return-result', text_body_sha256: sha(body) });
+    return { row, marker };
+  };
+  for (const [type, body] of [['Neuralese<"green" | "blue">', 'green'],
+    ['Neuralese<string>', 'a useful note'], ['Neuralese<number>', '7']]) {
+    const { row, marker } = make(type, body);
+    const result = materializeNativeRows([row], { directAnswers: true });
+    assert.equal(result.acceptedRows, 1, type);
+    assert.deepEqual(result.unlinked, []);
+    assert.equal(JSON.parse(result.turns[0].target.tool_calls[0].function.arguments).value, marker);
+  }
+  const mutations = [
+    r => { r.outcome.execution_graph[1].text_body_sha256 = '0'.repeat(64); },
+    r => { r.outcome.execution_graph[1].truncated = true; },
+    r => { r.outcome.execution_graph[1].result_type = 'Neuralese<number>'; },
+    r => { r.outcome.execution_graph.push(structuredClone(r.outcome.execution_graph[1])); },
+    r => { r.trajectory[0].model_response.raw_calls[0].id = 'different-call'; },
+    r => { r.outcome.invocation_ledger[0].host_result.value_sha256 = '0'.repeat(64); },
+    r => { r.outcome.invocation_ledger[0].host_result.terminal_action_seq = 99; },
+    r => { r.outcome.invocation_ledger[0].host_result.call_id = 'different-invocation'; },
+    r => { r.outcome.action_ledger[0].arguments.value.push({ type: 'text', text: 'extra' }); },
+    r => { r.outcome.action_ledger[0].arguments.value[0].id = `nz1_${'x'.repeat(32)}`; },
+    r => { const i = r.outcome.invocation_ledger[0]; i.inline_instruction_site.returns.natlang = 'string'; },
+  ];
+  for (const [index, mutate] of mutations.entries()) {
+    const { row } = make(); mutate(row);
+    const checked = materializeNativeRows([row], { directAnswers: true });
+    assert.equal(checked.acceptedRows, 0, `structured-value corruption ${index}`);
+    assert.equal(checked.turns.length, 0);
+  }
+});
