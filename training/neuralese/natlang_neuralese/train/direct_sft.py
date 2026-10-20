@@ -1503,6 +1503,8 @@ def final_evaluations(step, *, finished, drift_stopped_here, task_eval, monitor,
         return task_summary, None
     if task_eval is not None and task_summary is None:
         task_summary = task_eval.final_at(step)
+    if task_summary is not None and task_summary.get('operational_stop') is True:
+        return task_summary, None
     return task_summary, monitor.final_gate(step)
 
 
@@ -1819,7 +1821,7 @@ def main(argv=None):
     from ..eval.task_cadence import TaskEval, parse_task_eval
     task_eval_spec = parse_task_eval(a.task_eval)
     # Served through the stage's own engine at the eval cadence, in this process (no second copy of the weights).
-    task_eval = (TaskEval(task_eval_spec, a.out, engine, prompt_rendering='full')  # the spec's own setting wins (default full)
+    task_eval = (TaskEval(task_eval_spec, a.out, engine, prompt_rendering='full', stop_requested=lambda: stop.requested)  # the spec's own setting wins (default full)
                  if task_eval_spec is not None else None)
     final_task_summary = None
     drift_stopped_here = False
@@ -2976,12 +2978,13 @@ def main(argv=None):
     # gate is report-only; without a declared task evaluation the stage cannot qualify.
     from ..eval.task_cadence import task_gate as task_gate_of
     task_gate = task_gate_of(final_task_summary, task_eval_spec)
+    finished = finished and not stop.requested
     qualified = bool(finished and step >= a.steps and final.get('ce_delta', 0.0) < 0 and
                      task_gate is not None and task_gate['passed'])
     identity_file = a.out / 'identity-check.json'
     final.update(identity_check=json.loads(identity_file.read_text()) if identity_file.is_file() else None)
     status = ('complete' if step >= a.steps else 'stopped_at') if finished else ('checkpointed_on_drift_guard' if drift_stopped_here else 'checkpointed_on_signal')
-    final.update(status=status, stop_signals=stop.received, completed=step >= a.steps, steps=step,
+    final.update(status=status, stop_signals=stop.received, completed=step >= a.steps and not stop.requested, steps=step,
                  stopped_at=timed_prefix_step or a.stop_at or None, best=best,
                  training_seconds=training_seconds, training_time_limit_seconds=a.stop_after_training_seconds,
                  behaviour_gate=gate, behaviour_gate_report_only=True, task_gate=task_gate,

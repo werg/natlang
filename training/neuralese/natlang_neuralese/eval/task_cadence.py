@@ -73,7 +73,7 @@ DEFAULT_CASES = tuple(range(0, 48, 3))
 SCHEMA = 'natlang.in-run-task-eval/1'
 
 
-def wait_collectors(children, queues, launch, *, min_free_mib, max_workers=None):
+def wait_collectors(children, queues, launch, *, min_free_mib, max_workers=None, stop_requested=None):
     """Run exact case queues, optionally refilling a bounded set of collector slots.
 
     With ``max_workers`` the queue list is a stable case order and children starts
@@ -95,6 +95,8 @@ def wait_collectors(children, queues, launch, *, min_free_mib, max_workers=None)
     codes = [None] * len(queues)
     pending = set(range(len(queues)))
     paused = set()
+    interrupted = False
+    journal_error = None
 
     def check_pause(index):
         queue, journal, entries = queues[index]
@@ -112,6 +114,27 @@ def wait_collectors(children, queues, launch, *, min_free_mib, max_workers=None)
         return True
 
     while pending:
+        if not interrupted and stop_requested is not None and stop_requested():
+            interrupted = True
+            for index in sorted(pending):
+                queue, journal, entries = queues[index]
+                event = {'event': 'operational_stop', 'time': time.time(),
+                         'queue': str(queue), 'started': index in running,
+                         'keys': [entry['key'] for entry in entries]}
+                try:
+                    with journal.open('a') as stream:
+                        stream.write(json.dumps(event) + '\n'); stream.flush(); os.fsync(stream.fileno())
+                except OSError as error:
+                    if journal_error is None: journal_error = error
+                if index in running:
+                    child = running[index][0]
+                    if child.poll() is None:
+                        try: child.terminate()
+                        except ProcessLookupError: pass
+                else:
+                    codes[index] = 75
+            pending.intersection_update(running)
+            paused.clear()
         for index in tuple(sorted(running)):
             child, log = running[index]
             code = child.poll()
@@ -119,14 +142,14 @@ def wait_collectors(children, queues, launch, *, min_free_mib, max_workers=None)
                 continue
             log.close()
             del running[index]
-            if code == 75 and min_free_mib and check_pause(index):
+            if not interrupted and code == 75 and min_free_mib and check_pause(index):
                 paused.add(index)
                 continue
             codes[index] = code
             pending.remove(index)
 
         free_slots = max_workers - len(running)
-        if free_slots and pending:
+        if free_slots and pending and not interrupted:
             disk_ok = (not min_free_mib or
                        shutil.disk_usage(queues[0][1].parent).free // (1024 * 1024) >= min_free_mib)
             if disk_ok:
@@ -136,6 +159,7 @@ def wait_collectors(children, queues, launch, *, min_free_mib, max_workers=None)
                                if index not in running and index not in launched] +
                               [index for index in sorted(paused) if index in pending and index not in running])
                 for index in candidates[:free_slots]:
+                    if stop_requested is not None and stop_requested(): break
                     queue, journal, entries = queues[index]
                     if index in paused and not check_pause(index):
                         # An operator may drain a paused case while other work
@@ -150,7 +174,8 @@ def wait_collectors(children, queues, launch, *, min_free_mib, max_workers=None)
                     launched.add(index)
                     paused.discard(index)
         if pending:
-            time.sleep(0.2 if running else 30)
+            time.sleep(0.2 if running or stop_requested is not None else 30)
+    if journal_error is not None: raise journal_error
     return codes
 
 
@@ -225,7 +250,7 @@ def require_native_transport(spec):
 class TaskEval:
     """Serve ``engine`` on loopback and execute the fixed held subset against it."""
 
-    def __init__(self, spec: dict, out: Path, engine, *, prompt_rendering: str, external_actor=None):
+    def __init__(self, spec: dict, out: Path, engine, *, prompt_rendering: str, external_actor=None, stop_requested=None):
         from ..common.hashing import sha256_file_hex
         from .task_packet import read_jsonl
 
@@ -233,6 +258,7 @@ class TaskEval:
             require_native_transport(spec)
         self.spec, self.out, self.engine = spec, Path(out), engine
         self.external_actor = external_actor
+        self.stop_requested = stop_requested
         self.prompt_rendering = spec.get('prompt_rendering') or prompt_rendering or 'full'
         from ..common.paths import root as logical_root
         # Repo-relative paths resolve against the live checkout (a training run executes a code snapshot that
@@ -262,6 +288,10 @@ class TaskEval:
         text = ''.join(json.dumps(row, sort_keys=True, ensure_ascii=False) + '\n' for row in self.rows)
         if not self.subset.exists() or self.subset.read_text(encoding='utf-8') != text:
             self.subset.write_text(text, encoding='utf-8')
+
+    def operational_stop_requested(self):
+        callback = getattr(self, 'stop_requested', None)
+        return callback is not None and bool(callback())
 
     def previous(self, step: int) -> dict | None:
         """The stage's last eligible evaluation before ``step`` on the same packet and cases (None if none)."""
@@ -359,7 +389,8 @@ class TaskEval:
                     cwd=self.repo, env=env, stdout=log, stderr=subprocess.STDOUT), log)
             codes = wait_collectors([], queues, launch,
                                     min_free_mib=self.spec.get('min_free_mib', 0),
-                                    max_workers=min(self.spec['workers'], len(queues)))
+                                    max_workers=min(self.spec['workers'], len(queues)),
+                                    stop_requested=self.operational_stop_requested)
         finally:
             if server is not None:
                 server.shutdown()
@@ -401,18 +432,22 @@ class TaskEval:
         started = time.time()
         run = self.root / f'step-{step:07d}'
         score, codes = self._execute(run)
-        eligible = accounted(score)
+        operational_stop = self.operational_stop_requested()
+        eligible = accounted(score) and not operational_stop
         # Noise from repeat runs (coordinator 2026-10-12): the first evaluation of a stage runs the same model again
         # (noise_repeats total runs); the spread of the success counts is this stage's measured noise.
         repeats, repeat_noise = [], None
         if eligible and self.measured_noise() is None and self.spec.get('noise_repeats', 2) > 1:
             for index in range(1, self.spec.get('noise_repeats', 2)):
+                if self.operational_stop_requested(): break
                 again, again_codes = self._execute(run.with_name(run.name + f'-repeat{index}'), index)
                 if accounted(again):
                     repeats.append(again['task_successes'])
             if repeats:
                 counts = [score['task_successes'], *repeats]
                 repeat_noise = max(counts) - min(counts)
+        operational_stop = operational_stop or self.operational_stop_requested()
+        eligible = eligible and not operational_stop
         measured = repeat_noise if repeat_noise is not None else self.measured_noise()
         noise = max(self.spec['noise_successes'], measured or 0)
         previous = self.previous(step)
@@ -433,6 +468,8 @@ class TaskEval:
                    'regressed': eligible and bool(previous) and score['task_successes'] < previous['task_successes'] - noise,
                    'code_commit': _git_head(),
                    'seconds': time.time() - started, 'run': str(run)}
+        if operational_stop:
+            summary.update(operational_stop=True, qualification_deferred=True)
         if not eligible:
             summary.update(observed_task_successes=score['task_successes'],
                            observed_regressed=bool(previous) and score['task_successes'] < previous['task_successes'] - noise,
@@ -467,7 +504,7 @@ class TaskEval:
                         row.get('case_indices') != self.spec['cases']):
                     count = 0
                 else:
-                    if row.get('superseded') or row.get('skipped'):
+                    if row.get('superseded') or row.get('skipped') or row.get('operational_stop'):
                         continue  # a dropped request is no evaluation: neither a failure nor a success
                     count = 0 if row.get('eligible') else count + 1
         return count
@@ -486,12 +523,14 @@ class TaskEval:
                     row = json.loads(line)
                 except json.JSONDecodeError:
                     continue
+                if row.get('step') == step and row.get('operational_stop') is True:
+                    break  # Do not reuse an earlier publication of this interrupted attempt.
                 if (row.get('step') == step and row.get('eligible') is True and
                         row.get('packet_sha256') == self.spec['packet']['sha256'] and
                         row.get('case_indices') == self.spec['cases']):
                     return row
         summary = self.cadence(step, final=True)
-        while not summary['eligible']:
+        while not summary['eligible'] and not self.operational_stop_requested():
             summary = self.cadence(step, final=True)
         return summary
 
@@ -511,8 +550,21 @@ class TaskEval:
                           if getattr(getattr(self,'engine',None),'native_coefficient_policy_runtime',None) is not None else {}),
                        'code_commit': _git_head(), 'seconds': time.time() - started,
                        'run': str(self.root / f'step-{step:07d}')}
+            if self.operational_stop_requested():
+                summary.update(operational_stop=True, qualification_deferred=True)
             with (self.out / 'task-eval.jsonl').open('a') as handle:
                 handle.write(json.dumps(summary) + '\n')
+        if self.operational_stop_requested():
+            already_recorded = summary.get('operational_stop') is True
+            summary.update(operational_stop=True, qualification_deferred=True, eligible=False, regressed=False,
+                           observed_task_successes=summary.get('observed_task_successes',summary.get('task_successes')),
+                           task_successes=None, task_success_rate=None, model_outcome='unscored')
+            if not already_recorded:
+                # The stop can arrive after run() persisted its score. Append an
+                # explicit correction; never return a passed receipt while stopped.
+                with (self.out / 'task-eval.jsonl').open('a') as handle:
+                    handle.write(json.dumps(summary) + '\n')
+            return summary
         if summary['eligible']:
             return summary
         failures = self.consecutive_failures()

@@ -279,7 +279,7 @@ def test_real_stop_checkpoints_before_held_eval_and_resume_logs_actual_updates(t
     assert json.loads((tmp_path / 'run/report.json').read_text())['completed'] is True
 
 
-@pytest.mark.parametrize('stop_at', ['update', 'held', 'checkpoint'])
+@pytest.mark.parametrize('stop_at', ['update', 'held', 'checkpoint', 'task'])
 def test_stop_during_final_update_or_evaluation_saves_without_starting_collector(tmp_path, monkeypatch, stop_at):
     import json
     import torch
@@ -317,8 +317,15 @@ def test_stop_during_final_update_or_evaluation_saves_without_starting_collector
     monkeypatch.setattr(trainer.CheckpointPolicy, 'due', due)
     monkeypatch.setattr(trainer, '_evaluate_cadence', evaluate)
     monkeypatch.setattr(trainer, '_save', save)
-    monkeypatch.setattr(task_cadence, 'TaskEval', lambda spec, out, engine, **kwargs:
-                        SimpleNamespace(engine=engine, cadence=forbidden_collector))
+    def evaluator(spec, out, engine, **kwargs):
+        def cadence(*args, **kw):
+            if stop_at != 'task':return forbidden_collector(*args, **kw)
+            assert kwargs['stop_requested']() is False
+            policies[-1].stop.request()
+            assert kwargs['stop_requested']() is True
+            return None  # The real task dispatcher interruption is exercised separately.
+        return SimpleNamespace(engine=engine,cadence=cadence)
+    monkeypatch.setattr(task_cadence, 'TaskEval', evaluator)
     out = tmp_path/'run'
     assert trainer.main(['--base', str(base), '--dtype', 'float32', '--rank', '4', '--device', 'cpu',
         '--native-graphs', str(paths['train']), '--held-native-graphs', str(paths['test']),

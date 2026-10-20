@@ -430,7 +430,7 @@ def _exposure_complete(phases, source, participants, exposure):
     return not missing, missing
 
 
-def measure_tasks(participants, export, config, out, step, device, vae=None):
+def measure_tasks(participants, export, config, out, step, device, vae=None, stop_requested=None):
     """Serve the same live trained weights; do not allocate a second backbone."""
     from ..eval.native_state import task_execution_receipt
     from ..eval.task_cadence import TaskEval, parse_task_eval
@@ -450,6 +450,7 @@ def measure_tasks(participants, export, config, out, step, device, vae=None):
         if vae is not None:vae.eval()
         with _native_modules(participants):
             for name, participant in participants.items():
+                if stop_requested is not None and stop_requested(): break
                 declaration = config.get('models', {}).get(name, {}).get('task_eval', config.get('task_eval'))
                 if not declaration:
                     continue
@@ -469,7 +470,7 @@ def measure_tasks(participants, export, config, out, step, device, vae=None):
                         from ..serve import bind_native_semantic_channel
                         bind_native_semantic_channel(engine,channel,name)
                     directory = Path(out)/('participant-' + canonical_json_sha256_hex(name))
-                    evaluator = TaskEval(spec, directory, engine, prompt_rendering=spec.get('prompt_rendering', 'full'))
+                    evaluator = TaskEval(spec, directory, engine, prompt_rendering=spec.get('prompt_rendering', 'full'), stop_requested=stop_requested)
                     summary = evaluator.cadence(step)
                     receipt = task_execution_receipt(summary, identity,
                         checkpoint_sha256=export['checkpoint']['sha256'])
@@ -818,7 +819,7 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
         if policy.due(training['step']) or due_task:
             current = save_shared(policy, participants, vae, optimizer, training=training, device=device)
             if due_task:
-                metrics['task_execution'] = measure_tasks(participants, current, config, out, training['step'], device, vae=vae)
+                metrics['task_execution'] = measure_tasks(participants, current, config, out, training['step'], device, vae=vae, stop_requested=lambda: policy.signaled)
                 write_json_durable(out/'metrics.json', metrics)
         if max_updates is not None and training['step'] - started_step >= max_updates:
             break
@@ -852,17 +853,18 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
             phase='joint',options=config.get('options',{}),resolver=resolver,coverage=training.get('held_coverage'),rows=config.get('held_eval_rows'))
     export = save_shared(policy, participants, vae, optimizer, training=training, device=device)
     complete, missing = _exposure_complete(config['phases'], train, participants, training['exposure'])
-    complete=bool(complete and publication_boundary and policy_complete)
+    complete=bool(complete and publication_boundary and policy_complete and not policy.signaled)
     certificates = {}
     tasks = {}
     semantic_certificate=None
-    if complete or refresh_reached:
+    if not policy.signaled and (complete or refresh_reached):
         from ..eval.native_backend import qualify_complete_runtime
         from ..model.shared_state import RoleTokens
-        tasks = measure_tasks(participants, export, config, out, training['step'], device, vae=vae)
+        tasks = measure_tasks(participants, export, config, out, training['step'], device, vae=vae, stop_requested=lambda: policy.signaled)
         rng = capture_training_rng_state(device)
         try:
             for name, participant in participants.items():
+                if policy.signaled: break
                 declaration=config.get('models',{}).get(name,{})
                 fp8={'kind':declaration.get('fp8_training','triton-experts'if participant.config['architecture']in{'mellum','maple'}else'off'),
                     'recipe':declaration.get('fp8_recipe','delayed'),'amax_history_len':declaration.get('fp8_amax_history_len',16)}
@@ -885,7 +887,7 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
                                       'passed': certificate['passed']}
         finally:
             restore_training_rng_state(rng, device)
-        if set(export['tokenizers'])==set(participants):
+        if not policy.signaled and set(export['tokenizers'])==set(participants):
             from ..model.semantic_channel import SemanticChannel
             from ..eval.native_semantic_runtime import qualify_semantic_transport
             texts={}
@@ -906,10 +908,10 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
             write_json_durable(path,transport)
             semantic_certificate={'path':str(path.resolve()),'sha256':sha256_file_hex_cached(path),'passed':transport['passed']}
         numerics_ready=all(value['passed'] for value in certificates.values())
-        complete = bool(exposure_complete and policy_complete and numerics_ready and (metrics.get('held') or {}).get('scope')=='full')
+        complete = bool(not policy.signaled and exposure_complete and policy_complete and numerics_ready and (metrics.get('held') or {}).get('scope')=='full')
     configuration = out/'completed-curriculum.json'
     write_json_durable(configuration, config)
-    current_checks=bool(certificates and all(value['passed'] for value in certificates.values())
+    current_checks=bool(not policy.signaled and certificates and all(value['passed'] for value in certificates.values())
         and set(export['tokenizers'])==set(participants) and set(tasks)==set(participants)
         and all(value['passed'] for value in tasks.values())
         and semantic_certificate is not None and semantic_certificate['passed'])

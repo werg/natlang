@@ -2723,11 +2723,13 @@ def main(argv=None, embed=None):
                            crisp_weight=args.crisp_weight, lengths=lengths, stream_stats=stream_stats,
                            supervised_tokens=lambda: getattr(session, 'supervised_tokens', 0),
                            checkpoint_layers=args.checkpoint_layers)
+    from .loop import StopSignal
+    stop = StopSignal().install()
     from ..eval.task_cadence import TaskEval, parse_task_eval
     task_eval_spec = parse_task_eval(args.task_eval)
     # Served through this stage's own engine in this process (no second copy of the weights), with the task_eval
     # prompt policy (default full: generative evals use the proper system prompt, owner 2026-10-13).
-    task_eval = (TaskEval(task_eval_spec, out, engine, prompt_rendering='full')  # the spec's own setting wins (default full)
+    task_eval = (TaskEval(task_eval_spec, out, engine, prompt_rendering='full', stop_requested=lambda: stop.requested)  # the spec's own setting wins (default full)
                  if task_eval_spec is not None else None)
 
     def task_eval_report(step):
@@ -2816,7 +2818,6 @@ def main(argv=None, embed=None):
                    if p.requires_grad and p.grad is None and id(p) not in stepped_in_backward)
     from .loop import (Cadence, StopSignal, TrainingLoop, accumulate_gradients,
                        commit_optimizer_step)
-    stop = StopSignal().install()
     from .checkpoint_policy import publish_best
     # Declared step points only (owner 2026-10-10; plans/STORAGE_POLICY.md): the initial report is the gate's reference
     # (fresh lineages only), evaluations every --eval-every updates, full-state writes every --checkpoint-every
@@ -3437,98 +3438,103 @@ def main(argv=None, embed=None):
                     publish_best(checkpoint_path, out / 'best-checkpoint.pt')
                     (out / 'best-evaluation.json').write_text(json.dumps(best_evaluation, indent=2) + '\n')
         profiler.close(max(profiler.updates, default=start_step))
-    stop.restore()
-    log.close()
-    if drift_stopped_at is not None:
-        print(json.dumps({'status': 'checkpointed_on_drift_guard', 'step': drift_stopped_at,
-                          'checkpoint': str(checkpoint_path)}), flush=True)
-        return 3
-    if stop.requested:
-        print(json.dumps({'status': 'checkpointed_on_signal', 'checkpoint': str(checkpoint_path)}), flush=True)
+    try:
+        log.close()
+        if drift_stopped_at is not None:
+            print(json.dumps({'status': 'checkpointed_on_drift_guard', 'step': drift_stopped_at,
+                              'checkpoint': str(checkpoint_path)}), flush=True)
+            return 3
+        if stop.requested:
+            print(json.dumps({'status': 'checkpointed_on_signal', 'checkpoint': str(checkpoint_path)}), flush=True)
+            return 0
+        report["soft-trained"] = evaluate("soft-trained", leaves)
+        if task_eval is not None:
+            report["task_eval"] = task_eval_report(args.steps)
+        if stop.requested:
+            print(json.dumps({'status':'checkpointed_on_signal','checkpoint':str(checkpoint_path)}),flush=True)
+            return 0
+        if stream_source is not None:
+            report["record_stream"] = {'trainable_train_records': stream_source.train_records(), **stream_stats}
+        if drift_monitor is not None:
+            # The shared acceptance's behaviour gate on the final weights (the hard criterion) and the guard's record.
+            report["behaviour_gate"] = drift_monitor.final_gate(args.steps)
+            report["drift_guard"] = {'stopped': False, 'policy': 'report-only', 'warn': args.drift_warn,
+                                     'legacy_stop_threshold': args.drift_stop,
+                                     'log': 'drift.jsonl'}
+        if quant is not None:
+            report["quantization"] = {**quant.describe(args.steps), "columns": {}}
+            final_mixes, required_points = quant.mixes(args.steps), set(quant.required_points())
+            for point in quant.gated_points():
+                if point not in required_points and final_mixes.get(point, 0.0) <= 0.0:
+                    report["quantization"]["columns"][point] = {'skipped': 'ramp not started in this stage'}
+                    continue
+                column_started = time.perf_counter()
+                with quant.context(point, 1.0):
+                    report["quantization"]["columns"][point] = evaluate(f"soft-trained-{point}", leaves)
+                    if behaviour is not None:
+                        measured = behaviour.report(engine.backbone.hf)
+                        report["quantization"]["columns"][point + ":behaviour"] = {**measured,
+                                                                                   "passed": behaviour.passed(measured)}
+                print(json.dumps({'event': 'precision_column', 'point': point, 'step': args.steps,
+                                  'seconds': round(time.perf_counter() - column_started, 1)}), flush=True)
+        if cohort_strata_held:
+            report["cohort_strata-trained"] = {cohort: {"soft": evaluate(f"soft-trained-{cohort}", leaves, records=chosen)}
+                                               for cohort, chosen in cohort_strata_held.items()}
+        if family and args.member_eval:
+            report["family-trained"] = evaluate_members(backbone, member_eval_windows())
+        if args.handover == "written" or args.view == "written":
+            report["written-trained"] = evaluate_written("written-trained", leaves, paired_held, held_probe_accounting)
+            report["written-trained-train"] = evaluate_written("written-trained-train", leaves, paired_train, train_probe_accounting)
+            # The stage end's evaluation selects among the full-state writes too: the end write holds these weights.
+            written = report["written-trained"]
+            score = written.get('written')
+            from .trajectory_state import paired_probe_complete
+            if (score is not None and paired_probe_complete(written) and written.get('shuffled', score) > score
+                    and (best_evaluation is None or score < best_evaluation['written']) and checkpoint_path.exists()):
+                best_evaluation = {'step': args.steps, **written, 'semantic_channel_qualified': False,
+                                   'selection_signature': selection_signature,
+                                   'checkpoint': str(out / 'best-checkpoint.pt'),
+                                   'selection_scope': 'candidate by complete paired reader CE; separate semantic/stopping eval required'}
+                publish_best(checkpoint_path, out / 'best-checkpoint.pt')
+                (out / 'best-evaluation.json').write_text(json.dumps(best_evaluation, indent=2) + '\n')
+        if lengths:
+            report["writes"] = {"count": len(lengths), "mean_length": sum(lengths) / len(lengths), "max_length": max(lengths)}
+        if (head_params or lora) and args.save_state:
+            from .adapters import adapter_layers
+            source_metadata = torch.load(args.heads, map_location='cpu', weights_only=False, mmap=True) if args.heads else {}
+            ranks = {int(p.shape[0]) for name, p in backbone.hf.named_parameters() if '.lora_A.' in name}
+            if len(ranks) > 1:
+                raise ValueError('cannot export mixed-rank adapters in one port checkpoint')
+            atomic_checkpoint(out / 'heads.pt', {'heads': heads.state_dict(),
+                **(direct_projection_state() if direct is not None else {}),
+                **({'direct_artifact_manifest': direct.manifest} if direct is not None else {}),
+                'port_config': {**source_metadata.get('port_config', {}), 'cutoff': heads.cutoff,
+                                'max_length': heads.max_length, **heads.port_config(),
+                                'prompt_rendering': engine.prompt_rendering},
+                'control_rows': backbone.control_rows.detach().cpu(),
+                **({'control_head_rows': backbone.control_head_rows.detach().cpu()} if not getattr(backbone, 'tied', True) else {}), 'lora': lora_state(backbone),
+                'lora_layers': adapter_layers(backbone), 'lora_rank': next(iter(ranks), 0),
+                'backbone_training': args.backbone_training,
+                **({'maple_qat': True} if qat_named else {}),
+                **({'backbone_trainables': policy_state()} if args.backbone_training in ('full','qat','latent') else {}), 'anchor_origin': anchor_origin,
+                'backbone': source_metadata.get('backbone') or {'base': args.base},
+                'training_identity': identity})
+        # Every soft parameter's movement: also those only producers' contexts hold, which move by their readers' losses.
+        moved = {name: float((params[name].detach() - init[name]).norm() / init[name].norm().clamp_min(1e-9)) for name in params}
+        report["relative_change"] = moved
+        torch.save({"params": {k: v.detach().cpu() for k, v in params.items()}, "texts": texts,
+                    'port_profile': heads.profile}, out / "soft-params.pt")
+        if lora and args.save_state:
+            torch.save({"lora": lora_state(engine.backbone), "rank": args.rank}, out / "adapter.pt")
+        if bank:
+            current = {name.removeprefix("prompt:"): params[name] for name in used if name.removeprefix("prompt:") in bank.texts}
+            save_bank(out / "system-prompts.nz", bank, current, {"kind": "system-prompt-bank", "init": args.bank,
+                      "trained_by": "natlang_neuralese.train.trajectories", "records": args.records, "steps": args.steps})
+        (out / "summary.json").write_text(json.dumps({"options": vars(args), **report}, indent=2) + "\n")
+        print(json.dumps({k: v for k, v in report.items() if k != "relative_change"}), flush=True)
         return 0
-    report["soft-trained"] = evaluate("soft-trained", leaves)
-    if task_eval is not None:
-        report["task_eval"] = task_eval_report(args.steps)
-    if stream_source is not None:
-        report["record_stream"] = {'trainable_train_records': stream_source.train_records(), **stream_stats}
-    if drift_monitor is not None:
-        # The shared acceptance's behaviour gate on the final weights (the hard criterion) and the guard's record.
-        report["behaviour_gate"] = drift_monitor.final_gate(args.steps)
-        report["drift_guard"] = {'stopped': False, 'policy': 'report-only', 'warn': args.drift_warn,
-                                 'legacy_stop_threshold': args.drift_stop,
-                                 'log': 'drift.jsonl'}
-    if quant is not None:
-        report["quantization"] = {**quant.describe(args.steps), "columns": {}}
-        final_mixes, required_points = quant.mixes(args.steps), set(quant.required_points())
-        for point in quant.gated_points():
-            if point not in required_points and final_mixes.get(point, 0.0) <= 0.0:
-                report["quantization"]["columns"][point] = {'skipped': 'ramp not started in this stage'}
-                continue
-            column_started = time.perf_counter()
-            with quant.context(point, 1.0):
-                report["quantization"]["columns"][point] = evaluate(f"soft-trained-{point}", leaves)
-                if behaviour is not None:
-                    measured = behaviour.report(engine.backbone.hf)
-                    report["quantization"]["columns"][point + ":behaviour"] = {**measured,
-                                                                               "passed": behaviour.passed(measured)}
-            print(json.dumps({'event': 'precision_column', 'point': point, 'step': args.steps,
-                              'seconds': round(time.perf_counter() - column_started, 1)}), flush=True)
-    if cohort_strata_held:
-        report["cohort_strata-trained"] = {cohort: {"soft": evaluate(f"soft-trained-{cohort}", leaves, records=chosen)}
-                                           for cohort, chosen in cohort_strata_held.items()}
-    if family and args.member_eval:
-        report["family-trained"] = evaluate_members(backbone, member_eval_windows())
-    if args.handover == "written" or args.view == "written":
-        report["written-trained"] = evaluate_written("written-trained", leaves, paired_held, held_probe_accounting)
-        report["written-trained-train"] = evaluate_written("written-trained-train", leaves, paired_train, train_probe_accounting)
-        # The stage end's evaluation selects among the full-state writes too: the end write holds these weights.
-        written = report["written-trained"]
-        score = written.get('written')
-        from .trajectory_state import paired_probe_complete
-        if (score is not None and paired_probe_complete(written) and written.get('shuffled', score) > score
-                and (best_evaluation is None or score < best_evaluation['written']) and checkpoint_path.exists()):
-            best_evaluation = {'step': args.steps, **written, 'semantic_channel_qualified': False,
-                               'selection_signature': selection_signature,
-                               'checkpoint': str(out / 'best-checkpoint.pt'),
-                               'selection_scope': 'candidate by complete paired reader CE; separate semantic/stopping eval required'}
-            publish_best(checkpoint_path, out / 'best-checkpoint.pt')
-            (out / 'best-evaluation.json').write_text(json.dumps(best_evaluation, indent=2) + '\n')
-    if lengths:
-        report["writes"] = {"count": len(lengths), "mean_length": sum(lengths) / len(lengths), "max_length": max(lengths)}
-    if (head_params or lora) and args.save_state:
-        from .adapters import adapter_layers
-        source_metadata = torch.load(args.heads, map_location='cpu', weights_only=False, mmap=True) if args.heads else {}
-        ranks = {int(p.shape[0]) for name, p in backbone.hf.named_parameters() if '.lora_A.' in name}
-        if len(ranks) > 1:
-            raise ValueError('cannot export mixed-rank adapters in one port checkpoint')
-        atomic_checkpoint(out / 'heads.pt', {'heads': heads.state_dict(),
-            **(direct_projection_state() if direct is not None else {}),
-            **({'direct_artifact_manifest': direct.manifest} if direct is not None else {}),
-            'port_config': {**source_metadata.get('port_config', {}), 'cutoff': heads.cutoff,
-                            'max_length': heads.max_length, **heads.port_config(),
-                            'prompt_rendering': engine.prompt_rendering},
-            'control_rows': backbone.control_rows.detach().cpu(),
-            **({'control_head_rows': backbone.control_head_rows.detach().cpu()} if not getattr(backbone, 'tied', True) else {}), 'lora': lora_state(backbone),
-            'lora_layers': adapter_layers(backbone), 'lora_rank': next(iter(ranks), 0),
-            'backbone_training': args.backbone_training,
-            **({'maple_qat': True} if qat_named else {}),
-            **({'backbone_trainables': policy_state()} if args.backbone_training in ('full','qat','latent') else {}), 'anchor_origin': anchor_origin,
-            'backbone': source_metadata.get('backbone') or {'base': args.base},
-            'training_identity': identity})
-    # Every soft parameter's movement: also those only producers' contexts hold, which move by their readers' losses.
-    moved = {name: float((params[name].detach() - init[name]).norm() / init[name].norm().clamp_min(1e-9)) for name in params}
-    report["relative_change"] = moved
-    torch.save({"params": {k: v.detach().cpu() for k, v in params.items()}, "texts": texts,
-                'port_profile': heads.profile}, out / "soft-params.pt")
-    if lora and args.save_state:
-        torch.save({"lora": lora_state(engine.backbone), "rank": args.rank}, out / "adapter.pt")
-    if bank:
-        current = {name.removeprefix("prompt:"): params[name] for name in used if name.removeprefix("prompt:") in bank.texts}
-        save_bank(out / "system-prompts.nz", bank, current, {"kind": "system-prompt-bank", "init": args.bank,
-                  "trained_by": "natlang_neuralese.train.trajectories", "records": args.records, "steps": args.steps})
-    (out / "summary.json").write_text(json.dumps({"options": vars(args), **report}, indent=2) + "\n")
-    print(json.dumps({k: v for k, v in report.items() if k != "relative_change"}), flush=True)
-    return 0
+    finally:
+        stop.restore()
 
 
 if __name__ == "__main__":

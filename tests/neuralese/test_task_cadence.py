@@ -633,3 +633,99 @@ def test_rolling_dispatch_rechecks_paused_custody_after_other_work(tmp_path, mon
     monkeypatch.setattr(module.shutil, 'disk_usage', lambda _: SimpleNamespace(free=100 * 1024**2))
     assert module.wait_collectors([], queues, launch, min_free_mib=20, max_workers=1) == [75, 0]
     assert launches == [0, 1]
+
+
+def test_operational_stop_reaps_real_owned_collector_without_starting_queued_cases(tmp_path):
+    import io
+    import json
+    import subprocess
+    import sys
+    from natlang_neuralese.eval.task_cadence import wait_collectors
+    from natlang_neuralese.train.loop import StopSignal
+    queues=[]
+    for index in range(3):
+        root=tmp_path/str(index);root.mkdir();queue=root/'queue.jsonl'
+        entry={'key':str(index),'index':index};queue.write_text(json.dumps(entry)+'\n')
+        queues.append((queue,root/'journal.jsonl',[entry]))
+    stop=StopSignal();children=[];logs=[]
+    def launch(*_):
+        child=subprocess.Popen([sys.executable,'-c','import time; time.sleep(60)'])
+        children.append(child);log=io.StringIO();logs.append(log);stop.request()
+        return child,log
+    try:
+        codes=wait_collectors([],queues,launch,min_free_mib=0,max_workers=2,stop_requested=lambda:stop.requested)
+        assert len(children)==1 and children[0].poll() is not None and codes[0]!=0
+        assert codes[1:]==[75,75] and logs[0].closed
+        events=[json.loads(j.read_text()) for _,j,_ in queues]
+        assert [event['started']for event in events]==[True,False,False]
+        assert all(event['event']=='operational_stop'for event in events)
+    finally:
+        for child in children:
+            if child.poll() is None:child.terminate()
+            child.wait(timeout=10)
+
+
+def test_preexisting_operational_stop_never_starts_storage_paused_or_pending_case(tmp_path):
+    import json
+    from natlang_neuralese.eval.task_cadence import wait_collectors
+    queue=tmp_path/'queue';queue.write_text('{}\n');journal=tmp_path/'journal'
+    def forbidden(*_):raise AssertionError('Stopped evaluator launched a collector')
+    assert wait_collectors([],[(queue,journal,[{'key':'only'}])],forbidden,
+        min_free_mib=20,max_workers=1,stop_requested=lambda:True)==[75]
+    assert json.loads(journal.read_text())['started']is False
+
+
+def test_stopped_final_evaluation_defers_without_failure_cap_or_retry(tmp_path,monkeypatch):
+    import json
+    from natlang_neuralese.eval.task_cadence import TaskEval
+    evaluator=TaskEval.__new__(TaskEval);evaluator.out=tmp_path;evaluator.root=tmp_path/'task-eval'
+    evaluator.spec=parse_task_eval({'packet':{'path':'unused','sha256':'a'*64}})
+    evaluator.rows=[{}];evaluator.stop_requested=lambda:True
+    calls=[]
+    def interrupted(step):calls.append(step);raise RuntimeError('Interrupted collector transport')
+    evaluator.run=interrupted
+    def forbidden():raise AssertionError('Operational stop consumed quality failure budget')
+    evaluator.consecutive_failures=forbidden
+    result=evaluator.final_at(7)
+    assert calls==[7] and result['eligible']is False and result['task_successes']is None
+    assert result['operational_stop'] and result['qualification_deferred']
+    assert json.loads((tmp_path/'task-eval.jsonl').read_text())['operational_stop']is True
+
+
+def test_stop_journal_failure_still_reaps_real_owned_collector(tmp_path,monkeypatch):
+    import io
+    import subprocess
+    import sys
+    from pathlib import Path
+    from natlang_neuralese.eval.task_cadence import wait_collectors
+    queue=tmp_path/'queue';queue.write_text('{}');journal=tmp_path/'journal'
+    child=subprocess.Popen([sys.executable,'-c','import time; time.sleep(60)'])
+    original=Path.open
+    def fail(path,*args,**kwargs):
+        if path==journal:raise OSError('journal disk failure')
+        return original(path,*args,**kwargs)
+    monkeypatch.setattr(Path,'open',fail)
+    log=io.StringIO()
+    try:
+        with pytest.raises(OSError,match='journal disk failure'):
+            wait_collectors([(child,log)],[(queue,journal,[{'key':'only'}])],
+                lambda *_:None,min_free_mib=0,stop_requested=lambda:True)
+        assert child.poll() is not None and log.closed
+    finally:
+        if child.poll() is None:child.terminate()
+        child.wait(timeout=10)
+
+
+def test_stop_arriving_after_run_never_returns_passed_evaluation(tmp_path):
+    import json
+    from natlang_neuralese.eval.task_cadence import TaskEval
+    evaluator=TaskEval.__new__(TaskEval);evaluator.out=tmp_path
+    stopped=[False];evaluator.stop_requested=lambda:stopped[0]
+    def late_stop(step):
+        stopped[0]=True
+        return {'step':step,'eligible':True,'task_successes':16,'task_success_rate':1.0}
+    evaluator.run=late_stop
+    result=evaluator.cadence(7,final=True)
+    assert result['eligible']is False and result['task_successes']is None
+    assert result['observed_task_successes']==16 and result['model_outcome']=='unscored'
+    assert json.loads((tmp_path/'task-eval.jsonl').read_text())==result

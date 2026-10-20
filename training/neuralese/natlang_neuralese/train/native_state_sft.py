@@ -1404,7 +1404,7 @@ def _main(argv=None, *, requested_refresh):
             shared_model=model, role_tokens=roles, model_config=config,
             checkpoint_sha256=serving_identity['checkpoint_sha256'],
             embedding_weight_sha256=serving_identity['embedding_weight_sha256'])
-        task_eval = TaskEval(task_spec, args.out, engine, prompt_rendering=task_spec.get('prompt_rendering', 'full'))
+        task_eval = TaskEval(task_spec, args.out, engine, prompt_rendering=task_spec.get('prompt_rendering', 'full'), stop_requested=lambda: policy.signaled)
     step, epoch, cursor, global_step = 0, 0, 0, 0
     metrics = {}
     exposure_counts = {key: 0 for key in source_row_bindings}
@@ -1885,6 +1885,7 @@ def _main(argv=None, *, requested_refresh):
         metrics['task_checkpoint_sha256'] = current_sha
         metrics['task_native_identity'] = serving_identity
         write_json(args.out / 'metrics.json', metrics)
+    completed = completed and not policy.signaled
     checkpoint_sha = sha256_file_hex_cached(policy.slot)
     model_identity = native_identity(model, config, checkpoint_sha256=checkpoint_sha)
     task_summary = metrics.get('task_eval')
