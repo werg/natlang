@@ -191,3 +191,61 @@ def test_typed_drain_retires_exact_adoption_without_another_decode(completing_di
     resident.retire(directory,loaded[0]['checkpoint'],loaded[0]['terminal'],handoff=reference,verified_handoff=loaded)
     assert resident.current(directory) is None
     assert (directory/'retired'/(state['generation']+'.json')).exists()
+
+
+@pytest.fixture
+def reviewed_normal_return(tmp_path):
+    from natlang_neuralese.rl.native_owned_dispatch import capture_completion_contract
+    parent=tmp_path/'parent.json';parent.write_text('{}')
+    script=tmp_path/'recover-earned-owner.py'
+    command=[sys.executable,'-u','-m','natlang_neuralese.train.native_state_sft']
+    script.write_text('from natlang_neuralese.rl.native_owned_dispatch import capture\n'
+        'from natlang_neuralese.train.native_resident import binding,process_owner\n'
+        'from natlang_neuralese.common.jsonio import write_json_durable\n'
+        'from pathlib import Path\nimport json,sys,time\n'
+        'owner=process_owner(); root=Path(__file__).parent\n'
+        'write_json_durable(root/"original-launch.json",{"owner":owner,"controller_source":binding(__file__)})\n'
+        f'launch=capture(__file__,{command!r},{binding(parent)!r},{str(tmp_path/"capture")!r},environment={{}})\n'
+        'print(json.dumps({"dispatch":launch,"marker_launch":binding(root/"original-launch.json")}),flush=True)\n'
+        'sys.stdin.buffer.read()\n'
+        'write_json_durable(root/"earned-terminal.json",{"at":time.time(),"owner":owner,'
+        '"launch":binding(root/"original-launch.json"),"whole_recipe_completed":False})\n')
+    env={**os.environ,'PYTHONPATH':str(Path(raw.__file__).resolve().parents[2])}
+    child=subprocess.Popen([sys.executable,str(script)],stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True,env=env)
+    try:
+        identity=json.loads(child.stdout.readline());terminal=tmp_path/'earned-terminal.json'
+        contract=capture_completion_contract(identity['dispatch'],terminal,tmp_path/'completion.json',
+            normal_return_launch=identity['marker_launch'])
+        intent=raw.capture_drain_intent(identity['dispatch'],tmp_path/'drain.json')
+        yield child,identity,contract,intent,terminal
+    finally:
+        if child.poll() is None:child.communicate(timeout=15)
+
+
+def test_reviewed_normal_return_preserves_owner_and_grants_no_completion(reviewed_normal_return):
+    from natlang_neuralese.rl.native_owned_dispatch import verify_completion_contract
+    child,identity,contract,intent,terminal=reviewed_normal_return;child.communicate(timeout=15)
+    captured=json.loads(Path(intent['path']).read_text());value=json.loads(terminal.read_text())
+    receipt=verify_completion_contract(contract,captured,binding(terminal),value)
+    assert receipt['qualification_credit'] is False and value['whole_recipe_completed'] is False
+    Path(identity['marker_launch']['path']).unlink()
+    assert verify_completion_contract(contract,captured,binding(terminal),value)==receipt
+
+
+@pytest.mark.parametrize('fault',['owner','launch','completed','credit','returncode','path','snapshot','qualification'])
+def test_reviewed_normal_return_cannot_borrow_or_promote_work(reviewed_normal_return,fault):
+    from natlang_neuralese.rl.native_owned_dispatch import verify_completion_contract
+    child,identity,contract,intent,terminal=reviewed_normal_return;child.communicate(timeout=15)
+    captured=json.loads(Path(intent['path']).read_text());value=json.loads(terminal.read_text());ref=binding(terminal)
+    if fault=='owner':value['owner']['start_ticks']='0'
+    elif fault=='launch':value['launch']['sha256']='0'*64
+    elif fault=='completed':value['whole_recipe_completed']=True
+    elif fault=='credit':value['raw_completion_credit']=1
+    elif fault=='returncode':value['returncode']=0
+    elif fault=='path':ref={**ref,'path':str(terminal.with_name('borrowed.json'))}
+    else:
+        p=Path(contract['path']);data=json.loads(p.read_text());
+        if fault=='qualification':data['qualification_credit']=True
+        else:data['controls']['normal_return_launch']['sha256']='0'*64
+        p.write_text(json.dumps(data));contract=binding(p)
+    with pytest.raises(ValueError):verify_completion_contract(contract,captured,ref,value)

@@ -62,9 +62,10 @@ def verify(captured, observed, snapshots=None):
 
 
 COMPLETION = 'natlang.native-inprocess-completion-contract/1'
+NORMAL_RETURN = 'natlang.native-inprocess-completion-contract/2'
 
 
-def capture_completion_contract(launch, terminal_path, out):
+def capture_completion_contract(launch, terminal_path, out, *, normal_return_launch=None):
     """Predeclare a reviewed wrapper's normal trainer.main-return marker.
 
     Call while its genuine optimizer owner lives, before the terminal exists.
@@ -79,8 +80,16 @@ def capture_completion_contract(launch, terminal_path, out):
         raise ValueError('completion contract requires the actual live captured owner')
     _, _, refs = verify({'owner': owner}, source)
     terminal = Path(terminal_path).resolve()
-    if terminal != Path(refs['supervisor']['path']).parent / 'entry-terminal.json':
-        raise ValueError('completion contract needs the reviewed wrapper terminal path')
+    wrapper_parent = Path(refs['supervisor']['path']).parent
+    if normal_return_launch is None:
+        if terminal != wrapper_parent / 'entry-terminal.json':
+            raise ValueError('completion contract needs the reviewed wrapper terminal path')
+    else:
+        marker = json.loads(_bound(normal_return_launch).read_text())
+        if (terminal.parent != wrapper_parent or terminal.suffix != '.json'
+                or marker.get('owner') != {key:owner[key] for key in ('pid','start_ticks','boot_id')}
+                or marker.get('controller_source') != refs['supervisor']):
+            raise ValueError('normal return needs the actual reviewed owner launch and wrapper')
     if terminal.exists() or terminal.with_name('entry-failed.json').exists():
         raise ValueError('completion contract must precede terminal or failure evidence')
     out = Path(out)
@@ -89,7 +98,8 @@ def capture_completion_contract(launch, terminal_path, out):
     directory = out.parent / (out.stem + '-controls')
     directory.mkdir(parents=True, exist_ok=True)
     snapshots = {}
-    for name, reference in {'launch': launch, **refs}.items():
+    for name, reference in {'launch': launch, **refs,
+                            **({'normal_return_launch':normal_return_launch} if normal_return_launch is not None else {})}.items():
         target = directory / (name + '.json')
         write_bytes_durable(target, _bound(reference).read_bytes())
         if binding(target)['sha256'] != reference['sha256']:
@@ -100,10 +110,11 @@ def capture_completion_contract(launch, terminal_path, out):
             or again['argv_hex'] != owner['argv_hex'] or terminal.exists()
             or terminal.with_name('entry-failed.json').exists()):
         raise ValueError('completion owner or terminal changed during capture')
-    write_json_durable(out, {'schema': COMPLETION, 'at': time.time(),
+    write_json_durable(out, {'schema': NORMAL_RETURN if normal_return_launch is not None else COMPLETION, 'at': time.time(),
         'owner': owner, 'source_launch': launch, 'controls': snapshots,
         'terminal_path': str(terminal), 'success_kind': 'normal-trainer-main-return',
-        'qualification_credit': False})
+        'qualification_credit': False,
+        **({'normal_return_launch':normal_return_launch} if normal_return_launch is not None else {})})
     return binding(out)
 
 
@@ -115,19 +126,35 @@ def verify_completion_contract(reference, intent, terminal_reference, terminal):
     verify(intent, launch, controls)
     owner = intent['owner']
     times = (launch.get('at'), contract.get('at'), terminal.get('at'))
-    if (contract.get('schema') != COMPLETION
+    wrapper_parent = Path(json.loads(_bound(controls['intent']).read_text())['wrapper']['path']).parent
+    if contract.get('schema') == NORMAL_RETURN:
+        marker_ref = contract.get('normal_return_launch')
+        snapshot = controls.get('normal_return_launch')
+        if not isinstance(marker_ref,dict) or not isinstance(snapshot,dict) or snapshot.get('sha256') != marker_ref.get('sha256'):
+            raise ValueError('normal return lost its original launch authority')
+        marker = json.loads(_bound(snapshot).read_text())
+        dispatch = json.loads(_bound(controls['intent']).read_text())
+        valid_terminal = (set(terminal) == {'at','owner','launch','whole_recipe_completed'}
+            and terminal.get('owner') == marker.get('owner') == {key:owner[key] for key in ('pid','start_ticks','boot_id')}
+            and marker.get('controller_source') == dispatch['wrapper']
+            and terminal.get('launch') == marker_ref
+            and terminal.get('whole_recipe_completed') is False
+            and Path(contract.get('terminal_path','')).parent == wrapper_parent)
+    else:
+        valid_terminal = (terminal.get('passed') is True
+            and type(terminal.get('raw_completion_credit')) is int
+            and terminal['raw_completion_credit'] == 0 and 'returncode' not in terminal
+            and Path(contract.get('terminal_path','')) == wrapper_parent / 'entry-terminal.json')
+    if (contract.get('schema') not in (COMPLETION,NORMAL_RETURN)
             or contract.get('success_kind') != 'normal-trainer-main-return'
+            or contract.get('qualification_credit') is not False
             or contract.get('qualification_credit') is not False
             or contract.get('source_launch') != intent.get('source_launch', intent['launch'])
             or controls['launch']['sha256'] != intent['launch']['sha256']
             or not same_process(contract.get('owner') or {}, owner)
             or contract['owner'].get('argv_hex') != owner['argv_hex']
             or contract.get('terminal_path') != terminal_reference['path']
-            or Path(contract['terminal_path']) != Path(json.loads(
-                _bound(controls['intent']).read_text())['wrapper']['path']).parent / 'entry-terminal.json'
-            or terminal.get('passed') is not True
-            or type(terminal.get('raw_completion_credit')) is not int
-            or terminal['raw_completion_credit'] != 0 or 'returncode' in terminal
+            or not valid_terminal
             or any(type(value) not in (int, float) for value in times)
             or not times[0] <= times[1] <= times[2]):
         raise ValueError('in-process completion lost its predeclared successful-return authority')
