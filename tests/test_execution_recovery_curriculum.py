@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 from scripts.neuralese_data.build_execution_recovery_curriculum import (
-    VARIANTS, graph_rows, short_worlds)
+    VARIANTS, graph_rows, short_worlds, termination_worlds)
 from natlang_neuralese.common.paths import resolve
 
 
@@ -107,3 +107,31 @@ def test_source_builder_emits_two_separate_nonadmitted_sampling_modes(tmp_path):
         proof = json.loads(Path(packet['candidate_packet']['path']).read_text())
         assert proof['collection_sampling'] == packet['collection_sampling']
         assert proof['training_admission'] is False and proof['teacher_calls'] == 0
+
+
+def test_verify_return_lane_is_short_typed_and_has_no_communication_gate():
+    rows = list(termination_worlds())
+    assert len(rows) == len({row['id'] for row in rows}) == 12
+    assert rows == list(termination_worlds())
+    assert len({group for row in rows for group in row['source_groups']}) == 4
+    assert not {row['id'] for row in rows} & {row['id'] for row in short_worlds()}
+    for row in rows:
+        semantics = row['semantics']; variant = row['curriculum']['variant']
+        assert row['split'] == 'train' and row['generation']['provider_calls'] == 0
+        assert row['generation']['teacher_trajectory'] is False
+        assert row['curriculum']['reference']['children'] == []
+        assert 'trajectory_contract' not in row['curriculum']
+        assert 'returns: number' in semantics['files']['finish.nl']
+        assert 'kind: directory-reducer' in semantics['files']['finish.nl']
+        assert semantics['expected'] == semantics['inputs']['value']
+        assert row['curriculum']['reference']['root'][-1][1]['value'] == semantics['expected']
+        code = row['curriculum']['reference']['root'][0][1]['code']
+        if variant == 'typed-feedback-return':
+            assert semantics['failure_seed']['code'] == f'const result: number = "{semantics["expected"]}"; return result;'
+            assert 'facts.value()' in code
+            assert semantics['folder_files'] == semantics['expected_files']
+        else:
+            assert 'readText()' in code
+            assert json.loads(semantics['expected_files']['result.json']) == {'value': semantics['expected']}
+            assert 'failure_seed' not in semantics
+            assert ('writeText(' in code) == (variant == 'write-readback-return')
