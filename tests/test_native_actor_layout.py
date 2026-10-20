@@ -72,6 +72,49 @@ def test_layout_rejects_changed_donor_before_claiming_destination(tmp_path):
     assert not any(root.exists() for root in controls.values())
 
 
+def replacement_fixture(tmp_path):
+    arguments = fixture_layout(tmp_path)
+    overlay, donor = arguments[:2]
+    relative = 'scripts/coreweave/provider_dependencies.py'
+    replacement = overlay/relative
+    replacement.parent.mkdir(parents=True)
+    replacement.write_text('REVIEWED_SUCCESSOR = True\n')
+    path = overlay/'construction.json'
+    record = json.loads(path.read_bytes())
+    record['files'][relative] = {key: binding(replacement)[key] for key in ('sha256', 'bytes')}
+    path.write_text(json.dumps(record))
+    return arguments, replacement, donor/relative
+
+
+def test_sealed_dependency_replacement_records_both_actual_sources(tmp_path):
+    arguments, replacement, original = replacement_fixture(tmp_path)
+    original_bytes = original.read_bytes()
+    result = install(*arguments)
+    actual = arguments[-2]/replacement.relative_to(arguments[0])
+    assert actual.read_bytes() == replacement.read_bytes()
+    assert original.read_bytes() == original_bytes
+    assert result['physical_layout']['inherited_dependencies'] == []
+    assert result['physical_layout']['replaced_dependencies'] == [
+        {'source': binding(original), 'replacement': binding(actual)}]
+    assert result['physical_layout']['owner_started'] is False
+
+
+def test_changed_sealed_replacement_is_rejected_before_destination(tmp_path):
+    arguments, replacement, _ = replacement_fixture(tmp_path)
+    replacement.write_text('UNREVIEWED = True\n')
+    with pytest.raises(ValueError, match='composed source file changed'):
+        install(*arguments)
+    assert not arguments[-2].exists()
+
+
+def test_replacement_does_not_excuse_changed_original_donor(tmp_path):
+    arguments, _, original = replacement_fixture(tmp_path)
+    original.write_text('changed source\n')
+    with pytest.raises(ValueError, match='binding changed'):
+        install(*arguments)
+    assert not arguments[-2].exists()
+
+
 def test_layout_refuses_existing_control_root(tmp_path):
     arguments = fixture_layout(tmp_path)
     arguments[-1]['lfm'].mkdir(parents=True)

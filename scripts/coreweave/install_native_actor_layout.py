@@ -143,15 +143,24 @@ def install(overlay, donor, donor_code, dependencies, runtime, controls):
         'schema': 'natlang.native-actor-physical-layout/1', 'donor': str(donor),
         'donor_code': donor_code, 'overlay_original_root': str(original), 'overlay_construction': binding(overlay/'construction.json'),
         'runtime': str(runtime), 'control_roots': {role: str(path) for role, path in controls.items()},
-        'inherited_dependencies': [], 'full_tree_content_inventory_claimed': False,
+        'inherited_dependencies': [], 'replaced_dependencies': [],
+        'full_tree_content_inventory_claimed': False,
         'owner_started': False, 'readiness_granted': False}
     for reference in references:
         bound(reference)
-        target = runtime/Path(reference['path']).relative_to(donor)
+        relative = Path(reference['path']).relative_to(donor)
+        target = runtime/relative
         actual = binding(target)
-        if any(actual[key] != reference[key] for key in ('sha256', 'bytes') if key in reference):
-            raise ValueError('inherited dependency differs after physical clone')
-        installed['physical_layout']['inherited_dependencies'].append(actual)
+        replacement = record['files'].get(str(relative))
+        if replacement is not None:
+            if any(actual[key] != replacement[key] for key in ('sha256', 'bytes')):
+                raise ValueError('sealed dependency replacement differs after overlay')
+            installed['physical_layout']['replaced_dependencies'].append(
+                {'source': reference, 'replacement': actual})
+        else:
+            if any(actual[key] != reference[key] for key in ('sha256', 'bytes') if key in reference):
+                raise ValueError('inherited dependency differs after physical clone')
+            installed['physical_layout']['inherited_dependencies'].append(actual)
     if code_inventory(runtime/PACKAGE) != record['inventory']:
         raise ValueError('qualified numerical package changed during layout')
     write_json_durable(runtime/'construction.json', installed)
