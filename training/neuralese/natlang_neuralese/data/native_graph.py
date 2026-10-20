@@ -81,6 +81,12 @@ def graph_loss_from_result(model, example, result, *, chunk_tokens=128, boundary
     query_ids = torch.tensor(queries, device=hidden.device)
     target_ids = torch.tensor(targets, device=hidden.device)
     selected = torch.tensor(selected_weights, device=hidden.device, dtype=torch.float32)
+    observed_weights = getattr(example, 'evaluation_weights', {})
+    evaluation_names = tuple(observed_weights)
+    evaluation = torch.tensor([[observed_weights[name][target] for target in
+        [query + 1 for query in queries]] for name in evaluation_names],
+        device=hidden.device, dtype=torch.float32) if evaluation_names else None
+    evaluation_sums = hidden.new_zeros((len(evaluation_names), 4), dtype=torch.float32)
     total = hidden.new_zeros((), dtype=torch.float32)
     correct = hidden.new_zeros((), dtype=torch.float32)
     boundaries = None
@@ -91,11 +97,18 @@ def graph_loss_from_result(model, example, result, *, chunk_tokens=128, boundary
             raise ValueError('boundary observation requires distinct nonnegative integer token IDs')
         boundaries = hidden.new_zeros((len(boundary_token_ids), 5), dtype=torch.float32)
         observed = torch.tensor(boundary_token_ids, device=hidden.device, dtype=torch.long)
-    def loss_chunk(states, labels, token_weights):
+    def loss_chunk(states, labels, token_weights, evaluation_weights):
         logits = model.logits(states)
         ce = F.cross_entropy(logits.float(), labels, reduction='none')
         hits = (logits.argmax(-1) == labels).float()
         loss_outputs = ((ce * token_weights).sum(), (hits * token_weights).sum())
+        with torch.no_grad():
+            if evaluation_weights is not None:
+                loss_outputs = (*loss_outputs, torch.stack((
+                    evaluation_weights.sum(-1),
+                    (evaluation_weights * ce.detach()[None, :]).sum(-1),
+                    (evaluation_weights * hits[None, :]).sum(-1),
+                    (evaluation_weights > 0).sum(-1)), dim=-1))
         if boundaries is None:
             return loss_outputs
         with torch.no_grad():
@@ -116,10 +129,13 @@ def graph_loss_from_result(model, example, result, *, chunk_tokens=128, boundary
         # Save hidden rows, not a vocabulary-sized softmax per graph token.
         # The readout/role parameters remain unchanged until this backward ends.
         outputs = checkpoint(loss_chunk, hidden[query_ids[start:stop]],
-            target_ids[start:stop], selected[start:stop], use_reentrant=False)
+            target_ids[start:stop], selected[start:stop],
+            None if evaluation is None else evaluation[:, start:stop], use_reentrant=False)
         chunk_loss, chunk_correct = outputs[:2]
+        if evaluation is not None:
+            evaluation_sums = evaluation_sums + outputs[2]
         if boundaries is not None:
-            boundaries = boundaries + outputs[2]
+            boundaries = boundaries + outputs[3 if evaluation is not None else 2]
         total = total + chunk_loss
         correct = correct + chunk_correct
     denominator = selected.sum()
@@ -129,6 +145,11 @@ def graph_loss_from_result(model, example, result, *, chunk_tokens=128, boundary
                                  'logical_slots': sum(len(sequence) for sequence in example.plan.sequences),
                                  'allocated_kv_slots': len(example.plan.slot_sources),
                                  'kv_padding_slots': sum(source < 0 for source in example.plan.slot_sources)}
+    if evaluation is not None:
+        detail['evaluation_sums'] = {name: dict(zip(
+            ('weight', 'loss_sum', 'correct_sum', 'supervised_tokens'), values))
+            for name, values in zip(evaluation_names, evaluation_sums.detach().cpu().tolist())}
+        detail['evaluation_binding'] = dict(example.evaluation_binding)
     if boundaries is not None:
         detail['boundary_sums'] = {str(token): dict(zip(
             ('count', 'weight', 'nll_sum', 'correct_weight', 'probability_sum'), values))

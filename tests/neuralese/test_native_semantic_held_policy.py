@@ -51,3 +51,43 @@ def test_semantic_held_uses_raw_weights_and_preserves_state_rng(phase):
         for parameter, reference in zip(owner.parameters(), values):
             assert torch.equal(parameter, reference)
             assert parameter.grad is None
+
+
+@pytest.mark.parametrize('phase', ['joint','distill'])
+def test_semantic_dual_metrics_share_existing_forwards_and_exact_held_binding(phase):
+    from natlang_neuralese.data.native_graph import parse_graph,graph_loss
+    from natlang_neuralese.train.native_supervision import held_measurements
+    participants,raw,vae = setup_pair()
+    row = SourceBoundPair(raw)
+    row.source_sha256 = 'b'*64
+    row['split'] = 'test'
+    for view in row['models'].values():
+        graph = view['graph']
+        graph['split'] = 'test'
+        graph['nodes'][0]['name'] = 'producer'
+        graph['nodes'][1]['imports'][0]['source'] = 'producer'
+        view['export']['node'] = 'producer'
+        graph['nodes'][0]['target_weights'][1] = .05
+        graph['nodes'][1]['target_weights'][1] = .05
+        graph['source_pairing'] = {'pair_id':'fixture','payloads':[{'invocation':'producer'}],
+            'consumed_occurrences':[{'consumer_import_at':2}],'source_ids':['w','r']}
+    declaration = {'sha256':'b'*64,'encoding':'witnessed-pair-raw-v1','context_weight':.05}
+    policy = {'sources':[dict(declaration,sha256='a'*64)],'held_sources':[declaration]}
+    source = SimpleNamespace(entries=[{'models':list(participants)}],sha256='b'*64,rows=lambda:iter([row]))
+    counts = {name:[] for name in participants}
+    hooks = [entry.model.register_forward_hook(lambda _, __, ___, name=name:counts[name].append(1))
+             for name,entry in participants.items()]
+    torch.manual_seed(29)
+    original,_ = held_evaluation(participants,vae,source,phase=phase,options={},resolver=None,final=True)
+    baseline = {name:len(value) for name,value in counts.items()}
+    for value in counts.values():value.clear()
+    torch.manual_seed(29)
+    measured,_ = held_evaluation(participants,vae,source,phase=phase,
+        options={'_ce_supervision_policy':policy},resolver=None,final=True)
+    assert measured['loss'] == original['loss']
+    assert {name:len(value) for name,value in counts.items()} == baseline
+    for hook in hooks:hook.remove()
+    for name in participants:
+        assert measured['additional_ce'][name+':control']['target']['weight'] > 0
+        assert measured['additional_ce'][name+':adapted-consumer']['declared']['weight'] > 0
+    assert measured['additional_ce_bindings'] == [declaration | {'source_sha256':'b'*64}]

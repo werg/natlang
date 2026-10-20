@@ -112,7 +112,7 @@ def validate_config(config):
     declarations=[config,config.get('options') or {},*config.get('models',{}).values(),
                   *[phase.get('options') or {} for phase in phases]]
     for declaration in declarations:
-        if '_ce_supervision_policy' in declaration:
+        if any(key in declaration for key in ('_ce_supervision_policy', '_held_ce_supervision_policy')):
             raise ValueError('semantic CE policy must use its bound configuration input, not internal loss options')
         validate_native_optimizer_migration(declaration.get('native_optimizer_migration'))
         if 'checkpoint_input_offload' in declaration and type(declaration['checkpoint_input_offload']) is not bool:

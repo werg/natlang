@@ -578,6 +578,8 @@ def _evaluate(model, examples, *, checkpoint_layers, chunk_tokens, backend=None,
         ('count', 'weight', 'nll_sum', 'correct_weight', 'probability_sum'), 0.)
         for token in boundary_ids}
     classes = {}
+    evaluation_metrics = {}
+    evaluation_bindings = {}
     try:
         with scope, torch.no_grad():
             total_weight, total_loss, total_correct, total_tokens, total_graphs, forward_tokens = 0., 0., 0., 0, 0, 0
@@ -591,6 +593,19 @@ def _evaluate(model, examples, *, checkpoint_layers, chunk_tokens, backend=None,
                 for token, sums in detail['boundary_sums'].items():
                     for key, value in sums.items():
                         boundary_sums[token][key] += value
+                for name, values in detail.get('evaluation_sums', {}).items():
+                    sums = evaluation_metrics.setdefault(name, {'weight': 0., 'loss_sum': 0.,
+                        'correct_sum': 0., 'supervised_tokens': 0., 'examples': 0,
+                        'graph_loss_sum': 0., 'measured_examples': 0})
+                    for key, value in values.items():
+                        sums[key] += value
+                    sums['examples'] += 1
+                    if values['weight'] > 0:
+                        sums['graph_loss_sum'] += values['loss_sum']/values['weight']
+                        sums['measured_examples'] += 1
+                binding = detail.get('evaluation_binding')
+                if binding:
+                    evaluation_bindings[binding['source_sha256']] = binding
                 weight = detail['weight']
                 if graph_classes is not None:
                     name = detail.get('metric') or graph_classes[example.id]
@@ -626,6 +641,16 @@ def _evaluate(model, examples, *, checkpoint_layers, chunk_tokens, backend=None,
     return {'loss': total_loss / total_weight, 'weighted_accuracy': total_correct / total_weight,
             'weight': total_weight, 'supervised_tokens': total_tokens, 'examples': total_graphs,
             'forward_tokens': forward_tokens, 'boundaries': boundaries,
+            'ce_metric_kind': 'original-corpus-weighted-token-mean',
+            'additional_ce_scope': 'declared-held-sources-only; absent entries are unmeasured',
+            'additional_ce': {name: {**values,
+                'loss': values['graph_loss_sum']/values['measured_examples'] if values['measured_examples'] else None,
+                'aggregation': 'mean-original-graphs-with-observed-targets',
+                'token_weighted_loss': values['loss_sum']/values['weight'] if values['weight'] else None,
+                'weighted_accuracy': values['correct_sum']/values['weight'] if values['weight'] else None,
+                'unmeasured_examples': total_graphs-values['examples']}
+                for name, values in evaluation_metrics.items()},
+            'additional_ce_bindings': [evaluation_bindings[key] for key in sorted(evaluation_bindings)],
             'classes': {name: {**sums, 'boundaries': summarize_boundaries(sums['boundaries']), 'loss': sums['loss_sum']/sums['weight'] if sums['weight'] else None,
                 'weighted_accuracy': sums['correct_sum']/sums['weight'] if sums['weight'] else None}
                 for name, sums in classes.items()}}
@@ -662,6 +687,10 @@ def _evaluate_cadence(model, source, *, args, coverage=None, final=False, backen
                   source_graphs=len(source), cursor_before=int(coverage.get('cursor', 0)),
                   cursor_after=cursor, seconds=time.monotonic()-started,
                   selection=selection)
+    declaration_path = getattr(args, 'ce_supervision_policy', None)
+    if declaration_path is not None and objective is None:
+        result['additional_ce_policy'] = {'path':str(declaration_path),
+            'sha256':sha256_file_hex_cached(declaration_path)}
     return result, next_coverage
 
 
@@ -682,6 +711,10 @@ def _resume_identity_for_comparison(identity):
 def _save(policy, model, optimizer, *, config, identity, step, epoch, cursor, source_receipts,
           source_hash, source_row_bindings, held_row_bindings, exposure_counts, global_step, rng, metrics,
           architecture, options, fp8_state=None, sft_progress=None):
+    metrics['checkpoint_selection'] = {'continuation':'newest-full-state',
+        'raw_ce_best_export':not bool(options.get('ce_supervision_active')),
+        'quality_policy':'supervisor-task-and-declared-target-evidence' if options.get('ce_supervision_active')
+            else 'legacy-raw-ce-optional-export'}
     state = {'schema': CHECKPOINT_SCHEMA, 'model_config': config, **model_state(model), 'step': global_step,
              'training': {'schema': TRAINING_SCHEMA, 'identity': identity, 'step': step,
                           'global_step': global_step, 'epoch': epoch,
@@ -696,7 +729,10 @@ def _save(policy, model, optimizer, *, config, identity, step, epoch, cursor, so
     if sft_progress is not None:
         sft_progress.clear()
         sft_progress.update(state['training']['sft_progress'])
-    policy.save(state, metric=metrics.get('held', {}).get('loss'))
+    # Raw historical CE can be prompt dominated and is not the declared new
+    # objective. Never let it silently nominate a best-policy export.
+    metric = None if options.get('ce_supervision_active') else metrics.get('held', {}).get('loss')
+    policy.save(state, metric=metric)
 
 
 def qualify_precision_transition(model, tokenizer, roles, config, *, previous_precision,
@@ -1309,6 +1345,7 @@ def _main(argv=None, *, requested_refresh):
             'weights_optimizer_rng_exposure':'preserved', 'held_ce':'original-corpus-weights'})
     checkpoint_options['ce_supervision_policy_history'] = ce_history
     train.set_ce_policy(ce_policy if objective is None else None)
+    held.set_ce_policy(ce_policy if objective is None else None)
     checkpoint_options['ce_supervision_active'] = ce_policy is not None and objective is None
     from .native_source_classification import (migration_classes, reclassify_progress,
                                                require_explicit_reclassification)
@@ -1719,6 +1756,7 @@ def _main(argv=None, *, requested_refresh):
                         'continued_held_native_graphs': source_receipts[1]['sha256']}
                     train, held = expanded
                     train.set_ce_policy(ce_policy if objective is None else None)
+                    held.set_ce_policy(ce_policy if objective is None else None)
                     args.held_native_graphs = held.path
                     held_row_bindings = held.bindings
                     args.native_graphs = train.path

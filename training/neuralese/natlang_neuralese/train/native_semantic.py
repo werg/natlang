@@ -57,7 +57,11 @@ def producer(participant, example, view, *, external_blocks=None, chunk_tokens=1
         raise ValueError('semantic export token IDs/offsets differ from the exact payload tokenizer')
     # Producer controls (including the closing role token) use this result,
     # rather than a second forward with different hidden state.
-    control = graph_loss_from_result(model, example, result, chunk_tokens=chunk_tokens)[0] if supervise else None
+    control = None
+    if supervise:
+        control, detail = graph_loss_from_result(model, example, result, chunk_tokens=chunk_tokens)
+        if detail.get('evaluation_sums'):
+            result['held_ce'] = {'sums': detail['evaluation_sums'], 'binding': detail['evaluation_binding']}
     # Real control markers give even the empty payload a causal producer
     # trajectory. They are not synthetic payload tokens or exported KV rows.
     op, close = model.marker_ids[:2]
@@ -107,21 +111,32 @@ def consumer_example(example, view, token_count):
     if any(not reaches_wire(name) for name in target_names):
         raise ValueError('each declared semantic consumer must causally read the adapted native state')
     selected, weights = [], []
+    observed_weights = getattr(example, 'evaluation_weights', {})
+    evaluation_weights = {name: [] for name in observed_weights}
     for node, offset in zip(example.plan.invocations, example.plan.offsets):
         if node.name not in included:
             continue
         selected.append(rewritten[node.name])
         values = example.target_weights[offset:offset + len(node.token_ids)]
         weights.extend(values if node.name in target_names else [0.] * len(values))
+        for name, all_weights in observed_weights.items():
+            evaluation_weights[name].extend(all_weights[offset:offset + len(node.token_ids)]
+                if node.name in target_names else [0.] * len(values))
     external_sizes = dict(zip(example.plan.external_names, example.plan.external_sizes))
     external_sizes[wire] = token_count
     # Retain only external observations actually needed by the selected graph.
     used = {edge.source for node in selected for edge in node.imports}
     external_sizes = {name: size for name, size in external_sizes.items() if name in used}
     plan = compile_graph(selected, external_sizes=external_sizes)
-    return NativeGraphExample(example.id + ':adapted-consumers', example.split, example.source_groups,
+    consumer = NativeGraphExample(example.id + ':adapted-consumers', example.split, example.source_groups,
         example.tokenizer_fingerprint, plan, tuple(weights),
-        {name: value for name, value in example.external_states.items() if name in used}), wire
+        {name: value for name, value in example.external_states.items() if name in used})
+    if evaluation_weights:
+        from .native_supervision import attach_held_measurements
+        consumer = attach_held_measurements(consumer,
+            {name: tuple(values) for name, values in evaluation_weights.items()},
+            dict(example.evaluation_binding))
+    return consumer, wire
 
 
 def _consumer_forward(participant, example, view, block, *, external_blocks=None, chunk_tokens=128, reference=False):
@@ -191,6 +206,12 @@ def joint_loss(vae, participants, row, *, phase='joint', options=None, fetch_ext
         parsed = {name: (apply_policy(example, row['models'][name]['graph'],
             source_sha256=source_sha256, policy=ce_policy), view)
             for name, (example, view) in parsed.items()}
+    held_policy = options.get('_held_ce_supervision_policy')
+    if held_policy is not None:
+        from .native_supervision import held_measurements
+        parsed = {name: (held_measurements(example, row['models'][name]['graph'],
+            source_sha256=source_sha256, policy=held_policy), view)
+            for name, (example, view) in parsed.items()}
     if len(parsed) < 2:
         raise ValueError('semantic training row has fewer than two currently ready participants')
     chunk_tokens = options.get('chunk_tokens', 128)
@@ -207,6 +228,9 @@ def joint_loss(vae, participants, row, *, phase='joint', options=None, fetch_ext
             produced[name] = producer(participant, example, view, external_blocks=external,
                 chunk_tokens=chunk_tokens, supervise=phase != 'vae', reference=reference)
     terms, stats = [], {'pairs': [], 'phase': phase, 'models': sorted(parsed)}
+    if held_policy is not None:
+        stats['held_ce'] = [{'model': name, 'component': 'control', **values[2]['held_ce']}
+            for name, values in produced.items() if values[2].get('held_ce')]
     for first, second in itertools.combinations(sorted(parsed), 2):
         a, ab, ar, ac = produced[first]
         b, bb, br, bc = produced[second]
@@ -234,8 +258,13 @@ def joint_loss(vae, participants, row, *, phase='joint', options=None, fetch_ext
             for name, adapted, result in ((first, parts['source_block'], ar), (second, parts['target_block'], br)):
                 participant, (example, view) = participants[name], parsed[name]
                 with torch.set_grad_enabled(torch.is_grad_enabled() and phase == 'joint'):
-                    consumer_loss, adapted_result, consumer, _ = _consumer_forward(participant,
+                    consumer_loss, adapted_result, consumer, consumer_details = _consumer_forward(participant,
                         example, view, adapted, external_blocks=observations[name], chunk_tokens=chunk_tokens, reference=reference)
+                if held_policy is not None and consumer_details.get('evaluation_sums'):
+                    stats['held_ce'].append({'model':name, 'component':'adapted-consumer',
+                        'source':first if name == second else second,
+                        'sums':consumer_details['evaluation_sums'],
+                        'binding':consumer_details['evaluation_binding']})
                 if phase == 'joint':
                     behavior.append(consumer_loss)
                 else:

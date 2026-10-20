@@ -90,6 +90,11 @@ def held_evaluation(participants,vae,source,*,phase,options,resolver,coverage=No
     # Held historical telemetry retains corpus weights. A training source SHA
     # declaration cannot authorize reweighting a protected held source.
     held_options = {key: value for key, value in options.items() if key != '_ce_supervision_policy'}
+    train_policy = options.get('_ce_supervision_policy')
+    if train_policy is not None and train_policy.get('held_sources'):
+        held_options['_held_ce_supervision_policy'] = train_policy
+    ce_sums = {}
+    ce_bindings = {}
     device=next(vae.parameters()).device
     rng=capture_training_rng_state(device)
     modes={name:entry.model.training for name,entry in participants.items()};vae_mode=vae.training
@@ -101,7 +106,19 @@ def held_evaluation(participants,vae,source,*,phase,options,resolver,coverage=No
                 if index<cursor:continue
                 if index>=stop:break
                 if len(set(row['models'])&set(participants))<2:continue
-                value,_=joint_loss(vae,participants,row,phase=phase,options=held_options,fetch_external=resolver)
+                value,details=joint_loss(vae,participants,row,phase=phase,options=held_options,fetch_external=resolver)
+                for observation in details.get('held_ce', []):
+                    key = observation['model'] + ':' + observation['component']
+                    binding = observation['binding']
+                    ce_bindings[binding['source_sha256']] = binding
+                    for metric, values in observation['sums'].items():
+                        sums = ce_sums.setdefault(key, {}).setdefault(metric,
+                            {'weight':0., 'loss_sum':0., 'correct_sum':0., 'supervised_tokens':0., 'observations':0, 'graph_loss_sum':0., 'measured_observations':0})
+                        for name, amount in values.items():sums[name] += amount
+                        sums['observations'] += 1
+                        if values['weight'] > 0:
+                            sums['graph_loss_sum'] += values['loss_sum']/values['weight']
+                            sums['measured_observations'] += 1
                 scalar=float(value)
                 if not math.isfinite(scalar):raise FloatingPointError('nonfinite semantic held objective: '+row['id'])
                 losses.append(scalar);used.append(row['id']);visits[row['id']]=visits.get(row['id'],0)+1
@@ -112,7 +129,15 @@ def held_evaluation(participants,vae,source,*,phase,options,resolver,coverage=No
     coverage.update(source_sha256=source.sha256,cursor=0 if stop==total else stop,row_visits=visits,
                     total_rows=total,last_row_ids=used,last_phase=phase)
     return {'loss':sum(losses)/len(losses),'rows':len(losses),'scope':'full' if full else 'rotating',
-            'source_sha256':source.sha256,'phase':phase,'row_ids':used},coverage
+            'source_sha256':source.sha256,'phase':phase,'row_ids':used,
+            'additional_ce': {key: {metric: {**values,
+                'loss':values['graph_loss_sum']/values['measured_observations'] if values['measured_observations'] else None,
+                'aggregation':'mean-observed-component-graphs',
+                'token_weighted_loss':values['loss_sum']/values['weight'] if values['weight'] else None,
+                'weighted_accuracy':values['correct_sum']/values['weight'] if values['weight'] else None}
+                for metric,values in metrics.items()} for key,metrics in ce_sums.items()},
+            'additional_ce_bindings':[ce_bindings[key] for key in sorted(ce_bindings)],
+            'additional_ce_scope':'declared-held-sources-only; absent components are unmeasured'},coverage
 
 
 def validate_boundary(proof,adapter,curriculum):

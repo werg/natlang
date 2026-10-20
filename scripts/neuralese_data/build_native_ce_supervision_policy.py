@@ -16,7 +16,7 @@ from natlang_neuralese.train.native_supervision import SCHEMA, load_policy
 from natlang_neuralese.train.recipe import native_source_dependencies
 
 
-def build(sources, *, legacy_pair_context_weight):
+def build(sources, *, legacy_pair_context_weight, held_sources=(), expected_split='train'):
     leaves, roots = {}, []
     for source in sources:
         path = Path(source).resolve(strict=True)
@@ -40,6 +40,8 @@ def build(sources, *, legacy_pair_context_weight):
             graphs = [row]
         else:
             raise ValueError('CE declaration input is not an admitted native graph/pair source')
+        if row.get('split') != expected_split or any(graph.get('split') != expected_split for graph in graphs):
+            raise ValueError('CE declaration source has wrong explicit split: ' + str(path))
         encodings = set()
         for graph in graphs:
             conversion = graph.get('conversion') or {}
@@ -61,11 +63,18 @@ def build(sources, *, legacy_pair_context_weight):
         if declaration['sha256'] in declarations and declarations[declaration['sha256']] != declaration:
             raise ValueError('CE source digest has conflicting objective declarations')
         declarations[declaration['sha256']] = declaration
-    return {'schema':SCHEMA,'require_eligible_sources':True,
+    value = {'schema':SCHEMA,'require_eligible_sources':True,
         'sources':[declarations[key] for key in sorted(declarations)],
         'inventory':roots,'retained_sources':skipped,
         'scope':'First-row source-intent classification; every consumed row validates the exact declared encoding.',
         'history':'Original graph bytes, IDs, row credits, node mass, optimizer/RNG and raw held CE retained.'}
+    if held_sources:
+        held = build(held_sources, legacy_pair_context_weight=legacy_pair_context_weight, expected_split='test')
+        if set(item['sha256'] for item in value['sources']) & set(item['sha256'] for item in held['sources']):
+            raise ValueError('training and held CE source declarations must be disjoint')
+        value.update(held_sources=held['sources'], held_inventory=held['inventory'],
+                     retained_held_sources=held['retained_sources'])
+    return value
 
 
 def main(argv=None):
@@ -73,9 +82,11 @@ def main(argv=None):
     parser.add_argument('--source', action='append', type=Path, required=True)
     parser.add_argument('--legacy-pair-context-weight', type=float, required=True,
         help='explicit original witnessed_pair_graph coefficient, never estimated from weights')
+    parser.add_argument('--held-source', action='append', type=Path, default=[],
+        help='exact protected test source; evaluation declaration only, never training exposure')
     parser.add_argument('--out', type=Path, required=True)
     args = parser.parse_args(argv)
-    value = build(args.source, legacy_pair_context_weight=args.legacy_pair_context_weight)
+    value = build(args.source, legacy_pair_context_weight=args.legacy_pair_context_weight, held_sources=args.held_source)
     if args.out.exists():
         if json.loads(args.out.read_text()) != value:
             raise ValueError('existing CE policy differs; write a new explicit continuation artifact')
