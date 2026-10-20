@@ -45,5 +45,8 @@ actual compiler-rejected assignment before successful recovery. A bare string
 return was rejected during preparation because it did not provide that recovery
 contract. Current candidate and reference custody live under
 `/home/werg/data/dgxops/verify-return-curriculum-candidate-v3-20261020/verify-return/`.
-The 48 live student executions and subsequent strong-teacher collection remain
-pending; no source or trajectory from this profile is admitted by this change.
+The 48 strong-teacher requests may proceed in the next own-Qwen generation
+window, qualifying the actual teacher/runtime and verified trajectories.
+Student RL separately measures the actual trained actor in useful whole-root
+rollouts; neither measurement waits for unrelated communication readiness.
+Both remain pending; no source or trajectory is admitted by this change.

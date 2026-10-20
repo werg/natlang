@@ -1278,8 +1278,11 @@ profile in `scripts/neuralese_data/build_execution_recovery_curriculum.py` adds
 12 TRAIN tasks: verify an existing result and return, write/read back and return,
 and recover a typed return after actual seeded feedback. No held task input,
 answer or trajectory was used. The task text is not adopted: execute four live
-samples of every exact task (48 total) in whole-student-root mode under the bound
-runtime before source adoption, then collect verified teacher trajectories only
-from the existing self-hosted strong Qwen sandbox. Reference execution is not
-that measurement or teacher generation. Existing train breadth and ordinary
-correct-return reward remain intact; no communication edge is required.
+samples of every exact task (48 total) in whole-model-root mode with the actor
+that will use it and the bound runtime. Prepare the next 48 strong-Qwen teacher
+requests now; their live execution measurement and verified trajectory admission
+need not wait for student communication readiness. Student RL use separately
+measures the actual trained policy through useful rollout collection. Reference
+execution qualifies neither teacher trajectories nor student policy. Existing
+train breadth and ordinary correct-return reward remain intact; no communication
+edge is required.
