@@ -33,6 +33,8 @@ is only immutable inventory/CLI plumbing; it does not decide admission or
 invent assistant intent. New eligible undeclared sources fail explicitly, while
 already segmented whole trajectories retain their exact objective. The existing
 recipe input role and provider dependency closure transport this declaration.
+The inventory CLI reuses the existing cached file-digest verifier used by source
+dependency resolution, avoiding redundant full reads of already bound corpora.
 
 No live recipe, immutable corpus, checkpoint optimizer,
 exposure counter, tokenizer identity, or frozen runtime changes implicitly. Text

@@ -9,7 +9,7 @@ import argparse
 import json
 from pathlib import Path
 
-from natlang_neuralese.common.hashing import sha256_file_hex
+from natlang_neuralese.common.hashing import sha256_file_hex_cached as sha256_file_hex
 from natlang_neuralese.common.jsonio import write_json_durable
 from natlang_neuralese.data.native_sources import _jsonl
 from natlang_neuralese.train.native_supervision import SCHEMA, load_policy

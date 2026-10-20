@@ -44,9 +44,10 @@ def load_policy(binding):
 def apply_policy(example, row, *, source_sha256, policy):
     """Decode ONLY a declared immutable source encoding and retain node mass.
 
-    Sources absent from the declaration retain their original objective. In
-    particular already segmented whole trajectories and sampled RL are not
-    inferred from magnitudes or reweighted. Raw row identities stay unchanged.
+    Undeclared eligible sources fail when coverage is required; other sources
+    retain their original objective. Already segmented whole trajectories and
+    sampled RL are not inferred from magnitudes or reweighted. Raw row
+    identities stay unchanged.
     """
     if policy is None:
         return example
