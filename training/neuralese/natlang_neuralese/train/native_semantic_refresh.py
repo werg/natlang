@@ -87,6 +87,9 @@ def held_evaluation(participants,vae,source,*,phase,options,resolver,coverage=No
     cursor=selected[0];stop=total if full else selected[-1]+1
     visits=dict(coverage.get('row_visits') or {})
     losses=[];used=[]
+    # Held historical telemetry retains corpus weights. A training source SHA
+    # declaration cannot authorize reweighting a protected held source.
+    held_options = {key: value for key, value in options.items() if key != '_ce_supervision_policy'}
     device=next(vae.parameters()).device
     rng=capture_training_rng_state(device)
     modes={name:entry.model.training for name,entry in participants.items()};vae_mode=vae.training
@@ -98,7 +101,7 @@ def held_evaluation(participants,vae,source,*,phase,options,resolver,coverage=No
                 if index<cursor:continue
                 if index>=stop:break
                 if len(set(row['models'])&set(participants))<2:continue
-                value,_=joint_loss(vae,participants,row,phase=phase,options=options,fetch_external=resolver)
+                value,_=joint_loss(vae,participants,row,phase=phase,options=held_options,fetch_external=resolver)
                 scalar=float(value)
                 if not math.isfinite(scalar):raise FloatingPointError('nonfinite semantic held objective: '+row['id'])
                 losses.append(scalar);used.append(row['id']);visits[row['id']]=visits.get(row['id'],0)+1
