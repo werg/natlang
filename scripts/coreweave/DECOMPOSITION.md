@@ -297,3 +297,12 @@ path. Include installer and existing clone helper in the sealed artifact. The
 CLI writes a durable in-progress operation record before copying and an explicit
 failed record on error, leaving incomplete immutable destinations for exact
 operator reconciliation rather than automatic destructive retries.
+
+The full controller delegates to the same exact reviewed publishing loader;
+it has no separate reduced allowlist. Material, binder and controller spec carry
+that loader and its complete role manifest explicitly. Historical interrupted
+acknowledgements bind their actual source actors' paths as well as code bytes.
+The preparer may retain only the two interrupted actors at explicitly bound
+historical locations with identical reviewed SHA/bytes, and seals a separate
+immutable publisher manifest for those real origins. It never spoofs `__file__`,
+relaxes an old acknowledgement, changes numerical modules or replaces the owner.

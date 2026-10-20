@@ -68,3 +68,36 @@ def test_future_binder_rejects_review_of_another_script_and_mutated_source(tmp_p
     (composition/'controller.json').write_text('tampered')
     with pytest.raises(ValueError,match='source file changed'):
         prepare(composition,'lfm',path,tmp_path/'unused')
+
+
+def test_historical_interrupted_actor_keeps_real_origin_and_exact_reviewed_bytes(tmp_path):
+    composition,path,inputs=fixture(tmp_path,'lfm')
+    record=json.loads((composition/'construction.json').read_bytes())
+    material_path=composition/'material.json';material=json.loads(material_path.read_bytes())
+    def emit(target,value):
+        target.parent.mkdir(parents=True,exist_ok=True)
+        target.write_text(value if isinstance(value,str) else json.dumps(value))
+        return {'path':str(target),'sha256':sha256_file_hex(target),'bytes':target.stat().st_size}
+    reviewed=emit(composition/'extra/native_interrupted_update.py','# exact reviewed actor\n')
+    historical=emit(tmp_path/'actual-old-owner/native_interrupted_update.py','# exact reviewed actor\n')
+    material['controls']={'native_interrupted_update':reviewed}
+    material['publisher_loader']=emit(composition/'publishing-loader.py','# bound loader\n')
+    material['publisher_manifest']=emit(composition/'publishing-manifest.json',{'controls':material['controls']})
+    emit(material_path,material)
+    record['role_materials']['lfm']={'path':str(material_path),'sha256':sha256_file_hex(material_path),'bytes':material_path.stat().st_size}
+    record['files']={str(p.relative_to(composition)):{'sha256':sha256_file_hex(p),'bytes':p.stat().st_size}
+                     for p in composition.rglob('*') if p.is_file() and p.name!='construction.json'}
+    emit(composition/'construction.json',record)
+    inputs['historical_controls']={'native_interrupted_update':historical};emit(path,inputs)
+    out=composition/'binder-config.json';prepare(composition,'lfm',path,out)
+    config=json.loads(out.read_bytes())
+    assert config['controls']['native_interrupted_update']==historical
+    manifest=json.loads(Path(config['publisher_manifest']['path']).read_bytes())
+    assert manifest['controls']==config['controls']
+    assert historical in config['frozen_refs']
+    assert json.loads(Path(material['publisher_manifest']['path']).read_bytes())['controls']==material['controls']
+    assert prepare(composition,'lfm',path,out)['sha256']==sha256_file_hex(out)
+    changed=emit(tmp_path/'bad-actor.py','# unreviewed implementation\n')
+    inputs['historical_controls']['native_interrupted_update']=changed;emit(path,inputs)
+    with pytest.raises(ValueError,match='exact actual reviewed source'):
+        prepare(composition,'lfm',path,out)
