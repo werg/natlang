@@ -8,6 +8,8 @@ import copy
 import contextlib
 import fcntl
 import json
+import math
+import signal
 from pathlib import Path
 
 from ..common.jsonio import write_json_durable,write_bytes_durable
@@ -163,6 +165,23 @@ def _raw_receipt(saved,checkpoint,parent):
 
 
 
+def _requested_refresh_signal(records):
+    """Authenticate the existing StopSignal producer's durable record shape."""
+    if not isinstance(records,list) or not records:
+        return False
+    names={item.name for item in signal.Signals}
+    for record in records:
+        if (not isinstance(record,dict) or set(record)!={'signal','unix'}
+                or not isinstance(record['signal'],str) or record['signal']not in names
+                or type(record['unix'])not in(int,float)):
+            return False
+        try:
+            if not math.isfinite(record['unix']):return False
+        except OverflowError:
+            return False
+    return any(record['signal']=='SIGUSR2'for record in records)
+
+
 def _qualified_refresh_updates(config,stage,receipt,continuation=None):
     boundary=receipt.get('continuation_boundary')or{}
     updates=boundary.get('new_optimizer_updates')
@@ -171,8 +190,7 @@ def _qualified_refresh_updates(config,stage,receipt,continuation=None):
         raise ValueError('completed supervised result differs from its declared finite update quantum')
     if updates<quantum and (boundary.get('kind')!='semantic-refresh'
             or boundary.get('reached')is not True
-            or not isinstance(boundary.get('requested_signals'),list)
-            or 'SIGUSR2'not in boundary['requested_signals']
+            or not _requested_refresh_signal(boundary.get('requested_signals'))
             or type((continuation or{}).get('trainer_parameters',{}).get('refresh_after_updates'))is not int
             or (continuation or{}).get('trainer_parameters',{}).get('refresh_after_updates')!=quantum):
         raise ValueError('completed finite update quantum requires its actual qualified requested early refresh')

@@ -15,3 +15,13 @@ subsets, decode checkpoints again, reset optimizer/RNG or award exposure. Real
 serialized completed-quantum fixtures exercise both reference representations,
 wrong bytes/hash/path and unchanged optimizer/control state. Frozen R4 remains
 unchanged; this is a future shared source fix for both models.
+
+## Requested early refresh records (2026-10-20)
+
+The supervisor still decides when to refresh. The existing crisp completed
+verifier authenticates the trainer's `StopSignal` receipt: a list of exact
+`signal`/finite numeric `unix` records, including `SIGUSR2`, together with the
+existing reached boundary, earned update count and declared quantum. This
+extends the existing verifier; it neither rewrites historical receipts nor
+creates completion or exposure credit. Tests exercise the actual signal
+producer and reject malformed records before any publication changes.

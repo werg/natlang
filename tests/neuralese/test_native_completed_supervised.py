@@ -1,12 +1,12 @@
 """Real serialized optimizer/RNG and sealed bridge protocol; no quality claim."""
-import copy,json,os
+import copy,json,os,signal
 from pathlib import Path
 import pytest
 import torch
 from natlang_neuralese.common.jsonio import write_json_durable as write
 from natlang_neuralese.rl import native_completed_supervised as adapt,native_bridge as bridge
 from natlang_neuralese.train.recipe import native_recipe_binding
-from natlang_neuralese.train.loop import capture_training_rng_state
+from natlang_neuralese.train.loop import capture_training_rng_state,StopSignal
 from natlang_neuralese.model.native_model import CHECKPOINT_SCHEMA
 from natlang_neuralese.train.native_continuation import TRAINING_SCHEMA
 from test_native_state_sft import graph
@@ -447,7 +447,11 @@ def test_qualified_early_refresh_uses_one_preloaded_saved_object_under_owned_lea
     root,config,request,result,controller,plan,recipe=fixture(tmp_path,quantum=3)
     checkpoint=Path(json.loads(result.read_text())['checkpoint']['path'])
     receipt=checkpoint.parent/'native-training-receipt.json';value=json.loads(receipt.read_text())
-    value['continuation_boundary']['requested_signals']=['SIGUSR2'];write(receipt,value)
+    stop=StopSignal().install((signal.SIGUSR2,))
+    try:signal.raise_signal(signal.SIGUSR2)
+    finally:stop.restore()
+    assert stop.requested
+    value['continuation_boundary']['requested_signals']=stop.received;write(receipt,value)
     result_value=json.loads(result.read_text());result_value['artifacts']=bridge.inventory(checkpoint.parent.parent,exclude=[result]);write(result,result_value)
     pair=(bridge.binding(checkpoint),CheckpointPolicy.load(checkpoint))
     def forbidden(*a,**k):raise AssertionError('an owned completed parent may not be decoded again')
@@ -605,10 +609,10 @@ def test_dependency_closure_rejects_missing_future_authority(tmp_path,monkeypatc
 @pytest.mark.parametrize('mutation',['signal-string','wrong-signal','wrong-kind','false-reached','integer-reached','wrong-target','boolean-updates'])
 def test_early_refresh_requires_actual_typed_request_and_exact_declared_target(mutation):
     config={'supervised_stage_quantum_updates':{'full':1000}}
-    receipt={'continuation_boundary':{'kind':'semantic-refresh','reached':True,'requested_signals':['SIGUSR2'],'new_optimizer_updates':749}}
+    receipt={'continuation_boundary':{'kind':'semantic-refresh','reached':True,'requested_signals':[{'signal':'SIGUSR2','unix':1792488423.992293}],'new_optimizer_updates':749}}
     continuation={'trainer_parameters':{'refresh_after_updates':1000}}
     if mutation=='signal-string':receipt['continuation_boundary']['requested_signals']='SIGUSR2'
-    elif mutation=='wrong-signal':receipt['continuation_boundary']['requested_signals']=['SIGTERM']
+    elif mutation=='wrong-signal':receipt['continuation_boundary']['requested_signals']=[{'signal':'SIGTERM','unix':1792488423.992293}]
     elif mutation=='wrong-kind':receipt['continuation_boundary']['kind']='operational-stop'
     elif mutation=='false-reached':receipt['continuation_boundary']['reached']=False
     elif mutation=='integer-reached':receipt['continuation_boundary']['reached']=1
@@ -638,3 +642,32 @@ def test_completed_recipe_optional_bytes_rejects_tampering_with_real_proof(tmp_p
     with pytest.raises(ValueError):
         adapt.verify(adapt.binding(Path(proof['path'])))
     assert before == tuple(p.read_bytes() for p in (config, root/'cycle.json', root/'production/state.json'))
+
+
+@pytest.mark.parametrize('records', [None, [], ['SIGUSR2'], 'SIGUSR2',
+    [{'signal':'SIGUSR2'}], [{'unix':1.0}], [{'signal':'SIGUSR2','unix':True}],
+    [{'signal':'SIGUSR2','unix':float('nan')}], [{'signal':'SIGUSR2','unix':float('inf')}],
+    [{'signal':'SIGUSR2','unix':float('-inf')}], [{'signal':'SIGUSR2','unix':'1.0'}],
+    [{'signal':'SIGUSR2','unix':10**1000}], [{'signal':'UNKNOWN','unix':1.0}],
+    [{'signal':'SIGUSR2','unix':1.0,'extra':True}],
+    [{'signal':'SIGUSR2','unix':1.0}, {'signal':'SIGTERM','unix':False}]])
+def test_early_refresh_rejects_malformed_actual_producer_records(records):
+    config={'supervised_stage_quantum_updates':{'full':1000}}
+    receipt={'continuation_boundary':{'kind':'semantic-refresh','reached':True,
+        'requested_signals':records,'new_optimizer_updates':611}}
+    with pytest.raises(ValueError):
+        adapt._qualified_refresh_updates(config,{'id':'full'},receipt,
+            {'trainer_parameters':{'refresh_after_updates':1000}})
+
+
+def test_early_refresh_accepts_actual_stop_signal_records_without_rewriting_receipt():
+    stop=StopSignal().install((signal.SIGUSR2,))
+    try:signal.raise_signal(signal.SIGUSR2)
+    finally:stop.restore()
+    assert stop.requested and stop.received[0]['signal']=='SIGUSR2'
+    receipt={'continuation_boundary':{'kind':'semantic-refresh','reached':True,
+        'requested_signals':stop.received,'new_optimizer_updates':611}}
+    original=copy.deepcopy(receipt)
+    assert adapt._qualified_refresh_updates({'supervised_quantum_updates':1000},
+        {'id':'full'},receipt,{'trainer_parameters':{'refresh_after_updates':1000}})==611
+    assert receipt==original
