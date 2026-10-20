@@ -542,6 +542,9 @@ def verify_teacher_model_actions(graphs, receipt, *, raw_rows, raw_row_shas,
     """Shared original-action verifier used by the operational final admission."""
     from scripts.neuralese_data.build_verified_teacher_trajectory_graphs import teacher_action_graph_id
     profile = teacher_conversion_profile(receipt)
+    failure_policy = receipt.get('failed_assistant_history_policy', 'preserve')
+    if failure_policy not in ('preserve', 'mask-runtime-failures'):
+        raise ValueError('unsupported teacher assistant-history supervision profile')
     if set(raw_rows) != set(raw_row_shas):
         raise ValueError('teacher graph source SHA inventory differs from its source rows')
     partial = {}
@@ -569,19 +572,20 @@ def verify_teacher_model_actions(graphs, receipt, *, raw_rows, raw_row_shas,
         if target != f'{source_id}:decision:{turn:04d}' or identifier in ids:
             raise ValueError('decision identity mismatch or duplicate graph')
         source_row, row_sha = raw_rows[source_id], raw_row_shas[source_id]
-        expected = 'text:' + teacher_action_graph_id(source_id, row_sha, turn, profile)
+        expected = 'text:' + teacher_action_graph_id(source_id, row_sha, turn, profile, failure_policy)
         if (teacher['source_artifact_sha256'] != source_sha256
                 or teacher['source_row_sha256'] != row_sha or identifier != expected):
             raise ValueError('graph source SHA or source-bound profile identity mismatch')
         guided = (source_row.get('collection_guidance') or {}).get('training_admission') is False
-        if source_id in partial or guided:
-            expected_decision = decision_keys[(source_id, turn)]
+        restricted = source_id in partial or guided
+        if restricted or failure_policy == 'mask-runtime-failures':
+            expected_decision = decision_keys[(source_id, turn)] if restricted else None
             if guided and (expected_decision.get('guided_parent_review') is not True
                     or expected_decision.get('parent_trace_qualified') is not False
                     or (source_id, turn) in guided_static_root_keys({source_id: source_row})):
                 raise ValueError('guided child graph lacks its exact review or includes a static root')
-            if (expected_decision.get('approved') is not True
-                    or teacher.get('decision_admission') != expected_decision
+            if ((restricted and (expected_decision.get('approved') is not True
+                    or teacher.get('decision_admission') != expected_decision))
                     or partial_tokenizer is None):
                 raise ValueError('partial parent graph lacks exact approved decision and tokenizer')
             from natlang_neuralese.data.native_graph_conversion import text_row_graph
@@ -597,7 +601,7 @@ def verify_teacher_model_actions(graphs, receipt, *, raw_rows, raw_row_shas,
                 target_message['reasoning_content'] = assistant['reasoning']
             input_guard = reviewed_teacher_context_guard(captured, captured['context'], target_message, captured['tools_offered'])
             from natlang_neuralese.common.hashing import canonical_json_sha256_hex
-            if canonical_json_sha256_hex(input_guard) != expected_decision.get('assistant_history_input_sha256'):
+            if restricted and canonical_json_sha256_hex(input_guard) != expected_decision.get('assistant_history_input_sha256'):
                 raise ValueError('partial parent exact approval does not bind original structured input protection')
             packet, omission = render_teacher_packet(partial_tokenizer, captured['context'],
                 target_message, captured['tools_offered'], captured)
@@ -616,18 +620,20 @@ def verify_teacher_model_actions(graphs, receipt, *, raw_rows, raw_row_shas,
                 text=text, token_ids=ids_for_mask, supervised_suffix_start=conversion['source_suffix_start']),
                 source_tokenizer_fingerprint=receipt['tokenizer']['source_fingerprint'],
                 tokenizer=partial_tokenizer, expanded_tokenizer_fingerprint=row['tokenizer_fingerprint'],
-                context_weight=.05, mask_assistant_history=True, assistant_history_guard=input_guard)
+                context_weight=.05, mask_assistant_history=restricted,
+                mask_failed_assistant_history=failure_policy == 'mask-runtime-failures', assistant_history_guard=input_guard)
             if (row['nodes'] != masked['nodes']
                     or conversion.get('assistant_history_target_mask') != masked['conversion']['assistant_history_target_mask']):
                 raise ValueError('partial parent graph does not preserve the exact assistant-history loss mask')
-        elif (teacher.get('decision_admission', {}).get('parent_quality_hold') is not None
+        if not restricted and (teacher.get('decision_admission', {}).get('parent_quality_hold') is not None
                 or teacher.get('decision_admission', {}).get('guided_parent_review')):
             raise ValueError('partial parent graph has no current decision authority')
         groups = sorted(set(source_row['task']['program_ir']['source_groups']))
         if row['source_groups'] != groups or teacher['source_groups'] != groups or row['split'] != 'train':
             raise ValueError('graph train/source groups differ from exact verified program')
-        profile_ids = {'text:' + teacher_action_graph_id(source_id, row_sha, turn, candidate)
-                       for candidate in (None, 'keep', 'last_turn_only')}
+        profile_ids = {'text:' + teacher_action_graph_id(source_id, row_sha, turn, candidate, mask)
+                       for candidate in (None, 'keep', 'last_turn_only')
+                       for mask in ('preserve','mask-runtime-failures')}
         if ({identifier, target, source_id} | profile_ids) & hold_ids:
             raise ValueError('graph intersects current held decisions')
         ids.add(identifier); targets.add(target); source_ids.add(source_id)
@@ -638,7 +644,7 @@ def verify_teacher_model_actions(graphs, receipt, *, raw_rows, raw_row_shas,
             or count + receipt['deduplication']['omitted_rows'] != receipt['turns']
             or receipt['turns'] + len(receipt['action_omissions']) != source_actions):
         raise ValueError('teacher graph receipt lost complete action accounting')
-    inverse = {'text:' + teacher_action_graph_id(source_id, raw_row_shas[source_id], turn, profile):
+    inverse = {'text:' + teacher_action_graph_id(source_id, raw_row_shas[source_id], turn, profile, failure_policy):
                (source_id, turn) for source_id, row in raw_rows.items()
                for turn in range(len(row['trajectory']))}
     deduplicated = []

@@ -81,6 +81,7 @@ def text_row_graph(row: Mapping[str, Any], *, source_tokenizer_fingerprint: str,
                    tokenizer, expanded_tokenizer_fingerprint: str,
                    context_weight: float = 0.05,
                    mask_assistant_history: bool = False,
+                   mask_failed_assistant_history: bool = False,
                    assistant_history_guard: Mapping[str, Any] | None = None) -> dict:
     """Represent one complete serving-rendered invocation as a one-node graph.
 
@@ -96,10 +97,10 @@ def text_row_graph(row: Mapping[str, Any], *, source_tokenizer_fingerprint: str,
         tokenizer=tokenizer, expanded_tokenizer_fingerprint=expanded_tokenizer_fingerprint)
     boundary = row["supervised_suffix_start"]
     weights = [context_weight] * boundary + [1.] * (len(ids)-boundary)
-    if type(mask_assistant_history) is not bool:
+    if type(mask_assistant_history) is not bool or type(mask_failed_assistant_history) is not bool:
         raise ValueError('assistant history mask must be explicitly boolean')
     mask_proof = None
-    if mask_assistant_history:
+    if mask_assistant_history or mask_failed_assistant_history:
         if (not isinstance(assistant_history_guard, Mapping)
                 or assistant_history_guard.get('schema') != 'natlang.reviewed-chat-input-guard/1'
                 or assistant_history_guard.get('policy') != 'no-embedded-renderer-chat-boundaries'
@@ -116,14 +117,25 @@ def text_row_graph(row: Mapping[str, Any], *, source_tokenizer_fingerprint: str,
         role_ids = {role_token(role): role for role in ('system', 'user', 'assistant', 'tool')}
         if len(role_ids) != 4 or start_id in role_ids or start_id not in ids:
             raise ValueError('assistant history masking needs four distinct chat roles')
-        labels = chat_roles(ids, start_id=start_id, role_ids=role_ids)
+        prefixes = (tuple(tuple(tokenizer(prefix, add_special_tokens=False)['input_ids'])
+            for prefix in ('\n<tool_response>', '\n\n<tool_response>'))
+            if mask_failed_assistant_history and not mask_assistant_history else ())
+        labels = chat_roles(ids, start_id=start_id, role_ids=role_ids, tool_response_prefixes=prefixes)
         assistant = {ROLE_CODES.index('assistant_reasoning'), ROLE_CODES.index('assistant_reply')}
         if not all(label in assistant for label in labels[boundary:]):
             raise ValueError('reviewed suffix must be entirely the exact assistant target')
-        masked = [index for index in range(boundary) if labels[index] in assistant]
+        if mask_assistant_history:
+            masked = [index for index in range(boundary) if labels[index] in assistant]
+            policy = 'all-prior-assistant-context-only/1'
+        else:
+            from ..train.text_supervision import failed_assistant_mask
+            failed = failed_assistant_mask(ids, labels,
+                lambda values: tokenizer.decode(values, skip_special_tokens=False))
+            masked = [index for index in range(boundary) if failed[index]]
+            policy = 'runtime-failed-prior-assistant-context-only/1'
         for index in masked:
             weights[index] = 0.
-        mask_proof = {'policy': 'all-prior-assistant-context-only/1',
+        mask_proof = {'policy': policy,
                       'input_guard': dict(assistant_history_guard),
                       'masked_tokens': len(masked), 'suffix_start': boundary,
                       'role_labels_sha256': hashlib.sha256(bytes(labels)).hexdigest()}

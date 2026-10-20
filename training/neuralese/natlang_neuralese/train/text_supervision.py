@@ -93,6 +93,12 @@ def failed_assistant_mask(ids, labels, decode):
                 probe += 1
             text = decode(list(ids[run:probe]))
             body = text.split('<tool_response>', 1)[-1].lstrip()
+            if '<tool_response>' not in text:
+                # Native tool-role runs begin at the role token, so the decoded
+                # renderer header otherwise hides an anchored `rejected` body.
+                # Only these exact role-header forms are removed; tool results
+                # themselves and successful assistant history remain unchanged.
+                body = re.sub(r'\Atool(?:<\|im_sep\|>|\r?\n)', '', body, count=1).lstrip()
             if failed_feedback(body):
                 failed = True
         if failed:

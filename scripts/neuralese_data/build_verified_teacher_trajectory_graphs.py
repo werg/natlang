@@ -821,7 +821,8 @@ def graph_content_sha256(graph):
 
 
 def teacher_action_graph_id(source_record_id: str, source_record_sha256: str, turn_index: int,
-                            rendering_profile: str | None = None) -> str:
+                            rendering_profile: str | None = None,
+                            failed_assistant_history_policy: str = 'preserve') -> str:
     """Bind a rendered action to its exact trajectory, not only its reusable task ID.
 
     Teacher batches can legitimately execute the same selected program more than
@@ -834,11 +835,14 @@ def teacher_action_graph_id(source_record_id: str, source_record_sha256: str, tu
             or not isinstance(source_record_sha256, str) or len(source_record_sha256) != 64
             or any(char not in '0123456789abcdef' for char in source_record_sha256)
             or type(turn_index) is not int or turn_index < 0
-            or rendering_profile not in (None, 'keep', 'last_turn_only')):
+            or rendering_profile not in (None, 'keep', 'last_turn_only')
+            or failed_assistant_history_policy not in ('preserve', 'mask-runtime-failures')):
         raise ValueError('teacher action identity requires a source record ID, lowercase SHA-256, and nonnegative turn index')
     identifier = f'{source_record_id}:source-row:{source_record_sha256}:action:{turn_index:04d}'
-    return (identifier if rendering_profile is None else
-            identifier + ':history-reasoning:' + rendering_profile)
+    if rendering_profile is not None:
+        identifier += ':history-reasoning:' + rendering_profile
+    return (identifier if failed_assistant_history_policy == 'preserve' else
+            identifier + ':assistant-history:' + failed_assistant_history_policy)
 
 
 def unresolved_neuralese_references(value):
@@ -1216,6 +1220,8 @@ def main():
     parser.add_argument("--base-tokenizer", type=Path, required=True)
     parser.add_argument('--history-reasoning-policy', choices=('keep', 'last_turn_only'),
                         help='explicit rendering policy; omitted preserves the backbone default')
+    parser.add_argument('--failed-assistant-history-policy', choices=('preserve', 'mask-runtime-failures'),
+                        default='preserve', help='explicit new source view: runtime-failed assistant turns remain visible with zero CE')
     parser.add_argument("--protection-manifest", type=Path, required=True)
     parser.add_argument('--deduplicate-against', type=Path, action='append', default=[])
     parser.add_argument('--content-index-classification-migration', type=Path, action='append', default=[],
@@ -1285,7 +1291,8 @@ def main():
                     continue
                 (text, token_ids, boundary), emulation_proof = packet
                 identifier = teacher_action_graph_id(row['id'], source_row_sha, index,
-                    rendering_profile=getattr(args, 'history_reasoning_policy', None))
+                    rendering_profile=getattr(args, 'history_reasoning_policy', None),
+                    failed_assistant_history_policy=args.failed_assistant_history_policy)
                 if identifier in seen_ids:
                     raise ValueError(f"duplicate derived teacher turn identity: {identifier}")
                 seen_ids.add(identifier)
@@ -1294,10 +1301,12 @@ def main():
                             "token_ids": token_ids, "supervised_suffix_start": boundary,
                             "source_twin_id": identifier, "source_record_ids": [row["id"], identifier]}
                 partial_guard = None
-                if decision.get('parent_quality_hold') or decision.get('guided_parent_review'):
+                if (decision.get('parent_quality_hold') or decision.get('guided_parent_review')
+                        or args.failed_assistant_history_policy == 'mask-runtime-failures'):
                     try:
                         partial_guard = reviewed_teacher_context_guard(turn, context, target, tools)
-                        if canonical_json_sha256_hex(partial_guard) != decision.get('assistant_history_input_sha256'):
+                        if ((decision.get('parent_quality_hold') or decision.get('guided_parent_review'))
+                                and canonical_json_sha256_hex(partial_guard) != decision.get('assistant_history_input_sha256')):
                             raise ValueError('reviewed assistant-history input guard differs from exact decision approval')
                     except ValueError as error:
                         if str(error) != 'ambiguous embedded chat boundary in reviewed context':
@@ -1308,6 +1317,7 @@ def main():
                 graph = text_row_graph(row_data, source_tokenizer_fingerprint=source_fingerprint,
                     tokenizer=tokenizer, expanded_tokenizer_fingerprint=expanded_fingerprint,
                     context_weight=.05, mask_assistant_history=bool(decision.get('parent_quality_hold') or decision.get('guided_parent_review')),
+                    mask_failed_assistant_history=args.failed_assistant_history_policy == 'mask-runtime-failures',
                     assistant_history_guard=partial_guard)
                 graph["conversion"]["teacher_source"] = {
                     "schema": "natlang.static-teacher-turn-source/1",
@@ -1355,6 +1365,8 @@ def main():
     args.output.mkdir(parents=True, exist_ok=True)
     receipt = {"schema": "natlang.verified-teacher-native-graph-build/1", "status": "passed",
         **explicit_profile_receipt,
+        **({'failed_assistant_history_policy': args.failed_assistant_history_policy}
+           if args.failed_assistant_history_policy != 'preserve' else {}),
         "model_key": args.model_key, "model_id": model_id,
         "source": {"path": str(args.source), "sha256": binding["source_sha256"],
                    "rows": len(row_hashes), "row_bindings": row_hashes},
