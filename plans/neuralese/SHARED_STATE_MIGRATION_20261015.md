@@ -48,6 +48,43 @@ through the projected-value implementation.
 
 ## Current status
 
+October 20, 04:13 UTC: both students continue taking optimizer updates
+(latest passive samples LFM 19,018 and Mellum 24,968, the latter in offline
+preference training). The protected historical LFM 18,619 task check finished
+1/16: two invalid actions, six repetitions, five budget exhaustions and two
+semantic mismatches, with no infrastructure failures. Mellum 24,575 remains
+8/16. These are historical actor measurements; neither qualifies current
+weights or comprehensive recipe completion.
+
+A concrete backup attachment gap was found: the active LFM export follower
+still selected the previous supervised owner rather than the live direct Q6
+learner. Its latest independently verified private fallback remains 18,619;
+local newer saves alone are not durable private backups. An authenticated
+metadata-only owner-pointer repair passed preview and is being applied. The
+passive monitor now also compares the selected owner manifest namespace with
+the observed learner output, so service activity cannot hide this mismatch.
+
+The final runtime composition now includes dual raw/target/declared-objective
+held metrics, the exact source-classification continuation guard, and the
+narrow FP32 prefix readout reuse port. Independent inventory review of v8
+confirmed the numerical package is unchanged from reviewed v6; v8 adds the
+existing owner-publication helper and explicitly ships the dual-held policy
+builder. Actual dispatch integration tests found additional missing publication
+plumbing in the frozen donor; completing that closure precedes deployment.
+Both useful current learners continue during this work. No final runtime
+cutover, new private backup or completed communication cohort is claimed.
+
+Shared fixes are published through 0482b63c1b. The full 50ae8cfc4c check finished
+with one missing-producer exception-normalization regression; the fix is on
+main with 120 focused tests passing, and the new full 0482b63c1b ledger run is
+active. The last complete full-check pass remains 7edc9078c3.
+
+The completed historical Mellum compact evaluation copy was removed after its
+16 results landed and full-parent private recovery was verified, reclaiming
+24.31 GB. Its reports and full parent remain. A new current-owner quality
+consumer is prepared and awaits a genuine compact publication from the next
+already-loaded-parent handoff; it has not been activated against absent data.
+
 October20, 03:45 UTC: actual observed updates reached18,861 LFM and24,889
 Mellum. Mellum's historical24,575 checkpoint finished the protected16-family
 task evaluation:8 successes,5 semantic mismatches and3 repetitions, with no
