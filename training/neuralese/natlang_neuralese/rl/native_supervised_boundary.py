@@ -227,17 +227,15 @@ def apply(plan_path,declaration,handoff,config,cursor,directory):
     new_config['seed_trainer_parameters']={**refreshed['trainer_parameters'],'resident_data_directory':new_config['resident_data_directory']}
     publication=request.get('publication')
     if publication is not None:
-        from ..model.native_checkpoint_control import validate_publication_selection
-        validate_publication_selection(publication['native_checkpoint_publication'])
-        pointer=Path(publication['native_checkpoint_publication_owner_pointer'])
-        if not pointer.is_absolute()or'..'in pointer.parts:raise ValueError('supervised publication pointer must be absolute')
-        if not {'native_checkpoint_publication','native_checkpoint_publication_owner_pointer','native_checkpoint_publication_role','native_checkpoint_publication_runtime_root'}<=set(publication)or set(publication)-{'native_checkpoint_publication','native_checkpoint_publication_owner_pointer','native_checkpoint_publication_role','native_checkpoint_publication_runtime_root','native_checkpoint_publication_reserve_bytes'}:
+        from ..model.native_checkpoint_control import publication_owner_configuration
+        allowed={'native_checkpoint_publication','native_checkpoint_publication_owner_pointer',
+            'native_checkpoint_publication_role','native_checkpoint_publication_runtime_root',
+            'native_checkpoint_publication_reserve_bytes'}
+        if set(publication)-allowed:
             raise ValueError('supervised boundary publication cannot change other configuration')
-        if publication['native_checkpoint_publication_role']!=declared['model']or Path(publication['native_checkpoint_publication_runtime_root']).resolve()!=package.parents[2].resolve():
-            raise ValueError('supervised publication role/Python runtime changed')
-        reserve=publication.get('native_checkpoint_publication_reserve_bytes',0)
-        if type(reserve)is not int or reserve<0:raise ValueError('supervised publication reserve must be nonnegative bytes')
-        new_config.update(publication)
+        checked=publication_owner_configuration(publication,model=declared['model'],runtime_root=package.parents[2])
+        if not checked:raise ValueError('supervised publication needs its complete owner contract')
+        new_config.update(checked)
     if publication is not None:
         refreshed,_=continuation_config(new_config,stage,checkpoint=config['checkpoint'],adapter=None,out=config['out'])
         new_config['seed_trainer_parameters']={**refreshed['trainer_parameters'],'resident_data_directory':new_config['resident_data_directory']}

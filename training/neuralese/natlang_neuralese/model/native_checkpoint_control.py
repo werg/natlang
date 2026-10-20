@@ -266,6 +266,40 @@ def validate_publication_selection(selection):
 
 
 
+def publication_owner_configuration(declaration, *, model=None, runtime_root=None):
+    """Verify the complete optional owner-follow contract without publishing it."""
+    required = {'native_checkpoint_publication_owner_pointer',
+        'native_checkpoint_publication_role', 'native_checkpoint_publication_runtime_root'}
+    optional = {'native_checkpoint_publication_reserve_bytes'}
+    selected = {key: value for key, value in declaration.items()
+        if key in required | optional | {'native_checkpoint_publication'}}
+    if not (required | optional) & selected.keys():
+        return {}
+    if not (required | {'native_checkpoint_publication'}) <= selected.keys():
+        raise ValueError('publication owner configuration needs its complete declared contract')
+    selection = validate_publication_selection(selected['native_checkpoint_publication'])
+    role = selected['native_checkpoint_publication_role']
+    if (role not in ('lfm', 'mellum') or role != (model or declaration.get('model'))
+            or (declaration.get('model') is not None and role != declaration['model'])):
+        raise ValueError('publication owner role/Python runtime differs from its declared model')
+    if any(not isinstance(selected[key],str) or not selected[key] for key in
+            ('native_checkpoint_publication_owner_pointer','native_checkpoint_publication_runtime_root')):
+        raise ValueError('publication owner pointer and Python runtime need explicit paths')
+    pointer = Path(selected['native_checkpoint_publication_owner_pointer'])
+    if not pointer.is_absolute() or '..' in pointer.parts or pointer.is_symlink():
+        raise ValueError('publication owner pointer must be an absolute nonsymlink path')
+    producer = Path(selection['producer']['path']).resolve(strict=True)
+    runtime = Path(selected['native_checkpoint_publication_runtime_root']).resolve(strict=True)
+    if (producer != runtime / 'training/neuralese/natlang_neuralese/model/native_checkpoint_control.py'
+            or (runtime_root is not None and runtime != Path(runtime_root).resolve(strict=True))):
+        raise ValueError('publication owner Python runtime differs from its sealed producer')
+    if 'native_checkpoint_publication_reserve_bytes' in selected:
+        reserve = selected['native_checkpoint_publication_reserve_bytes']
+        if type(reserve) is not int or reserve < 0:
+            raise ValueError('publication owner reserve must be nonnegative bytes')
+    return selected
+
+
 def publication_trainer_parameters(selection):
     """Derive the shared trainer invocation from its sealed producer selection."""
     selection=validate_publication_selection(selection)

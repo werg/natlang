@@ -182,6 +182,8 @@ def configure_provider(config,declaration,plan,binding,config_path,*,write=True)
         for key in ('trainer_parameters','seed_trainer_parameters'):
             if key=='trainer_parameters' or key in config:
                 config.setdefault(key,{}).update(publication_trainer_parameters(selection))
+    from ..model.native_checkpoint_control import publication_owner_configuration
+    config.update(publication_owner_configuration(declaration, model=config.get('model')or config.get('native_participant')or declaration.get('model')))
     if write:write_json_durable(config_path, config)
     return config
 
