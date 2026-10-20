@@ -22,7 +22,7 @@ class CheckpointInputOffload:
         self.file_store = None
         if directory is not None:
             from .checkpoint_file_storage import CheckpointFileStore
-            self.file_store = CheckpointFileStore(directory)
+            self.file_store = CheckpointFileStore(directory, pin_memory=pin_memory)
             self.directory = self.file_store.directory
 
     def __call__(self, function, *args, **kwargs):

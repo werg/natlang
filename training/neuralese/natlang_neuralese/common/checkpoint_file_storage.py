@@ -50,7 +50,7 @@ class SavedFileTensor:
         # Keep the holder/file for retain_graph and repeated higher derivatives.
         mapped = torch.from_file(str(self.path), shared=False, size=self.numel,
                                  dtype=self.dtype)
-        restored = mapped.to(device=self.device, copy=True, non_blocking=False)
+        restored = self.store.restore(mapped, self.device)
         del mapped
         with self.path.open('rb') as stream:
             _release_cache(stream.fileno())
@@ -61,13 +61,24 @@ class SavedFileTensor:
 
 
 class CheckpointFileStore:
-    def __init__(self, directory):
+    def __init__(self, directory, *, pin_memory=True, transfer_chunk_bytes=64 << 20):
+        if type(pin_memory) is not bool:
+            raise ValueError('file checkpoint pinning must be an explicit boolean')
+        if (type(transfer_chunk_bytes) is not int or transfer_chunk_bytes < 16
+                or transfer_chunk_bytes % 16):
+            raise ValueError('file checkpoint transfer chunk must be positive and aligned to 16 bytes')
         parent = Path(directory).expanduser().resolve()
         parent.mkdir(parents=True, exist_ok=True)
         self.directory = str(parent)
         self.lock = threading.Lock()
+        self.transfer_lock = threading.Lock()
+        self.pin_memory = pin_memory
+        self.transfer_chunk_bytes = transfer_chunk_bytes
+        self.transfer_buffer = None
         self.counters = dict(written_bytes=0, read_bytes=0, live_bytes=0,
-                             peak_live_bytes=0, live_files=0, packs=0, unpacks=0)
+                             peak_live_bytes=0, live_files=0, packs=0, unpacks=0,
+                             pinned_transfer_bytes=0, pinned_pack_chunks=0,
+                             pinned_unpack_chunks=0)
         # Creation and abandoned-store cleanup use one parent lock. The store's
         # separate lock remains held for the lifetime of every saved holder.
         with (parent / '.natlang-checkpoint-input.lock').open('a+b') as guard:
@@ -93,6 +104,51 @@ class CheckpointFileStore:
             (self.path / 'store.json').write_text(json.dumps({'schema': SCHEMA}))
             self.cleanup = weakref.finalize(self, _remove_store, self.path, lease)
 
+    def _staging(self, dtype):
+        # One byte buffer is reused across dtypes. A file holder must never
+        # retain it: the next checkpoint tensor is allowed to overwrite it.
+        if self.transfer_buffer is None:
+            self.transfer_buffer = torch.empty(self.transfer_chunk_bytes,
+                                               dtype=torch.uint8, pin_memory=True)
+            with self.lock:
+                self.counters['pinned_transfer_bytes'] = self.transfer_buffer.numel()
+        return self.transfer_buffer.view(dtype)
+
+    def copy_to_file(self, mapped, source):
+        if not self.pin_memory or source.device.type != 'cuda':
+            mapped.copy_(source, non_blocking=False)
+            return
+        with self.transfer_lock:
+            staging = self._staging(source.dtype)
+            chunks = 0
+            for first in range(0, source.numel(), staging.numel()):
+                last = min(first + staging.numel(), source.numel())
+                block = staging[:last-first]
+                # Synchronous completion protects the shared staging buffer
+                # and makes the following CPU/file copy observe actual values.
+                block.copy_(source[first:last], non_blocking=False)
+                mapped[first:last].copy_(block)
+                chunks += 1
+            with self.lock:
+                self.counters['pinned_pack_chunks'] += chunks
+
+    def restore(self, mapped, device):
+        if not self.pin_memory or device.type != 'cuda':
+            return mapped.to(device=device, copy=True, non_blocking=False)
+        restored = torch.empty(mapped.numel(), dtype=mapped.dtype, device=device)
+        with self.transfer_lock:
+            staging = self._staging(mapped.dtype)
+            chunks = 0
+            for first in range(0, mapped.numel(), staging.numel()):
+                last = min(first + staging.numel(), mapped.numel())
+                block = staging[:last-first]
+                block.copy_(mapped[first:last])
+                restored[first:last].copy_(block, non_blocking=False)
+                chunks += 1
+            with self.lock:
+                self.counters['pinned_unpack_chunks'] += chunks
+        return restored
+
     def pack(self, tensor):
         if not tensor.numel():
             return tensor.detach()  # The checkpoint's empty sentinel owns no bytes.
@@ -111,7 +167,7 @@ class CheckpointFileStore:
             # Copy logical values directly into file-backed host memory: no
             # accumulated anonymous CPU tensor or serialization storage alias.
             source = tensor.detach().as_strided((span,), (1,), storage_offset=tensor.storage_offset())
-            mapped.copy_(source, non_blocking=False)
+            self.copy_to_file(mapped, source)
             del mapped
             del source
             os.fdatasync(fd)
@@ -136,4 +192,6 @@ class CheckpointFileStore:
 
     def snapshot(self):
         with self.lock:
-            return {'storage': 'file', 'directory': self.directory, **self.counters}
+            return {'storage': 'file', 'directory': self.directory,
+                    'pin_memory': self.pin_memory,
+                    'transfer_chunk_bytes': self.transfer_chunk_bytes, **self.counters}

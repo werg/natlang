@@ -260,3 +260,44 @@ def test_kernel_relevant_strides_survive_file_storage_without_unused_prefix(tmp_
     span=1+sum((n-1)*s for n,s in zip(tensor.shape,tensor.stride()))
     assert saved.path.stat().st_size==span*tensor.element_size()
     if layout=='expanded':assert saved.path.stat().st_size==tensor.element_size()
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason='CUDA unavailable')
+def test_bounded_pinned_buffer_reuse_preserves_all_saved_values_and_layouts(tmp_path):
+    store=CheckpointFileStore(tmp_path, transfer_chunk_bytes=64)
+    holders=[]
+    for dtype in (torch.float64, torch.bfloat16, torch.int64, torch.bool):
+        original=torch.arange(120, device='cuda').to(dtype).reshape(12,10)[1::2].T
+        holders.append((store.pack(original), original.clone(), original.stride()))
+    # Several later packs have overwritten the one buffer, including its dtype
+    # view. Each holder must still restore independent, exact file-backed data.
+    for saved, original, stride in reversed(holders):
+        for _ in range(2):
+            restored=saved.unpack()
+            assert restored.device==original.device and restored.stride()==stride
+            torch.testing.assert_close(restored,original,atol=0,rtol=0)
+            restored.zero_()
+    snapshot=store.snapshot()
+    assert store.transfer_buffer.is_pinned()
+    assert snapshot['pinned_transfer_bytes']==64
+    assert snapshot['pinned_pack_chunks']>len(holders)
+    assert snapshot['pinned_unpack_chunks']>2*len(holders)
+
+
+@pytest.mark.parametrize('device',['cpu','cuda'])
+def test_file_wrapper_honors_explicitly_disabled_pinning(tmp_path,device):
+    if device=='cuda'and not torch.cuda.is_available():pytest.skip('CUDA unavailable')
+    wrapper=CheckpointInputOffload(checkpoint, pin_memory=False, directory=tmp_path)
+    x=torch.randn(13, device=device, dtype=torch.float64, requires_grad=True)
+    result=wrapper(torch.sin,x,use_reentrant=False).sum()
+    result.backward()
+    torch.testing.assert_close(x.grad,x.detach().cos(),atol=0,rtol=0)
+    assert wrapper.file_store.pin_memory is False
+    assert wrapper.snapshot()['pinned_transfer_bytes']==0
+
+
+@pytest.mark.parametrize('value',[True,0,-16,15,17])
+def test_invalid_transfer_allocation_is_rejected_before_creating_store(tmp_path,value):
+    with pytest.raises(ValueError,match='transfer chunk'):
+        CheckpointFileStore(tmp_path,transfer_chunk_bytes=value)
+    assert not list(tmp_path.iterdir())

@@ -98,6 +98,15 @@ supersede older projection/recursive graph-replay foundation rules for new work.
 Track implementation and cutover in
 `plans/neuralese/SHARED_STATE_MIGRATION_20261015.md`.
 
+Publication dependencies (engineering finding, 2026-10-20): newly admitted
+classification witnesses retain exact historical parser-policy dependencies.
+Include their explicitly verified package roots in both provider and checkpoint
+publication declarations. A shared provider fix does not update a frozen
+trainer's publication helper. Check the actual privately verified step, not
+service liveness or a saved checkpoint alone; keep useful training running with
+the existing full-state fallback while repairing publication. Retain original
+artifact hashes and exact path validation.
+
 Native token learnability (engineering qualification, 2026-10-15): existing
 tokenizer entries are not evidence of usable frozen output rows. The QAD
 thinking boundaries were almost identical, imposing a fixed output-probability
