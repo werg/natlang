@@ -23,6 +23,20 @@ CONSUMED_RAW='natlang.native-completed-raw-consumption/1'
 def _read(reference):return json.loads(_bound(reference).read_text())
 
 
+def _recipe_binding(reference):
+    """Check both recipe-reference forms before comparing exact identity."""
+    if (not isinstance(reference,dict) or set(reference) not in (
+            {'path','sha256'},{'path','sha256','bytes'})
+            or not isinstance(reference.get('path'),str)
+            or not isinstance(reference.get('sha256'),str)):
+        raise ValueError('completed recipe reference needs exact path/SHA and optional bytes')
+    path=_bound(reference)
+    if 'bytes'in reference and (type(reference['bytes'])is not int
+            or reference['bytes']<0 or reference['bytes']!=path.stat().st_size):
+        raise ValueError('completed recipe reference byte count changed')
+    return {'path':reference['path'],'sha256':reference['sha256']}
+
+
 def _controls(config_path):
     path=Path(config_path).resolve();config=json.loads(path.read_text());root=path.parent
     if Path(config['out']).resolve()!=root/'production':
@@ -467,7 +481,7 @@ def _future_global(reference,old,role,recipe,model_id,package):
         if row.get('handoff_requirement',{}).get('model_id')!=previous.get('handoff_requirement',{}).get('model_id'):
             raise ValueError('completed runtime transition substituted a student/base identity')
     selected=rows[role]
-    if (selected['production_recipe']!=recipe
+    if (_recipe_binding(selected['production_recipe'])!=_recipe_binding(recipe)
             or selected.get('handoff_requirement',{}).get('model_id')!=model_id
             or selected.get('actor_runtime')!=str(Path(package).resolve().parents[2])
             or selected.get('production_stage')!=old_rows[role].get('production_stage')
@@ -513,6 +527,7 @@ def _prepare(config_path,plan_path,role,recipe_reference,consumption,verified_ch
     from ..train.native_continuation import collect_sft_progress
     from .native_supervised import continuation_config,bind_recipe_lineage
     from .native_raw_rounds import _supervised_quantum
+    _recipe_binding(recipe_reference)
     config,paths=_controls(config_path);consumed=_read(consumption);reference,saved=verified_checkpoint
     if (consumed.get('schema')not in(CONSUMED,CONSUMED_RAW) or reference!=consumed['checkpoint']
             or binding(reference['path'])['sha256']!=reference['sha256']
@@ -646,7 +661,7 @@ def verify(reference):
     expected_config=_future_config(config,value['recipe'],future['recipe'],value['checkpoint'],value['lineage'],
                                    declaration=declaration,plan_reference=value.get('future_global_plan'))
     if future_config!=expected_config:raise ValueError('completed adaptation changed its declared future invocation')
-    if (binding(future_config['production_recipe'])!=value['recipe']
+    if (binding(future_config['production_recipe'])!=_recipe_binding(value['recipe'])
             or future_config['raw_model_id']!=config['raw_model_id']
             or future_config['bootstrap_binding']!=config['bootstrap_binding']
             or (declaration is None and future_config.get('runtime_handoff')!=config.get('runtime_handoff'))
@@ -655,7 +670,7 @@ def verify(reference):
     original_global=_read(value['old_global_plan'])
     declaration=next((item for item in original_global['models']if item['model']==value['role']),None)
     authority=config.get('runtime_binding',config.get('bootstrap_binding',{}))
-    if (declaration is None or declaration['production_recipe']!=binding((_read(consumed['snapshots']['config'])if consumed.get('publication')else config)['production_recipe'])
+    if (declaration is None or _recipe_binding(declaration['production_recipe'])!=binding((_read(consumed['snapshots']['config'])if consumed.get('publication')else config)['production_recipe'])
             or authority.get('plan_sha256')!=value['old_global_plan']['sha256']):
         raise ValueError('completed adaptation old plan differs from its actual controller authority')
     return value
@@ -674,7 +689,9 @@ def verify_declaration(reference,declaration):
                               _read(proof['old_config'])['raw_model_id'],proof['package'])
     expected={**base,'production_recipe':proof['recipe'],
         'completed_supervised_adaptation':reference}
-    if declaration!=expected:
+    actual={**declaration,'production_recipe':_recipe_binding(declaration['production_recipe'])}
+    expected['production_recipe']=_recipe_binding(expected['production_recipe'])
+    if actual!=expected:
         raise ValueError('completed adaptation declaration changed outside its owned recipe transition')
     return proof
 
@@ -801,7 +818,9 @@ def _configure(plan_path,declaration,bootstrap,config_path):
     old_global=_read(proof['old_global_plan']);actual=json.loads(Path(plan_path).read_text())
     expected=copy.deepcopy(_read(proof['future_global_plan'])if proof.get('future_global_plan')else old_global);role=proof['role']
     row=next(item for item in expected['models']if item['model']==role)
-    row.update(production_recipe=proof['recipe'],completed_supervised_adaptation=reference)
+    # verify_declaration already authenticated this exact recipe identity and
+    # any declared byte count; preserve the actual plan's reference shape.
+    row.update(production_recipe=declaration['production_recipe'],completed_supervised_adaptation=reference)
     if actual!=expected or next(item for item in actual['models']if item['model']==role)!=declaration:
         raise ValueError('completed adaptation global plan changed outside its owned role')
     path=Path(config_path);prior=json.loads(path.read_text());old=_read(proof['old_config']);future=_read(proof['future_config'])

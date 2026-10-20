@@ -12,7 +12,7 @@ from natlang_neuralese.train.native_continuation import TRAINING_SCHEMA
 from test_native_state_sft import graph
 
 
-def fixture(tmp_path,quantum=2):
+def fixture(tmp_path,quantum=2,recipe_with_bytes=False):
     root=tmp_path/'rounds'/'lfm';root.mkdir(parents=True);train=tmp_path/'train.jsonl';held=tmp_path/'held.jsonl'
     train.write_text(json.dumps(graph('old'))+'\n');h=graph('held');h['split']='test';held.write_text(json.dumps(h)+'\n')
     recipe={'schema':'natlang.neuralese-training-recipe/1','id':'lineage','identity_qualification':'native_state_runtime_qualified',
@@ -57,7 +57,7 @@ def fixture(tmp_path,quantum=2):
     write(result,{'schema':bridge.RESULT_SCHEMA,'kind':'round','request_id':req['request_id'],
         'request_sha256':bridge.binding(request)['sha256'],'status':'completed','state':bridge.binding(job/'state.json'),
         'checkpoint':cp,'artifacts':bridge.inventory(job,exclude=[result])})
-    plan=tmp_path/'global.json';write(plan,{'models':[{'model':'lfm','production_recipe':adapt.binding(recipe_path),
+    plan=tmp_path/'global.json';write(plan,{'models':[{'model':'lfm','production_recipe':(bridge.binding(recipe_path)if recipe_with_bytes else adapt.binding(recipe_path)),
         'handoff_requirement':{'model_id':config['raw_model_id'],'recipe_sha256':rb['sha256'],
             'recipe_lineage_sha256':rb['lineage_sha256'],'stage_ids':['full']}}]})
     config['runtime_binding']={'plan_sha256':adapt.binding(plan)['sha256'],'handoff':config['bootstrap_binding']['handoff']};config['supervised_stage_quantum_control']={'plan':adapt.binding(plan),'updates':config['supervised_stage_quantum_updates']};write(config_path,config)
@@ -65,8 +65,9 @@ def fixture(tmp_path,quantum=2):
     return root,config_path,request,result,controller,plan,recipe_path
 
 
-def test_completed_stage_accounted_once_and_same_decode_reused(tmp_path,monkeypatch):
-    root,config,request,result,controller,plan,recipe=fixture(tmp_path)
+@pytest.mark.parametrize('recipe_with_bytes',[False,True])
+def test_completed_stage_accounted_once_and_same_decode_reused(tmp_path,monkeypatch,recipe_with_bytes):
+    root,config,request,result,controller,plan,recipe=fixture(tmp_path,recipe_with_bytes=recipe_with_bytes)
     original=torch.load;loads=[]
     def observed(*args,**kwargs):loads.append(args[0]);return original(*args,**kwargs)
     monkeypatch.setattr(torch,'load',observed)
@@ -78,9 +79,15 @@ def test_completed_stage_accounted_once_and_same_decode_reused(tmp_path,monkeypa
     package=tmp_path/'package';package.mkdir();(package/'identity.py').write_text('VALUE=1\n')
     new=json.loads(recipe.read_text());new['stages'][1]['parameters']['learning_rate']=1e-5
     future=tmp_path/'future.json';write(future,new)
-    proof=adapt.prepare(config,plan,'lfm',adapt.binding(future),adapt.binding(tmp_path/'consumed.json'),pair,tmp_path/'adaptation/proof.json',package=package)
+    future_ref=bridge.binding(future)if recipe_with_bytes else adapt.binding(future)
+    proof=adapt.prepare(config,plan,'lfm',future_ref,adapt.binding(tmp_path/'consumed.json'),pair,tmp_path/'adaptation/proof.json',package=package)
     assert len(loads)==1 and bridge.binding(pair[0]['path'])==before
     actual=adapt.verify(proof);assert actual['new_sources_earned_visits']==0
+    assert actual['recipe']==future_ref
+    declaration={**json.loads(plan.read_text())['models'][0],
+        'production_recipe':adapt.binding(future)if recipe_with_bytes else bridge.binding(future),
+        'completed_supervised_adaptation':proof}
+    assert adapt.verify_declaration(proof,declaration)==actual
     assert pair[1]['training']['optimizer']['param_groups']==moments['param_groups']
     # Exact consumption retry does not double-advance the cursor.
     adapt.consume(config,bridge.binding(request),bridge.binding(result),tmp_path/'consumed.json',controller=controller)
@@ -472,14 +479,15 @@ def test_explicit_old_to_new_runtime_keeps_exact_optimizer_rng_and_requires_new_
     assert checked['whole_recipe_completed']is False and checked['new_sources_earned_visits']==0
 
 
-def test_runtime_configuration_requires_exact_future_global_and_rebinds_factory_pair(tmp_path,monkeypatch):
+@pytest.mark.parametrize('future_recipe_bytes',[False,True])
+def test_runtime_configuration_requires_exact_future_global_and_rebinds_factory_pair(tmp_path,monkeypatch,future_recipe_bytes):
     root,config,request,result,controller,plan,recipe=fixture(tmp_path)
     consumed_path=tmp_path/'consumed.json'
     _,pair=adapt.consume(config,bridge.binding(request),bridge.binding(result),consumed_path,controller=controller)
     old=tmp_path/'old-runtime/training/neuralese/natlang_neuralese';old.mkdir(parents=True);(old/'identity.py').write_text('VALUE=1\n')
     package=tmp_path/'new-runtime/training/neuralese/natlang_neuralese';package.mkdir(parents=True);(package/'identity.py').write_text('VALUE=2\n')
     future=tmp_path/'future.json';write(future,json.loads(recipe.read_text()))
-    target=json.loads(plan.read_text());row=target['models'][0];row.update(actor_runtime=str(package.parents[2]),production_recipe=adapt.binding(future),
+    target=json.loads(plan.read_text());row=target['models'][0];row.update(actor_runtime=str(package.parents[2]),production_recipe=(bridge.binding(future)if future_recipe_bytes else adapt.binding(future)),
         commands={'seed_command':['env','PYTHONPATH='+str(package.parent),'python','-m','natlang_neuralese.train.native_state_sft','{seed_trainer_args}']})
     target_path=tmp_path/'future-global.json';write(target_path,target)
     from natlang_neuralese.rl import production,native_bootstrap_metadata
@@ -607,3 +615,26 @@ def test_early_refresh_requires_actual_typed_request_and_exact_declared_target(m
     elif mutation=='wrong-target':continuation['trainer_parameters']['refresh_after_updates']=999
     else:receipt['continuation_boundary']['new_optimizer_updates']=True
     with pytest.raises(ValueError):adapt._qualified_refresh_updates(config,{'id':'full'},receipt,continuation)
+
+
+@pytest.mark.parametrize('mutation', ['bytes', 'bool-bytes', 'negative-bytes', 'hash', 'path', 'extra'])
+def test_completed_recipe_optional_bytes_rejects_tampering_with_real_proof(tmp_path, mutation):
+    root, config, plan, proof = prepared(tmp_path)
+    value = adapt.verify(proof)
+    recipe = Path(value['recipe']['path'])
+    reference = bridge.binding(recipe)
+    if mutation == 'bytes': reference['bytes'] += 1
+    elif mutation == 'bool-bytes': reference['bytes'] = True
+    elif mutation == 'negative-bytes': reference['bytes'] = -1
+    elif mutation == 'hash': reference['sha256'] = '0' * 64
+    elif mutation == 'path':
+        other = tmp_path / 'same-bytes-other-recipe.json'
+        other.write_bytes(recipe.read_bytes())
+        reference = bridge.binding(other)
+    else: reference['unchecked'] = 'not an allowed recipe binding field'
+    value['recipe'] = reference
+    write(Path(proof['path']), value)
+    before = tuple(p.read_bytes() for p in (config, root/'cycle.json', root/'production/state.json'))
+    with pytest.raises(ValueError):
+        adapt.verify(adapt.binding(Path(proof['path'])))
+    assert before == tuple(p.read_bytes() for p in (config, root/'cycle.json', root/'production/state.json'))
