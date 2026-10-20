@@ -1609,7 +1609,7 @@ def _main(argv=None, *, requested_refresh):
     admission_record = ((resume or saved_training).get('options') or {}).get('_pending_source_admission')
     prior_foundations = set((resume or {}).get('completed_foundations') or
         (carried_progress.get(args.stage_id or 'native-graph-ce') or {}).get('completed_foundations') or [])
-    saved_options = class_migration = None
+    saved_options = ce_prior_options = class_migration = None
     saved_training = resume = shared_resume = continuation_training = restored_frame = None
     source_resume = foundation_frame = old_frame = old_options = None
     old_counts = old_quotas = prior_bindings = prior_order = prior_held = None
