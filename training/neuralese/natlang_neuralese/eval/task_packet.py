@@ -71,6 +71,20 @@ def classify_case(result: dict[str, Any] | None, finish: dict[str, Any] | None) 
     """Use explicit terminal evidence; repeated action-shape counts alone are not a failure label."""
     if finish and finish.get('status') == 'repetition' and finish.get('resource_limit_reason') == 'identical_turn_limit':
         return 'repetition'
+    evidence = (finish or {}).get('model_incomplete_evidence') or {}
+    requests = evidence.get('request_sha256') or []
+    if (finish and finish.get('status') == 'model_incomplete'
+            and finish.get('resource_limit_reason') == 'consecutive_truncated_no_action'
+            and evidence.get('reason') == 'consecutive_truncated_no_action'
+            and isinstance(evidence.get('invocation_id'), str) and evidence['invocation_id']
+            and type(evidence.get('limit')) is int and evidence['limit'] > 0
+            and type(evidence.get('completed_no_action_replies')) is int
+            and evidence['completed_no_action_replies'] >= evidence['limit']
+            and isinstance(requests, list) and len(requests) == evidence['completed_no_action_replies']
+            and all(isinstance(item,str) and re.fullmatch('[0-9a-f]{64}',item) for item in requests)
+            and not (result and (result.get('outcome') or {}).get('status') == 'done'
+                     and (result.get('outcome') or {}).get('accepted') is True)):
+        return 'model_incomplete'
     if result is None:
         accounting = (finish or {}).get('output_accounting') or {}
         states = accounting.get('job_states') or []
@@ -116,7 +130,7 @@ def classify_case(result: dict[str, Any] | None, finish: dict[str, Any] | None) 
     if any(detail == "this operation was aborted" for detail in failed_invocation_details):
         return "infrastructure_error"
     if any(isinstance(detail, str) and
-           re.match(r"^model_incomplete:\s*terminated_without_result\b", detail.casefold())
+           re.match(r"^model_incomplete:\s*(terminated_without_result|truncated_without_action)\b", detail.casefold())
            for detail in incomplete_details):
         return "model_incomplete"
 

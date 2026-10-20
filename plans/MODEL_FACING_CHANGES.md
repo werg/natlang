@@ -1286,3 +1286,5 @@ measures the actual trained policy through useful rollout collection. Reference
 execution qualifies neither teacher trajectories nor student policy. Existing
 train breadth and ordinary correct-return reward remain intact; no communication
 edge is required.
+
+- 2026-10-20: prospective completed-truncated-no-action repair accounting reuses the existing cut-off retry sentence and existing explicit budgets. New terminal detail `model_incomplete: truncated_without_action` may reach a parent invocation after its declared repairs are exhausted; recovery is one executable next-step call or the actual typed return. Synthetic runtime/collector checks precede adoption; about48 executing-model cases in the next useful self-hosted teacher/student window remain empirical debt. Active19006 and frozen4655 runtimes remain unchanged.

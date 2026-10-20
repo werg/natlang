@@ -1371,6 +1371,12 @@ export class NativeToolAgent {
           (session.lam.return !== MISSING && !missing ? 'A complete typed result is already staged. Call return_result with {status: "success"} and omit value to return that exact result, or reply "done" to return it without a tool call.' :
             'Take the next step with one tool call.') :
           unrun + (missing || 'The staged result is incomplete.');
+        if (response.truncated && ++failureRepairs > (this.options.maxFailureRepairs ?? Infinity)) {
+          session.runtime.trace.emit('model_incomplete', { call_id: callId, turn: turns,
+            reason: 'truncated_without_action', evidence: 'completed_truncated_reply_without_executable_action',
+            failed_continuations: failureRepairs, repair_limit: this.options.maxFailureRepairs });
+          return 'model_incomplete: truncated_without_action (configured repair limit reached)';
+        }
         messages.push({ role: 'assistant', content: response.text ?? '', ...thought(response.reasoning) }, { role: 'user', content: feedback });
         continue;
       }

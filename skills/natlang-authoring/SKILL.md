@@ -594,3 +594,5 @@ the source has no records. Preserve reserved service bindings and return the
 declared result type after completing the original task. The fresh TRAIN
 `tool-contract-recovery` profile measures this behavior through the existing
 self-hosted teacher; it does not change ordinary runtime or compiler semantics.
+
+A completed reply cut off before any executable action consumes an explicitly configured repair budget. Recover with the existing instruction to take the next step with one tool call; return the actual typed result when ready. `model_incomplete: truncated_without_action` records exhausted repairs, separately from transport errors. Successful executed actions/results can establish progress; an emitted rejected proposal cannot. One still-pending long decode is not a failed continuation.

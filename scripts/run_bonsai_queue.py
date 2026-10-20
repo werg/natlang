@@ -450,23 +450,76 @@ class IdenticalTurnLimit(Exception):
     """The same action saw the same observation repeatedly in one invocation."""
 
 
-def identical_turn_streak(entry, limit):
-    """Find an exact no-progress suffix in a single-case durable checkpoint.
+def _completed_no_action_truncation(turn):
+    response = turn.get('response') or {}
+    raw = response.get('raw_response') or {}
+    provenance = raw.get('natlang_action_provenance') or {}
+    choices = raw.get('choices') or []
+    tokens = response.get('completion_tokens')
+    return (response.get('truncated') is True and not response.get('calls')
+            and type(tokens) is int and tokens > 0 and isinstance(choices, list) and bool(choices)
+            and choices[0].get('finish_reason') == 'length'
+            and provenance.get('sampled') is not False
+            and provenance.get('kind') != 'authored_reference_root_eval'
+            and isinstance(turn.get('request_sha256'), str) and len(turn['request_sha256']) == 64
+            and all(char in '0123456789abcdef' for char in turn['request_sha256']))
 
-    An action appearing again on another item is not a stall. Require the same
-    invocation, tool call and preceding observation for every turn in the
-    suffix; this works even though the request hash changes as history grows.
+
+def identical_turn_streak(entry, limit):
+    """Verify configured no-progress limits from authentic completed partials.
+
+    The original exact action/observation law stays intact. Completed truncated
+    replies with no executable action also consume the declared bound. Real
+    successful execution receipts reset that count; emitted proposals cannot.
+    Legacy partials prove only a contiguous same-invocation no-action suffix.
     """
     if not limit or entry.get('count', 1) != 1:
         return None
     for job in resolve_entry_jobs(entry):
         path = Path(entry['jobs']) / f"{job['key']}.partial.json"
         try:
-            turns = json.loads(path.read_text()).get('turns', [])
+            partial = json.loads(path.read_text())
+            turns = partial.get('turns', [])
         except (OSError, ValueError):
             continue
-        if len(turns) < limit:
+        if (partial.get('program_id') != job['program_id']
+                or partial.get('provenance', {}).get('program_ir_sha256') != job['digest']
+                or len(turns) < limit):
             continue
+        latest = turns[-1].get('invocation_id')
+        if latest and _completed_no_action_truncation(turns[-1]):
+            scoped = [turn for turn in turns if turn.get('invocation_id') == latest]
+            count, successful, sequence = 0, 0, None
+            requests = []
+            if all(isinstance(turn.get('execution_progress'), dict) for turn in scoped):
+                for turn in scoped:
+                    progress = turn['execution_progress']
+                    current, seq = progress.get('successful_actions'), progress.get('last_success_seq')
+                    if (progress.get('schema') != 'natlang.completed-action-progress/1'
+                            or progress.get('invocation_id') != latest or type(current) is not int
+                            or current < successful or (current == 0 and seq is not None)
+                            or (current > 0 and (type(seq) is not int or seq < 0))
+                            or (current == successful and seq != sequence)
+                            or (current > successful and sequence is not None and seq <= sequence)):
+                        raise ValueError('collector completed-action progress receipt is invalid')
+                    if current > successful:
+                        count, requests = 0, []
+                    successful, sequence = current, seq
+                    if _completed_no_action_truncation(turn):
+                        count += 1; requests.append(turn['request_sha256'])
+            else:
+                # Unknown execution outcomes cannot be relabeled successful.
+                # A contiguous all-no-call suffix itself proves no action ran.
+                for turn in reversed(turns):
+                    if turn.get('invocation_id') != latest or not _completed_no_action_truncation(turn):
+                        break
+                    count += 1; requests.append(turn['request_sha256'])
+                requests.reverse()
+            if count >= limit:
+                return {'saved_turns': len(turns), 'invocation_id': latest,
+                        'reason': 'consecutive_truncated_no_action', 'limit': limit,
+                        'completed_no_action_replies': count, 'successful_actions': successful,
+                        'request_sha256': requests}
         signatures = []
         for turn in turns[-limit:]:
             calls = (turn.get('response') or {}).get('calls')
@@ -573,7 +626,7 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
         for line in jsonl_lines(journal):
             row = json.loads(line)
             if row.get('event') == 'finish' and not row.get('batch_key'):
-                failure_streak = 0 if (row['status'] in {'complete', 'complete_with_skips', 'skipped', 'repetition'} or
+                failure_streak = 0 if (row['status'] in {'complete', 'complete_with_skips', 'skipped', 'repetition', 'model_incomplete'} or
                                        row.get('resource_limit_reason') == 'model_request_budget') else failure_streak + 1
                 next_allowed_at = row.get('next_allowed_at', 0)
     journal.parent.mkdir(parents=True, exist_ok=True)
@@ -691,6 +744,7 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
         observation = {'pending_requests': []}
         observations = []
         limit_reason = None
+        limit_evidence = None
         previous_decode = None
         teacher_proof = None
         if teacher_identity is not None:
@@ -719,7 +773,8 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
                         current = partial_metrics(entry)
                         repeated = identical_turn_streak(entry, identical_turn_limit)
                         if repeated:
-                            limit_reason = 'identical_turn_limit'
+                            limit_reason = repeated.get('reason', 'identical_turn_limit')
+                            limit_evidence = repeated
                             record({'event': 'repetition_detected', 'key': entry['key'], 'time': time.time(),
                                     'limit': identical_turn_limit, **repeated})
                             raise IdenticalTurnLimit('same action and observation repeated without progress')
@@ -776,7 +831,7 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
                     raise subprocess.TimeoutExpired(command, case_seconds)
                 status = 'complete' if code == 0 else 'incomplete'
             except (subprocess.TimeoutExpired, TimeoutError, IdenticalTurnLimit, ProviderStreamOverflow) as error:
-                status, code = ('repetition' if isinstance(error, IdenticalTurnLimit) else
+                status, code = (('model_incomplete' if limit_reason == 'consecutive_truncated_no_action' else 'repetition') if isinstance(error, IdenticalTurnLimit) else
                                 'provider_stream_overflow' if isinstance(error, ProviderStreamOverflow) else
                                 'no_observation_limit' if isinstance(error, TimeoutError) else 'timeout'), None
                 child.terminate()
@@ -814,11 +869,12 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
             status = 'incomplete_export'
         # Deterministic task limits are not upstream-provider failures; a
         # cooldown before an unrelated next item only wastes the queue slot.
-        failure_streak = 0 if (status in {'complete', 'complete_with_skips', 'skipped', 'repetition'} or
+        failure_streak = 0 if (status in {'complete', 'complete_with_skips', 'skipped', 'repetition', 'model_incomplete'} or
                                limit_reason == 'model_request_budget') else failure_streak + 1
         next_allowed_at = max(time.time() + failure_cooldown(failure_streak), retry_deadline(entry)) if failure_streak else 0
         record({'event': 'finish', 'key': entry['key'], 'status': status, 'exit_code': code,
                 'observation_policy': OBSERVATION_POLICY_VERSION,
+                **({'model_incomplete_evidence': limit_evidence} if limit_reason == 'consecutive_truncated_no_action' else {}),
                 'resource_limit_reason': limit_reason, 'stuckness': 'unknown' if limit_reason else None,
                 'provider_observation': observation,
                 'failure_streak': failure_streak, 'next_allowed_at': next_allowed_at,
@@ -864,7 +920,7 @@ if __name__ == '__main__':
     parser.add_argument('--no-observation-seconds', type=int, default=0,
                         help='optional collection silence ceiling; zero (default) disables; never diagnoses stuckness; excludes explicit retry waits')
     parser.add_argument('--identical-turn-limit', type=int, default=0,
-                        help='stop a single case after this many exact repeats of action and observation in one invocation; zero disables')
+                        help='stop after this many exact action/observation repeats or completed truncated no-action continuations in one invocation; zero disables')
     parser.add_argument('--max-batch-cases', type=int, default=5, help='explicit local queue batch ceiling; request concurrency remains separate')
     parser.add_argument('--teacher-identity', type=Path, help='verify immutable actual teacher actor and engine process identity before each case')
     parser.add_argument('--drain-file', type=Path, help='finish the active case, then stop before another case with a durable unstarted frontier')

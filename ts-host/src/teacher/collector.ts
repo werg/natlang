@@ -39,7 +39,7 @@ import type { CollectionLivenessSnapshot } from './collection-liveness.js';
 import { createTextNeuraleseEmulation, TEXT_NEURALESE_EMULATION_PROMPT,
   TEXT_NEURALESE_DIALECT, TEXT_NEURALESE_EMULATION_VERSION, TEXT_NEURALESE_PROMPT_REVISION,
   TEXT_NEURALESE_WIDTH } from '../model/text-neuralese-emulation.js';
-import { registerTrace, releaseTrace } from '../native/graph.js';
+import { registerTrace, releaseTrace, traceFor } from '../native/graph.js';
 import { NATIVE_TOOL_SCHEMA } from '../native/tool-surface.js';
 import { hostCaptures, type CaptureSource } from '../exact-capture/host-capture.js';
 import { checkItemResultBinding, type ItemResultBindingSpec } from './item-result-binding.js';
@@ -669,7 +669,16 @@ function observedTrajectoryContract(record: ProgramRecord, runId: string, run: P
     training_admission: false };
 }
 
-type PartialTurn = { request_sha256: string; response: ModelTurn; invocation_id?: string;
+export function completedActionProgress(invocationId: string | undefined) {
+  const trace = traceFor(invocationId);
+  if (!trace || !invocationId) return undefined;
+  const successful = trace.events.filter(event => event.kind === 'action' && event.call_id === invocationId &&
+    (event.outcome === 'ok' || event.outcome === 'completed'));
+  return { schema: 'natlang.completed-action-progress/1' as const, invocation_id: invocationId,
+    successful_actions: successful.length, last_success_seq: successful.at(-1)?.seq ?? null };
+}
+
+type PartialTurn = { execution_progress?: ReturnType<typeof completedActionProgress>; request_sha256: string; response: ModelTurn; invocation_id?: string;
   requested_at?: string; observed_at?: string;
   last_tool_observation?: { content_preview: string; content_sha256: string; truncated: boolean } };
 type CollectorRequestStart = { attempt_id: string; case_sequence: number; request_ordinal: number;
@@ -1286,7 +1295,9 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
           const observation = last?.role === 'tool' && typeof last.content === 'string' ? {
             content_preview: last.content.slice(0, 2000), content_sha256: sha256(last.content),
             truncated: last.content.length > 2000 } : undefined;
+          const executionProgress = completedActionProgress(request.invocation_id);
           partial.turns.push({ request_sha256: requestSha256, response: structuredClone(turn),
+            ...(executionProgress ? { execution_progress: executionProgress } : {}),
             ...(request.invocation_id ? { invocation_id: request.invocation_id } : {}),
             requested_at: requestedAt, observed_at: new Date().toISOString(),
             ...(observation ? { last_tool_observation: observation } : {}) });
