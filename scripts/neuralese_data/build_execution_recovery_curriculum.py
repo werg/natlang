@@ -21,11 +21,62 @@ from scripts.neuralese_data.decision_holds import load_decision_holds
 
 REVISION = 'authored-short-execution-recovery-20261019/1'
 GRAPH_REVISION = 'authored-private-state-execution-recovery-20261019/1'
+TERMINATION_REVISION = 'authored-verify-return-execution-recovery-20261020/1'
 TYPES = ('export type Row = { id:string; category:string; value:number; active:boolean; '
          'blocked:boolean; waiver:boolean };\n'
          'export type Policy = { category:string; minimum:number };\n'
          'export type Summary = { ids:string[]; total:number; count:number };\n')
 VARIANTS = ('page-range-recovery', 'reserved-service-binding', 'typed-result-recovery')
+
+
+def termination_worlds(*, revision: str = TERMINATION_REVISION):
+    """Twelve independent TRAIN tasks; ordinary correct returns remain eligible."""
+    for world in range(4):
+        rng = random.Random(f'{revision}:world-{world}')
+        value = rng.randrange(21, 900)
+        group = f'{revision}:world-{world}'
+        saved = json.dumps({'value': value}, separators=(',', ':')) + '\n'
+        for variant in ('verify-existing-return', 'write-readback-return', 'typed-feedback-return'):
+            task_id = f'{group}:{variant}'
+            semantics = {'root': 'finish.nl', 'inputs': {'value': value},
+                         'expected': value, 'operation': 'exact',
+                         'folder_files': {'result.json': saved if variant == 'verify-existing-return' else '{}\n'},
+                         'expected_files': {'result.json': saved if variant != 'typed-feedback-return' else '{}\n'}}
+            if variant == 'verify-existing-return':
+                instruction = ('Read result.json and return its numeric value. The saved record already contains the requested value. '
+                               'After verifying the saved value, return that number as the completed result.')
+                code = "const saved = JSON.parse(await folder.file('result.json').readText()); return saved.value;"
+            elif variant == 'write-readback-return':
+                instruction = ('Save the supplied value in result.json as an object with one numeric value field and a final newline. '
+                               'Read the saved record back. Once its value equals the supplied value, return that number as the completed result.')
+                code = ("await folder.file('result.json').writeText(JSON.stringify({value})+'\\n'); "
+                        "const saved = JSON.parse(await folder.file('result.json').readText()); return saved.value;")
+            else:
+                instruction = ('Read the numeric fact from facts.value() and return it as a number. '
+                               'When runtime feedback describes a type contract, continue with the value of the declared type and complete the return.')
+                semantics['services'] = {'facts': f'/** Read the numeric fact. */\nexport function value():number {{return {value};}}\n'}
+                semantics['failure_seed'] = {'code': f'const result: number = {json.dumps(str(value))}; return result;'}
+                code = 'return await facts.value();'
+            semantics['files'] = {'finish.nl': '---\nargs:\n  value: number\nreturns: number\nkind: directory-reducer\n---\n' + instruction + '\n'}
+            yield {'version': 'natlang.program/2', 'id': task_id, 'kind': 'lambda_source',
+                   'family': 'curriculum_verify_return_execution_recovery',
+                   'source': 'natlang-authored-verify-return-execution-recovery', 'split': 'train',
+                   'source_ids': [task_id], 'source_groups': [group], 'source_revisions': [revision],
+                   'license': 'project-generated', 'gold_sources': ['constructed-world-oracle'],
+                   'generation': {'generator': revision, 'independent_world': group,
+                       'authorship': 'fresh constructed TRAIN facts; no held input, answer, or trace used',
+                       'provider_calls': 0, 'teacher_trajectory': False},
+                   'curriculum': {'version': 'natlang.inline_curriculum/1', 'family': 'verify_return_execution_recovery',
+                       'family_version': 1, 'shape': 'one-number-one-file', 'variant': variant,
+                       'pair_group': None, 'split_group': group, 'slice': 'verify_return',
+                       'domain': 'other', 'mode': 'single_call', 'inline': 'optional',
+                       'evidence': {'world': ['fresh numeric record'], 'retrieved': [], 'background': []},
+                       'assumptions': [], 'decisive': [], 'plausible_actions': [],
+                       'minimum_sequence': ['perform the requested operation', 'verify the actual typed result',
+                                            'return the completed result'],
+                       'reference': {'root': [['eval', {'code': code}],
+                           ['return_result', {'status': 'success', 'value': value}]], 'children': []}},
+                   'semantics': semantics}
 
 
 def short_worlds(*, revision: str = REVISION, domains=DOMAINS):
@@ -209,7 +260,7 @@ def write_packet(out: Path, name: str, rows: list[dict], *, root_mode: str, grou
     proof = folder / 'cases-proof.json'
     write_json_durable(proof, {'schema': 'natlang.strong-teacher-catalog-packet/1',
         'cases': len(rows), 'cases_binding': {'path': str(cases), 'sha256': sha256_file_hex(cases), 'bytes': cases.stat().st_size},
-        'family': 'short_execution_recovery' if root_mode == 'student' else 'private_state_execution_recovery',
+        'family': rows[0]['curriculum']['family'],
         'expected_targets_visible': False, 'source_generator': {'path': str(generator),
             'sha256': sha256_file_hex(generator), 'bytes': generator.stat().st_size},
         'source_selection': {'path': str(source_proof), 'sha256': sha256_file_hex(source_proof), 'bytes': source_proof.stat().st_size},
@@ -228,26 +279,34 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--protection', type=Path, required=True)
+    parser.add_argument('--profile', choices=('existing', 'verify-return'), default='existing')
     args = parser.parse_args()
     out = args.out.resolve()
     if out.exists() and any(out.iterdir()):
         raise FileExistsError('curriculum output must be a new immutable directory')
     out.mkdir(parents=True, exist_ok=True)
     protection = current_protection(args.protection.resolve(strict=True))
-    ordinary = list(short_worlds())
-    graphs = list(graph_rows())
-    ordinary_protection = protection_check(ordinary, protection)
-    graph_protection = protection_check(graphs, protection)
-    if len(ordinary) != 24 or len(graphs) != 3:
-        raise ValueError('curriculum cardinality changed unexpectedly')
-    packets = {
-        'ordinary': write_packet(out, 'ordinary', ordinary, root_mode='student', group=2,
-            selection_protection=ordinary_protection, generator=Path(__file__).resolve()),
-        'private-state': write_packet(out, 'private-state', graphs, root_mode='authored', group=16,
-            selection_protection=graph_protection, generator=Path(__file__).resolve()),
-    }
+    if args.profile == 'verify-return':
+        rows = list(termination_worlds())
+        if len(rows) != 12: raise ValueError('verify-return curriculum cardinality changed')
+        packets = {'verify-return': write_packet(out, 'verify-return', rows, root_mode='student', group=4,
+            selection_protection=protection_check(rows, protection), generator=Path(__file__).resolve())}
+    else:
+        ordinary = list(short_worlds())
+        graphs = list(graph_rows())
+        ordinary_protection = protection_check(ordinary, protection)
+        graph_protection = protection_check(graphs, protection)
+        if len(ordinary) != 24 or len(graphs) != 3:
+            raise ValueError('curriculum cardinality changed unexpectedly')
+        packets = {
+            'ordinary': write_packet(out, 'ordinary', ordinary, root_mode='student', group=2,
+                selection_protection=ordinary_protection, generator=Path(__file__).resolve()),
+            'private-state': write_packet(out, 'private-state', graphs, root_mode='authored', group=16,
+                selection_protection=graph_protection, generator=Path(__file__).resolve()),
+        }
     receipt = {'schema': 'natlang.lfm-execution-recovery-curriculum/1',
-        'revision': REVISION, 'graph_revision': GRAPH_REVISION, 'packets': packets,
+        'revision': TERMINATION_REVISION if args.profile == 'verify-return' else REVISION,
+        'graph_revision': GRAPH_REVISION, 'packets': packets,
         'teacher_responses_generated': 0, 'model_calls': 0, 'training_admission': False,
         'held_content_used': False, 'current_protection': protection['proof']}
     write_json_durable(out / 'prepared.json', receipt)

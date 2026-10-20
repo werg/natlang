@@ -19,3 +19,31 @@ The communication track uses the existing authored-root trajectory contract and 
 ## Validation and release boundary
 
 Tests must verify deterministic distinct IDs, all-train rows, current held/quality/pending exclusion, short page coverage, exact oracle equality, seeded failure recovery requirements, and graph contracts with producer/consumer edges. Run the existing exact authored-reference qualification on the generated packet before handing off. Teacher execution, teacher acceptance, training admission and actual student exposure remain separate milestones.
+
+## Short verify-and-return lane (2026-10-20 decomposition)
+
+`finishVerifiedWork(input, folder) -> number` is the additional typed natural-language
+function. Four independently seeded TRAIN worlds each offer three tasks: read an
+already correct numeric record and return it; write the supplied value, read it
+back, and return it; recover from seeded typed-result feedback and return the
+actual numeric service fact. These require no child or communication edge. Correct
+task execution is sufficient, and any actual graph still uses whole-episode RL.
+
+The existing builder constructs exact facts and references, the existing reference
+executor checks them, and the existing self-hosted Qwen queue supplies all sampled
+teacher responses. JSON/oracle/protection verification stays crisp. This adds no
+new reward, termination heuristic, queue, trainer, or runtime instruction. Select
+this source profile explicitly; existing 24-task and private-state packets retain
+their identities. Twelve source tasks with four independent samples provide the
+48-execution live measurement window. New model-facing task text is candidate
+debt until the exact source/mode/runtime measurement and teacher admission; source
+construction and reference success do not qualify training or student lift.
+
+The final 12-task source passed the existing actual reference executor on
+2026-10-20 (12/12 accepted, zero model calls); the typed-feedback cases use an
+actual compiler-rejected assignment before successful recovery. A bare string
+return was rejected during preparation because it did not provide that recovery
+contract. Current candidate and reference custody live under
+`/home/werg/data/dgxops/verify-return-curriculum-candidate-v3-20261020/verify-return/`.
+The 48 live student executions and subsequent strong-teacher collection remain
+pending; no source or trajectory from this profile is admitted by this change.

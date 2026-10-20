@@ -1272,3 +1272,14 @@ the corrected interpretation and per-artifact evidence are in
 The sampler's generated raw summary does not count state writes returned through
 tool results, so its `native_state_parts`, `pinned_state_count`, and raw
 `decoder_differences` fields are not used as evidence.
+
+Candidate debt, 2026-10-20: the independently authored `verify-return` source
+profile in `scripts/neuralese_data/build_execution_recovery_curriculum.py` adds
+12 TRAIN tasks: verify an existing result and return, write/read back and return,
+and recover a typed return after actual seeded feedback. No held task input,
+answer or trajectory was used. The task text is not adopted: execute four live
+samples of every exact task (48 total) in whole-student-root mode under the bound
+runtime before source adoption, then collect verified teacher trajectories only
+from the existing self-hosted strong Qwen sandbox. Reference execution is not
+that measurement or teacher generation. Existing train breadth and ordinary
+correct-return reward remain intact; no communication edge is required.
