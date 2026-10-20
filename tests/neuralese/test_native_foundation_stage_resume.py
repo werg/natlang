@@ -153,8 +153,12 @@ def test_inherited_foundation_requalifies_after_completed_new_source_boundary(tm
 
     task_calls=[]
     class FakeTaskEval:
-        def __init__(self,spec,out,engine,*,prompt_rendering): self.engine=engine
+        def __init__(self,spec,out,engine,*,prompt_rendering,stop_requested):
+            self.engine=engine
+            self.stop_requested=stop_requested
+            assert callable(stop_requested)
         def cadence(self,step,*,final):
+            assert self.stop_requested() is False
             task_calls.append((step,final))
             return {'run':'fixture','step':step,'eligible':True,'passed':True,
                     'task_successes':0,'outcome_counts':{'invalid_action':1}}
