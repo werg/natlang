@@ -21,7 +21,7 @@ def test_scheduling_artifact_identity_validates_optional_bytes(tmp_path,bad_byte
         adapt._artifact_binding({**complete,'bytes':bad_bytes})
 
 
-def fixture(tmp_path,quantum=2,recipe_with_bytes=False,opaque_inputs=False):
+def fixture(tmp_path,quantum=2,recipe_with_bytes=False,opaque_inputs=False,resident_append=False):
     root=tmp_path/'rounds'/'lfm';root.mkdir(parents=True);train=tmp_path/'train.jsonl';held=tmp_path/'held.jsonl'
     train.write_text(json.dumps(graph('old'))+'\n');h=graph('held');h['split']='test';held.write_text(json.dumps(h)+'\n')
     recipe={'schema':'natlang.neuralese-training-recipe/1','id':'lineage','identity_qualification':'native_state_runtime_qualified',
@@ -46,17 +46,47 @@ def fixture(tmp_path,quantum=2,recipe_with_bytes=False,opaque_inputs=False):
         body=json.loads(objective.read_text());body['teacher_receipt']=adapt.binding(teacher);write(objective,body)
         recipe['input_bindings']['objective']=adapt.binding(objective)
     recipe_path=tmp_path/'recipe.json';write(recipe_path,recipe);rb=native_recipe_binding(recipe_path,'e'*64)
+    declared_rb=rb;active_recipe=recipe_path;resident_cursor=None
+    if resident_append:
+        from natlang_neuralese.data import native_sources
+        from natlang_neuralese.train import native_resident as resident
+        from natlang_neuralese.rl.native_raw_handoff import _recipe_plan
+        package=Path(native_sources.__file__).parents[1]
+        directory=tmp_path/'resident-entry/resident-data';directory.mkdir(parents=True)
+        installed=_recipe_plan(recipe_path,'cuda');installed.update(
+            code=resident.code_inventory(package),recipe_sha256=rb['lineage_sha256'])
+        write(directory.parent/'recipe-plan.json',installed)
+        train_source=native_sources.NativeGraphSource(train,'tokenizer-sha',required_split='train')
+        held_source=native_sources.NativeGraphSource(held,'tokenizer-sha',required_split='test')
+        evidence=tmp_path/'geometry-evidence.json';write(evidence,{'passed':True,'scope':'tiny CPU fixture'})
+        capacity=tmp_path/'capacity.json';write(capacity,{
+            'schema':'natlang.native-resident-geometry-qualification/1','passed':True,
+            'identity':None,'runtime_code_sha256':resident.digest(installed['code']),
+            'limits':{'forward_tokens':1000000,'kv_slots':1000000},'evidence':resident.binding(evidence)})
+        manager=resident.ResidentAdoption(directory,stage_id='full',recipe_binding=rb,
+            train=train_source,held=held_source,package=package,geometry_qualification=capacity)
+        appended=tmp_path/'appended.jsonl';appended.write_text(train.read_text()+json.dumps(graph('new'))+'\n')
+        successor=copy.deepcopy(recipe);successor['input_bindings']['appended']=adapt.binding(appended)
+        successor['stages'][1]['inputs'].update(native_graphs='appended',continued_native_graphs='train')
+        active_recipe=tmp_path/'adopted-recipe.json';write(active_recipe,successor)
+        resident.prepare(directory,active_recipe,'full',tokenizer_fingerprint='tokenizer-sha',
+            role_ids=(),runtime_package=package)
+        assert manager.poll(2)is not None
+        state=resident.current(directory);rb=state['payload']['recipe']
+        snapshot=tmp_path/'accounted-resident/current.json';snapshot.parent.mkdir();write(snapshot,state)
+        resident_cursor=adapt.binding(snapshot)
     parent=tmp_path/'parent.pt';parent.write_bytes(b'actual protocol parent')
     bootstrap=tmp_path/'historical-bootstrap.json';write(bootstrap,{'retained':'original bootstrap provenance'})
     config={'native_state':True,'native_actor_mode':'raw-state','out':str(root/'production'),
-        'supervised_stage_quantum_updates':{'dpo':quantum,'full':1000},'checkpoint':str(parent),'production_recipe':str(recipe_path),'production_stage':'full',
+        'supervised_stage_quantum_updates':{'dpo':quantum,'full':1000},'checkpoint':str(parent),'production_recipe':str(active_recipe),'production_stage':'full',
         'raw_model_id':'fixture:'+('a'*64),'recipe_lineage_sha256':'e'*64,
         'bootstrap_binding':{'handoff':adapt.binding(bootstrap)},
         'seed_command':['python','-m','natlang_neuralese.train.native_state_sft','{seed_trainer_args}'],
         'trainer_parameters':{'recipe_binding':rb},'seed_trainer_parameters':{'recipe_binding':rb}}
     config_path=root/'config.json';write(config_path,config)
     (root/'production').mkdir();write(root/'production/state.json',{'phase':'collect','checkpoint':str(parent),'round':2,'trained_rounds':2})
-    write(root/'cycle.json',{'phase':'sft','cycle':3,'next_stage':0,'current_checkpoint':adapt.binding(parent)})
+    write(root/'cycle.json',{'phase':'sft','cycle':3,'next_stage':0,'current_checkpoint':adapt.binding(parent),
+        **({'resident_current':resident_cursor}if resident_cursor else{})})
     job=root/'cycles/000003/supervised/000';job.mkdir(parents=True)
     continuation={**config,'mandatory_sft_only':True,'production_stage':'dpo','out':str(job),
         'trainer_parameters':{'stage_id':'dpo','refresh_after_updates':quantum}};write(job/'config.json',continuation)
@@ -82,11 +112,41 @@ def fixture(tmp_path,quantum=2,recipe_with_bytes=False,opaque_inputs=False):
         'request_sha256':bridge.binding(request)['sha256'],'status':'completed','state':bridge.binding(job/'state.json'),
         'checkpoint':cp,'artifacts':bridge.inventory(job,exclude=[result])})
     plan=tmp_path/'global.json';write(plan,{'models':[{'model':'lfm','production_recipe':(bridge.binding(recipe_path)if recipe_with_bytes else adapt.binding(recipe_path)),
-        'handoff_requirement':{'model_id':config['raw_model_id'],'recipe_sha256':rb['sha256'],
-            'recipe_lineage_sha256':rb['lineage_sha256'],'stage_ids':['full']}}]})
+        'handoff_requirement':{'model_id':config['raw_model_id'],'recipe_sha256':declared_rb['sha256'],
+            'recipe_lineage_sha256':declared_rb['lineage_sha256'],'stage_ids':['full']}}]})
     config['runtime_binding']={'plan_sha256':adapt.binding(plan)['sha256'],'handoff':config['bootstrap_binding']['handoff']};config['supervised_stage_quantum_control']={'plan':adapt.binding(plan),'updates':config['supervised_stage_quantum_updates']};write(config_path,config)
     controller={'pid':99999999,'start_ticks':'0','boot_id':'gone'}
     return root,config_path,request,result,controller,plan,recipe_path
+
+
+@pytest.mark.parametrize('missing_witness',[False,True])
+def test_completed_adaptation_after_previously_accounted_resident_append(tmp_path,monkeypatch,missing_witness):
+    from natlang_neuralese.data import native_sources
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE',str(tmp_path/'cache'))
+    root,config,request,result,controller,plan,declared_recipe=fixture(tmp_path,resident_append=True)
+    frozen_global=plan.read_bytes();configuration=json.loads(config.read_text())
+    assert configuration['production_recipe']!=str(declared_recipe)
+    if missing_witness:
+        cursor=json.loads((root/'cycle.json').read_text());cursor.pop('resident_current');write(root/'cycle.json',cursor)
+    consumed,pair=adapt.consume(config,bridge.binding(request),bridge.binding(result),
+        tmp_path/'consumed.json',controller=controller)
+    before=tuple(p.read_bytes()for p in(config,root/'cycle.json',root/'production/state.json'))
+    checkpoint=bridge.binding(pair[0]['path']);moments=copy.deepcopy(pair[1]['training']['optimizer'])
+    package=Path(native_sources.__file__).parents[1]
+    def prepare():
+        return adapt.prepare(config,plan,'lfm',adapt.binding(configuration['production_recipe']),
+            adapt.binding(tmp_path/'consumed.json'),pair,tmp_path/'adaptation/proof.json',package=package)
+    if missing_witness:
+        with pytest.raises(ValueError,match='without accounted resident history'):prepare()
+    else:
+        proof=prepare();value=adapt.verify(proof)
+        assert value['global_step']==4 and value['new_sources_earned_visits']==0
+        assert value['old_global_plan']['sha256']==adapt.binding(plan)['sha256']
+        assert value['started_stage_ids']==['dpo','full']
+    assert before==tuple(p.read_bytes()for p in(config,root/'cycle.json',root/'production/state.json'))
+    assert checkpoint==bridge.binding(pair[0]['path'])and plan.read_bytes()==frozen_global
+    from natlang_neuralese.train.checkpoint_offload import _same_values
+    _same_values(moments,pair[1]['training']['optimizer'])
 
 
 @pytest.mark.parametrize('recipe_with_bytes',[False,True])
@@ -482,6 +542,25 @@ def test_release_follows_real_fresh_resident_append_after_completed_adaptation(t
     bad_ready=tmp_path/'bad-readiness.json';write(bad_ready,{'resident_adoption':{'generation':'forged','history':state['history']}})
     with pytest.raises(ValueError,match='readiness omitted'):
         raw._release_requirement(declaration,{**actual,'readiness':adapt.binding(bad_ready)})
+    # A later completed operation still belongs to the frozen declaration;
+    # its exact admitted recipe is authenticated by the accounted cursor.
+    current_config=json.loads(config.read_text());cursor=json.loads((root/'cycle.json').read_text())
+    adapt._verify_controller_recipe(declaration,current_config,cursor,value['lineage'])
+    with pytest.raises(ValueError,match='without accounted resident history'):
+        adapt._verify_controller_recipe(declaration,current_config,{},value['lineage'])
+    with pytest.raises(ValueError,match='accounted resident recipe'):
+        adapt._verify_controller_recipe(declaration,current_config,cursor,'f'*64)
+    alias=tmp_path/'same-bytes-unaccounted-recipe.json'
+    alias.write_bytes(Path(current_config['production_recipe']).read_bytes())
+    with pytest.raises(ValueError,match='accounted resident recipe'):
+        adapt._verify_controller_recipe(declaration,{**current_config,'production_recipe':str(alias)},cursor,value['lineage'])
+    corrupted=copy.deepcopy(state);corrupted['history'][0]['recipe']=corrupted['history'][-1]['recipe']
+    wrong=tmp_path/'broken-accounted-history/current.json';wrong.parent.mkdir();write(wrong,corrupted)
+    with pytest.raises(ValueError):
+        adapt._verify_controller_recipe(declaration,current_config,{'resident_current':adapt.binding(wrong)},value['lineage'])
+    unrelated=copy.deepcopy(declaration);unrelated['production_recipe']=adapt.binding(alias)
+    with pytest.raises(ValueError):
+        adapt._verify_controller_recipe(unrelated,current_config,cursor,value['lineage'])
 
 
 @pytest.mark.parametrize('bad_target',['unrelated','raw-future-plan','missing-after-adoption'])

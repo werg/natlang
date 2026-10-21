@@ -599,6 +599,32 @@ def _prepare(config_path,plan_path,role,recipe_reference,consumption,verified_ch
     write_json_durable(out,value);verify(binding(out));return binding(out)
 
 
+def _verify_controller_recipe(declaration, config, cursor, lineage):
+    """Authenticate an already-accounted append against its frozen controller."""
+    actual = binding(config['production_recipe'])
+    if _artifact_binding(declaration['production_recipe']) == actual:
+        return
+    reference = cursor.get('resident_current')
+    if reference is None:
+        raise ValueError('completed adaptation changed recipe without accounted resident history')
+    from .native_raw_rounds import _release_requirement
+    from ..train.native_resident import current
+    # This also authenticates an earlier completed/runtime adaptation before
+    # replaying the committed append contracts from that declared recipe.
+    requirement = _release_requirement(declaration, {'resident_current': reference})
+    state = current(_bound(reference).parent)
+    if not state:
+        raise ValueError('completed adaptation lost its accounted resident history')
+    payload = state['payload']; recipe = payload['recipe']
+    expected = {'path': recipe['path'],
+                'sha256': recipe.get('file_sha256', recipe['sha256'])}
+    if (requirement.get('recipe_lineage_sha256') != lineage
+            or requirement.get('recipe_sha256') != recipe['sha256']
+            or payload['plan']['recipe_sha256'] != lineage
+            or _artifact_binding(expected) != actual):
+        raise ValueError('completed adaptation config differs from its accounted resident recipe')
+
+
 def verify(reference):
     """Replay policy verification over immutable controls; no historical tensor decode."""
     from ..train.recipe import lineage_handoff
@@ -688,9 +714,11 @@ def verify(reference):
     original_global=_read(value['old_global_plan'])
     declaration=next((item for item in original_global['models']if item['model']==value['role']),None)
     authority=config.get('runtime_binding',config.get('bootstrap_binding',{}))
-    if (declaration is None or _artifact_binding(declaration['production_recipe'])!=binding((_read(consumed['snapshots']['config'])if consumed.get('publication')else config)['production_recipe'])
+    if (declaration is None
             or authority.get('plan_sha256')!=value['old_global_plan']['sha256']):
         raise ValueError('completed adaptation old plan differs from its actual controller authority')
+    operation_config=_read(consumed['snapshots']['config'])if consumed.get('publication')else config
+    _verify_controller_recipe(declaration,operation_config,old_cursor,value['lineage'])
     return value
 
 

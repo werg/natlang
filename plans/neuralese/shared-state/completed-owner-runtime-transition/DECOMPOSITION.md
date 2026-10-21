@@ -16,6 +16,11 @@ that any new source or numerical implementation is already qualified.
    thread into completed/runtime configuration. Authenticate that descriptor;
    opening the same lock again contends even within the same process. Preserve
    the actual configuration failure traceback for operational diagnosis.
+6. When an earlier publication already accounted resident data, authenticate the
+   frozen controller's recipe through the immutable consumed cursor's committed
+   append history. Replay the shared release contracts, including any prior
+   adaptation, and require the final recipe's exact path/file hash. Keep the
+   original global-plan authority; do not replace it with an invented plan.
 
 Python implements exact identities, replay equality, leases, durable writes and
 existing recipe/gradient contracts. Scheduling and cutover remain supervisor policy.
