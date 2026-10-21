@@ -2,12 +2,13 @@
 
 The owner requested an actual test of RecursiveSI/flint and replacement of Qwen
 if decent. Flint is provisionally serving continuous verified generation in the
-existing teacher sandbox. At 20:11 UTC, 42 of the 48 matched cases have finished:
-Flint has 31 successes and Qwen 37 on those same task keys. Flint has
-7 budget failures, 1 invalid action and 3 semantic mismatches. The completed sample
-does not establish improved task quality. On the 28 cases both solved, median
-Qwen/Flint elapsed time is 3.29x. These are practical observations under each
-engine's serving load, not isolated engine throughput measurements.
+existing teacher sandbox. At 21:41 UTC, 46 of the 48 matched cases have finished:
+Flint has 32 successes and Qwen 38 on those same task keys. Flint has
+9 budget failures, 2 invalid actions and 3 semantic mismatches. Its
+matched success rate is lower. On the 29 cases both solved, median
+Qwen/Flint elapsed time is 2.94x. Flint also solved 3 cases that Qwen failed.
+These are practical observations under each engine's serving load, not isolated
+engine throughput measurements.
 
 The operational reason to retain the provisional generator is faster verified
 positive collection, not a claimed quality win. Admit only successful trajectories
@@ -100,32 +101,30 @@ source/row validation and descriptor/actor tamper rejection. The normal global
 source closure and its complete bound artifact checks passed with unchanged
 source-protection implementation identities.
 
-The matched comparison is still incomplete: at the latest observed 30 finished
-cases Flint has 25 successes and Qwen 27 on the matching keys. This supersedes
-any implication that the initial 17/18 versus 15/18 establishes a final win.
-Continue useful verified generation while completing the comparison and inspect
-concrete failures before retaining or reversing the provisional selection.
-
-The independently full-tested writer-occurrence correction `3c908b4bf` is now
-integrated as `12a22fa1e`. Its physical built runtime is being staged for live
-model-facing measurement before production adoption. The prior integrated full
-check passed at 18:47:51 UTC; the final combined alias/writer full check is a
-separate running unit and is not yet claimed green. Both learners are doing
-useful work: LFM reached actual preference step24319 from24292, and Mellum
-reached27561, with exact continuation state retained.
+The larger current comparison above supersedes early partial success-rate claims.
+The writer-occurrence correction `12a22fa1e` is integrated; its physical candidate
+runtime is undergoing the required live model-facing measurement. The integrated
+full check for `09bebe8316` passed at 20:18 UTC, independently of the unfinished
+runtime measurement.
 
 ## Current integration and validation
 
 The first mixed 481-graph continuation (six Flint tranches plus Qwen batch89
-tranches0–1) was actually adopted by Mellum at step27732. This is recipe adoption,
-not proof that every newly appended graph has been visited. The corresponding
-LFM data is staged and eligible, with adoption still pending. Continuous paired
-admission is active beyond the first wave; published later tranches remain
-separate from actual learner exposure.
+tranches0–1) was actually adopted by Mellum at step27732. LFM adopted that wave
+alongside the preceding ready source additions at24663. Both learners then adopted
+the second mixed wave: Mellum added1576 graphs at28028 and LFM added1584 at24750.
+Actual active totals are1460605 TRAIN/25968 held for Mellum and1545644 TRAIN/25955
+held for LFM. These totals are source obligations, not a claim of complete exposure.
+The shared append mechanism preserves existing optimizer/RNG and per-row history.
 
-The writer-occurrence candidate runtime is now running the 48-task live measurement
-on the same Flint actor, task keys and seeds. At20:11 UTC eight candidate tasks
-had finished; no production runtime adoption or completed measurement is claimed.
+The writer-occurrence candidate runtime is running the 48-task live measurement
+on the same Flint actor, task keys and seeds. At21:43 UTC14 candidate tasks had
+finished:10 successes and4 budget failures. No production runtime adoption or
+completed measurement is claimed.
 
-The comparison snapshot used for the current selection statement is bound in
-`/home/werg/data/dgxops/flint-matched-current-selection-evidence-20261021.json`.
+The current operational selection snapshot is bound in
+`/home/werg/data/dgxops/flint-current-teacher-selection-root-20261021.json`.
+Its evidence records actual compared task keys, complementary successes and the
+serving-load limitation. Continuous generation, private export, paired conversion
+and admission remain active; registered later tranches still need actual learner
+adoption and per-row training.
