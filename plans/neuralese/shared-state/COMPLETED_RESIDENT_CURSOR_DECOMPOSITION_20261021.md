@@ -13,6 +13,12 @@ resident generation cannot become evidence that the new recipe was trained.
    recipe. All other resident cursors still undergo normal append verification.
 5. Foundation/task verifiers continue checking actual recipe/exposure. No new
    readiness, exposure or optimizer credit follows from this transport repair.
+6. At the configured student continuation, move bound readiness receipts naming
+   a different recipe into explicit cursor history. Retain their original bytes
+   and qualification-attempt history, but do not offer them as current foundation
+   candidates while withdrawing eligibility. Continue to the next useful quantum.
+   This revokes obsolete claims; it never grants readiness or clears earned data
+   exposure, optimizer state or the current checkpoint.
 
 The crisp helper is an exact artifact-identity verifier, not a training policy.
 Exercise a real resident append followed by a changed-recipe completed handoff,

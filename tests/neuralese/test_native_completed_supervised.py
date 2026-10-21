@@ -1010,3 +1010,40 @@ def test_completed_recipe_replacement_retains_only_its_exact_historical_resident
         assert answer['recipe_lineage_sha256'] == value['lineage']
         assert answer['recipe_sha256'] != json.loads(Path(original['path']).read_text())['payload']['recipe']['sha256']
         assert 'readiness' not in answer
+
+
+@pytest.mark.parametrize('changed_recipe', [False, True])
+def test_completed_continuation_retires_old_recipe_claims_without_changing_earned_state(tmp_path, changed_recipe, monkeypatch):
+    from natlang_neuralese.rl import native_raw_rounds as raw
+    from natlang_neuralese.train.recipe import recipe_identity_sha256
+    root, config_path, request, result, controller, plan, recipe = fixture(tmp_path)
+    config = json.loads(config_path.read_text())
+    # Only claim invalidation is under test. This bound historical metadata is
+    # never passed off as a qualified foundation or exposed as new training.
+    receipt = tmp_path / 'historical-claim.json'
+    write(receipt, {'recipe': {'sha256': recipe_identity_sha256(recipe)}})
+    reference = adapt.binding(receipt)
+    cursor = {'cycle': 4, 'phase': 'sft', 'next_stage': 0,
+              'foundation_candidate': reference, 'readiness': reference,
+              'foundation_qualified': True,
+              'foundation_qualification_attempt': {'request': {'sha256': 'a' * 64}, 'status': 'passed'}}
+    before_cursor = copy.deepcopy(cursor)
+    checkpoint_files = {str(p): bridge.binding(p) for p in root.rglob('*.pt')}
+    if changed_recipe:
+        definition = json.loads(recipe.read_text())
+        definition['stages'][1]['parameters']['learning_rate'] = 1e-5
+        future = tmp_path / 'future.json'; write(future, definition)
+        config['production_recipe'] = str(future)
+    monkeypatch.setattr(torch, 'load', lambda *a, **k: pytest.fail('claim invalidation cannot decode or rewrite optimizer state'))
+    assert raw._retire_recipe_readiness(config, cursor) is changed_recipe
+    if changed_recipe:
+        assert not any(k in cursor for k in ('foundation_candidate', 'readiness', 'foundation_qualified', 'foundation_qualification_attempt'))
+        assert cursor['superseded_recipe_readiness'][0]['receipts'] == {
+            'foundation_candidate': reference, 'readiness': reference}
+        assert cursor['foundation_qualification_history']['a' * 64] == before_cursor['foundation_qualification_attempt']
+        assert (cursor['cycle'], cursor['phase'], cursor['next_stage']) == (4, 'sft', 0)
+        assert raw._retire_recipe_readiness(config, cursor) is False
+    else:
+        assert cursor == before_cursor
+    assert checkpoint_files == {str(p): bridge.binding(p) for p in root.rglob('*.pt')}
+    assert adapt.binding(receipt) == reference

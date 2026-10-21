@@ -1552,6 +1552,8 @@ def student_cycle(plan_path,declaration,handoff,directory,*,stop,owned_controlle
         raise StudentConfigurationError(str(error)) from error
     cursor_path=directory/'cycle.json'
     cursor=json.loads(cursor_path.read_text()) if cursor_path.exists() else {'cycle':0,'phase':'rl','next_stage':0}
+    if _retire_recipe_readiness(config, cursor):
+        write_json_durable(cursor_path, cursor)
     bridge_marker=cursor.get('deferred_owner_handoff_bridge')
     if bridge_marker:
         runtime_reference=config.get('runtime_handoff')
@@ -1668,6 +1670,36 @@ def student_cycle(plan_path,declaration,handoff,directory,*,stop,owned_controlle
         next_stage=0,current_checkpoint=_current_checkpoint(config))
     write_json_durable(cursor_path,cursor)
     return cursor
+
+
+def _retire_recipe_readiness(config, cursor):
+    """Keep old evidence as history without offering it for a changed recipe."""
+    from ..train.recipe import recipe_identity_sha256
+    references = {key: cursor[key] for key in ('foundation_candidate', 'readiness') if cursor.get(key)}
+    if not references:
+        return False
+    current_recipe = recipe_identity_sha256(config['production_recipe'])
+    retired = {}
+    for key, reference in references.items():
+        receipt = json.loads(_bound(reference).read_text())
+        recipe = (receipt.get('recipe') or {}).get('sha256')
+        if not isinstance(recipe, str) or len(recipe) != 64:
+            raise ValueError('raw readiness receipt lacks its exact recipe identity')
+        if recipe != current_recipe:
+            retired[key] = reference
+    if not retired:
+        return False
+    cursor.setdefault('superseded_recipe_readiness', []).append({
+        'receipts': retired, 'current_recipe_sha256': current_recipe,
+        'reason': 'Historical receipts cannot certify the current production recipe',
+        'new_training_credit': 0})
+    for key in retired:
+        cursor.pop(key)
+    cursor.pop('foundation_qualified', None)
+    attempt = cursor.pop('foundation_qualification_attempt', None)
+    if attempt:
+        cursor.setdefault('foundation_qualification_history', {})[attempt['request']['sha256']] = attempt
+    return True
 
 
 def _sealed_supervised_request(jobdir,expected=None):

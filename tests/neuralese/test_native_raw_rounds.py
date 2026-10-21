@@ -45,6 +45,7 @@ def fixture(tmp_path,monkeypatch):
         # Exact output slots are reused after controller restart.
         if not checkpoint.exists():checkpoint.write_bytes(declaration['checkpoint'].encode()+b'+full-row-SFT')
         ready={'checkpoint':{'path':str(checkpoint),'sha256':sha256_file_hex(checkpoint)},
+               'recipe':declaration['trainer_parameters']['recipe_binding'],
                'foundation_ready':True,'completed':False,'communication_foundation':{'complete':True}}
         write_json_durable(checkpoint.parent/'native-training-receipt.json',ready)
         return {'pending_native_checkpoint':str(checkpoint)}
@@ -226,7 +227,7 @@ def test_real_rl_sft_rl_bridge_uses_latest_weights_and_retains_full_source_credi
         '--device',device,'--dtype',str(dtype).removeprefix('torch.'),'--rank','4','--stage-id','full','--epochs','2','--seed','1',
         '--learning-rate','1e-3','--weight-decay','0','--eval-every','1','--checkpoint-every','1','--refresh-at-checkpoint',
         '--forward-atol','1e-4','--gradient-atol','1e-5',*backend_args]
-    from natlang_neuralese.train.recipe import native_recipe_binding
+    from natlang_neuralese.train.recipe import native_recipe_binding,recipe_identity_sha256
     policy=tmp_path/'policy.json'
     write_json_durable(policy,{'schema':'natlang.neuralese-training-recipe/1','id':'saved-lineage',
         'identity_qualification':'native_state_runtime_qualified',
@@ -311,7 +312,7 @@ def test_raw_release_follows_actual_monotone_resident_source_policy_without_movi
     import copy
     from test_native_resident import setup
     from natlang_neuralese.train import native_resident as resident
-    from natlang_neuralese.train.recipe import native_recipe_binding
+    from natlang_neuralese.train.recipe import native_recipe_binding,recipe_identity_sha256
     monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE',str(tmp_path/'cache'))
     _,directory,manager,new_recipe=setup(tmp_path)
     original=manager.recipe_binding
@@ -430,6 +431,7 @@ def test_independent_students_keep_working_until_two_ready_then_drain(tmp_path,m
 
 
 def test_completed_nonfoundation_stage_does_not_qualify_foundation(tmp_path,monkeypatch):
+    from natlang_neuralese.train.recipe import native_recipe_binding,recipe_identity_sha256
     directory,config,stop,calls=fixture(tmp_path,monkeypatch)
     original=native_rounds.round_job
     def completed(*args):
@@ -439,7 +441,8 @@ def test_completed_nonfoundation_stage_does_not_qualify_foundation(tmp_path,monk
         write_json_durable(path,value);return result
     monkeypatch.setattr(native_rounds,'round_job',completed)
     cursor={};continuation={'mandatory_sft_only':True,'out':str(directory/'ordinary-job'),
-        'checkpoint':config['checkpoint'],'trainer_parameters':{'checkpoint_every':250,'refresh_at_checkpoint':True,'refresh_after_updates':250}}
+        'checkpoint':config['checkpoint'],'trainer_parameters':{'checkpoint_every':250,'refresh_at_checkpoint':True,'refresh_after_updates':250,
+            'recipe_binding':native_recipe_binding(Path(config['production_recipe']),recipe_identity_sha256(config['production_recipe']))}}
     raw._supervised_job(continuation,directory/'ordinary-job',config,cursor,stop)
     assert 'foundation_qualified' not in cursor and 'readiness' not in cursor
 
