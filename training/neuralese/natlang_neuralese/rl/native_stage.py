@@ -112,6 +112,9 @@ def main(argv=None):
     parser.add_argument('--communication-foundation', action='store_true')
     parser.add_argument('--foundation-native-graphs', type=Path)
     parser.add_argument('--foundation-communication-batches', type=int)
+    parser.add_argument('--refresh-foundation-readiness', action='store_true')
+    parser.add_argument('--foundation-readiness-policy', choices=('at-boundary', 'on-shared-request'))
+    parser.add_argument('--foundation-qualification-request', type=Path)
     parser.add_argument('--resident-data-directory', type=Path)
     parser.add_argument('--resident-geometry-qualification', type=Path)
     # Optional owner-follow metadata is a control-plane pointer. The RL stage

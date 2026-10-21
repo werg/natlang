@@ -1,6 +1,8 @@
 """Physical-layout metadata guards; no models, checkpoints or cloud resources."""
 import json
 import shutil
+import os
+import subprocess
 from pathlib import Path
 import sys
 
@@ -8,6 +10,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'scripts/coreweave'))
 from install_native_actor_layout import PACKAGE, binding, install
+from compose_native_actor_runtime import RENDERING_ASSETS, include_rendering_assets
+from verify_native_actor_runtime import verify_files
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex
 from natlang_neuralese.train.native_resident import code_inventory
 
@@ -60,6 +64,55 @@ def test_layout_rebinds_json_dependency_hashes_and_binder_parent(tmp_path):
         assert result['role_materials'][role] == binding(root/'control-material.json')
     assert result['physical_layout']['readiness_granted'] is False
     assert code_inventory(runtime/PACKAGE) == code_inventory(overlay/PACKAGE)
+
+
+def refresh_construction(root):
+    path = root/'construction.json'
+    record = json.loads(path.read_bytes())
+    record['inventory'] = code_inventory(root/PACKAGE)
+    record['code'] = canonical_json_sha256_hex(record['inventory'])
+    record['files'] = {str(p.relative_to(root)): {k: binding(p)[k] for k in ('sha256', 'bytes')}
+                       for p in root.rglob('*') if p.is_file() and p != path}
+    path.write_text(json.dumps(record))
+
+
+def test_installed_actor_computes_real_rendering_identity_without_checkout(tmp_path):
+    arguments = fixture_layout(tmp_path)
+    overlay, _, _, _, runtime, _ = arguments
+    source = Path(__file__).resolve().parents[1]
+    shutil.rmtree(overlay/PACKAGE)
+    shutil.copytree(source/PACKAGE, overlay/PACKAGE,
+                    ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
+    include_rendering_assets(source, overlay)
+    refresh_construction(overlay)
+    install(*arguments)
+    code = ('import json;from natlang_neuralese.data.rendering_contract import compute_identity;'
+            'print(json.dumps({mode:compute_identity(mode)for mode in ("full","program-header")}))')
+    result = subprocess.run([sys.executable, '-P', '-c', code], cwd=tmp_path,
+        env={**os.environ, 'PYTHONPATH': str(runtime/'training/neuralese'),
+             'NATLANG_REPO': str(runtime), 'CUDA_VISIBLE_DEVICES': ''},
+        capture_output=True, text=True, check=True)
+    identities = json.loads(result.stdout)
+    for mode, identity in identities.items():
+        assert identity['mode'] == mode
+        assert identity['fixtures_sha256'] == binding(runtime/RENDERING_ASSETS[1])['sha256']
+        assert identity['pieces_sha256'] == binding(runtime/RENDERING_ASSETS[0])['sha256']
+
+
+@pytest.mark.parametrize('asset', RENDERING_ASSETS)
+def test_actor_rejects_rendering_assets_missing_from_manifest(tmp_path, asset):
+    overlay = fixture_layout(tmp_path)[0]
+    module = overlay/PACKAGE/'data/rendering_contract.py'
+    module.parent.mkdir()
+    module.write_text('VALUE = 1\n')
+    include_rendering_assets(Path(__file__).resolve().parents[1], overlay)
+    refresh_construction(overlay)
+    path = overlay/'construction.json'
+    record = json.loads(path.read_bytes())
+    del record['files'][asset]
+    path.write_text(json.dumps(record))
+    with pytest.raises(ValueError, match='rendering asset is absent'):
+        verify_files(overlay)
 
 
 def test_layout_rejects_changed_donor_before_claiming_destination(tmp_path):

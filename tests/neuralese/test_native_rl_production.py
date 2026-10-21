@@ -170,6 +170,8 @@ def test_native_stage_real_shared_parent_update_and_exact_noop_resume(tmp_path,s
         '--learning-rate', '1e-3', '--weight-decay', '0', '--eval-every', '1',
         '--communication-foundation', '--foundation-native-graphs', str(tmp_path/'parent-only-source'),
         '--foundation-communication-batches','4',
+        '--refresh-foundation-readiness', '--foundation-readiness-policy', 'on-shared-request',
+        '--foundation-qualification-request', str(tmp_path/'parent-only-qualification.json'),
         '--resident-data-directory',str(tmp_path/'parent-only-resident'),
         '--resident-geometry-qualification',str(tmp_path/'parent-only-capacity.json'), *extra_args]
     assert main(argv) == 0
@@ -184,6 +186,9 @@ def test_native_stage_real_shared_parent_update_and_exact_noop_resume(tmp_path,s
     if not shared_parent:assert report['mandatory_sft']['complete'] is False
     assert state['training']['options']['resident_data_directory'] is None
     assert state['training']['options']['foundation_communication_batches'] is None
+    assert state['training']['options']['refresh_foundation_readiness'] is False
+    assert state['training']['options']['foundation_readiness_policy'] == 'at-boundary'
+    assert state['training']['options']['foundation_qualification_request'] is None
     assert state['training']['options']['resident_geometry_qualification'] is None
     if not shared_parent:
         from natlang_neuralese.train.native_continuation import progress_obligations, restore_sft_progress

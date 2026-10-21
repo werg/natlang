@@ -23,6 +23,8 @@ from natlang_neuralese.common.jsonio import write_bytes_durable, write_json_dura
 from natlang_neuralese.train.native_resident import code_inventory
 
 PREFIX = 'training/neuralese/natlang_neuralese/'
+RENDERING_ASSETS = tuple('training/prompt-pieces/' + name for name in (
+    'pieces.json', 'rendering-contract-fixtures.json', 'rendering-identity-equivalence.json'))
 COMMITS = ('e97599138', 'f63c8b05b', '8b4e3bf42', 'fd4b71cbf', 'cb46b28de', 'd1ef19931', '810e496c1', '5fd55d0c7')
 ALLOWED = {'model/shared_state.py', 'model/native_adapters.py', 'maple/fused_moe.py',
            'common/runtime_inventory.py', 'rl/production.py', 'rl/native_raw_rounds.py',
@@ -76,6 +78,16 @@ def bound(reference):
             or ('bytes' in reference and path.stat().st_size != reference['bytes'])):
         raise ValueError('composition source binding changed: '+str(path))
     return path
+
+
+def include_rendering_assets(source, destination):
+    """Carry the exact non-Python inputs used by the actor's rendering identity."""
+    for name in RENDERING_ASSETS:
+        path = Path(source) / name
+        raw = path.read_bytes()
+        target = Path(destination) / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        write_bytes_durable(target, raw)
 
 
 def controller_publishing_closure(raw):
@@ -280,6 +292,7 @@ def compose(base_construction, base_sha256, source, out, closures, publisher_loa
                     'old_owner_or_source_plan_relabeling_allowed':False}
                 write_json_durable(folder/'control-material.json',material)
                 materials[role]=reference(folder/'control-material.json')
+        include_rendering_assets(source, pending)
         for path in pending.rglob('*.py'):
             compile(path.read_bytes(),str(path),'exec')
         files = {str(path.relative_to(pending)): {'sha256':sha256_file_hex(path),'bytes':path.stat().st_size}

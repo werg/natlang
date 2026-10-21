@@ -12,6 +12,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'training/neuralese'))
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex,sha256_file_hex
 from natlang_neuralese.common.jsonio import write_json_durable
 from natlang_neuralese.train.native_resident import code_inventory
+from compose_native_actor_runtime import RENDERING_ASSETS
 
 
 def verify_files(root):
@@ -19,6 +20,10 @@ def verify_files(root):
     record=json.loads((root/'construction.json').read_bytes())
     if record.get('schema')!='natlang.native-actor-coordinator-composition/1':
         raise ValueError('unsupported native actor composition')
+    if (root/'training/neuralese/natlang_neuralese/data/rendering_contract.py').is_file():
+        for name in RENDERING_ASSETS:
+            if name not in record['files']:
+                raise ValueError('actor rendering asset is absent from the composition: '+name)
     for name,reference in record['files'].items():
         path=root/name
         if (Path(name).is_absolute() or '..' in Path(name).parts or path.is_symlink()
@@ -45,6 +50,8 @@ from natlang_neuralese.rl import native_role_release, native_raw_rounds, native_
 from natlang_neuralese.common.runtime_inventory import python_runtime_binding
 from natlang_neuralese.train.native_resident import code_inventory
 from scripts.coreweave import teacher_engine_guard
+from natlang_neuralese.data.rendering_contract import compute_identity
+rendering_identities={mode:compute_identity(mode)for mode in ('full','program-header')}
 assert pathlib.Path(teacher_engine_guard.__file__).resolve()==root/'scripts/coreweave/teacher_engine_guard.py'
 assert 'session_only' in inspect.signature(teacher_engine_guard.cleanup_session).parameters
 assert (root/'scripts/run_bonsai_queue.py').is_file()
@@ -79,6 +86,7 @@ if record.get('role_materials'):
         review['binder']['sha256']='0'*64
         assert not eval(expression,scope)
 print(json.dumps({'role':role,'load':evidence,'active_raw_rounds_source':str(source),
+ 'rendering_identities':rendering_identities,
  'python_runtime':python_runtime_binding(),'source_keyword_verified':True,
  'checkpoint_decodes':0,'model_allocations':0,'readiness_granted':False}))
 '''
