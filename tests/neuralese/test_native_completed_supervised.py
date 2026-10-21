@@ -976,3 +976,37 @@ def test_early_refresh_accepts_actual_stop_signal_records_without_rewriting_rece
     assert adapt._qualified_refresh_updates({'supervised_quantum_updates':1000},
         {'id':'full'},receipt,{'trainer_parameters':{'refresh_after_updates':1000}})==611
     assert receipt==original
+
+
+@pytest.mark.parametrize('changed_cursor', [False, True])
+def test_completed_recipe_replacement_retains_only_its_exact_historical_resident_cursor(tmp_path, monkeypatch, changed_cursor):
+    from natlang_neuralese.data import native_sources
+    from natlang_neuralese.rl import native_raw_rounds as raw
+    from natlang_neuralese.train.recipe import recipe_identity_sha256
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE', str(tmp_path / 'cache'))
+    root, config, request, result, controller, plan, _ = fixture(tmp_path, resident_append=True)
+    _, pair = adapt.consume(config, bridge.binding(request), bridge.binding(result),
+        tmp_path / 'consumed.json', controller=controller)
+    before = json.loads((root / 'cycle.json').read_text())['resident_current']
+    definition = json.loads(Path(json.loads(config.read_text())['production_recipe']).read_text())
+    definition['stages'][1]['parameters']['learning_rate'] = 1e-5
+    future = tmp_path / 'changed-recipe.json'; write(future, definition)
+    proof = adapt.prepare(config, plan, 'lfm', adapt.binding(future),
+        adapt.binding(tmp_path / 'consumed.json'), pair, tmp_path / 'adaptation/proof.json',
+        package=Path(native_sources.__file__).parents[1])
+    declaration, value = release_declaration(proof)
+    original = before
+    if changed_cursor:
+        alias = tmp_path / 'unaccounted-resident.json'
+        alias.write_bytes(Path(before['path']).read_bytes())
+        before = adapt.binding(alias)
+    monkeypatch.setattr(torch, 'load', lambda *a, **k: pytest.fail('release must not decode tensors'))
+    if changed_cursor:
+        with pytest.raises(ValueError, match='raw release'):
+            raw._release_requirement(declaration, {'resident_current': before})
+    else:
+        answer = raw._release_requirement(declaration, {'resident_current': before})
+        assert answer['recipe_sha256'] == recipe_identity_sha256(future)
+        assert answer['recipe_lineage_sha256'] == value['lineage']
+        assert answer['recipe_sha256'] != json.loads(Path(original['path']).read_text())['payload']['recipe']['sha256']
+        assert 'readiness' not in answer

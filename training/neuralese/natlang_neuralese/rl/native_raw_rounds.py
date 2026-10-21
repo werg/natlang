@@ -1795,7 +1795,7 @@ def _release_requirement(declaration,value,*,verified_handoff=None):
     """Recheck the existing resident append contract, preserving fixed foundation."""
     requirement={**declaration['handoff_requirement'],'trainer_exit':None,'trainer_launch':None,'resident_adoption':None}
     transition_ref=declaration.get('drained_recipe_handoff')
-    transition_handoff=None;retired_cursor=None;transition=None
+    transition_handoff=None;retired_cursor=None;transition=None;completed_cursor=None
     if declaration.get('runtime_handoff'):
         from .native_runtime_handoff import verify_runtime_handoff
         runtime=json.loads(_bound(declaration['runtime_handoff']).read_text())
@@ -1823,10 +1823,20 @@ def _release_requirement(declaration,value,*,verified_handoff=None):
             raise ValueError('raw release completed adaptation changed its preserved recipe lineage')
         requirement['recipe_sha256']=recipe_identity_sha256(_bound(adapted['recipe']))
         requirement['recipe_lineage_sha256']=adapted['lineage']
+        consumed=json.loads(_bound(adapted['consumption']).read_text())
+        published_cursor=(consumed.get('candidates')or{}).get('cursor')or consumed.get('candidate_cursor')
+        if published_cursor is not None:
+            completed_cursor=json.loads(_bound(published_cursor).read_text()).get('resident_current')
+        else:
+            completed_cursor=json.loads(_bound(consumed['snapshots']['cursor']).read_text()).get('resident_current')
     reference=value.get('resident_current')
     # A later handoff explicitly retired this exact historical generation.
     # Keep the cursor receipt, but never reinterpret it as the new live plan.
     if transition_handoff is not None and reference==retired_cursor:return requirement
+    # Completed adaptation installs its new resident namespace separately. Its
+    # authenticated publication can still carry the preceding generation for
+    # accounting; never replay that old cursor as exposure to the new recipe.
+    if completed_cursor is not None and reference==completed_cursor:return requirement
     from .native_supervised_boundary import release_requirement
     requirement=release_requirement(requirement,value)
     return _resident_release_requirement(requirement,value,transition=transition)
