@@ -1,6 +1,20 @@
 # Refill useful teacher capacity while preserving live tails
 
 Named natural-language scheduling stage: **refill within the owned worker envelope**.
+Initial-packet refinement (2026-10-22): the declared anchor is real owned work
+even though it was selected before the ordered sequence started. Authenticate
+its original configuration, live primary phase and sealed source into a distinct
+anchor receipt. Count its unfinished keys with the same capacity rule and reserve
+the first qualified sequence packet without replacing the anchor configuration.
+Only its actual guardian boundary can close the anchor; that closure, separate
+from completed sequence ordinals, authorizes serial adoption of the reservation.
+The receipt/closure helpers are crisp custody and durability mechanisms. They
+grant neither source qualification, task completion nor training admission.
+For a fresh teacher epoch, authenticate an inherited priority policy's original
+catalog against the declared ready prefix and record that catalog observation.
+It is not previously served work. Keep anchor closure in publisher history so a
+slow or restarted publisher can recover the last original outcomes after later
+packets have also closed.
 Operational refinement (2026-10-18): when an explicit worker envelope is present,
 completed work plus enough remaining worker capacity triggers refill; do not also
 require the legacy six-active-job low-water mark. At 11:00–11:01 UTC the teacher

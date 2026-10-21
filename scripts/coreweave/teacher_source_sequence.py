@@ -262,7 +262,123 @@ def _reconcile_publication(pending, declaration):
         raise ValueError('sequence source configuration publication failed')
 
 
+def _predecessor_closed(sequence, declaration, batch):
+    if batch == declaration['anchor']['batch']:
+        return sequence.get('anchor_closed')
+    return sequence.get('closed', {}).get(str(batch))
+
+
+def observe_anchor_source(folder, state, config):
+    """Authenticate the original live packet without inventing a sequence ordinal.
+
+    Its sentinel ordinal is internal chain arithmetic only; the anchor is never
+    inserted into the ready manifest or counted as a completed sequence packet.
+    """
+    declaration = config.get('source_sequence')
+    if not declaration or config.get('primary_worker_capacity') is None:
+        return
+    anchor = declaration['anchor']; batch = anchor['batch']
+    sequence = state.get('source_sequence') or {}
+    existing = sequence.get('anchor')
+    if existing is None:
+        phase = (state.get('primary_phases') or {}).get(str(batch))
+        if state.get('active_batch') != batch or not alive(state.get('owner')) or phase is None:
+            return
+        if phase.get('batch') != batch or phase.get('owner') != state['owner']:
+            raise ValueError('sequence anchor lacks its exact live primary phase')
+        _read(phase['guardian_config'], declaration)
+        _read(phase['feeder'], declaration)
+        current_config = _json(state['config_snapshot'], declaration)
+        if (current_config.get('source_sequence') != declaration
+                or current_config.get('root') != config['root']):
+            raise ValueError('sequence anchor declaration differs from its guardian configuration')
+        home = Path(config['root'])/'evidence-collections-v2'/f'batch-{batch:04d}'
+        names = ('source-cases.jsonl', 'queue.jsonl', 'teacher-source.json')
+        if not all((home/name).is_file() for name in names):
+            return
+        sealed = {name: binding(home/name) for name in names}
+        source = json.loads((home/'teacher-source.json').read_bytes())
+        initial_raw = _read(declaration['initial_configuration'], declaration)[1]
+        initial = json.loads(initial_raw)
+        if (sealed['source-cases.jsonl']['sha256'] != anchor['cases_sha256']
+                or source.get('batch') != batch
+                or source.get('source_cases_sha256') != anchor['cases_sha256']
+                or source.get('source_provenance') != initial
+                or initial.get('cases_sha256') != anchor['cases_sha256']
+                or source.get('actual_task_runtime') != phase.get('task_runtime')
+                or type(source.get('concurrency')) is not int or source['concurrency'] < 1):
+            raise ValueError('sequence anchor differs from its original sealed configuration')
+        if 'collection_sampling' in initial:
+            verify_collection_sampling(source, _jsonl_entries(home/'queue.jsonl'), initial)
+        snapshot = Path(folder)/'source-sequence/config-history'/(hashlib.sha256(initial_raw).hexdigest()+'.json')
+        _immutable(snapshot, initial_raw)
+        intent = Path(folder)/'source-sequence/anchor-intent.json'
+        _immutable(intent, {'schema': 'natlang.teacher-sequence-anchor/1',
+            'batch': batch, 'ordinal': -1, 'anchor': anchor,
+            'new_configuration': binding(snapshot), 'primary_phase': phase})
+        started = Path(folder)/'source-sequence/started'/f'batch-{batch:04d}.json'
+        _immutable(started, {'batch': batch, 'ordinal': -1, 'sealed': sealed,
+            'selection_intent': binding(intent),
+            'claim': 'original sealed anchor only; no completion, qualification or admission'})
+        sequence = state.setdefault('source_sequence', {'next_ordinal': 0})
+        priority = declaration.get('priority_packets')
+        if priority and not sequence.get('observed_entries'):
+            manifest_raw = Path(declaration['ready_manifest']).read_bytes()
+            manifest = json.loads(manifest_raw)
+            if (manifest.get('schema') != 'natlang.strong-teacher-ready-packet-sequence/1'
+                    or manifest['candidate_inventory'] != declaration['candidate_inventory']):
+                raise ValueError('anchor initial source catalog differs from its declaration')
+            proof, _ = _priority_policy(priority, declaration, manifest['entries'])
+            original = _json(proof['original_ready'], declaration)['entries']
+            catalog = Path(folder)/'source-sequence/initial-priority-catalog.json'
+            _immutable(catalog, {'primary_phase': phase, 'priority_policy': priority,
+                'original_ready': proof['original_ready'],
+                'ready_manifest_sha256': hashlib.sha256(manifest_raw).hexdigest(),
+                'claim': 'observe inherited catalog only; no packets served, closed or admitted'})
+            sequence['initial_priority_catalog'] = binding(catalog)
+            sequence['observed_entries'] = original
+        sequence['anchor'] = {'batch': batch, 'ordinal': -1,
+            'intent': binding(intent), 'cases_sha256': anchor['cases_sha256']}
+        sequence.setdefault('started', {})[str(batch)] = binding(started)
+        sequence.setdefault('configuration', declaration['initial_configuration'])
+        write(Path(folder)/'state.json', state)
+        existing = sequence['anchor']
+    intent = _json(existing['intent'], declaration)
+    if (intent.get('schema') != 'natlang.teacher-sequence-anchor/1'
+            or intent.get('anchor') != anchor or existing.get('batch') != batch
+            or existing.get('ordinal') != -1 or intent.get('batch') != batch
+            or intent.get('ordinal') != -1 or existing.get('cases_sha256') != anchor['cases_sha256']):
+        raise ValueError('original sequence anchor custody changed')
+    if (state.get('active_batch') == batch
+            and state.get('owner') != intent['primary_phase']['owner']):
+        raise ValueError('sequence anchor changed its pinned primary owner')
+    if alive(intent['primary_phase']['owner']):
+        return
+    boundary = state.get('last_boundary')
+    if boundary is None or _json(boundary, declaration).get('batch') != batch:
+        return
+    if Path(boundary['path']).resolve() != (Path(folder)/'boundaries'/f'batch-{batch:04d}.json').resolve():
+        raise ValueError('sequence anchor closure lacks its canonical guardian boundary')
+    terminal = _json(boundary, declaration)
+    closure = _drained_boundary(folder, state, config, batch, terminal)
+    started_ref = sequence['started'][str(batch)]
+    started = _json(started_ref, declaration)
+    home = Path(config['root'])/'evidence-collections-v2'/f'batch-{batch:04d}'
+    if (started['selection_intent'] != existing['intent']
+            or started['sealed'] != {name: binding(home/name) for name in started['sealed']}
+            or any(terminal['bindings'].get(name) != started['sealed'][name]
+                   for name in ('queue.jsonl', 'teacher-source.json'))):
+        raise ValueError('anchor boundary differs from its original sealed source')
+    receipt = Path(folder)/'source-sequence/anchor-closed.json'
+    _immutable(receipt, {'batch': batch, 'started': started_ref, 'boundary': boundary,
+        **({'drained_with_repair_debt': closure} if closure else {}),
+        'claim': 'actual anchor boundary only; no completed sequence ordinal'})
+    sequence['anchor_closed'] = binding(receipt)
+    write(Path(folder)/'state.json', state)
+
+
 def observe_source_sequence(folder, state, config):
+    observe_anchor_source(folder, state, config)
     declaration=config.get('source_sequence');sequence=state.get('source_sequence')or{}
     pending=sequence.get('pending')
     if not declaration or not pending:return
@@ -288,7 +404,7 @@ def observe_source_sequence(folder, state, config):
         raise ValueError('sequence started batch artifacts changed')
     intent=_json(pending['intent'],declaration)
     if intent.get('prefetch')is not None:
-        previous=sequence.get('closed',{}).get(str(batch-1))
+        previous=_predecessor_closed(sequence,declaration,batch-1)
         if not previous or _json(previous,declaration).get('started')!=intent['prefetch']['predecessor_started']:
             raise ValueError('prefetched source publication precedes its genuine predecessor closure')
         _reconcile_publication(pending,declaration)
@@ -644,7 +760,7 @@ def _prefetch_start(folder,sequence,declaration,pending,root):
 def _prefetch_service_chain(folder,state,config,*,require_live=True):
     """Authenticate ordered reservations without advancing the live source cursor."""
     declaration=config['source_sequence'];sequence=state['source_sequence']
-    pending=sequence.get('pending')
+    pending=sequence.get('pending') or sequence.get('anchor')
     if not pending or pending['batch']!=state.get('active_batch')or (require_live and not alive(state.get('owner'))):
         raise ValueError('prefetch lacks its exact live predecessor selection')
     chain=[pending]
@@ -798,7 +914,7 @@ def adopt_prefetched_source(folder,state,config,batch):
     if reserved['batch']!=batch or (sequence.get('pending')is not None and sequence['pending']!=reserved):
         raise ValueError('prefetched selection cannot bypass its unfinished predecessor')
     intent=_json(reserved['intent'],declaration);predecessor=intent['prefetch']['predecessor_started']
-    closed=sequence.get('closed',{}).get(str(batch-1))
+    closed=_predecessor_closed(sequence,declaration,batch-1)
     if not closed or _json(closed,declaration).get('started')!=predecessor:
         raise ValueError('prefetch predecessor has not genuinely closed')
     lock=(Path(config['root'])/'next-source-selection.lock').open('a')

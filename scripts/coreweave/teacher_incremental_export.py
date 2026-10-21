@@ -1032,7 +1032,7 @@ def _closed_guardian_transition(publisher, guardian_raw, state, batch, read_file
         expected_path = f'{control}/boundaries/batch-{batch:04d}.json'
         reference = fresh.get('last_boundary')
         if not isinstance(reference, dict) or reference.get('path') != expected_path:
-            closed = (fresh.get('source_sequence') or {}).get('closed', {}).get(str(batch))
+            closed = _guardian_closed_sources(fresh, publisher['anchor_batch']).get(str(batch))
             receipt = bound_json(closed, 'closed source-sequence transition')
             if receipt.get('batch') != batch:
                 raise ValueError('closed source-sequence transition names another batch')
@@ -1150,6 +1150,19 @@ def _guardian_export_slot(state, batch):
     if type(frontier) is int and frontier > batch and str(batch) in closed:
         return slot
     return None
+
+
+def _guardian_closed_sources(state, anchor_batch):
+    """Retain the original anchor boundary without treating it as an ordinal."""
+    sequence = state.get('source_sequence') or {}
+    closed = dict(sequence.get('closed') or {})
+    anchor = sequence.get('anchor_closed')
+    if anchor is not None:
+        key = str(anchor_batch)
+        if key in closed and closed[key] != anchor:
+            raise ValueError('anchor closure conflicts with sequence history')
+        closed[key] = anchor
+    return closed
 
 
 def discover_guardian_batch(publisher: dict, sandbox,
@@ -1295,7 +1308,7 @@ def discover_guardian_batch(publisher: dict, sandbox,
         feeder=ref['path'];phase_path=slot['phase_path']
     closed_refs = {}; closed_receipts = {}
     sequence_state = state.get('source_sequence') or {}
-    for key, closed_ref in (sequence_state.get('closed') or {}).items():
+    for key, closed_ref in _guardian_closed_sources(state, publisher['anchor_batch']).items():
         if not isinstance(closed_ref, dict) or not {'path', 'sha256', 'bytes'} <= closed_ref.keys():
             raise ValueError('guardian closed-sequence history has an incomplete receipt binding')
         closed_raw = read_file(closed_ref['path'])
