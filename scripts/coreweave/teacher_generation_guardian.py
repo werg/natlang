@@ -105,6 +105,30 @@ def teacher_environment(config):
         raise ValueError('ambient teacher descriptor is not declared by guardian configuration')
     return env
 
+def _feeder_invocation(current, path):
+    if current is None:return False
+    argv=current['argv'];argument=str(path).encode()
+    launching=(len(argv)==6 and Path(argv[0].decode()).name=='nice'
+               and argv[1:]==[b'-n',b'10',b'python',b'-u',argument])
+    return argument in argv[:5] or launching
+
+def record_primary_phase(state, config):
+    """Bind a canonical primary feeder's per-batch phase without relaunching it."""
+    directory=config.get('primary_phase_directory')
+    if directory is None:return False  # Historical feeders use the root phase.
+    if Path(directory)!=Path(config['root'])/'feeder-phases':
+        raise ValueError('primary phase directory differs from canonical generation root')
+    batch=state.get('active_batch');owner=state.get('owner')
+    if type(batch)is not int or not alive(owner):return False
+    launches=state.setdefault('primary_launches',{})
+    if str(batch)in launches:return False  # Never rewrite an existing slot's custody.
+    feeder=state['feeder'];reference=feeder if isinstance(feeder,dict)else binding(feeder)
+    if binding(reference['path'])!=reference or not _feeder_invocation(process(owner['pid']),reference['path']):
+        raise ValueError('primary phase lacks its exact live feeder custody')
+    launches[str(batch)]={'batch':batch,'owner':owner,'feeder':reference,
+        'task_runtime':state['task_runtime'],'phase_path':str(Path(directory)/f'batch-{batch:04d}.json')}
+    return True
+
 def recover_token(token, *, script_prefix='feed-evidence-'):
     found = []
     for root in Path('/proc').iterdir():
@@ -333,6 +357,7 @@ def launch_feeder(folder, state, config, batch):
     if identity is None: raise ValueError('new feeder exited before process identity publication')
     state.update(owner=public_identity(identity), active_batch=batch, feeder=binding(config['feeder']),
         task_runtime=config['task_runtime']); state.pop('prepared_launch', None); write(target, state)
+    if record_primary_phase(state,config):write(target,state)
 
 def repair_outcomes(queue, journal):
     entries = [json.loads(line) for line in queue.read_text().splitlines() if line]
@@ -514,7 +539,7 @@ def config_revision(folder, state, path, *, publish=True):
     raw=Path(path).read_bytes();config=json.loads(raw);current=binding(path)
     if state.get('config')==current: return config
     previous=state.get('config_value')
-    allowed={'task_runtime','server','model_id','teacher_source','feeder','queue_worker','node_bin','drain_file','teacher_identity','source_sequence','repair_parallel_batches','primary_parallel_batches','primary_tail_max_running','primary_worker_capacity','overlap_workers','overlap_feeder','collection_repo','collection_worker'}
+    allowed={'task_runtime','server','model_id','teacher_source','primary_phase_directory','feeder','queue_worker','node_bin','drain_file','teacher_identity','source_sequence','repair_parallel_batches','primary_parallel_batches','primary_tail_max_running','primary_worker_capacity','overlap_workers','overlap_feeder','collection_repo','collection_worker'}
     changes={key for key in set(previous or {})|set(config) if (previous or {}).get(key)!=config.get(key)}
     if previous is not None and changes-allowed: raise ValueError('guardian root/ownership configuration changed; preserve and explicitly migrate this state')
     snapshot=folder/'config-history'/(current['sha256']+'.json');snapshot.parent.mkdir(parents=True,exist_ok=True)
@@ -887,13 +912,10 @@ def primary_capacity_observation(folder,state,config):
         if not current or not alive(owner):return None
         feeder=slot['feeder'];path=feeder['path']if isinstance(feeder,dict)else feeder
         if isinstance(feeder,dict)and binding(path)!=feeder:raise ValueError('owned refill feeder changed')
-        argv=current['argv'];feeder_arg=str(path).encode()
         # Popen can publish the same owner's identity before nice execs Python.
         # Accept only our exact launcher while it performs that normal exec;
         # source sealing below must still establish actual collection custody.
-        launching=(len(argv)==6 and Path(argv[0].decode()).name=='nice'
-                   and argv[1:]==[b'-n',b'10',b'python',b'-u',feeder_arg])
-        if feeder_arg not in argv[:5] and not launching:
+        if not _feeder_invocation(current,path):
             raise ValueError('refill owner no longer executes its exact feeder')
         batch=slot['batch'];ref=sequence.get('started',{}).get(str(batch))
         if ref is None:return None
@@ -1087,6 +1109,7 @@ def run(config_path, *, external_transition=None, external_reconciliation=None, 
     config=config_revision(folder,state,config_path)
     while True:
         config=config_revision(folder,state,config_path)
+        if record_primary_phase(state,config):write(target,state)
         if config.get('source_sequence'):
             _source_sequence_helpers().observe_source_sequence(folder,state,config)
         if alive(state.get('owner')):

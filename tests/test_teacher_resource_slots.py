@@ -98,6 +98,22 @@ def test_exact_nice_exec_transition_preserves_feeder_owner_custody(tmp_path,monk
         g.primary_capacity_observation(folder,state,config)
 
 
+def test_primary_per_batch_phase_is_bound_to_existing_live_feeder_without_relaunch(tmp_path,monkeypatch):
+    folder,state,config,owners=pool(tmp_path,monkeypatch,ahead=0)
+    state.update(feeder=g.binding(config['feeder']),task_runtime=config['task_runtime'])
+    config['primary_phase_directory']=str(Path(config['root'])/'feeder-phases')
+    before=copy.deepcopy(state)
+    assert g.record_primary_phase(state,config)
+    slot=state['primary_launches']['22']
+    assert slot['owner']==before['owner'] and slot['feeder']==before['feeder']
+    assert slot['phase_path']==str(Path(config['root'])/'feeder-phases/batch-0022.json')
+    assert state['source_sequence']==before['source_sequence']
+    assert not g.record_primary_phase(state,config)
+    config['primary_phase_directory']=str(tmp_path/'unrelated')
+    with pytest.raises(ValueError,match='canonical'):
+        g.record_primary_phase(state,config)
+
+
 @pytest.mark.parametrize('change',['capacity','startup','dead','tamper','workers','partitions'])
 def test_unknown_or_excess_work_never_grants_capacity(tmp_path,monkeypatch,change):
     folder,state,config,owners=pool(tmp_path,monkeypatch,ahead=2)
