@@ -86,6 +86,18 @@ def test_many_live_tails_refill_within_worker_envelope_and_preserve_cursors(tmp_
     assert state['primary_prefetch']['batch']==27
 
 
+def test_exact_nice_exec_transition_preserves_feeder_owner_custody(tmp_path,monkeypatch):
+    folder,state,config,owners=pool(tmp_path,monkeypatch,ahead=0)
+    owner=owners[state['owner']['pid']]
+    owner['argv']=[b'nice',b'-n',b'10',b'python',b'-u',config['feeder'].encode()]
+    observed=g.primary_capacity_observation(folder,state,config)
+    assert observed['slots'][0]['owner']==state['owner']
+    # A different wrapper cannot smuggle a script path beyond the old prefix.
+    owner['argv'][0]=b'unrelated-wrapper'
+    with pytest.raises(ValueError,match='exact feeder'):
+        g.primary_capacity_observation(folder,state,config)
+
+
 @pytest.mark.parametrize('change',['capacity','startup','dead','tamper','workers','partitions'])
 def test_unknown_or_excess_work_never_grants_capacity(tmp_path,monkeypatch,change):
     folder,state,config,owners=pool(tmp_path,monkeypatch,ahead=2)

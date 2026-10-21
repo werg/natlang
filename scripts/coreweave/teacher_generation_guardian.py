@@ -887,7 +887,14 @@ def primary_capacity_observation(folder,state,config):
         if not current or not alive(owner):return None
         feeder=slot['feeder'];path=feeder['path']if isinstance(feeder,dict)else feeder
         if isinstance(feeder,dict)and binding(path)!=feeder:raise ValueError('owned refill feeder changed')
-        if str(path).encode()not in current['argv'][:5]:raise ValueError('refill owner no longer executes its exact feeder')
+        argv=current['argv'];feeder_arg=str(path).encode()
+        # Popen can publish the same owner's identity before nice execs Python.
+        # Accept only our exact launcher while it performs that normal exec;
+        # source sealing below must still establish actual collection custody.
+        launching=(len(argv)==6 and Path(argv[0].decode()).name=='nice'
+                   and argv[1:]==[b'-n',b'10',b'python',b'-u',feeder_arg])
+        if feeder_arg not in argv[:5] and not launching:
+            raise ValueError('refill owner no longer executes its exact feeder')
         batch=slot['batch'];ref=sequence.get('started',{}).get(str(batch))
         if ref is None:return None
         started=_source_sequence_helpers()._json(ref,declaration)

@@ -21,3 +21,9 @@ Exact byte bindings, process identity checks, environment transport and collecto
 arguments are crisp helpers in the existing guardian and feeder. They enforce the
 supervisor's declared selection; they do not choose a teacher or invent quality
 credit. There is one generation pipeline for all self-hosted teachers.
+
+Feeder custody includes the short normal `nice -n 10 python -u <exact feeder>`
+exec transition immediately after spawning. Authenticate this exact argument
+vector and process birth, then require the ordinary sealed source/frontier checks
+before granting refill capacity. A launch race must not terminate supervision of
+an already collecting batch; unrelated wrappers remain rejected.
