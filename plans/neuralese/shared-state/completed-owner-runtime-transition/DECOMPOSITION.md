@@ -21,6 +21,11 @@ that any new source or numerical implementation is already qualified.
    append history. Replay the shared release contracts, including any prior
    adaptation, and require the final recipe's exact path/file hash. Keep the
    original global-plan authority; do not replace it with an invented plan.
+7. Replaying an earlier adaptation in a newer runtime can relocate the two
+   byte-identical classification readers. Reuse the recipe's existing exact
+   reader-relocation verifier, check every other plan field and dependency, and
+   derive each flat input inventory from its actual stage bindings. Preserve
+   historical source, proof and package hashes rather than rewriting old plans.
 
 Python implements exact identities, replay equality, leases, durable writes and
 existing recipe/gradient contracts. Scheduling and cutover remain supervisor policy.

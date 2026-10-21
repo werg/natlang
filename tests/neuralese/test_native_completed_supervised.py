@@ -12,6 +12,46 @@ from natlang_neuralese.train.native_continuation import TRAINING_SCHEMA
 from test_native_state_sft import graph
 
 
+@pytest.mark.parametrize('fault', [None, 'code', 'device', 'recipe', 'flat-inventory',
+    'missing-stage', 'held', 'data-dependency', 'proof', 'reader-bytes', 'old-reader-bytes'])
+def test_completed_plan_replay_checks_real_classification_reader_relocation(tmp_path, monkeypatch, fault):
+    from test_native_classification_recipe_handoff import prepared
+    from natlang_neuralese.train import native_classification_continuation as continuation
+    from scripts.neuralese_data import continue_native_source_indexes as adapter
+    _, save, _, _ = prepared(tmp_path, monkeypatch)
+    roles = save(); role = 'source_classification_migration'; readers = []
+    for module in (continuation, adapter):
+        path = tmp_path / 'historical' / Path(module.__file__).name
+        path.parent.mkdir(exist_ok=True); path.write_bytes(Path(module.__file__).read_bytes())
+        readers.append(adapt.binding(path))
+    data = {k: roles['native_graphs'][k] for k in ('path', 'sha256')}
+    roles[role]['dependencies'] = [data, *readers]
+    def plan(inputs):
+        return {'schema': 'natlang.neuralese-recipe-plan/1', 'code': {'frozen': 'exact'},
+            'recipe': {'id': 'same'}, 'device': 'cuda', 'stage_inputs': {'full': inputs},
+            'inputs': {item['path']: item['sha256'] for ref in inputs.values()
+                       for item in (ref, *ref.get('dependencies', []))}}
+    old = plan(roles); current = copy.deepcopy(roles)
+    current[role]['dependencies'] = [data, *[adapt.binding(m.__file__) for m in (continuation, adapter)]]
+    new = plan(current)
+    if fault in ('code', 'device', 'recipe'): new[fault] = {'changed': True}
+    elif fault == 'flat-inventory': new['inputs']['invented'] = 'a' * 64
+    elif fault == 'missing-stage': new['stage_inputs'].clear()
+    elif fault == 'held': current['held_native_graphs']['sha256'] = 'a' * 64
+    elif fault == 'data-dependency': current[role]['dependencies'].pop(0)
+    elif fault == 'proof': current[role]['sha256'] = 'a' * 64
+    elif fault == 'reader-bytes':
+        path = tmp_path / Path(continuation.__file__).name; path.write_text('# changed reader\n')
+        current[role]['dependencies'][1] = adapt.binding(path)
+    elif fault == 'old-reader-bytes': Path(readers[0]['path']).write_text('# changed history\n')
+    if fault is None:
+        assert adapt._same_replayed_recipe_plan(old, new)
+    else:
+        try: result = adapt._same_replayed_recipe_plan(old, new)
+        except ValueError: result = False
+        assert result is False
+
+
 @pytest.mark.parametrize('bad_bytes',[-1,True,0,'12',None])
 def test_scheduling_artifact_identity_validates_optional_bytes(tmp_path,bad_bytes):
     path=tmp_path/'global-plan.json';write(path,{'models':[]})
