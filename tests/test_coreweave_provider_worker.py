@@ -286,7 +286,8 @@ def test_runner_death_before_provider_launch_receipt_recovers_existing_child(tmp
     assert counter.read_text()=='once\n'
     assert json.loads((tmp_path/'child-exit.json').read_text())['reason'].startswith('previous owned launch already terminal')
 
-def test_once_drains_initial_request_after_queue_timeout_without_launching_arrivals(tmp_path,monkeypatch):
+@pytest.mark.parametrize('failed_observation', ['timeout', None, {}, 'missing', [None], [{}]])
+def test_once_drains_initial_request_after_queue_timeout_without_launching_arrivals(tmp_path,monkeypatch,failed_observation):
     config=tmp_path/'provider.json';config.write_text(json.dumps({'coordinator_id':'mellum','sandboxes':{'mellum':{},'lfm':{}},'ferry_command':['existing-ferry'],'queue':'/work/native-production/queue','poll_seconds':0}))
     class IO:
         def __init__(self):self.rows={};self.polls=0
@@ -294,7 +295,9 @@ def test_once_drains_initial_request_after_queue_timeout_without_launching_arriv
         def save_receipt(self,key,value):self.rows[key]=value
         def pending(self,*args):
             self.polls+=1
-            if self.polls==1:raise TimeoutError('transient SDK queue read')
+            if self.polls==1:
+                if failed_observation == 'timeout':raise TimeoutError('transient SDK queue read')
+                return failed_observation
             return [{'request_id':'initial'}]+([{'request_id':'later'}] if self.polls>2 else [])
     io=IO();calls=[]
     class Bridge:
@@ -307,7 +310,8 @@ def test_once_drains_initial_request_after_queue_timeout_without_launching_arriv
     monkeypatch.setattr(worker.cwctl,'require_key',lambda:None)
     assert worker.main(['--config',str(config),'--once'])==0
     assert calls==['initial','initial'] and io.polls==3
-    assert io.receipt('queue-poll-provider-error')['last_provider_error']['type']=='TimeoutError'
+    assert io.receipt('queue-poll-provider-error')['last_provider_error']['type']==(
+        'TimeoutError' if failed_observation == 'timeout' else 'ValueError')
 
 def test_provider_never_ferries_over_a_published_runtime_alias():
     io=worker.SDKIO.__new__(worker.SDKIO)

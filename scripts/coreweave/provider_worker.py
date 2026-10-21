@@ -479,6 +479,11 @@ def main(argv=None):
     while True:
         try:
             pending = io.pending(coordinator, config['queue'])
+            if (not isinstance(pending, list)
+                    or any(not isinstance(row, dict)
+                           or not isinstance(row.get('request_id'), str)
+                           or not row['request_id'] for row in pending)):
+                raise ValueError('provider queue poll did not return request envelopes')
         except Exception as error:
             record_provider_error(io, "queue-poll", error)
             print(json.dumps({"event": "provider_queue_poll_retry", "error_type": type(error).__name__}), flush=True)

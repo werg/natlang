@@ -65,6 +65,12 @@ this service does not decide training policy or allocate resources.
 | Cross-sandbox artifacts | Existing private scoped artifact transport | Credentials remain on DGX; source and target bytes must match the declared SHA/size, with results exposed last. |
 | Recovery | Durable per-request provider receipts | Reattach to the same owned process; never duplicate a model worker after a controller interruption. |
 
+Queue polling requires an actual list of request envelopes with string request
+identities. A missing or malformed SDK reply is an observation failure, not an
+empty queue. Record it through the existing poll-error receipt and retry before
+freezing a once-mode cohort or iterating requests. Keep existing request receipts
+when restarting a provider so completed or live workers are reattached.
+
 Authenticated request stops are exact provider plumbing: check the request-bound
 stop before resolving dependencies, between staged files, and before launch.
 An already stopped request must not load an actor merely to terminate it. For
