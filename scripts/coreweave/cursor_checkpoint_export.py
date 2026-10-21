@@ -33,8 +33,10 @@ def bound_output_checkpoint(reference,role,*,production_root='/work/native-produ
         parts=allowed.relative_to(pathlib.Path(production_root).resolve()).parts
         round_output=any(parts[index]=='rounds' and index+1<len(parts) and parts[index+1]==role
                          for index in range(len(parts)))
-        if not (control_output or round_output):
-            raise ValueError('configured output is outside its role-owned control or round namespace')
+        recovery_output=(allowed.parent==pathlib.Path(production_root).resolve()/'recovered-training'
+            and re.fullmatch(re.escape(role)+r'-.+',allowed.name)is not None)
+        if not (control_output or round_output or recovery_output):
+            raise ValueError('configured output is outside its role-owned control, round or recovery namespace')
     if not output.is_relative_to(allowed):raise ValueError('owner output escapes configured root')
     return output/'checkpoint.pt'
 

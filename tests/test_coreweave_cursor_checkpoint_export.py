@@ -22,6 +22,29 @@ def test_actual_owner_output_is_bound_role_scoped_and_cannot_escape(tmp_path):
     with pytest.raises(ValueError,match='exactly one'):module.bound_output_checkpoint(ref,'lfm',production_root=tmp_path,control_root=control)
 
 
+@pytest.mark.parametrize('role', ['lfm', 'mellum'])
+def test_recovered_owner_output_retains_role_and_exact_lineage_boundary(tmp_path, role):
+    recovery=tmp_path/'recovered-training'
+    lineage=recovery/(role+'-full-recipe-26320')
+    output=lineage/'native_full_sft';output.mkdir(parents=True)
+    argv=tmp_path/'argv.json'
+    def reference(target, allowed):
+        argv.write_text(json.dumps(['python','--out',str(target)]))
+        return {'path':str(argv),'sha256':hashlib.sha256(argv.read_bytes()).hexdigest(),
+                'allowed_output_root':str(allowed)}
+    assert module.bound_output_checkpoint(reference(output,lineage),role,
+        production_root=tmp_path)==output/'checkpoint.pt'
+    foreign=recovery/('mellum-other' if role=='lfm' else 'lfm-other')
+    for target,allowed in ((foreign/'native_full_sft',foreign),(output,recovery),
+                           (recovery/(role+'-other')/'native_full_sft',lineage)):
+        with pytest.raises(ValueError):
+            module.bound_output_checkpoint(reference(target,allowed),role,production_root=tmp_path)
+    escaped=lineage/'escaped';escaped.symlink_to(tmp_path/'unrelated',target_is_directory=True)
+    with pytest.raises(ValueError,match='escapes'):
+        module.bound_output_checkpoint(reference(escaped/'native_full_sft',lineage),role,
+            production_root=tmp_path)
+
+
 def test_pending_export_recovery_never_recopies_or_advances_before_full_readback(tmp_path):
     chosen={'source':'canonical/learner/checkpoint.pt','pin':'immutable/pin.pt','step':12,'bytes':123}
     calls=[]
