@@ -18,9 +18,9 @@ def load_source_configuration(path, expected_sha256=None, expected_bytes=None):
   raise ValueError('feeder source row count differs from its immutable cases')
  return value
 
-def prepare_collection_command(cases,out,rows,seed,configuration):
+def prepare_collection_command(cases,out,rows,seed,configuration,temperature=0.6):
  sampling=collection_sampling(configuration)
- return ['python','-m','natlang_neuralese.rl.task_rollouts','prepare','--cases',str(cases),'--out',str(out),'--rows',str(rows),'--group',str(sampling['group']),'--temperature','0.6','--case-seconds','7200','--max-model-requests','128','--max-turns','160','--seed-base',str(seed),'--root-mode',sampling['root_mode']]
+ return ['python','-m','natlang_neuralese.rl.task_rollouts','prepare','--cases',str(cases),'--out',str(out),'--rows',str(rows),'--group',str(sampling['group']),'--temperature',str(temperature),'--case-seconds','7200','--max-model-requests','128','--max-turns','160','--seed-base',str(seed),'--root-mode',sampling['root_mode']]
 
 
 def resumed_collection_rows(entries,source):
@@ -34,12 +34,26 @@ def resumed_collection_rows(entries,source):
  return len(entries)//sampling['group']
 
 root=pathlib.Path(os.environ['NATLANG_TEACHER_GENERATION_ROOT']);runtime=pathlib.Path(os.environ['NATLANG_REPO']);queue_worker=pathlib.Path(os.environ['NATLANG_TEACHER_QUEUE_WORKER']);node_bin=os.environ['NATLANG_TEACHER_NODE_BIN'];task_runtime=pathlib.Path(os.environ['NATLANG_TEACHER_TASK_RUNTIME']);teacher_identity=pathlib.Path(os.environ['NATLANG_TEACHER_IDENTITY']);controller=queue_worker.parent;batch=int(os.environ['NATLANG_TEACHER_START_BATCH']);worker_count=int(os.environ.get('NATLANG_TEACHER_WORKER_COUNT','24'));assert 1<=worker_count<=24
-teacher_source=root/'continuations/batch14-after-csf-ordered-system-qualification-20261016-v1/teacher-source.json';teacher_source_raw=teacher_source.read_bytes();assert hashlib.sha256(teacher_source_raw).hexdigest()=='c67d81315c3f791c4d1a6f44da77e617bf8c86d4c216adbb09245782e59e0614';actual_teacher=json.loads(teacher_source_raw)['teacher'];assert actual_teacher['revision']=='b9ce18a6887e18c089fdea8509a33e63429a3300'
-
 import sys
 sys.path.insert(0,os.environ.get('NATLANG_TEACHER_GUARDIAN_MODULE_ROOT',str(controller)))
-from teacher_generation_guardian import verify_teacher_identity,write
-verify_teacher_identity(teacher_identity,server='http://127.0.0.1:8001',model_id='pennyroyal')
+from teacher_generation_guardian import verify_teacher_identity,write,load_teacher_source
+server=os.environ.get('NATLANG_TEACHER_SERVER','http://127.0.0.1:8001')
+model_id=os.environ.get('NATLANG_TEACHER_MODEL_ID','pennyroyal')
+temperature=0.6;request_config=None
+if os.environ.get('NATLANG_TEACHER_SOURCE_BINDING'):
+ source_ref=json.loads(os.environ['NATLANG_TEACHER_SOURCE_BINDING'])
+ descriptor=load_teacher_source(source_ref,identity=teacher_identity,server=server,model_id=model_id)
+ teacher_source=pathlib.Path(source_ref['path']);teacher_source_raw=teacher_source.read_bytes()
+ actual_teacher=descriptor['teacher'];temperature=descriptor['sampling']['temperature']
+ request_config=descriptor['sampling'].get('request_config')
+else:
+ if (server,model_id)!=('http://127.0.0.1:8001','pennyroyal'):
+  raise ValueError('a different teacher requires an authenticated source descriptor')
+ teacher_source=root/'continuations/batch14-after-csf-ordered-system-qualification-20261016-v1/teacher-source.json'
+ teacher_source_raw=teacher_source.read_bytes()
+ assert hashlib.sha256(teacher_source_raw).hexdigest()=='c67d81315c3f791c4d1a6f44da77e617bf8c86d4c216adbb09245782e59e0614'
+ actual_teacher=json.loads(teacher_source_raw)['teacher'];assert actual_teacher['revision']=='b9ce18a6887e18c089fdea8509a33e63429a3300'
+ verify_teacher_identity(teacher_identity,server=server,model_id=model_id)
 from teacher_batch_completion import batch_completion
 from teacher_source_sequence import collection_sampling,verify_collection_sampling
 controller_sha256=hashlib.sha256(pathlib.Path(__file__).read_bytes()).hexdigest()
@@ -80,13 +94,13 @@ try:
    else:rows=32;conf={}
    packet=out/'source-cases.jsonl';out.mkdir(parents=True,exist_ok=True);packet.write_bytes(cases.read_bytes());cases=packet
    seed=2900000+batch*100000
-   prep=prepare_collection_command(cases,out,rows,seed,conf);subprocess.run(prep,cwd=root,env=env,check=True)
+   prep=prepare_collection_command(cases,out,rows,seed,conf,temperature);subprocess.run(prep,cwd=root,env=env,check=True)
    entries=[json.loads(line) for line in (out/'queue.jsonl').read_text().splitlines() if line]
    for e in entries:e.update(context_tokens=65536,text_neuralese_emulation=True)
-   (out/'queue.jsonl').write_text(''.join(json.dumps(e)+'\n' for e in entries));binding={'schema':'natlang.sandbox-strong-teacher-collection/1','at':time.time(),'batch':batch,'teacher':actual_teacher,'source_cases':str(cases),'source_cases_sha256':hashlib.sha256(cases.read_bytes()).hexdigest(),'seed_base':seed,'context_tokens':65536,'temperature':0.6,'root_mode':collection_sampling(conf)['root_mode'],'text_neuralese_emulation':True,'concurrency':worker_count,'policy_claim':'independent stronger teacher; not learner/onpolicy','protected_selection':conf.get('protected_selection',conf),'source_provenance':conf,'collection_controller':{'mechanism':'natlang.teacher-collection-feeder/1','helper_sha256':controller_sha256,'script':str(pathlib.Path(__file__)),'guardian_protocol':'natlang.teacher-generation-guardian/1'},'runtime_source_receipt':{'source_commit':'2ff598246378','root':str(runtime)},'actual_task_runtime':str(task_runtime),'actual_teacher_execution_identity':{'path':str(teacher_identity),'sha256':hashlib.sha256(teacher_identity.read_bytes()).hexdigest(),'bytes':teacher_identity.stat().st_size},'actor':json.loads(teacher_identity.read_text())['actor'],'teacher_configuration_source':{'path':str(teacher_source),'sha256':hashlib.sha256(teacher_source_raw).hexdigest(),'bytes':len(teacher_source_raw)}};binding.update({'collection_sampling':collection_sampling(conf)}if 'collection_sampling'in conf else {});verify_collection_sampling(binding,entries,conf);(out/'teacher-source.json').write_text(json.dumps(binding,indent=2));children=[]
+   (out/'queue.jsonl').write_text(''.join(json.dumps(e)+'\n' for e in entries));binding={'schema':'natlang.sandbox-strong-teacher-collection/1','at':time.time(),'batch':batch,'teacher':actual_teacher,'source_cases':str(cases),'source_cases_sha256':hashlib.sha256(cases.read_bytes()).hexdigest(),'seed_base':seed,'context_tokens':65536,'temperature':temperature,'root_mode':collection_sampling(conf)['root_mode'],'text_neuralese_emulation':True,'concurrency':worker_count,'policy_claim':'independent stronger teacher; not learner/onpolicy','protected_selection':conf.get('protected_selection',conf),'source_provenance':conf,'collection_controller':{'mechanism':'natlang.teacher-collection-feeder/1','helper_sha256':controller_sha256,'script':str(pathlib.Path(__file__)),'guardian_protocol':'natlang.teacher-generation-guardian/1'},'runtime_source_receipt':{'source_commit':'2ff598246378','root':str(runtime)},'actual_task_runtime':str(task_runtime),'actual_teacher_execution_identity':{'path':str(teacher_identity),'sha256':hashlib.sha256(teacher_identity.read_bytes()).hexdigest(),'bytes':teacher_identity.stat().st_size},'actor':json.loads(teacher_identity.read_text())['actor'],'teacher_configuration_source':{'path':str(teacher_source),'sha256':hashlib.sha256(teacher_source_raw).hexdigest(),'bytes':len(teacher_source_raw)}};binding.update({'collection_sampling':collection_sampling(conf)}if 'collection_sampling'in conf else {});verify_collection_sampling(binding,entries,conf);(out/'teacher-source.json').write_text(json.dumps(binding,indent=2));children=[]
   children=[]
   for worker in range(worker_count):
-   label='fanout-v11-' if resuming else '';queue=out/f'queue-{label}worker-{worker}.jsonl';journal=out/f'journal-{label}worker-{worker}.jsonl';data=''.join(json.dumps(e)+'\n' for e in (frontier['shards'][worker] if resuming else entries[worker::worker_count]));assert not queue.exists() or queue.read_text()==data;queue.write_text(data);cmd=['python','-u',str(queue_worker),str(queue),str(journal),'--runtime',str(task_runtime),'--server','http://127.0.0.1:8001','--chat-completions-url','http://127.0.0.1:8001/v1/chat/completions','--model-id','pennyroyal','--model-concurrency','1','--max-batch-cases','1','--case-seconds','7200','--identical-turn-limit','8','--teacher-identity',str(teacher_identity),'--drain-file',str(controller/'DRAIN')];log=(out/f'{label}worker-{worker}.log').open('ab');c=subprocess.Popen(cmd,cwd=root,env=env,stdout=log,stderr=log);children.append(c)
+   label='fanout-v11-' if resuming else '';queue=out/f'queue-{label}worker-{worker}.jsonl';journal=out/f'journal-{label}worker-{worker}.jsonl';data=''.join(json.dumps(e)+'\n' for e in (frontier['shards'][worker] if resuming else entries[worker::worker_count]));assert not queue.exists() or queue.read_text()==data;queue.write_text(data);cmd=['python','-u',str(queue_worker),str(queue),str(journal),'--runtime',str(task_runtime),'--server',server,'--chat-completions-url',server.rstrip('/')+'/v1/chat/completions','--model-id',model_id,'--model-concurrency','1','--max-batch-cases','1','--case-seconds','7200','--identical-turn-limit','8','--teacher-identity',str(teacher_identity),'--drain-file',str(controller/'DRAIN')];cmd+=['--chat-request-config',request_config['path']]if request_config else [];log=(out/f'{label}worker-{worker}.log').open('ab');c=subprocess.Popen(cmd,cwd=root,env=env,stdout=log,stderr=log);children.append(c)
   phase('collecting',batch=batch,out=str(out),worker_pids=[c.pid for c in children],cases=rows,teacher=actual_teacher['model'],worker_count=worker_count)
   codes=[c.wait() for c in children];journal=[]
   for journal_path in sorted(out.glob('journal*worker-*.jsonl')):journal.extend(json.loads(line) for line in journal_path.read_text().splitlines() if line)

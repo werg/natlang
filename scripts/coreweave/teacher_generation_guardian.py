@@ -4,6 +4,7 @@ import argparse
 import fcntl
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import subprocess
@@ -65,6 +66,44 @@ def verify_teacher_identity(path, *, server, model_id):
             raise ValueError('actual teacher engine process identity changed')
     return {'identity':binding(path),'actor':actual,'processes':owners,
         'server':server,'model_id':model_id,'claim':'actual independent retry actor, not the original source-batch actor'}
+
+def load_teacher_source(reference, *, identity, server, model_id):
+    """Authenticate a selected teacher without relabelling historical batches."""
+    actual = binding(reference['path'])
+    if actual != reference:
+        raise ValueError('teacher source descriptor binding changed')
+    value = json.loads(Path(reference['path']).read_bytes())
+    if (value.get('schema') != 'natlang.self-hosted-teacher-source/1'
+            or value.get('server') != server or value.get('model_id') != model_id
+            or value.get('execution_identity') != binding(identity)):
+        raise ValueError('teacher source descriptor differs from actual serving identity')
+    teacher = value.get('teacher') or {}
+    if not all(isinstance(teacher.get(key), str) and teacher[key] for key in ('model', 'revision')):
+        raise ValueError('teacher source needs actual model and revision')
+    sampling = value.get('sampling') or {}
+    temperature = sampling.get('temperature')
+    if (type(temperature) not in (int, float) or not math.isfinite(temperature)
+            or temperature < 0):
+        raise ValueError('teacher source needs explicit finite sampling temperature')
+    if sampling.get('request_config'):
+        if binding(sampling['request_config']['path']) != sampling['request_config']:
+            raise ValueError('teacher request configuration binding changed')
+    verify_teacher_identity(identity, server=server, model_id=model_id)
+    return value
+
+def teacher_environment(config):
+    """Transport the declared teacher identically to every collection feeder."""
+    env = {'NATLANG_TEACHER_SERVER': config['server'],
+           'NATLANG_TEACHER_MODEL_ID': config['model_id']}
+    if config.get('teacher_source'):
+        descriptor = load_teacher_source(config['teacher_source'], identity=config['teacher_identity']['path'],
+                                         server=config['server'], model_id=config['model_id'])
+        if descriptor['execution_identity'] != config['teacher_identity']:
+            raise ValueError('guardian teacher identity binding differs from selected source')
+        env['NATLANG_TEACHER_SOURCE_BINDING'] = json.dumps(config['teacher_source'], sort_keys=True)
+    elif os.environ.get('NATLANG_TEACHER_SOURCE_BINDING'):
+        raise ValueError('ambient teacher descriptor is not declared by guardian configuration')
+    return env
 
 def recover_token(token, *, script_prefix='feed-evidence-'):
     found = []
@@ -284,6 +323,7 @@ def launch_feeder(folder, state, config, batch):
     env = {**os.environ, TOKEN: launch['token'], 'NATLANG_TEACHER_START_BATCH': str(batch),
            'NATLANG_TEACHER_SINGLE_BATCH': '1', 'NATLANG_TEACHER_TASK_RUNTIME': config['task_runtime'],
            'NATLANG_TEACHER_IDENTITY':config['teacher_identity']['path']}
+    env.update(teacher_environment(config))
     if config.get('source_sequence'):
         _source_sequence_helpers().verify_prepared_source(state,config,batch)
     log = (folder/'feeder.log').open('ab')
@@ -330,7 +370,7 @@ def _launch_one_repair(folder, state, config, *, source_queue=None, per_batch_lo
                     terminal_keys=sorted(finishes))
                 receipt['attempts'].append(attempt); receipt['current'] = None; attempt = None
             if attempt is not None and not journal.exists() and any(attempt.get(key)!=config.get(field) for key,field in
-                    [('runtime','task_runtime'),('server','server'),('model_id','model_id'),('teacher_identity','teacher_identity')]):
+                    [('runtime','task_runtime'),('server','server'),('model_id','model_id'),('teacher_identity','teacher_identity'),('teacher_source','teacher_source')]):
                 attempt['state']='superseded_unstarted_configuration_revision';receipt['attempts'].append(attempt)
                 receipt['current']=None;attempt=None
             # No journal and no live token means the intent never reached an
@@ -342,10 +382,18 @@ def _launch_one_repair(folder, state, config, *, source_queue=None, per_batch_lo
             receipt['claim'] = 'actual terminal retry outcomes retained; original batch is not relabelled complete'
             write(receipt_path, receipt); continue
         if attempt is None:
+            selected = None
+            if config.get('teacher_source'):
+                teacher_environment(config)
+                selected = load_teacher_source(config['teacher_source'], identity=config['teacher_identity']['path'],
+                                               server=config['server'], model_id=config['model_id'])
             number = len(receipt['attempts'])+1; leaf = source_queue.parent/f'attempt-{number:04d}'
             leaf.mkdir(exist_ok=True)
             rows = [{**row, 'jobs': str(leaf/row['key']/'jobs'),
                 'output': str(leaf/row['key']/'results.jsonl'), 'log': str(leaf/row['key']/'collector.log')} for row in remaining]
+            if selected:
+                for row in rows:
+                    row['temperature'] = selected['sampling']['temperature']
             queue = leaf/'queue.jsonl'; text = ''.join(json.dumps(row)+'\n' for row in rows)
             if queue.exists() and queue.read_text() != text: raise ValueError('repair attempt queue changed')
             if not queue.exists():
@@ -357,6 +405,9 @@ def _launch_one_repair(folder, state, config, *, source_queue=None, per_batch_lo
                 'runtime':config['task_runtime'],'server':config['server'],'model_id':config['model_id'],
                 'node_bin':config['node_bin'],'queue_worker':config['queue_worker'],
                 'teacher_identity':config.get('teacher_identity')}
+            if selected:
+                attempt['teacher_source'] = config['teacher_source']
+                attempt['sampling'] = selected['sampling']
             receipt['current'] = attempt; write(receipt_path, receipt)
         queue = Path(attempt['queue'])
         if binding(queue) != attempt['queue_binding']: raise ValueError('prepared repair queue changed')
@@ -372,6 +423,13 @@ def _launch_one_repair(folder, state, config, *, source_queue=None, per_batch_lo
                 raise ValueError('configured teacher execution identity changed')
             attempt['actual_teacher_identity']=verify_teacher_identity(identity_binding['path'],server=attempt['server'],model_id=attempt['model_id'])
             command += ['--teacher-identity',identity_binding['path']]
+        if attempt.get('teacher_source'):
+            selected = load_teacher_source(attempt['teacher_source'], identity=attempt['teacher_identity']['path'],
+                                           server=attempt['server'], model_id=attempt['model_id'])
+            if selected['sampling'] != attempt['sampling']:
+                raise ValueError('prepared repair sampling differs from selected teacher')
+            if attempt['sampling'].get('request_config'):
+                command += ['--chat-request-config', attempt['sampling']['request_config']['path']]
         attempt['argv']=command;write(receipt_path,receipt)
         log=(queue.parent/'worker.log').open('ab');child=subprocess.Popen(command,env=env,stdout=log,stderr=log,start_new_session=True)
         identity=process(child.pid)
@@ -456,7 +514,7 @@ def config_revision(folder, state, path, *, publish=True):
     raw=Path(path).read_bytes();config=json.loads(raw);current=binding(path)
     if state.get('config')==current: return config
     previous=state.get('config_value')
-    allowed={'task_runtime','server','model_id','feeder','queue_worker','node_bin','drain_file','teacher_identity','source_sequence','repair_parallel_batches','primary_parallel_batches','primary_tail_max_running','primary_worker_capacity','overlap_workers','overlap_feeder','collection_repo','collection_worker'}
+    allowed={'task_runtime','server','model_id','teacher_source','feeder','queue_worker','node_bin','drain_file','teacher_identity','source_sequence','repair_parallel_batches','primary_parallel_batches','primary_tail_max_running','primary_worker_capacity','overlap_workers','overlap_feeder','collection_repo','collection_worker'}
     changes={key for key in set(previous or {})|set(config) if (previous or {}).get(key)!=config.get(key)}
     if previous is not None and changes-allowed: raise ValueError('guardian root/ownership configuration changed; preserve and explicitly migrate this state')
     snapshot=folder/'config-history'/(current['sha256']+'.json');snapshot.parent.mkdir(parents=True,exist_ok=True)
@@ -896,6 +954,7 @@ def _spawn_primary_prefetch(folder,state,config,slot,workers):
         'NATLANG_TEACHER_SOURCE_CONFIGURATION_SHA256':slot['source_configuration']['sha256'],
         'NATLANG_TEACHER_SOURCE_CONFIGURATION_BYTES':str(slot['source_configuration']['bytes']),
         'NATLANG_TEACHER_WORKER_COUNT':str(workers)}
+    env.update(teacher_environment(config))
     verify_teacher_identity(config['teacher_identity']['path'],server=config['server'],model_id=config['model_id'])
     log=(Path(folder)/f"prefetch-{slot['batch']:04d}.log").open('ab')
     child=subprocess.Popen(['nice','-n','10','python','-u',slot['feeder']['path']],
