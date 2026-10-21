@@ -4,9 +4,12 @@ import triton
 import triton.language as tl
 
 
-@triton.jit
-def _gather(source, index, out, S:tl.constexpr, C:tl.constexpr, R:tl.constexpr,
-            SB:tl.constexpr, SS:tl.constexpr, SC:tl.constexpr, N:tl.constexpr, BLOCK:tl.constexpr):
+# Source/history lengths change between graphs. Specializing them recompiles
+# both kernels during useful training; only feature geometry stays constant.
+@triton.jit(do_not_specialize=['S','R','SB','N'],
+            do_not_specialize_on_alignment=['S','R','SB','N'])
+def _gather(source, index, out, S, C:tl.constexpr, R,
+            SB, SS:tl.constexpr, SC:tl.constexpr, N, BLOCK:tl.constexpr):
     offsets = tl.program_id(0).to(tl.int64)*BLOCK + tl.arange(0,BLOCK)
     valid = offsets < N
     row = (offsets//C)%R
@@ -19,9 +22,10 @@ def _gather(source, index, out, S:tl.constexpr, C:tl.constexpr, R:tl.constexpr,
     tl.store(out+offsets,value,mask=valid)
 
 
-@triton.jit
-def _accumulate(grad,index,out,S:tl.constexpr,C:tl.constexpr,R:tl.constexpr,
-                N:tl.constexpr,BLOCK:tl.constexpr):
+@triton.jit(do_not_specialize=['S','R','N'],
+            do_not_specialize_on_alignment=['S','R','N'])
+def _accumulate(grad,index,out,S,C:tl.constexpr,R,
+                N,BLOCK:tl.constexpr):
     offsets = tl.program_id(0).to(tl.int64)*BLOCK + tl.arange(0,BLOCK)
     valid = offsets<N
     row = (offsets//C)%R

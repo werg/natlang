@@ -52,3 +52,28 @@ def test_actual_cuda_values_gradients_and_workspace(channels):
     torch.testing.assert_close(actual,expected,rtol=0,atol=1e-12)
     allowed=result.numel()*4*2+x.numel()*8+index.numel()*8+8*1024**2
     assert peak<=allowed,(peak,allowed)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(),reason='actual CUDA JIT cache required')
+def test_varying_graph_lengths_reuse_cuda_kernels():
+    from natlang_neuralese.maple import state_gather_kernels as kernels
+
+    def compiled(kernel):
+        return sum(len(cache[0])for cache in kernel.device_caches.values())
+
+    before=[compiled(k)for k in(kernels._gather,kernels._accumulate)]
+    for batch,sources,rows in((1,17,13),(2,19,20),(1,23,27),(2,29,34)):
+        # Strided sources and repeated negative indices exercise the actual
+        # address/adjoint arithmetic while every graph has different lengths.
+        x=torch.randn(batch,sources,74,device='cuda',dtype=torch.float64)[...,::2]
+        x.requires_grad_()
+        index=(torch.arange(rows,device='cuda')%(sources*2)-sources).reshape(-1,1)
+        result=gather_convolution_state(x,index)
+        reference=x[:,index].float()
+        assert torch.equal(result,reference)
+        grad=torch.randn_like(result)
+        actual=torch.autograd.grad(result,x,grad)[0]
+        expected=torch.autograd.grad(reference,x,grad)[0]
+        torch.testing.assert_close(actual,expected,rtol=0,atol=1e-12)
+    after=[compiled(k)for k in(kernels._gather,kernels._accumulate)]
+    assert all(end-start<=1 for start,end in zip(before,after)),(before,after)

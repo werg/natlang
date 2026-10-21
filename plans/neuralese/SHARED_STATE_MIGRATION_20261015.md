@@ -1854,3 +1854,63 @@ archives and last measured optimized serving arguments. Fresh actor custody
 and honest unfinished-generation accounting are required before new generation.
 The full10e7df20e7 repository check passed before the new dispatch fix; the new
 fix has passing focused/quick checks and requires its normal full check.
+
+### Consolidated recovery progress — 2026-10-21 05:15 Berlin
+
+LFM adopted verified-row continuations9940,746,288,456 and708 at global22611,
+22848,22892,23130 and23264. Current train1540148/held25955; optimizer/RNG and
+per-row exposure are retained. Epoch87/tranches5–13 now add1384 admitted rows
+per model across eight positive tranches; tr11 has an exact empty disposition.
+These additional1384 still need normal staging and learner admission. All new
+teacher data comes from the dedicated self-hosted stronger Qwen teacher, whose
+24 workers had recent activity and159 completed trajectories at the last check.
+
+Mellum fa6f6e08 restored the independently durable full26320 parent6e6e35a1
+and original795ffca6 lineage, including optimizer/RNG/exposure,646 source/held
+files and all required auxiliary metadata. No replacement SGD is yet credited.
+Its canonical base layout, same-byte classifier path continuation, missing held
+packet and missing parameter artifacts have been repaired. Native32037 under
+recipe31921 is now executing the real R13 full recipe and fresh capacity checks.
+The backup watcher is bound to this actual child's argv, retaining26320 as its
+honest durable lower bound until a newer full export is independently verified.
+Old inaccessible26658 remains338 unrescued updates, not recovered progress.
+
+Do not make the duplicate complete source-geometry rescan a prerequisite for
+useful training. The independently reviewed adaptive entry retains every active
+historical whole-graph capacity case and reference, adds all-current-index
+forward maxima for each overlapping class and verified completed-leaf maxima,
+and runs the unchanged actual numerical/capacity checks before SGD. The complete
+396-leaf KV census continues asynchronously. Its executable follower compares
+final requirements to fresh measured capacity and requests a safe checkpoint if
+an actual larger case requires extension. No incomplete global-max credit is
+claimed. Cache-only source wrappers deliberately forbid parsing: use the normal
+source loader for selected graph reads after authenticating all exact indexes.
+Keep the complete current recipe and every useful source; append all prepared
+backlog/new rows after Mellum's resident initialization.
+
+Historical LFM22038 evaluation finished0/16:12repetition,2budget exhaustion,
+2semantic mismatches, no infrastructure errors. Evaluation23031 is now active.
+This remains actual quality debt, not qualification of newer weights.
+Epoch87/tr4 admitted708 rows from19 materialized trajectories. Source
+teacher-program:e3a5128f5c0e972eb0e3 remains assigned to exact linkage repair:
+two structured Neuralese returns have recorded writer metadata inconsistent
+with the strict return-write matcher. Preserve its original data and diagnostic
+bindings; no targets from that held source were admitted. The exact admission
+operators received independent Luna engineering review, without any generation.
+
+A live stack localized LFM pauses to Triton state-gather backward JIT compiling
+changing graph lengths. The shared fix leaves lengths/batch strides dynamic and
+preserves FP32 values/FP64 adjoints. Seven focused CUDA tests and the full main
+suite passed. On actual H100,17 varied geometries produced34 baseline kernel
+specializations and zero additional candidate specializations after warmup
+(7.69s versus0.0145s dispatch/compile); warm math was0.3275ms versus0.3295ms.
+R14 is R13 plus only this kernel change: codee2733aed7d2d, construction728ecdb2.
+Both complete sealed publisher/controller loads passed113 tests plus one skip.
+R14 is physically staged on LFM; Mellum transport is being repaired through the
+existing verified private-HTTP ferry after another SDK stream-write failure.
+No production R14 activation is yet claimed. Preserve R13's other intentional
+numerical/controller fixes and all live data appends during cutover.
+
+Exporter recovery-namespace support passed67focused plus full/quick checks and
+is published in5024148ad. Retention remains disabled until current full-state,
+inference and evaluation dependencies are correctly bound and remotely present.
