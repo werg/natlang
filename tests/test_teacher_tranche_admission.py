@@ -92,8 +92,8 @@ def test_changed_cases_and_remote_selection_hash_reject(tmp_path):
         packet_references(ready, collection)
 
 
-def corpus(root, batch, number, quality_view=None):
-    cid = Tranche(batch, number, quality_view=quality_view).corpus_id
+def corpus(root, batch, number, quality_view=None, **teacher):
+    cid = Tranche(batch, number, quality_view=quality_view, **teacher).corpus_id
     folder = root / 'runs' / cid
     outputs = {}
     files = []
@@ -119,6 +119,30 @@ def test_predecessors_span_batches_in_registry_order_exclude_self(tmp_path):
     put(tmp_path / 'training/neuralese_corpora.json', {'corpora': [first, second]})
     assert [row['id'] for row in admitted_predecessors(tmp_path, second['id'])] == [first['id']]
     assert [row['id'] for row in admitted_predecessors(tmp_path, Tranche(22, 1).corpus_id)] == [first['id'], second['id']]
+
+
+def test_new_teacher_epoch_keeps_actual_batch_zero_and_both_admitted_predecessors(tmp_path):
+    namespace = 'flint-verified-positive-native-graphs-20261021-recovery7853'
+    current = Tranche(0, 1, teacher_namespace=namespace)
+    assert current.corpus_id == namespace + '-batch0000-tranche0001'
+    assert current.admission(tmp_path) == tmp_path / 'admission/batch-0000/tranche-0001'
+    assert Tranche(21, 0, teacher_namespace=namespace).admission(tmp_path) == tmp_path / 'admission/batch-0021/tranche-0000'
+    old = corpus(tmp_path, 88, 0)
+    new = corpus(tmp_path, 0, 0, teacher_namespace=namespace)
+    put(tmp_path / 'training/neuralese_corpora.json', {'corpora': [old, new]})
+    admitted, rejected = preceding_tranches(tmp_path, tmp_path / 'spool', current)
+    assert [row['id'] for row in admitted] == [old['id'], new['id']]
+    assert rejected == []
+    # Same original manifest/quality checks apply to the new teacher.
+    (tmp_path / new['path'] / 'mellum21/train/native-graphs.jsonl.zst').write_bytes(b'changed')
+    with pytest.raises(ValueError, match='graph differs'):
+        preceding_tranches(tmp_path, tmp_path / 'spool', current)
+
+
+@pytest.mark.parametrize('namespace', ['', '../flint', 'flint/other', True])
+def test_teacher_namespace_cannot_escape_artifact_paths(namespace):
+    with pytest.raises(ValueError, match='namespace'):
+        Tranche(0, 0, teacher_namespace=namespace)
 
 
 def test_predecessor_requires_manifest_and_both_exact_admitted_views(tmp_path):

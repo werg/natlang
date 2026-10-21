@@ -146,15 +146,23 @@ def verify_completed_source_phase(receipt_reference, directory):
     return receipt
 
 
+LEGACY_TEACHER_NAMESPACE = 'qwen-verified-positive-native-graphs-20261017-recovery7853'
+
+
 @dataclass(frozen=True)
 class Tranche:
     batch: int
     number: int
     attempt: int | None = None
     quality_view: str | None = None
+    teacher_namespace: str = LEGACY_TEACHER_NAMESPACE
 
     def __post_init__(self):
-        if type(self.batch) is not int or self.batch < 21 or type(self.number) is not int or self.number < 0:
+        if (not isinstance(self.teacher_namespace, str)
+                or re.fullmatch(r'[a-z][a-z0-9]*(?:-[a-z0-9]+)*', self.teacher_namespace) is None):
+            raise ValueError('teacher admission needs an explicit safe teacher namespace')
+        minimum = 21 if self.teacher_namespace == LEGACY_TEACHER_NAMESPACE else 0
+        if type(self.batch) is not int or self.batch < minimum or type(self.number) is not int or self.number < 0:
             raise ValueError('teacher tranche needs actual batch and nonnegative tranche numbers')
         if self.attempt is not None and (type(self.attempt) is not int or self.attempt < 1):
             raise ValueError('teacher repair attempt must be an explicit positive integer')
@@ -177,8 +185,9 @@ class Tranche:
     @property
     def corpus_id(self):
         suffix = (f'batch{self.batch:04d}-repair{self.attempt:04d}-' if self.attempt is not None
-                  else '' if self.batch == 21 else f'batch{self.batch:04d}-')
-        ident=f'qwen-verified-positive-native-graphs-20261017-recovery7853-{suffix}tranche{self.number:04d}'
+                  else '' if self.batch == 21 and self.teacher_namespace == LEGACY_TEACHER_NAMESPACE
+                  else f'batch{self.batch:04d}-')
+        ident=f'{self.teacher_namespace}-{suffix}tranche{self.number:04d}'
         return ident+(('-quality-'+self.quality_view)if self.quality_view else'')
 
     def exports(self, spool):
@@ -192,7 +201,8 @@ class Tranche:
         if self.attempt is not None:
             result=root / 'repair-attempts' / self.batch_name / f'attempt-{self.attempt:04d}' / self.name
         else:
-            result=(root / self.batch_name if self.batch != 21 else root)/self.name
+            legacy_anchor = self.batch == 21 and self.teacher_namespace == LEGACY_TEACHER_NAMESPACE
+            result=(root if legacy_anchor else root / self.batch_name)/self.name
         if self.quality_view and not recovery:
             return Path(spool)/'admission-quality-views'/self.quality_view/result.relative_to(root)
         return result
@@ -258,7 +268,7 @@ def packet_references(ready_reference, collection):
     return matches[0]
 
 
-def admitted_predecessors(root, corpus_id):
+def admitted_predecessors(root, corpus_id, *, namespaces=(LEGACY_TEACHER_NAMESPACE,)):
     """Return the registered positive corpus closure in registry order.
 
     No directory glob or unregistered partial output grants predecessor status.
@@ -270,13 +280,13 @@ def admitted_predecessors(root, corpus_id):
     registry = read_bound(before)
     rows = []
     seen = set()
-    prefix = 'qwen-verified-positive-native-graphs-20261017-recovery7853-'
+    prefixes = tuple(namespace + '-' for namespace in namespaces)
     for entry in registry['corpora']:
         ident = entry['id']
         if ident in seen:
             raise ValueError('teacher registry repeats a corpus identity')
         seen.add(ident)
-        if ident == corpus_id or not ident.startswith(prefix) or entry.get('training_admission') is not True:
+        if ident == corpus_id or not ident.startswith(prefixes) or entry.get('training_admission') is not True:
             continue
         folder = root / entry['path']
         manifest = json.loads((root / 'training/corpus-manifests' / (ident + '.json')).read_bytes())
@@ -338,15 +348,17 @@ def _reviewed_predecessor_source(root, spool, original, reviewed):
 
 def preceding_tranches(root, spool, tranche):
     """Account for every earlier tranche in this batch, including all-rejected ones."""
-    admitted = admitted_predecessors(root, tranche.corpus_id)
+    admitted = admitted_predecessors(root, tranche.corpus_id,
+        namespaces=tuple(dict.fromkeys((LEGACY_TEACHER_NAMESPACE, tranche.teacher_namespace))))
     identities = {row['id'] for row in admitted}
     rejected = []
     for number in range(tranche.number):
-        earlier = Tranche(tranche.batch, number, tranche.attempt)
+        earlier = Tranche(tranche.batch, number, tranche.attempt, teacher_namespace=tranche.teacher_namespace)
         if earlier.corpus_id in identities:
             continue
         if tranche.quality_view is not None:
-            reviewed = Tranche(tranche.batch, number, tranche.attempt, quality_view=tranche.quality_view)
+            reviewed = Tranche(tranche.batch, number, tranche.attempt, quality_view=tranche.quality_view,
+                               teacher_namespace=tranche.teacher_namespace)
             if reviewed.corpus_id in identities:
                 _reviewed_predecessor_source(root, spool, earlier, reviewed)
                 continue

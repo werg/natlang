@@ -27,3 +27,11 @@ exec transition immediately after spawning. Authenticate this exact argument
 vector and process birth, then require the ordinary sealed source/frontier checks
 before granting refill capacity. A launch race must not terminate supervision of
 an already collecting batch; unrelated wrappers remain rejected.
+
+Admission uses an explicit teacher namespace in the existing shared `Tranche`
+mechanism. Preserve every historical Qwen identity and its batch-21 layout.
+New teacher epochs retain their actual batch numbers, including zero, and always
+include the batch in their names and paths. Deduplication verifies the existing
+admitted Qwen outputs together with the selected teacher's admitted outputs using
+the same manifest, quality and paired-student hash checks. A new namespace grants
+neither source admission nor exposure.
