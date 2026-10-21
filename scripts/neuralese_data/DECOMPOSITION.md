@@ -293,6 +293,13 @@ decision.
    `write_acquired_source_closure_receipt.py --force-full-validation` provides
    that uncached full pass while creating a receipt only at its new output path.
 
+Teacher runtime aliases are authenticated transport facts, not a teacher-selection
+policy. The ordinary trajectory converter resolves a declared self-hosted source
+descriptor through exact transferred path/SHA/byte bindings, verifies its teacher
+and execution actor against the collection, and uses its model alias when checking
+captured trajectories. Legacy collections retain their existing pennyroyal alias.
+Never rename captured provenance to satisfy an older converter.
+
 The hash cache is a performance aid after an actual byte hash, not authority by
 itself. Its current threat model covers ordinary filesystem mutation and races;
 it does not claim to detect privileged forgery of kernel-maintained ctime or

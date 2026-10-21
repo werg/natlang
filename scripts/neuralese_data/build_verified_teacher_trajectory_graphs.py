@@ -295,6 +295,51 @@ def collection_provenance(collection, transferred, *, seen=()):
     return proofs
 
 
+def collection_runtime_model(collection, transferred):
+    """Resolve a serving alias from authenticated source and actor declarations."""
+    reference = collection.get('teacher_configuration_source')
+    if reference is None:
+        return 'pennyroyal', {}
+    proofs = {}
+    def load(name, ref):
+        if (not isinstance(ref, dict) or not isinstance(ref.get('path'), str)
+                or not isinstance(ref.get('sha256'), str)
+                or type(ref.get('bytes')) is not int or ref['bytes'] < 1):
+            raise ValueError('teacher runtime lacks an exact ' + name + ' binding')
+        copies = transferred.get(ref['path'], [])
+        if not copies:
+            raise ValueError('teacher runtime provenance was not transferred: ' + name)
+        for item in copies:
+            path = Path(item['path'])
+            if (item.get('sha256') != ref['sha256'] or item.get('bytes') != ref['bytes']
+                    or path.stat().st_size != ref['bytes'] or sha256_file(path) != ref['sha256']):
+                raise ValueError('teacher runtime provenance changed: ' + name)
+        proofs[name] = {'path': copies[0]['path'], 'source': ref['path'],
+                        'sha256': ref['sha256'], 'bytes': ref['bytes']}
+        return json.loads(Path(copies[0]['path']).read_text())
+    source = load('teacher_configuration_source', reference)
+    teacher = dict(collection['teacher'])
+    # A separate, source-bound legacy-role attestation can add this semantic
+    # field. It must not change any actual model or serving metadata.
+    teacher.pop('teacher_role', None)
+    declared_teacher = dict(source.get('teacher') or {})
+    declared_teacher.pop('teacher_role', None)
+    alias = source.get('model_id')
+    if (source.get('schema') != 'natlang.self-hosted-teacher-source/1'
+            or not isinstance(alias, str) or not alias.strip()
+            or teacher != declared_teacher
+            or source.get('execution_identity') != collection.get('actual_teacher_execution_identity')):
+        raise ValueError('teacher runtime descriptor differs from its collection')
+    identity = load('actual_teacher_execution_identity', source['execution_identity'])
+    actor = collection.get('actor')
+    if (identity.get('schema') != 'natlang.self-hosted-teacher-execution-identity/1'
+            or identity.get('model_id') != alias or identity.get('server') != source.get('server')
+            or identity.get('actor') != actor):
+        raise ValueError('teacher runtime descriptor refers to a different actor')
+    load('actor', actor)
+    return alias, proofs
+
+
 def restore_transfer_row_ids(transfer, additions):
     """Add missing transport identities without replacing existing facts."""
     identities={}
@@ -404,6 +449,7 @@ def source_binding(args):
                 'independent stronger open teacher; not either student/onpolicy'):
             raise ValueError('collection does not identify an independent stronger teacher')
         provenance = collection_provenance(collection, transferred)
+        runtime_model, runtime_proofs = collection_runtime_model(collection, transferred)
         if (collection.get('source_cases_sha256') != packet['packet_sha256']
                 or canonical_json_sha256_hex(collection.get('protected_selection')) != canonical_json_sha256_hex(packet['selection'])
                 or canonical_json_sha256_hex(collection.get('teacher')) != canonical_json_sha256_hex(teacher)):
@@ -414,8 +460,11 @@ def source_binding(args):
             raise ValueError('collection receipt differs from its executed root mode or original source path')
         packets[item['source']] = packet
         collections[item['source']] = {'path': str(local), 'sha256': item['sha256'],
+                                      'runtime_model': runtime_model,
                                       'packet_proofs': packet['proofs'],
                                       **({'continuation_proofs': provenance} if provenance else {})}
+        for name, proof in runtime_proofs.items():
+            proof_paths['runtime:' + item['source'] + ':' + name] = Path(proof['path'])
         for name, proof in provenance.items():
             proof_paths['collection:' + item['source'] + ':' + name] = Path(proof['path'])
     if not collections or set(packets) != set(collections):
@@ -671,7 +720,8 @@ def validate_teacher_row(row, binding):
             or not set(groups) <= packet['train_groups'] or set(groups) & packet['held_groups']):
         raise ValueError('teacher program differs from its actual batch selected packet')
     trace = row.get("provenance") or {}
-    if trace.get("model") != "pennyroyal" or row.get("execution_identity", {}).get("execution_run_id") is None:
+    expected_model = binding['collections'][batch_source].get('runtime_model', 'pennyroyal')
+    if trace.get("model") != expected_model or row.get("execution_identity", {}).get("execution_run_id") is None:
         raise ValueError(f"teacher trajectory lacks the expected runtime execution identity: {row.get('id')}")
     if not isinstance(row.get("trajectory"), list) or not row["trajectory"]:
         raise ValueError(f"teacher trajectory has no captured whole-turn contexts: {row.get('id')}")

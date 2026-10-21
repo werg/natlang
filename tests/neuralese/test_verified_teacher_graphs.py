@@ -34,6 +34,42 @@ def _row():
         'trajectory': [{'phase': 'action', 'assistant': {'content': 'correct'}}]}
 
 
+@pytest.mark.parametrize('mutation', ['descriptor-bytes', 'missing-descriptor', 'teacher',
+    'identity', 'actor', 'empty-alias'])
+def test_runtime_alias_rejects_changed_or_missing_teacher_custody(tmp_path, mutation):
+    transferred = {}
+    def put(name, value):
+        path = tmp_path/name
+        path.write_text(json.dumps(value))
+        ref = {'path': '/remote/'+name, 'sha256': converter.sha256_file(path),
+               'bytes': path.stat().st_size}
+        transferred[ref['path']] = [{**ref, 'source': ref['path'], 'path': str(path)}]
+        return ref
+    actor = put('actor.json', {'pid': 42})
+    identity = put('identity.json', {'actor': actor,
+        'schema': 'natlang.self-hosted-teacher-execution-identity/1', 'model_id': 'flint'})
+    teacher = {'model': 'RecursiveSI/flint', 'revision': 'exact-model-revision'}
+    descriptor = {'schema': 'natlang.self-hosted-teacher-source/1', 'model_id': 'flint',
+                  'teacher': teacher, 'execution_identity': identity}
+    if mutation == 'empty-alias':
+        descriptor['model_id'] = ''
+    source = put('source.json', descriptor)
+    collection = {'teacher': teacher, 'teacher_configuration_source': source,
+                  'actual_teacher_execution_identity': identity, 'actor': actor}
+    if mutation == 'descriptor-bytes':
+        (tmp_path/'source.json').write_text('{}')
+    elif mutation == 'missing-descriptor':
+        transferred.pop(source['path'])
+    elif mutation == 'teacher':
+        collection['teacher'] = {**teacher, 'revision': 'different'}
+    elif mutation == 'identity':
+        collection['actual_teacher_execution_identity'] = {**identity, 'sha256': '0'*64}
+    elif mutation == 'actor':
+        collection['actor'] = {**actor, 'sha256': '0'*64}
+    with pytest.raises(ValueError, match='teacher runtime'):
+        converter.collection_runtime_model(collection, transferred)
+
+
 def test_row_id_recovery_preserves_existing_receipt_and_exact_file_identity():
     item={'path':'/local/result','source':'/remote/result','sha256':'a'*64,'bytes':7}
     receipt={'files':[item]}
@@ -424,7 +460,8 @@ def test_authenticated_text_emulation_preserves_renderer_omitted_null_type():
 @pytest.mark.parametrize('code_selection', [False, 'list', 'count'])
 @pytest.mark.parametrize('explicit_collection', [False, True])
 @pytest.mark.parametrize('prepared_execution', [False, True])
-def test_each_teacher_batch_uses_its_own_exact_program_packet(tmp_path, monkeypatch, code_selection, explicit_collection, prepared_execution):
+@pytest.mark.parametrize('runtime_model', ['pennyroyal', 'flint'])
+def test_each_teacher_batch_uses_its_own_exact_program_packet(tmp_path, monkeypatch, code_selection, explicit_collection, prepared_execution, runtime_model):
     from types import SimpleNamespace
     monkeypatch.setattr(converter, 'current_protection', lambda _: {
         'held': set(), 'quality': set(), 'pending': set(), 'proof': {}})
@@ -440,6 +477,7 @@ def test_each_teacher_batch_uses_its_own_exact_program_packet(tmp_path, monkeypa
     rows, files, batches = [], [], []
     for index in range(2):
         row = copy.deepcopy(_row())
+        row['provenance']['model'] = runtime_model
         row['id'] = f'execution-{index}'
         program = row['task']['program_ir']
         program.update(id=f'program-{index}', source_groups=[f'train-{index}'])
@@ -476,6 +514,24 @@ def test_each_teacher_batch_uses_its_own_exact_program_packet(tmp_path, monkeypa
             'teacher': teacher})
         files.append({'path': str(collection), 'source': collection_source,
             'bytes': collection.stat().st_size, 'sha256': converter.sha256_file(collection)})
+        if runtime_model != 'pennyroyal':
+            def runtime_file(name, value):
+                path = put(base+'/'+name, value)
+                ref = {'path': '/remote/'+base+'/'+name, 'sha256': converter.sha256_file(path),
+                       'bytes': path.stat().st_size}
+                files.append({**ref, 'path': str(path), 'source': ref['path']})
+                return ref
+            actor = runtime_file('actor.json', {'actual_model': 'RecursiveSI/flint', 'pid': 42})
+            identity = runtime_file('identity.json', {'actor': actor,
+                'schema': 'natlang.self-hosted-teacher-execution-identity/1', 'model_id': runtime_model})
+            descriptor = runtime_file('source.json', {'schema': 'natlang.self-hosted-teacher-source/1',
+                'model_id': runtime_model, 'teacher': teacher, 'execution_identity': identity})
+            value = json.loads(collection.read_text())
+            value.update(teacher_configuration_source=descriptor,
+                         actual_teacher_execution_identity=identity, actor=actor)
+            collection.write_text(json.dumps(value)+'\n')
+            collection_file = next(item for item in files if item['source'] == collection_source)
+            collection_file.update(bytes=collection.stat().st_size, sha256=converter.sha256_file(collection))
         response = put(base+'/response.jsonl', row)
         files.append({'row_id': row['id'], 'path': str(response),
             'source': f'/work/generation/batch-{index:04d}/results/program/response.jsonl',
@@ -513,6 +569,11 @@ def test_each_teacher_batch_uses_its_own_exact_program_packet(tmp_path, monkeypa
     assert binding['teacher'] == teacher
     for row in rows:
         assert converter.validate_teacher_row(row, binding)[0] == row['task']['program_ir']
+    if runtime_model != 'pennyroyal':
+        swapped_alias = copy.deepcopy(rows[0])
+        swapped_alias['provenance']['model'] = 'pennyroyal'
+        with pytest.raises(ValueError, match='runtime execution identity'):
+            converter.validate_teacher_row(swapped_alias, binding)
     # Historical transfers may omit row_id. Restore that fact in a separate
     # continuation instead of rewriting the immutable transfer receipt.
     transfer_path = tmp_path/'transfer-receipt.json'
