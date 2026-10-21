@@ -810,7 +810,11 @@ export class MemoryNeuraleseStore implements NeuraleseStore {
   get size(): number { return this.blocks.size + this.nativeStates.size + this.nativeTensorArtifacts.size; }
 }
 
-/** Write port: turns what a model wrote inside a literal into a stored block. */
+/** Write port: turns what a model wrote inside a literal into a stored block.
+ * Returned type/producer/truncation describe this write occurrence. The content
+ * store may retain an earlier producer for an identical payload; inspect it via
+ * store.get() when original stored custody is required.
+ */
 export interface NeuralesePort {
   readonly dialect: string;
   write(text: string, options?: { type?: string; producer?: Record<string, unknown>; truncated?: boolean }): Promise<NeuraleseBlockMeta>;
@@ -834,9 +838,15 @@ export class StandInNeuralesePort implements NeuralesePort {
       if (vector.length !== this.width) throw new RangeError(`embedding width ${vector.length}, expected ${this.width}`);
       data.set(vector, index * this.width);
     });
-    return this.store.put({ dialect: this.dialect, type: options.type, length: vectors.length, width: this.width, dtype: 'f32',
-      data: new Uint8Array(data.buffer), producer: { kind: 'stand-in', ...(options.producer ?? {}) },
+    const producer = { kind: 'stand-in', ...(options.producer ?? {}) };
+    const stored = await this.store.put({ dialect: this.dialect, type: options.type, length: vectors.length, width: this.width, dtype: 'f32',
+      data: new Uint8Array(data.buffer), producer,
       ...(options.truncated ? { truncated: true } : {}) });
+    // The store retains immutable payload custody. A successful write reports
+    // this occurrence even when its bytes deduplicate with an earlier writer.
+    const { type: _storedType, producer: _storedProducer, truncated: _storedTruncated, ...payload } = stored;
+    return { ...payload, ...(options.type === undefined ? {} : { type: options.type }), producer,
+      ...(options.truncated ? { truncated: true } : {}) };
   }
 }
 

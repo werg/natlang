@@ -576,3 +576,118 @@ test('text readout rejects vector-only libraries, mismatched body IDs, invalid s
   await assert.rejects(() => badSource.wrap(async () => ({ calls: [] }))(requestWithBody), /does not match the configured library's declared read body/);
   await assert.rejects(() => wrongTypeSend(requestWithBody), /does not match the declared string result type/);
 });
+
+
+test('repeated text writes retain current occurrence metadata and original stored custody', async () => {
+  const emulation = createTextNeuraleseEmulation();
+  const first = await emulation.port.write(NOTE, { type: 'Neuralese<First>', truncated: true,
+    producer: { marker_context: 'eval-code', result_type: 'Neuralese<First>', call_id: 'first' } });
+  const storedBefore = await emulation.runtime.store.get(first.id);
+  const second = await emulation.port.write(NOTE, { type: 'Neuralese<Second>',
+    producer: { marker_context: 'return-result', result_type: 'Neuralese<Second>', call_id: 'second' } });
+  assert.equal(first.id, second.id, 'the payload is still content addressed');
+  assert.equal(second.type, 'Neuralese<Second>');
+  assert.equal(second.producer.result_type, 'Neuralese<Second>');
+  assert.equal(second.producer.marker_context, 'return-result');
+  assert.equal(second.producer.call_id, 'second');
+  assert.equal(second.producer.text_body_sha256, sha256(NOTE));
+  assert.equal(!!second.truncated, false);
+  assert.deepEqual(await emulation.runtime.store.get(first.id), storedBefore,
+    'a later write must not overwrite the first producer or durable payload');
+});
+test('repeated eval and return marker bytes preserve actual teacher writer occurrences', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'teacher-text-neuralese-'));
+  const project = definitionProject('protocol', { returns: 'string', instructions: 'Pass a soft note to a reader child.' });
+  const record = { version: 'natlang.program/2', id: 'text-neuralese-roundtrip', kind: 'lambda_source',
+    source: 'focused-test', split: 'test', source_ids: ['text-neuralese-roundtrip'],
+    source_groups: ['text-neuralese-roundtrip'], license: 'test', semantics: {
+      root: project.root, files: project.files, inputs: {}, expected: NOTE, operation: 'exact' } };
+  const requests = [];
+  let handoffWrites = 0;
+  const server = createServer((request, response) => {
+    let body = '';
+    request.setEncoding('utf8'); request.on('data', chunk => { body += chunk; });
+    request.on('end', () => {
+      const parsed = JSON.parse(body);
+      requests.push(parsed);
+      const activePrompt = parsed.messages.filter(message => message.role === 'user' &&
+        typeof message.content === 'string' && message.content.includes('You are inside this call')).at(-1)?.content ?? '';
+      let reply;
+      if (requests.length === 1) reply = ['eval', { code: 'const seed: Neuralese<() => Promise<Neuralese<string>>> = nl.with<Neuralese<string>>({})`Write the handoff note.`;\n' +
+        'const prior = await seed();\n' +
+        'const byTemplate = `${prior}`;\n' +
+        'let byAppend = ""; byAppend += prior;\n' +
+        'const byPlus = "" + prior;\n' +
+        'const byString = String(prior);\n' +
+        'const byJson = JSON.stringify(prior);\n' +
+        'const reader: Neuralese<(prior: Neuralese<string>) => Promise<string>> = nl.with<string>({})`Read the supplied handoff note and repeat its content exactly.`;\n' +
+        'return await reader(prior);' }];
+      else if (activePrompt.includes('Write the handoff note')) {
+        handoffWrites++;
+        reply = handoffWrites === 1 ? ['eval', { code:
+          `const duplicate: Neuralese<string> = <|neuralese|>${NOTE}<|/neuralese|>; console.log(duplicate);` }] :
+          ['return_result', { status: 'success', value: `<|neuralese|>${NOTE}<|/neuralese|>` }];
+      }
+      else if (activePrompt.includes('Read the supplied handoff note')) reply = ['return_result', { status: 'success', value: NOTE }];
+      else reply = ['return_result', { status: 'success', value: NOTE }];
+      const message = { role: 'assistant', content: '', tool_calls: [{ id: `r${requests.length}`,
+        type: 'function', function: { name: reply[0], arguments: JSON.stringify(reply[1]) } }] };
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ choices: [{ message }], usage: { prompt_tokens: 20, completion_tokens: 12 } }));
+    });
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const options = { jobs: join(dir, 'jobs'), output: join(dir, 'out.jsonl'), workers: 1, modelId: 'mock-teacher',
+      rootSeed: 21, systemPrompt: 'Test system prompt.', contextTokens: 8192,
+      toolSurfaceSha256: await defaultToolSurfaceHash(), endpoint: `http://127.0.0.1:${server.address().port}`,
+      collectionRole: 'teacher', textNeuraleseEmulation: true, transportRetries: 1, retryDelayMs: 0 };
+    await mkdir(options.jobs, { recursive: true });
+    const item = { index: 0, record };
+    const enabledIdentity = expectedProvenance(record, options);
+    const disabledIdentity = expectedProvenance(record, { ...options, textNeuraleseEmulation: false });
+    assert.equal(enabledIdentity.text_neuralese_transport.mode, 'text-marker-standin/2');
+    assert.equal(enabledIdentity.text_neuralese_transport.prompt_revision, 'text-marker-guidance/10');
+    assert.equal(Object.hasOwn(disabledIdentity, 'text_neuralese_transport'), false);
+    assert.notEqual(enabledIdentity.system_prompt_sha256, disabledIdentity.system_prompt_sha256);
+    const row = await nativeJobRunner(options)(item, expectedProvenance(record, options));
+    assert.equal(row.outcome.accepted, true, JSON.stringify(row.outcome.rejection_reasons));
+    assert.equal(row.outcome.value, NOTE);
+    const repeatedWrites = row.outcome.execution_graph.filter(event => event.kind === 'block_write' &&
+      event.text_body_sha256 === sha256(NOTE));
+    assert.ok(repeatedWrites.some(event => event.marker_context === 'eval-code'));
+    assert.ok(repeatedWrites.some(event => event.marker_context === 'return-result'),
+      'return metadata must describe its actual occurrence after the identical eval-code write');
+    assert.ok(requests.length >= 8 && requests.length <= 13, `unexpected provider turns: ${requests.length}`);
+    assert.equal(row.request_telemetry.starts.reduce((sum, start) => sum + start.chat_transport_starts, 0), requests.length,
+      'transport telemetry follows rendered requests through the text emulation wrapper');
+    const renderedTexts = requests.flatMap(request => request.messages ?? []).flatMap(message => {
+      const content = message.content;
+      return typeof content === 'string' ? [content] : Array.isArray(content) ? content.map(part => part.text ?? '') : [];
+    }).join('\n');
+    assert.match(renderedTexts, /Neuralese text block id=nz1_/);
+    assert.match(renderedTexts, /return the computed plain text as the result/);
+    assert.match(renderedTexts, /stage it with return_result\(text\) inside eval/);
+    assert.doesNotMatch(renderedTexts, /Do not call return_result from inside eval/);
+    assert.match(renderedTexts, /Native JavaScript text-coercion contexts use typed readout/);
+    assert.match(renderedTexts, /For an ordinary string result, any characters that look like Neuralese marker delimiters are literal string content/);
+    assert.match(renderedTexts, /a quoted marker is an ordinary string/);
+    assert.match(renderedTexts, /label is a human-readable preview/);
+    assert.match(renderedTexts, /complete unchanged label may be resolved as a Neuralese result only when its ID, type, and exact body digest match a typed value visible in this call/);
+    assert.ok(renderedTexts.includes(`exact JSON string body=${JSON.stringify(NOTE)}`),
+      `provider did not receive the exact stored literal body: ${renderedTexts}`);
+    const providerToolArguments = requests.flatMap(request => request.messages ?? []).flatMap(message =>
+      (message.tool_calls ?? []).map(call => call.function?.arguments).filter(value => value !== undefined));
+    assert.ok(providerToolArguments.every(value => typeof value === 'string'),
+      'text emulation restores provider tool arguments to their required string representation');
+    assert.ok(requests.flatMap(request => request.messages ?? []).every(message =>
+      message.content === undefined || typeof message.content === 'string'),
+      'the text-only provider sees string message content, not unsupported multipart content');
+    const native = materializeNativeRows([row]);
+    assert.equal(native.unlinked.length, 0, JSON.stringify(native.unlinked));
+    const markers = native.turns.flatMap(turn => turn.decision.assistant.calls).filter(call =>
+      call.source_tool === 'return_result' && call.arguments?.value === `<|neuralese|>${NOTE}<|/neuralese|>`);
+    assert.equal(markers.length, 1, 'the original sampled return marker is retained exactly once');
+  } finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
+});
+

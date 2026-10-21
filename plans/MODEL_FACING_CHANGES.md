@@ -1300,3 +1300,19 @@ exact-source current-protection/reference qualification and twelve times four
 actual own-Qwen teacher executions in the existing GEN sequence. Teacher
 trajectory admission and trained-student RL measurement are separate. No held
 content or answer is included, and no task success requires Neuralese use.
+
+
+## 2026-10-21: repeated text writer occurrence repair (not deployed)
+
+The stand-in write receipt now records the actual write's type, producer and
+truncation even when identical bytes already exist in the store. This fixes
+real teacher return events mislabeled with a previous eval-code producer.
+Raw stored payloads and first-producer custody remain unchanged. Provider
+expansion type labels can consequently become correct for a later declaration.
+The original materializer admission checks remain strict. Focused mocked runtime
+checks are engineering evidence only. Before teacher deployment, compare about
+48 live executor samples per variant with the self-hosted CoreWeave teacher,
+including repeated eval/return bodies and differently named equivalent types.
+Root owns this measurement and the actual guardian runtime transition; the
+currently running teacher remains on its existing runtime. Historical held
+traces need a separate explicitly bound conversion; no repair admission claimed.

@@ -620,8 +620,16 @@ export class NativeToolAgent {
     }
     // Each block the turn wrote is a node. Stop decisions and distribution parameters come from a writer that reports
     // them (a Neuralese server); the stand-in writer has none.
-    for (const block of new Map(written.map(block => [block.id, block])).values()) {
+    const reportedArtifacts = new Set<string>();
+    for (const block of written) {
       const reported = (block.producer ?? {}) as Record<string, unknown>;
+      // The text port reports actual writes, including two occurrences of the
+      // same payload within one turn. A server artifact list may repeat a stored
+      // artifact; retain its existing once-per-artifact recording semantics.
+      if (reported.kind !== 'text-marker-emulation') {
+        if (reportedArtifacts.has(block.id)) continue;
+        reportedArtifacts.add(block.id);
+      }
       graphNode(session.runtime.trace, 'block_write', { call_id: producer.call_id, turn: turnNode ?? '', block: block.id,
         length: block.length, truncated: !!block.truncated, stops: Array.isArray(reported.stops) ? reported.stops : [],
         ...Object.fromEntries(['position', 'temperature', 'seed', 'mean', 'scale', 'distribution',
