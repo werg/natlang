@@ -36,6 +36,14 @@ generation sandbox supplied with useful tasks and admit verified results into
 the evolving training recipe. Measure actual CPU/RAM need on the allocated
 machine rather than delaying useful generation to test smaller allocations.
 
+Owner instruction (2026-10-21): test `RecursiveSI/flint` as the generation
+teacher and replace Qwen if its actual natlang task performance is decent.
+Use the existing generation sandbox and preserve full trajectory, actor,
+runtime and source provenance. The publisher's NVFP4 GGUF is a candidate for
+our RTX PRO 6000 Blackwell; model-card scores alone do not establish our task
+quality or useful generation throughput. This conditionally supersedes the
+selected-teacher name above; it does not authorize external teacher generation.
+
 Owner clarification (2026-10-16): standing authorization covers replacing any
 stalled sandbox; do not ask again or wait indefinitely. Adjust the resource request if
 capacity is exhausted. Restore the newest independently verified full state,
