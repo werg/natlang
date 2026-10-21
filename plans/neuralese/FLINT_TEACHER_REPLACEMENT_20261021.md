@@ -39,9 +39,11 @@ admission, learner adoption and actual exposure.
   `b1a5ab2c050f3081c34ad710e7885b6190fe696023dbaaebd58aff62ac67d597`.
 - Teacher source descriptor SHA:
   `5d6a0ee03aee5415ba8124f54c468d433f15ac6f6c57f055d78560018a22ce8f`.
-- Guardian v2 preserves the collecting feeder and fixes its exact nice-to-Python
-  exec observation. Its source is frozen separately from the failed v1 supervisor.
-  Actual generation GPU utilization was 99% at 17:59 UTC.
+- Guardian v4 preserves the collecting feeder and authenticates ordinary primary
+  phase records separately from actual prefetched launches. Both producer and
+  private publisher use the same protocol; 247 focused integration tests passed.
+  Exact owner: PID 1771597, start tick 7039520. Actual generation GPU utilization
+  was 99% at 17:59 UTC.
 
 ## Continuation obligations
 
@@ -64,3 +66,43 @@ Host receipts and operational controls are under `/home/werg/data/dgxops`:
 `flint-continuous-native-publisher-20261021/`. The publisher uses the explicit
 CoreWeave SDK Python, not the project-only environment. Its durable spool is
 `/mnt/external/natlang-development-data/teacher-incremental-flint-7853-20261021`.
+
+## Verified integration at 18:49 UTC
+
+The first two private-export tranches have passed source/oracle, exact actor,
+TRAIN/held separation, paired actual-tokenizer reconstruction and full action
+accounting. They contain 29 successful complete source trajectories and 179
+captured actions, yielding 155 new ordinary SFT graphs for EACH student after
+explicit omissions and deduplication. Data-only registration commits are
+`cb137edae1adf4287aa4c59de98d524bbd2b155f` and
+`431797596f407e89ea5e69fe7a2f56beb29dfce2`. Registration is separate from learner
+adoption and actual exposure, which remains zero in these admission receipts.
+The general continuous drain processes further Flint exports and Qwen batches
+89–99 through the shared converters, strict admission and immutable manifests.
+Qwen batch89/tr0 is also registered: 11 trajectories, 138 captured actions,
+126 new graphs per student, commit `7f5ba3ec2863b4eb2d64145e99c929be4b7c93d0`.
+
+Historical captures remain unchanged. A source-bound metadata continuation
+attests the original independent-teacher role in the legacy converter field and
+retains the original exported collection, queue, tranche frontier and actor.
+Shared converter `35d05f7dd` resolves the serving alias from the exact transferred
+teacher descriptor and checks its model/revision metadata, execution identity
+and actor. Captured Flint provenance stays `flint`; it is never renamed to the
+old `pennyroyal` alias. 191 focused tests passed, including actual per-batch
+source/row validation and descriptor/actor tamper rejection. The normal global
+source closure and its complete bound artifact checks passed with unchanged
+source-protection implementation identities.
+
+The matched comparison is still incomplete: at the latest observed 30 finished
+cases Flint has 25 successes and Qwen 27 on the matching keys. This supersedes
+any implication that the initial 17/18 versus 15/18 establishes a final win.
+Continue useful verified generation while completing the comparison and inspect
+concrete failures before retaining or reversing the provisional selection.
+
+The independently full-tested writer-occurrence correction `3c908b4bf` is now
+integrated as `12a22fa1e`. Its physical built runtime is being staged for live
+model-facing measurement before production adoption. The prior integrated full
+check passed at 18:47:51 UTC; the final combined alias/writer full check is a
+separate running unit and is not yet claimed green. Both learners are doing
+useful work: LFM reached actual preference step24319 from24292, and Mellum
+reached27561, with exact continuation state retained.
