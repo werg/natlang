@@ -120,12 +120,18 @@ def record_primary_phase(state, config):
         raise ValueError('primary phase directory differs from canonical generation root')
     batch=state.get('active_batch');owner=state.get('owner')
     if type(batch)is not int or not alive(owner):return False
-    launches=state.setdefault('primary_launches',{})
-    if str(batch)in launches:return False  # Never rewrite an existing slot's custody.
+    phases=state.get('primary_phases',{})
+    if str(batch)in phases:return False
+    # Prefetched launches already carry their complete distinct source intent.
+    if str(batch)in state.get('primary_launches',{}):return False
     feeder=state['feeder'];reference=feeder if isinstance(feeder,dict)else binding(feeder)
     if binding(reference['path'])!=reference or not _feeder_invocation(process(owner['pid']),reference['path']):
         raise ValueError('primary phase lacks its exact live feeder custody')
-    launches[str(batch)]={'batch':batch,'owner':owner,'feeder':reference,
+    snapshot=state['config_snapshot']
+    if binding(snapshot['path'])!=snapshot:
+        raise ValueError('primary phase guardian configuration snapshot changed')
+    state.setdefault('primary_phases',{})[str(batch)]={'schema':'natlang.teacher-primary-phase/1',
+        'guardian_config':snapshot,'batch':batch,'owner':owner,'feeder':reference,
         'task_runtime':state['task_runtime'],'phase_path':str(Path(directory)/f'batch-{batch:04d}.json')}
     return True
 
@@ -1118,7 +1124,8 @@ def run(config_path, *, external_transition=None, external_reconciliation=None, 
             write(folder/'phase.json', {'at': time.time(), 'phase': 'waiting_natural_feeder_exit', 'owner': state['owner'], 'drain_requested': Path(config['drain_file']).exists()})
             time.sleep(5); continue
         if state.get('active_batch') is not None:
-            launch=(state.get('primary_launches')or{}).get(str(state['active_batch']),{})
+            launch=((state.get('primary_launches')or{}).get(str(state['active_batch']))
+                    or(state.get('primary_phases')or{}).get(str(state['active_batch']),{}))
             decision, entries = boundary(root, folder, state['active_batch'],phase_path=launch.get('phase_path')); prepare_retry(folder, decision, entries)
             state.update(next_batch=decision['batch']+1, active_batch=None, owner=None,
                 last_boundary=binding(folder/'boundaries'/f"batch-{decision['batch']:04d}.json"))

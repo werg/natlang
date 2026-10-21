@@ -176,7 +176,8 @@ def test_owner_poller_fails_closed_on_restarted_sandbox_boot(tmp_path, monkeypat
     assert 'boot identity differs' in state['identity_error']
 
 
-def test_guardian_discovery_accepts_exact_anchor_without_started_receipt(tmp_path):
+@pytest.mark.parametrize('canonical_primary',[False,True])
+def test_guardian_discovery_accepts_exact_anchor_without_started_receipt(tmp_path,monkeypatch,canonical_primary):
     from types import SimpleNamespace
     from scripts.coreweave.teacher_incremental_export import discover_guardian_batch
     import hashlib
@@ -234,12 +235,38 @@ def test_guardian_discovery_accepts_exact_anchor_without_started_receipt(tmp_pat
         'directory_root':'/external/export','role':'bulk','chunk_size':32,'exporter_path':'/owner/export.py',
         'identity':{'sandbox_boot_id':'boot-1','actor_sha256':'a'*64,
             'execution_identity_sha256':'b'*64,'teacher_config_sha256':'e'*64,'runtime_path':'/work/runtime'}}
+    if canonical_primary:
+        from scripts.coreweave import teacher_generation_guardian as guard
+        guardian['primary_phase_directory']='/work/generation/feeder-phases'
+        guardian_raw=json.dumps(guardian).encode()
+        guardian_ref={**guardian_ref,'bytes':len(guardian_raw),'sha256':hashlib.sha256(guardian_raw).hexdigest()}
+        remote[guardian_ref['path']]=guardian_raw
+        publisher['guardian_config']=guardian_ref;state['config']=guardian_ref
+        snapshot={**guardian_ref,'path':f"/work/control/config-history/{guardian_ref['sha256']}.json"}
+        remote[snapshot['path']]=guardian_raw
+        remote[guardian['feeder']]=b'# exact canonical feeder\n'
+        def binding(path):
+            raw=remote[str(path)]
+            return {'path':str(path),'sha256':hashlib.sha256(raw).hexdigest(),'bytes':len(raw)}
+        state.update(config_snapshot=snapshot,feeder=binding(guardian['feeder']),task_runtime=guardian['task_runtime'])
+        monkeypatch.setattr(guard,'binding',binding)
+        monkeypatch.setattr(guard,'alive',lambda owner:owner==state['owner'])
+        monkeypatch.setattr(guard,'process',lambda pid:{**state['owner'],'argv':[b'python',guardian['feeder'].encode()]})
+        assert guard.record_primary_phase(state,guardian)
+        assert not state.get('primary_launches')  # A normal primary is not a prefetch intent.
+        phase=state['primary_phases']['21']['phase_path']
+        remote[phase]=remote.pop('/work/generation/feed-evidence-phase.json')
+        remote['/work/control/state.json']=json.dumps(state).encode()
     active=discover_guardian_batch(publisher,sandbox,remote.__getitem__)
     assert active['batch']==21 and active['queue_path']==queue_path
     assert active['source_sequence_started_sha256'] is None
     assert active['identity']['source_cases_sha256']==hashlib.sha256(cases).hexdigest()
     assert active['worker_queue_paths']==[f'/work/generation/evidence-collections-v2/batch-0021/queue-worker-{i}.jsonl'
                                           for i in range(24)]
+    if canonical_primary:
+        remote[guardian['feeder']]+=b'# changed\n'
+        with pytest.raises(ValueError,match='feeder bytes'):
+            discover_guardian_batch(publisher,sandbox,remote.__getitem__)
 
 
 def test_guardian_discovery_requires_exact_started_receipt_after_anchor():

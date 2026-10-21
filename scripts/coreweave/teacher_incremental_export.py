@@ -1211,6 +1211,35 @@ def discover_guardian_batch(publisher: dict, sandbox,
     elif batch is not None:
         slot=(state.get('primary_launches')or{}).get(str(batch))
     feeder=guardian['feeder'];phase_path=f"{publisher['generation_root']}/feed-evidence-phase.json"
+    primary=(state.get('primary_phases')or{}).get(str(batch)) if slot is None else None
+    if primary is not None:
+        original_ref=primary.get('guardian_config') or {}
+        if (primary.get('schema')!='natlang.teacher-primary-phase/1'
+                or primary.get('batch')!=batch or primary.get('owner')!=owner
+                or set(original_ref)!={'path','sha256','bytes'}
+                or type(original_ref.get('bytes'))is not int or original_ref['bytes']<0
+                or not isinstance(original_ref.get('sha256'),str)
+                or re.fullmatch(r'[0-9a-f]{64}',original_ref['sha256'])is None
+                or original_ref['path']!=f"{control}/config-history/{original_ref['sha256']}.json"):
+            raise ValueError('primary phase lacks its exact owner/configuration authority')
+        original_raw=read_file(original_ref['path'])
+        if len(original_raw)!=original_ref['bytes']or _sha(original_raw)!=original_ref['sha256']:
+            raise ValueError('primary phase guardian configuration snapshot changed')
+        original=_json(original_raw,'primary phase guardian configuration')
+        phase_path=f"{publisher['generation_root']}/feeder-phases/batch-{batch:04d}.json"
+        ref=primary.get('feeder')or{}
+        if (original.get('root')!=publisher['generation_root']or original.get('control')!=control
+                or original.get('primary_phase_directory')!=f"{publisher['generation_root']}/feeder-phases"
+                or original.get('teacher_identity')!=guardian.get('teacher_identity')
+                or original.get('task_runtime')!=primary.get('task_runtime')
+                or primary.get('phase_path')!=phase_path or ref.get('path')!=original.get('feeder')
+                or set(ref)!={'path','sha256','bytes'} or type(ref.get('bytes'))is not int
+                or ref['bytes']<0):
+            raise ValueError('primary phase changed actual feeder/runtime authority')
+        raw=read_file(ref['path'])
+        if len(raw)!=ref['bytes']or _sha(raw)!=ref['sha256']:
+            raise ValueError('primary phase feeder bytes changed')
+        feeder=ref['path']
     if slot is not None:
         original_ref=slot.get('guardian_config')
         if (not isinstance(original_ref,dict)or set(original_ref)!={'path','sha256','bytes'}

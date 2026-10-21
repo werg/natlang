@@ -104,7 +104,7 @@ def test_primary_per_batch_phase_is_bound_to_existing_live_feeder_without_relaun
     config['primary_phase_directory']=str(Path(config['root'])/'feeder-phases')
     before=copy.deepcopy(state)
     assert g.record_primary_phase(state,config)
-    slot=state['primary_launches']['22']
+    slot=state['primary_phases']['22']
     assert slot['owner']==before['owner'] and slot['feeder']==before['feeder']
     assert slot['phase_path']==str(Path(config['root'])/'feeder-phases/batch-0022.json')
     assert state['source_sequence']==before['source_sequence']

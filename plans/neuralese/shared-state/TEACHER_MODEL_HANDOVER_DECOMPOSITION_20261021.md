@@ -35,3 +35,12 @@ include the batch in their names and paths. Deduplication verifies the existing
 admitted Qwen outputs together with the selected teacher's admitted outputs using
 the same manifest, quality and paired-student hash checks. A new namespace grants
 neither source admission nor exposure.
+
+Canonical primary feeders publish their phase under `feeder-phases/batch-N.json`.
+Bind that ordinary primary's actual owner, feeder bytes and original guardian
+configuration in a distinct `primary_phases` record. Guardian boundaries and the
+export consumer verify the same record. It is not a prefetch slot: no fabricated
+prefetch selection intent or source-sequence start is needed for the genuine
+anchor batch. Preserve the historical root phase contract for legacy feeders.
+Exercise the actual record producer through publisher discovery and reject
+changed feeder bytes before deployment.
