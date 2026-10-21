@@ -52,6 +52,58 @@ def test_completed_plan_replay_checks_real_classification_reader_relocation(tmp_
         assert result is False
 
 
+@pytest.mark.parametrize('fault', [None, 'held', 'proof', 'data-dependency', 'reader-bytes'])
+def test_resident_release_replays_frozen_classification_readers(tmp_path, monkeypatch, fault):
+    from test_native_classification_recipe_handoff import prepared
+    from natlang_neuralese.train import recipe as recipes, native_resident as resident
+    from natlang_neuralese.train import native_classification_continuation as continuation
+    from natlang_neuralese.rl import native_raw_rounds as raw
+    from scripts.neuralese_data import continue_native_source_indexes as adapter
+    _, save, _, _ = prepared(tmp_path, monkeypatch)
+    live = save(); role = 'source_classification_migration'
+    data = {k: live['native_graphs'][k] for k in ('path', 'sha256')}
+    live[role]['dependencies'] = [data, *[adapt.binding(m.__file__) for m in (continuation, adapter)]]
+    frozen = copy.deepcopy(live)
+    for index, module in enumerate((continuation, adapter), 1):
+        path = tmp_path / 'old-runtime' / Path(module.__file__).name
+        path.parent.mkdir(exist_ok=True); path.write_bytes(Path(module.__file__).read_bytes())
+        frozen[role]['dependencies'][index] = adapt.binding(path)
+    definition = {'schema': 'natlang.neuralese-training-recipe/1', 'id': 'frozen',
+        'input_bindings': {v['binding']: {k: v[k] for k in ('path', 'sha256')} for v in live.values()},
+        'stages': [{'id': 'full', 'kind': 'native_state_sft', 'requires': [],
+                    'inputs': {k: v['binding'] for k, v in live.items()}, 'parameters': {'epochs': 1}}]}
+    path = tmp_path / 'recipe.json'; write(path, definition)
+    lineage = recipes.recipe_identity_sha256(path); rb = recipes.native_recipe_binding(path, lineage)
+    actual_recipe = recipes.resolve_recipe_data(path)
+    plan = {'recipe': actual_recipe, 'recipe_sha256': lineage, 'stage_inputs': {'full': frozen}}
+    if fault == 'held': frozen['held_native_graphs']['sha256'] = 'a' * 64
+    elif fault == 'proof': frozen[role]['sha256'] = 'a' * 64
+    elif fault == 'data-dependency': frozen[role]['dependencies'].pop(0)
+    elif fault == 'reader-bytes':
+        old = Path(frozen[role]['dependencies'][1]['path']); old.write_text('# different historical reader\n')
+        frozen[role]['dependencies'][1] = adapt.binding(old)
+    payload = {'stage_id': 'full', 'recipe': rb, 'prior_recipe': rb, 'plan': plan}
+    directory = tmp_path / 'resident'; directory.mkdir()
+    write(directory / 'current.json', {'schema': resident.SCHEMA, 'payload': payload,
+                                      'generation': resident.digest(payload), 'history': []})
+    # Resolve the exact same immutable proof with today's same-byte readers,
+    # reproducing the runtime-dependent path expansion in the real failure.
+    original = recipes.resolve_stage_inputs
+    def resolve(recipe, stage, supplied):
+        values = original(recipe, stage, supplied)
+        assert {k: {n: v[n] for n in ('path', 'sha256')} for k, v in values.items()} == \
+               {k: {n: v[n] for n in ('path', 'sha256')} for k, v in live.items()}
+        return copy.deepcopy(live)
+    monkeypatch.setattr(recipes, 'resolve_stage_inputs', resolve)
+    requirement = {'recipe_sha256': rb['sha256'], 'recipe_lineage_sha256': lineage, 'stage_ids': ['full']}
+    if fault is None:
+        result = raw._resident_release_requirement(requirement, {'resident_current': resident.binding(directory / 'current.json')})
+        assert result['recipe_sha256'] == rb['sha256']
+    else:
+        with pytest.raises(ValueError):
+            raw._resident_release_requirement(requirement, {'resident_current': resident.binding(directory / 'current.json')})
+
+
 @pytest.mark.parametrize('bad_bytes',[-1,True,0,'12',None])
 def test_scheduling_artifact_identity_validates_optional_bytes(tmp_path,bad_bytes):
     path=tmp_path/'global-plan.json';write(path,{'models':[]})

@@ -1837,7 +1837,7 @@ def _resident_release_requirement(requirement,value,*,transition=None):
     reference=value.get('resident_current')
     if reference is None:return requirement
     from ..train.native_resident import current,_contract
-    from ..train.recipe import resolve_recipe_data,resolve_stage_inputs,recipe_identity_sha256
+    from ..train.recipe import resolve_recipe_data,resolve_stage_inputs,recipe_identity_sha256,same_replayed_stage_inputs
     path=_bound(reference);state=current(path.parent)
     if not state:raise ValueError('raw release lost its exact committed resident source')
     payload=state['payload'];stage=payload['stage_id']
@@ -1866,7 +1866,7 @@ def _resident_release_requirement(requirement,value,*,transition=None):
         adoptions=payload['plan'].get('resident_adoptions',[])
         from ..common.hashing import canonical_json_sha256_hex
         suffix=adoptions[len(previous):]
-        if (actual_prior['recipe']!=old_plan['recipe'] or actual_prior['stage_inputs']!=old_plan['stage_inputs']
+        if (actual_prior['recipe']!=old_plan['recipe'] or not same_replayed_stage_inputs(actual_prior['stage_inputs'],old_plan['stage_inputs'])
                 or installed['recipe_sha256']!=lineage or installed['code']!=payload['plan']['code']
                 or installed.get('device')!=payload['plan'].get('device')
                 or payload['plan'].get('handoffs',[])!=installed.get('handoffs',[])
@@ -1881,7 +1881,7 @@ def _resident_release_requirement(requirement,value,*,transition=None):
         prior=plan(bindings[start]);remaining=bindings[start+1:]
     for reference in remaining:
         proposed=plan(reference);_contract(prior,proposed,stage);prior=proposed
-    if payload['recipe']!=bindings[-1] or prior['recipe']!=payload['plan']['recipe'] or prior['stage_inputs']!=payload['plan']['stage_inputs']:
+    if payload['recipe']!=bindings[-1] or prior['recipe']!=payload['plan']['recipe'] or not same_replayed_stage_inputs(prior['stage_inputs'],payload['plan']['stage_inputs']):
         raise ValueError('raw release resident history differs from its actual current source plan')
     requirement['recipe_sha256']=payload['recipe']['sha256']
     if value.get('readiness'):

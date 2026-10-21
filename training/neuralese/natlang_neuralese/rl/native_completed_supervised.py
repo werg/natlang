@@ -625,28 +625,7 @@ def _verify_controller_recipe(declaration, config, cursor, lineage):
         raise ValueError('completed adaptation config differs from its accounted resident recipe')
 
 
-def _same_replayed_recipe_plan(recorded, replayed):
-    """Preserve exact plans across authenticated byte-identical reader moves."""
-    if recorded == replayed:
-        return True
-    from ..train.recipe import _binding_files, _classification_reader_relocation
-    if ({k: v for k, v in recorded.items() if k not in ('stage_inputs', 'inputs')}
-            != {k: v for k, v in replayed.items() if k not in ('stage_inputs', 'inputs')}):
-        return False
-    old, new = recorded['stage_inputs'], replayed['stage_inputs']
-    if old.keys() != new.keys():
-        return False
-    for stage in old:
-        if old[stage] != new[stage] and not _classification_reader_relocation(old[stage], new[stage]):
-            return False
-    # The flat inventory must still be precisely derived from each plan's real
-    # stage inputs. No other missing, added or changed dependency is excused.
-    for plan in (recorded, replayed):
-        inputs = {item['path']: item['sha256'] for roles in plan['stage_inputs'].values()
-                  for value in roles.values() for item in _binding_files(value)}
-        if plan['inputs'] != inputs:
-            return False
-    return True
+from ..train.recipe import same_replayed_recipe_plan as _same_replayed_recipe_plan
 
 
 def verify(reference):

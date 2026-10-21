@@ -1875,6 +1875,34 @@ def _classification_reader_relocation(old, new):
     return True
 
 
+def same_replayed_stage_inputs(recorded, replayed):
+    """Compare historical inputs using the existing checked reader relocation."""
+    return recorded.keys() == replayed.keys() and all(
+        recorded[stage] == replayed[stage]
+        or _classification_reader_relocation(recorded[stage], replayed[stage])
+        for stage in recorded)
+
+
+def same_replayed_recipe_plan(recorded, replayed):
+    """Preserve exact plans across authenticated byte-identical reader moves."""
+    if recorded == replayed:
+        return True
+    if ({k: v for k, v in recorded.items() if k not in ('stage_inputs', 'inputs')}
+            != {k: v for k, v in replayed.items() if k not in ('stage_inputs', 'inputs')}):
+        return False
+    old, new = recorded['stage_inputs'], replayed['stage_inputs']
+    if not same_replayed_stage_inputs(old, new):
+        return False
+    # The flat inventory must still be precisely derived from each plan's real
+    # stage inputs. No other missing, added or changed dependency is excused.
+    for plan in (recorded, replayed):
+        inputs = {item['path']: item['sha256'] for roles in plan['stage_inputs'].values()
+                  for value in roles.values() for item in _binding_files(value)}
+        if plan['inputs'] != inputs:
+            return False
+    return True
+
+
 def _classification_proof(inputs):
     """Authenticate the existing metadata proof independently of input changes."""
     from .native_source_classification import SCHEMA, _checked, _binding, POLICY_FILES

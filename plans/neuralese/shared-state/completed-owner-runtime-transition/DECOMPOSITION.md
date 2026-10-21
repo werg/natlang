@@ -23,7 +23,8 @@ that any new source or numerical implementation is already qualified.
    original global-plan authority; do not replace it with an invented plan.
 7. Replaying an earlier adaptation in a newer runtime can relocate the two
    byte-identical classification readers. Reuse the recipe's existing exact
-   reader-relocation verifier, check every other plan field and dependency, and
+   reader-relocation verifier in one shared stage-input comparison, including
+   resident release and installed-plan adoption bridges. Check every other plan field and dependency, and
    derive each flat input inventory from its actual stage bindings. Preserve
    historical source, proof and package hashes rather than rewriting old plans.
 
