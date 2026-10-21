@@ -1,13 +1,20 @@
 # Flint generation teacher replacement
 
 The owner requested an actual test of RecursiveSI/flint and replacement of Qwen
-if decent. The supervisor selected Flint for continuous generation after the first
-18 matching completed native tasks: Flint passed 17, Qwen passed 15. Flint recovered
-three cases Qwen did not finish successfully, while one Qwen success exhausted
-Flint's execution budget. Most matching successful cases had shorter elapsed
-execution with Flint. These are practical observations under each engine's serving
-load and selected sampling settings, not an isolated throughput benchmark. The
-remaining 48-case comparison continues and can change the operational decision.
+if decent. Flint is provisionally serving continuous verified generation in the
+existing teacher sandbox. At 20:11 UTC, 42 of the 48 matched cases have finished:
+Flint has 31 successes and Qwen 37 on those same task keys. Flint has
+7 budget failures, 1 invalid action and 3 semantic mismatches. The completed sample
+does not establish improved task quality. On the 28 cases both solved, median
+Qwen/Flint elapsed time is 3.29x. These are practical observations under each
+engine's serving load, not isolated engine throughput measurements.
+
+The operational reason to retain the provisional generator is faster verified
+positive collection, not a claimed quality win. Admit only successful trajectories
+that pass the existing full source, actor, held separation and conversion checks.
+Finish the remaining cases and diagnose concrete budget and semantic failures
+before deciding on permanent replacement. The early 17/18 versus 15/18 observation
+is superseded by these larger matched results; retain useful Qwen source data.
 
 Both runs use the same source-bound task keys and seeds, the existing natlang
 executor and full trajectory capture. No held tasks or external teacher generation
@@ -106,3 +113,19 @@ check passed at 18:47:51 UTC; the final combined alias/writer full check is a
 separate running unit and is not yet claimed green. Both learners are doing
 useful work: LFM reached actual preference step24319 from24292, and Mellum
 reached27561, with exact continuation state retained.
+
+## Current integration and validation
+
+The first mixed 481-graph continuation (six Flint tranches plus Qwen batch89
+tranches0–1) was actually adopted by Mellum at step27732. This is recipe adoption,
+not proof that every newly appended graph has been visited. The corresponding
+LFM data is staged and eligible, with adoption still pending. Continuous paired
+admission is active beyond the first wave; published later tranches remain
+separate from actual learner exposure.
+
+The writer-occurrence candidate runtime is now running the 48-task live measurement
+on the same Flint actor, task keys and seeds. At20:11 UTC eight candidate tasks
+had finished; no production runtime adoption or completed measurement is claimed.
+
+The comparison snapshot used for the current selection statement is bound in
+`/home/werg/data/dgxops/flint-matched-current-selection-evidence-20261021.json`.
