@@ -2,18 +2,22 @@
 
 The owner requested an actual test of RecursiveSI/flint and replacement of Qwen
 if decent. Flint is provisionally serving continuous verified generation in the
-existing teacher sandbox. At 21:41 UTC, 46 of the 48 matched cases have finished:
-Flint has 32 successes and Qwen 38 on those same task keys. Flint has
-9 budget failures, 2 invalid actions and 3 semantic mismatches. Its
-matched success rate is lower. On the 29 cases both solved, median
-Qwen/Flint elapsed time is 2.94x. Flint also solved 3 cases that Qwen failed.
-These are practical observations under each engine's serving load, not isolated
-engine throughput measurements.
+existing teacher sandbox. The full 48-case comparison is complete: Flint solved
+32/48 (66.7%) and Qwen solved39/48 (81.3%). Flint had11 budget failures,2 invalid
+actions and3 semantic mismatches. It solved3 cases Qwen failed, while its matched
+task-success rate was lower.
+
+On the 29 cases both solved, median Qwen/Flint elapsed time was2.94x. Counting
+all successes and failures, summed case wall time was72,199.5s for Flint and
+99,214.0s for Qwen. Verified successes per aggregate case-hour were1.60 versus
+1.42, about13% higher for Flint. This is a practical proxy under different
+serving loads, not isolated GPU throughput. The median on successful cases alone
+overstates the aggregate benefit.
 
 The operational reason to retain the provisional generator is faster verified
 positive collection, not a claimed quality win. Admit only successful trajectories
 that pass the existing full source, actor, held separation and conversion checks.
-Finish the remaining cases and diagnose concrete budget and semantic failures
+Diagnose concrete budget and semantic failures
 before deciding on permanent replacement. The early 17/18 versus 15/18 observation
 is superseded by these larger matched results; retain useful Qwen source data.
 
@@ -55,7 +59,8 @@ admission, learner adoption and actual exposure.
 
 ## Continuation obligations
 
-Finish scoring the remaining comparison cases and inspect the budget failure.
+The comparison is complete. Investigate the budget and semantic failures, and
+measure useful production yield as the task mix broadens.
 Maintain generation, verify private exports, convert and admit useful complete
 trajectories through the shared mechanism for both students. Use the explicit Flint
 namespace while retaining verified Qwen predecessors for deduplication. Do not
@@ -101,7 +106,7 @@ source/row validation and descriptor/actor tamper rejection. The normal global
 source closure and its complete bound artifact checks passed with unchanged
 source-protection implementation identities.
 
-The larger current comparison above supersedes early partial success-rate claims.
+The complete comparison above supersedes all early partial success-rate claims.
 The writer-occurrence correction `12a22fa1e` is integrated; its physical candidate
 runtime is undergoing the required live model-facing measurement. The integrated
 full check for `09bebe8316` passed at 20:18 UTC, independently of the unfinished
@@ -122,9 +127,27 @@ on the same Flint actor, task keys and seeds. At21:43 UTC14 candidate tasks had
 finished:10 successes and4 budget failures. No production runtime adoption or
 completed measurement is claimed.
 
-The current operational selection snapshot is bound in
-`/home/werg/data/dgxops/flint-current-teacher-selection-root-20261021.json`.
-Its evidence records actual compared task keys, complementary successes and the
-serving-load limitation. Continuous generation, private export, paired conversion
-and admission remain active; registered later tranches still need actual learner
-adoption and per-row training.
+A third wave of26 newly admitted source batches is prepared and eligible on both
+sandboxes:2491 LFM graphs and2487 Mellum graphs. It is separate from the already
+adopted waves above; no third-wave exposure is claimed. Source preparation,
+conversion, transport, classification and eligibility passed. Further Flint and
+Qwen publications continue through the same pipeline. A transient GitHub DNS
+failure stopped admission; the recovered worker retries network failures and
+preserves exact unrelated engineering edits during data-only publication.
+
+The full comparison and selection evidence is bound in
+`/home/werg/data/dgxops/flint-full48-teacher-selection-root-20261021.json`.
+The actual 48-case observation is preserved separately with its SHA-256. Flint
+remains the active provisional generator because it supplies useful verified
+positives and complementary examples; the result does not establish a quality
+upgrade over Qwen.
+
+Shared runtime fixes in `f458386e5c6dc4a0690e341ad2520ffa17b6605b` include all
+required rendering assets in future actor compositions and keep parent-only
+supervised readiness controls out of whole-graph RL. Full repository checks,
+focused real optimizer/resume checks and the final quick check passed. Exact
+rendering assets were restored on both active deployments. Mellum's corrected
+policy operation actually advanced28181 to28182 with its original captured
+on-policy episodes; LFM's R22 production continuation advanced past25037.
+Neither statement is a claim of whole-recipe completion or measured capability
+lift.
