@@ -250,6 +250,15 @@ comprehensive training on the entire evolving production recipe.
   result from an older attempt replace the newer earned parent. Verify the
   actual checkpoint and cursor, and observe the real optimizer child advancing;
   a live coordinator or a launched request alone is not resumed training.
+- **Reuse actual controller custody across continuations** (engineering finding,
+  2026-10-21). Pass the coordinator's continuously held canonical lease descriptor
+  through worker threads into completed/runtime configuration; opening the same
+  lock again can self-contend. A normal resident publication changes bootstrap
+  metadata: verify and refresh the actual adopted configuration rather than
+  discarding its data or weakening custody checks. Preserve concrete configuration
+  tracebacks and diagnose a blocked retry signature. Exercise this path after the
+  complete sealed controller/publisher loaders; a previously shared guard fix can
+  still be missing from their frozen source closures.
 
 These instructions supersede earlier requirements for frozen experimental
 runs, base-drift hard stops or clean-run comparisons where they conflict.
