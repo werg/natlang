@@ -460,7 +460,7 @@ def test_authenticated_text_emulation_preserves_renderer_omitted_null_type():
 @pytest.mark.parametrize('code_selection', [False, 'list', 'count'])
 @pytest.mark.parametrize('explicit_collection', [False, True])
 @pytest.mark.parametrize('prepared_execution', [False, True])
-@pytest.mark.parametrize('runtime_model', ['pennyroyal', 'flint'])
+@pytest.mark.parametrize('runtime_model', ['pennyroyal', 'flint', 'legacy-source'])
 def test_each_teacher_batch_uses_its_own_exact_program_packet(tmp_path, monkeypatch, code_selection, explicit_collection, prepared_execution, runtime_model):
     from types import SimpleNamespace
     monkeypatch.setattr(converter, 'current_protection', lambda _: {
@@ -477,7 +477,8 @@ def test_each_teacher_batch_uses_its_own_exact_program_packet(tmp_path, monkeypa
     rows, files, batches = [], [], []
     for index in range(2):
         row = copy.deepcopy(_row())
-        row['provenance']['model'] = runtime_model
+        runtime_alias = 'pennyroyal' if runtime_model == 'legacy-source' else runtime_model
+        row['provenance']['model'] = runtime_alias
         row['id'] = f'execution-{index}'
         program = row['task']['program_ir']
         program.update(id=f'program-{index}', source_groups=[f'train-{index}'])
@@ -523,9 +524,10 @@ def test_each_teacher_batch_uses_its_own_exact_program_packet(tmp_path, monkeypa
                 return ref
             actor = runtime_file('actor.json', {'actual_model': 'RecursiveSI/flint', 'pid': 42})
             identity = runtime_file('identity.json', {'actor': actor,
-                'schema': 'natlang.self-hosted-teacher-execution-identity/1', 'model_id': runtime_model})
-            descriptor = runtime_file('source.json', {'schema': 'natlang.self-hosted-teacher-source/1',
-                'model_id': runtime_model, 'teacher': teacher, 'execution_identity': identity})
+                'schema': 'natlang.self-hosted-teacher-execution-identity/1', 'model_id': runtime_alias})
+            descriptor = runtime_file('source.json', {'schema': ('natlang.sandbox-strong-teacher-collection/1'
+                if runtime_model == 'legacy-source' else 'natlang.self-hosted-teacher-source/1'),
+                'model_id': runtime_alias, 'teacher': teacher, 'execution_identity': identity})
             value = json.loads(collection.read_text())
             value.update(teacher_configuration_source=descriptor,
                          actual_teacher_execution_identity=identity, actor=actor)
@@ -571,7 +573,7 @@ def test_each_teacher_batch_uses_its_own_exact_program_packet(tmp_path, monkeypa
         assert converter.validate_teacher_row(row, binding)[0] == row['task']['program_ir']
     if runtime_model != 'pennyroyal':
         swapped_alias = copy.deepcopy(rows[0])
-        swapped_alias['provenance']['model'] = 'pennyroyal'
+        swapped_alias['provenance']['model'] = 'other-teacher'
         with pytest.raises(ValueError, match='runtime execution identity'):
             converter.validate_teacher_row(swapped_alias, binding)
     # Historical transfers may omit row_id. Restore that fact in a separate

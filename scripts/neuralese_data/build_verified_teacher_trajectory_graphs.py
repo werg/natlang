@@ -324,16 +324,19 @@ def collection_runtime_model(collection, transferred):
     teacher.pop('teacher_role', None)
     declared_teacher = dict(source.get('teacher') or {})
     declared_teacher.pop('teacher_role', None)
-    alias = source.get('model_id')
-    if (source.get('schema') != 'natlang.self-hosted-teacher-source/1'
+    legacy = source.get('schema') in {'natlang.sandbox-strong-teacher-collection/1',
+                                    'natlang.sandbox-strong-teacher-continuation/1'}
+    alias = 'pennyroyal' if legacy else source.get('model_id')
+    if ((not legacy and source.get('schema') != 'natlang.self-hosted-teacher-source/1')
             or not isinstance(alias, str) or not alias.strip()
             or teacher != declared_teacher
-            or source.get('execution_identity') != collection.get('actual_teacher_execution_identity')):
+            or (not legacy and source.get('execution_identity') != collection.get('actual_teacher_execution_identity'))):
         raise ValueError('teacher runtime descriptor differs from its collection')
-    identity = load('actual_teacher_execution_identity', source['execution_identity'])
+    identity = load('actual_teacher_execution_identity', collection['actual_teacher_execution_identity'])
     actor = collection.get('actor')
     if (identity.get('schema') != 'natlang.self-hosted-teacher-execution-identity/1'
-            or identity.get('model_id') != alias or identity.get('server') != source.get('server')
+            or identity.get('model_id') != alias
+            or (not legacy and identity.get('server') != source.get('server'))
             or identity.get('actor') != actor):
         raise ValueError('teacher runtime descriptor refers to a different actor')
     load('actor', actor)
