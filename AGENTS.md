@@ -44,6 +44,16 @@ our RTX PRO 6000 Blackwell; model-card scores alone do not establish our task
 quality or useful generation throughput. This conditionally supersedes the
 selected-teacher name above; it does not authorize external teacher generation.
 
+Operational selection (2026-10-21): Flint's first 18 completed matching native
+tasks produced 17 successes against Qwen's 15, with faster elapsed execution on
+most matching successful cases. The supervisor selected the official
+`RecursiveSI/flint-nvfp4-gguf` for continuous generation on the existing sandbox;
+the remaining 48-case comparison continues. Keep the new teacher namespace and
+exact quantized artifact/engine provenance, and retain usable earlier Qwen data.
+See `plans/neuralese/FLINT_TEACHER_REPLACEMENT_20261021.md`. This is a provisional
+production choice from actual task behavior, not a claim of complete evaluation
+or learner exposure to Flint data.
+
 Owner clarification (2026-10-16): standing authorization covers replacing any
 stalled sandbox; do not ask again or wait indefinitely. Adjust the resource request if
 capacity is exhausted. Restore the newest independently verified full state,
