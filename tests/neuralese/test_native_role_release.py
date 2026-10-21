@@ -407,7 +407,8 @@ def test_partial_owner_keeps_eligible_student_useful_while_peer_missing(tmp_path
         declaration['handoff_receipt']={'path':'original-bootstrap-protocol','sha256':'a'*64}
     write_json_durable(row['plan_path'],plan)
     calls=[]
-    def cycle(plan_path,model,witness,directory,stop):
+    def cycle(plan_path,model,witness,directory,stop,owned_controller_fd=None):
+        raw.verify_controller_fd(owned_controller_fd,Path(directory).parent/'controller.lock')
         calls.append(model['model']);directory=Path(directory);directory.mkdir(parents=True,exist_ok=True)
         production=directory/'production';production.mkdir(exist_ok=True)
         checkpoint=row['receipt']['checkpoint']['path']

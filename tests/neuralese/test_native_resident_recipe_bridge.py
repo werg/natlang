@@ -78,9 +78,10 @@ def test_preworker_configuration_failure_does_not_stop_independent_student(tmp_p
     calls=[]
     def invalid(*a,**k):raise ValueError('exact LF recipe authority missing')
     monkeypatch.setattr(raw,'configure_model',invalid)
-    def student(path,declaration,witness,directory,*,stop):
+    def student(path,declaration,witness,directory,*,stop,owned_controller_fd=None):
+        raw.verify_controller_fd(owned_controller_fd,Path(directory).parent/'controller.lock')
         name=declaration['model'];calls.append(name)
-        if name=='lfm':return actual_cycle(path,declaration,witness,directory,stop=stop)
+        if name=='lfm':return actual_cycle(path,declaration,witness,directory,stop=stop,owned_controller_fd=owned_controller_fd)
         assert not stop.requested
         directory.mkdir(parents=True,exist_ok=True);production=directory/'production';production.mkdir()
         parent=directory/'parent';parent.write_text('actual test publication')
@@ -108,9 +109,10 @@ def test_suspended_student_retries_corrected_declaration_without_restarting_sibl
         assert second_mellum.wait(3)
         raise ValueError('old invalid authority')
     monkeypatch.setattr(raw,'configure_model',invalid)
-    def student(path,declaration,witness,directory,*,stop):
+    def student(path,declaration,witness,directory,*,stop,owned_controller_fd=None):
+        raw.verify_controller_fd(owned_controller_fd,Path(directory).parent/'controller.lock')
         name=declaration['model'];calls[name]+=1
-        if name=='lfm' and not declaration.get('repaired'):return actual_cycle(path,declaration,witness,directory,stop=stop)
+        if name=='lfm' and not declaration.get('repaired'):return actual_cycle(path,declaration,witness,directory,stop=stop,owned_controller_fd=owned_controller_fd)
         if name=='mellum' and calls[name]==1:
             replacement=json.loads(path.read_text());replacement['models'][0]['repaired']=True;write(path,replacement)
         if name=='mellum' and calls[name]==2:second_mellum.set()

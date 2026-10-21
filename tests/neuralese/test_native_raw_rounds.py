@@ -402,7 +402,8 @@ def test_independent_students_keep_working_until_two_ready_then_drain(tmp_path,m
     write_json_durable(plan,{'schema':'natlang.native-raw-rl-bootstrap/1','models':[
         {'model':name,'handoff_receipt':{'path':'protocol'},'handoff_requirement':{'model_id':name}}
         for name in visits]})
-    def student(path,declaration,witness,directory,*,stop):
+    def student(path,declaration,witness,directory,*,stop,owned_controller_fd=None):
+        raw.verify_controller_fd(owned_controller_fd,Path(directory).parent/'controller.lock')
         name=declaration['model'];directory.mkdir(parents=True,exist_ok=True)
         with lock:
             assert name not in running;running.add(name);visits[name]+=1;number=visits[name]
@@ -477,7 +478,8 @@ def test_hot_plan_failure_stops_owned_sibling_before_executor_drains(tmp_path,mo
         {'model':name,'handoff_receipt':{'path':'protocol'},'handoff_requirement':{'model_id':name}}
         for name in ('slow','hot-plan')]})
     monkeypatch.setattr(raw,'validate_release',lambda *a,**k:None)
-    def student(path,declaration,witness,directory,*,stop):
+    def student(path,declaration,witness,directory,*,stop,owned_controller_fd=None):
+        raw.verify_controller_fd(owned_controller_fd,Path(directory).parent/'controller.lock')
         if declaration['model']=='slow':
             started.set();deadline=time.monotonic()+3
             while not stop.requested and time.monotonic()<deadline:drained.wait(.005)

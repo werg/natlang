@@ -164,6 +164,30 @@ def prepared(tmp_path,new_lr=1e-5,old_declaration_overrides=None,runtime_package
     return root,config,plan,proof
 
 
+def test_raw_configuration_reuses_actual_owned_controller_lease(tmp_path,monkeypatch):
+    import fcntl
+    from natlang_neuralese.rl import native_raw_rounds as raw,native_bootstrap_metadata
+    root,config,plan,proof=prepared(tmp_path)
+    value=adapt.verify(proof);document=json.loads(plan.read_text())
+    document['models'][0].update(production_recipe=value['recipe'],completed_supervised_adaptation=proof)
+    write(plan,document);declaration=document['models'][0]
+    prior=json.loads(config.read_text());bootstrap=prior['bootstrap_binding']['handoff']
+    monkeypatch.setattr(raw,'_task_cases',lambda declaration:None)
+    monkeypatch.setattr(native_bootstrap_metadata,'unchanged',lambda *args:False)
+    monkeypatch.setattr(native_bootstrap_metadata,'save',lambda *args:None)
+    before=(root/'cycle.json').read_bytes(),(root/'production/state.json').read_bytes()
+    with (root.parent/'controller.lock').open('a')as lease:
+        fcntl.flock(lease,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        # The completed verifier must reject a competing open description.
+        with pytest.raises(BlockingIOError):
+            raw.configure_model(plan,declaration,bootstrap,root)
+        assert raw.configure_model(plan,declaration,bootstrap,root,
+            owned_controller_fd=lease.fileno())==config
+        raw.verify_controller_fd(lease.fileno(),root.parent/'controller.lock')
+    assert before==((root/'cycle.json').read_bytes(),(root/'production/state.json').read_bytes())
+    assert json.loads(config.read_text())['completed_supervised_adaptation']==proof
+
+
 @pytest.mark.parametrize('new_lr',[1e-5,1e-6])
 @pytest.mark.parametrize('separate_configured_plan',[False,True])
 def test_configuration_changes_future_lr_only_and_does_not_repeat_completed_stage(tmp_path,monkeypatch,new_lr,separate_configured_plan):

@@ -154,7 +154,7 @@ def _scheduling_controls(config,declaration,plan_path,record,*,pending=False):
     return config
 
 
-def configure_model(plan_path,declaration,handoff,out,*,verified_handoff=None):
+def configure_model(plan_path,declaration,handoff,out,*,verified_handoff=None,owned_controller_fd=None):
     from .production import configure_native
     from .native_rounds import configure_provider
     for key in ('rows_per_round','supervised_quantum_updates'):
@@ -163,6 +163,8 @@ def configure_model(plan_path,declaration,handoff,out,*,verified_handoff=None):
     if 'supervised_stage_quantum_updates' in declaration:_validate_stage_quanta(declaration['supervised_stage_quantum_updates'])
     _task_cases(declaration)
     plan_path=Path(plan_path);out=Path(out);out.mkdir(parents=True,exist_ok=True)
+    if owned_controller_fd is not None:
+        verify_controller_fd(owned_controller_fd,out.parent/'controller.lock')
     path=out/'config.json';verification=out/'bootstrap-verification.json'
     from .native_bootstrap_metadata import unchanged,save
     if path.exists():
@@ -181,10 +183,11 @@ def configure_model(plan_path,declaration,handoff,out,*,verified_handoff=None):
             return path
         if declaration.get('completed_supervised_adaptation'):
             from .native_completed_supervised import configure
-            return configure(plan_path,declaration,handoff,path)
+            return configure(plan_path,declaration,handoff,path,owned_controller_fd=owned_controller_fd)
         if declaration.get('runtime_handoff'):
             from .native_runtime_handoff import configure_runtime_handoff
-            return configure_runtime_handoff(plan_path,declaration,handoff,path,verified_handoff=verified_handoff)
+            return configure_runtime_handoff(plan_path,declaration,handoff,path,verified_handoff=verified_handoff,
+                owned_controller_fd=owned_controller_fd)
     elif declaration.get('runtime_handoff'):
         raise ValueError('later runtime authority requires its existing bootstrap and cursor')
     record,saved=verify_handoff(handoff,requirement=declaration['handoff_requirement'])
@@ -1535,14 +1538,15 @@ def _fresh_owned_work_cursor(root, cursor):
     return result
 
 
-def student_cycle(plan_path,declaration,handoff,directory,*,stop):
+def student_cycle(plan_path,declaration,handoff,directory,*,stop,owned_controller_fd=None):
     """Resume exact per-operation outputs; every source remains a carried obligation."""
     from .native_rounds import round_job
     from .native_supervised import continuation_config,stage_pending,MANDATORY_STAGE_KINDS
     from ..train.recipe import resolve_recipe_data
     directory=Path(directory)
     try:
-        config_path=configure_model(plan_path,declaration,handoff,directory)
+        custody={'owned_controller_fd':owned_controller_fd}if owned_controller_fd is not None else {}
+        config_path=configure_model(plan_path,declaration,handoff,directory,**custody)
         config=resolve_recipe_data(config_path)
     except Exception as error:
         raise StudentConfigurationError(str(error)) from error
@@ -1986,7 +1990,8 @@ def run(plan_path,out,*,cycles=None,stop=None,poll_seconds=60):
                                     # Retire CURRENT eligibility before any descendant
                                     # can update. The pinned snapshot pointer survives.
                                     if exchange:roles.withdraw(plan,state_path)
-                                    active[name]=(pool.submit(student_cycle,plan_path,model,witness,out/name,stop=stop),witness,model)
+                                    active[name]=(pool.submit(student_cycle,plan_path,model,witness,out/name,stop=stop,
+                                        owned_controller_fd=lease.fileno()),witness,model)
                         write_json_durable(state_path,state)
                         if not active:
                             if rendezvous and eligible!=set(models):
@@ -2004,12 +2009,14 @@ def run(plan_path,out,*,cycles=None,stop=None,poll_seconds=60):
                             try:
                                 cursor=future.result()
                             except StudentConfigurationError as error:
+                                import traceback
                                 del active[name];eligible.discard(name)
                                 blocked[name]=_configuration_signature(submitted,out/name)
                                 cause=error.__cause__ or error
                                 state.setdefault('configuration_errors',{})[name]={
                                     'input_sha256':blocked[name],'phase':'configuration',
-                                    'error_type':type(cause).__name__,'error':str(cause)}
+                                    'error_type':type(cause).__name__,'error':str(cause),
+                                    'traceback':''.join(traceback.format_exception(cause))}
                                 write_json_durable(state_path,state)
                                 continue
                             del active[name];counts[name]+=1

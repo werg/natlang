@@ -12,6 +12,10 @@ that any new source or numerical implementation is already qualified.
 3. Use the one owned saved-state tuple to validate all retained stage frames and
    the old-to-new recipe/package transition. Reuse the inherited exclusive lease.
 4. Bind the future invocation and its verifier dependencies for later replay.
+5. Pass the coordinator's continuously held canonical lease through its worker
+   thread into completed/runtime configuration. Authenticate that descriptor;
+   opening the same lock again contends even within the same process. Preserve
+   the actual configuration failure traceback for operational diagnosis.
 
 Python implements exact identities, replay equality, leases, durable writes and
 existing recipe/gradient contracts. Scheduling and cutover remain supervisor policy.
