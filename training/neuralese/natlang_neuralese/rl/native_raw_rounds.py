@@ -175,12 +175,14 @@ def configure_model(plan_path,declaration,handoff,out,*,verified_handoff=None,ow
     from .native_bootstrap_metadata import unchanged,save
     if path.exists():
         prior=json.loads(path.read_text())
-        if declaration.get('failed_supervised_retry') and prior.get('failed_supervised_retry'):
+        if declaration.get('failed_supervised_retry'):
             from .native_failed_supervised_retry import configure as configure_failed_retry
+            from .native_failed_supervised_retry import dispatch_required
             retry_ref=declaration['failed_supervised_retry']
             if isinstance(retry_ref,str):retry_ref=binding(retry_ref)
-            return configure_failed_retry(retry_ref,plan_path,
-                declaration,handoff,path,owned_controller_fd=owned_controller_fd)
+            if dispatch_required(retry_ref,path,prior):
+                return configure_failed_retry(retry_ref,plan_path,
+                    declaration,handoff,path,owned_controller_fd=owned_controller_fd)
         if prior.get('supervised_boundary_configuration'):
             from .native_supervised_boundary import recover_configuration
             if recover_configuration(path,plan_path,declaration,handoff):return path

@@ -330,6 +330,11 @@ def test_configure_replays_exact_candidate_with_inherited_lease_and_recovers_par
         assert binding(config_path)['sha256']==candidates['config']['sha256']
         assert binding(cursor_path)['sha256']==candidates['cursor']['sha256']
         assert binding(state_path)['sha256']==candidates['state']['sha256']
+        release=retry.verify_release(reference,declaration)
+        assert release['recipe_lineage_sha256']==lineage
+        dependencies=retry.dependencies(reference)
+        assert dependencies[snapshots['config']['path']]==snapshots['config']
+        assert config_path.as_posix() not in dependencies
         retry.configure(reference,plan,declaration,{'binding':'fixture'},config_path,owned_controller_fd=lease.fileno())
     finally:
         fcntl.flock(lease,fcntl.LOCK_UN);lease.close()
@@ -364,3 +369,29 @@ def test_prepare_rejects_live_captured_owner_before_writing_retry_intent(tmp_pat
             package=tmp_path,future_global_plan=None,controller={'pid':99999999},
             owner_census=[process_owner()],verified_checkpoint=({},{}))
     assert config_path.read_bytes()==before and not output.exists()
+
+
+def test_raw_configure_dispatches_first_retry_before_runtime_handoff_without_marker(
+        tmp_path,monkeypatch,failed_operation):
+    from natlang_neuralese.rl import native_raw_rounds as raw
+    from natlang_neuralese.rl import native_runtime_handoff as runtime
+    x=failed_operation;config_path=x['config'];root=x['root']
+    config=json.loads(config_path.read_text())
+    runtime_path=tmp_path/'prior-runtime-handoff.json';write(runtime_path,{'schema':'fixture'})
+    prior_handoff=binding(runtime_path);config['runtime_handoff']=prior_handoff;write(config_path,config)
+    plan=tmp_path/'plan.json';write(plan,{'plan':'fixture'})
+    request={'schema':retry.SCHEMA,'config':binding(config_path)}
+    intent_path=tmp_path/'intent.json';write(intent_path,{'schema':retry.SCHEMA,'request':request})
+    receipt_path=tmp_path/'retry.json';write(receipt_path,{'schema':retry.SCHEMA,
+        'intent':binding(intent_path),'request_sha256':retry._digest(request)})
+    reference=binding(receipt_path)
+    declaration={'cases':'fixture','failed_supervised_retry':reference,'runtime_handoff':prior_handoff}
+    monkeypatch.setattr(raw,'_task_cases',lambda declaration:tmp_path/'cases.jsonl')
+    calls=[]
+    monkeypatch.setattr(retry,'configure',lambda *args,**kwargs:calls.append((args,kwargs)) or config_path)
+    monkeypatch.setattr(runtime,'configure_runtime_handoff',
+        lambda *args,**kwargs:pytest.fail('first retry was misrouted to runtime-handoff reconfigure'))
+    assert 'failed_supervised_retry' not in config
+    result=raw.configure_model(plan,declaration,{'binding':'bootstrap'},root)
+    assert result==config_path and len(calls)==1
+    assert calls[0][0][0]==reference and calls[0][0][1]==plan

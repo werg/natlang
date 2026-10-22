@@ -479,6 +479,8 @@ def verify_release(reference,declaration):
         raise ValueError('retry release intent binding changed')
     _artifact_binding(intent_ref)
     intent=_read(intent_ref);request=intent.get('request') or {}
+    try:_original_config_snapshot(intent)
+    except ValueError as error:raise ValueError('retry release lost its immutable original config snapshot binding') from error
     declared=declaration.get('failed_supervised_retry')
     if isinstance(declared,str):declared=binding(declared)
     recipe=declaration.get('production_recipe')
@@ -556,10 +558,24 @@ def verify_release(reference,declaration):
             'future_plan':request['future_plan']}}
 
 
+def _original_config_snapshot(intent):
+    snapshot=intent.get('snapshots',{}).get('config')
+    before=intent.get('before',{}).get('config')
+    request=(intent.get('request') or {}).get('config')
+    if (not isinstance(snapshot,dict) or not isinstance(before,dict) or not isinstance(request,dict)
+            or before.get('path')!=request.get('path') or before.get('sha256')!=request.get('sha256')
+            or snapshot.get('sha256')!=before.get('sha256')
+            or ('bytes' in before and snapshot.get('bytes')!=before.get('bytes'))
+            or binding(snapshot.get('path'))!=snapshot):
+        raise ValueError('retry original config binding differs from its immutable pre-CAS snapshot')
+    return snapshot
+
+
 def dependencies(reference):
     """Exact files required to preserve and replay the retry control authority."""
     receipt=_read(reference);intent_ref=receipt['intent'];intent=_read(intent_ref);request=intent['request']
-    refs=[reference,intent_ref,request['config'],request['plan'],request['recipe'],
+    original_config=_original_config_snapshot(intent)
+    refs=[reference,intent_ref,original_config,request['plan'],request['recipe'],
         request['failed_request'],request['failed_result'],request['corrected_request'],
         request['lineage_handoff'],request['future_plan'],intent['failure_log_snapshot']]
     if request.get('future_global_plan'):refs.append(request['future_global_plan'])
@@ -572,6 +588,28 @@ def dependencies(reference):
     for ref in unique.values():
         _artifact_binding(ref)
     return unique
+
+
+def dispatch_required(reference, config_path, prior):
+    """Select first/partial retry configure only for its exact predecessor or active marker."""
+    if isinstance(reference,str):reference=binding(reference)
+    _artifact_binding(reference)
+    receipt=_read(reference);intent_ref=receipt.get('intent')
+    if not isinstance(intent_ref,dict) or binding(intent_ref['path'])!=intent_ref:
+        raise ValueError('retry dispatch intent binding changed')
+    intent=_read(intent_ref);request=intent.get('request') or {}
+    if (receipt.get('schema')!=SCHEMA or intent.get('schema')!=SCHEMA
+            or receipt.get('request_sha256')!=_digest(request)
+            or not isinstance(request.get('config'),dict)
+            or Path(request['config'].get('path','')).resolve()!=Path(config_path).resolve()):
+        raise ValueError('retry dispatch does not identify this exact RAW config boundary')
+    marker=(prior.get('failed_supervised_retry') or {}) if isinstance(prior,dict) else {}
+    if marker:
+        if marker.get('receipt_path')!=str(Path(reference['path']).resolve()):
+            raise ValueError('active RAW retry marker belongs to another receipt')
+        return True
+    actual=binding(config_path)
+    return actual.get('sha256')==request['config'].get('sha256')
 
 
 def consume_boundary(reference, config, cursor, state, root):
