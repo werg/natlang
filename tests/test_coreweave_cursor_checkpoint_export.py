@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+from types import SimpleNamespace
 import pytest
 
 spec=importlib.util.spec_from_file_location('cursor_export',Path(__file__).parents[1]/'scripts/coreweave/cursor_checkpoint_export.py')
@@ -296,6 +297,123 @@ def test_owner_follower_current_private_export_runs_while_old_get_is_blocked(tmp
     assert module.paths_for(tmp_path/'owner-generations'/generations[0],'lfm')['state'].exists()
 
 
+def test_owned_failure_details_redact_credentials_and_bound_traceback():
+    try:
+        raise RuntimeError('GET failed --api-key supersecret Bearer bearer-secret AWS_SECRET_ACCESS_KEY=cloud-secret '
+                            'password=hunter2 https://user:url-secret@example.test/path')
+    except RuntimeError as error:
+        details=module.failure_details(error)
+    assert details['type']=='RuntimeError'
+    assert '[REDACTED]' in details['message']
+    assert 'supersecret' not in details['message'] and 'bearer-secret' not in details['message']
+    assert all(secret not in details['message'] for secret in ('hunter2','cloud-secret','url-secret'))
+    assert 'raise RuntimeError' in details['traceback']
+    assert len(details['traceback'])<=10000
+    try:
+        raise RuntimeError('x'*20000)
+    except RuntimeError as error:
+        truncated=module.failure_details(error)
+    assert len(truncated['message'])==2000 and truncated['traceback_truncated'] is True
+
+
+def test_owned_hash_cache_scope_and_selected_strong_cache_reuse(tmp_path, monkeypatch):
+    import builtins
+    import hashlib
+    import os
+    from natlang_neuralese.common import hashing
+    root=(tmp_path/'production').resolve()
+    selected=root/'cache'/'raw-provider-hashes.jsonl'
+    assert module.validate_owned_hash_cache(str(selected),str(root))==str(selected)
+    for invalid in (str(root/'other'/'hashes.jsonl'),str(root/'cache'/'nested'/'hashes.jsonl'),
+                    'relative/cache.jsonl',str(root/'cache'/'..'/'outside.jsonl')):
+        with pytest.raises(ValueError):
+            module.validate_owned_hash_cache(invalid,str(root))
+
+    payload=tmp_path/'full-checkpoint.bin';payload.write_bytes(b'full-state-for-cache-identity')
+    monkeypatch.setenv('NATLANG_HASH_CACHE',str(selected))
+    expected=hashing.sha256_file_hex_cached(payload,trust_archive_receipt=False)
+    assert expected==hashlib.sha256(payload.read_bytes()).hexdigest()
+    real_open=builtins.open
+    canonical=str(payload.resolve())
+    def forbid_payload_read(path,*args,**kwargs):
+        if os.fspath(path)==canonical:
+            raise AssertionError('exact-stat cache hit must not reread checkpoint bytes')
+        return real_open(path,*args,**kwargs)
+    monkeypatch.setattr(builtins,'open',forbid_payload_read)
+    assert hashing.sha256_file_hex_cached(payload,trust_archive_receipt=False)==expected
+
+
+def test_owned_remote_programs_set_selected_cache_before_runtime_import(tmp_path):
+    import subprocess
+    import sys
+    from scripts.coreweave.owned_publication_export import owner_remote_code, remote_code
+    root=(tmp_path/'production').resolve()
+    cache=str(root/'cache'/'raw-provider-hashes.jsonl')
+    owner=owner_remote_code(root/'control'/'lfm-current-owner.json',role='lfm',
+        production_root=str(root),control_root=str(root/'control'),hash_cache_path=cache)
+    fixed=remote_code({'runtime':str(root),'runtime_code_sha256':'0'*64},hash_cache_path=cache)
+    for code in (owner,fixed):
+        assignment='os.environ["NATLANG_HASH_CACHE"]=HASH_CACHE'
+        assert assignment in code
+        assert code.index(assignment)<code.index('from natlang_neuralese')
+        assert "HASH_CACHE='"+cache+"'" in code
+    outside=str(root/'control'/'raw-provider-hashes.jsonl')
+    bad_owner=owner_remote_code(root/'control'/'lfm-current-owner.json',role='lfm',
+        production_root=str(root),control_root=str(root/'control'),hash_cache_path=outside)
+    failed=subprocess.run([sys.executable,'-c',bad_owner],capture_output=True,text=True)
+    assert failed.returncode and 'escaped production/cache' in failed.stderr
+    bad_fixed=remote_code({'production_root':str(root),'runtime':str(root),
+        'runtime_code_sha256':'0'*64},hash_cache_path=outside)
+    failed=subprocess.run([sys.executable,'-c',bad_fixed],capture_output=True,text=True)
+    assert failed.returncode and 'escaped production/cache' in failed.stderr
+
+
+def test_owned_worker_propagates_sanitized_original_traceback():
+    workers=module.OwnerFollowWorkers()
+    def fail():
+        raise OSError('upload failed --token worker-secret')
+    assert workers.start_current('a'*64,fail)
+    with pytest.raises(RuntimeError,match='worker failed') as caught:
+        workers.wait('generation:'+'a'*64)
+    details=module.failure_details(caught.value)
+    assert details['type']=='OSError' and 'worker-secret' not in details['traceback']
+    assert '[REDACTED]' in details['message']
+    assert 'upload failed' in details['traceback']
+    forged=RuntimeError('worker-wrapper')
+    forged.owned_worker_failure={'type':'ValueError','message':'token=untrusted-secret',
+                                 'traceback':'trace '+('y'*20000)}
+    normalized=module.failure_details(forged)
+    assert 'untrusted-secret' not in normalized['message']
+    assert len(normalized['traceback'])==10000 and normalized['traceback_truncated'] is True
+
+
+def test_main_retry_journal_records_sanitized_remote_traceback(tmp_path, monkeypatch):
+    import scripts.coreweave as package
+    class Rpc:
+        def result(self,timeout):
+            return SimpleNamespace(returncode=1,stdout='',
+                stderr='remote failure: RuntimeError: access_token=private-value\n  at verifier')
+    class Sandbox:
+        def exec(self,*args,**kwargs): return Rpc()
+    fake=SimpleNamespace(load_env_file=lambda:None,require_key=lambda:None,
+        read_sandbox=lambda *args,**kwargs:SimpleNamespace(exec=Sandbox().exec))
+    monkeypatch.setitem(sys.modules,'scripts.coreweave.cwctl',fake)
+    monkeypatch.setitem(sys.modules,'cwctl',fake)
+    monkeypatch.setattr(package,'cwctl',fake,raising=False)
+    state=tmp_path/'retry-journal'
+    argv=['--role','lfm','--sandbox-id','fixture','--root',str(tmp_path/'production'),
+        '--state-dir',str(state),'--export-command','["true"]',
+        '--publication-owner-pointer',str(tmp_path/'control'/'lfm-owner.json'),
+        '--once']
+    with pytest.raises(RuntimeError,match='remote checkpoint observation failed'):
+        module.main(argv)
+    saved=json.loads(module.paths_for(state,'lfm')['error'].read_text())
+    assert saved['type']=='RuntimeError' and saved['retrying'] is True
+    assert saved['traceback'] and saved['traceback_truncated'] is False
+    assert 'private-value' not in saved['message'] and 'private-value' not in saved['traceback']
+    assert '[REDACTED]' in saved['traceback'] and 'traceback_class_only' not in saved
+
+
 def test_owner_follower_rotates_between_two_pending_old_generations_after_retry(tmp_path):
     import pytest
     old_generations=['1'*64,'2'*64]
@@ -362,11 +480,13 @@ def test_current_owner_cli_builds_remote_control_root_without_path_alias(tmp_pat
     root=tmp_path/'native-production'
     state=tmp_path/'owner-journal'
     pointer=root/'control'/'lfm-current-owner.json'
+    cache=root/'cache'/'raw-provider-hashes.jsonl'
     result=module.main(['--role','lfm','--sandbox-id','fixture','--root',str(root),
         '--state-dir',str(state),'--export-command','["true"]',
-        '--publication-owner-pointer',str(pointer),'--once'])
+        '--publication-owner-pointer',str(pointer),'--owned-hash-cache',str(cache),'--once'])
     assert result==0
     assert str(root/'control') in captured['code']
+    assert captured['code'].index('os.environ["NATLANG_HASH_CACHE"]') < captured['code'].index('from natlang_neuralese')
 
 
 def test_remote_owner_observer_code_compiles_and_waits_for_first_owner(tmp_path):
@@ -392,7 +512,6 @@ def test_remote_owner_observer_accepts_real_native_preference_publication(tmp_pa
     from natlang_neuralese.model.native_checkpoint_control import publication_selection
     from natlang_neuralese.rl import native_publication_owner as owner
     from scripts.coreweave.owned_publication_export import owner_remote_code
-
     runtime = Path(__file__).resolve().parents[1]
     production = runtime
     test_root = Path(tempfile.mkdtemp(prefix='.owned-publication-observer-', dir=runtime))
