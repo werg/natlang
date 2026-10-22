@@ -284,7 +284,8 @@ def load_native_checkpoint(path, *, base=None, device='cpu', dtype=None, partici
             if actor_view is not None:
                 raise ValueError('composite actor keeps the complete checkpoint loader')
             from .native_composite import load_native_composite_checkpoint
-            return load_native_composite_checkpoint(path, base=base, device=device, dtype=dtype)
+            return load_native_composite_checkpoint(path, base=base, device=device, dtype=dtype,
+                                                    allow_weights_only=allow_weights_only)
     from ..train.checkpoint_policy import CheckpointPolicy
     if actor_view is None:
         if preloaded_checkpoint is None:
