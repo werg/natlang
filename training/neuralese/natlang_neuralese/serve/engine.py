@@ -638,6 +638,25 @@ class Engine:
         token_ids = torch.tensor([ids], dtype=torch.long, device=self.backbone.embedding_weight.device)
         return native_step(self.shared_model, token_ids, cache, producing=producing)
 
+    def _native_prefill_forward(self, ids, cache):
+        """Bound ordinary prefill workspace while preserving every positional state.
+
+        Only the final token's hidden state is needed for next-token decoding.
+        Producer captures use the original forward path and keep their full span.
+        """
+        if not ids:
+            raise ValueError('native prefill needs at least one token')
+        if type(self.prefill_tokens) is not int or self.prefill_tokens <= 0:
+            raise ValueError('native prefill_tokens must be a positive integer')
+        for start in range(0, len(ids), self.prefill_tokens):
+            output = self._native_forward(ids[start:start+self.prefill_tokens], cache)
+            cache = output['cache']
+            if start + self.prefill_tokens < len(ids):
+                # Do not retain the preceding chunk's raw captures/hidden state
+                # while allocating the next chunk's layer workspace.
+                del output
+        return output
+
     def _native_logits(self, hidden):
         return self._native_run(lambda: self.shared_model.logits(hidden[:, -1]))
 
@@ -747,7 +766,7 @@ class Engine:
             if not fallback_ids and len(block.token_ids):
                 raise RequestError("neuralese-native-state-empty-text", f"{block_id} has no text for target reencoding")
             if fallback_ids:
-                output = self._native_forward(fallback_ids, seq.cache)
+                output = self._native_prefill_forward(fallback_ids, seq.cache)
                 seq.cache = output["cache"]
             mode = "best-effort-text-retokenization"
             if capture_enabled(seq):
@@ -843,7 +862,7 @@ class Engine:
                                                  "producing": [False] * len(value)})
                 seq.native_own_position += len(value)
                 if value:
-                    output = self._native_forward(value, seq.cache)
+                    output = self._native_prefill_forward(value, seq.cache)
                     seq.cache = output["cache"]
                     seq.logits = self._native_logits(output["h_final"])
             elif kind in ("native_state","native_state_constant"):
