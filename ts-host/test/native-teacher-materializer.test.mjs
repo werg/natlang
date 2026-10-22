@@ -40,6 +40,58 @@ const nativeRow = (id, accepted = true) => ({ version: 'natlang.teacher_trajecto
       raw_response_sha256: 'raw-2' },
   ], capture_limits: [] });
 
+function folderApplyPseudoReturnRow({ id = 'folder-apply-pseudo-return', pseudoText, actionValue = '1.3.7', owner = 'child', duplicateTrace = false,
+  hostValue = '1.3.7', offerReturn = true, turnNumber = 1, modelSeq = 8, terminalSeq = 10,
+  requestSha = 'c'.repeat(64), responseSha = 'd'.repeat(64), childToolCallId = 'child-terminal' } = {}) {
+  const row = nativeRow(id);
+  const root = 'root-invocation', child = 'child-invocation';
+  const evalArgs = { code: 'await folder.dir("packages/cli").apply(bump_version);' };
+  const returnArgs = { status: 'success', value: actionValue };
+  const text = pseudoText ?? `return_result(${JSON.stringify(returnArgs)})`;
+  const tools = [...schema, ...(offerReturn ? [{ type: 'function', function: { name: 'return_result',
+    parameters: { type: 'object', properties: { status: { type: 'string' }, value: { type: 'string' } } } } }] : [])];
+  row.outcome.action_ledger = [
+    { seq: 2, call_id: root, tool_call_id: 'parent-eval', name: 'eval', arguments: evalArgs,
+      outcome: 'ok', result_text: 'Applied reducer to packages/cli.' },
+    { seq: terminalSeq, call_id: owner === 'child' ? child : root, tool_call_id: childToolCallId, name: 'return_result',
+      arguments: returnArgs, outcome: 'completed', result_text: `Returned ${JSON.stringify(actionValue)}.` },
+  ];
+  row.outcome.execution_graph = [
+    { kind: 'model_turn', seq: 1, call_id: root, node: `${root}#turn1`, turn: 1, calls: ['eval'], text_chars: 0,
+      inputs: [{ node: `call:${root}`, port: 'invocation' }] },
+    { kind: 'invocation', seq: 3, call_id: child, phase: 'start', attempt: 1,
+      inputs: [{ node: `${root}#turn1`, port: 'result' }] },
+    ...Array.from({ length: turnNumber - 1 }, (_, i) => ({ kind: 'model_turn', seq: [5, 13, 20][i],
+      call_id: child, node: `${child}#turn${i + 1}`, turn: i + 1, calls: [], text_chars: 0,
+      inputs: [{ node: `call:${child}`, port: 'invocation' }] })),
+    { kind: 'model_turn', seq: modelSeq, call_id: child, node: `${child}#turn${turnNumber}`, turn: turnNumber, calls: [], text_chars: text.length,
+      inputs: [{ node: `call:${child}`, port: 'invocation' }] },
+    ...(duplicateTrace ? [{ kind: 'model_turn', seq: 9, call_id: child, node: `${child}#turn1-duplicate`,
+      turn: 1, calls: [], text_chars: text.length, inputs: [{ node: `call:${child}`, port: 'invocation' }] }] : []),
+  ];
+  const host = { kind: 'host_capture', capture_kind: 'invocation_output', call_id: child,
+    parent_call_id: root, complete: true, value: hostValue, result_type: 'string', terminal_action_seq: terminalSeq };
+  row.outcome.invocation_ledger = [
+    { invocation_id: root, parent_invocation_id: null },
+    { invocation_id: child, parent_invocation_id: root, completion_status: 'done',
+      completion_source: 'execution_graph', host_result: host },
+  ];
+  row.trajectory = [
+    { phase: 'action', invocation_id: root, context: [system, opening], tools_offered: tools,
+      assistant: { content: '', reasoning: 'Apply the reducer to the selected folder.', calls: [{ tool: 'eval', source_tool: 'eval',
+        arguments: evalArgs, call_id: null }] }, model_response: { text: '', raw_calls: [{ id: 'parent-eval',
+        function: { name: 'eval', arguments: JSON.stringify(evalArgs) } }] },
+      request_sha256: 'a'.repeat(64), raw_response_sha256: 'b'.repeat(64) },
+    ...Array.from({ length: turnNumber - 1 }, () => ({ phase: 'action', invocation_id: child,
+      context: [system, opening], tools_offered: tools, assistant: { content: '', reasoning: 'Continue the reducer.', calls: [] },
+      model_response: { text: '', raw_calls: [] }, request_sha256: 'e'.repeat(64), raw_response_sha256: 'f'.repeat(64) })),
+    { phase: 'action', invocation_id: child, context: [system, opening], tools_offered: tools,
+      assistant: { content: text, reasoning: 'Return the reducer result.', calls: [] },
+      model_response: { text, raw_calls: [] }, request_sha256: requestSha, raw_response_sha256: responseSha },
+  ];
+  return row;
+}
+
 const softBlock = `nz1_${'s'.repeat(32)}`;
 const softCallId = 'child-soft-1';
 const softMarker = '<|neuralese|>A constructed soft note.<|/neuralese|>';
@@ -132,6 +184,73 @@ test('native lineage hashes the saved JSON representation', () => {
   const turns = materializeNativeRows([row], { directAnswers: true }).turns;
   assert.ok(turns.length);
   assert.ok(turns.every(t => t.source_ref.source_row_sha256 === nativeRowDigest(saved)));
+});
+
+test('folder.apply child literal pseudo-return links to its exact terminal action and host result', () => {
+  const row = folderApplyPseudoReturnRow();
+  const result = materializeNativeRows([row]);
+  assert.equal(result.unlinked.length, 0);
+  assert.equal(result.rejectedRows, 0);
+  assert.equal(result.turns.length, 2);
+  const parent = result.turns[0].decision.assistant.calls[0];
+  assert.equal(parent.source_tool, 'eval');
+  assert.equal(parent.outcome.status, 'ok');
+  const child = result.turns[1].decision.assistant.calls[0];
+  assert.equal(child.source_tool, 'return_result');
+  assert.equal(child.call_id, 'child-terminal');
+  assert.deepEqual(child.arguments, { status: 'success', value: '1.3.7' });
+  assert.equal(child.outcome.status, 'completed');
+  assert.equal(child.outcome.arguments_source, 'exact-assistant-text-pseudo-call');
+});
+
+test('captured batch-12 reducer pseudo-return remains linkable without its external corpus', () => {
+  // Minimal source-derived evidence from batch-0012/tranche-0004 row
+  // teacher-program:a5ef4dbf20007d783cab (source SHA
+  // a7b8c7e198b0fead8cb1016b33b70011d7fddde11a33da581d87ab16d64c3496).
+  // The child text, request/response hashes, fourth turn, and terminal action
+  // identities are the original captured values; unrelated context is omitted.
+  const row = folderApplyPseudoReturnRow({
+    id: 'teacher-program:a5ef4dbf20007d783cab',
+    pseudoText: '\n\nreturn_result({\n  "status": "success",\n  "value": "1.3.7"\n})',
+    turnNumber: 4,
+    modelSeq: 27,
+    terminalSeq: 31,
+    requestSha: '553a7d7aedca2580aa9f4b0e7700a52062a2601e7f185294f5f755325922a88a',
+    responseSha: '04a5deb8205a4419a4ce70a03e4c364a5768728e32044a3a1fb06cb688c8f97b',
+    childToolCallId: 'call_4_0',
+  });
+  const result = materializeNativeRows([row]);
+  assert.equal(result.unlinked.length, 0);
+  assert.equal(result.rejectedRows, 0);
+  const child = result.turns.at(-1).decision.assistant.calls[0];
+  assert.equal(child.call_id, 'call_4_0');
+  assert.deepEqual(child.arguments, { status: 'success', value: '1.3.7' });
+  assert.equal(child.outcome.trace_seq, 31);
+  assert.equal(child.outcome.arguments_source, 'exact-assistant-text-pseudo-call');
+});
+
+test('folder.apply pseudo-return linkage rejects ambiguous or inconsistent evidence', () => {
+  const missingAssistantCalls = folderApplyPseudoReturnRow();
+  delete missingAssistantCalls.trajectory[1].assistant.calls;
+  const missingRawCalls = folderApplyPseudoReturnRow();
+  delete missingRawCalls.trajectory[1].model_response.raw_calls;
+  const mutated = [
+    folderApplyPseudoReturnRow({ actionValue: '1.3.8' }),
+    folderApplyPseudoReturnRow({ owner: 'root' }),
+    folderApplyPseudoReturnRow({ duplicateTrace: true }),
+    folderApplyPseudoReturnRow({ hostValue: '1.3.8' }),
+    folderApplyPseudoReturnRow({ offerReturn: false }),
+    folderApplyPseudoReturnRow({ pseudoText: 'The package is now 1.3.7. return_result({"status":"success","value":"1.3.7"})' }),
+    missingAssistantCalls,
+    missingRawCalls,
+  ];
+  for (const row of mutated) {
+    const result = materializeNativeRows([row]);
+    assert.equal(result.turns.length, 0);
+    assert.equal(result.rejectedRows, 1);
+    assert.equal(result.unlinked.length, 1);
+    assert.equal(result.unlinked[0].outcomes, 1);
+  }
 });
 
 test('status-only success requires a same-invocation linked staged typed result unless the return type is void', () => {
