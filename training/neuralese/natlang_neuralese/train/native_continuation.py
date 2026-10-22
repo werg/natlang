@@ -4,11 +4,11 @@ These are schedule metadata, never another optimizer/RNG history. The live
 participant owns one current model/optimizer/FP8/RNG continuation stream.
 """
 from __future__ import annotations
-import copy
 import math
 import json
 from pathlib import Path
 from ..common.hashing import sha256_file_hex_cached
+from ..common.copying import deepcopy_metadata
 
 TRAINING_SCHEMA='natlang.neuralese-native-sft-training/1'
 PROGRESS_SCHEMA='natlang.native-sft-progress/1'
@@ -63,7 +63,7 @@ def withdraw_ordinary_rows(training, proof_path, *, current_bindings, model_id, 
         selected[key]=row
     # Copy schedule metadata only; preserve the actual live optimizer/RNG objects.
     result=dict(training)
-    result['options']=copy.deepcopy(training.get('options') or {})
+    result['options']=deepcopy_metadata(training.get('options') or {})
     history=list(result['options'].get('withdrawal_history') or [])
     historical_frames=collect_sft_progress(training,borrow_frames=True)
     history.append({'proof_sha256':proof_sha,'evidence':proof['evidence'],
@@ -81,13 +81,13 @@ def withdraw_ordinary_rows(training, proof_path, *, current_bindings, model_id, 
         for field in ('exposure_counts','required_visits'):
             if field in frame:frame[field]={k:v for k,v in frame[field].items() if k not in selected}
     remove(result)
-    result['sft_progress']=copy.deepcopy(training.get('sft_progress') or {})
+    result['sft_progress']=deepcopy_metadata(training.get('sft_progress') or {})
     for frame in result['sft_progress'].values():
         for key,row in selected.items():
             if key in (frame.get('source_row_bindings') or {}) and frame['source_row_bindings'][key]!=row['binding']:
                 raise ValueError('native withdrawal conflicts with a carried stage binding')
         remove(frame)
-        frame.setdefault('options',{})['withdrawal_history']=copy.deepcopy(history)
+        frame.setdefault('options',{})['withdrawal_history']=deepcopy_metadata(history)
     return result
 
 
@@ -105,8 +105,8 @@ def stage_key(training):
 def _retain_pending_sources(frame,previous):
     """Merge mandatory source declarations into the existing CE frame, with no earned credit."""
     active=frame.get('source_row_bindings') or {}
-    pending=copy.deepcopy(previous.get('pending_source_rows') or {})
-    declarations=copy.deepcopy(previous.get('pending_source_declarations') or {})
+    pending=deepcopy_metadata(previous.get('pending_source_rows') or {})
+    declarations=deepcopy_metadata(previous.get('pending_source_declarations') or {})
     quotas=dict(previous.get('required_visits') or {})
     for key,required in required_visits(frame.get('source_row_order') or list(active),
             float((frame.get('options') or {}).get('epochs',1))).items():
@@ -115,7 +115,7 @@ def _retain_pending_sources(frame,previous):
         if key in active:quotas[key]=max(quotas.get(key,0),required)
     for declaration in (frame.get('options') or {}).get('_pending_native_source_declarations') or []:
         reference=declaration['binding'];fingerprint=reference['sha256']
-        record={key:copy.deepcopy(value) for key,value in declaration.items() if key!='rows'}
+        record={key:deepcopy_metadata(value) for key,value in declaration.items() if key!='rows'}
         if fingerprint in declarations and declarations[fingerprint]!=record:
             raise ValueError('pending source declaration changed without a new immutable binding')
         declarations[fingerprint]=record
@@ -162,11 +162,11 @@ def collect_sft_progress(training, *, borrow_frames=False):
     # The current frame replaces its historical snapshot. Copy only the other
     # stages; the pending merge below owns the few prior values still needed.
     result=(dict(historical) if borrow_frames else
-            copy.deepcopy({name:None if capture and name==key else frame
+            deepcopy_metadata({name:None if capture and name==key else frame
                            for name,frame in historical.items()}))
     if capture:
         previous=historical.get(key) or {}
-        frame={key:value if borrow_frames else copy.deepcopy(value)
+        frame={key:value if borrow_frames else deepcopy_metadata(value)
                for key,value in training.items() if key not in _TRANSIENT}
         if borrow_frames:
             # _retain_pending_sources updates only these existing nested values;
@@ -175,7 +175,7 @@ def collect_sft_progress(training, *, borrow_frames=False):
         _retain_pending_sources(frame,previous)
         if 'completed_foundations' not in frame:
             completed=previous.get('completed_foundations',[])
-            frame['completed_foundations']=completed if borrow_frames else copy.deepcopy(completed)
+            frame['completed_foundations']=completed if borrow_frames else deepcopy_metadata(completed)
         result[key]=frame
     return result
 
@@ -208,7 +208,7 @@ def restore_sft_progress(current,stage,*,collected_progress=None):
     progress=collect_sft_progress(current)if collected_progress is None else collected_progress
     frame=progress.get(stage or 'native-graph-ce')
     if frame is None:return None
-    result=copy.deepcopy(frame)
+    result=deepcopy_metadata(frame)
     for key in ('optimizer','rng','fp8'):
         if key in current:result[key]=current[key]
     result['global_step']=int(current.get('global_step',current.get('step',0)))
@@ -236,12 +236,12 @@ def progress_obligations(progress):
             'epochs':(frame.get('options') or {}).get('epochs',1)}
         if (frame.get('identity') or {}).get('objective_kind'):
             stages[stage]['objective_kind']=frame['identity']['objective_kind']
-            stages[stage]['objective']=copy.deepcopy(frame['identity']['objective'])
+            stages[stage]['objective']=deepcopy_metadata(frame['identity']['objective'])
         if frame.get('pending_source_declarations') or frame.get('pending_source_rows'):
             stages[stage].update(
                 pending_source_graph_visits=sum(value for key,value in missing.items() if key in (frame.get('pending_source_rows') or {})),
                 active_remaining_graph_visits=sum(value for key,value in missing.items() if key not in (frame.get('pending_source_rows') or {})),
-                pending_source_declarations=copy.deepcopy(frame.get('pending_source_declarations') or {}))
+                pending_source_declarations=deepcopy_metadata(frame.get('pending_source_declarations') or {}))
     return {'schema':PROGRESS_SCHEMA,'complete':bool(stages) and all(x['complete'] for x in stages.values()),
         'remaining_graph_visits':sum(x['remaining_graph_visits'] for x in stages.values()),'stages':stages}
 
