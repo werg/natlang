@@ -511,6 +511,16 @@ afterwards. The rules below are consequences of this one.
   (`scripts/memory_ledger.py run --unit <family>-<id> --budget-gb N -- ...`;
   units run asynchronously, so wait for the unit to finish and read its log).
   Never report a merge as verified when the ledgered tests did not run.
+- Bound dirty file-cache memory during large artifact copies (engineering finding,
+  2026-10-22): a small Python heap does not bound a ledger unit's memory. Flush
+  and synchronize bounded write windows, release clean cache when appropriate,
+  and resume an interrupted copy only after validating its actual prefix. Verify
+  full content before replacing a logical path; preserve source and live readers.
+- Restart transient ledger services through the ledger with a fresh unit name
+  (engineering finding, 2026-10-22). A stopped transient unit may already have
+  been collected, so `systemctl start` can fail even after a clean stop. Preserve
+  the existing state/lease namespace, verify the new actual process and update
+  supervision bindings; never treat scheduling the wrapper as resumed work.
 - Ledger priority (owner, 2026-10-11): pass `--priority high` for training and
   GPU direct/E2E runs, `low` for data generation, rendering and check-main, and
   leave smokes/evals at the default `medium`. Claims may be generous: admission
