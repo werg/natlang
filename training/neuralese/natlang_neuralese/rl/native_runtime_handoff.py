@@ -33,12 +33,24 @@ def _read(reference):return json.loads(_bound(reference).read_text())
 
 
 def _snap(reference,directory,name):
-    raw=_bound(reference).read_bytes()
-    if binding(reference['path'])!=reference:raise ValueError('runtime handoff control changed during snapshot')
+    source=_bound(reference)
+    raw=source.read_bytes()
+    actual=binding(source)
+    if actual['path']!=reference['path'] or actual['sha256']!=reference['sha256']:
+        raise ValueError('runtime handoff control changed during snapshot')
+    if 'bytes' in reference and (type(reference['bytes']) is not int or reference['bytes']!=len(raw)):
+        raise ValueError('runtime handoff control byte count differs during snapshot')
+    directory.mkdir(parents=True,exist_ok=True)
     path=directory/name
     if path.exists() and path.read_bytes()!=raw:raise ValueError('runtime handoff immutable snapshot differs')
     write_bytes_durable(path,raw)
-    return binding(path)
+    copied=path.read_bytes()
+    snapshot=binding(path)
+    if copied!=raw or (snapshot['path']!=str(path.resolve())
+            or snapshot['sha256']!=reference['sha256']
+            or ('bytes' in reference and len(copied)!=reference['bytes'])):
+        raise ValueError('runtime handoff snapshot changed during copy')
+    return snapshot
 
 
 def _paths(config_path,config):
@@ -83,6 +95,9 @@ def _transition(reference,handoff,record,saved):
 def _owned_launch_chain(record, snapshots=None):
     """Follow only the byte-bound launch observed during genuine live capture."""
     captured=_read(record['intent']);observed=_read(captured['launch'])
+    if observed.get('observed_bridge_dispatch'):
+        from .native_owned_bridge_dispatch import verify
+        return verify(captured,observed,snapshots)
     if observed.get('inprocess_dispatch'):
         from .native_owned_dispatch import verify
         return verify(captured,observed,snapshots)
@@ -228,7 +243,7 @@ def _loaded_handoff(reference,verified=None):
     return record,saved
 
 
-def prepare_runtime_handoff(bootstrap,handoff,recipe_handoff,config_path,out,*,operation=None,bare_direct_owner=None,owned_operations=None,deferred_owner_bridge=None,verified_handoff=None,owned_controller_fd=None):
+def prepare_runtime_handoff(bootstrap,handoff,recipe_handoff,config_path,out,*,operation=None,bare_direct_owner=None,owned_operations=None,deferred_owner_bridge=None,drained_checkpoint_import=None,verified_handoff=None,owned_controller_fd=None):
     """Snapshot an actual later drain under the existing coordinator/worker leases."""
     config_path=Path(config_path);out=Path(out)
     if owned_controller_fd is not None:
@@ -240,11 +255,12 @@ def prepare_runtime_handoff(bootstrap,handoff,recipe_handoff,config_path,out,*,o
                 or (value.get('operation') or {}).get('original')!=operation
                 or value.get('owned_operations')!=owned_operations
                 or value.get('deferred_owner_bridge')!=deferred_owner_bridge
+                or value.get('drained_checkpoint_import')!=drained_checkpoint_import
                 or value['sources']['config']['path']!=str(config_path.resolve())):
             raise ValueError('runtime handoff retry changed its requested authority')
         return binding(out)
     config=json.loads(config_path.read_text());root,cursor,state=_paths(config_path,config)
-    if deferred_owner_bridge is not None and (operation is not None or owned_operations is not None):
+    if deferred_owner_bridge is not None and (operation is not None or owned_operations is not None or drained_checkpoint_import is not None):
         raise ValueError('deferred-owner bridge cannot be combined with another runtime operation authority')
     locks=[root.parent/'controller.lock',Path(config['out'])/'controller.lock']
     if operation:
@@ -253,6 +269,13 @@ def prepare_runtime_handoff(bootstrap,handoff,recipe_handoff,config_path,out,*,o
         sources={'config':binding(config_path),'cursor':binding(cursor),'state':binding(state)}
         current=json.loads(state.read_text());published=binding(current['checkpoint'])
         record,saved=_loaded_handoff(handoff,verified_handoff)
+        if drained_checkpoint_import is not None:
+            from .native_raw_rounds import verify_drained_checkpoint_import
+            verify_drained_checkpoint_import(drained_checkpoint_import,config=config,cursor=json.loads(cursor.read_text()),
+                state=current,config_binding=sources['config'],verified_handoff=(record,saved))
+        elif (json.loads(cursor.read_text()).get('drained_checkpoint_recovery')
+                and not operation and not owned_operations):
+            raise ValueError('fresh drained-checkpoint boundary requires its explicit runtime import receipt')
         verify_handoff_metadata(bootstrap)
         authority={'recipe_handoff':recipe_handoff}
         if bare_direct_owner is not None:
@@ -302,7 +325,8 @@ def prepare_runtime_handoff(bootstrap,handoff,recipe_handoff,config_path,out,*,o
             'bare_direct_owner':authority.get('bare_direct_owner'),
             'checkpoint':record['checkpoint'],'published_checkpoint':published,'sources':sources,
             'snapshots':snapshots,'operation':operation_snapshot,'owned_operations':owned_operations,
-            'deferred_owner_bridge':bridge,'model_id':config.get('raw_model_id'),
+            'deferred_owner_bridge':bridge,'drained_checkpoint_import':drained_checkpoint_import,
+            'model_id':config.get('raw_model_id'),
             'lineage':config.get('recipe_lineage_sha256'),'previous':config.get('runtime_handoff')}
         _verify(value,bootstrap,record,saved,transition)
         if any(binding(ref['path'])!=ref for ref in sources.values()):
@@ -360,6 +384,10 @@ def _verify(value,bootstrap,record,saved,transition):
     if value.get('deferred_owner_bridge'):
         _verified_deferred_owner_bridge(value['deferred_owner_bridge'],record['checkpoint'],value['sources'],
             config_snapshot=value['snapshots']['config'],cursor=cursor,state=state,handoff=value['handoff'])
+    if value.get('drained_checkpoint_import'):
+        from .native_raw_rounds import verify_drained_checkpoint_import
+        verify_drained_checkpoint_import(value['drained_checkpoint_import'],config=config,cursor=cursor,
+            state=state,config_binding=value['snapshots']['config'],verified_handoff=(record,saved))
     if value.get('operation'):
         from .native_bridge import read_request,RESULT_SCHEMA
         request=read_request(_bound(value['operation']['request']))
@@ -488,6 +516,21 @@ def _verified_deferred_owner_bridge(reference,checkpoint,sources,*,config_snapsh
 
 def _owned_cycle_boundary(proof,cursor,state,recipe,production_stage):
     """An authenticated end-of-cycle acknowledgement has no sealed next packet."""
+    drained=proof.get('drained_checkpoint_import')
+    if drained:
+        from .native_raw_rounds import _supervised_stage_inventory
+        if not _supervised_stage_inventory(recipe,production_stage):return False
+        marker=cursor.get('drained_checkpoint_recovery') or {}
+        if (marker.get('receipt')!=_bound(drained).as_posix()
+                or marker.get('handoff')!=proof.get('handoff')
+                or marker.get('recipe_handoff')!=proof.get('recipe_handoff')
+                or marker.get('whole_recipe_completed') is not False
+                or marker.get('training_credit')!=0 or marker.get('raw_completion_credit')!=0):return False
+        return (cursor.get('phase')=='sft' and cursor.get('next_stage')==0
+            and 'pending_rl_round' not in cursor and state.get('phase')=='collect'
+            and not any(state.get(key) is not None for key in
+                ('pending_native_checkpoint','pending_native_round_dir','pending_native_operation',
+                 'pending_semantic_source','pending_semantic_round','learner_pending')))
     if not proof.get('owned_operations'):
         bridge=proof.get('deferred_owner_bridge')
         if not bridge:return False
@@ -671,6 +714,8 @@ def main(argv=None):
     parser.add_argument('--owned-operations',type=Path,help='bound completed owned operation-chain JSON; no stage is marked complete')
     parser.add_argument('--deferred-owner-bridge',type=Path,
         help='bound no-credit bridge from the selected startup parent to its completed owner checkpoint')
+    parser.add_argument('--drained-checkpoint-import',type=Path,
+        help='bound no-credit full-state import receipt establishing a fresh mandatory RAW SFT boundary')
     args=parser.parse_args(argv)
     bootstrap=binding(args.bootstrap)
     if args.verify:
@@ -711,7 +756,9 @@ def main(argv=None):
         reference=prepare_runtime_handoff(bootstrap,binding(args.handoff),binding(args.recipe_handoff) if args.recipe_handoff else None,
             args.config,args.out,operation=operation,bare_direct_owner=bare,
             owned_operations=owned,deferred_owner_bridge=(binding(args.deferred_owner_bridge)
-                if args.deferred_owner_bridge else None),verified_handoff=verified)
+                if args.deferred_owner_bridge else None),
+            drained_checkpoint_import=(binding(args.drained_checkpoint_import)
+                if args.drained_checkpoint_import else None),verified_handoff=verified)
     print(json.dumps(reference,sort_keys=True))
     return 0
 

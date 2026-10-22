@@ -557,6 +557,353 @@ def import_current_owner_checkpoint(config_path,cursor_path,selected_checkpoint,
     return binding(out)
 
 
+def import_drained_checkpoint(config_path, cursor_path, handoff, recipe_handoff, out, *,
+                              recovery_reason, verified_handoff=None, owned_controller_fd=None):
+    """Import an actually drained full checkpoint into the existing RAW lineage.
+
+    Unlike the in-process current-owner path, authority here comes from the
+    immutable optimizer drain and schema-4 recovered recipe handoff. The full
+    checkpoint is loaded by the shared handoff verifier; no future trainer
+    argv or synthetic owner invocation is constructed.
+    """
+    import contextlib
+    from ..common.hashing import canonical_json_sha256_hex as digest
+    from ..train.native_resident import owner_alive
+    from .native_raw_handoff import (RECOVERED_RECIPE_HANDOFF,
+        verify_drained_recipe_handoff)
+
+    config_path=Path(config_path).resolve(strict=True)
+    cursor_path=Path(cursor_path).resolve(strict=True)
+    out=Path(out).resolve()
+    config=json.loads(config_path.read_text());root=config_path.parent
+    state_path=Path(config['out']).resolve()/'state.json'
+    if cursor_path!=root/'cycle.json' or Path(config['out']).resolve().parent!=root:
+        raise ValueError('drained checkpoint import lost its exact RAW controller namespace')
+    if not isinstance(recovery_reason,str) or not recovery_reason.strip():
+        raise ValueError('drained checkpoint import needs an explicit no-credit recovery reason')
+    handoff=handoff if isinstance(handoff,dict) else binding(handoff)
+    recipe_handoff=recipe_handoff if isinstance(recipe_handoff,dict) else binding(recipe_handoff)
+    if _bound(handoff)!=Path(handoff['path']) or _bound(recipe_handoff)!=Path(recipe_handoff['path']):
+        raise ValueError('drained checkpoint authority bindings must name exact files')
+    record,saved=(verify_handoff(handoff) if verified_handoff is None else verified_handoff)
+    transition=verify_drained_recipe_handoff(recipe_handoff,handoff=handoff,
+        verified_handoff=(record,saved))
+    if transition.get('schema')!=RECOVERED_RECIPE_HANDOFF or not transition.get('external_runtime',{}).get('executed_runtime'):
+        raise ValueError('drained checkpoint import requires verified schema-4 historical/executed runtime evidence')
+    intent=json.loads(_bound(record['intent']).read_text())
+    if intent.get('schema')!='natlang.native-raw-optimizer-drain/2':
+        raise ValueError('drained checkpoint import requires the original complete drain/2 process census')
+    owner=intent.get('owner') or {}
+    if owner_alive(owner):
+        raise ValueError('drained checkpoint import rejects a live original optimizer owner')
+    for child in intent.get('children',[]):
+        if owner_alive(child):
+            raise ValueError('drained checkpoint import rejects a live optimizer descendant')
+    selected=record['checkpoint'];training=saved.get('training') or {};model=saved.get('model_config') or {}
+    model_id=str(model.get('architecture',''))+':'+str(model.get('base_inventory_sha256',''))
+    if config.get('raw_model_id')!=model_id:
+        raise ValueError('drained checkpoint belongs to another RAW model/base')
+    plan=json.loads(_bound(transition['new_plan']).read_text())
+    old_plan=json.loads(_bound(transition['old_plan']).read_text())
+    if config.get('recipe_lineage_sha256') not in (plan.get('recipe_sha256'),old_plan.get('recipe_sha256')):
+        raise ValueError('drained recipe handoff does not preserve the active or authenticated predecessor lineage')
+    _verify_drained_config_sources(config,record,transition)
+    global_step=training.get('global_step',training.get('step'))
+    if type(global_step)is not int:
+        raise ValueError('drained checkpoint lacks its exact saved optimizer step')
+    from .native_raw_policy import require_raw_training
+    require_raw_training(saved)
+
+    def published(state,cursor):
+        next_state=_published_checkpoint_state(state,selected)
+        next_state.pop('readiness',None)
+        next_cursor={**cursor,'phase':'sft','next_stage':0,'current_checkpoint':selected,
+            'drained_checkpoint_recovery':{'receipt':str(out),'handoff':handoff,
+                'recipe_handoff':recipe_handoff,'global_step':global_step,
+                'whole_recipe_completed':False,'training_credit':0,'raw_completion_credit':0}}
+        next_cursor.pop('readiness',None);next_cursor.pop('foundation_qualified',None)
+        next_cursor.pop('pending_rl_round',None)
+        next_cursor=_fresh_owned_work_cursor(root,next_cursor)
+        return next_state,next_cursor
+
+    directory=out.parent/(out.stem+'-drained-checkpoint-import');intent_path=directory/'intent.json'
+    if out.exists():
+        receipt=json.loads(out.read_text());request=receipt.get('request') or {}
+        if (receipt.get('schema')!='natlang.native-raw-drained-checkpoint-import/1'
+                or receipt.get('request_sha256')!=digest(request)
+                or request.get('config')!=binding(config_path)
+                or request.get('handoff')!=handoff or request.get('recipe_handoff')!=recipe_handoff
+                or request.get('selected_checkpoint')!=selected
+                or request.get('recovery_reason')!=recovery_reason
+                or receipt.get('published_checkpoint')!=selected
+                or receipt.get('whole_recipe_completed') is not False
+                or receipt.get('training_credit')!=0 or receipt.get('raw_completion_credit')!=0
+                or receipt.get('readiness_granted') is not False):
+            raise ValueError('drained checkpoint import receipt belongs to another recovery decision')
+        committed_state=json.loads(state_path.read_text());committed_cursor=json.loads(cursor_path.read_text())
+        verify_drained_checkpoint_import(binding(out),config=config,cursor=committed_cursor,
+            state=committed_state,config_binding=binding(config_path),verified_handoff=(record,saved))
+        return binding(out)
+
+    state=json.loads(state_path.read_text());cursor=json.loads(cursor_path.read_text())
+    if state.get('phase')!='collect' or any(state.get(key) is not None for key in
+            ('pending_native_checkpoint','pending_native_round_dir','pending_native_operation',
+             'pending_semantic_source','pending_semantic_round','learner_pending')):
+        raise ValueError('drained checkpoint import cannot bypass an active RAW optimizer operation')
+    if cursor.get('pending_rl_round') is not None or any(
+            value is not None for key,value in cursor.items()
+            if key.startswith('pending_') and key not in ('pending_collection','pending_rl_round')):
+        raise ValueError('drained checkpoint import cannot bypass a pending RL or semantic round')
+    prior_intent=json.loads(intent_path.read_text()) if intent_path.exists() else None
+    if prior_intent is not None:
+        request=prior_intent.get('request') or {}
+        if (request.get('schema')!='natlang.native-raw-drained-checkpoint-import/1'
+                or request.get('config')!=binding(config_path) or request.get('handoff')!=handoff
+                or request.get('recipe_handoff')!=recipe_handoff
+                or request.get('selected_checkpoint')!=selected
+                or request.get('recovery_reason')!=recovery_reason
+                or prior_intent.get('request_sha256')!=digest(request)):
+            raise ValueError('drained checkpoint import interrupted intent changed its recovery authority')
+        current=request.get('previous_checkpoint')
+    else:
+        if (not isinstance(cursor.get('current_checkpoint'),dict)
+                or {key:cursor['current_checkpoint'].get(key) for key in ('path','sha256')}!=binding(state['checkpoint'])):
+            raise ValueError('drained checkpoint import requires the current state and cursor to agree')
+        current=binding(state['checkpoint'])
+    paths={'state':state_path,'cursor':cursor_path}
+    request=prior_intent['request'] if prior_intent is not None else {
+        'schema':'natlang.native-raw-drained-checkpoint-import/1','config':binding(config_path),
+        'handoff':handoff,'recipe_handoff':recipe_handoff,'selected_checkpoint':selected,
+        'previous_checkpoint':current,'recovery_reason':recovery_reason,
+        'global_step':global_step,'lineage':transition['new_plan']['sha256']}
+    controller_lock=root.parent/'controller.lock';locks={Path(config['out']).resolve()/'controller.lock'}
+    if owned_controller_fd is None:locks.add(controller_lock)
+    with contextlib.ExitStack() as stack:
+        if owned_controller_fd is not None:verify_controller_fd(owned_controller_fd,controller_lock)
+        for path in sorted(locks):
+            path.parent.mkdir(parents=True,exist_ok=True)
+            lease=stack.enter_context(path.open('a'));fcntl.flock(lease,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        # Revalidate all external authority while holding the exact controller lease.
+        # Recheck the immutable handoff control bindings without decoding the
+        # full model/optimizer a second time while holding the controller lease.
+        from .native_raw_handoff import verify_handoff_controls
+        controlled=verify_handoff_controls(handoff)
+        if controlled!=record:
+            raise ValueError('drained checkpoint handoff controls changed before import')
+        record,saved=(record,saved)
+        transition=verify_drained_recipe_handoff(recipe_handoff,handoff=handoff,verified_handoff=(record,saved))
+        if (binding(config_path)!=request['config'] or record['checkpoint']!=selected
+                or owner_alive((json.loads(_bound(record['intent']).read_text())).get('owner') or {})):
+            raise ValueError('drained checkpoint authority or RAW config changed before import')
+        if out.exists():
+            receipt=json.loads(out.read_text())
+            if receipt.get('schema')!='natlang.native-raw-drained-checkpoint-import/1' or receipt.get('request_sha256')!=digest(request):
+                raise ValueError('drained checkpoint import receipt belongs to another recovery decision')
+            return binding(out)
+        if intent_path.exists():
+            intent_value=json.loads(intent_path.read_text())
+            if intent_value.get('request')!=request or intent_value.get('request_sha256')!=digest(request):
+                raise ValueError('drained checkpoint import intent belongs to another recovery decision')
+            for name,path in paths.items():
+                snapshot=intent_value['snapshots'][name];candidate=intent_value['candidates'][name]
+                if binding(snapshot['path'])!=snapshot or binding(candidate['path'])!=candidate:
+                    raise ValueError('drained checkpoint import durable snapshot/candidate changed')
+            originals={name:json.loads(_bound(ref).read_text()) for name,ref in intent_value['snapshots'].items()}
+            expected_state,expected_cursor=published(originals['state'],originals['cursor'])
+            for name,expected_value in (('state',expected_state),('cursor',expected_cursor)):
+                if json.loads(_bound(intent_value['candidates'][name]).read_text())!=expected_value:
+                    raise ValueError('drained checkpoint import candidate changes unrelated recipe debt')
+        else:
+            before={name:binding(path) for name,path in paths.items()}
+            old_state=json.loads(state_path.read_text());old_cursor=json.loads(cursor_path.read_text())
+            if (before['state']!=binding(state_path) or before['cursor']!=binding(cursor_path)
+                    or old_state!=state or old_cursor!=cursor):
+                raise ValueError('drained checkpoint controller changed before snapshot')
+            next_state,next_cursor=published(state,cursor)
+            directory.mkdir(parents=True,exist_ok=True);snapshots={};candidates={}
+            for name,path in paths.items():
+                snap=directory/f'original-{name}.json';write_bytes_durable(snap,path.read_bytes());snapshots[name]=binding(snap)
+            for name,value in (('state',next_state),('cursor',next_cursor)):
+                candidate=directory/f'candidate-{name}.json';write_json_durable(candidate,value);candidates[name]=binding(candidate)
+            intent_value={'schema':'natlang.native-raw-drained-checkpoint-import/1','request':request,
+                'request_sha256':digest(request),'before':before,'snapshots':snapshots,
+                'candidates':candidates,'whole_recipe_completed':False,'training_credit':0,
+                'raw_completion_credit':0,'readiness_granted':False}
+            write_json_durable(intent_path,intent_value)
+        for name,path in paths.items():
+            actual=binding(path)
+            if actual['sha256']!=intent_value['candidates'][name]['sha256'] and actual!=intent_value['before'][name]:
+                raise ValueError('drained checkpoint import found a concurrent controller successor')
+        for name,path in paths.items():
+            candidate=intent_value['candidates'][name]
+            if binding(path)['sha256']!=candidate['sha256']:
+                write_bytes_durable(path,_bound(candidate).read_bytes())
+        receipt={'schema':'natlang.native-raw-drained-checkpoint-import/1','request_sha256':digest(request),
+            'request':request,'intent':binding(intent_path),'published_checkpoint':selected,
+            'whole_recipe_completed':False,'training_credit':0,'raw_completion_credit':0,
+            'readiness_granted':False}
+        write_json_durable(out,receipt)
+        if owned_controller_fd is not None:
+            verify_controller_fd(owned_controller_fd,controller_lock)
+    return binding(out)
+
+
+def verify_drained_checkpoint_import(reference, *, config, cursor, state,
+                                     config_binding=None, verified_handoff=None):
+    """Verify the no-credit recovery receipt at its immutable runtime boundary."""
+    from ..common.hashing import canonical_json_sha256_hex as digest
+    from .native_raw_handoff import (RECOVERED_RECIPE_HANDOFF,
+        verify_drained_recipe_handoff)
+    receipt_path=_bound(reference);receipt=json.loads(receipt_path.read_text())
+    request=receipt.get('request') or {};intent_ref=receipt.get('intent')
+    if (receipt.get('schema')!='natlang.native-raw-drained-checkpoint-import/1'
+            or receipt.get('request_sha256')!=digest(request)
+            or receipt.get('whole_recipe_completed') is not False
+            or receipt.get('training_credit')!=0 or receipt.get('raw_completion_credit')!=0
+            or receipt.get('readiness_granted') is not False
+            or not isinstance(intent_ref,dict) or binding(intent_ref['path'])!=intent_ref):
+        raise ValueError('runtime handoff needs an exact no-credit drained-checkpoint import receipt')
+    intent=json.loads(_bound(intent_ref).read_text())
+    if (intent.get('schema')!=receipt['schema'] or intent.get('request')!=request
+            or intent.get('request_sha256')!=receipt['request_sha256']
+            or intent.get('whole_recipe_completed') is not False
+            or intent.get('training_credit')!=0 or intent.get('raw_completion_credit')!=0
+            or intent.get('readiness_granted') is not False):
+        raise ValueError('runtime handoff drained-import intent changed its no-credit authority')
+    if request.get('schema')!='natlang.native-raw-drained-checkpoint-import/1':
+        raise ValueError('drained-import request schema changed')
+    if request.get('selected_checkpoint')!=receipt.get('published_checkpoint'):
+        raise ValueError('drained-import request checkpoint differs from its committed receipt')
+    if config_binding is not None and request.get('config',{}).get('sha256')!=config_binding.get('sha256'):
+        raise ValueError('drained-import config content changed from its committed authority')
+    # The intent itself names the exact state/cursor files. Verify every
+    # immutable original and candidate before trusting the committed receipt.
+    expected_names={'state','cursor'}
+    if set(intent.get('snapshots',{}))!=expected_names or set(intent.get('candidates',{}))!=expected_names or set(intent.get('before',{}))!=expected_names:
+        raise ValueError('drained-import transaction lost its two-file compare-and-swap set')
+    root=Path(request.get('config',{}).get('path','')).resolve().parent
+    expected_paths={'cursor':root/'cycle.json','state':Path(config['out']).resolve()/'state.json'}
+    originals={}
+    for name in expected_names:
+        snap=intent['snapshots'][name];candidate=intent['candidates'][name]
+        if binding(snap['path'])!=snap or binding(candidate['path'])!=candidate:
+            raise ValueError('drained-import durable snapshot or candidate changed')
+        if (snap['sha256']!=intent['before'][name].get('sha256')
+                or intent['before'][name].get('path')!=str(expected_paths[name])
+                or Path(candidate['path']).parent!=_bound(intent_ref).parent):
+            raise ValueError('drained-import compare-and-swap paths or before-image changed')
+        originals[name]=json.loads(_bound(snap).read_text())
+    expected_state=_published_checkpoint_state(originals['state'],request.get('selected_checkpoint'))
+    expected_state.pop('readiness',None)
+    expected_cursor={**originals['cursor'],'phase':'sft','next_stage':0,
+        'current_checkpoint':request.get('selected_checkpoint'),
+        'drained_checkpoint_recovery':{'receipt':str(receipt_path),'handoff':request.get('handoff'),
+            'recipe_handoff':request.get('recipe_handoff'),'global_step':request.get('global_step'),
+            'whole_recipe_completed':False,'training_credit':0,'raw_completion_credit':0}}
+    expected_cursor.pop('readiness',None);expected_cursor.pop('foundation_qualified',None);expected_cursor.pop('pending_rl_round',None)
+    candidate_cursor=json.loads(_bound(intent['candidates']['cursor']).read_text())
+    generation=candidate_cursor.get('raw_retry_generation')
+    if type(generation)is not int or generation<originals['cursor'].get('raw_retry_generation',0):
+        raise ValueError('drained-import candidate has an invalid fresh work generation')
+    expected_cursor['raw_retry_generation']=generation
+    for name,expected in (('state',expected_state),('cursor',expected_cursor)):
+        if json.loads(_bound(intent['candidates'][name]).read_text())!=expected:
+            raise ValueError('drained-import candidate does not preserve the exact no-credit recovery transition')
+    if config_binding is not None and request.get('config',{}).get('sha256')!=config_binding.get('sha256'):
+        raise ValueError('drained-import receipt was prepared from another RAW config')
+    selected=request.get('selected_checkpoint')
+    published_binding=binding(state.get('checkpoint'))
+    selected_matches=(isinstance(selected,dict) and published_binding['path']==selected.get('path')
+        and published_binding['sha256']==selected.get('sha256')
+        and ('bytes' not in selected or (type(selected['bytes']) is int
+            and Path(published_binding['path']).stat().st_size==selected['bytes'])))
+    if (receipt.get('published_checkpoint')!=selected
+            or not selected_matches
+            or cursor.get('current_checkpoint')!=selected
+            or cursor.get('phase')!='sft' or cursor.get('next_stage')!=0
+            or state.get('phase')!='collect'
+            or 'pending_rl_round' in cursor
+            or any(value is not None for key,value in cursor.items()
+                if key.startswith('pending_') and key!='pending_collection')
+            or any(state.get(key) is not None for key in
+                ('pending_native_checkpoint','pending_native_round_dir','pending_native_operation',
+                 'pending_semantic_source','pending_semantic_round','learner_pending'))):
+        raise ValueError('drained-import receipt does not match a fresh, unsealed RAW SFT boundary')
+    marker=cursor.get('drained_checkpoint_recovery') or {}
+    if (marker.get('receipt')!=str(receipt_path) or marker.get('handoff')!=request.get('handoff')
+            or marker.get('recipe_handoff')!=request.get('recipe_handoff')
+            or marker.get('whole_recipe_completed') is not False
+            or marker.get('training_credit')!=0 or marker.get('raw_completion_credit')!=0
+            or marker.get('global_step')!=request.get('global_step')):
+        raise ValueError('fresh RAW SFT boundary lost its exact drained-import receipt')
+    if not isinstance(config,dict) or config.get('raw_model_id') is None:
+        raise ValueError('drained-import receipt needs its exact current RAW config')
+    record,saved=(verify_handoff(request['handoff']) if verified_handoff is None else verified_handoff)
+    transition=verify_drained_recipe_handoff(request['recipe_handoff'],handoff=request['handoff'],
+        verified_handoff=(record,saved))
+    if (transition.get('schema')!=RECOVERED_RECIPE_HANDOFF
+            or not transition.get('external_runtime',{}).get('executed_runtime')
+            or record['checkpoint']!=selected):
+        raise ValueError('drained-import receipt no longer matches its schema-4 full checkpoint/runtime proof')
+    model=saved.get('model_config') or {};training=saved.get('training') or {}
+    actual=str(model.get('architecture',''))+':'+str(model.get('base_inventory_sha256',''))
+    plan=json.loads(_bound(transition['new_plan']).read_text())
+    if config.get('raw_model_id')!=actual:
+        raise ValueError('drained-import receipt differs from the current student/base')
+    _verify_drained_config_sources(config,record,transition)
+    if (config.get('recipe_lineage_sha256') not in
+            (plan.get('recipe_sha256'),json.loads(_bound(transition['old_plan']).read_text()).get('recipe_sha256'))
+            or training.get('global_step',training.get('step'))!=request.get('global_step')):
+        raise ValueError('drained-import receipt differs from current recipe lineage or saved full state')
+    return {'receipt':reference,'request':request,'handoff':request['handoff'],
+        'recipe_handoff':request['recipe_handoff'],'checkpoint':selected,
+        'whole_recipe_completed':False,'training_credit':0,'raw_completion_credit':0,
+        'readiness_granted':False}
+
+
+def _verify_drained_config_sources(config,record,transition):
+    """Bind the caller's original recipe/source pair to the authenticated adoption chain."""
+    from .native_raw_handoff import _bound as handoff_bound
+    resident=record.get('resident') or {}
+    if not resident.get('initial') or not resident.get('current'):
+        raise ValueError('drained config source validation needs the full original and current resident history')
+    initial=json.loads(handoff_bound(resident['initial']).read_text())
+    current=json.loads(handoff_bound(resident['current']).read_text())
+    payload=current['payload'];history=[*current.get('history',[]),payload]
+    config_recipe=config.get('production_recipe')
+    config_path=_bound(config_recipe) if isinstance(config_recipe,dict) else Path(config_recipe).resolve(strict=True)
+    config_digest=sha256_file_hex_cached(config_path)
+    recipe_refs=[ref for ref in [initial.get('recipe'),payload.get('prior_recipe'),
+        *[item.get('recipe') for item in history]] if isinstance(ref,dict)]
+    matching=[]
+    for ref in recipe_refs:
+        ref_path=Path(ref.get('path','')).resolve()
+        ref_sha=ref.get('file_sha256',ref.get('sha256'))
+        if str(ref_path)==str(config_path) and ref_sha==config_digest:
+            matching.append({'path':str(ref_path),'sha256':ref_sha,
+                **({'bytes':ref['bytes']} if type(ref.get('bytes')) is int else {})})
+    if not matching:
+        raise ValueError('RAW config recipe is outside the exact original/adopted recipe history')
+    # Schema-4 binds the historical package and the actually executed package
+    # separately. Replay the caller recipe with the former reader.
+    historical_reader_plan=json.loads(handoff_bound(transition['old_plan']).read_text())
+    from .native_raw_handoff import _package_recipe_plans
+    historical_plan=_package_recipe_plans(Path(transition['old_package']),historical_reader_plan['code'],
+        [matching[0]],historical_reader_plan['device'])[0]
+    stage_id=config.get('production_stage')
+    roles=historical_plan.get('stage_inputs',{}).get(stage_id,{})
+    from ..train.recipe import _binding_files
+    for config_key,role in (('seed_native_graphs','native_graphs'),('held_native_graphs','held_native_graphs')):
+        if role not in roles:
+            raise ValueError('authenticated historical RAW recipe omitted a configured source role')
+        actual=_bound(config[config_key]) if isinstance(config.get(config_key),dict) else Path(config[config_key]).resolve(strict=True)
+        actual_ref={'path':str(actual),'sha256':sha256_file_hex_cached(actual)}
+        expected=[{'path':str(Path(ref['path']).resolve()),'sha256':ref['sha256']}
+            for ref in _binding_files(roles[role])]
+        if actual_ref not in expected:
+            raise ValueError('RAW config source differs from its authenticated historical reader stage input')
+
+
 def bridge_deferred_owner_handoff(config_path,cursor_path,deferred_reference,handoff_reference,
                                   retirement_reference,out,*,recovery_reason,verified_handoff=None,
                                   owned_controller_fd=None):
@@ -1554,6 +1901,38 @@ def student_cycle(plan_path,declaration,handoff,directory,*,stop,owned_controlle
     cursor=json.loads(cursor_path.read_text()) if cursor_path.exists() else {'cycle':0,'phase':'rl','next_stage':0}
     if _retire_recipe_readiness(config, cursor):
         write_json_durable(cursor_path, cursor)
+    recovery=cursor.get('drained_checkpoint_recovery')
+    if recovery:
+        runtime_reference=config.get('runtime_handoff')
+        consumed=cursor.get('drained_checkpoint_recovery_consumed')
+        if not runtime_reference:
+            raise StudentConfigurationError('drained checkpoint recovery requires its configured runtime handoff')
+        from .native_runtime_handoff import verify_runtime_handoff
+        try:
+            proof=verify_runtime_handoff(runtime_reference,bootstrap=handoff)
+        except Exception as error:
+            raise StudentConfigurationError(f'drained checkpoint runtime authority failed: {error}') from error
+        receipt=proof.get('drained_checkpoint_import')
+        if (receipt is None or _bound(receipt)!=Path(recovery['receipt']).resolve()
+                or proof.get('handoff')!=recovery.get('handoff')
+                or proof.get('recipe_handoff')!=recovery.get('recipe_handoff')
+                or recovery.get('whole_recipe_completed') is not False
+                or recovery.get('training_credit')!=0 or recovery.get('raw_completion_credit')!=0):
+            raise StudentConfigurationError('configured runtime handoff does not consume this exact no-credit recovery receipt')
+        identity={'receipt':receipt,'runtime_handoff':runtime_reference,
+            'checkpoint':proof['checkpoint'],'whole_recipe_completed':False,
+            'training_credit':0,'raw_completion_credit':0,'readiness_granted':False}
+        if consumed is None:
+            if (proof.get('checkpoint')!=cursor.get('current_checkpoint')
+                    or cursor.get('phase')!='sft' or cursor.get('next_stage')!=0 or 'pending_rl_round' in cursor):
+                raise StudentConfigurationError('drained import was not consumed at its fresh mandatory SFT boundary')
+            work=cycle_work_directory(directory,cursor)
+            if work.exists():
+                raise StudentConfigurationError('drained import retry namespace already contains stale operation outputs')
+            cursor['drained_checkpoint_recovery_consumed']=identity
+            write_json_durable(cursor_path,cursor)
+        elif consumed!=identity:
+            raise StudentConfigurationError('drained recovery receipt was already consumed by another runtime boundary')
     bridge_marker=cursor.get('deferred_owner_handoff_bridge')
     if bridge_marker:
         runtime_reference=config.get('runtime_handoff')
