@@ -527,6 +527,7 @@ def verify_handoff(reference, *, requirement=None):
 RECIPE_HANDOFF='natlang.native-raw-drained-recipe-handoff/2'
 LEGACY_RECIPE_HANDOFF='natlang.native-raw-drained-recipe-handoff/1'
 EXTERNAL_RECIPE_HANDOFF='natlang.native-raw-drained-recipe-handoff/3'
+RECOVERED_RECIPE_HANDOFF='natlang.native-raw-drained-recipe-handoff/4'
 
 
 def _recipe_plan(recipe_path, device):
@@ -577,7 +578,7 @@ def _drained_plan_authority(record, saved):
     return None,plan,stage
 
 
-def _external_frozen_package(record, package, old_plan, snapshots=None):
+def _external_frozen_package(record, package, old_plan, snapshots=None, *, executed_package=None, saved=None):
     """An external immutable runtime must be the actual captured launch runtime."""
     from .native_runtime_handoff import _owned_launch_chain, _read
     from ..train.native_resident import code_inventory
@@ -586,10 +587,151 @@ def _external_frozen_package(record, package, old_plan, snapshots=None):
     paths = (intent.get('env') or {}).get('PYTHONPATH', '').split(':')
     selected = next((Path(path)/'natlang_neuralese' for path in paths
                      if path and (Path(path)/'natlang_neuralese').is_dir()), None)
-    if (selected is None or selected.resolve() != Path(package).resolve()
+    executed = Path(executed_package or package).resolve()
+    if (selected is None or selected.resolve() != executed
             or code_inventory(package) != old_plan['code']):
         raise ValueError('external resident runtime differs from its actual captured import path/code')
+    if executed_package is not None:
+        _verify_recovered_execution(record, executed, saved, snapshots=snapshots)
     return references
+
+
+
+def _recovered_capacity_cases(request, proof, *, code, parent):
+    """Validate the same numerical and whole-graph evidence in both formats."""
+    if (request.get('schema') != 'natlang.native-memory-qualification-request/1'
+            or request.get('runtime_code_sha256') != code
+            or proof.get('schema') != 'natlang.native-memory-qualification/1'
+            or proof.get('passed') is not True or type(proof.get('optimizer_updates')) is not int
+            or proof['optimizer_updates'] != 0
+            or proof.get('parent_checkpoint_sha256') != parent
+            or proof.get('runtime_code_sha256') != code
+            or proof.get('identity') != request.get('identity')
+            or (proof.get('numerical_reference') or {}).get('passed') is not True
+            or (proof.get('capacity') or {}).get('passed') is not True):
+        raise ValueError('recovered runtime lacks an actual passed numerical/capacity case')
+    rows = (proof.get('capacity') or {}).get('cases')
+    if (not isinstance(rows, list) or not rows
+            or any(not isinstance(row, dict) or row.get('status') != 'passed'
+                   or any(type(row.get(k)) is not int or row[k] < 1
+                          for k in ('forward_tokens', 'kv_slots')) for row in rows)):
+        raise ValueError('recovered runtime requires complete successful whole-graph cases')
+    return rows
+
+
+def _verify_recovered_execution(record, package, saved, *, snapshots=None):
+    """Bind a recovered runtime to its real launch and saved capacity evidence."""
+    from .native_runtime_handoff import _owned_launch_chain
+    from .native_raw_policy import require_raw_training
+    from ..train.native_resident import code_inventory, digest
+    if saved is None:
+        raise ValueError('recovered runtime requires its verified full checkpoint')
+    _, argv, _ = _owned_launch_chain(record, snapshots)
+    options = require_raw_training(saved).get('options') or {}
+    qualification = options.get('memory_qualification') or {}
+    reference = qualification.get('request')
+    parent = (options.get('continuation') or {}).get('checkpoint_sha256')
+    def argument(flag):
+        if argv.count(flag) != 1 or argv.index(flag)+1 >= len(argv):
+            raise ValueError('recovered runtime requires one captured '+flag)
+        return argv[argv.index(flag)+1]
+    def same_binding(left, right):
+        if not isinstance(left,dict) or not isinstance(right,dict):
+            return False
+        for ref in (left,right):
+            path = _bound(ref)
+            if 'bytes' in ref and (type(ref['bytes']) is not int or path.stat().st_size != ref['bytes']):
+                raise ValueError('recovered runtime artifact byte count changed')
+        return all(left.get(key)==right.get(key) for key in ('path','sha256'))
+    requested = json.loads(argument('--memory-qualification'))
+    requested = [requested] if isinstance(requested, dict) else requested
+    if isinstance(reference,list):
+        return _verify_recovered_cohort(package,options,qualification,argv,requested,same_binding)
+    if (qualification.get('passed') is not True or not reference or not parent
+            or qualification.get('parent_checkpoint_sha256') != parent
+            or not isinstance(requested, list) or not any(same_binding(reference,ref) for ref in requested)):
+        raise ValueError('recovered runtime lost its actual launch/parent qualification')
+    request = json.loads(_bound(reference).read_text())
+    code = digest(code_inventory(package))
+    certificate = json.loads(Path(options.get('resident_geometry_qualification', '')).read_text())
+    proof = json.loads(_bound(certificate['evidence']).read_text())
+    if (request.get('schema') != 'natlang.native-memory-qualification-request/1'
+            or request.get('runtime_code_sha256') != code
+            or certificate.get('schema') != 'natlang.native-resident-geometry-qualification/1'
+            or certificate.get('passed') is not True or certificate.get('runtime_code_sha256') != code
+            or proof.get('schema') != 'natlang.native-memory-qualification/1'
+            or proof.get('passed') is not True or proof.get('runtime_code_sha256') != code
+            or not same_binding(proof.get('request'),reference) or proof.get('parent_checkpoint_sha256') != parent
+            or certificate.get('identity') != request.get('identity')
+            or proof.get('identity') != request.get('identity')):
+        raise ValueError('recovered runtime code/capacity proof differs from actual execution')
+    rows = _recovered_capacity_cases(request, proof, code=code, parent=parent)
+    limits = {key: max(row[key] for row in rows) for key in ('forward_tokens', 'kv_slots')}
+    if certificate.get('limits') != limits:
+        raise ValueError('recovered capacity certificate differs from its measured cases')
+    return {'package': str(Path(package).resolve()), 'code': code,
+            'qualification': qualification, 'capacity_certificate': binding(Path(options['resident_geometry_qualification']))}
+
+
+
+def _verify_recovered_cohort(package, options, qualification, argv, requested, same_binding):
+    """Verify the real trainer's complete request/alias/reference/capacity cohort."""
+    from ..train.native_resident import code_inventory, digest
+    parent=(options.get('continuation') or {}).get('checkpoint_sha256')
+    references=qualification['request']
+    def equal_bindings(left,right):
+        return (isinstance(left,list) and isinstance(right,list) and len(left)==len(right)
+                and all(same_binding(a,b) for a,b in zip(left,right)))
+    if (qualification.get('passed') is not True or not parent
+            or qualification.get('parent_checkpoint_sha256')!=parent
+            or not references or not equal_bindings(references,requested)
+            or argv.count('--out')!=1 or argv.index('--out')+1>=len(argv)):
+        raise ValueError('recovered cohort lost its actual launch/parent/request inventory')
+    output=Path(argv[argv.index('--out')+1])
+    summary_path=output/'memory-qualification.json'
+    summary=json.loads(summary_path.read_text())
+    checks=summary.get('checks');aliases=summary.get('request_aliases')
+    if (summary.get('schema')!='natlang.native-memory-cohort-qualification/1'
+            or summary.get('passed') is not True or summary.get('optimizer_updates')!=0
+            or summary.get('parent_checkpoint_sha256')!=parent
+            or not equal_bindings(summary.get('request'),references)
+            or not isinstance(checks,list) or len(checks)!=len(references)
+            or not isinstance(aliases,list) or len(aliases)!=len(references)
+            or summary.get('retained_capacity')!=options.get('resident_geometry_qualification')):
+        raise ValueError('recovered cohort summary differs from its saved complete qualification')
+    code=digest(code_inventory(package));proofs={};cases=[]
+    for reference,alias,check in zip(references,aliases,checks):
+        resolved=alias.get('resolved_binding');canonical=alias.get('canonical_binding')
+        if (not same_binding(alias.get('requested_binding'),reference)
+                or not same_binding(check.get('request'),canonical)
+                or _bound(resolved).read_bytes()!=_bound(canonical).read_bytes()):
+            raise ValueError('recovered cohort lost its exact resolved/canonical request aliases')
+        request=json.loads(_bound(canonical).read_text())
+        rows=_recovered_capacity_cases(request,check,code=code,parent=parent)
+        proof_path=output/'memory-qualifications'/canonical['sha256']/parent/'proof.json'
+        if json.loads(proof_path.read_text())!=check:
+            raise ValueError('recovered cohort summary changed its original per-request proof')
+        if canonical['sha256'] not in proofs:
+            proofs[canonical['sha256']]=binding(proof_path);cases.extend(rows)
+    certificate_path=Path(options['resident_geometry_qualification'])
+    certificate=json.loads(certificate_path.read_text());evidence=json.loads(_bound(certificate['evidence']).read_text())
+    limits={k:max(row[k]for row in cases)for k in ('forward_tokens','kv_slots')}
+    if (certificate.get('schema')!='natlang.native-resident-geometry-qualification/1'
+            or certificate.get('passed') is not True or certificate.get('runtime_code_sha256')!=code
+            or certificate.get('identity')!=checks[0]['identity'] or certificate.get('limits')!=limits):
+        raise ValueError('recovered capacity certificate differs from its complete measured cohort')
+    if len(proofs)==1:
+        if not same_binding(certificate['evidence'],next(iter(proofs.values()))):
+            raise ValueError('recovered single-cohort capacity lost its actual proof')
+    elif (evidence.get('schema')!='natlang.native-memory-combined-capacity/1'
+            or evidence.get('passed')is not True or evidence.get('optimizer_updates')!=0
+            or evidence.get('runtime_code_sha256')!=code or evidence.get('parent_checkpoint_sha256')!=parent
+            or evidence.get('identity')!=checks[0]['identity']
+            or not equal_bindings(evidence.get('proofs'),list(proofs.values()))
+            or (evidence.get('capacity')or{}).get('cases')!=cases):
+        raise ValueError('recovered combined capacity lost its complete original proof union')
+    return {'package':str(Path(package).resolve()),'code':code,'qualification':qualification,
+            'capacity_certificate':binding(certificate_path),'cohort_summary':binding(summary_path)}
 
 
 def _external_recipe_plans(record, old_plan, recipes):
@@ -604,14 +746,19 @@ def _external_recipe_plans(record, old_plan, recipes):
     import sys
     from .native_runtime_handoff import _owned_launch_chain, _read
     from ..train.native_resident import code_inventory
-    _, _, references = _owned_launch_chain(record)
+    continuation, _, references = _owned_launch_chain(record)
     intent = _read(references['intent'])
     paths = (intent.get('env') or {}).get('PYTHONPATH', '').split(':')
     package = next((Path(path)/'natlang_neuralese' for path in paths
                     if path and (Path(path)/'natlang_neuralese').is_dir()), None)
     if package is None:
         raise ValueError('historical recipe reconstruction lost its captured runtime')
-    _external_frozen_package(record, package, old_plan)
+    if continuation.get('schema') == 'natlang.native-observed-bridge-dispatch/1':
+        package = Path(continuation['historical_package'])
+        if code_inventory(package) != old_plan['code']:
+            raise ValueError('observed recovery changed its historical plan reader')
+    else:
+        _external_frozen_package(record, package, old_plan)
     return _package_recipe_plans(package, old_plan['code'], recipes, old_plan['device'])
 
 
@@ -681,7 +828,7 @@ def _external_started_stage_layout(record, saved, old_plan, stage_id, *, snapsho
     training=saved['training'];options=training.get('options')or{}
     if (len(stages)!=1 or stages[0]['kind']!='native_state_sft'
             or argument('--stage-id')!=stage_id or options.get('stage_id')!=stage_id
-            or not output.is_dir()or output.parent!=root
+            or not output.is_dir()or not output.is_relative_to(root)
             or Path(record['checkpoint_pin']['original_slot']['path']).resolve()!=output/'checkpoint.pt'
             or type(training.get('global_step'))is not int or training['global_step']<=0
             or not any(value>0 for value in training.get('exposure_counts',{}).values())):
@@ -706,7 +853,7 @@ def _external_started_stage_layout(record, saved, old_plan, stage_id, *, snapsho
     return {'stage_id':stage_id,'output_directory':str(output),'receipt':reference,
             'global_step':training['global_step'],'started_stage_ids':[stage_id]}
 
-def prepare_drained_recipe_handoff(handoff, recipe, out, *, package=None, external_package=None, verified_handoff=None):
+def prepare_drained_recipe_handoff(handoff, recipe, out, *, package=None, external_package=None, executed_package=None, verified_handoff=None):
     """Persist an existing verified lineage handoff, never a resident rewrite."""
     from ..train import native_resident as resident
     from ..train.recipe import lineage_handoff
@@ -714,6 +861,8 @@ def prepare_drained_recipe_handoff(handoff, recipe, out, *, package=None, extern
     record,saved=(verify_handoff(handoff) if verified_handoff is None else
                   _loaded_handoff(handoff,verified_handoff))
     loaded=(record,saved)
+    if executed_package is not None and external_package is None:
+        raise ValueError('recovered execution needs its separate historical external package')
     state,old_plan,stage_id=_drained_plan_authority(record,saved);del saved
     directory=Path(record['resident']['directory'])
     package=Path(package or Path(__file__).resolve().parents[1]).resolve()
@@ -722,7 +871,9 @@ def prepare_drained_recipe_handoff(handoff, recipe, out, *, package=None, extern
         reference=binding(out);value=verify_drained_recipe_handoff(reference,handoff=handoff,verified_handoff=loaded)
         if binding(recipe)!=value['recipe']:raise ValueError('drained recipe handoff recipe changed')
         if (bool(value.get('external_runtime')) != bool(external_package)
-                or external_package and Path(external_package).resolve()!=Path(value['old_package']).resolve()):
+                or external_package and Path(external_package).resolve()!=Path(value['old_package']).resolve()
+                or (str(Path(executed_package).resolve()) if executed_package else None) !=
+                    ((value.get('external_runtime') or {}).get('executed_runtime') or {}).get('package')):
             raise ValueError('drained recipe handoff changed its external runtime layout')
         if resident.code_inventory(package)!=value['new_code']:
             raise ValueError('drained recipe handoff requested runtime changed')
@@ -755,11 +906,13 @@ def prepare_drained_recipe_handoff(handoff, recipe, out, *, package=None, extern
                 directory.parent/'runtime/natlang_neuralese')
         external = None
         if external_package:
-            refs = _external_frozen_package(record, frozen, old_plan)
+            refs = _external_frozen_package(record, frozen, old_plan, executed_package=executed_package, saved=loaded[1])
             from .native_runtime_handoff import _snap
             snapshots = out.parent/(out.stem+'-external-launch'); snapshots.mkdir(exist_ok=True)
             external = {'package': str(frozen), 'launch_control': {
                 name: _snap(ref, snapshots, name+'.json') for name,ref in refs.items()}}
+            if executed_package is not None:
+                external['executed_runtime'] = _verify_recovered_execution(record, executed_package, loaded[1])
             if layout:
                 layout['receipt']=_snap(layout['receipt'],snapshots,'started-stage-receipt.json')
                 external['started_stage_layout']=layout
@@ -794,7 +947,7 @@ def prepare_drained_recipe_handoff(handoff, recipe, out, *, package=None, extern
         old_package=frozen if external_package else (directory.parent/previous/'natlang_neuralese') if previous else package
         if resident.code_inventory(old_package)!=old_plan['code']:
             raise ValueError('drained recipe handoff lost immutable original runtime code')
-        value={'schema':EXTERNAL_RECIPE_HANDOFF if external_package else RECIPE_HANDOFF,'handoff':handoff,'checkpoint':record['checkpoint'],
+        value={'schema':RECOVERED_RECIPE_HANDOFF if executed_package else EXTERNAL_RECIPE_HANDOFF if external_package else RECIPE_HANDOFF,'handoff':handoff,'checkpoint':record['checkpoint'],
             'retirement':binding(retired) if retired else None,'old_plan':binding(old_copy),'recipe':binding(recipe),
             'new_plan':binding(new_copy),'old_package':str(old_package.resolve()),
             'new_package':str(package),'old_code':resident.code_inventory(old_package),
@@ -809,7 +962,7 @@ def verify_drained_recipe_handoff(reference, *, handoff, verified_handoff=None):
     from ..train import native_resident as resident
     from ..train.recipe import lineage_handoff
     value=json.loads(_bound(reference).read_text())
-    if value.get('schema') not in (RECIPE_HANDOFF,LEGACY_RECIPE_HANDOFF,EXTERNAL_RECIPE_HANDOFF) or value.get('handoff')!=handoff:
+    if value.get('schema') not in (RECIPE_HANDOFF,LEGACY_RECIPE_HANDOFF,EXTERNAL_RECIPE_HANDOFF,RECOVERED_RECIPE_HANDOFF) or value.get('handoff')!=handoff:
         raise ValueError('drained recipe handoff belongs to another original owner')
     record,saved=(verify_handoff(handoff) if verified_handoff is None else verified_handoff)
     if record!=json.loads(_bound(handoff).read_text()):
@@ -823,19 +976,26 @@ def verify_drained_recipe_handoff(reference, *, handoff, verified_handoff=None):
                 or retirement.get('checkpoint')!=record['checkpoint']
                 or retirement.get('terminal',{}).get('sha256')!=record['terminal']['sha256']):
             raise ValueError('drained recipe handoff retirement changed')
-    elif value.get('schema')not in(RECIPE_HANDOFF,EXTERNAL_RECIPE_HANDOFF) or value.get('retirement') is not None:
+    elif value.get('schema')not in(RECIPE_HANDOFF,EXTERNAL_RECIPE_HANDOFF,RECOVERED_RECIPE_HANDOFF) or value.get('retirement') is not None:
         raise ValueError('initial-only recipe transition requires explicit version2 proof')
     prior=json.loads(_bound(value['old_plan']).read_text())
     if prior!=original_plan:
         raise ValueError('drained recipe handoff lost its final original plan')
     old_package,new_package=Path(value['old_package']),Path(value['new_package'])
     external=value.get('external_runtime')
-    if bool(external)!=(value.get('schema')==EXTERNAL_RECIPE_HANDOFF):
+    if bool(external)!=(value.get('schema') in (EXTERNAL_RECIPE_HANDOFF,RECOVERED_RECIPE_HANDOFF)):
         raise ValueError('external resident runtime layout needs its explicit authority schema')
     if external:
         if external.get('package')!=str(old_package.resolve()):
             raise ValueError('external resident package binding changed')
-        _external_frozen_package(record,old_package,prior,external.get('launch_control'))
+        executed = external.get('executed_runtime')
+        if bool(executed) != (value.get('schema') == RECOVERED_RECIPE_HANDOFF):
+            raise ValueError('recovered runtime requires its explicit execution authority schema')
+        _external_frozen_package(record,old_package,prior,external.get('launch_control'),
+            executed_package=executed['package'] if executed else None,saved=saved)
+        if executed and _verify_recovered_execution(record,executed['package'],saved,
+                snapshots=external.get('launch_control')) != executed:
+            raise ValueError('recovered runtime execution authority changed')
     layout=(external or {}).get('started_stage_layout');started=()
     if layout:
         if layout.get('stage_id')!=actual_stage_id:raise ValueError('external started-stage identity changed')
@@ -874,8 +1034,9 @@ def main(argv=None):
     parser.add_argument('--output',type=Path,required=True)
     parser.add_argument('--package',type=Path)
     parser.add_argument('--external-package',type=Path,help='Exact captured external immutable old package; never installed or moved')
+    parser.add_argument('--executed-package',type=Path,help='Actual qualified recovery runtime, separately bound from the historical plan package')
     args=parser.parse_args(argv)
-    print(json.dumps(prepare_drained_recipe_handoff(json.loads(args.handoff),args.recipe,args.output,package=args.package,external_package=args.external_package)))
+    print(json.dumps(prepare_drained_recipe_handoff(json.loads(args.handoff),args.recipe,args.output,package=args.package,external_package=args.external_package,executed_package=args.executed_package)))
 
 
 if __name__=='__main__':main()

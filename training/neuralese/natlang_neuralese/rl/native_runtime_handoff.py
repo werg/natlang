@@ -83,6 +83,9 @@ def _transition(reference,handoff,record,saved):
 def _owned_launch_chain(record, snapshots=None):
     """Follow only the byte-bound launch observed during genuine live capture."""
     captured=_read(record['intent']);observed=_read(captured['launch'])
+    if observed.get('observed_bridge_dispatch'):
+        from .native_owned_bridge_dispatch import verify
+        return verify(captured,observed,snapshots)
     if observed.get('inprocess_dispatch'):
         from .native_owned_dispatch import verify
         return verify(captured,observed,snapshots)
