@@ -57,6 +57,103 @@ def equal(a, b):
     return a == b
 
 
+def _legacy_muonsr_restore(optimizer, saved):
+    """Original loader as an independent precision/ownership reference."""
+    protected = {index: {key: value for key, value in entry.items()
+                         if key in ('momentum', 'grad_norm') and torch.is_tensor(value)}
+                 for index, entry in saved['state'].items()}
+    parameters = {index: parameter
+                  for previous, current in zip(saved['param_groups'], optimizer.param_groups)
+                  for index, parameter in zip(previous['params'], current['params'])}
+    LionSR.load_state_dict(optimizer, saved)
+    for index, values in protected.items():
+        for key, value in values.items():
+            optimizer.state[parameters[index]][key] = value.to(parameters[index].device, copy=True)
+
+
+@pytest.mark.parametrize('dtype', [torch.float32, torch.bfloat16])
+@pytest.mark.parametrize('hooks', [False, True])
+def test_muonsr_restore_matches_legacy_state_hooks_and_next_stochastic_updates(tmp_path, dtype, hooks):
+    import copy
+    from natlang_neuralese.train.optim import MuonSR
+    generator = torch.Generator().manual_seed(4523)
+    value = torch.randn(3, 6, 8, generator=generator).to(dtype)
+    source = torch.nn.Parameter(value.clone())
+    original = MuonSR([source], lr=0.002, idle_fraction=0.1)
+    # Deliberately retain precision not representable by a BF16 parameter.
+    original.state[source] = {
+        'momentum': torch.randn(source.shape, generator=generator),
+        'grad_norm': torch.tensor([0.1234567, 0.2345678, 0.3456789]),
+        'updates': torch.tensor(11, dtype=torch.int64),
+    }
+    original.param_groups[0]['row_scale'] = torch.tensor([1.125, 0.8125, 1.0]).reshape(3, 1, 1)
+    path = tmp_path/'optimizer.pt'
+    torch.save(original.state_dict(), path)
+    saved = torch.load(path, mmap=True, weights_only=False)
+    untouched = copy.deepcopy(saved)
+    reference_parameter = torch.nn.Parameter(value.clone())
+    actual_parameter = torch.nn.Parameter(value.clone())
+    reference = MuonSR([reference_parameter], lr=0.9)
+    actual = MuonSR([actual_parameter], lr=0.9)
+    observed = [[], []]
+    if hooks:
+        for optimizer, events in zip((reference, actual), observed):
+            def before(opt, state, events=events):
+                events.append(('before', copy.deepcopy(state)))
+            def after(opt, events=events):
+                events.append(('after', copy.deepcopy(opt.state_dict())))
+            optimizer.register_load_state_dict_pre_hook(before)
+            optimizer.register_load_state_dict_post_hook(after)
+    rng = torch.get_rng_state().clone()
+    _legacy_muonsr_restore(reference, saved)
+    actual.load_state_dict(saved)
+    assert torch.equal(rng, torch.get_rng_state())
+    assert equal(reference.state_dict(), actual.state_dict())
+    assert equal(untouched, saved)
+    assert equal(observed[0], observed[1])
+    for key in ('momentum', 'grad_norm'):
+        tensor = actual.state[actual_parameter][key]
+        assert tensor.dtype == torch.float32
+        assert tensor.data_ptr() != saved['state'][0][key].data_ptr()
+    assert actual.param_groups[0]['row_scale'].data_ptr() != saved['param_groups'][0]['row_scale'].data_ptr()
+    for step in range(3):
+        grad = torch.randn(source.shape, generator=generator).to(dtype)
+        # Include an idle expert to exercise its saved running-norm history.
+        grad[1].zero_()
+        reference_parameter.grad = grad.clone()
+        actual_parameter.grad = grad.clone()
+        torch.manual_seed(1200+step)
+        reference.step()
+        after_rng = torch.get_rng_state().clone()
+        torch.manual_seed(1200+step)
+        actual.step()
+        assert torch.equal(after_rng, torch.get_rng_state())
+        assert torch.equal(reference_parameter, actual_parameter)
+        assert equal(reference.state_dict(), actual.state_dict())
+
+
+def test_muonsr_restore_eliminates_discarded_precision_cast_copies():
+    from natlang_neuralese.train.optim import MuonSR
+    parameter = torch.nn.Parameter(torch.zeros(2, 6, 8, dtype=torch.bfloat16))
+    original = MuonSR([parameter], lr=0.002)
+    original.state[parameter] = {
+        'momentum': torch.ones(parameter.shape, dtype=torch.float32),
+        'grad_norm': torch.tensor([0.1234567, 0.2345678]),
+    }
+    saved = original.state_dict()
+    def copies(legacy):
+        target = MuonSR([torch.nn.Parameter(torch.zeros_like(parameter))], lr=0.002)
+        with torch.profiler.profile(activities=[torch.profiler.ProfilerActivity.CPU]) as profile:
+            if legacy:
+                _legacy_muonsr_restore(target, saved)
+            else:
+                target.load_state_dict(saved)
+        return sum(event.count for event in profile.key_averages() if event.key=='aten::_to_copy')
+    # Both saved FP32 tensors used to be copied/cast and immediately discarded.
+    # The CPU profiler measures real Torch allocations; no speedup is inferred.
+    assert copies(True)-copies(False) == 2
+
+
 def state_by_name(opt, named):
     names = optimizer_param_names(opt, named)
     sd = opt.state_dict()
