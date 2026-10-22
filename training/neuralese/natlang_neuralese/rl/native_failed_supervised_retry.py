@@ -11,7 +11,7 @@ from ..train.native_readiness import _bound
 from ..train.native_resident import binding
 
 SCHEMA = 'natlang.native-failed-supervised-retry/1'
-FAILURE = 'ValueError: memory qualification request differs from actual restored model/runtime/packing'
+FAILURE = 'memory qualification request differs from actual restored model/runtime/packing'
 
 
 def _read(reference):

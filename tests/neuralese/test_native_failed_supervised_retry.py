@@ -12,6 +12,8 @@ from natlang_neuralese.rl import native_failed_supervised_retry as retry
 from natlang_neuralese.rl.native_raw_rounds import cycle_work_directory
 from natlang_neuralese.train.native_resident import binding
 
+_ACTUAL_MEMORY_FAILURE = 'memory qualification request differs from actual restored model/runtime/packing'
+
 
 def _recipe(tmp_path):
     train=tmp_path/'train.jsonl';held=tmp_path/'held.jsonl'
@@ -53,7 +55,7 @@ def failed_operation(tmp_path,request):
     failure_log_path=tmp_path/request['request_id']/'worker.log';failure_log_path.parent.mkdir()
     failure_log_path.write_text("Traceback (most recent call last):\n  File \"native_memory.py\", line 744, in run_prepared\n"
         "  File \"native_memory.py\", line 427, in _run_one_prepared\n"
-        "    raise ValueError('"+retry.FAILURE+"')\nValueError: "+retry.FAILURE+"\n")
+        "    raise ValueError('"+_ACTUAL_MEMORY_FAILURE+"')\nValueError: "+_ACTUAL_MEMORY_FAILURE+"\n")
     write(result_path,{'schema':bridge.RESULT_SCHEMA,'kind':'round','request_id':request['request_id'],
         'request_sha256':bridge.sha256_file_hex_cached(request_path),'status':'failed',
         'error':"CalledProcessError: Command ['env', 'python'] returned non-zero exit status 1.",
@@ -106,6 +108,27 @@ def test_exact_known_preupdate_failure_has_zero_checkpoint_authority(failed_oper
                 config=config,cursor=x['cursor'],
                 state=x['state'],verified_checkpoint=(x['checkpoint'],x['saved']))
     x['request'].write_bytes(baseline_request)
+
+
+@pytest.mark.parametrize('bad_log', [
+    "Traceback (most recent call last):\n  File \"native_memory.py\", line 744, in run_prepared\n"
+    "  File \"native_memory.py\", line 427, in _run_one_prepared\n"
+    "    raise ValueError('ValueError: "+_ACTUAL_MEMORY_FAILURE+"')\nValueError: ValueError: "+_ACTUAL_MEMORY_FAILURE+"\n",
+    "Traceback (most recent call last):\n  File \"native_memory.py\", line 744, in run_prepared\n"
+    "  File \"native_memory.py\", line 427, in _run_one_prepared\n"
+    "    raise ValueError('different failure')\nValueError: "+_ACTUAL_MEMORY_FAILURE+"\n",
+])
+def test_failure_log_requires_exact_single_prefix_and_source_message(failed_operation,bad_log):
+    x=failed_operation;config=json.loads(x['config'].read_text())
+    log_path=Path(x['failure_log']['path']);original=log_path.read_bytes()
+    log_path.write_text(bad_log)
+    try:
+        with pytest.raises(ValueError,match='exact failed pre-update'):
+            retry._verify_failure(binding(x['request']),binding(x['result']),
+                {**binding(log_path),'bytes':log_path.stat().st_size},config=config,cursor=x['cursor'],
+                state=x['state'],verified_checkpoint=(x['checkpoint'],x['saved']))
+    finally:
+        log_path.write_bytes(original)
 
 
 def test_corrected_capacity_identity_requires_ffn_chunk_and_exact_runtime(tmp_path):
