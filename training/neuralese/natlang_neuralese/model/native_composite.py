@@ -253,7 +253,8 @@ def native_update_directory(checkpoint):
     raise ValueError('native composite checkpoint ancestry contains a cycle')
 
 
-def load_native_composite_checkpoint(path, *, base=None, device='cpu', dtype=None):
+def load_native_composite_checkpoint(path, *, base=None, device='cpu', dtype=None,
+                                     allow_weights_only=False):
     """Restore full parent once, then apply immutable patches oldest to newest."""
     from .native_model import load_native_checkpoint
     current = Path(path).resolve(strict=True)
@@ -278,7 +279,8 @@ def load_native_composite_checkpoint(path, *, base=None, device='cpu', dtype=Non
         participant = parent.get('participant')
     if not chain:
         raise ValueError('unsupported native composite checkpoint schema')
-    result = load_native_checkpoint(current,base=base,device=device,dtype=dtype,participant=participant)
+    result = load_native_checkpoint(current,base=base,device=device,dtype=dtype,participant=participant,
+                                    allow_weights_only=allow_weights_only)
     for manifest_path in reversed(chain):
         result = _apply_native_composite_checkpoint(manifest_path,result)
     return result
@@ -421,6 +423,11 @@ def _apply_native_composite_checkpoint(path, restored):
              'parameter_artifact_id': artifact_id, 'optimizer': manifest.get('optimizer') or {},
              'optimizer_tensors': optimizer_artifact.tensors if optimizer_artifact is not None else {},
              'update_provenance': manifest.get('update_provenance') or {}}
+    # A patch carries weights, not the root's missing optimizer history. Keep
+    # the actual parent read-only through arbitrarily many composite layers.
+    if (parent_state.get('inference_only') or parent_state.get('optimizer_pruned')
+            or root_state.get('inference_only') or root_state.get('optimizer_pruned')):
+        state.update(inference_only=True, optimizer_pruned=True)
     from .native_model import _bind_backbone_revision
     _bind_backbone_revision(model, __import__('hashlib').sha256(manifest_bytes).hexdigest())
     return model, tokenizer, roles, config, state
