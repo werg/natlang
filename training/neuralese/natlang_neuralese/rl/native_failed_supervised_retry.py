@@ -2,8 +2,8 @@
 from __future__ import annotations
 
 import copy
-import hashlib
 import json
+import re
 from pathlib import Path
 
 from ..common.jsonio import write_bytes_durable, write_json_durable
@@ -33,14 +33,43 @@ def _artifact_binding(reference):
     return {'path':reference['path'],'sha256':reference['sha256']}
 
 
-def _verify_failure(request_ref, result_ref, *, config, cursor, state, verified_checkpoint):
+def _failure_log_source(reference):
+    """Return the exact captured worker log bytes and their original remote identity."""
+    if isinstance(reference,dict) and {'source','snapshot'}<=set(reference):
+        source=reference['source'];snapshot=reference['snapshot']
+        if (not isinstance(source,dict) or not {'path','sha256','bytes'}<=set(source)
+                or type(source['bytes']) is not int or not isinstance(snapshot,dict)):
+            raise ValueError('captured failure log lacks original source and local snapshot bindings')
+        path=_bound(snapshot)
+        if (path.stat().st_size!=source['bytes'] or snapshot.get('bytes',source['bytes'])!=source['bytes']
+                or snapshot['sha256']!=source['sha256']):
+            raise ValueError('captured worker log snapshot differs from its original path/SHA/bytes')
+        return source,path
+    source=reference
+    path=_bound(source)
+    if 'bytes' not in source or type(source['bytes']) is not int or path.stat().st_size!=source['bytes']:
+        raise ValueError('worker failure log requires its exact byte count')
+    return source,path
+
+
+def _verify_failure(request_ref, result_ref, failure_log_ref, *, config, cursor, state, verified_checkpoint):
     from .native_bridge import verify_result_inventory
     from .native_raw_rounds import _supervised_stage_inventory, cycle_work_directory
     from ..train.recipe import resolve_recipe_data
     request, result = verify_result_inventory(_bound(request_ref), _bound(result_ref))
-    if (result.get('status') != 'failed' or result.get('error') != FAILURE
+    failure_log_source,failure_log_path=_failure_log_source(failure_log_ref)
+    failure_log=failure_log_path.read_text(errors='replace')
+    error=result.get('error') or ''
+    if (result.get('status') != 'failed' or not error.startswith('CalledProcessError: Command ')
+            or 'returned non-zero exit status 1.' not in error
+            or Path(failure_log_source['path']).name!='worker.log'
+            or Path(failure_log_source['path']).parent.name!=request.get('request_id')
+            or 'ValueError: '+FAILURE not in failure_log
+            or "raise ValueError('"+FAILURE+"')" not in failure_log
+            or 'run_prepared' not in failure_log or '_run_one_prepared' not in failure_log
             or any(result.get(key) is not None for key in ('checkpoint','checkpoint_publication','deployment'))
-            or any(Path(item['path']).name in ('checkpoint.pt','native-training-receipt.json')
+            or any(Path(item['path']).name in ('checkpoint.pt','native-training-receipt.json',
+                   'training-progress.json','progress.json')
                    for item in result.get('artifacts',[]))
             or request.get('kind') != 'round' or request.get('native_actor_mode') != 'raw-state'
             or request.get('parent_checkpoint', {}).get('sha256') != cursor['current_checkpoint']['sha256']
@@ -97,8 +126,8 @@ def _future(config, plan_path, role, recipe_reference, future_global_plan,
         _,declaration=_future_global(future_global_plan,json.loads(Path(plan_path).read_text()),
             role,recipe_reference,config['raw_model_id'],package)
     future=_future_config(config,recipe_reference,future_plan['recipe'],selected,lineage,
-        declaration=declaration,plan_reference=future_global_plan)
-    return future,lineage_proof,future_plan
+        declaration=declaration,plan_reference=future_global_plan,preserve_runtime_handoff=True)
+    return future,lineage_proof,future_plan,started
 
 
 def _corrected_request(reference, *, config, verified_checkpoint, package, stage_id):
@@ -106,8 +135,31 @@ def _corrected_request(reference, *, config, verified_checkpoint, package, stage
     from ..train.native_resident import code_inventory
     request=_read(reference); selected,saved=verified_checkpoint
     if request.get('schema')=='natlang.native-preference-capacity-case/1':
-        if not isinstance(request.get('cases'),list) or not request['cases']:
-            raise ValueError('corrected live capacity descriptor has no exact cases')
+        from ..common.hashing import sha256_file_hex_cached
+        params=config.get('trainer_parameters') or {}
+        source=config.get('seed_native_graphs')
+        objective=config.get('objective_spec')
+        if not isinstance(source,(str,dict)) or not isinstance(objective,(str,dict)):
+            raise ValueError('corrected live preference descriptor lacks restored source/objective bindings')
+        objective_path=_bound(objective) if isinstance(objective,dict) else Path(objective).resolve(strict=True)
+        spec=json.loads(objective_path.read_text())
+        expected_objective={'kind':spec.get('kind'),'sha256':sha256_file_hex_cached(objective_path),
+            'beta':params.get('preference_beta',spec.get('beta')),
+            'margin':params.get('preference_margin',spec.get('margin'))}
+        case=request.get('case');reference_case=request.get('numerical_reference')
+        def valid_pair(value):
+            geometry=value.get('geometry') if isinstance(value,dict) else None
+            return (isinstance(value,dict) and isinstance(value.get('id'),str) and value['id']
+                and isinstance(value.get('graph_sha256'),str)
+                and re.fullmatch(r'[0-9a-f]{64}',value['graph_sha256']) is not None
+                and value.get('split')=='train' and isinstance(geometry,dict)
+                and type(geometry.get('forward_tokens'))is int and geometry['forward_tokens']>0
+                and type(geometry.get('kv_slots'))is int and geometry['kv_slots']>=0)
+        if (request.get('schema')!='natlang.native-preference-capacity-case/1'
+                or _artifact_binding(request.get('source'))!=_artifact_binding(source)
+                or request.get('objective')!=expected_objective
+                or not valid_pair(case) or not valid_pair(reference_case)):
+            raise ValueError('corrected live preference descriptor changed its restored source/objective/cases')
         return request
     if (request.get('schema')!='natlang.native-memory-qualification-request/1'
             or request.get('runtime_code_sha256')!=canonical_json_sha256_hex(code_inventory(package))
@@ -136,7 +188,7 @@ def _request_target(value):
 
 
 def prepare(config_path, plan_path, role, recipe_reference, failed_request,
-            failed_result, corrected_request, out, *, package, future_global_plan,
+            failed_result, failure_log, corrected_request, out, *, package, future_global_plan,
             controller, owner_census, verified_checkpoint, owned_controller_fd=None):
     """Prepare a durable no-credit retry; canonical files change only in configure()."""
     from .native_completed_supervised import _completed_leases, _no_owner, _no_active_operation
@@ -152,7 +204,8 @@ def prepare(config_path, plan_path, role, recipe_reference, failed_request,
         receipt=_read(binding(out));intent=_read(receipt['intent']);prior=intent['request']
         expected={'config':binding(config_path),'plan':binding(plan_path),'recipe':recipe_reference,
             'future_global_plan':future_global_plan,'role':role,'package':str(Path(package).resolve()),
-            'failed_request':failed_request,'failed_result':failed_result,'corrected_request':corrected_request,
+            'failed_request':failed_request,'failed_result':failed_result,'failure_log':failure_log,
+            'corrected_request':corrected_request,
             'controller':controller,'owner_census':owner_census,
             'parent':verified_checkpoint[0],'training_credit':0}
         if (receipt.get('schema')!=SCHEMA or prior.get('schema')!=SCHEMA
@@ -166,12 +219,14 @@ def prepare(config_path, plan_path, role, recipe_reference, failed_request,
         _no_owner(controller);_no_active_operation(root)
         cursor=json.loads(paths['cursor'].read_text());state=json.loads(paths['state'].read_text())
         request,result,invocation,stage,old_memory,saved=_verify_failure(
-            failed_request,failed_result,config=config,cursor=cursor,state=state,
+            failed_request,failed_result,failure_log,config=config,cursor=cursor,state=state,
             verified_checkpoint=verified_checkpoint)
-        old_target=_request_target(old_memory);new_target=_request_target(corrected_request)
-        if new_target is None or new_target==old_target:
+        old_targets={target for target in (_request_target(value) for value in
+            (old_memory if isinstance(old_memory,list) else [old_memory])) if target}
+        new_target=_request_target(corrected_request)
+        if new_target is None or new_target in old_targets:
             raise ValueError('corrected capacity input must be a distinct versioned request/descriptor')
-        future,lineage_proof,future_plan=_future(config,plan_path,role,recipe_reference,
+        future,lineage_proof,future_plan,started_stage_ids=_future(config,plan_path,role,recipe_reference,
             future_global_plan,package,verified_checkpoint)
         effective_plan=future_global_plan or binding(plan_path)
         plan_sha=_artifact_binding(effective_plan)['sha256']
@@ -202,14 +257,35 @@ def prepare(config_path, plan_path, role, recipe_reference, failed_request,
         from ..common.jsonio import write_json_durable
         from ..train.native_resident import binding as bind
         directory=out.parent/(out.stem+'-control');intent_path=directory/'intent.json'
+        source_log,local_log=_failure_log_source(failure_log)
+        directory.mkdir(parents=True,exist_ok=True)
+        log_snapshot_path=directory/'failure-worker.log'
+        if log_snapshot_path.exists() and log_snapshot_path.read_bytes()!=local_log.read_bytes():
+            raise ValueError('retry transaction worker-log snapshot differs from its exact source')
+        if not log_snapshot_path.exists():write_bytes_durable(log_snapshot_path,local_log.read_bytes())
+        log_snapshot=binding(log_snapshot_path)
+        if log_snapshot['sha256']!=source_log['sha256']:
+            raise ValueError('retry transaction worker-log snapshot lost its original source SHA')
+        lineage_path=directory/'lineage-handoff.json';future_plan_path=directory/'future-plan.json'
+        if lineage_path.exists():
+            if json.loads(lineage_path.read_text())!=lineage_proof:
+                raise ValueError('retry lineage handoff snapshot changed')
+        else:write_json_durable(lineage_path,lineage_proof)
+        if future_plan_path.exists():
+            if json.loads(future_plan_path.read_text())!=future_plan:
+                raise ValueError('retry future plan snapshot changed')
+        else:write_json_durable(future_plan_path,future_plan)
+        lineage_handoff_ref=binding(lineage_path);future_plan_ref=binding(future_plan_path)
         request_obj={'schema':SCHEMA,'config':bind(config_path),'plan':bind(plan_path),
             'recipe':recipe_reference,'future_global_plan':future_global_plan,'role':role,
             'package':str(Path(package).resolve()),'failed_request':failed_request,
-            'failed_result':failed_result,'corrected_request':corrected_request,
+            'failed_result':failed_result,'failure_log':failure_log,'corrected_request':corrected_request,
             'controller':controller,'owner_census':owner_census,'parent':verified_checkpoint[0],
             'stage_id':stage['id'],'next_stage':cursor['next_stage'],
+            'lineage_handoff':lineage_handoff_ref,'future_plan':future_plan_ref,
+            'started_stage_ids':started_stage_ids,
             'lineage_handoff_sha256':_digest(lineage_proof),
-            'training_credit':0}
+            'training_credit':0,'failure_log_snapshot':log_snapshot}
         if out.exists():
             existing=_read(bind(out));intent=_read(existing['intent'])
             if existing.get('schema')!=SCHEMA or intent.get('request')!=request_obj:
@@ -218,6 +294,12 @@ def prepare(config_path, plan_path, role, recipe_reference, failed_request,
         if intent_path.exists():
             intent=json.loads(intent_path.read_text())
             if intent.get('request')!=request_obj:raise ValueError('failed retry interrupted intent changed')
+            before=intent.get('before');snapshots=intent.get('snapshots');candidates=intent.get('candidates')
+            if (not isinstance(before,dict) or not isinstance(snapshots,dict) or not isinstance(candidates,dict)
+                    or intent.get('failure_log_source')!=source_log
+                    or intent.get('failure_log_snapshot')!=log_snapshot
+                    or binding(log_snapshot_path)!=log_snapshot):
+                raise ValueError('failed retry interrupted intent lost its exact snapshots or failure log')
         else:
             before={name:bind(path) for name,path in paths.items()};directory.mkdir(parents=True,exist_ok=True)
             snapshots={};candidates={}
@@ -236,6 +318,7 @@ def prepare(config_path, plan_path, role, recipe_reference, failed_request,
                 candidates[name]=bind(candidate)
             if any(bind(path)!=before[name] for name,path in paths.items()):raise ValueError('retry predecessor changed before intent')
             intent={'schema':SCHEMA,'request':request_obj,'before':before,'snapshots':snapshots,
+                'failure_log_source':source_log,'failure_log_snapshot':log_snapshot,
                 'candidates':candidates,'whole_recipe_completed':False,'training_credit':0,
                 'readiness_granted':False,'failed_stage_index':cursor['next_stage']}
             write_json_durable(intent_path,intent)
@@ -270,6 +353,32 @@ def configure(reference, plan_path, declaration, bootstrap, config_path, *, owne
             or Path(config_path).resolve()!=Path(request['config']['path']).resolve()
             or binding(plan_path)['sha256']!=_artifact_binding(request.get('future_global_plan') or request['plan'])['sha256']):
         raise ValueError('retry declaration does not bind its exact no-credit intent')
+    log_source=(request.get('failure_log') or {}).get('source') if isinstance(request.get('failure_log'),dict) else None
+    if log_source is None:log_source=request.get('failure_log')
+    log_snapshot=intent.get('failure_log_snapshot')
+    if (not isinstance(log_source,dict) or not isinstance(log_snapshot,dict)
+            or request.get('failure_log_snapshot')!=log_snapshot
+            or intent.get('failure_log_source')!=log_source
+            or binding(log_snapshot['path'])!=log_snapshot
+            or log_snapshot['sha256']!=log_source.get('sha256')
+            or ('bytes' in log_source and Path(log_snapshot['path']).stat().st_size!=log_source['bytes'])):
+        raise ValueError('retry durable intent lost its exact worker failure-log evidence')
+    captured_log=Path(log_snapshot['path']).read_text(errors='replace')
+    if ('ValueError: '+FAILURE not in captured_log or 'run_prepared' not in captured_log
+            or '_run_one_prepared' not in captured_log):
+        raise ValueError('retry worker failure log no longer proves the same pre-update failure')
+    lineage_reference=request.get('lineage_handoff');future_plan_reference=request.get('future_plan')
+    if (not isinstance(lineage_reference,dict) or not isinstance(future_plan_reference,dict)
+            or binding(lineage_reference['path'])!=lineage_reference
+            or binding(future_plan_reference['path'])!=future_plan_reference):
+        raise ValueError('retry intent lost its durable future recipe lineage bindings')
+    lineage_value=_read(lineage_reference);future_plan_value=_read(future_plan_reference)
+    if (lineage_value.get('recipe_sha256')!=_read(intent['snapshots']['config']).get('recipe_lineage_sha256')
+            or lineage_value.get('code')!=future_plan_value.get('code')
+            or lineage_value.get('recipe')!=future_plan_value.get('recipe')
+            or lineage_value.get('stage_inputs')!=future_plan_value.get('stage_inputs')):
+        raise ValueError('retry durable lineage proof differs from its exact old/future plan authority')
+    _verify_lineage_replay(request,_read(intent['snapshots']['config']))
     if request.get('future_global_plan'):
         from .native_completed_supervised import _future_global
         original_config=_read(intent['snapshots']['config'])
@@ -288,18 +397,16 @@ def configure(reference, plan_path, declaration, bootstrap, config_path, *, owne
         expected_config=json.loads(_bound(intent['candidates']['config']).read_text())
         identity={'receipt':reference,'stage_id':receipt['stage_id'],'checkpoint':receipt['checkpoint'],
             'training_credit':0,'readiness_granted':False}
-        history_complete=(identity in (live_cursor.get('failed_supervised_retry_history') or [])
-            and live_cursor.get('next_stage',0)>intent.get('failed_stage_index',-1))
+        history_complete=(identity in (live_cursor.get('failed_supervised_retry_history') or []))
         if history_complete:
             retry_marker=active.get('failed_supervised_retry') or {}
-            if (retry_marker.get('receipt_path')!=str(Path(reference['path']).resolve())
-                    or active.get('production_recipe')!=expected_config.get('production_recipe')
-                    or active.get('runtime_binding')!=expected_config.get('runtime_binding')
-                    or (active.get('trainer_parameters') or {}).get('memory_qualification')!=
-                       (expected_config.get('trainer_parameters') or {}).get('memory_qualification')):
-                raise ValueError('completed retry metadata cache changed its future invocation identity')
+            if retry_marker.get('receipt_path')!=str(Path(reference['path']).resolve()):
+                raise ValueError('completed retry history differs from the active config receipt')
+            active.pop('failed_supervised_retry',None)
+            write_json_durable(path,active)
             from .native_bootstrap_metadata import save
             save(root/'bootstrap-verification.json',plan_path,declaration,bootstrap,active)
+            _install_retry_resident_plan(request,active)
             return path
         if (request.get('config',{}).get('path')!=str(path)
                 or request.get('config',{}).get('sha256')!=intent.get('before',{}).get('config',{}).get('sha256')):
@@ -330,7 +437,141 @@ def configure(reference, plan_path, declaration, bootstrap, config_path, *, owne
                 write_bytes_durable(target,_bound(intent['candidates'][name]).read_bytes())
         from .native_bootstrap_metadata import save
         save(root/'bootstrap-verification.json',plan_path,declaration,bootstrap,expected['config'])
+        _install_retry_resident_plan(request,expected['config'])
     return path
+
+
+def _install_retry_resident_plan(request,config):
+    """Install the retry's authentic lineage plan through the shared verifier."""
+    from .native_completed_supervised import _install_resident_plan
+    proof={'recipe':request['recipe'],'lineage_handoff':request['lineage_handoff'],
+        'future_plan':request['future_plan'],'lineage':_read(request['lineage_handoff'])['recipe_sha256'],
+        'code':_read(request['future_plan'])['code'],'package':request['package']}
+    return _install_resident_plan(proof,config)
+
+
+def _verify_lineage_replay(request,original_config):
+    """Replay the shared lineage mechanism against the sealed old/future plans."""
+    from .native_raw_handoff import _recipe_plan,_stable_handoff_plan
+    from ..train.native_resident import code_inventory
+    from ..train.recipe import lineage_handoff,resolve_recipe_data
+    package=Path(request['package']).resolve();code=code_inventory(package)
+    old_plan=_recipe_plan(Path(original_config['production_recipe']),'cuda')
+    old_plan.update(code=code,recipe_sha256=original_config['recipe_lineage_sha256'])
+    future=_read(request['future_plan']);lineage=_read(request['lineage_handoff'])
+    if (future.get('code')!=code or future.get('recipe')!=resolve_recipe_data(_bound(request['recipe']))
+            or _digest(lineage)!=request.get('lineage_handoff_sha256')):
+        raise ValueError('retry lineage plan changed its exact package or recipe input')
+    replay=lineage_handoff(old_plan,future,package,package,
+        Path(request['lineage_handoff']['path']).parent/'configure-lineage-replay.json',
+        out=Path(request['lineage_handoff']['path']).parent,dry_run=True,
+        started_stage_ids=request.get('started_stage_ids'))
+    if _stable_handoff_plan(replay)!=_stable_handoff_plan(lineage):
+        raise ValueError('retry lineage proof does not replay from its exact old/future recipe plans')
+
+
+def verify_release(reference,declaration):
+    """Verify the durable no-credit retry authority for RAW resident release."""
+    if isinstance(reference,str):reference=binding(reference)
+    _artifact_binding(reference)
+    receipt=_read(reference);intent_ref=receipt.get('intent')
+    if not isinstance(intent_ref,dict):
+        raise ValueError('retry release intent binding changed')
+    _artifact_binding(intent_ref)
+    intent=_read(intent_ref);request=intent.get('request') or {}
+    declared=declaration.get('failed_supervised_retry')
+    if isinstance(declared,str):declared=binding(declared)
+    recipe=declaration.get('production_recipe')
+    if isinstance(recipe,str):recipe=binding(recipe)
+    if (receipt.get('schema')!=SCHEMA or intent.get('schema')!=SCHEMA
+            or receipt.get('request_sha256')!=_digest(request)
+            or intent.get('training_credit')!=0 or receipt.get('training_credit')!=0
+            or intent.get('readiness_granted') is not False or receipt.get('readiness_granted') is not False
+            or declared!=reference or _artifact_binding(request.get('recipe'))!=_artifact_binding(recipe)
+            or not isinstance(request.get('lineage_handoff'),dict)
+            or not isinstance(request.get('future_plan'),dict)):
+        raise ValueError('RAW release lost the exact no-credit retry authority')
+    lineage=_read(request['lineage_handoff']);future=_read(request['future_plan'])
+    _artifact_binding(request['lineage_handoff']);_artifact_binding(request['future_plan'])
+    if (lineage.get('recipe')!=future.get('recipe')
+            or lineage.get('stage_inputs')!=future.get('stage_inputs')
+            or intent.get('failure_log_source') is None
+            or intent.get('failure_log_snapshot') is None):
+        raise ValueError('RAW release retry lineage/source proof changed')
+    from .native_bridge import verify_result_inventory
+    from .native_raw_rounds import _supervised_stage_inventory,cycle_work_directory
+    from ..train.recipe import resolve_recipe_data
+    failed_request,failed_result=verify_result_inventory(_bound(request['failed_request']),
+        _bound(request['failed_result']))
+    source=request.get('failure_log',{}).get('source')
+    snapshot=intent.get('failure_log_snapshot')
+    if (not isinstance(source,dict) or intent.get('failure_log_source')!=source
+            or request.get('failure_log_snapshot')!=snapshot or not isinstance(snapshot,dict)
+            or binding(snapshot['path'])!=snapshot or snapshot['sha256']!=source.get('sha256')
+            or Path(source.get('path','')).name!='worker.log'
+            or Path(source['path']).parent.name!=failed_request.get('request_id')):
+        raise ValueError('RAW release retry lost its exact source worker failure log')
+    worker_log=Path(snapshot['path']).read_text(errors='replace')
+    if ('ValueError: '+FAILURE not in worker_log or 'run_prepared' not in worker_log
+            or '_run_one_prepared' not in worker_log
+            or failed_result.get('status')!='failed'
+            or not (failed_result.get('error') or '').startswith('CalledProcessError: Command ')
+            or 'returned non-zero exit status 1.' not in failed_result.get('error','')
+            or any(failed_result.get(key)is not None for key in ('checkpoint','checkpoint_publication','deployment'))
+            or any(Path(item['path']).name in ('checkpoint.pt','native-training-receipt.json',
+                   'training-progress.json','progress.json')for item in failed_result.get('artifacts',[]))):
+        raise ValueError('RAW release retry no longer proves the exact zero-update failure')
+    original_cursor=_read(intent['snapshots']['cursor']);original_state=_read(intent['snapshots']['state'])
+    original_config=_read(intent['snapshots']['config'])
+    index=original_cursor.get('next_stage')
+    stages=_supervised_stage_inventory(resolve_recipe_data(original_config['production_recipe']),
+        original_config['production_stage'])
+    if (original_cursor.get('phase')!='sft' or original_state.get('phase')!='collect'
+            or original_cursor.get('pending_rl_round') is not None or type(index)is not int
+            or index!=request.get('next_stage') or not 0<=index<len(stages)
+            or stages[index]['id']!=request.get('stage_id')
+            or failed_request.get('parent_checkpoint',{}).get('sha256')!=original_cursor.get('current_checkpoint',{}).get('sha256')
+            or failed_request.get('parent_checkpoint',{}).get('path')!=original_cursor.get('current_checkpoint',{}).get('path')
+            or str(Path(original_state.get('checkpoint','')).resolve())!=str(Path(request['parent']['path']).resolve())
+            or failed_request.get('parent_checkpoint',{}).get('sha256')!=request['parent'].get('sha256')
+            or Path(failed_request.get('out','')).resolve()!=cycle_work_directory(
+                Path(original_config['out']).parent,original_cursor)/'supervised'/f'{index:03d}'):
+        raise ValueError('RAW release retry changed its saved parent/stage/zero-update boundary')
+    if request.get('future_global_plan'):
+        from .native_completed_supervised import _future_global
+        original_plan=_read(request['plan'])
+        original_config=_read(intent['snapshots']['config'])
+        _future_global(request['future_global_plan'],original_plan,request['role'],request['recipe'],
+            original_config['raw_model_id'],Path(request['package']))
+    if (declaration.get('runtime_handoff') is not None
+            and original_config.get('runtime_handoff')!=declaration.get('runtime_handoff')):
+        raise ValueError('RAW retry does not inherit the declared prior runtime authority')
+    from ..train.recipe import recipe_identity_sha256
+    predecessor_cursor=_read(intent['snapshots']['cursor'])
+    return {'recipe_sha256':recipe_identity_sha256(_bound(recipe)),
+        'recipe_lineage_sha256':lineage['recipe_sha256'],'package':request['package'],
+        'prior_runtime_handoff':original_config.get('runtime_handoff'),
+        'prior_resident_current':predecessor_cursor.get('resident_current'),
+        'resident_plan':{'recipe':request['recipe'],'lineage_handoff':request['lineage_handoff'],
+            'future_plan':request['future_plan']}}
+
+
+def dependencies(reference):
+    """Exact files required to preserve and replay the retry control authority."""
+    receipt=_read(reference);intent_ref=receipt['intent'];intent=_read(intent_ref);request=intent['request']
+    refs=[reference,intent_ref,request['config'],request['plan'],request['recipe'],
+        request['failed_request'],request['failed_result'],request['corrected_request'],
+        request['lineage_handoff'],request['future_plan'],intent['failure_log_snapshot']]
+    if request.get('future_global_plan'):refs.append(request['future_global_plan'])
+    failure=request.get('failure_log')
+    refs.extend(intent.get('snapshots',{}).values());refs.extend(intent.get('candidates',{}).values())
+    unique={}
+    for ref in refs:
+        if isinstance(ref,dict) and ref.get('path') and ref.get('sha256'):
+            unique[ref['path']]=ref
+    for ref in unique.values():
+        _artifact_binding(ref)
+    return unique
 
 
 def consume_boundary(reference, config, cursor, state, root):
@@ -351,10 +592,7 @@ def consume_boundary(reference, config, cursor, state, root):
         'training_credit':0,'readiness_granted':False}
     consumed=cursor.get('failed_supervised_retry_consumed')
     history=cursor.get('failed_supervised_retry_history') or []
-    if not marker and identity in history:
-        if cursor.get('next_stage',0)<=intent.get('failed_stage_index',-1):
-            raise ValueError('retry history was recorded before its actual stage boundary advanced')
-        return cursor
+    if not marker and identity in history:return cursor
     receipt_path=marker.get('receipt_path')
     if not receipt_path or Path(receipt_path).resolve()!=Path(reference['path']).resolve():
         raise ValueError('failed-stage retry cursor does not consume the configured receipt')
@@ -368,8 +606,9 @@ def consume_boundary(reference, config, cursor, state, root):
             or cursor.get('current_checkpoint',{}).get('path')!=receipt.get('checkpoint',{}).get('path')):
         raise ValueError('failed-stage retry is not at its exact mandatory same-stage boundary')
     if consumed is not None and consumed!=identity:raise ValueError('retry receipt was consumed by another boundary')
+    updated=copy.deepcopy(cursor)
     if consumed is None:
         from .native_raw_rounds import cycle_work_directory
         if cycle_work_directory(root,cursor).exists():raise ValueError('retry namespace already contains stale operation output')
-        cursor['failed_supervised_retry_consumed']=identity
-    return cursor
+        updated['failed_supervised_retry_consumed']=identity
+    return updated

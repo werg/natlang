@@ -450,7 +450,8 @@ def _stable(plan):
     return _stable_handoff_plan(plan)
 
 
-def _future_config(config,recipe_reference,recipe,checkpoint,lineage,*,declaration=None,plan_reference=None):
+def _future_config(config,recipe_reference,recipe,checkpoint,lineage,*,declaration=None,plan_reference=None,
+                   preserve_runtime_handoff=False):
     from .native_supervised import continuation_config,bind_recipe_lineage
     from .native_raw_rounds import _supervised_quantum
     foundation=next(stage for stage in recipe['stages']if stage['id']==config['production_stage'])
@@ -483,7 +484,8 @@ def _future_config(config,recipe_reference,recipe,checkpoint,lineage,*,declarati
             if key in protected:future[key]=protected[key]
             else:future.pop(key,None)
         _scheduling_controls(future,declaration,_bound(plan_reference),{},pending=True)
-        future.pop('runtime_handoff',None)
+        if not preserve_runtime_handoff:
+            future.pop('runtime_handoff',None)
     return future
 
 

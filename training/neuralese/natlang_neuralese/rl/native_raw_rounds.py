@@ -175,7 +175,7 @@ def configure_model(plan_path,declaration,handoff,out,*,verified_handoff=None,ow
     from .native_bootstrap_metadata import unchanged,save
     if path.exists():
         prior=json.loads(path.read_text())
-        if declaration.get('failed_supervised_retry'):
+        if declaration.get('failed_supervised_retry') and prior.get('failed_supervised_retry'):
             from .native_failed_supervised_retry import configure as configure_failed_retry
             retry_ref=declaration['failed_supervised_retry']
             if isinstance(retry_ref,str):retry_ref=binding(retry_ref)
@@ -2058,13 +2058,23 @@ def student_cycle(plan_path,declaration,handoff,directory,*,stop,owned_controlle
             _supervised_job(continuation,jobdir,config,cursor,stop)
             if stop.requested:return cursor
         cursor.update(next_stage=index+1,current_checkpoint=_current_checkpoint(config))
+        retry_identity=None
         if cursor.get('failed_supervised_retry'):
             history=cursor.setdefault('failed_supervised_retry_history',[])
-            identity=cursor.pop('failed_supervised_retry_consumed',None)
-            if identity is None:raise StudentConfigurationError('failed retry stage completed without boundary consumption')
-            if identity not in history:history.append(identity)
+            retry_identity=cursor.pop('failed_supervised_retry_consumed',None)
+            if retry_identity is None:raise StudentConfigurationError('failed retry stage completed without boundary consumption')
+            if retry_identity not in history:history.append(retry_identity)
             cursor.pop('failed_supervised_retry',None)
         write_json_durable(cursor_path,cursor)
+        if retry_identity is not None:
+            # The retry receipt is a one-stage authority. Retire its active
+            # config marker only after the successful stage and history are
+            # durable; subsequent resident appends then follow normal shared
+            # continuation without being pinned to this old receipt.
+            config.pop('failed_supervised_retry',None)
+            write_json_durable(config_path,config)
+            from .native_bootstrap_metadata import save
+            save(directory/'bootstrap-verification.json',plan_path,declaration,handoff,config)
     if cursor.get('foundation_qualified') and config.get('foundation_readiness_policy')!='on-shared-request':
         # This is the same shared trainer, not a fabricated copy of an old
         # certificate. It may do zero updates when the exact cohort is complete,
@@ -2276,10 +2286,21 @@ def _release_requirement(declaration,value,*,verified_handoff=None):
             completed_cursor=json.loads(_bound(published_cursor).read_text()).get('resident_current')
         else:
             completed_cursor=json.loads(_bound(consumed['snapshots']['cursor']).read_text()).get('resident_current')
+    retry=None
+    if declaration.get('failed_supervised_retry'):
+        from .native_failed_supervised_retry import verify_release
+        retry=verify_release(declaration['failed_supervised_retry'],declaration)
+        requirement['recipe_sha256']=retry['recipe_sha256']
+        requirement['recipe_lineage_sha256']=retry['recipe_lineage_sha256']
     reference=value.get('resident_current')
     # A later handoff explicitly retired this exact historical generation.
     # Keep the cursor receipt, but never reinterpret it as the new live plan.
     if transition_handoff is not None and reference==retired_cursor:return requirement
+    # A corrected no-credit retry changes the future recipe/config boundary.
+    # Its exact predecessor cursor is retained as lineage evidence, but must
+    # not be replayed as resident exposure into the fresh recipe namespace.
+    if retry is not None and reference==retry.get('prior_resident_current'):
+        return requirement
     # Completed adaptation installs its new resident namespace separately. Its
     # authenticated publication can still carry the preceding generation for
     # accounting; never replay that old cursor as exposure to the new recipe.
@@ -2287,7 +2308,7 @@ def _release_requirement(declaration,value,*,verified_handoff=None):
     from .native_supervised_boundary import release_requirement
     requirement=release_requirement(requirement,value)
     return _resident_release_requirement(requirement,value,transition=transition,
-        replay_package=(adapted['package']if adapted is not None else
+        replay_package=(adapted['package']if adapted is not None else retry['package']if retry is not None else
                         transition['new_package']if transition is not None else None))
 
 

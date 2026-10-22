@@ -14,10 +14,12 @@ or successful operation, authorizes this recovery.
 
 ## Mechanism
 
-1. A crisp verifier checks the exact failed bridge request/result, its artifact
-   inventory, zero update/checkpoint evidence, exact current stage and parent,
-   and absence of every captured owner/descendant. The verifier also confirms
-   the corrected runtime/request authority supplied by the supervisor.
+1. A crisp verifier checks the exact failed bridge request/result, the bound
+   worker log's original path/SHA/bytes and captured copy, its exact pre-update
+   traceback, artifact inventory, zero update/checkpoint evidence, current
+   stage and parent, and absence of every captured owner/descendant. The
+   verifier also confirms the corrected runtime/request authority supplied by
+   the supervisor.
 2. A durable transaction snapshots config, state, and cursor; derives candidate
    config/state/cursor; reserves the next unused `raw_retry_generation`; and
    commits by compare-and-swap under the canonical and production leases.
@@ -27,8 +29,11 @@ or successful operation, authorizes this recovery.
    stays shared and source lineage remains exact. It does not create a completed
    supervised receipt or alter checkpoint/exposure state.
 4. The normal runtime handoff/configuration boundary verifies and installs the
-   retry receipt once, then the ordinary `student_cycle` runs the unchanged
-   stage from the unchanged checkpoint in the fresh namespace.
+   retry receipt once, then the ordinary `student_cycle` durably consumes the
+   boundary before running the unchanged stage from the unchanged checkpoint
+   in the fresh namespace. After real stage completion, it records history and
+   retires the one-stage config marker; future cycles and resident appends use
+   the ordinary continuation path.
 
 ## Crisp boundaries
 

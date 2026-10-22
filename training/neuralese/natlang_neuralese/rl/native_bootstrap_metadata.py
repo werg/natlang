@@ -42,7 +42,21 @@ def evidence(plan_path,declaration,handoff,config):
             packages[key]=code_inventory(Path(value[key]))
             if packages[key]!=value[key.replace('_package','_code')]:
                 raise ValueError('bootstrap proof package identity changed')
+    retry=declaration.get('failed_supervised_retry')
+    if retry:
+        if isinstance(retry,str):retry=binding(retry)
+        from .native_failed_supervised_retry import dependencies,verify_release
+        verify_release(retry,declaration)
+        for reference in dependencies(retry).values():add(reference)
+        retry_receipt=json.loads(add(retry).read_text())
+        retry_intent=json.loads(add(retry_receipt['intent']).read_text())
+        packages['failed_retry']=code_inventory(Path(retry_intent['request']['package']))
     later=declaration.get('runtime_handoff')
+    if retry:
+        original_config=json.loads(add(retry_intent['snapshots']['config']).read_text())
+        if later is None:later=original_config.get('runtime_handoff')
+        if later!=original_config.get('runtime_handoff'):
+            raise ValueError('failed retry did not preserve its exact predecessor runtime authority')
     if later!=config.get('runtime_handoff'):
         raise ValueError('bootstrap metadata lost its current later runtime authority')
     if later:
