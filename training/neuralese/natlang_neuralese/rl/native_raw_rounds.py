@@ -175,6 +175,12 @@ def configure_model(plan_path,declaration,handoff,out,*,verified_handoff=None,ow
     from .native_bootstrap_metadata import unchanged,save
     if path.exists():
         prior=json.loads(path.read_text())
+        if declaration.get('failed_supervised_retry'):
+            from .native_failed_supervised_retry import configure as configure_failed_retry
+            retry_ref=declaration['failed_supervised_retry']
+            if isinstance(retry_ref,str):retry_ref=binding(retry_ref)
+            return configure_failed_retry(retry_ref,plan_path,
+                declaration,handoff,path,owned_controller_fd=owned_controller_fd)
         if prior.get('supervised_boundary_configuration'):
             from .native_supervised_boundary import recover_configuration
             if recover_configuration(path,plan_path,declaration,handoff):return path
@@ -1913,6 +1919,15 @@ def student_cycle(plan_path,declaration,handoff,directory,*,stop,owned_controlle
             raise StudentConfigurationError('independent RAW RL scheduling is not bound to the active sealed declaration')
     cursor_path=directory/'cycle.json'
     cursor=json.loads(cursor_path.read_text()) if cursor_path.exists() else {'cycle':0,'phase':'rl','next_stage':0}
+    if config.get('failed_supervised_retry'):
+        from .native_failed_supervised_retry import consume_boundary
+        production_state=Path(config['out'])/'state.json'
+        retry_state=json.loads(production_state.read_text()) if production_state.exists() else {}
+        marker=config['failed_supervised_retry']
+        retry_reference=binding(marker['receipt_path'])
+        updated=consume_boundary(retry_reference,config,cursor,retry_state,directory)
+        if updated!=cursor:
+            cursor=updated;write_json_durable(cursor_path,cursor)
     if _retire_recipe_readiness(config, cursor):
         write_json_durable(cursor_path, cursor)
     recovery=cursor.get('drained_checkpoint_recovery')
@@ -2043,6 +2058,12 @@ def student_cycle(plan_path,declaration,handoff,directory,*,stop,owned_controlle
             _supervised_job(continuation,jobdir,config,cursor,stop)
             if stop.requested:return cursor
         cursor.update(next_stage=index+1,current_checkpoint=_current_checkpoint(config))
+        if cursor.get('failed_supervised_retry'):
+            history=cursor.setdefault('failed_supervised_retry_history',[])
+            identity=cursor.pop('failed_supervised_retry_consumed',None)
+            if identity is None:raise StudentConfigurationError('failed retry stage completed without boundary consumption')
+            if identity not in history:history.append(identity)
+            cursor.pop('failed_supervised_retry',None)
         write_json_durable(cursor_path,cursor)
     if cursor.get('foundation_qualified') and config.get('foundation_readiness_policy')!='on-shared-request':
         # This is the same shared trainer, not a fabricated copy of an old
