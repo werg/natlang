@@ -746,8 +746,15 @@ def test_runtime_configuration_requires_exact_future_global_and_rebinds_factory_
         commands={'seed_command':['env','PYTHONPATH='+str(package.parent),'python','-m','natlang_neuralese.train.native_state_sft','{seed_trainer_args}']})
     target_path=tmp_path/'future-global.json';write(target_path,target)
     from natlang_neuralese.rl import production,native_bootstrap_metadata
-    monkeypatch.setattr(production,'actor_runtime_configuration',lambda repository:{'actor_command':['new-actor'],
-        'actor_environment':{'NATLANG_REPO':repository},'native_actor_python_runtime':{'exact':'new-runtime'}})
+    actor_root=Path(package).parents[2]
+    actor_entry=actor_root/'scripts/neuralese_data/serve_direct_checkpoint.py'
+    actor_entry.parent.mkdir(parents=True,exist_ok=True);actor_entry.write_text('# selected actor runtime')
+    actor_environment={'NATLANG_REPO':str(actor_root),
+        'PYTHONPATH':str(actor_root/'training/neuralese')+':'+str(actor_root)}
+    actor_command=['env','NATLANG_REPO='+str(actor_root),'PYTHONPATH='+actor_environment['PYTHONPATH'],
+        'python',str(actor_entry),'--native-state','--preserved-arg','yes']
+    monkeypatch.setattr(production,'actor_runtime_configuration',lambda repository:{'actor_command':actor_command.copy(),
+        'actor_environment':actor_environment,'native_actor_python_runtime':{'exact':'new-runtime'}})
     monkeypatch.setattr(native_bootstrap_metadata,'save',lambda *a:None)
     proof=adapt.prepare(config,plan,'lfm',adapt.binding(future),adapt.binding(consumed_path),pair,tmp_path/'adaptation/proof.json',package=package,old_package=old,future_global_plan=(bridge.binding(target_path)if future_plan_bytes else adapt.binding(target_path)))
     checked=adapt.verify(proof);assert checked['fresh_runtime_qualification_required']
@@ -757,7 +764,7 @@ def test_runtime_configuration_requires_exact_future_global_and_rebinds_factory_
     before=(root/'cycle.json').read_bytes(),(root/'production/state.json').read_bytes()
     adapt.configure(configured_plan,target['models'][0],json.loads(config.read_text())['bootstrap_binding']['handoff'],config)
     configured=json.loads(config.read_text())
-    assert configured['actor_command']==['new-actor']
+    assert configured['actor_command']==actor_command
     assert configured['actor_environment']['NATLANG_REPO']==str(package.parents[2])
     assert configured['native_actor_python_runtime']=={'exact':'new-runtime'}
     assert configured['seed_command'][1]=='PYTHONPATH='+str(package.parent)

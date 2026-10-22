@@ -370,6 +370,10 @@ def test_python_actor_runtime_is_bound_and_mixed_replicas_rejected():
         'communication': 'native-state', 'native_identity': native, 'python_runtime': runtime}
     expected = {'native_identity': native, 'native_participant': None,
                 'semantic_adapter_sha256': None, 'python_runtime': runtime}
+    # External fleets have no local command or repository environment. They
+    # remain bound by the actual receipts returned from every actor endpoint.
+    assert production.validate_actor_runtime_configuration({
+        'native_actor_python_runtime':runtime,'endpoints':['https://actor-fleet.example']}) is True
     production.validate_actor_receipts({'a': receipt}, policy_id=policy, neuralese_server=True,
                                        expected_native=expected)
     changed = deepcopy(receipt)

@@ -255,6 +255,8 @@ def test_raw_storage_save_does_not_force_yield_or_change_real_trainer_arguments(
 def test_explicit_actor_runtime_reconciles_known_role_binder_command_only(tmp_path):
     from natlang_neuralese.rl.native_rounds import configure_provider
     actor=tmp_path/'new-actor';actor.mkdir()
+    entry=actor/'scripts/neuralese_data/serve_direct_checkpoint.py';entry.parent.mkdir(parents=True);entry.write_text('# actor')
+    package=actor/'training/neuralese/natlang_neuralese';package.mkdir(parents=True);(package/'__init__.py').write_text('# package')
     environment={'NATLANG_REPO':str(actor),'PYTHONPATH':str(actor/'training/neuralese')+':'+str(actor)}
     old=['/usr/bin/env','NATLANG_REPO=/old-learner','PYTHONPATH=/old-learner/training/neuralese',
          '/usr/bin/python','/old-learner/scripts/neuralese_data/serve_direct_checkpoint.py','--native-state']
@@ -269,9 +271,10 @@ def test_explicit_actor_runtime_reconciles_known_role_binder_command_only(tmp_pa
     with pytest.raises(ValueError,match='custom actor command'):
         configure_provider({'actor_environment':environment},
             {'actor_runtime':str(actor),'commands':{'actor_command':['custom-actor']}}, {}, {},tmp_path/'unused',write=False)
-    with pytest.raises(ValueError,match='factory-bound runtime'):
-        configure_provider({'actor_environment':{**environment,'NATLANG_REPO':'/wrong'}},
-            declaration,{}, {},tmp_path/'unused',write=False)
+    rebound=configure_provider({'actor_environment':{**environment,'NATLANG_REPO':'/wrong'},'actor_command':old.copy()},
+        {'actor_runtime':str(actor)}, {}, {},tmp_path/'rebound.json',write=False)
+    assert rebound['actor_environment']==environment
+    assert rebound['actor_command'][4]==str(entry)
 
 
 @pytest.mark.parametrize('command',[
@@ -282,6 +285,8 @@ def test_explicit_actor_runtime_reconciles_known_role_binder_command_only(tmp_pa
 ])
 def test_actor_runtime_never_reinterprets_custom_prefix_with_native_path(tmp_path,command):
     from natlang_neuralese.rl.native_rounds import configure_provider
+    entry=tmp_path/'scripts/neuralese_data/serve_direct_checkpoint.py';entry.parent.mkdir(parents=True);entry.write_text('# actor')
+    package=tmp_path/'training/neuralese/natlang_neuralese';package.mkdir(parents=True);(package/'__init__.py').write_text('# package')
     with pytest.raises(ValueError,match='custom actor command'):
         configure_provider({}, {'actor_runtime':str(tmp_path),'commands':{'actor_command':command}},
                            {},{},tmp_path/'unused',write=False)
@@ -291,8 +296,40 @@ def test_actor_runtime_never_reinterprets_custom_prefix_with_native_path(tmp_pat
     ['/usr/bin/env','OMP_NUM_THREADS=2','/usr/bin/python','-B','-u']])
 def test_actor_runtime_accepts_declared_python_launcher_shapes(tmp_path,prefix):
     from natlang_neuralese.rl.native_rounds import configure_provider
+    entry=tmp_path/'scripts/neuralese_data/serve_direct_checkpoint.py';entry.parent.mkdir(parents=True);entry.write_text('# actor')
+    package=tmp_path/'training/neuralese/natlang_neuralese';package.mkdir(parents=True);(package/'__init__.py').write_text('# package')
     environment={'NATLANG_REPO':str(tmp_path),'PYTHONPATH':str(tmp_path/'training/neuralese')}
     command=prefix+['/old/scripts/neuralese_data/serve_direct_checkpoint.py','--native-state']
     result=configure_provider({'actor_environment':environment},
         {'actor_runtime':str(tmp_path),'commands':{'actor_command':command}}, {},{},tmp_path/'unused',write=False)
     assert result['actor_command'][-2:]==[str(tmp_path/'scripts/neuralese_data/serve_direct_checkpoint.py'),'--native-state']
+
+
+@pytest.mark.parametrize('model',['lfm','mellum'])
+def test_actor_runtime_retargets_default_factory_command_and_rejects_stale_identity(tmp_path,model):
+    from natlang_neuralese.rl.production import (actor_runtime_configuration,
+        bind_actor_runtime_command,validate_actor_runtime_configuration)
+    from natlang_neuralese.rl.native_rounds import configure_provider
+    roots=[]
+    for name in ('r22','r26'):
+        root=tmp_path/f'{model}-{name}'
+        entry=root/'scripts/neuralese_data/serve_direct_checkpoint.py';entry.parent.mkdir(parents=True);entry.write_text('# '+name)
+        package=root/'training/neuralese/natlang_neuralese';package.mkdir(parents=True);(package/'__init__.py').write_text('# '+name)
+        roots.append(root)
+    old,new=roots
+    command=['/usr/bin/env','NATLANG_REPO='+str(old),'PYTHONPATH='+str(old/'training/neuralese')+':'+str(old),
+        '/usr/bin/python','-u',str(old/'scripts/neuralese_data/serve_direct_checkpoint.py'),
+        '--native-state','--port','8123','--provider-arg','preserve-me']
+    config={'model':model,'actor_command':command,**actor_runtime_configuration(old)}
+    rebound=configure_provider(config,{'actor_runtime':str(new)}, {},{},tmp_path/f'{model}.json',write=False)
+    assert rebound['actor_command']==['/usr/bin/env','NATLANG_REPO='+str(new),
+        'PYTHONPATH='+str(new/'training/neuralese')+':'+str(new),'/usr/bin/python','-u',
+        str(new/'scripts/neuralese_data/serve_direct_checkpoint.py'),'--native-state','--port','8123','--provider-arg','preserve-me']
+    assert rebound['actor_environment']==actor_runtime_configuration(new)['actor_environment']
+    assert rebound['native_actor_python_runtime']==actor_runtime_configuration(new)['native_actor_python_runtime']
+    validate_actor_runtime_configuration(rebound)
+    stale={**rebound,'actor_command':command}
+    with pytest.raises(ValueError,match='different checkouts'):
+        validate_actor_runtime_configuration(stale)
+    with pytest.raises(ValueError,match='direct-checkpoint entry point'):
+        bind_actor_runtime_command(['/usr/bin/python','-c','custom actor'],new)
