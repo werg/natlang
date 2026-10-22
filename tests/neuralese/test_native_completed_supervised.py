@@ -1127,3 +1127,36 @@ def test_cached_bootstrap_dispatches_exact_legacy_rl_control_repair(tmp_path,mon
     assert before==((root/'cycle.json').read_bytes(),(root/'production/state.json').read_bytes())
     write(verification,{'config':adapt.binding(config),'evidence':{'same_inputs':True}})
     assert metadata.unchanged(verification,final,declaration,bootstrap,expected)is True
+
+
+def test_paired_dependencies_verify_once_and_preserve_all_bound_inputs(tmp_path, monkeypatch):
+    manifest, source, authority, base, loader = publisher_fixture(tmp_path)
+    _, _, _, reference = prepared(tmp_path, old_declaration_overrides={
+        'publisher_manifest': adapt.binding(manifest)})
+    original = adapt.verify
+    calls = []
+    def counted(ref):
+        calls.append(ref)
+        return original(ref)
+    monkeypatch.setattr(adapt, 'verify', counted)
+    proof, inputs = adapt.verified_dependencies(reference)
+    assert calls == [reference]
+    for path in (source, authority, base, loader, manifest):
+        assert inputs[str(path)]['sha256'] == adapt.binding(path)['sha256']
+    assert proof['future_config']['path'] in inputs
+    assert adapt.dependencies(reference) == inputs
+    assert calls == [reference, reference]
+
+
+def test_paired_dependencies_recheck_inputs_changed_after_verification(tmp_path, monkeypatch):
+    manifest, source, _, _, _ = publisher_fixture(tmp_path)
+    _, _, _, reference = prepared(tmp_path, old_declaration_overrides={
+        'publisher_manifest': adapt.binding(manifest)})
+    original = adapt.verify
+    def changed_after_verify(ref):
+        proof = original(ref)
+        source.write_text('CONTROL=changed\n')
+        return proof
+    monkeypatch.setattr(adapt, 'verify', changed_after_verify)
+    with pytest.raises(ValueError):
+        adapt.verified_dependencies(reference)

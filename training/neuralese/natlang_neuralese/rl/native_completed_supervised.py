@@ -756,7 +756,7 @@ def verify_declaration(reference,declaration):
     return proof
 
 
-def dependencies(reference):
+def verified_dependencies(reference):
     """Exact verifier/recipe/loader inputs; bound JSON provenance is not executable.
 
     Normal recipe collectors define source, index, CE and admission dependencies.
@@ -852,7 +852,12 @@ def dependencies(reference):
     if consumed['schema']==CONSUMED_RAW and request.get('state'):add(request['state'])
     for key in ('admission','objective','graphs'):
         if consumed.get('raw_admission'):add(consumed['raw_admission'][key])
-    return found
+    return proof,found
+
+
+def dependencies(reference):
+    """Exact dependency bindings, retaining the existing public interface."""
+    return verified_dependencies(reference)[1]
 
 
 def _install_resident_plan(proof,config):

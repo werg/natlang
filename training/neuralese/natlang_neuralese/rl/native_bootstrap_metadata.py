@@ -109,9 +109,9 @@ def evidence(plan_path,declaration,handoff,config):
                     raise ValueError('later runtime proof package identity changed')
     adaptation=declaration.get('completed_supervised_adaptation')
     if adaptation:
-        from .native_completed_supervised import verify,dependencies as completed_dependencies
-        proof=verify(adaptation)
-        for reference in completed_dependencies(adaptation).values():add(reference)
+        from .native_completed_supervised import verified_dependencies
+        proof,completed_inputs=verified_dependencies(adaptation)
+        for reference in completed_inputs.values():add(reference)
         for key,code in(('package','code'),('old_package','old_code')):
             path=Path(proof.get(key,proof['package']))
             packages['completed_'+key]=code_inventory(path)

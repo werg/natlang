@@ -273,23 +273,31 @@ def dependency_closure(request, *, namespace='/work/native-production', readonly
             adapter = semantic_adapter(source['adapter'])
             bundle(source['block_bundle'], policy_id=adapter['checkpoint']['sha256'])
 
-    def config_value(value, marker):
+    def config_value(value, marker, *, inherited_completed_provenance=False):
         if marker in active_configs:
             raise ValueError("provider consumed configuration contains a cycle")
         active_configs.add(marker)
         adaptation=value.get('completed_supervised_adaptation')
         if adaptation is not None:
-            if request.get('kind') == 'round' and value.get('mandatory_sft_only') is True:
-                # production.run dispatches this directly to supervised.execute.
-                # Its inherited controller adaptation is provenance, not an
-                # instruction to replay that old invocation under current defaults.
+            if inherited_completed_provenance or (request.get('kind') == 'round' and value.get('mandatory_sft_only') is True):
+                # A verified adaptation's future configuration carries prior
+                # controller provenance. The actual current adaptation was
+                # verified by its caller; this old marker is not another active
+                # invocation under today's defaults. Mandatory SFT likewise
+                # dispatches directly to supervised.execute.
                 bound(adaptation)
             else:
-                from natlang_neuralese.rl.native_completed_supervised import verify,dependencies as completed_dependencies
-                proof=verify(adaptation)
-                for reference in completed_dependencies(adaptation).values():bound(reference)
+                from natlang_neuralese.rl import native_completed_supervised as completed
+                paired=getattr(completed,'verified_dependencies',None)
+                if callable(paired):proof,completed_inputs=paired(adaptation)
+                else:
+                    # Immutable older runtime closures retain their original API.
+                    proof=completed.verify(adaptation)
+                    completed_inputs=completed.dependencies(adaptation)
+                for reference in completed_inputs.values():bound(reference)
                 config_value(json.loads(bound(proof['future_config']).read_text()),
-                             'completed-future:'+adaptation['sha256'])
+                             'completed-future:'+adaptation['sha256'],
+                             inherited_completed_provenance=True)
         controls=value.get('native_checkpoint_controls', {})
         if not isinstance(controls,dict):
             raise ValueError('native checkpoint controls must map full source SHA256 to explicit bindings')

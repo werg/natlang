@@ -664,3 +664,35 @@ def test_snapshot_ferry_restores_only_declared_closure_with_original_host_unavai
     torch.testing.assert_close(loaded['training']['optimizer']['actual-buffer'],
         state['training']['optimizer']['actual-buffer'],rtol=0,atol=0)
     assert torch.equal(loaded['training']['rng']['torch'],state['training']['rng']['torch'])
+
+
+@pytest.mark.parametrize('mutation',[None,'historical','future_source','future_held'])
+def test_verified_future_keeps_inherited_adaptation_as_bound_provenance(tmp_path,monkeypatch,mutation):
+    from natlang_neuralese.rl import native_completed_supervised as completed
+    historical=write(tmp_path/'old-adaptation.json',{'old_invocation':'historical defaults'})
+    source=write(tmp_path/'future.jsonl','future admitted source\n')
+    held=write(tmp_path/'held.jsonl','protected source\n')
+    source_manifest=write(tmp_path/'sources.json',{'schema':'natlang.native-graph-sources/1',
+        'sources':[{'kind':'native-graphs',**source}]})
+    held_manifest=write(tmp_path/'held-sources.json',{'schema':'natlang.native-graph-sources/1',
+        'sources':[{'kind':'native-graphs',**held}]})
+    future=write(tmp_path/'future-config.json',{'completed_supervised_adaptation':historical,
+        'seed_native_graphs':source_manifest['path'],'held_native_graphs':held_manifest['path']})
+    active=write(tmp_path/'active-adaptation.json',{'actual':'current invocation'})
+    config=write(tmp_path/'config.json',{'completed_supervised_adaptation':active})
+    calls=[]
+    def verified(reference):
+        calls.append(reference)
+        assert reference==active,'must not reinterpret historical defaults'
+        return {'future_config':future},{active['path']:active,future['path']:future}
+    monkeypatch.setattr(completed,'verified_dependencies',verified)
+    if mutation:
+        target={'historical':historical,'future_source':source,'future_held':held}[mutation]
+        Path(target['path']).write_text('changed bound bytes')
+        with pytest.raises(ValueError,match='hash (changed|mismatch)'):
+            deps.dependency_closure({'kind':'round','config':config},namespace=str(tmp_path))
+    else:
+        closure=deps.dependency_closure({'kind':'round','config':config},namespace=str(tmp_path))
+        assert {r['path']for r in closure['files']}=={r['path']for r in
+            [config,active,historical,future,source_manifest,source,held_manifest,held]}
+    assert calls==[active]
