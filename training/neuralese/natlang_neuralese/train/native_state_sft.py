@@ -728,7 +728,7 @@ def _resume_identity_for_comparison(identity):
 
 def _save(policy, model, optimizer, *, config, identity, step, epoch, cursor, source_receipts,
           source_hash, source_row_bindings, held_row_bindings, exposure_counts, global_step, rng, metrics,
-          architecture, options, fp8_state=None, sft_progress=None):
+          architecture, options, fp8_state=None, sft_progress=None, async_allowed=False):
     metrics['checkpoint_selection'] = {'continuation':'newest-full-state',
         'raw_ce_best_export':not bool(options.get('ce_supervision_active')),
         'quality_policy':'supervisor-task-and-declared-target-evidence' if options.get('ce_supervision_active')
@@ -750,7 +750,7 @@ def _save(policy, model, optimizer, *, config, identity, step, epoch, cursor, so
     # Raw historical CE can be prompt dominated and is not the declared new
     # objective. Never let it silently nominate a best-policy export.
     metric = None if options.get('ce_supervision_active') else metrics.get('held', {}).get('loss')
-    policy.save(state, metric=metric)
+    policy.save(state, metric=metric, async_allowed=async_allowed, async_optimizer=optimizer)
 
 
 def qualify_precision_transition(model, tokenizer, roles, config, *, previous_precision,
@@ -937,6 +937,8 @@ def build_parser():
     parser.add_argument('--held-eval-graphs', type=int, default=0)
     parser.add_argument('--checkpoint-every', type=int, default=0)
     parser.add_argument('--checkpoint-seconds', type=float, default=3600.)
+    parser.add_argument('--async-checkpoint', action=argparse.BooleanOptionalAction, default=False,
+        help='write ordinary full-state cadence snapshots asynchronously when measured host/cgroup headroom permits')
     parser.add_argument('--checkpoint-publication', action='store_true')
     parser.add_argument('--checkpoint-publication-namespace', default='/work/native-production')
     parser.add_argument('--checkpoint-publication-readonly-input-roots', default='[]')
@@ -1062,7 +1064,8 @@ def _main(argv=None, *, requested_refresh):
     torch.manual_seed(args.seed)
     random.seed(args.seed)
     policy = CheckpointPolicy(args.out, every_steps=args.checkpoint_every,
-                              every_seconds=args.checkpoint_seconds, prune_best=False)
+                              every_seconds=args.checkpoint_seconds, prune_best=False,
+                              async_checkpoint=args.async_checkpoint)
     if args.checkpoint_publication:
         from ..model.native_checkpoint_control import saved_publication_hook
         roots=json.loads(args.checkpoint_publication_readonly_input_roots)
@@ -1769,8 +1772,31 @@ def _main(argv=None, *, requested_refresh):
         return bool(foundation_template and foundation_template['graphs'] and not foundation_missing and
                     foundation_template['cohort_sha256'] not in prior_foundations and
                     not refresh_inherited_foundation and args.foundation_readiness_policy != 'on-shared-request')
+    exception_boundary_safe = True
+    loop_error = None
+    loop_error_tb = None
     try:
         while not policy.signaled and not foundation_pending():
+            # Surface writer failures at the update boundary, before fetching
+            # or applying the next batch. The exact current optimizer/RNG and
+            # exposure are then persisted synchronously before training moves.
+            try:
+                policy.check_async()
+            except BaseException as writer_error:
+                history = checkpoint_options.setdefault('async_checkpoint_recovery_history', [])
+                history.append({'schema':'natlang.native-async-checkpoint-recovery/1',
+                    'writer_error_type':type(writer_error).__name__,
+                    'writer_error':str(writer_error)[:1000], 'recovered_synchronously':True,
+                    'global_step':global_step, 'cursor':cursor})
+                _save(policy, model, optimizer, config=config, identity=training_identity, step=step,
+                    global_step=global_step, epoch=epoch, cursor=cursor, source_receipts=source_receipts,
+                    source_hash=source_hash, source_row_bindings=source_row_bindings,
+                    held_row_bindings=held_row_bindings, exposure_counts=exposure_counts,
+                    rng=capture_training_rng_state(args.device), metrics=metrics,
+                    architecture=config['architecture'], options={**checkpoint_options, '_source_row_order': source_order},
+                    fp8_state=backend.extra_state() if backend is not None else None, sft_progress=carried_progress)
+                last_saved_step = step
+                metadata_dirty = False
             if resident is not None:
                 expanded = resident.poll(global_step)
                 if expanded is not None:
@@ -1864,6 +1890,7 @@ def _main(argv=None, *, requested_refresh):
                 raise
             batch_tokens = sum(train.entries[index]['forward_tokens'] for index in indices)
             cursor = indices[-1] + 1
+            exception_boundary_safe = False
             loss, details = native_training_update(model, optimizer, batch, backend=backend,
                 checkpoint_layers=args.checkpoint_layers, chunk_tokens=args.chunk_tokens, objective=objective)
             step += 1
@@ -1877,6 +1904,7 @@ def _main(argv=None, *, requested_refresh):
             epoch = min(exposure_counts[key] for key, required in required_visits.items() if required > 0)
             if pass_end and all(exposure_counts[key] >= required for key, required in required_visits.items()):
                 cursor = 0
+            exception_boundary_safe = True
             # Telemetry is appended after the actual optimizer update. The rolling
             # checkpoint remains the authority for committed resume/exposure; logs
             # can include work subsequently replayed after an uncheckpointed crash.
@@ -2015,7 +2043,10 @@ def _main(argv=None, *, requested_refresh):
                       held_row_bindings=held_row_bindings, exposure_counts=exposure_counts,
                       rng=capture_training_rng_state(args.device), metrics=metrics,
                       architecture=config['architecture'], options={**checkpoint_options, '_source_row_order': source_order},
-                      fp8_state=backend.extra_state() if backend is not None else None, sft_progress=carried_progress)
+                      fp8_state=backend.extra_state() if backend is not None else None, sft_progress=carried_progress,
+                      async_allowed=(args.async_checkpoint and step < total_end and not policy.signaled
+                          and not relative_refresh_due and not requested_refresh.requested
+                          and not (args.refresh_at_checkpoint and due_checkpoint)))
                 last_saved_step = step
                 metadata_dirty = False
             if requested_refresh.requested or relative_refresh_due or (args.refresh_after_updates is None
@@ -2029,8 +2060,64 @@ def _main(argv=None, *, requested_refresh):
                 pass
             else:
                 raise ValueError('native source schedule exceeds its declared updates')
-    finally:
+    except BaseException as error:
+        loop_error = error
+        loop_error_tb = error.__traceback__
+    try:
         schedule.close()
+    except BaseException as close_error:
+        if loop_error is None:
+            loop_error = close_error
+            loop_error_tb = close_error.__traceback__
+        else:
+            loop_error.add_note(f'schedule.close() also failed: {type(close_error).__name__}: {close_error}')
+    # This drain belongs to exceptional and normal exits alike. A failed close
+    # must not bypass writer ownership or erase the original training error.
+    writer_error = None
+    try:
+        policy.drain_async()
+    except BaseException as error:
+        writer_error = error
+    if writer_error is not None:
+        history = checkpoint_options.setdefault('async_checkpoint_recovery_history', [])
+        history.append({'schema':'natlang.native-async-checkpoint-recovery/1',
+            'writer_error_type':type(writer_error).__name__,
+            'writer_error':str(writer_error)[:1000], 'recovered_synchronously':True,
+            'global_step':global_step, 'cursor':cursor,
+            'boundary':'exceptional-exit' if loop_error is not None else 'stage-or-stop-flush',
+            'safe_completed_update_boundary':exception_boundary_safe})
+    if loop_error is not None:
+        if writer_error is not None:
+            loop_error.add_note(f'background checkpoint writer also failed: {type(writer_error).__name__}: {writer_error}')
+        if exception_boundary_safe and (writer_error is not None or last_saved_step != step or metadata_dirty):
+            try:
+                _save(policy, model, optimizer, config=config, identity=training_identity, step=step,
+                    global_step=global_step, epoch=epoch, cursor=cursor, source_receipts=source_receipts,
+                    source_hash=source_hash, source_row_bindings=source_row_bindings,
+                    held_row_bindings=held_row_bindings, exposure_counts=exposure_counts,
+                    rng=capture_training_rng_state(args.device), metrics=metrics,
+                    architecture=config['architecture'], options={**checkpoint_options, '_source_row_order': source_order},
+                    fp8_state=backend.extra_state() if backend is not None else None, sft_progress=carried_progress)
+                last_saved_step = step
+                metadata_dirty = False
+            except BaseException as recovery_error:
+                loop_error.add_note('completed-update exceptional-exit recovery save failed: '
+                    f'{type(recovery_error).__name__}: {recovery_error}; last known durable checkpoint: {policy.slot}')
+        elif not exception_boundary_safe:
+            loop_error.add_note('exception occurred inside native_training_update; potentially partial optimizer state '
+                'was not checkpointed')
+        raise loop_error.with_traceback(loop_error_tb)
+    if writer_error is not None:
+        # Replace the failed background snapshot with exact fully-accounted
+        # current state. A failure here propagates with the prior durable path.
+        _save(policy, model, optimizer, config=config, identity=training_identity, step=step,
+            global_step=global_step, epoch=epoch, cursor=cursor, source_receipts=source_receipts,
+            source_hash=source_hash, source_row_bindings=source_row_bindings,
+            held_row_bindings=held_row_bindings, exposure_counts=exposure_counts,
+            rng=capture_training_rng_state(args.device), metrics=metrics,
+            architecture=config['architecture'], options={**checkpoint_options, '_source_row_order': source_order},
+            fp8_state=backend.extra_state() if backend is not None else None, sft_progress=carried_progress)
+        last_saved_step = step
     if metadata_dirty or ((step != resumed_step or policy.signaled) and last_saved_step != step):
         if not policy.signaled and not metrics.get('held'):
             metrics['held'], metrics['held_coverage'] = _evaluate_cadence(model, held, args=args,
