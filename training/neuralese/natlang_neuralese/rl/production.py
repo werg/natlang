@@ -943,6 +943,11 @@ def validate_actor_runtime_configuration(config):
     runtime=config.get('native_actor_python_runtime')
     if runtime is None:return True
     environment=config.get('actor_environment')or{}
+    if config.get('actor_command') is None and not environment:
+        # External actor fleets have no local entrypoint/import environment to
+        # reconcile. Their exact Python runtime remains enforced by the
+        # per-endpoint native policy receipts in validate_actor_receipts.
+        return True
     repository=environment.get('NATLANG_REPO')
     if not isinstance(repository,str)or not repository:
         raise ValueError('native actor runtime binding lacks its repository environment')
