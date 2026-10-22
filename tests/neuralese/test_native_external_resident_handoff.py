@@ -17,6 +17,29 @@ from natlang_neuralese.train.recipe import native_recipe_binding
 from natlang_neuralese.common.jsonio import write_json_durable as write
 
 
+@pytest.mark.parametrize('with_bytes',[False,True])
+def test_runtime_snapshot_accepts_exact_two_or_three_field_binding(tmp_path,with_bytes):
+    source=tmp_path/'source.json';source.write_bytes(b'{"exact":true}\n')
+    reference=resident.binding(source)
+    if with_bytes:reference['bytes']=source.stat().st_size
+    snapshot=runtime._snap(reference,tmp_path/'snapshots','source.json')
+    assert snapshot==resident.binding(tmp_path/'snapshots'/'source.json')
+    assert (tmp_path/'snapshots'/'source.json').read_bytes()==source.read_bytes()
+
+
+def test_runtime_snapshot_rejects_wrong_byte_count_and_tampered_copy(tmp_path,monkeypatch):
+    source=tmp_path/'source.json';source.write_bytes(b'authenticated bytes')
+    reference={**resident.binding(source),'bytes':1}
+    with pytest.raises(ValueError,match='byte count'):
+        runtime._snap(reference,tmp_path/'bad','source.json')
+    reference['bytes']=source.stat().st_size
+    original=runtime.write_bytes_durable
+    def tampered(path,raw):original(path,raw+b'!')
+    monkeypatch.setattr(runtime,'write_bytes_durable',tampered)
+    with pytest.raises(ValueError,match='snapshot changed'):
+        runtime._snap(reference,tmp_path/'tampered','source.json')
+
+
 @pytest.fixture
 def external(ordinary,tmp_path,request):
     x=ordinary;N=tmp_path/'external-resident';N.mkdir();(N/'sft').mkdir();out=N/'learner';out.mkdir()
@@ -31,7 +54,8 @@ def external(ordinary,tmp_path,request):
     historical_package = x['newpackage']
     qualification = None
     if recovered_mode:
-        historical_package = N/'historical-package'
+        historical_package = N/'historical-runtime'/'natlang_neuralese'
+        historical_package.parent.mkdir(parents=True)
         shutil.copytree(x['newpackage'],historical_package,ignore=shutil.ignore_patterns('__pycache__','*.pyc'))
         (x['newpackage']/'recovered_runtime_fixture.py').write_text('value = 1\n')
         manager.package = historical_package
@@ -208,6 +232,45 @@ def test_external_resident_cannot_borrow_a_runtime_or_rewrite_adoption(external,
 def test_both_actual_optimizer_next_updates_survive_external_resident_authority(external):
     _rejoin(external)
     _assert_next_update(external)
+
+
+@pytest.mark.parametrize('external',['recovered-runtime'],indirect=True)
+@pytest.mark.parametrize('later',['lfm','mellum'],indirect=True)
+def test_schema4_drained_parent_enters_runtime_at_no_credit_sft_boundary(external):
+    """Exercise real checkpoint, owner, adoption and runtime proofs end to end."""
+    x=external
+    # Bind the actual bootstrap caller to the fixture's exact original recipe
+    # file; its semantic contents are copied from the bootstrap recipe above.
+    config=json.loads(x['config'].read_text())
+    config['production_recipe']=str((x['external_root']/'initial-recipe.json').resolve())
+    write(x['config'],config)
+    state_path=x['out']/'state.json';cursor_path=x['root']/'cycle.json'
+    state=json.loads(state_path.read_text());cursor=json.loads(cursor_path.read_text())
+    state.update(checkpoint=x['pin'].resolve().as_posix(),phase='collect')
+    cursor.update(cycle=11,phase='sft',next_stage=1,current_checkpoint=resident.binding(x['pin']),pending_rl_round=None)
+    write(state_path,state);write(cursor_path,cursor)
+    receipt=x['external_root']/'drained-import.json'
+    imported=raw.import_drained_checkpoint(x['config'],cursor_path,x['handoff'],x['transition'],receipt,
+        recovery_reason='observed H8 owner drained with full optimizer state; restart mandatory recipe with no completion credit')
+    fresh=json.loads(cursor_path.read_text());assert fresh['next_stage']==0 and fresh['phase']=='sft'
+    assert fresh['current_checkpoint']==resident.binding(x['pin']) and fresh['raw_retry_generation']>=0
+    assert fresh['drained_checkpoint_recovery']['training_credit']==0
+    verified=handoff.verify_handoff(x['handoff'])
+    proof=runtime.prepare_runtime_handoff(x['bootstrap'],x['handoff'],x['transition'],x['config'],
+        x['external_root']/'drained-runtime.json',drained_checkpoint_import=imported,
+        verified_handoff=verified)
+    value=runtime.verify_runtime_handoff(proof,bootstrap=x['bootstrap'],verified_handoff=verified)
+    assert value['drained_checkpoint_import']==imported
+    recipe=json.loads(Path(x['recipe']['path']).read_text())
+    assert runtime._owned_cycle_boundary(value,fresh,json.loads(state_path.read_text()),recipe,'sft')
+    x['declaration']['runtime_handoff']=proof
+    write(x['plan'],{'models':[x['declaration']]})
+    class Stop:
+        requested=True
+    raw.student_cycle(x['plan'],x['declaration'],x['bootstrap'],x['root'],stop=Stop())
+    consumed=json.loads(cursor_path.read_text())['drained_checkpoint_recovery_consumed']
+    assert consumed['receipt']==imported and consumed['training_credit']==0
+    _assert_next_update(x)
 
 
 def test_external_launch_snapshots_survive_pruned_original_control_scripts(external):
