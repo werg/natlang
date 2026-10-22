@@ -138,6 +138,15 @@ def evidence(plan_path,declaration,handoff,config):
 
 def unchanged(path,plan_path,declaration,handoff,config):
     """Only reuse a local verifier-produced receipt after fresh owner/evidence checks."""
+    if declaration.get('completed_supervised_adaptation'):
+        actual_plan=binding(plan_path)
+        for key in ('supervised_quantum_control','supervised_stage_quantum_control','rl_scheduling_control'):
+            if key in config and (not isinstance(config[key],dict) or config[key].get('plan')!=actual_plan):
+                return False
+        if declaration.get('rl_scheduling_policy')=='independent-local-cycles-v1':
+            control=config.get('rl_scheduling_control') or {}
+            if control.get('policy')!=declaration['rl_scheduling_policy']:
+                return False
     path=Path(path)
     if not path.exists():return False
     value=json.loads(path.read_text())

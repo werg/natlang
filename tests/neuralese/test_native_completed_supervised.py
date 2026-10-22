@@ -1097,3 +1097,33 @@ def test_completed_independent_rl_rebinds_final_plan_and_repairs_exact_legacy(tm
     assert json.loads(Path(receipt['after']['path']).read_text())==future
     adapt.configure(final,declaration,bootstrap,config)
     assert json.loads(config.read_text())==future
+
+
+def test_cached_bootstrap_dispatches_exact_legacy_rl_control_repair(tmp_path,monkeypatch):
+    from natlang_neuralese.rl import native_raw_rounds as raw,native_bootstrap_metadata as metadata,native_raw_handoff as hand
+    root,config,_,proof=prepared(tmp_path,runtime_package=Path(adapt.__file__).parents[1],
+        future_declaration_overrides={'rl_scheduling_policy':'independent-local-cycles-v1'})
+    value=adapt.verify(proof);plan=json.loads(Path(value['future_global_plan']['path']).read_text())
+    declaration=plan['models'][0];declaration['completed_supervised_adaptation']=proof
+    final=tmp_path/'final-global.json';write(final,plan)
+    monkeypatch.setattr(metadata,'save',lambda *args:None)
+    bootstrap=json.loads(config.read_text())['bootstrap_binding']['handoff']
+    adapt.configure(final,declaration,bootstrap,config)
+    expected=json.loads(config.read_text());legacy=copy.deepcopy(expected)
+    legacy['rl_scheduling_control']=json.loads(Path(value['future_config']['path']).read_text())['rl_scheduling_control']
+    write(config,legacy)
+    # Reproduce the actual old cache: it authenticated exactly this legacy
+    # config and its other immutable evidence still matches. It must not bypass
+    # the new completed configurator merely because these old bytes are intact.
+    verification=root/'bootstrap-verification.json'
+    write(verification,{'config':adapt.binding(config),'evidence':{'same_inputs':True}})
+    monkeypatch.setattr(metadata,'evidence',lambda *args:{'same_inputs':True})
+    monkeypatch.setattr(hand,'verify_handoff_metadata',lambda *args,**kwargs:None)
+    monkeypatch.setattr(raw,'_task_cases',lambda *args:None)
+    assert metadata.unchanged(verification,final,declaration,bootstrap,legacy)is False
+    before=((root/'cycle.json').read_bytes(),(root/'production/state.json').read_bytes())
+    assert raw.configure_model(final,declaration,bootstrap,root)==config
+    assert json.loads(config.read_text())==expected
+    assert before==((root/'cycle.json').read_bytes(),(root/'production/state.json').read_bytes())
+    write(verification,{'config':adapt.binding(config),'evidence':{'same_inputs':True}})
+    assert metadata.unchanged(verification,final,declaration,bootstrap,expected)is True
