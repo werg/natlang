@@ -14,6 +14,43 @@ from itertools import count
 _ACTIVE = ContextVar('natlang_graph_gradient_partitions', default=None)
 _FRAME_IDS = count()
 _PRIMAL_ROWS = ContextVar('natlang_graph_primal_rows', default=None)
+_WEIGHT_PREPARATIONS = ContextVar('natlang_ffn_weight_preparations', default=None)
+
+
+def reuse_weight_preparation(weight, format_key, prepare):
+    """Reuse immutable preparation only inside one token-local FFN call.
+
+    The original tensor is retained to prevent object-id reuse. Version and
+    geometry checks also invalidate a preparation after an in-place mutation.
+    Inference tensors without a version counter use ordinary preparation.
+    """
+    cache = _WEIGHT_PREPARATIONS.get()
+    if cache is None:
+        return prepare()
+    try:
+        version = weight._version
+    except RuntimeError:
+        return prepare()
+    key = (id(weight), format_key)
+    identity = (version, tuple(weight.shape), tuple(weight.stride()),
+                weight.dtype, weight.device, weight.storage_offset(), weight.data_ptr())
+    previous = cache.get(key)
+    if previous is not None and previous[0] is weight and previous[1] == identity:
+        return previous[2]
+    value = prepare()
+    cache[key] = (weight, identity, value)
+    return value
+
+
+def _scoped_weight_preparations(callback):
+    @wraps(callback)
+    def execute(*args, **kwargs):
+        token = _WEIGHT_PREPARATIONS.set({})
+        try:
+            return callback(*args, **kwargs)
+        finally:
+            _WEIGHT_PREPARATIONS.reset(token)
+    return execute
 
 
 @dataclass(frozen=True)
@@ -189,6 +226,7 @@ def reduce_parameter_rows(partitions, count, contribution, *, add=None):
     return total
 
 
+@_scoped_weight_preparations
 def token_local_chunks(h, chunk_tokens, callback):
     """Evaluate each physical FFN row once, with invocation-local routing plans.
 

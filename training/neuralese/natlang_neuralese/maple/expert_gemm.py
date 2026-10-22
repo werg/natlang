@@ -192,11 +192,15 @@ class Fp8ExpertProjection(torch.autograd.Function):
         ctx.scope_weight = weight if anchors else None
         from ..model.native_weight_carrier import active_cotangent_scope
         ctx.scope = active_cotangent_scope() if anchors else None
-        weight = weight.to(dtype) if ctx.carrier else weight
-        E, N, K = weight.shape
         aq, sa = rowwise_quant(a)
-        wq, sw = rowwise_quant(weight.reshape(E * N, K))
-        wq, sw = wq.view(E, N, K), sw.view(E, N)
+        from ..model.native_gradient_partitions import reuse_weight_preparation
+        def prepare_weight():
+            stored = weight.to(dtype) if ctx.carrier else weight
+            E, N, K = stored.shape
+            quantized, scales = rowwise_quant(stored.reshape(E * N, K))
+            return stored, quantized.view(E, N, K), scales.view(E, N)
+        weight, wq, sw = reuse_weight_preparation(
+            weight, ('expert-rowwise-fp8-v1', dtype), prepare_weight)
         if hand is not None:
             hand.col_scale, hand.ends = sw, table.ends
         from .model import DENSE_MOE
