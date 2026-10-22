@@ -107,10 +107,10 @@ source closure and its complete bound artifact checks passed with unchanged
 source-protection implementation identities.
 
 The complete comparison above supersedes all early partial success-rate claims.
-The writer-occurrence correction `12a22fa1e` is integrated; its physical candidate
-runtime is undergoing the required live model-facing measurement. The integrated
-full check for `09bebe8316` passed at 20:18 UTC, independently of the unfinished
-runtime measurement.
+The writer-occurrence correction `12a22fa1e` is integrated and its48-case live
+measurement is complete, as recorded below. The integrated full check for
+`09bebe8316` passed at20:18 UTC; the subsequent shared anchor-refill fix also
+passed the full repository check at00:01 UTC on2026-10-22.
 
 ## Current integration and validation
 
@@ -122,18 +122,34 @@ Actual active totals are1460605 TRAIN/25968 held for Mellum and1545644 TRAIN/259
 held for LFM. These totals are source obligations, not a claim of complete exposure.
 The shared append mechanism preserves existing optimizer/RNG and per-row history.
 
-The writer-occurrence candidate runtime is running the 48-task live measurement
-on the same Flint actor, task keys and seeds. At21:43 UTC14 candidate tasks had
-finished:10 successes and4 budget failures. No production runtime adoption or
-completed measurement is claimed.
+The writer-occurrence candidate runtime completed all48 matched task keys and
+seeds:36 successes,7 budget failures,4 semantic mismatches and1 invalid action.
+The previous Flint runtime had32 successes. Six failures became successes and
+two successes failed;30 remained successful. Aggregate case time was66,097.9s
+versus72,199.5s previously. Serving loads were not isolated, so this does not
+establish a causal quality or throughput improvement. The guardian declares the
+measured runtime for future unreserved batches beginning with batch2; batches0
+and1 retain their actual original runtime and the server/collectors continue.
+The publisher uses explicit runtime epochs. Evidence and exact identities:
+`/home/werg/data/dgxops/flint-writer-runtime-live48-and-adoption-root-20261022.json`.
+Actual batch2 execution must still be observed separately.
 
-A third wave of26 newly admitted source batches is prepared and eligible on both
-sandboxes:2491 LFM graphs and2487 Mellum graphs. It is separate from the already
-adopted waves above; no third-wave exposure is claimed. Source preparation,
-conversion, transport, classification and eligibility passed. Further Flint and
-Qwen publications continue through the same pipeline. A transient GitHub DNS
-failure stopped admission; the recovered worker retries network failures and
-preserves exact unrelated engineering edits during data-only publication.
+LFM actually adopted third-wave2491 graphs at25314 and fourth-wave1638 at25359,
+bringing its active source obligations to1,549,773 TRAIN/25,955 held. Mellum
+actually adopted third-wave2487 at28441, bringing its active obligations to
+1,463,092 TRAIN/25,968 held. The fifth wave has passed the normal preparation,
+transport and eligibility pipeline:1,142 graphs for each model. LFM's fifth
+append is preparing; Mellum's fourth and fifth additions are preparing together
+as one2778-graph append. These counts describe source obligations and adoption,
+not completed per-row exposure. Both learners retain optimizer/RNG/exposure
+through the shared append mechanism.
+
+Source starvation at the original Flint anchor was repaired through the shared
+guardian/source-sequence mechanism, retaining the original source and serving
+identity. Focused228 checks and the full repository check passed. Batch1 is
+actively generating and verified-positive admission continues. One Qwen source
+row remains held by the existing partial-output quality policy; its six accepted
+siblings were independently verified and admitted without admitting the held row.
 
 The full comparison and selection evidence is bound in
 `/home/werg/data/dgxops/flint-full48-teacher-selection-root-20261021.json`.

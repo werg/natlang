@@ -1302,7 +1302,7 @@ trajectory admission and trained-student RL measurement are separate. No held
 content or answer is included, and no task success requires Neuralese use.
 
 
-## 2026-10-21: repeated text writer occurrence repair (not deployed)
+## 2026-10-21: repeated text writer occurrence repair (live measurement completed)
 
 The stand-in write receipt now records the actual write's type, producer and
 truncation even when identical bytes already exist in the store. This fixes
@@ -1316,3 +1316,21 @@ including repeated eval/return bodies and differently named equivalent types.
 Root owns this measurement and the actual guardian runtime transition; the
 currently running teacher remains on its existing runtime. Historical held
 traces need a separate explicitly bound conversion; no repair admission claimed.
+
+The own-sandbox Flint measurement completed all48 original task keys/seeds on
+2026-10-22. The corrected runtime produced36 successes,7 budget failures,
+4 semantic mismatches and1 invalid action; its previous runtime produced32,
+11,3 and2 respectively. Thirty original successes remained successful, six
+failures became successes and two successes failed. Serving loads differed;
+these outcomes qualify the runtime correction without establishing a causal
+quality gain. All queues reached48 terminal outcomes; worker exit2 records
+failed task cases rather than an omitted queue.
+
+The guardian now declares the exact measured inventory
+`1a3edc32d9a46c57e2ce46eb45252654a19358ce07feeb7107e88b11e3ac3c2b`
+for future unreserved generation batches, beginning with batch2. Existing
+batches0 and1 retain their original runtime. The server and active collectors
+were preserved. The existing publisher runtime-epoch mechanism authenticates
+both old and new batches. Actual execution on batch2 remains a separate next
+observation; no historical held trace is cleared by this measurement.
+Evidence: `/home/werg/data/dgxops/flint-writer-runtime-live48-and-adoption-root-20261022.json`.
