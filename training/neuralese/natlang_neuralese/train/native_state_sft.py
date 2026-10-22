@@ -750,7 +750,13 @@ def _save(policy, model, optimizer, *, config, identity, step, epoch, cursor, so
     # Raw historical CE can be prompt dominated and is not the declared new
     # objective. Never let it silently nominate a best-policy export.
     metric = None if options.get('ce_supervision_active') else metrics.get('held', {}).get('loss')
-    policy.save(state, metric=metric, async_allowed=async_allowed, async_optimizer=optimizer)
+    # Preserve the synchronous CheckpointPolicy API for callers and test
+    # adapters which predate async checkpoints. The extra arguments are only
+    # meaningful when a cadence save was explicitly admitted asynchronously.
+    if async_allowed:
+        policy.save(state, metric=metric, async_allowed=True, async_optimizer=optimizer)
+    else:
+        policy.save(state, metric=metric)
 
 
 def qualify_precision_transition(model, tokenizer, roles, config, *, previous_precision,
@@ -1773,6 +1779,7 @@ def _main(argv=None, *, requested_refresh):
                     foundation_template['cohort_sha256'] not in prior_foundations and
                     not refresh_inherited_foundation and args.foundation_readiness_policy != 'on-shared-request')
     exception_boundary_safe = True
+    specialized_recovery_attempted = False
     loop_error = None
     loop_error_tb = None
     try:
@@ -1870,6 +1877,7 @@ def _main(argv=None, *, requested_refresh):
                 # batch has not reached native_training_update and earns nothing.
                 restore_training_rng_state(fetch_rng, args.device)
                 if step > resumed_step:
+                    specialized_recovery_attempted = True
                     failure_metrics = {'train_loss': train_loss, 'step': step,
                         'epoch': epoch, 'cursor': cursor,
                         'elapsed_seconds': time.time() - started,
@@ -1883,6 +1891,8 @@ def _main(argv=None, *, requested_refresh):
                             rng=fetch_rng, metrics=failure_metrics,
                             architecture=config['architecture'], options={**checkpoint_options, '_source_row_order': source_order},
                             fp8_state=backend.extra_state() if backend is not None else None, sft_progress=carried_progress)
+                        last_saved_step = step
+                        metadata_dirty = False
                     except Exception as save_error:
                         error.add_note(f'Completed-update recovery checkpoint failed: {save_error!r}')
                     finally:
@@ -1979,6 +1989,7 @@ def _main(argv=None, *, requested_refresh):
                     # This boundary follows a completed optimizer update and exact
                     # exposure accounting. Never checkpoint a partial failed update.
                     restore_training_rng_state(evaluation_rng, args.device)
+                    specialized_recovery_attempted = True
                     failure_metrics = {'train_loss': train_loss, 'step': step,
                         'epoch': epoch, 'cursor': cursor,
                         'elapsed_seconds': time.time() - started,
@@ -1992,6 +2003,8 @@ def _main(argv=None, *, requested_refresh):
                             rng=evaluation_rng, metrics=failure_metrics,
                             architecture=config['architecture'], options={**checkpoint_options, '_source_row_order': source_order},
                             fp8_state=backend.extra_state() if backend is not None else None, sft_progress=carried_progress)
+                        last_saved_step = step
+                        metadata_dirty = False
                     except Exception as save_error:
                         error.add_note(f'Completed-update recovery checkpoint failed: {save_error!r}')
                     raise
@@ -2089,7 +2102,8 @@ def _main(argv=None, *, requested_refresh):
     if loop_error is not None:
         if writer_error is not None:
             loop_error.add_note(f'background checkpoint writer also failed: {type(writer_error).__name__}: {writer_error}')
-        if exception_boundary_safe and (writer_error is not None or last_saved_step != step or metadata_dirty):
+        if exception_boundary_safe and not specialized_recovery_attempted and (
+                writer_error is not None or last_saved_step != step or metadata_dirty):
             try:
                 _save(policy, model, optimizer, config=config, identity=training_identity, step=step,
                     global_step=global_step, epoch=epoch, cursor=cursor, source_receipts=source_receipts,
