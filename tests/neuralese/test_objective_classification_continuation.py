@@ -199,6 +199,78 @@ def test_recipe_and_publication_recursively_bind_actual_proof_dependencies(combi
     with pytest.raises(ValueError):classification_proof_dependencies(ref)
 
 
+def test_dependency_enumeration_authenticates_shared_files_once_per_call(combined, monkeypatch):
+    from collections import Counter
+    from natlang_neuralese.train.native_classification_continuation import classification_proof_dependencies
+    _, _, _, prior, put, _ = combined
+    part = prior['indexes'][0]
+    ref = put(Path(part['source']['path']).parent / 'repeated-proof.json',
+              {'schema': m.SCHEMA, 'indexes': [part] * 100, 'held_indexes': []})
+    wanted = [ref, part['source'], part['old_index'], part['new_index'],
+              part['producer'], *part['old_policy'].values()]
+    expected = list({item['path']: m._binding(item['path']) for item in wanted}.values())
+    calls = Counter()
+    checked = m._checked
+    def check(value):
+        calls[value['path']] += 1
+        return checked(value)
+    monkeypatch.setattr(m, '_checked', check)
+    assert classification_proof_dependencies(ref) == expected
+    assert calls == Counter({item['path']: 1 for item in expected})
+    assert classification_proof_dependencies(ref) == expected
+    assert calls == Counter({item['path']: 2 for item in expected})
+
+
+@pytest.mark.parametrize('field,value', [('sha256', '0' * 64), ('bytes', 1)])
+def test_dependency_reuse_rejects_contradictory_occurrence(combined, field, value):
+    from natlang_neuralese.train.native_classification_continuation import classification_proof_dependencies
+    _, _, _, prior, put, _ = combined
+    part = copy.deepcopy(prior['indexes'][0])
+    # Both index references name the same actual file in this historical proof.
+    part['new_index'] = {**part['new_index'], field: value}
+    ref = put(Path(part['source']['path']).parent / 'conflicting-proof.json',
+              {'schema': m.SCHEMA, 'indexes': [part], 'held_indexes': []})
+    with pytest.raises(ValueError):
+        classification_proof_dependencies(ref)
+
+
+@pytest.mark.parametrize('fault', ['same-mtime', 'replacement', 'symlink-retarget'])
+def test_dependency_reuse_checks_all_files_again_before_return(combined, monkeypatch, fault):
+    import os
+    from natlang_neuralese.train.native_classification_continuation import classification_proof_dependencies
+    _, _, _, prior, put, _ = combined
+    part = copy.deepcopy(prior['indexes'][0])
+    source = Path(part['source']['path'])
+    if fault == 'symlink-retarget':
+        link = source.with_name('source-alias.jsonl')
+        link.symlink_to(source)
+        part['source'] = m._binding(link)
+    ref = put(source.parent / 'mutation-proof.json',
+              {'schema': m.SCHEMA, 'indexes': [part], 'held_indexes': []})
+    checked = m._checked
+    def check(value):
+        result = checked(value)
+        if value['path'] == part['producer']['path']:
+            raw = source.read_bytes()
+            state = source.stat()
+            if fault == 'same-mtime':
+                source.write_bytes(bytes([raw[0] ^ 1]) + raw[1:])
+                os.utime(source, ns=(state.st_atime_ns, state.st_mtime_ns))
+            else:
+                replacement = source.with_name('different-inode.jsonl')
+                replacement.write_bytes(raw)
+                os.utime(replacement, ns=(state.st_atime_ns, state.st_mtime_ns))
+                if fault == 'replacement':
+                    replacement.replace(source)
+                else:
+                    link.unlink()
+                    link.symlink_to(replacement)
+        return result
+    monkeypatch.setattr(m, '_checked', check)
+    with pytest.raises(ValueError, match='changed during enumeration'):
+        classification_proof_dependencies(ref)
+
+
 def test_historical_manifest_child_byte_annotation_is_not_intrinsic_authority(tmp_path):
     from natlang_neuralese.train.native_classification_continuation import _leaves
     source=tmp_path/'child.jsonl';source.write_text('immutable native graph source\n');ref=m._binding(source)

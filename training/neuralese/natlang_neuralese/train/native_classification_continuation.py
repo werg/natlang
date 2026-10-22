@@ -250,18 +250,31 @@ def verify_objective_proof_extension(old_inputs, new_inputs, prior, current):
 def classification_proof_dependencies(reference):
     """Exact recursively consumed classification/adapter/withdrawal artifacts."""
     from scripts.neuralese_data import continue_native_source_indexes as adapter
-    found, visiting = {}, set()
+    found, stamps, visiting, completed = {}, {}, set(), set()
+    def stamp(path):
+        return (path.resolve(strict=True), _index_signature(path))
     def add(ref):
-        path = m._checked(ref)
-        actual = m._binding(path)
-        if actual['path'] in found and found[actual['path']] != actual:
+        path = Path(ref['path'])
+        key = str(path)
+        before = stamp(path)
+        if key in found:
+            actual = found[key]
+            if (before != stamps[key] or ref['sha256'] != actual['sha256']
+                    or ('bytes' in ref and ref['bytes'] != actual['bytes'])):
+                raise ValueError('classification dependency changed during enumeration')
+            return path
+        m._checked(ref)
+        if stamp(path) != before:
             raise ValueError('classification dependency changed during enumeration')
-        found[actual['path']] = actual
+        actual = {'path': key, 'sha256': ref['sha256'], 'bytes': before[1][2]}
+        found[key] = actual
+        stamps[key] = before
         return path
     def visit(ref):
         path = add(ref)
         marker = (str(path.resolve()), ref['sha256'])
         if marker in visiting:raise ValueError('classification predecessor proof cycle')
+        if marker in completed:return
         visiting.add(marker)
         proof = json.loads(path.read_text())
         if proof.get('schema') != m.SCHEMA:
@@ -285,6 +298,10 @@ def classification_proof_dependencies(reference):
                 if not Path(evidence['path']).is_absolute():evidence['path']=str(withdrawal_path.parent/evidence['path'])
                 add(evidence)
         visiting.remove(marker)
-        m._checked(ref)
+        add(ref)
+        completed.add(marker)
     visit(reference)
+    for key, before in stamps.items():
+        if stamp(Path(key)) != before:
+            raise ValueError('classification dependency changed during enumeration')
     return list(found.values())
