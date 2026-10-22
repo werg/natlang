@@ -14,7 +14,7 @@ from pathlib import Path
 
 from ..common.jsonio import write_json_durable,write_bytes_durable
 from ..train.native_readiness import _bound
-from ..train.native_resident import binding,code_inventory
+from ..train.native_resident import binding,code_inventory,digest
 
 SCHEMA='natlang.native-completed-supervised-adaptation/1'
 SCHEMA_RAW='natlang.native-completed-raw-adaptation/1'
@@ -941,7 +941,8 @@ def _configure(plan_path,declaration,bootstrap,config_path):
         raise ValueError('completed runtime activation requires its explicit future provider declaration')
     future['completed_supervised_adaptation']=reference
     future['runtime_binding']={'plan_sha256':binding(plan_path)['sha256'],'handoff':bootstrap}
-    for key in('supervised_quantum_control','supervised_stage_quantum_control'):
+    unrebound_rl=copy.deepcopy(future.get('rl_scheduling_control'))
+    for key in('supervised_quantum_control','supervised_stage_quantum_control','rl_scheduling_control'):
         if key in future:
             declared=future[key].get('plan',{})
             old_authority=(declared.get('sha256')==proof['old_global_plan']['sha256']
@@ -953,6 +954,40 @@ def _configure(plan_path,declaration,bootstrap,config_path):
             future[key]={**future[key],'plan':binding(plan_path)}
     if prior==future:
         _install_resident_plan(proof,future)
+        save(path.parent/'bootstrap-verification.json',plan_path,declaration,bootstrap,future)
+        return path
+    legacy=copy.deepcopy(future)
+    if unrebound_rl is not None:
+        legacy['rl_scheduling_control']=unrebound_rl
+    if unrebound_rl is not None and prior==legacy and legacy!=future:
+        # The former configurator rebound the supervised controls but left RL
+        # pointing at preparation. Authenticate that exact candidate; do not
+        # reinterpret a later learner/configuration as this zero-update repair.
+        for key in('cursor','state'):
+            if binding(proof['controls'][key]['path'])!=proof['controls'][key]:
+                raise ValueError('completed RL control repair lost its unchanged earned boundary')
+        _no_active_operation(path.parent)
+        directory=path.parent/'completed-scheduling-control-rebindings'/digest(
+            {'adaptation':reference,'plan':binding(plan_path)})
+        directory.mkdir(parents=True,exist_ok=True)
+        for name,value in(('before.json',prior),('after.json',future)):
+            target=directory/name
+            if target.exists():
+                if json.loads(target.read_bytes())!=value:
+                    raise ValueError('completed RL control repair changed its recorded candidate')
+            else:write_json_durable(target,value)
+        intent={'schema':'natlang.completed-rl-control-rebinding/1',
+                'adaptation':reference,'plan':binding(plan_path),
+                'before':binding(directory/'before.json'),'after':binding(directory/'after.json'),
+                'cursor':proof['controls']['cursor'],'state':proof['controls']['state'],
+                'new_optimizer_updates':0,'new_exposure':0}
+        target=directory/'intent.json'
+        if target.exists():
+            if json.loads(target.read_bytes())!=intent:
+                raise ValueError('completed RL control repair changed its recorded authority')
+        else:write_json_durable(target,intent)
+        _install_resident_plan(proof,future)
+        write_json_durable(path,future)
         save(path.parent/'bootstrap-verification.json',plan_path,declaration,bootstrap,future)
         return path
     from ..train.native_resident import current

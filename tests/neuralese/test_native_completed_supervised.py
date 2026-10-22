@@ -1054,3 +1054,46 @@ def test_completed_continuation_retires_old_recipe_claims_without_changing_earne
         assert cursor == before_cursor
     assert checkpoint_files == {str(p): bridge.binding(p) for p in root.rglob('*.pt')}
     assert adapt.binding(receipt) == reference
+
+
+@pytest.mark.parametrize('legacy_fault',[None,'other-config','cursor','state'])
+def test_completed_independent_rl_rebinds_final_plan_and_repairs_exact_legacy(tmp_path,monkeypatch,legacy_fault):
+    from natlang_neuralese.rl import native_bootstrap_metadata
+    root,config,_,proof=prepared(tmp_path,runtime_package=Path(adapt.__file__).parents[1],
+        future_declaration_overrides={'rl_scheduling_policy':'independent-local-cycles-v1'})
+    value=adapt.verify(proof)
+    plan=json.loads(Path(value['future_global_plan']['path']).read_text())
+    declaration=plan['models'][0];declaration['completed_supervised_adaptation']=proof
+    final=tmp_path/'actual-global.json';write(final,plan)
+    monkeypatch.setattr(native_bootstrap_metadata,'save',lambda *args:None)
+    old=json.loads(config.read_text());bootstrap=old['bootstrap_binding']['handoff']
+    boundary=((root/'cycle.json').read_bytes(),(root/'production/state.json').read_bytes())
+    adapt.configure(final,declaration,bootstrap,config)
+    future=json.loads(config.read_text())
+    assert future['rl_scheduling_control']['policy']=='independent-local-cycles-v1'
+    for key in ('supervised_quantum_control','supervised_stage_quantum_control','rl_scheduling_control'):
+        if key in future:assert future[key]['plan']==adapt.binding(final)
+    assert boundary==((root/'cycle.json').read_bytes(),(root/'production/state.json').read_bytes())
+    legacy=copy.deepcopy(future)
+    legacy['rl_scheduling_control']=json.loads(Path(value['future_config']['path']).read_text())['rl_scheduling_control']
+    assert legacy!=future
+    if legacy_fault=='other-config':legacy['seed_trainer_parameters']['learning_rate']=0.123
+    elif legacy_fault in ('cursor','state'):
+        p=root/('cycle.json'if legacy_fault=='cursor'else'production/state.json')
+        changed=json.loads(p.read_text());changed['unauthorized-change']=True;write(p,changed)
+    write(config,legacy);before=config.read_bytes()
+    if legacy_fault:
+        with pytest.raises(ValueError):adapt.configure(final,declaration,bootstrap,config)
+        assert config.read_bytes()==before
+        return
+    adapt.configure(final,declaration,bootstrap,config)
+    assert json.loads(config.read_text())==future
+    assert boundary==((root/'cycle.json').read_bytes(),(root/'production/state.json').read_bytes())
+    receipts=list((root/'completed-scheduling-control-rebindings').glob('*/intent.json'))
+    assert len(receipts)==1
+    receipt=json.loads(receipts[0].read_text())
+    assert receipt['new_optimizer_updates']==0 and receipt['new_exposure']==0
+    assert adapt.binding(Path(receipt['before']['path']))==receipt['before']
+    assert json.loads(Path(receipt['after']['path']).read_text())==future
+    adapt.configure(final,declaration,bootstrap,config)
+    assert json.loads(config.read_text())==future
