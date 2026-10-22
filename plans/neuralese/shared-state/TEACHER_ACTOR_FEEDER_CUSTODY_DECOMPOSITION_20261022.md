@@ -15,10 +15,10 @@ allocations remain explicit; this change does not allocate or resize a server.
    declares a different endpoint or model alias. An unknown or changed identity
    remains a conflict. Only fully authenticated disjoint actors may overlap.
 4. Launch and publish the existing prepared feeder under the same short lock,
-   closing the scan/spawn race. Release the lock after owner publication; useful
+   closing the scan/spawn race for both initial and prefetched batches. Release the lock after owner publication; useful
    generation by distinct actors continues concurrently. Existing batch custody,
    process-token recovery, source selection, drain, transport and admission
-   checks remain unchanged.
+   checks remain unchanged. Recover repair actors using their recorded queue-worker basename, including versioned worker names, rather than assuming one historical filename.
 
 These steps are exact process custody and authentication mechanisms. The
 existing natural-language operations policy still chooses tasks and teachers.

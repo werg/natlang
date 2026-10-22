@@ -120,3 +120,65 @@ def test_exited_feeder_is_not_an_active_reservation(actors):
     child.terminate()
     child.wait(timeout=10)
     assert guardian.feeder_conflicts(other, config) is False
+
+
+@pytest.mark.parametrize('same_actor', [False, True])
+def test_prefetch_obeys_the_same_actor_custody_as_initial_launch(actors, tmp_path, monkeypatch, same_actor):
+    config, selected, independent, feeder, children = actors
+    feeder('previous-teacher', selected if same_actor else independent)
+    monkeypatch.setenv('PATH', str(Path(sys.executable).parent) + os.pathsep + os.environ.get('PATH', ''))
+    next_feeder = tmp_path / 'feed-evidence-prefetch.py'
+    next_feeder.write_text('import time\ntime.sleep(60)\n')
+    source = tmp_path / 'source.json'
+    guardian.write(source, {'fixture': 'immutable source'})
+    worker = tmp_path / 'run_bonsai_queue.py'
+    worker.write_text('# fixture worker bytes; not executed by the feeder stub\n')
+    config = {**config, 'root': str(tmp_path / 'generation')}
+    slot = {'token': os.urandom(12).hex(), 'batch': 1,
+        'feeder': guardian.binding(next_feeder), 'source_configuration': guardian.binding(source),
+        'task_runtime': '/qualified/task-runtime',
+        'collection_context': {'repo': str(tmp_path), 'node_bin': '/qualified/node/bin',
+                               'queue_worker': guardian.binding(worker)}}
+    popen = subprocess.Popen
+
+    def spawn(*args, **kwargs):
+        child = popen(*args, **kwargs)
+        children.append(child)
+        return child
+
+    monkeypatch.setattr(guardian.subprocess, 'Popen', spawn)
+    if same_actor:
+        with pytest.raises(ValueError, match='unowned feeder'):
+            guardian._spawn_primary_prefetch(tmp_path, {}, config, slot, 1)
+        assert 'owner' not in slot
+    else:
+        guardian._spawn_primary_prefetch(tmp_path, {}, config, slot, 1)
+        assert guardian.alive(slot['owner'])
+        assert children[-1].pid == slot['owner']['pid']
+
+
+def test_repair_recovery_uses_recorded_versioned_worker_after_config_change(tmp_path, monkeypatch):
+    queue = tmp_path / 'repairs/batch-0000/queue.jsonl'
+    queue.parent.mkdir(parents=True)
+    queue.write_text(json.dumps({'key': 'case-0', 'source': '/source', 'index': 0, 'seed': 7}) + '\n')
+    config = {'task_runtime': '/qualified/runtime', 'server': 'http://localhost:8001',
+        'model_id': 'fixture', 'node_bin': '/node/bin',
+        'queue_worker': '/controller/run_bonsai_queue-versioned-original.py'}
+    monkeypatch.setattr(guardian, 'recover_token', lambda *a, **k: None)
+    monkeypatch.setattr(guardian.subprocess, 'Popen',
+                        lambda *a, **k: (_ for _ in ()).throw(RuntimeError('before spawn')))
+    with pytest.raises(RuntimeError, match='before spawn'):
+        guardian._launch_one_repair(tmp_path, {}, config, source_queue=queue)
+    seen = []
+    owner = guardian.process(os.getpid())
+
+    def recover(token, *, script_prefix):
+        seen.append(script_prefix)
+        return owner
+
+    monkeypatch.setattr(guardian, 'recover_token', recover)
+    state = {}
+    guardian._launch_one_repair(tmp_path, state,
+        {**config, 'queue_worker': '/controller/run_bonsai_queue-future.py'}, source_queue=queue)
+    assert seen == ['run_bonsai_queue-versioned-original.py']
+    assert state['repair_owner']['pid'] == os.getpid()
