@@ -12,6 +12,7 @@ import { desugarNlCalls } from '../compiler/nl-call.js';
 import { pureLiteralEvalReturn } from '../compiler/neuralese-conversion.js';
 import { deriveInlineActionSpanMap } from '../compiler/inline-action-spans.js';
 import { formatType, parseType, type Type } from '../native/types.js';
+import { writtenReturnResult } from '../native/pseudo-call.js';
 
 export const NATIVE_TEACHER_TRAJECTORY_VERSION = 'natlang.teacher_trajectory.native/1';
 export const NATIVE_TEACHER_TURN_VERSION = 'natlang.teacher_training_turn.native/1';
@@ -924,6 +925,55 @@ function hasExactRawModelCall(source: Dict, call: Dict): boolean {
   return rawCalls.some(raw => rawModelCallMatches(raw, call));
 }
 
+/** Bind the runtime's literal written-return adapter to its exact captured model
+ * turn and terminal action. This is not a second parser: `writtenReturnResult`
+ * is the runtime parser, and the ledger/trace checks below establish that this
+ * exact child invocation carried it out. */
+function exactWrittenReturnAction(source: Dict, row: NativeRow, ledger: readonly Dict[], invocationId: string):
+  { arguments: Dict; event: Dict } | undefined {
+  const assistant = source.assistant && typeof source.assistant === 'object' ? source.assistant as Dict : {};
+  if (!Array.isArray(assistant.calls) || assistant.calls.length || typeof assistant.content !== 'string') return;
+  const response = source.model_response && typeof source.model_response === 'object' ? source.model_response as Dict : {};
+  if (!Array.isArray(response.raw_calls) || response.raw_calls.length || response.text !== assistant.content ||
+      typeof source.raw_response_sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(source.raw_response_sha256) ||
+      typeof source.request_sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(source.request_sha256)) return;
+  const request = writtenReturnResult(assistant.content);
+  if (!request || !Array.isArray(source.tools_offered) || !source.tools_offered.some(value => {
+    const tool = value && typeof value === 'object' ? value as Dict : {};
+    const fn = tool.function && typeof tool.function === 'object' ? tool.function as Dict : {};
+    return fn.name === 'return_result';
+  })) return;
+
+  const sameInvocationSteps = row.trajectory.filter(step => step && typeof step === 'object' &&
+    (step as Dict).invocation_id === invocationId);
+  const turnNumber = sameInvocationSteps.indexOf(source) + 1;
+  if (turnNumber <= 0) return;
+  const graph = Array.isArray(row.outcome.execution_graph) ? row.outcome.execution_graph as Dict[] : [];
+  const modelTurns = graph.filter(event => event.kind === 'model_turn' && event.call_id === invocationId &&
+    event.turn === turnNumber && typeof event.node === 'string');
+  if (modelTurns.length !== 1 || !Number.isSafeInteger(modelTurns[0]!.seq) ||
+      (modelTurns[0]!.text_chars !== assistant.content.length) ||
+      !Array.isArray(modelTurns[0]!.calls) || modelTurns[0]!.calls.length) return;
+
+  const invocations = Array.isArray(row.outcome.invocation_ledger) ? row.outcome.invocation_ledger as Dict[] : [];
+  const entries = invocations.filter(entry => entry.invocation_id === invocationId);
+  if (entries.length !== 1) return;
+  const receipt = entries[0]!;
+  const host = receipt.host_result && typeof receipt.host_result === 'object' ? receipt.host_result as Dict : undefined;
+  const parentId = receipt.parent_invocation_id ?? null;
+  if (host?.parent_call_id !== undefined && host.parent_call_id !== parentId) return;
+  const terminalSeq = host?.terminal_action_seq;
+  if (!Number.isSafeInteger(terminalSeq) || Number(terminalSeq) <= Number(modelTurns[0]!.seq)) return;
+  const candidates = ledger.filter(event => event.call_id === invocationId && event.name === 'return_result' &&
+    event.seq === terminalSeq && event.outcome === 'completed' && typeof event.tool_call_id === 'string' &&
+    canonical(event.arguments) === canonical(request));
+  if (candidates.length !== 1) return;
+  if (request.status === 'success' && (receipt.completion_status !== 'done' || !host ||
+      host.capture_kind !== 'invocation_output' || host.call_id !== invocationId || host.complete !== true ||
+      !Object.hasOwn(host, 'value') || canonical(host.value) !== canonical(request.value))) return;
+  return { arguments: request as Dict, event: candidates[0]! };
+}
+
 function rawModelCallMatches(raw: unknown, call: Dict): boolean {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return false;
   const fn = (raw as Dict).function;
@@ -1773,8 +1823,14 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
       // A decision that sees nothing but its opening starts a call: even a call identical to an earlier one (the
       // same instructions on the same input) has its own actions.
       if (!invocation && contextSource.length === openingLength(contextSource)) { claimed.delete(caller); sentBefore.delete(caller); }
-      const calls = Array.isArray(assistant.calls) ? assistant.calls.map((value, callIndex) => {
+      const explicitCalls = Array.isArray(assistant.calls) ? assistant.calls as Dict[] : [];
+      const writtenReturn = invocation && !explicitCalls.length ? exactWrittenReturnAction(source, row, ledger, invocation) : undefined;
+      const sourceCalls = writtenReturn ? [{ tool: 'return_result', source_tool: 'return_result',
+        arguments: writtenReturn.arguments, call_id: writtenReturn.event.tool_call_id,
+        __exact_assistant_text_pseudo_call: true }, ...explicitCalls] : explicitCalls;
+      const calls = sourceCalls.map((value, callIndex) => {
         const call = record(value, `${row.id}.trajectory[${index}].assistant.calls[${callIndex}]`);
+        const exactAssistantTextPseudoCall = call.__exact_assistant_text_pseudo_call === true;
         const normalized: Dict = { tool: String(call.tool ?? ''), source_tool: String(call.source_tool ?? call.tool ?? ''),
           arguments: structuredClone(call.arguments ?? {}), call_id: call.call_id ?? null };
         const exactRaw = hasExactRawModelCall(source, normalized);
@@ -1783,7 +1839,9 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
             softBodyActionMatches(normalized.arguments, candidate.arguments, row, invocation)) || (exactRaw && candidate.name === normalized.source_tool &&
             normalized.source_tool === 'return_result' && softReturnResultActionMatches(normalized.arguments,
               candidate.arguments, row, invocation, candidate)) || (exactRaw && candidate.name === normalized.source_tool &&
-            containsIncompleteDiagnostic(candidate.arguments)));
+            containsIncompleteDiagnostic(candidate.arguments)) || (exactAssistantTextPseudoCall && writtenReturn &&
+            candidate.name === 'return_result' && candidate.call_id === invocation && candidate.seq === writtenReturn.event.seq &&
+            canonical(candidate.arguments) === canonical(writtenReturn.arguments)));
         const projectedOutcome = [...logs.keys()].some(key => !owners.has(key) &&
           logs.get(key)![next.get(key) ?? 0]?.name === normalized.source_tool &&
           containsIncompleteDiagnostic(logs.get(key)![next.get(key) ?? 0]?.arguments));
@@ -1810,6 +1868,7 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
           const eventDiagnostics = Array.isArray(event.diagnostics) ? structuredClone(event.diagnostics) : [];
           normalized.outcome = { event_index: ledger.indexOf(event), trace_seq: event.seq ?? null,
             ...(typeof event.tool_call_id === 'string' ? { tool_call_id: event.tool_call_id } : {}),
+            ...(exactAssistantTextPseudoCall ? { arguments_source: 'exact-assistant-text-pseudo-call' } : {}),
             name: event.name, arguments: structuredClone(eventArguments ?? {}),
             ...(containsIncompleteDiagnostic(event.arguments) ? { arguments_source: 'exact_raw_model_call' } : {}),
             ...(typedResultWrites?.length ? { typed_result_writes: structuredClone(typedResultWrites) } : {}),
@@ -1826,7 +1885,7 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
           status: log === undefined && [...logs.keys()].every(key => owners.has(key)) ? 'not_recorded' : 'not_executed',
           result: null, diagnostics: [] };
         return normalized;
-      }) : [];
+      });
 
       const invocationReturnType = invocation ?
         ((instructionSites.get(invocation) as Dict | undefined)?.returns ?? contextDeclaredReturnType(contextSource)) :
