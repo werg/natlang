@@ -511,7 +511,20 @@ class MuonSR(LionSR):
         parameters = {index: parameter
                       for previous, current in zip(state_dict['param_groups'], self.param_groups)
                       for index, parameter in zip(previous['params'], current['params'])}
-        super().load_state_dict(state_dict)
+        # These tensors must retain saved precision and own their storage.
+        # Passing them through Torch first transfers/casts them once only to
+        # discard that result below. Restore them directly after its ordinary
+        # state/group handling instead. Keep the old path when hooks exist:
+        # hooks must continue to observe the complete state at the same point.
+        has_hooks = (self._optimizer_load_state_dict_pre_hooks
+                     or self._optimizer_load_state_dict_post_hooks)
+        ordinary = state_dict if has_hooks else {
+            **state_dict,
+            'state': {index: {key: value for key, value in entry.items()
+                              if key not in saved[index]}
+                      for index, entry in state_dict['state'].items()},
+        }
+        super().load_state_dict(ordinary)
         for index, values in saved.items():
             for key, value in values.items():
                 self.state[parameters[index]][key] = value.to(parameters[index].device, copy=True)
