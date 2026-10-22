@@ -170,3 +170,26 @@ policy operation actually advanced28181 to28182 with its original captured
 on-policy episodes; LFM's R22 production continuation advanced past25037.
 Neither statement is a claim of whole-recipe completion or measured capability
 lift.
+
+## Integration on 2026-10-22
+
+The sixth verified wave contains 423 LFM graphs and 422 Mellum graphs from nine
+Flint tranches. Mellum adopted its addition at step 29013. LFM adopted its
+addition at step 26559, bringing its active obligations to 1,551,338 TRAIN /
+25,955 held; Mellum's active obligations are 1,466,292 TRAIN / 25,968 held.
+These are actual resident adoptions with optimizer/RNG and prior exposure
+retained, not completed new-row exposure or measured capability gains. The LFM
+adoption evidence is
+`/home/werg/data/dgxops/lfm-r22-sixth-wave423-actual-adoption-root-20261022.json`.
+
+A seventh wave of 285 LFM / 284 Mellum graphs passed the standard consumer,
+classification, transport and eligibility checks. LFM's first optional
+preparation exceeded its 7 GiB anonymous-memory ceiling by about 45 MiB while
+the actual headroom checks still passed. The shared preparer now permits 8 GiB,
+retains its existing available-memory and cgroup reserve guards, and reports
+its active phase correctly. A fresh immutable LFM preparation is underway;
+Mellum awaits its next actual SFT owner. Neither seventh-wave addition has been
+claimed as learner exposure. Evidence:
+`/home/werg/data/dgxops/teacher-seventh-wave-normal-ready-pipeline-20261021/terminal.json`
+and
+`/home/werg/data/dgxops/source-preparation-measured-memory-and-phase-repair-root-20261022.json`.
