@@ -177,6 +177,202 @@ def refresh(directory, request, *, runtime_package=None, old_cache_root=None, pu
         return {'request':new_ref,'receipt':resident.binding(proof_path),'published':publish}
 
 
+def recover_saved_workspace(directory, *, checkpoint, qualification, failed_request,
+                            failed_result, captured_owner, out, reason, runtime_package=None):
+    """Recover only qualified FFN workspace metadata; keep the failed owner failed."""
+    import time
+    from ..rl import native_bridge as bridge, native_raw_handoff as hand
+    from ..rl.native_raw_policy import require_raw_training
+    from .checkpoint_policy import CheckpointPolicy
+
+    if not isinstance(reason, str) or not reason.strip():
+        raise ValueError('saved workspace recovery needs its practical reason')
+    directory = Path(directory).resolve()
+    package = Path(runtime_package or Path(resident.__file__).resolve().parents[1])
+    out = Path(out)
+    control = out.parent / (out.stem + '-control')
+    for reference in (checkpoint, qualification, failed_request, failed_result, captured_owner):
+        path = resident.bound(reference)
+        if 'bytes' in reference and path.stat().st_size != reference['bytes']:
+            raise ValueError('saved workspace recovery input byte count changed')
+    request = bridge.read_request(resident.bound(failed_request))
+    result = json.loads(resident.bound(failed_result).read_bytes())
+    config = json.loads(resident.bound(request['config']).read_bytes())
+    intent, _, identities = hand._captured_owner_controls(captured_owner)
+    if (request.get('kind') != 'round' or result.get('schema') != bridge.RESULT_SCHEMA
+            or result.get('status') != 'failed' or result.get('kind') != 'round'
+            or result.get('request_id') != request['request_id']
+            or result.get('request_sha256') != failed_request['sha256']
+            or Path(config.get('resident_data_directory', '')).resolve() != directory
+            or Path(config['out']).resolve() != Path(request['out']).resolve()
+            or any(checkpoint[key] != request['parent_checkpoint'][key] for key in ('path', 'sha256'))):
+        raise ValueError('saved workspace recovery lost its actual failed operation/parent')
+
+    learner_out = Path(request['out']) / 'learner'
+    if ((learner_out / 'progress.json').exists()
+            or any(Path(item['path']) == learner_out / 'progress.json' for item in result.get('artifacts', []))
+            or any(Path(item['path']) == learner_out / 'checkpoint.pt' and item['sha256'] != checkpoint['sha256']
+                   for item in result.get('artifacts', []))):
+        raise ValueError('saved workspace recovery cannot discard newer optimizer progress')
+
+    def require_exited():
+        if any(hand.same_process(owner, actual := hand.observe(owner['pid']))
+               and actual['state'] not in ('Z', 'X') for owner in identities):
+            raise ValueError('saved workspace recovery requires every actual owner to exit')
+
+    def artifact(reference):
+        actual = resident.binding(resident.bound(reference))
+        if not any(all(item.get(key) == actual[key] for key in ('path', 'sha256'))
+                   for item in result.get('artifacts', [])):
+            raise ValueError('workspace qualification is absent from actual failed operation artifacts')
+        return json.loads(resident.bound(reference).read_bytes())
+
+    require_exited()
+    transaction = {'checkpoint': checkpoint, 'qualification': qualification,
+        'failed_request': failed_request, 'failed_result': failed_result,
+        'captured_owner': captured_owner, 'reason': reason, 'directory': str(directory)}
+    with resident.locked(directory):
+        if out.exists():
+            committed = json.loads(out.read_bytes())
+            old = json.loads(resident.bound(committed['intent']).read_bytes())
+            if old.get('transaction') != transaction:
+                raise ValueError('saved workspace recovery retry changed its exact transaction')
+            candidate = json.loads(resident.bound(committed['candidate']).read_bytes())
+            actual = json.loads((directory / 'initial.json').read_bytes())
+            # A later normal restart may update owner/history but must retain
+            # the exact installed workspace and this immutable recovery intent.
+            if any(actual.get(key) != candidate.get(key) for key in
+                   ('geometry_identity', 'geometry_qualification', 'geometry_recoveries')):
+                raise ValueError('saved workspace recovery was superseded by another authority')
+            return resident.binding(out)
+        intent_path = control / 'intent.json'
+        if intent_path.exists():
+            unfinished = json.loads(intent_path.read_bytes())
+            if (unfinished.get('schema') != 'natlang.saved-workspace-recovery-intent/1'
+                    or unfinished.get('transaction') != transaction
+                    or unfinished.get('actor_source') != resident.binding(__file__)):
+                raise ValueError('saved workspace recovery unfinished transaction changed')
+            before = json.loads(resident.bound(unfinished['original_initial']).read_bytes())
+            expected = {**before, 'geometry_identity': unfinished['new_geometry_identity'],
+                'geometry_qualification': unfinished['new_geometry_qualification'],
+                'geometry_recoveries': [*(before.get('geometry_recoveries') or []), resident.binding(intent_path)]}
+            current_initial = json.loads((directory / 'initial.json').read_bytes())
+            if current_initial == expected:
+                if (resident.binding(directory / 'current.json') != unfinished['original_current']
+                        or (resident.binding(directory / 'pending.json') if (directory / 'pending.json').exists() else None)
+                           != unfinished['retained_pending']):
+                    raise ValueError('resident data authority changed during unfinished workspace commit')
+                candidate_path = control / 'candidate-initial.json'
+                if json.loads(resident.bound(resident.binding(candidate_path)).read_bytes()) != expected:
+                    raise ValueError('saved workspace candidate changed during unfinished commit')
+                resident.write_json(out, {'schema': 'natlang.saved-workspace-recovery/1',
+                    'intent': resident.binding(intent_path), 'candidate': resident.binding(candidate_path),
+                    'installed_initial': resident.binding(directory / 'initial.json'),
+                    'changed_fields': ['geometry_identity', 'geometry_qualification', 'geometry_recoveries'],
+                    'training_credit': 0, 'readiness_granted': False, 'original_operation_still_failed': True})
+                return resident.binding(out)
+            if current_initial != before:
+                raise ValueError('saved workspace recovery found another initial authority')
+        initial_ref = resident.binding(directory / 'initial.json')
+        initial = json.loads(resident.bound(initial_ref).read_bytes())
+        state_ref = resident.binding(directory / 'current.json')
+        state = resident.current(directory)
+        pending = resident.binding(directory / 'pending.json') if (directory / 'pending.json').exists() else None
+        owner = next((item for item in identities if hand.same_process(initial.get('owner', {}), item)), None)
+        if owner is None or resident.owner_alive(initial.get('owner') or {}):
+            raise ValueError('resident initial lost its actual exited captured optimizer owner')
+        argv = hand.process_argv(owner)
+        learner = Path(request['out']) / 'learner'
+        if (argv.count('--out') != 1 or argv[argv.index('--out') + 1] != str(learner)
+                or 'natlang_neuralese.train.native_state_sft' not in argv
+                or config.get('production_stage') != initial['stage_id']
+                or state['payload']['stage_id'] != initial['stage_id']):
+            raise ValueError('saved workspace recovery captured a different actual trainer/stage')
+    plan = state['payload']['plan']
+    if resident.code_inventory(package) != plan['code']:
+        raise ValueError('saved workspace recovery frozen runtime changed')
+    certificate = artifact(qualification)
+    proposed = certificate.get('identity')
+    previous = initial.get('geometry_identity')
+    if (not isinstance(proposed, dict) or not isinstance(previous, dict)
+            or {k: v for k, v in proposed.items() if k != 'ffn_chunk_tokens'} !=
+               {k: v for k, v in previous.items() if k != 'ffn_chunk_tokens'}
+            or type(proposed.get('ffn_chunk_tokens')) is not int
+            or proposed['ffn_chunk_tokens'] < 1
+            or config['trainer_parameters'].get('ffn_chunk_tokens') != proposed['ffn_chunk_tokens']):
+        raise ValueError('saved workspace recovery permits only the explicitly qualified FFN chunk change')
+    limits = resident.geometry_capacity(qualification, identity=proposed, code=plan['code'])
+    proof = artifact(certificate['evidence'])
+    if (proof.get('schema') != 'natlang.native-memory-qualification/1'
+            or proof.get('passed') is not True or proof.get('optimizer_updates') != 0
+            or proof.get('parent_checkpoint_sha256') != checkpoint['sha256']
+            or proof.get('identity') != proposed or proof.get('runtime_code_sha256') != resident.digest(plan['code'])
+            or (proof.get('numerical_reference') or {}).get('passed') is not True
+            or (proof.get('capacity') or {}).get('passed') is not True
+            or proof.get('request') not in config['trainer_parameters'].get('memory_qualification', [])):
+        raise ValueError('saved workspace recovery needs actual unchanged-parent numerical/capacity proof')
+    memory_request = json.loads(resident.bound(proof['request']).read_bytes())
+    cases = (proof.get('capacity') or {}).get('cases') or []
+    expected_cases = memory_request.get('cases') or []
+    if (not cases or len(cases) != len(expected_cases)
+            or any(case.get('status') != 'passed' or
+                   any(case.get(key) != expected.get(key) for key in ('id', 'forward_tokens', 'kv_slots'))
+                   for case, expected in zip(cases, expected_cases))
+            or limits != {key: max(case[key] for case in cases) for key in limits}):
+        raise ValueError('saved workspace recovery certificate lost its actual complete maximum graph cases')
+    if any(state['payload']['geometry'][key] > limits[key] for key in limits):
+        raise ValueError('saved workspace recovery capacity does not cover the adopted data geometry')
+    saved = CheckpointPolicy.load(resident.bound(checkpoint))
+    training = require_raw_training(saved)
+    counts = training.get('exposure_counts') or {}
+    rows = training.get('source_row_bindings') or {}
+    order = training.get('source_row_order') or []
+    adoption = (training.get('options') or {}).get('resident_adoption') or {}
+    if (saved.get('model_config') != proposed.get('model_config')
+            or not rows or set(counts) != set(rows) or len(order) != len(rows) or set(order) != set(rows)
+            or any(type(n) is not int or n < 0 for n in counts.values())
+            or not training.get('held_row_bindings') or saved.get('step') != training.get('global_step')
+            or training['global_step'] < state['at_global_step']
+            or adoption != {'generation': state['generation'], 'history': state['history']}
+            or any(training['source_receipts'][index]['sha256'] != state['payload'][role]['sha256']
+                   for index, role in enumerate(('train', 'held')))):
+        raise ValueError('saved workspace recovery lost actual saved adoption/exposure/source authority')
+    del saved
+    with resident.locked(directory):
+        require_exited()
+        if (resident.binding(directory / 'initial.json') != initial_ref
+                or resident.binding(directory / 'current.json') != state_ref
+                or (resident.binding(directory / 'pending.json') if (directory / 'pending.json').exists() else None) != pending):
+            raise ValueError('resident authority changed during saved workspace verification')
+        control.mkdir(parents=True, exist_ok=True)
+        before = control / 'original-initial.json'
+        write_bytes_durable(before, resident.bound(initial_ref).read_bytes())
+        intent_path = control / 'intent.json'
+        recovery = {'schema': 'natlang.saved-workspace-recovery-intent/1', 'at': time.time(),
+            'transaction': transaction, 'actor_source': resident.binding(__file__), 'original_initial': resident.binding(before),
+            'original_current': state_ref, 'retained_pending': pending,
+            'new_geometry_identity': proposed, 'new_geometry_qualification': qualification,
+            'saved_global_step': training['global_step'], 'training_credit': 0,
+            'readiness_granted': False, 'original_operation_still_failed': True}
+        if intent_path.exists():
+            prior_intent = json.loads(intent_path.read_bytes())
+            if {k: v for k, v in prior_intent.items() if k != 'at'} != {k: v for k, v in recovery.items() if k != 'at'}:
+                raise ValueError('saved workspace recovery intent changed on retry')
+        else:
+            resident.write_json(intent_path, recovery)
+        candidate = {**initial, 'geometry_identity': proposed, 'geometry_qualification': qualification,
+            'geometry_recoveries': [*(initial.get('geometry_recoveries') or []), resident.binding(intent_path)]}
+        candidate_path = control / 'candidate-initial.json'
+        resident.write_json(candidate_path, candidate)
+        resident.write_json(directory / 'initial.json', candidate)
+        resident.write_json(out, {'schema': 'natlang.saved-workspace-recovery/1',
+            'intent': resident.binding(intent_path), 'candidate': resident.binding(candidate_path),
+            'installed_initial': resident.binding(directory / 'initial.json'),
+            'changed_fields': ['geometry_identity', 'geometry_qualification', 'geometry_recoveries'],
+            'training_credit': 0, 'readiness_granted': False, 'original_operation_still_failed': True})
+    return resident.binding(out)
+
+
 def main(argv=None):
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--directory',type=Path,required=True)

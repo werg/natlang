@@ -1,6 +1,7 @@
 """Durable boundary supervision for the existing self-hosted teacher feeder."""
 from __future__ import annotations
 import argparse
+from contextlib import contextmanager
 import fcntl
 import hashlib
 import json
@@ -8,6 +9,7 @@ import math
 import os
 from pathlib import Path
 import subprocess
+import tempfile
 import time
 import uuid
 try:
@@ -325,6 +327,56 @@ def _source_sequence_helpers():
     return teacher_source_sequence
 
 
+def _teacher_actor_owners(reference, *, server, model_id):
+    actual = binding(reference['path'])
+    if any(actual[key] != reference[key] for key in ('path', 'sha256')) or (
+            'bytes' in reference and actual['bytes'] != reference['bytes']):
+        raise ValueError('feeder teacher identity binding changed')
+    proof = verify_teacher_identity(reference['path'], server=server, model_id=model_id)
+    return frozenset((owner['boot_id'], owner['pid'], owner['start_ticks'])
+                     for owner in proof['processes'])
+
+
+def feeder_conflicts(current, config):
+    """Allow concurrent feeders only for authenticated disjoint live actors."""
+    if not config.get('teacher_identity'):
+        return True  # Unknown historical declarations keep exclusive custody.
+    selected = _teacher_actor_owners(config['teacher_identity'],
+        server=config['server'], model_id=config['model_id'])
+    try:
+        fields = (Path('/proc') / str(current['pid']) / 'environ').read_bytes().split(b'\0')
+        names = {b'NATLANG_TEACHER_SOURCE_BINDING', b'NATLANG_TEACHER_IDENTITY',
+                 b'NATLANG_TEACHER_SERVER', b'NATLANG_TEACHER_MODEL_ID'}
+        declared = {pair.split(b'=', 1)[0]: pair.split(b'=', 1)[1].decode()
+                    for pair in fields if b'=' in pair and pair.split(b'=', 1)[0] in names}
+        server = declared[b'NATLANG_TEACHER_SERVER']
+        model_id = declared[b'NATLANG_TEACHER_MODEL_ID']
+        identity = declared[b'NATLANG_TEACHER_IDENTITY']
+        source = load_teacher_source(json.loads(declared[b'NATLANG_TEACHER_SOURCE_BINDING']),
+            identity=identity, server=server, model_id=model_id)
+        other = _teacher_actor_owners(source['execution_identity'], server=server, model_id=model_id)
+    except (OSError, KeyError, ValueError, TypeError):
+        # A naturally exited feeder is no longer a competing owner. Otherwise
+        # incomplete provenance must never become permission for another feeder.
+        return alive(current)
+    observed = process(current['pid'])
+    if observed is None:
+        return False
+    if (not alive(current) or observed['argv'] != current['argv']):
+        return True
+    return bool(selected & other)
+
+
+@contextmanager
+def feeder_launch_lease():
+    """Serialize scan/spawn/publication; independent actors do not share a run lease."""
+    directory = Path(tempfile.gettempdir()) / 'natlang-teacher-feeder-custody'
+    directory.mkdir(mode=0o700, exist_ok=True)
+    with (directory / 'launch.lock').open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        yield
+
+
 def launch_feeder(folder, state, config, batch):
     target = folder/'state.json'
     launch = state.get('prepared_launch')
@@ -345,25 +397,26 @@ def launch_feeder(folder, state, config, batch):
         if config.get('source_sequence'):
             _source_sequence_helpers().prepare_source_sequence(folder,state,config,batch)
         launch = {'batch': batch, 'token': uuid.uuid4().hex}; state['prepared_launch'] = launch; write(target, state)
-    for root in Path('/proc').iterdir():
-        if not root.name.isdigit(): continue
-        current = process(root.name)
-        if current and any(Path(arg.decode(errors='replace')).name.startswith('feed-evidence-') for arg in current['argv'][:5]):
-            raise ValueError('another live feeder already owns generation')
-    env = {**os.environ, TOKEN: launch['token'], 'NATLANG_TEACHER_START_BATCH': str(batch),
-           'NATLANG_TEACHER_SINGLE_BATCH': '1', 'NATLANG_TEACHER_TASK_RUNTIME': config['task_runtime'],
-           'NATLANG_TEACHER_IDENTITY':config['teacher_identity']['path']}
-    env.update(teacher_environment(config))
-    if config.get('source_sequence'):
-        _source_sequence_helpers().verify_prepared_source(state,config,batch)
-    log = (folder/'feeder.log').open('ab')
-    child = subprocess.Popen(['nice', '-n', '10', 'python', '-u', config['feeder']],
-        env=env, stdout=log, stderr=log, start_new_session=True)
-    identity = process(child.pid)
-    if identity is None: raise ValueError('new feeder exited before process identity publication')
-    state.update(owner=public_identity(identity), active_batch=batch, feeder=binding(config['feeder']),
-        task_runtime=config['task_runtime']); state.pop('prepared_launch', None); write(target, state)
-    if record_primary_phase(state,config):write(target,state)
+    with feeder_launch_lease():
+        for root in Path('/proc').iterdir():
+            if not root.name.isdigit(): continue
+            current = process(root.name)
+            if current and any(Path(arg.decode(errors='replace')).name.startswith('feed-evidence-') for arg in current['argv'][:6]) and feeder_conflicts(current, config):
+                raise ValueError('another live feeder already owns this actor or lacks verified independent custody')
+        env = {**os.environ, TOKEN: launch['token'], 'NATLANG_TEACHER_START_BATCH': str(batch),
+               'NATLANG_TEACHER_SINGLE_BATCH': '1', 'NATLANG_TEACHER_TASK_RUNTIME': config['task_runtime'],
+               'NATLANG_TEACHER_IDENTITY':config['teacher_identity']['path']}
+        env.update(teacher_environment(config))
+        if config.get('source_sequence'):
+            _source_sequence_helpers().verify_prepared_source(state,config,batch)
+        log = (folder/'feeder.log').open('ab')
+        child = subprocess.Popen(['nice', '-n', '10', 'python', '-u', config['feeder']],
+            env=env, stdout=log, stderr=log, start_new_session=True)
+        identity = process(child.pid)
+        if identity is None: raise ValueError('new feeder exited before process identity publication')
+        state.update(owner=public_identity(identity), active_batch=batch, feeder=binding(config['feeder']),
+            task_runtime=config['task_runtime']); state.pop('prepared_launch', None); write(target, state)
+        if record_primary_phase(state,config):write(target,state)
 
 def repair_outcomes(queue, journal):
     entries = [json.loads(line) for line in queue.read_text().splitlines() if line]
@@ -387,7 +440,7 @@ def _launch_one_repair(folder, state, config, *, source_queue=None, per_batch_lo
         if receipt['source_queue'] != binding(source_queue): raise ValueError('repair source queue changed')
         attempt = receipt.get('current')
         if attempt:
-            recovered = recover_token(attempt['token'], script_prefix='run_bonsai_queue.py')
+            recovered = recover_token(attempt['token'], script_prefix=Path(attempt.get('queue_worker',config['queue_worker'])).name)
             if recovered:
                 attempt['owner'] = public_identity(recovered); attempt['state'] = 'launched'
                 state['repair_owner'] = attempt['owner']; write(receipt_path, receipt); write(folder/'state.json', state); return
@@ -493,7 +546,7 @@ def launch_repair(folder, state, config):
         # A live flock wrapper and its token-bearing Python child are ONE
         # trajectory. Preserve its authenticated stored owner before recovery.
         recovered = None if alive(owner) else recover_token(
-            attempt['token'], script_prefix='run_bonsai_queue.py')
+            attempt['token'], script_prefix=Path(attempt.get('queue_worker',config['queue_worker'])).name)
         if recovered:
             owner = public_identity(recovered)
         if not alive(owner):
@@ -965,38 +1018,39 @@ def _spawn_primary_prefetch(folder,state,config,slot,workers):
     if config.get('drain_file')and Path(config['drain_file']).exists():return
     if binding(slot['feeder']['path'])!=slot['feeder']:
         raise ValueError('reserved feeder mechanism changed')
-    for item in Path('/proc').iterdir():
-        if not item.name.isdigit():continue
-        current=process(item.name)
-        if not current:continue
-        is_feeder=any(Path(arg.decode(errors='replace')).name.startswith('feed-evidence-')
-            or arg.decode(errors='replace')==slot['feeder']['path']for arg in current['argv'][:5])
-        owners=[state.get('owner'),*[item.get('owner')for item in primary_ahead_slots(state).values()]]
-        if is_feeder and public_identity(current)not in owners:
-            raise ValueError('unowned feeder prevents next-batch overlap')
-    if binding(slot['source_configuration']['path'])!=slot['source_configuration']:
-        raise ValueError('reserved immutable source configuration changed')
-    context=slot['collection_context']
-    if binding(context['queue_worker']['path'])!=context['queue_worker']:
-        raise ValueError('reserved collection queue worker changed')
-    env={**os.environ,TOKEN:slot['token'],'NATLANG_TEACHER_START_BATCH':str(slot['batch']),
-        'NATLANG_TEACHER_SINGLE_BATCH':'1','NATLANG_TEACHER_TASK_RUNTIME':slot['task_runtime'],
-        'NATLANG_TEACHER_GUARDIAN_MODULE_ROOT':str(Path(__file__).parent),
-        'NATLANG_TEACHER_GENERATION_ROOT':config['root'],'NATLANG_REPO':context['repo'],
-        'NATLANG_TEACHER_QUEUE_WORKER':context['queue_worker']['path'],'NATLANG_TEACHER_NODE_BIN':context['node_bin'],
-        'NATLANG_TEACHER_IDENTITY':config['teacher_identity']['path'],
-        'NATLANG_TEACHER_SOURCE_CONFIGURATION':slot['source_configuration']['path'],
-        'NATLANG_TEACHER_SOURCE_CONFIGURATION_SHA256':slot['source_configuration']['sha256'],
-        'NATLANG_TEACHER_SOURCE_CONFIGURATION_BYTES':str(slot['source_configuration']['bytes']),
-        'NATLANG_TEACHER_WORKER_COUNT':str(workers)}
-    env.update(teacher_environment(config))
-    verify_teacher_identity(config['teacher_identity']['path'],server=config['server'],model_id=config['model_id'])
-    log=(Path(folder)/f"prefetch-{slot['batch']:04d}.log").open('ab')
-    child=subprocess.Popen(['nice','-n','10','python','-u',slot['feeder']['path']],
-        env=env,stdout=log,stderr=log,start_new_session=True)
-    identity=process(child.pid)
-    if identity is None:raise ValueError('reserved feeder exited before custody publication')
-    slot['owner']=public_identity(identity);write(Path(folder)/'state.json',state)
+    with feeder_launch_lease():
+        for item in Path('/proc').iterdir():
+            if not item.name.isdigit():continue
+            current=process(item.name)
+            if not current:continue
+            is_feeder=any(Path(arg.decode(errors='replace')).name.startswith('feed-evidence-')
+                or arg.decode(errors='replace')==slot['feeder']['path']for arg in current['argv'][:6])
+            owners=[state.get('owner'),*[item.get('owner')for item in primary_ahead_slots(state).values()]]
+            if is_feeder and public_identity(current)not in owners and feeder_conflicts(current,config):
+                raise ValueError('unowned feeder prevents next-batch overlap')
+        if binding(slot['source_configuration']['path'])!=slot['source_configuration']:
+            raise ValueError('reserved immutable source configuration changed')
+        context=slot['collection_context']
+        if binding(context['queue_worker']['path'])!=context['queue_worker']:
+            raise ValueError('reserved collection queue worker changed')
+        env={**os.environ,TOKEN:slot['token'],'NATLANG_TEACHER_START_BATCH':str(slot['batch']),
+            'NATLANG_TEACHER_SINGLE_BATCH':'1','NATLANG_TEACHER_TASK_RUNTIME':slot['task_runtime'],
+            'NATLANG_TEACHER_GUARDIAN_MODULE_ROOT':str(Path(__file__).parent),
+            'NATLANG_TEACHER_GENERATION_ROOT':config['root'],'NATLANG_REPO':context['repo'],
+            'NATLANG_TEACHER_QUEUE_WORKER':context['queue_worker']['path'],'NATLANG_TEACHER_NODE_BIN':context['node_bin'],
+            'NATLANG_TEACHER_IDENTITY':config['teacher_identity']['path'],
+            'NATLANG_TEACHER_SOURCE_CONFIGURATION':slot['source_configuration']['path'],
+            'NATLANG_TEACHER_SOURCE_CONFIGURATION_SHA256':slot['source_configuration']['sha256'],
+            'NATLANG_TEACHER_SOURCE_CONFIGURATION_BYTES':str(slot['source_configuration']['bytes']),
+            'NATLANG_TEACHER_WORKER_COUNT':str(workers)}
+        env.update(teacher_environment(config))
+        verify_teacher_identity(config['teacher_identity']['path'],server=config['server'],model_id=config['model_id'])
+        log=(Path(folder)/f"prefetch-{slot['batch']:04d}.log").open('ab')
+        child=subprocess.Popen(['nice','-n','10','python','-u',slot['feeder']['path']],
+            env=env,stdout=log,stderr=log,start_new_session=True)
+        identity=process(child.pid)
+        if identity is None:raise ValueError('reserved feeder exited before custody publication')
+        slot['owner']=public_identity(identity);write(Path(folder)/'state.json',state)
 
 
 def maintain_primary_prefetch(folder,state,config):
