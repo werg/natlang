@@ -1827,7 +1827,7 @@ def _release_requirement(declaration,value,*,verified_handoff=None):
     """Recheck the existing resident append contract, preserving fixed foundation."""
     requirement={**declaration['handoff_requirement'],'trainer_exit':None,'trainer_launch':None,'resident_adoption':None}
     transition_ref=declaration.get('drained_recipe_handoff')
-    transition_handoff=None;retired_cursor=None;transition=None;completed_cursor=None
+    transition_handoff=None;retired_cursor=None;transition=None;completed_cursor=None;adapted=None
     if declaration.get('runtime_handoff'):
         from .native_runtime_handoff import verify_runtime_handoff
         runtime=json.loads(_bound(declaration['runtime_handoff']).read_text())
@@ -1871,10 +1871,12 @@ def _release_requirement(declaration,value,*,verified_handoff=None):
     if completed_cursor is not None and reference==completed_cursor:return requirement
     from .native_supervised_boundary import release_requirement
     requirement=release_requirement(requirement,value)
-    return _resident_release_requirement(requirement,value,transition=transition)
+    return _resident_release_requirement(requirement,value,transition=transition,
+        replay_package=(adapted['package']if adapted is not None else
+                        transition['new_package']if transition is not None else None))
 
 
-def _resident_release_requirement(requirement,value,*,transition=None):
+def _resident_release_requirement(requirement,value,*,transition=None,replay_package=None):
     """Metadata-only committed source history, after caller authenticates its root."""
     reference=value.get('resident_current')
     if reference is None:return requirement
@@ -1890,13 +1892,30 @@ def _resident_release_requirement(requirement,value,*,transition=None):
     if stage not in requirement['stage_ids']:raise ValueError('raw release adopted another production stage')
     bindings=[payload['prior_recipe'],*[item['recipe'] for item in state['history']]]
     start=next((index for index,item in enumerate(bindings) if item['sha256']==requirement['recipe_sha256']),None)
+    historical={}
+    if replay_package is not None:
+        from ..train import native_classification_continuation as reader
+        from ..train.native_resident import code_inventory
+        package=Path(replay_package)
+        if code_inventory(package)!=payload['plan']['code']:
+            raise ValueError('raw resident historical reader package changed')
+        historical_reader=package/'train/native_classification_continuation.py'
+        if (historical_reader.is_file()and
+                binding(historical_reader)['sha256']!=binding(reader.__file__)['sha256']):
+            from .native_raw_handoff import _package_recipe_plans
+            references=[{'path':ref['path'],'sha256':ref.get('file_sha256',ref['sha256'])}for ref in bindings]
+            replayed=_package_recipe_plans(package,payload['plan']['code'],references,payload['plan']['device'])
+            historical={ref['path']:value for ref,value in zip(bindings,replayed)}
     def plan(reference):
         recipe_path=_bound({'path':reference['path'],'sha256':reference.get('file_sha256',reference['sha256'])})
         if reference.get('lineage_sha256',reference['sha256'])!=lineage:
             raise ValueError('raw resident recipe history changed its preserved lineage')
         if recipe_identity_sha256(recipe_path)!=reference['sha256']:raise ValueError('raw resident recipe identity changed')
-        recipe=resolve_recipe_data(recipe_path)
-        inputs={item['id']:({} if item.get('admitted') is False else resolve_stage_inputs(recipe,item,{})) for item in recipe['stages']}
+        if reference['path']in historical:
+            replayed=historical[reference['path']];recipe=replayed['recipe'];inputs=replayed['stage_inputs']
+        else:
+            recipe=resolve_recipe_data(recipe_path)
+            inputs={item['id']:({} if item.get('admitted') is False else resolve_stage_inputs(recipe,item,{})) for item in recipe['stages']}
         return {**payload['plan'],'recipe':recipe,'stage_inputs':inputs}
     if start is None:
         if transition is None:
