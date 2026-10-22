@@ -173,7 +173,9 @@ def test_native_stage_real_shared_parent_update_and_exact_noop_resume(tmp_path,s
         '--refresh-foundation-readiness', '--foundation-readiness-policy', 'on-shared-request',
         '--foundation-qualification-request', str(tmp_path/'parent-only-qualification.json'),
         '--resident-data-directory',str(tmp_path/'parent-only-resident'),
-        '--resident-geometry-qualification',str(tmp_path/'parent-only-capacity.json'), *extra_args]
+        '--resident-geometry-qualification',str(tmp_path/'parent-only-capacity.json'),
+        '--memory-qualification',json.dumps({'path':str(tmp_path/'parent-only-sft-memory.json'),
+            'sha256':'0'*64,'bytes':1}), *extra_args]
     assert main(argv) == 0
     slot = tmp_path/'learner/checkpoint.pt'
     state = torch.load(slot, map_location='cpu', weights_only=False)
@@ -190,6 +192,9 @@ def test_native_stage_real_shared_parent_update_and_exact_noop_resume(tmp_path,s
     assert state['training']['options']['foundation_readiness_policy'] == 'at-boundary'
     assert state['training']['options']['foundation_qualification_request'] is None
     assert state['training']['options']['resident_geometry_qualification'] is None
+    assert state['training']['options']['memory_qualification'] is None
+    capacity=json.loads((tmp_path/'learner/rl-policy-capacity-request.json').read_text())
+    assert capacity['objective'] is not None
     if not shared_parent:
         from natlang_neuralese.train.native_continuation import progress_obligations, restore_sft_progress
         frame=state['training']['sft_progress']['full']
