@@ -32,8 +32,12 @@ ENCODINGS = {'ordinary-suffix-raw-v1', 'witnessed-pair-raw-v1', 'native-row-obje
 
 def load_policy(binding):
     """Read a bound declaration before restoring/training any parameters."""
+    return _load_policy_and_dependencies(binding)[0]
+
+
+def _load_policy_and_dependencies(binding):
     if binding is None:
-        return None
+        return None, []
     path = Path(binding['path'])
     digest = sha256_file_hex(path)
     if digest != binding.get('sha256') or ('bytes' in binding and path.stat().st_size != binding['bytes']):
@@ -59,23 +63,34 @@ def load_policy(binding):
         seen.add(digest)
     if not isinstance(value.get('failed_history_masks',[]),list):
         raise ValueError('failed-history mask inputs must be an explicit list')
+    dependencies=[]
     if value.get('failed_history_masks'):
         from .native_failed_history import prepare_masks
-        prepare_masks(value)
+        dependencies=prepare_masks(value)
         held={item['sha256']for item in value.get('held_sources',[])}
         if held.intersection(value.get('_failed_history_rows',{})):
             raise ValueError('failed-history TRAIN masks overlap held declarations')
-    return value
+    return value, dependencies
 
 
 def ce_policy_dependencies(binding):
     """Exact policy plus portable failed-mask/decoder inputs for every consumer."""
-    policy=load_policy(binding)
-    result=[{'path':str(Path(binding['path'])),'sha256':sha256_file_hex(binding['path']),
-             'bytes':Path(binding['path']).stat().st_size}]
-    if policy.get('failed_history_masks'):
-        from .native_failed_history import prepare_masks
-        result.extend(prepare_masks(policy))
+    policy,dependencies=_load_policy_and_dependencies(binding)
+    result=[{'path':str(Path(binding['path'])),'sha256':binding['sha256'],
+             'bytes':Path(binding['path']).stat().st_size},*dependencies]
+    from .native_failed_history import checked
+    for reference in result:
+        checked(reference)
+    # Masks already contain each authenticated decoder's exact directory and
+    # file inventory. Recheck the cheap directory census without reparsing and
+    # revalidating every manifest row a second time.
+    decoders={entry['decoder'] for rows in policy.get('_failed_history_rows',{}).values()
+              for entry in rows.values()}
+    for directory,inventory,_ in decoders:
+        expected={Path(name).name for name,_,_ in inventory}
+        actual={path.name for path in Path(directory).iterdir() if path.is_file()}
+        if actual!=expected:
+            raise ValueError('failed-history decoder has unbound files after preparation')
     return result
 
 
