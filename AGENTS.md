@@ -20,7 +20,7 @@ other external teachers. Existing admitted third-party data remains usable.
 Owner clarification (2026-10-15): "our own models" here means self-hosted
 teachers in our sandboxes, not the student models we are trying to improve.
 Use a substantially stronger teacher; Mellum and LFM are students. The selected
-generation teacher is Qwen3.8-Flash-Next NVFP4 on the existing dedicated
+generation teacher is Qwen3.6-35B-A3B (owner selection, 2026-10-22) on the existing dedicated
 generation sandbox, using the GPU-specific optimized serving engine. Preserve
 verified full trajectories for both students and expand beyond a narrow task
 pilot. Do not allocate an additional sandbox merely to change the teacher.
@@ -44,17 +44,21 @@ our RTX PRO 6000 Blackwell; model-card scores alone do not establish our task
 quality or useful generation throughput. This conditionally supersedes the
 selected-teacher name above; it does not authorize external teacher generation.
 
-Operational selection (updated 2026-10-22): the completed matched comparison
-produced 32/48 successes for Flint versus 39/48 for Qwen. Flint supplied about
-13% more verified successes per aggregate case-hour under different serving
-loads; this is not isolated GPU throughput or a quality win. A subsequent full
-48-case measurement with the writer-occurrence runtime repair produced 36/48
-Flint successes. The official `RecursiveSI/flint-nvfp4-gguf` remains the
-provisional continuous generator on the existing sandbox. Preserve its exact
-quantized artifact, engine and per-batch runtime identities; admit only verified
-positive complete trajectories and retain usable earlier Qwen data. The early
-18-case result is superseded. See
-`plans/neuralese/FLINT_TEACHER_REPLACEMENT_20261021.md`. Source admission and
+Owner selection (2026-10-22): stick with `Qwen/Qwen3.6-35B-A3B` as the
+self-hosted teacher. This supersedes the provisional Flint selection and the
+earlier Qwen3.8 teacher. Use the existing generation sandbox, with an optimized
+serving engine and an explicitly identified compatible quantization (initial
+candidate: `nvidia/Qwen3.6-35B-A3B-NVFP4`). Preserve useful verified Flint and
+earlier Qwen trajectories with their original identities. Give new Qwen3.6
+batches their own exact checkpoint, tokenizer, runtime and actor provenance;
+never relabel earlier generations. Keep both learners moving during preparation
+and switch generation through explicit actor and guardian epoch bindings.
+
+Historical comparison: Flint produced 32/48 successes versus Qwen's 39/48;
+a later writer-occurrence runtime measurement produced 36/48 Flint successes.
+These do not establish Qwen3.6 task performance. See
+`plans/neuralese/FLINT_TEACHER_REPLACEMENT_20261021.md` and
+`plans/neuralese/QWEN36_TEACHER_SELECTION_20261022.md`. Source admission and
 learner adoption do not establish completed exposure or student capability lift.
 
 Owner clarification (2026-10-16): standing authorization covers replacing any
