@@ -306,3 +306,93 @@ def test_owned_custody_also_protects_older_canonical_aliases(tmp_path,custody):
     assert alias in files and alias not in deleted
     proof=json.loads(next((tmp_path/'journal').glob('*-intent-*.json')).read_text())
     assert alias in proof['protected_files']
+
+
+@pytest.mark.parametrize('role',['lfm','mellum'])
+@pytest.mark.parametrize('damage',[None,'missing','size','digest','role','readback','step'])
+def test_current_owned_recovery_retains_real_object_and_only_prunes_old_aliases(tmp_path,role,damage):
+    name,state,files,deleted,api,state_path,policy=setup_export(tmp_path,role)
+    actual=f'{role}/{"a"*64}/{role}-{"a"*64}.pt'
+    files[actual]=SimpleNamespace(name=actual,size=40,md5='owned-current')
+    state['receipt'].update(name=actual,role=role)
+    if damage=='missing':del files[actual]
+    if damage=='size':files[actual].size+=1
+    if damage=='digest':state['receipt']['identity']['sha256']='b'*64
+    if damage=='role':state['receipt']['role']='mellum'if role=='lfm'else'lfm'
+    if damage=='readback':state['receipt']['independent_verification']['bytes']+=1
+    if damage=='step':state['last_verified_step']=True
+    state_path.write_text(json.dumps(state))
+    invoke=lambda:retention.tick(policy,tmp_path/'journal',apply=True,api=api,
+                                ownership_directory=tmp_path/'owners')
+    if damage:
+        with pytest.raises(ValueError):invoke()
+        assert not deleted
+    else:
+        assert invoke()[0]['candidates']==1
+        assert deleted==[name(1)]and actual in files and name(4)in files
+        intent=json.loads(next((tmp_path/'journal').glob('*-intent-*.json')).read_text())
+        assert intent['verified_latest']==actual
+
+
+@pytest.mark.parametrize('relative_step',[1,3,4])
+@pytest.mark.parametrize('damage',[None,'missing','size','digest','role','readback','step','run'])
+def test_owned_inference_parent_uses_actual_private_object_at_every_frontier(tmp_path,relative_step,damage):
+    name,files,deleted,api,policy,view,receipts,parent=with_inference_views(tmp_path)
+    digest='e'*64;actual=f'mellum/{digest}/mellum-{digest}.pt'
+    full={'private':True,'run':'owner/project/run','role':'mellum','name':actual,
+          'identity':{'sha256':digest,'bytes':40},
+          'independent_verification':{'sha256':digest,'bytes':40}}
+    files[actual]=SimpleNamespace(name=actual,size=40,md5='owned-full')
+    if relative_step==3:
+        current=json.loads((tmp_path/'state.json').read_text())
+        current['receipt']=json.loads(json.dumps(full))
+        (tmp_path/'state.json').write_text(json.dumps(current))
+    source={**parent(relative_step),'training_checkpoint_sha256':digest}
+    v={'last_verified_step':relative_step,'receipt':receipts[relative_step],
+       'inference_source':source,'derivation':{'full_private_receipt':full}}
+    if damage=='missing':del files[actual]
+    if damage=='size':files[actual].size+=1
+    if damage=='digest':source['training_checkpoint_sha256']='f'*64
+    if damage=='role':full['role']='lfm'
+    if damage=='readback':full['independent_verification']['sha256']='f'*64
+    if damage=='step':source['step']=relative_step+1
+    if damage=='run':full['run']='other/project/run'
+    view.write_text(json.dumps(v))
+    invoke=lambda:retention.tick(policy,tmp_path/'journal',apply=True,api=api,
+                                ownership_directory=tmp_path/'owners')
+    if damage:
+        with pytest.raises(ValueError):invoke()
+        assert not deleted
+    else:
+        assert invoke()[0]['verified_latest_step']==3
+        assert actual in files and receipts[relative_step]['name']in files
+        # No invented native spelling is needed to establish object presence.
+        assert f'mellum/{digest}/mellum-native-checkpoint-step-{relative_step}.pt'not in files
+        if relative_step>1:assert receipts[1]['name']in deleted
+
+
+@pytest.mark.parametrize('damage',[None,'role','step','identity','readback'])
+def test_pending_owned_full_parent_remains_protected_without_step_filename(tmp_path,damage):
+    _,files,deleted,api,policy,_,receipts,_=with_inference_views(tmp_path)
+    digest='e'*64;actual=f'mellum/{digest}/mellum-{digest}.pt'
+    receipt={'private':True,'run':'owner/project/run','role':'mellum','name':actual,
+             'identity':{'sha256':digest,'bytes':40},
+             'independent_verification':{'sha256':digest,'bytes':40}}
+    pending={'step':1,'identity':receipts[1]['identity'],'full_private_receipt':receipt,
+             'full_training_checkpoint':{'step':1,'sha256':digest,'bytes':40}}
+    if damage=='role':receipt['role']='lfm'
+    if damage=='step':pending['step']=2
+    if damage=='identity':pending['full_training_checkpoint']['sha256']='f'*64
+    if damage=='readback':receipt['independent_verification']['bytes']+=1
+    path=tmp_path/'pending-owned.json';path.write_text(json.dumps(pending))
+    declaration=json.loads(policy.read_text());declaration['models']['mellum']['inference_pending']=[str(path)]
+    policy.write_text(json.dumps(declaration))
+    invoke=lambda:retention.tick(policy,tmp_path/'journal',apply=True,api=api,
+                                ownership_directory=tmp_path/'owners')
+    if damage:
+        with pytest.raises(ValueError):invoke()
+        assert not deleted
+    else:
+        invoke();assert receipts[1]['name']not in deleted
+        intent=json.loads(next((tmp_path/'journal').glob('*-intent-*.json')).read_text())
+        assert actual in intent['protected_files']
