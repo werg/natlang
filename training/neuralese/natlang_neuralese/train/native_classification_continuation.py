@@ -256,13 +256,13 @@ def classification_proof_dependencies(reference, *, follow_continuations=True):
     def add(ref):
         path = Path(ref['path'])
         key = str(path)
-        before = stamp(path)
         if key in found:
             actual = found[key]
-            if (before != stamps[key] or ref['sha256'] != actual['sha256']
+            if (ref['sha256'] != actual['sha256']
                     or ('bytes' in ref and ref['bytes'] != actual['bytes'])):
                 raise ValueError('classification dependency changed during enumeration')
             return path
+        before = stamp(path)
         m._checked(ref)
         if stamp(path) != before:
             raise ValueError('classification dependency changed during enumeration')

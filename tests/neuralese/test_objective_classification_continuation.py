@@ -221,6 +221,25 @@ def test_dependency_enumeration_authenticates_shared_files_once_per_call(combine
     assert calls == Counter({item['path']: 2 for item in expected})
 
 
+def test_dependency_enumeration_stats_unique_files_not_repeated_parts(combined, monkeypatch):
+    from collections import Counter
+    from natlang_neuralese.train import native_classification_continuation as continuation
+    _, _, _, prior, put, _ = combined
+    part = prior['indexes'][0]
+    ref = put(Path(part['source']['path']).parent / 'many-repeated-parts.json',
+              {'schema': m.SCHEMA, 'indexes': [part] * 1000, 'held_indexes': []})
+    signatures = Counter()
+    original = continuation._index_signature
+    def signature(path):
+        signatures[str(path)] += 1
+        return original(path)
+    monkeypatch.setattr(continuation, '_index_signature', signature)
+    result = continuation.classification_proof_dependencies(ref)
+    # Authenticate before/after first consumption and check again at return.
+    # Duplicate declarations must not turn this into thousands of filesystem calls.
+    assert signatures == Counter({item['path']: 3 for item in result})
+
+
 @pytest.mark.parametrize('field,value', [('sha256', '0' * 64), ('bytes', 1)])
 def test_dependency_reuse_rejects_contradictory_occurrence(combined, field, value):
     from natlang_neuralese.train.native_classification_continuation import classification_proof_dependencies
