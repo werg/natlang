@@ -247,7 +247,7 @@ def verify_objective_proof_extension(old_inputs, new_inputs, prior, current):
 
 
 
-def classification_proof_dependencies(reference):
+def classification_proof_dependencies(reference, *, follow_continuations=True):
     """Exact recursively consumed classification/adapter/withdrawal artifacts."""
     from scripts.neuralese_data import continue_native_source_indexes as adapter
     found, stamps, visiting, completed = {}, {}, set(), set()
@@ -282,9 +282,9 @@ def classification_proof_dependencies(reference):
         for part in proof.get('indexes', []) + proof.get('held_indexes', []):
             for value in (part['source'],part['old_index'],part['new_index'],part['producer'],*part['old_policy'].values()):add(value)
             produced = part.get('objective_policy_continuation') or {}
-            if produced.get('producer'):add(produced['producer'])
+            if produced.get('producer') and follow_continuations:add(produced['producer'])
         extra = proof.get('objective_policy_continuation')
-        if extra is not None:
+        if extra is not None and follow_continuations:
             if extra.get('schema') != SCHEMA:raise ValueError('classification dependency continuation schema differs')
             adapter.prove_ce_objective_extension(extra['old_package'],extra['new_package'])
             for root in (Path(extra['old_package']),Path(extra['new_package'])):

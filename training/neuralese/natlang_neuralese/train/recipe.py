@@ -1925,14 +1925,16 @@ def _classification_proof(inputs):
         if (any(historical_producer.get(key) != current_producer[key] for key in ('sha256', 'bytes'))
                 or set(part.get('old_policy', {})) != set(POLICY_FILES)):
             raise ValueError('classification continuation producer/policy differs')
-        # Historical provenance is the original bound source, even when the
-        # exact same classifier now lives in a different runtime directory.
-        try:
-            _checked(historical_producer)
-            for value in (part['source'], part['old_index'], part['new_index'], *part['old_policy'].values()):
-                _checked(value)
-        except OSError as error:
-            raise ValueError('classification continuation artifact unavailable') from error
+    # Authenticate each exact part artifact once within this call, retaining
+    # the existing classifier's binding checks and a final stamp check for all
+    # reused files. Hundreds of parts commonly share the same policy files.
+    # Objective/predecessor continuation has its own independent verifier; this
+    # check preserves the original current-proof scope instead of adding work.
+    from .native_classification_continuation import classification_proof_dependencies
+    try:
+        classification_proof_dependencies(reference,follow_continuations=False)
+    except OSError as error:
+        raise ValueError('classification continuation artifact unavailable') from error
     return proof
 
 
