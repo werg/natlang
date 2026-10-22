@@ -36,6 +36,20 @@ generation sandbox supplied with useful tasks and admit verified results into
 the evolving training recipe. Measure actual CPU/RAM need on the allocated
 machine rather than delaying useful generation to test smaller allocations.
 
+Owner correction (2026-10-22): additional CoreWeave sandboxes are authorized,
+including a dedicated evaluator shared by both model lines. The only required
+resource specification for new GPU sandboxes is exactly one GPU. Omit CPU,
+RAM, GPU-type and GPU-memory requirements; in particular, remove such filters
+when capacity errors occur rather than repeatedly requesting the same constrained
+shape. Inspect the actual assigned resources and adapt execution accordingly.
+This supersedes the earlier three-sandbox allocation plan. Stop the current DGX
+Mellum evaluation, preserve its partial evidence, investigate and repair concrete
+problems, and launch the next evaluation on a sandbox.
+Owner follow-up (2026-10-22): a minimal RAM requirement is also authorized when
+useful. The evaluator replacement requests one GPU plus 8Gi RAM, with CPU,
+GPU model and GPU memory unspecified. Prefer the unconstrained one-GPU request
+when capacity is scarce; measure assigned resources and actual loading needs.
+
 Owner instruction (2026-10-21): test `RecursiveSI/flint` as the generation
 teacher and replace Qwen if its actual natlang task performance is decent.
 Use the existing generation sandbox and preserve full trajectory, actor,
