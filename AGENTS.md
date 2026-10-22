@@ -44,15 +44,18 @@ our RTX PRO 6000 Blackwell; model-card scores alone do not establish our task
 quality or useful generation throughput. This conditionally supersedes the
 selected-teacher name above; it does not authorize external teacher generation.
 
-Operational selection (2026-10-21): Flint's first 18 completed matching native
-tasks produced 17 successes against Qwen's 15, with faster elapsed execution on
-most matching successful cases. The supervisor selected the official
-`RecursiveSI/flint-nvfp4-gguf` for continuous generation on the existing sandbox;
-the remaining 48-case comparison continues. Keep the new teacher namespace and
-exact quantized artifact/engine provenance, and retain usable earlier Qwen data.
-See `plans/neuralese/FLINT_TEACHER_REPLACEMENT_20261021.md`. This is a provisional
-production choice from actual task behavior, not a claim of complete evaluation
-or learner exposure to Flint data.
+Operational selection (updated 2026-10-22): the completed matched comparison
+produced 32/48 successes for Flint versus 39/48 for Qwen. Flint supplied about
+13% more verified successes per aggregate case-hour under different serving
+loads; this is not isolated GPU throughput or a quality win. A subsequent full
+48-case measurement with the writer-occurrence runtime repair produced 36/48
+Flint successes. The official `RecursiveSI/flint-nvfp4-gguf` remains the
+provisional continuous generator on the existing sandbox. Preserve its exact
+quantized artifact, engine and per-batch runtime identities; admit only verified
+positive complete trajectories and retain usable earlier Qwen data. The early
+18-case result is superseded. See
+`plans/neuralese/FLINT_TEACHER_REPLACEMENT_20261021.md`. Source admission and
+learner adoption do not establish completed exposure or student capability lift.
 
 Owner clarification (2026-10-16): standing authorization covers replacing any
 stalled sandbox; do not ask again or wait indefinitely. Adjust the resource request if
@@ -277,6 +280,13 @@ comprehensive training on the entire evolving production recipe.
   tracebacks and diagnose a blocked retry signature. Exercise this path after the
   complete sealed controller/publisher loaders; a previously shared guard fix can
   still be missing from their frozen source closures.
+- **Publish completed resident training before adopting its next stage**
+  (engineering finding, 2026-10-22). A supervised stage can finish after several
+  live data appends while the coordinator still holds its bootstrap recipe.
+  Use the real completed request and result through the normal publication
+  helper to bind the earned checkpoint, actual resident configuration and next
+  cursor. Updating bootstrap metadata alone does not publish the adopted recipe.
+  Preserve optimizer/RNG/exposure and verify the next real optimizer child.
 
 These instructions supersede earlier requirements for frozen experimental
 runs, base-drift hard stops or clean-run comparisons where they conflict.
