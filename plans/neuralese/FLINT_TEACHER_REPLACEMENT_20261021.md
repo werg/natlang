@@ -132,15 +132,18 @@ measured runtime for future unreserved batches beginning with batch2; batches0
 and1 retain their actual original runtime and the server/collectors continue.
 The publisher uses explicit runtime epochs. Evidence and exact identities:
 `/home/werg/data/dgxops/flint-writer-runtime-live48-and-adoption-root-20261022.json`.
-Actual batch2 execution must still be observed separately.
+Batch2 execution was subsequently observed at02:16 UTC on2026-10-22:
+18 cases had started and2 had finished, while batch1 continued with87 of128
+cases finished. The serving process and replacement guardian both matched their
+recorded process births. This confirms useful execution after the declaration;
+the per-export runtime and actor checks remain required for admission.
 
-LFM actually adopted third-wave2491 graphs at25314 and fourth-wave1638 at25359,
-bringing its active source obligations to1,549,773 TRAIN/25,955 held. Mellum
-actually adopted third-wave2487 at28441, bringing its active obligations to
-1,463,092 TRAIN/25,968 held. The fifth wave has passed the normal preparation,
-transport and eligibility pipeline:1,142 graphs for each model. LFM's fifth
-append is preparing; Mellum's fourth and fifth additions are preparing together
-as one2778-graph append. These counts describe source obligations and adoption,
+LFM actually adopted third-wave2491 graphs at25314, fourth-wave1638 at25359,
+and fifth-wave1142 at25634, bringing its active source obligations to
+1,550,915 TRAIN/25,955 held. Mellum actually adopted third-wave2487 at28441
+and the combined fourth/fifth2778 at28471, bringing its active obligations to
+1,465,870 TRAIN/25,968 held. All passed the normal preparation, transport and
+eligibility pipeline. These counts describe source obligations and adoption,
 not completed per-row exposure. Both learners retain optimizer/RNG/exposure
 through the shared append mechanism.
 
