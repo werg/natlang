@@ -667,6 +667,10 @@ def _configure_runtime_handoff(plan_path,declaration,bootstrap,config_path,*,ver
     if pending:
         provider_declaration={**declaration,'commands':{key:value for key,value in
             (declaration.get('commands')or{}).items()if key!='actor_command'}}
+        # The sealed active collection owns its original command and runtime;
+        # do not ask provider configuration to retarget it before restoring
+        # the protected pending-boundary fields below.
+        provider_declaration.pop('actor_runtime',None)
     elif declaration.get('actor_runtime'):
         config.update(actor_runtime_configuration(declaration['actor_runtime']))
     configure_provider(config,provider_declaration,{},original,path,write=False)

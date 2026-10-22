@@ -671,6 +671,7 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
             if config.get('native_actor_python_runtime') is not None:
                 if expected_native is None:
                     raise ValueError('Python actor runtime binding requires an exact native policy')
+                validate_actor_runtime_configuration(config)
                 expected_native = {**expected_native, 'python_runtime': config['native_actor_python_runtime']}
             if config.get('before_collect'):
                 run_command(config['before_collect'], values)
@@ -905,6 +906,54 @@ def actor_runtime_configuration(repository):
     return {'native_actor_python_runtime': python_runtime_binding(repository/'training/neuralese/natlang_neuralese'),
             'actor_environment': {'NATLANG_REPO': str(repository),
                 'PYTHONPATH': str(repository/'training/neuralese') + ':' + str(repository)}}
+
+
+def bind_actor_runtime_command(command, repository):
+    """Retarget the declared native Python entry while preserving actor args.
+
+    A runtime handoff changes an executable code root, not just environment
+    metadata. Only the known direct-checkpoint entry point is relocatable here;
+    custom provider commands keep their own owner and must be rebound explicitly.
+    """
+    import re
+    repository=Path(repository).resolve(strict=True)
+    if not isinstance(command,list)or not command or any(not isinstance(part,str)for part in command):
+        raise ValueError('native actor runtime needs an explicit argv command')
+    actor=list(command);cursor=0
+    if actor[0]in('env','/usr/bin/env','/bin/env'):
+        cursor=1
+        while cursor<len(actor)and re.match(r'^[A-Za-z_][A-Za-z_0-9]*=',actor[cursor]):cursor+=1
+    if cursor>=len(actor)or re.fullmatch(r'python(?:3(?:\.\d+)?)?',Path(actor[cursor]).name)is None:
+        raise ValueError('native actor runtime cannot reinterpret a custom actor command')
+    cursor+=1
+    while cursor<len(actor)and actor[cursor]in('-u','-B'):cursor+=1
+    suffix='/scripts/neuralese_data/serve_direct_checkpoint.py'
+    if cursor>=len(actor)or not actor[cursor].endswith(suffix):
+        raise ValueError('native actor runtime cannot reinterpret a custom actor command without its direct-checkpoint entry point')
+    actor[cursor]=str(repository)+suffix
+    environment=actor_runtime_configuration(repository)['actor_environment']
+    for index,value in enumerate(actor):
+        for name in ('NATLANG_REPO','PYTHONPATH'):
+            if value.startswith(name+'='):actor[index]=name+'='+environment[name]
+    return actor
+
+
+def validate_actor_runtime_configuration(config):
+    """Reject an advertised native runtime whose command still loads another checkout."""
+    runtime=config.get('native_actor_python_runtime')
+    if runtime is None:return True
+    environment=config.get('actor_environment')or{}
+    repository=environment.get('NATLANG_REPO')
+    if not isinstance(repository,str)or not repository:
+        raise ValueError('native actor runtime binding lacks its repository environment')
+    expected=actor_runtime_configuration(repository)
+    if (runtime!=expected['native_actor_python_runtime']
+            or environment.get('PYTHONPATH')!=expected['actor_environment']['PYTHONPATH']):
+        raise ValueError('native actor runtime environment and Python inventory disagree')
+    command=config.get('actor_command')
+    if bind_actor_runtime_command(command,repository)!=command:
+        raise ValueError('native actor command and advertised runtime select different checkouts')
+    return True
 
 
 def configure_native(args):

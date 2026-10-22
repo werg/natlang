@@ -150,6 +150,12 @@ def _scheduling_controls(config,declaration,plan_path,record,*,pending=False):
         config['foundation_qualification_generation']=declaration.get('foundation_qualification_generation','initial')
         if not isinstance(config['foundation_qualification_generation'],str) or not config['foundation_qualification_generation']:
             raise ValueError('foundation qualification generation must name its explicit repair attempt')
+    if 'rl_scheduling_policy' in declaration:
+        policy=declaration['rl_scheduling_policy']
+        if policy not in ('foundation-qualified-only','independent-local-cycles-v1'):
+            raise ValueError('unknown RAW RL scheduling policy')
+        config['rl_scheduling_policy']=policy
+        config['rl_scheduling_control']={'plan':binding(plan_path),'policy':policy}
     _seed_quantum(config,record)
     return config
 
@@ -1897,6 +1903,14 @@ def student_cycle(plan_path,declaration,handoff,directory,*,stop,owned_controlle
         config=resolve_recipe_data(config_path)
     except Exception as error:
         raise StudentConfigurationError(str(error)) from error
+    rl_policy=config.get('rl_scheduling_policy','foundation-qualified-only')
+    if rl_policy not in ('foundation-qualified-only','independent-local-cycles-v1'):
+        raise StudentConfigurationError('RAW RL scheduling policy is unknown')
+    if rl_policy=='independent-local-cycles-v1':
+        control=config.get('rl_scheduling_control') or {}
+        if (control.get('policy')!=rl_policy or control.get('plan')!=binding(plan_path)
+                or declaration.get('rl_scheduling_policy')!=rl_policy):
+            raise StudentConfigurationError('independent RAW RL scheduling is not bound to the active sealed declaration')
     cursor_path=directory/'cycle.json'
     cursor=json.loads(cursor_path.read_text()) if cursor_path.exists() else {'cycle':0,'phase':'rl','next_stage':0}
     if _retire_recipe_readiness(config, cursor):
@@ -2045,7 +2059,8 @@ def student_cycle(plan_path,declaration,handoff,directory,*,stop,owned_controlle
         _supervised_job(continuation,jobdir,config,cursor,stop)
         if stop.requested:return cursor
     cursor.pop('raw_retry_generation',None)
-    cursor.update(cycle=cycle+1,phase=('rl' if cursor.get('foundation_qualified') else 'sft'),
+    cursor.update(cycle=cycle+1,phase=('rl' if (cursor.get('foundation_qualified')
+        or rl_policy=='independent-local-cycles-v1') else 'sft'),
         next_stage=0,current_checkpoint=_current_checkpoint(config))
     write_json_durable(cursor_path,cursor)
     return cursor

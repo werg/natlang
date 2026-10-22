@@ -95,6 +95,65 @@ def test_raw_policy_publish_stop_restart_does_not_recollect_and_interleaves_same
     assert result['cycle']==2 and [kind for kind,_ in calls].count('rl')==2
 
 
+def test_independent_local_rl_repeats_without_peer_foundation_and_keeps_sft_debt(tmp_path,monkeypatch):
+    directory,config,stop,calls=fixture(tmp_path,monkeypatch)
+    plan=tmp_path/'sealed-plan.json';write_json_durable(plan,{'schema':'raw-scheduler-fixture'})
+    declaration={'rl_scheduling_policy':'independent-local-cycles-v1',
+        'foundation_readiness_policy':'on-shared-request','foundation_qualification_generation':'peer-wait'}
+    raw._scheduling_controls(config,declaration,plan,{},pending=False)
+    config_path=directory/'config.json';write_json_durable(config_path,config)
+    from natlang_neuralese.rl import native_role_release as roles
+    monkeypatch.setattr(roles,'ownership',lambda _:({'role':'lfm'},{'directory':str(tmp_path/'exchange')}))
+    monkeypatch.setattr(roles,'foundation_request',lambda *args,**kwargs:None)
+    original_job=native_rounds.round_job
+    def no_foundation_job(path,request,out,active_stop):
+        result=original_job(path,request,out,active_stop)
+        if request.get('mandatory_sft_only'):
+            report=Path(result['pending_native_checkpoint']).parent/'native-training-receipt.json'
+            value=json.loads(report.read_text());value['foundation_ready']=False;value['completed']=False
+            write_json_durable(report,value)
+        return result
+    monkeypatch.setattr(native_rounds,'round_job',no_foundation_job)
+    first=raw.student_cycle(plan,declaration,None,directory,stop=stop)
+    assert first['cycle']==1 and first['phase']=='rl' and not first.get('foundation_qualified')
+    assert 'readiness' not in first
+    assert [kind for kind,_ in calls].count('rl')==1
+    assert [kind for kind,_ in calls].count('sft')==1
+    # A second local cycle performs another real bridge operation despite no
+    # peer candidate; mandatory communication training remains scheduled.
+    second=raw.student_cycle(plan,declaration,None,directory,stop=stop)
+    assert second['cycle']==2 and second['phase']=='rl' and not second.get('foundation_qualified')
+    assert 'readiness' not in second
+    assert [kind for kind,_ in calls].count('rl')==2
+    sft=[value for kind,value in calls if kind=='sft']
+    assert len(sft)==2 and all(value['trainer_parameters']['communication_foundation'] for value in sft)
+    assert config['rl_scheduling_control']=={'plan':raw.binding(plan),'policy':'independent-local-cycles-v1'}
+
+
+def test_independent_local_rl_does_not_hide_actual_bridge_failure(tmp_path,monkeypatch):
+    directory,config,stop,calls=fixture(tmp_path,monkeypatch)
+    plan=tmp_path/'sealed-plan.json';write_json_durable(plan,{'schema':'raw-scheduler-fixture'})
+    declaration={'rl_scheduling_policy':'independent-local-cycles-v1'}
+    raw._scheduling_controls(config,declaration,plan,{},pending=False)
+    write_json_durable(directory/'config.json',config)
+    def fail_bridge(*args,**kwargs):raise RuntimeError('actual RAW bridge verification failed')
+    monkeypatch.setattr(native_rounds,'round_job',fail_bridge)
+    with pytest.raises(RuntimeError,match='actual RAW bridge verification failed'):
+        raw.student_cycle(plan,declaration,None,directory,stop=stop)
+    assert json.loads((directory/'cycle.json').read_text())['phase']=='rl'
+
+
+def test_independent_local_rl_policy_requires_current_sealed_plan_binding(tmp_path,monkeypatch):
+    directory,config,stop,_=fixture(tmp_path,monkeypatch)
+    plan=tmp_path/'sealed-plan.json';write_json_durable(plan,{'schema':'raw-scheduler-fixture','revision':1})
+    declaration={'rl_scheduling_policy':'independent-local-cycles-v1'}
+    raw._scheduling_controls(config,declaration,plan,{},pending=False)
+    write_json_durable(directory/'config.json',config)
+    write_json_durable(plan,{'schema':'raw-scheduler-fixture','revision':2})
+    with pytest.raises(raw.StudentConfigurationError,match='not bound to the active sealed declaration'):
+        raw.student_cycle(plan,declaration,None,directory,stop=stop)
+
+
 def test_raw_supervised_publish_restart_uses_same_output_and_retains_obligations(tmp_path,monkeypatch):
     directory,config,stop,calls=fixture(tmp_path,monkeypatch)
     actual=raw._publish_checkpoint;seen=[]

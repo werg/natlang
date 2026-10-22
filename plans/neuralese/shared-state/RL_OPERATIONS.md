@@ -10,6 +10,16 @@ obligations. The two students progress independently. Follow
 and the capacity/handoff procedure below; completing joint semantic training is
 not a raw-RL prerequisite.
 
+The sealed RAW scheduler declaration must set
+`rl_scheduling_policy: independent-local-cycles-v1` to keep each model's RL
+rounds advancing after its own full supervised-cycle boundary. This scheduler
+setting changes only the next local cursor phase: it does not certify task
+success, complete supervised obligations, qualify a communication foundation,
+or admit either participant to shared VAE work. The existing exact RAW bridge
+and whole-episode validation remain mandatory, and the cross-model foundation
+rendezvous still requires two independently validated candidates. Omitting
+the field preserves the legacy foundation-gated cycle transition.
+
 Correct tasks earn reward without Neuralese. When an execution has a graph,
 policy updates retain every captured sampled/forced producer and consumer turn,
 exact occurrence bindings and gradients through the actual dependencies. Missing
