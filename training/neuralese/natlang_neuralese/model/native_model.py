@@ -152,7 +152,7 @@ def base_inventory(base):
     """Pin actual model/tokenizer inputs, reusing the shared verified file cache."""
     return _input_inventory(base, include_weights=True)
 
-def load_native_model(base, *, rank=8, device='cpu', dtype=torch.bfloat16, inventory=None, native_linear_precision="ieee", native_attention_precision=None, token_override_ids=None, token_override_dtype=torch.float32, sparse_row_dtype=torch.float32, native_ordinary_precision=None, native_norm_execution='stable-v1', history_reasoning_policy=None, native_shared_execution=None):
+def load_native_model(base, *, rank=8, device='cpu', dtype=torch.bfloat16, inventory=None, native_linear_precision="ieee", native_attention_precision=None, token_override_ids=None, token_override_dtype=torch.float32, sparse_row_dtype=torch.float32, native_ordinary_precision=None, native_norm_execution='stable-v1', history_reasoning_policy=None, native_shared_execution=None, backbone_state=None):
     """Return (SharedStateModel, tokenizer, RoleTokens, model_config).
 
     No PortHeads or projected communication module is created. Provision the
@@ -172,18 +172,25 @@ def load_native_model(base, *, rank=8, device='cpu', dtype=torch.bfloat16, inven
         from ..maple.maple_port import MaplePortBackbone
         if dtype != torch.bfloat16:
             raise ValueError('native Mellum/Maple loader requires its declared BF16 source precision')
-        hf, tokenizer = load_student(str(base), device=device, precision='bf16')
+        if backbone_state is None:
+            hf, tokenizer = load_student(str(base), device=device, precision='bf16')
         port_type = MaplePortBackbone
     elif architecture in {'lfm2', 'lfm2_moe'}:
         from .lfm2_port import load_backbone, PortBackbone
-        hf, tokenizer = load_backbone(str(base), dtype=dtype, device=device)
+        if backbone_state is None:
+            hf, tokenizer = load_backbone(str(base), dtype=dtype, device=device)
         port_type = PortBackbone
     elif architecture in {'qwen3', 'qwen2'}:
         from .hf_port import load_qwen_backbone, QwenPortBackbone
-        hf, tokenizer = load_qwen_backbone(str(base), dtype=dtype, device=device)
+        if backbone_state is None:
+            hf, tokenizer = load_qwen_backbone(str(base), dtype=dtype, device=device)
         port_type = QwenPortBackbone
     else:
         raise ValueError(f'unsupported native-state backbone architecture {architecture!r}')
+    if backbone_state is not None:
+        from .native_backbone_restore import restore_backbone
+        hf, tokenizer = restore_backbone(base, architecture, backbone_state,
+                                         device=device, dtype=dtype)
     roles = provision_role_tokens(SimpleNamespace(hf=hf, config=hf.config,
                                   embedding_weight=hf.get_input_embeddings().weight), tokenizer)
     from ..serve.chat import bind_history_reasoning
@@ -330,7 +337,8 @@ def load_native_checkpoint(path, *, base=None, device='cpu', dtype=None, partici
         native_ordinary_precision=saved.get('native_ordinary_precision'),
         native_norm_execution=saved.get('native_norm_execution'),
         native_shared_execution=saved.get('native_shared_execution'),
-        history_reasoning_policy=saved.get('history_reasoning_policy'))
+        history_reasoning_policy=saved.get('history_reasoning_policy'),
+        backbone_state=state['backbone_state'])
     if 'token_override_dtype' not in saved and str(requested_dtype) == saved['dtype']:
         config.pop('token_override_dtype', None)  # exact pre-master-row configuration contract
     if 'sparse_row_dtype' not in saved and str(requested_dtype) == saved['dtype']:
