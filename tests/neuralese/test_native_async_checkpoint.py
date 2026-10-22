@@ -213,6 +213,45 @@ def test_native_trainer_drains_on_update_and_schedule_close_errors_without_savin
     assert saved['training']['exposure_counts']=={'train':1}
 
 
+def test_native_trainer_generic_safe_exception_still_saves_completed_update(tmp_path,monkeypatch):
+    import json
+    from test_native_serve import _tiny_source
+    from natlang_neuralese.model.native_model import load_native_model
+    from natlang_neuralese.train import native_state_sft as trainer
+
+    base=tmp_path/'base'
+    _tiny_source(base)
+    _,_,_,config=load_native_model(base,dtype=torch.float32,rank=4)
+    paths={}
+    for split in ('train','test'):
+        row={'schema':'natlang.neuralese-native-graph/1','id':split,'split':split,
+            'source_groups':[split],'tokenizer_fingerprint':config['tokenizer_fingerprint'],
+            'nodes':[{'name':'answer','token_ids':[1,2,3], 'target_weights':[0,1,1]}]}
+        paths[split]=tmp_path/f'{split}.jsonl'
+        paths[split].write_text(json.dumps(row)+'\n')
+
+    original_write=trainer.write_json
+    failure=OSError('unexpected progress telemetry failure')
+    writes=[]
+    def fail_progress(path,value):
+        if path.name=='progress.json':
+            writes.append(path)
+            raise failure
+        return original_write(path,value)
+    monkeypatch.setattr(trainer,'write_json',fail_progress)
+    out=tmp_path/'run'
+    argv=['--base',str(base),'--dtype','float32','--rank','4','--device','cpu',
+        '--native-graphs',str(paths['train']),'--held-native-graphs',str(paths['test']),
+        '--epochs','3','--eval-every','1','--checkpoint-every','3','--task-eval-every','0',
+        '--async-checkpoint','--out',str(out)]
+    with pytest.raises(OSError,match='unexpected progress telemetry failure') as caught:
+        trainer.main(argv)
+    assert caught.value is failure and len(writes)==1
+    saved=torch.load(out/'checkpoint.pt',map_location='cpu',weights_only=False)
+    assert saved['step']==saved['training']['global_step']==1
+    assert saved['training']['exposure_counts']=={'train':1}
+
+
 def test_failed_async_write_recovers_latest_state_before_returning(tmp_path,monkeypatch):
     from natlang_neuralese.train import trajectory_state
     real_write=trajectory_state.atomic_checkpoint
