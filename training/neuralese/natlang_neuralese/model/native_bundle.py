@@ -10,6 +10,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import stat
 import tempfile
 
 from ..common.hashing import sha256_file_hex_cached
@@ -25,12 +26,15 @@ def _file_binding(path):
     return {'path':str(path),'sha256':sha256_file_hex_cached(path),'bytes':path.stat().st_size}
 
 
-def write_actor_view(checkpoint, out, *, validated_state, decoded_source_stat=None):
+def write_actor_view(checkpoint, out, *, validated_state, decoded_source_stat=None,
+                     prepared_view=None):
     """Extract exact actor tensors from the exporter's already-validated decode.
 
     The caller must pass the actual state decoded from this immutable source,
     after its normal full-state validation. Unsupported source forms retain the
     existing full-checkpoint path by returning None, without writing a view.
+    An explicitly named interrupted temporary output is never trusted: it must
+    pass the same full safe reread, exact comparison and immutable publication.
     """
     from .native_model import CHECKPOINT_SCHEMA
     from ..train.checkpoint_policy import CheckpointPolicy
@@ -65,15 +69,31 @@ def write_actor_view(checkpoint, out, *, validated_state, decoded_source_stat=No
     mechanism = _file_binding(__file__)
     out = Path(out).resolve()/source_binding['sha256']
     out.mkdir(parents=True,exist_ok=True)
-    fd,name = tempfile.mkstemp(prefix='.actor-view-',suffix='.pt',dir=out)
-    os.close(fd)
-    pending = Path(name)
+    recovered = prepared_view is not None
+    if recovered:
+        pending = Path(prepared_view).absolute()
+        if (pending.is_symlink() or pending.parent.resolve(strict=True) != out
+                or not pending.name.startswith('.actor-view-') or pending.suffix != '.pt'
+                or not stat.S_ISREG(pending.lstat().st_mode)):
+            raise ValueError('recovered actor view must be a regular temporary file in its exact source directory')
+    else:
+        fd,name = tempfile.mkstemp(prefix='.actor-view-',suffix='.pt',dir=out)
+        os.close(fd)
+        pending = Path(name)
     try:
-        atomic_checkpoint(pending,selected)
+        if not recovered:
+            atomic_checkpoint(pending,selected)
+        candidate_before = pending.stat()
+        candidate_signature = (candidate_before.st_dev,candidate_before.st_ino,
+            candidate_before.st_size,candidate_before.st_mtime_ns,candidate_before.st_ctime_ns)
         written = CheckpointPolicy.load(pending)
         _same_values(selected,written)
         del written
         digest = sha256_file_hex_cached(pending)
+        candidate_after = pending.stat()
+        if (candidate_after.st_dev,candidate_after.st_ino,candidate_after.st_size,
+                candidate_after.st_mtime_ns,candidate_after.st_ctime_ns) != candidate_signature:
+            raise ValueError('actor view temporary output changed during verification')
         target = out/(digest+'.pt')
         try:os.link(pending,target)
         except FileExistsError:
@@ -83,7 +103,8 @@ def write_actor_view(checkpoint, out, *, validated_state, decoded_source_stat=No
         try:os.fsync(directory)
         finally:os.close(directory)
     finally:
-        pending.unlink(missing_ok=True)
+        if not recovered:
+            pending.unlink(missing_ok=True)
     after = source.stat()
     if (after.st_dev,after.st_ino,after.st_size,after.st_mtime_ns) != signature:
         raise ValueError('actor view source changed during extraction')
@@ -96,6 +117,8 @@ def write_actor_view(checkpoint, out, *, validated_state, decoded_source_stat=No
     import hashlib
     proof = out/(hashlib.sha256(raw).hexdigest()+'.json')
     _durable_immutable(proof,raw)
+    if recovered:
+        pending.unlink()
     return _file_binding(proof)
 
 
