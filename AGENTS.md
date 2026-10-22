@@ -128,6 +128,16 @@ service liveness or a saved checkpoint alone; keep useful training running with
 the existing full-state fallback while repairing publication. Retain original
 artifact hashes and exact path validation.
 
+Exchange custody follows the effective shared contract (engineering finding,
+2026-10-22): a runtime cutover can change role verification mechanism identities
+and therefore the fixed exchange-cohort digest. Derive the complete effective
+contract after all controller/publisher loaders and select the same fresh,
+contract-addressed exchange directory on both models before the real launch.
+Do not reuse or overwrite a differently bound cohort. Rebuild only the completed
+adaptation and control declarations when necessary; preserve earned weights,
+optimizer/RNG/exposure and the existing training lineage. A failed coordinator
+before learner launch is not evidence that its saved model state is bad.
+
 Retention follows active lineages (engineering finding, 2026-10-20): a larger
 step number from an old lineage does not supersede a current model's artifacts.
 At every owner/runtime cutover, bind cloud retention to the current full-backup
