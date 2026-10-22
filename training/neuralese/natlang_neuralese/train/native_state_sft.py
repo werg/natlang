@@ -1368,9 +1368,10 @@ def _main(argv=None, *, requested_refresh):
     train.set_ce_policy(ce_policy if objective is None else None)
     held.set_ce_policy(ce_policy if objective is None else None)
     checkpoint_options['ce_supervision_active'] = ce_policy is not None and objective is None
-    from .native_source_classification import (migration_classes, reclassify_progress,
+    from .native_source_classification import (reclassify_progress,
                                                require_explicit_reclassification)
-    class_migration = (migration_classes(args.source_classification_migration, SourceIdentityView(train))
+    from .native_classification_reader import migration_classes
+    class_migration = (migration_classes(args.source_classification_migration, SourceIdentityView(train), directory=args.out)
                        if args.source_classification_migration else {})
     require_explicit_reclassification(carried_progress, train.entries, class_migration)
     if class_migration:

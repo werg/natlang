@@ -79,7 +79,8 @@ def continue_geometry(evidence, proof_reference, source, output):
     write_json_durable(subset_path, subset)
     # Authenticates policy, producer, row order, every nonclassification field,
     # current classes, and ordinary/pair topology law using the shared verifier.
-    classification.migration_classes(subset_path, source)
+    from .native_classification_reader import migration_classes
+    migration_classes(subset_path, source, directory=output.parent)
     prior_entries = []
     for current in source.entries:
         old = old_by_id.pop(current['id'], None)

@@ -268,7 +268,8 @@ def validate_classification_append(plan,proposed,stage_id,train,prior_rows,direc
         else:
             path.parent.mkdir(parents=True,exist_ok=True)
             write_json(path,proof)
-        classification.migration_classes(path,SourceIdentityView(leaf))
+        from .native_classification_reader import migration_classes
+        migration_classes(path,SourceIdentityView(leaf),directory=directory)
         for entry in leaf.entries:
             actual=remaining.pop(entry['id'],None)
             if actual is None or {k:v for k,v in actual.items()if k!='training_priority'}!={
