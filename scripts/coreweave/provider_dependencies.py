@@ -285,9 +285,14 @@ def dependency_closure(request, *, namespace='/work/native-production', readonly
                 # instruction to replay that old invocation under current defaults.
                 bound(adaptation)
             else:
-                from natlang_neuralese.rl.native_completed_supervised import verify,dependencies as completed_dependencies
-                proof=verify(adaptation)
-                for reference in completed_dependencies(adaptation).values():bound(reference)
+                from natlang_neuralese.rl import native_completed_supervised as completed
+                paired=getattr(completed,'verified_dependencies',None)
+                if callable(paired):proof,completed_inputs=paired(adaptation)
+                else:
+                    # Immutable older runtime closures retain their original API.
+                    proof=completed.verify(adaptation)
+                    completed_inputs=completed.dependencies(adaptation)
+                for reference in completed_inputs.values():bound(reference)
                 config_value(json.loads(bound(proof['future_config']).read_text()),
                              'completed-future:'+adaptation['sha256'])
         controls=value.get('native_checkpoint_controls', {})
