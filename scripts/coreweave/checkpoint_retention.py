@@ -39,8 +39,8 @@ def run_authority(run, policy_path, directory):
         yield claim
 
 
-def candidates(role, state, files, protected, *, kind='checkpoint'):
-    receipt = state['receipt']
+def _receipt_step(role, receipt, *, expected_step=None, kind=None):
+    """Authenticate actual native or owned publication names without aliasing them."""
     identity = receipt['identity']
     fetched = receipt['independent_verification']
     if (receipt.get('private') is not True or
@@ -50,13 +50,31 @@ def candidates(role, state, files, protected, *, kind='checkpoint'):
         raise ValueError('retention requires independently verified full private recovery')
     if role not in ('lfm', 'mellum'):
         raise ValueError('unknown checkpoint export role')
-    if kind not in ('checkpoint','inference'):
+    if kind not in (None,'checkpoint','inference'):
         raise ValueError('unknown retained native artifact kind')
-    latest = re.fullmatch(rf'{role}/([0-9a-f]{{64}})/{role}-native-{kind}-step-(\d+)\.pt', receipt['name'])
-    if (not latest or latest[1] != identity['sha256'] or
-            type(state['last_verified_step']) is not int or
-            int(latest[2]) != state['last_verified_step']):
+    if expected_step is not None and (type(expected_step)is not int or expected_step<0):
+        raise ValueError('verified publication needs an exact nonnegative step')
+    latest = re.fullmatch(rf'{role}/([0-9a-f]{{64}})/{role}-native-(checkpoint|inference)-step-(\d+)\.pt', receipt['name'])
+    if latest:
+        step=int(latest[3])
+        valid=(latest[1]==identity['sha256'] and (kind is None or latest[2]==kind)
+               and (expected_step is None or step==expected_step))
+    else:
+        digest=identity['sha256'];step=expected_step
+        valid=(kind!='inference' and receipt.get('role')==role and step is not None
+               and receipt['name']==f'{role}/{digest}/{role}-{digest}.pt')
+    if not valid:
         raise ValueError('latest export name differs from verified checkpoint identity')
+    return step
+
+
+def candidates(role, state, files, protected, *, kind='checkpoint'):
+    receipt = state['receipt']
+    identity = receipt['identity']
+    step=state['last_verified_step']
+    if type(step)is not int or step<0:
+        raise ValueError('verified publication needs an exact nonnegative step')
+    _receipt_step(role,receipt,expected_step=step,kind=kind)
     files = list(files)
     present = {f.name: f for f in files}
     if receipt['name'] not in present or present[receipt['name']].size != identity['bytes']:
@@ -74,23 +92,24 @@ def candidates(role, state, files, protected, *, kind='checkpoint'):
 def inference_dependencies(role, declaration):
     """Read existing transfer/request custody without loading any model bytes."""
     protected=set(declaration['protected_files'])
-    def protect_receipt(receipt):
-        identity=receipt['identity'];proof=receipt['independent_verification']
-        match=re.fullmatch(rf'{role}/([0-9a-f]{{64}})/{role}-native-(?:inference|checkpoint)-step-(\d+)\.pt',receipt['name'])
-        if (receipt.get('private')is not True or receipt.get('run')!=declaration['run']
-                or type(identity.get('bytes'))is not int or identity['bytes']<=0
-                or any(proof.get(k)!=identity[k]for k in ('sha256','bytes'))
-                or not match or match[1]!=identity['sha256']):
+    def protect_receipt(receipt, *, expected_step=None, kind=None):
+        if receipt.get('run')!=declaration['run']:
             raise ValueError('native retention dependency has no verified same-run artifact identity')
+        step=_receipt_step(role,receipt,expected_step=expected_step,kind=kind)
         protected.add(receipt['name'])
-        return int(match[2])
-    def protect_parent(parent):
+        return step
+    def protect_parent(parent, receipt=None):
         if (parent.get('schema')!='natlang.native-inference-source/1'
                 or not re.fullmatch('[0-9a-f]{64}',parent.get('training_checkpoint_sha256',''))
                 or type(parent.get('step'))is not int or parent['step']<0
                 or type(parent.get('training_checkpoint_bytes'))is not int or parent['training_checkpoint_bytes']<=0):
             raise ValueError('native inference dependency has no exact full parent')
         protected.add(f"{role}/{parent['training_checkpoint_sha256']}/{role}-native-checkpoint-step-{parent['step']}.pt")
+        if receipt is not None:
+            if receipt['identity']!={'sha256':parent['training_checkpoint_sha256'],
+                                     'bytes':parent['training_checkpoint_bytes']}:
+                raise ValueError('inference derivation differs from its exact full parent')
+            protect_receipt(receipt,expected_step=parent['step'],kind='checkpoint')
     for directory in declaration.get('inference_ingesters',[]):
         directory=Path(directory)
         for path in (directory/'incoming').glob('*.receipt.json'):
@@ -109,7 +128,8 @@ def inference_dependencies(role, declaration):
     view_path=declaration.get('inference_state')
     view=json.loads(Path(view_path).read_text())if view_path and Path(view_path).exists()else None
     if view is not None:
-        protect_receipt(view['receipt']);protect_parent(view['inference_source'])
+        protect_receipt(view['receipt']);protect_parent(view['inference_source'],
+            (view.get('derivation')or{}).get('full_private_receipt'))
         if view['inference_source']['step']!=view['last_verified_step']:
             raise ValueError('inference pointer differs from full-parent step')
         if view['inference_source']['training_checkpoint_bytes']<=view['receipt']['identity']['bytes']:
@@ -117,7 +137,7 @@ def inference_dependencies(role, declaration):
     for path in declaration.get('inference_pending',[]):
         if Path(path).exists():
             pending=json.loads(Path(path).read_text());receipt=pending['full_private_receipt']
-            step=protect_receipt(receipt)
+            step=protect_receipt(receipt,expected_step=pending['step'],kind='checkpoint')
             parent=pending['full_training_checkpoint']
             if (parent!={'step':step,**receipt['identity']}or pending['step']!=step):
                 raise ValueError('pending inference full receipt differs from its declared parent')
@@ -221,6 +241,10 @@ def _prune_run(role, declaration, root, apply, api, policy_binding, claim):
         if match and int(match[1])in view_steps:protected.add(file.name)
     selected = candidates(role, state, files, protected)
     if view is not None:
+        full=(view.get('derivation')or{}).get('full_private_receipt')
+        if full is not None:
+            candidates(role,{'last_verified_step':view['inference_source']['step'],
+                             'receipt':full},files,protected)
         if view['last_verified_step']>state['last_verified_step']:
             # Progress/cohort decoding may deliberately lag a separately
             # exported full checkpoint. Verify that exact private parent; do
@@ -230,8 +254,7 @@ def _prune_run(role, declaration, root, apply, api, policy_binding, claim):
             expected={'sha256':parent['training_checkpoint_sha256'],
                       'bytes':parent['training_checkpoint_bytes']}
             if (not isinstance(full,dict)or full.get('run')!=declaration['run']
-                    or full.get('identity')!=expected
-                    or full.get('name')!=f"{role}/{expected['sha256']}/{role}-native-checkpoint-step-{parent['step']}.pt"):
+                    or full.get('identity')!=expected):
                 raise ValueError('inference pointer is ahead without an exact verified private full parent')
             # Reuse the existing receipt/readback/listing verifier. Its
             # candidate list is intentionally discarded: the full-checkpoint
