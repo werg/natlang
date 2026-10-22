@@ -43,7 +43,7 @@ import torch
 
 from .loop import Cadence, StopSignal
 from .checkpoint_offload import after_write, path_lock, policy_record, recover_latest, update_policy_record
-from .trajectory_state import atomic_checkpoint
+from .trajectory_state import atomic_checkpoint, AsyncAtomicCheckpointWriter
 
 
 def publish_best(slot: Path, best: Path, receipt: dict | None = None, *, prune=False) -> None:
@@ -67,7 +67,8 @@ def publish_best(slot: Path, best: Path, receipt: dict | None = None, *, prune=F
 class CheckpointPolicy:
     def __init__(self, out_dir, *, every_steps: int = 0, every_seconds: float = 0, name: str = "checkpoint.pt",
                  best_name: str = "best-checkpoint.pt", final_name: str = "final-weights.pt",
-                 free_factor: float = 1.2, prune_best: bool = True, on_saved=None):
+                 free_factor: float = 1.2, prune_best: bool = True, on_saved=None,
+                 async_checkpoint: bool = False):
         self.out = Path(out_dir)
         self.out.mkdir(parents=True, exist_ok=True)
         self.cadence = Cadence(every_steps)
@@ -84,6 +85,11 @@ class CheckpointPolicy:
         # Bests are selection/export copies (direct, QAT conversion): weights-only once offloaded (owner 2026-10-13).
         self.prune_best = prune_best
         self.on_saved = on_saved
+        if type(async_checkpoint) is not bool:
+            raise TypeError('async checkpoint policy must be an explicit boolean')
+        self.async_checkpoint = async_checkpoint
+        self._async_writer = AsyncAtomicCheckpointWriter() if async_checkpoint else None
+        self.last_committed_step = None
         self.best_metric: float | None = None
         self.events: list[dict] = []
         meta = self.out / "checkpoint-policy.json"
@@ -116,23 +122,68 @@ class CheckpointPolicy:
         return self.stop.requested or timed or self.cadence.due(step, force=end)
 
     # Writes -----------------------------------------------------------------------------------------------------
-    def _write(self, state: dict, target: Path) -> dict:
-        """Preserve the previous slot until the replacement is completely written."""
+    def _require_disk_headroom(self, target: Path) -> None:
         expected = target.stat().st_size if target.exists() else 0
         if expected and shutil.disk_usage(self.out).free < self.free_factor * expected:
             raise OSError(errno.ENOSPC, 'insufficient space for atomic checkpoint replacement; previous file preserved', str(target))
+
+    def _write(self, state: dict, target: Path) -> dict:
+        """Preserve the previous slot until the replacement is completely written."""
+        self._require_disk_headroom(target)
         # GPU tensors are copied to host one storage at a time while writing; no second full copy in memory.
         atomic_checkpoint(target, state)
         event = {"time": time.time(), "path": str(target), "bytes": target.stat().st_size,
                  "previous_preserved_until_replace": True}
+        self._record_committed(state)
         self.events.append(event)
         return event
 
-    def save(self, state: dict, *, metric: float | None = None, higher_is_better: bool = False) -> dict:
-        """The rolling resumable slot (weights + optimizer + schedule + RNG, whatever the trainer passes). With
-        ``metric`` (the evaluation of this write's step point) better than every earlier write's, the same file is
-        also published as the best (``publish_best``); a stop write passes no metric."""
-        event = self._write(state, self.slot)
+    def _record_committed(self, state):
+        training = state.get('training') if isinstance(state, dict) else None
+        step = state.get('step') if isinstance(state, dict) else None
+        if type(step) is not int and isinstance(training, dict):
+            step = training.get('global_step', training.get('step'))
+        if type(step) is int:
+            self.last_committed_step = step
+
+    @property
+    def async_pending(self):
+        return bool(self._async_writer and self._async_writer.pending)
+
+    def check_async(self):
+        """Surface a completed background writer failure before more optimizer work."""
+        if self._async_writer is not None:
+            self._async_writer.check()
+
+    def drain_async(self):
+        """Wait for the exact pending snapshot and its post-commit hooks."""
+        if self._async_writer is not None:
+            self._async_writer.drain()
+
+    @staticmethod
+    def _record_async_failure(state, error):
+        training = state.get('training') if isinstance(state, dict) else None
+        if not isinstance(training, dict):
+            return
+        options = training.setdefault('options', {})
+        if not isinstance(options, dict):
+            return
+        history = options.setdefault('async_checkpoint_recovery_history', [])
+        if isinstance(history, list):
+            history.append({'schema':'natlang.native-async-checkpoint-recovery/1',
+                'writer_error_type':type(error).__name__,'writer_error':str(error)[:1000],
+                'recovered_synchronously':True})
+
+    @staticmethod
+    def _record_async_admission(state, admission, mode):
+        training = state.get('training') if isinstance(state, dict) else None
+        options = training.setdefault('options', {}) if isinstance(training, dict) else None
+        if isinstance(options, dict):
+            options['async_checkpoint_admission'] = {
+                'schema':'natlang.native-async-checkpoint-admission/1',
+                'mode':mode, **admission}
+
+    def _after_save(self, state, event, *, metric, higher_is_better):
         if self.on_saved is not None:
             self.on_saved(self.slot, state, event)
         self.last_saved_monotonic = time.monotonic()
@@ -142,7 +193,89 @@ class CheckpointPolicy:
             publish_best(self.slot, self.best_path, {"step": state.get("step"), "metric": metric,
                                                      "file": self.slot.name}, prune=self.prune_best)
             self.write_best_metric(metric)
-            event = dict(event, best=True)
+            event['best'] = True
+        event['committed'] = True
+
+    def save(self, state: dict, *, metric: float | None = None, higher_is_better: bool = False,
+             async_allowed: bool = False, async_optimizer=None) -> dict:
+        """The rolling resumable slot (weights + optimizer + schedule + RNG, whatever the trainer passes). With
+        ``metric`` (the evaluation of this write's step point) better than every earlier write's, the same file is
+        also published as the best (``publish_best``); a stop write passes no metric."""
+        if type(async_allowed) is not bool:
+            raise TypeError('async checkpoint boundary permission must be an explicit boolean')
+        writer_error = None
+        if self._async_writer is not None:
+            try:
+                # Do not retain a previous detached tree while making the next.
+                self.drain_async()
+            except BaseException as error:
+                writer_error = error
+        if writer_error is not None:
+            self._record_async_failure(state, writer_error)
+            try:
+                event = self._write(state, self.slot)
+                event['async_writer_recovery'] = {'error_type':type(writer_error).__name__,
+                    'error':str(writer_error)[:1000], 'recovered_synchronously':True}
+                self._after_save(state, event, metric=metric, higher_is_better=higher_is_better)
+                return event
+            except BaseException as recovery_error:
+                recovery_error.add_note('prior async checkpoint writer failed: '
+                    f'{type(writer_error).__name__}: {writer_error}')
+                recovery_error.add_note(f'last known durable checkpoint path: {self.slot}')
+                raise
+        if self._async_writer is not None and async_allowed:
+            self._require_disk_headroom(self.slot)
+            if async_optimizer is None:
+                admission = {'eligible':False,'reason':'optimizer_bound_unavailable',
+                    'available_host_bytes':None,'snapshot_size_bound_bytes':None,
+                    'required_headroom_bytes':None}
+            else:
+                try:
+                    from .checkpoint_safety import native_async_snapshot_headroom
+                    admission = native_async_snapshot_headroom(state, async_optimizer)
+                except Exception as error:
+                    admission = {'eligible':False,'reason':type(error).__name__,
+                        'error':str(error)[:1000],'available_host_bytes':None,
+                        'snapshot_size_bound_bytes':None,'required_headroom_bytes':None}
+            if admission.get('eligible'):
+                self._record_async_admission(state, admission, 'background')
+                event = {'time':time.time(),'path':str(self.slot),'bytes':None,
+                    'previous_preserved_until_replace':True,'async_pending':True,
+                    'async_headroom':admission,'async_mode':'background'}
+                self.events.append(event)
+                def after_write(snapshot):
+                    stat = self.slot.stat()
+                    event['bytes'] = stat.st_size
+                    self._record_committed(snapshot)
+                    event['async_pending'] = False
+                    self._after_save(snapshot, event, metric=metric, higher_is_better=higher_is_better)
+                try:
+                    self._async_writer.submit(self.slot,state,after_write=after_write)
+                    self.last_saved_monotonic = time.monotonic()
+                    return event
+                except BaseException as error:
+                    # Snapshot allocation/startup or an overlapped writer may
+                    # fail. Commit the exact current state synchronously before
+                    # allowing the caller to continue.
+                    self._record_async_failure(state,error)
+                    try:
+                        event=self._write(state,self.slot)
+                        event['async_writer_recovery']={'error_type':type(error).__name__,
+                            'error':str(error)[:1000],'recovered_synchronously':True}
+                        self._after_save(state,event,metric=metric,higher_is_better=higher_is_better)
+                        return event
+                    except BaseException as recovery_error:
+                        recovery_error.add_note('async checkpoint snapshot/write failed: '
+                            f'{type(error).__name__}: {error}')
+                        recovery_error.add_note(f'last known durable checkpoint path: {self.slot}')
+                        raise
+            self._record_async_admission(state, admission, 'synchronous-fallback')
+            event=self._write(state,self.slot)
+            event['async_fallback']=admission
+            self._after_save(state,event,metric=metric,higher_is_better=higher_is_better)
+            return event
+        event=self._write(state,self.slot)
+        self._after_save(state,event,metric=metric,higher_is_better=higher_is_better)
         return event
 
     def finalize(self, weights_state: dict | None = None, *, resumable_state: dict | None = None,
@@ -155,6 +288,7 @@ class CheckpointPolicy:
         """
         if drop_resumable and weights_state is None:
             raise ValueError('dropping resumable state requires a successful final weights export')
+        self.drain_async()
         if resumable_state is not None:
             self.save(resumable_state)
         event = self._write(weights_state, self.final_path) if weights_state is not None else {}

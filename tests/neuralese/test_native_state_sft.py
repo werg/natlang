@@ -1025,7 +1025,9 @@ def test_held_failure_preserves_completed_optimizer_rng_and_exposure_for_exact_r
 
     monkeypatch.setattr(trainer, '_evaluate_cadence', fail_second)
     original_save = trainer._save
+    save_calls = []
     def save(*args, **kwargs):
+        save_calls.append(dict(kwargs.get('metrics', {})))
         if recovery_save_fails and 'held_evaluation_failure' in kwargs['metrics']:
             raise OSError('injected full disk')
         return original_save(*args, **kwargs)
@@ -1034,6 +1036,8 @@ def test_held_failure_preserves_completed_optimizer_rng_and_exposure_for_exact_r
     with pytest.raises(ValueError) as caught:
         run(interrupted)
     assert caught.value is failure
+    assert len(save_calls) == 2  # Step-one cadence plus one specialized step-two recovery attempt.
+    assert sum('held_evaluation_failure' in metrics for metrics in save_calls) == 1
     slot = interrupted / 'checkpoint.pt'
     saved = torch.load(slot, map_location='cpu', weights_only=False)
     saved_step = 1 if recovery_save_fails else 2

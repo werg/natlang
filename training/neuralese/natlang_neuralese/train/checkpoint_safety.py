@@ -129,6 +129,47 @@ def warmup_checkpoint_size_upper_bound(named_parameters, heads, optimizer, *, la
     return int(math.ceil((tensor_payload + overhead) * margin))
 
 
+def native_async_snapshot_headroom(state, optimizer, *, margin=1.15, available_margin=1.25):
+    """Conservatively admit a detached native-state snapshot using host/cgroup headroom.
+
+    Count each tensor storage occurrence (aliases can overcount, never undercount),
+    add the remaining lazy optimizer-state bound, then apply the same 1.15 state
+    margin and 1.25 available-memory margin used by text warmup. Unknown memory
+    or unsupported tensor storage fails closed to synchronous persistence.
+    """
+    from .trajectory_state import available_system_memory_bytes
+    import torch
+
+    if (not math.isfinite(margin) or margin < 1.0
+            or not math.isfinite(available_margin) or available_margin < 1.0):
+        raise ValueError('async checkpoint memory margins must be finite and at least one')
+
+    def tensor_bytes(value):
+        if isinstance(value, torch.Tensor):
+            if value.layout != torch.strided or value.is_conj() or value.is_neg():
+                raise CheckpointReserveError('async checkpoint cannot bound unsupported tensor storage')
+            return int(value.untyped_storage().nbytes())
+        if isinstance(value, dict):
+            return sum(tensor_bytes(item) for item in value.values())
+        if isinstance(value, (tuple, list, set, frozenset)):
+            return sum(tensor_bytes(item) for item in value)
+        return 0
+
+    payload = tensor_bytes(state)
+    current_slots = optimizer_state_size_upper_bound(optimizer, lazy=False)
+    lazy_slots = optimizer_state_size_upper_bound(optimizer, lazy=True)
+    parameter_count = sum(len(group['params']) for group in optimizer.param_groups)
+    overhead = max(16 * 1024 * 1024, parameter_count * 1024)
+    size_bound = int(math.ceil((payload + max(0, lazy_slots-current_slots) + overhead) * margin))
+    available = available_system_memory_bytes()
+    required = int(math.ceil(size_bound * available_margin))
+    return {'eligible': available is not None and available >= required,
+            'available_host_bytes': available, 'snapshot_size_bound_bytes': size_bound,
+            'required_headroom_bytes': required, 'state_tensor_bytes': payload,
+            'lazy_optimizer_bytes': max(0, lazy_slots-current_slots),
+            'available_margin': available_margin, 'size_margin': margin}
+
+
 def _state_tensor_bytes(value):
     if hasattr(value, 'numel') and hasattr(value, 'element_size'):
         return int(value.numel() * value.element_size())

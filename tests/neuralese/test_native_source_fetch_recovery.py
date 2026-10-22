@@ -100,7 +100,9 @@ def test_fetch_failure_checkpoint_matches_completed_reference_and_resumes(tmp_pa
                     raise failure
                 yield next(stream)
         finally:stream.close()
+    save_calls=[]
     def save(policy,*args,**kwargs):
+        save_calls.append(dict(kwargs.get('metrics',{})))
         if save_fails and 'source_fetch_failure'in kwargs['metrics']:
             random.random();torch.rand(7)
             raise OSError('injected recovery disk failure')
@@ -111,6 +113,8 @@ def test_fetch_failure_checkpoint_matches_completed_reference_and_resumes(tmp_pa
         patch.setattr(trainer,'_save',save)
         with pytest.raises(ValueError)as caught:run(base,paths,interrupted)
     assert caught.value is failure
+    assert len(save_calls)==2  # Step-two cadence plus one specialized step-three recovery attempt.
+    assert sum('source_fetch_failure' in metrics for metrics in save_calls)==1
     equal(trainer.capture_training_rng_state('cpu'),boundary['rng'])
     actual=torch.load(interrupted/'checkpoint.pt',weights_only=False,map_location='cpu')
     expected=prefix['checkpoint']if save_fails else reference_three
