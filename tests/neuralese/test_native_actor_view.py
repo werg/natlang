@@ -266,3 +266,60 @@ def test_physical_inference_export_cannot_publish_optimizer_updates(source,tmp_p
     finally:restored.store.close()
     assert sha256_file_hex_cached(path)==before
     assert state['training']['sft_progress']['native_full_sft']['exposure_counts']['row-9999']==1
+
+
+@pytest.mark.parametrize('mutation',[None,'weights','step','truncated','symlink','outside'])
+def test_interrupted_view_reuses_only_exact_fully_verified_output(source,tmp_path,monkeypatch,mutation):
+    from natlang_neuralese.train import trajectory_state
+    _,path,state,signature=source
+    ref=write_actor_view(path,tmp_path/'original',validated_state=state,decoded_source_stat=signature)
+    receipt=json.loads(Path(ref['path']).read_text())
+    original=Path(ref['path']).parent/receipt['view']['path']
+    out=tmp_path/'recovery';folder=out/receipt['source']['sha256'];folder.mkdir(parents=True)
+    pending=folder/'.actor-view-interrupted.pt'
+    import shutil
+    shutil.copyfile(original,pending)
+    if mutation in ('weights','step'):
+        bad=copy.deepcopy(CheckpointPolicy.load(pending))
+        if mutation=='step':bad['step']+=1
+        else:
+            key=next(iter(bad['backbone_state']))
+            bad['backbone_state'][key]=bad['backbone_state'][key]+1
+        torch.save(bad,pending)
+    elif mutation=='truncated':pending.write_bytes(b'partial checkpoint')
+    elif mutation=='symlink':
+        pending.unlink();pending.symlink_to(original)
+    elif mutation=='outside':
+        pending=tmp_path/'.actor-view-outside.pt';shutil.copyfile(original,pending)
+    def forbidden(*args,**kwargs):raise AssertionError('Recovery must not serialize actor weights again')
+    monkeypatch.setattr(trajectory_state,'atomic_checkpoint',forbidden)
+    source_hash=sha256_file_hex_cached(path)
+    if mutation:
+        with pytest.raises((ValueError,RuntimeError,AssertionError,EOFError,IndexError,__import__('pickle').UnpicklingError)):
+            write_actor_view(path,out,validated_state=state,decoded_source_stat=signature,prepared_view=pending)
+        assert pending.exists()
+        assert not list(folder.glob('*.json'))
+    else:
+        recovered=write_actor_view(path,out,validated_state=state,decoded_source_stat=signature,prepared_view=pending)
+        value=json.loads(Path(recovered['path']).read_text())
+        assert value['view']['sha256']==receipt['view']['sha256']
+        assert value['source']==receipt['source']
+        assert not pending.exists()
+        assert load_actor_view(path,recovered)['step']==state['step']
+    assert sha256_file_hex_cached(path)==source_hash
+
+
+def test_recovered_actor_view_retains_candidate_if_receipt_publication_fails(source,tmp_path,monkeypatch):
+    import shutil
+    from natlang_neuralese.model import native_composite
+    _,path,state,signature=source
+    ref=write_actor_view(path,tmp_path/'original',validated_state=state,decoded_source_stat=signature)
+    value=json.loads(Path(ref['path']).read_text())
+    folder=tmp_path/'recover'/value['source']['sha256'];folder.mkdir(parents=True)
+    pending=folder/'.actor-view-recover.pt'
+    shutil.copyfile(Path(ref['path']).parent/value['view']['path'],pending)
+    def fail(*args,**kwargs):raise OSError('simulated receipt storage failure')
+    monkeypatch.setattr(native_composite,'_durable_immutable',fail)
+    with pytest.raises(OSError,match='receipt storage'):
+        write_actor_view(path,tmp_path/'recover',validated_state=state,decoded_source_stat=signature,prepared_view=pending)
+    assert pending.exists()

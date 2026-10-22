@@ -737,6 +737,16 @@ class MapleForCausalLM(nn.Module):
 CHECKPOINT_RENAMES = {"model.word_embeddings.weight": "model.embed_tokens.weight"}
 
 
+def restore_maple_owned_state(config, state, device):
+    """Restore already owned tensors and regenerate the nonpersistent RoPE state."""
+    with torch.device('meta'):
+        model = MapleForCausalLM(config)
+    model.load_state_dict(state, strict=True, assign=True)
+    model.model.rotary_emb = rotary_embedding(config).to(device)
+    model.requires_grad_(False)
+    return model.eval()
+
+
 def load_maple(path, device="cpu", dtype=torch.bfloat16, ternary_attention: bool = True, layers: int | None = None,
                experts: int | None = None, cache: str | Path | None = None,
                dense_experts: bool | None = None) -> MapleForCausalLM:
@@ -753,8 +763,6 @@ def load_maple(path, device="cpu", dtype=torch.bfloat16, ternary_attention: bool
     if cache is not None and Path(cache).is_dir() and layers is None and experts is None:
         config = MapleConfig.from_dir(path)
         config.dense_experts = dense_experts
-        with torch.device("meta"):
-            model = MapleForCausalLM(config)
         moved = {}
         # Shards of ~1 GB, each mapped, moved to the device and released before the next: the memory guard counts
         # page cache charged to the job's cgroup, so a single 21 GB mapping would count twice while loading.
@@ -771,10 +779,7 @@ def load_maple(path, device="cpu", dtype=torch.bfloat16, ternary_attention: bool
             del state
             with open(shard, "rb") as handle:
                 os.posix_fadvise(handle.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
-        model.load_state_dict(moved, strict=True, assign=True)  # keeps the stored dtypes (BF16, FP32 router, int8)
-        model.model.rotary_emb = rotary_embedding(config).to(device)
-        model.requires_grad_(False)
-        return model.eval()
+        return restore_maple_owned_state(config, moved, device)
     model = _convert(path, device, dtype, ternary_attention, layers, experts, dense_experts)
     if cache is not None and layers is None and experts is None:
         save_cache(model, cache)
