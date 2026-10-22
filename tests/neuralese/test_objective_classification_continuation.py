@@ -345,3 +345,20 @@ def test_policy_mutation_during_source_inventory_fails_final_recheck(combined, m
     with pytest.raises(ValueError,match='artifact changed'):
         continuation.verify_objective_proof_extension(old,new,prior,current)
     assert mutated
+
+
+def test_shallow_dependency_check_preserves_current_parts_scope(combined, tmp_path):
+    from natlang_neuralese.train.native_classification_continuation import classification_proof_dependencies
+    _, _, proof, _, put, _ = combined
+    proof = copy.deepcopy(proof)
+    missing = {'path': str(tmp_path / 'independent-predecessor-check.json'), 'sha256': '0' * 64}
+    proof['objective_policy_continuation']['prior_proof'] = missing
+    ref = put(tmp_path / 'current-parts-only.json', proof)
+    actual = classification_proof_dependencies(ref, follow_continuations=False)
+    expected = {ref['path']}
+    for part in proof['indexes'] + proof['held_indexes']:
+        expected.update(part[key]['path'] for key in ('source', 'old_index', 'new_index', 'producer'))
+        expected.update(value['path'] for value in part['old_policy'].values())
+    assert {item['path'] for item in actual} == expected
+    with pytest.raises((ValueError, OSError)):
+        classification_proof_dependencies(ref)

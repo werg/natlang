@@ -288,6 +288,21 @@ comprehensive training on the entire evolving production recipe.
   cursor. Updating bootstrap metadata alone does not publish the adopted recipe.
   Preserve optimizer/RNG/exposure and verify the next real optimizer child.
 
+Historical reader replay (engineering finding, 2026-10-22): recipe inputs can
+include the exact classification reader implementation. A changed reader is not
+a byte-identical relocation. Replay historical completed adaptations and drained
+handoffs using the package that actually prepared their metadata, with complete
+code inventory and bound recipe checks before and after isolated CPU replay.
+Both old and future plans in a completed adaptation were enumerated by that
+adaptation's implementation; its old numerical package is not automatically the
+original metadata reader. Preserve strict source/held, lineage and exposure
+checks. Include committed resident histories and both effective sealed control
+closures in validation before cutover. A live scheduler holding the canonical
+lease can still be blocked: monitor its actual configuration_errors and retry
+signature alongside real optimizer progress. When a normal publication advances
+the earned parent, rebind a completed invocation to that actual state through
+the existing continuation mechanism rather than reusing an obsolete invocation.
+
 These instructions supersede earlier requirements for frozen experimental
 runs, base-drift hard stops or clean-run comparisons where they conflict.
 

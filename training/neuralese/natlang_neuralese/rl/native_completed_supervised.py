@@ -683,7 +683,16 @@ def verify(reference):
     from .native_raw_handoff import _recipe_plan
     expected_old=_recipe_plan(Path(config['production_recipe']),'cuda');expected_old.update(code=old_code,recipe_sha256=value['lineage'])
     expected_future=_recipe_plan(_bound(value['recipe']),'cuda');expected_future['code']=value['code']
-    if not _same_replayed_recipe_plan(old,expected_old) or not _same_replayed_recipe_plan(future,expected_future):raise ValueError('completed adaptation changed its exact old/future recipe plans')
+    if not _same_replayed_recipe_plan(old,expected_old) or not _same_replayed_recipe_plan(future,expected_future):
+        # Both plans were enumerated by the adaptation's implementation. The
+        # old numerical package describes the earned optimizer, not the reader
+        # that prepared the adaptation. Reuse its exact declared future package.
+        from .native_raw_handoff import _package_recipe_plans
+        expected_old,expected_future=_package_recipe_plans(package,value['code'],
+            [binding(config['production_recipe']),value['recipe']],'cuda')
+        expected_old.update(code=old_code,recipe_sha256=value['lineage']);expected_future['code']=value['code']
+        if not _same_replayed_recipe_plan(old,expected_old) or not _same_replayed_recipe_plan(future,expected_future):
+            raise ValueError('completed adaptation changed its exact old/future recipe plans')
     declared=[ref for roles in old['stage_inputs'].values()for key,ref in roles.items()if key=='withdrawn_native_graphs']
     if [item['proof']for item in value['closed_prior_withdrawals']]!=declared:
         raise ValueError('completed adaptation changed its prior withdrawal declarations')
@@ -880,7 +889,8 @@ def _install_resident_plan(proof,config):
                 raise ValueError('completed adaptation resident history lost its installed-plan anchor')
             requirement={'recipe_sha256':recipe_identity_sha256(_bound(proof['recipe'])),
                 'recipe_lineage_sha256':proof['lineage'],'stage_ids':[stage]}
-            _resident_release_requirement(requirement,{'resident_current':binding(directory/'current.json')})
+            _resident_release_requirement(requirement,{'resident_current':binding(directory/'current.json')},
+                replay_package=proof['package'])
             if json.loads(target.read_text())!=active_plan:
                 raise ValueError('completed adaptation resident projection differs from its committed plan')
             recipe=payload['recipe']

@@ -134,3 +134,55 @@ def test_historical_classification_readers_may_relocate_without_changing_sources
             wrong.write_text('# different implementation\n')
             changed[role]['dependencies'][1] = migration._binding(wrong)
         assert not recipe._classification_reader_relocation(old, changed)
+
+
+def test_recipe_proof_checks_shared_policy_bindings_once_per_call(tmp_path, monkeypatch):
+    from collections import Counter
+    from natlang_neuralese.train import native_source_classification as source
+    _, save, proof, part = prepared(tmp_path, monkeypatch)
+    proof['indexes'] = [copy.deepcopy(part) for _ in range(100)]
+    proof['held_indexes'] = [copy.deepcopy(part) for _ in range(100)]
+    roles = save()
+    calls = Counter()
+    original = source._checked
+    def checked(ref):
+        calls[ref['path']] += 1
+        return original(ref)
+    monkeypatch.setattr(source, '_checked', checked)
+    assert recipe._classification_proof(roles) == proof
+    unique = {part[key]['path'] for key in ('source', 'old_index', 'new_index', 'producer')}
+    unique.update(item['path'] for item in part['old_policy'].values())
+    assert {path: calls[path] for path in unique} == {path: 1 for path in unique}
+    calls.clear()
+    assert recipe._classification_proof(roles) == proof
+    assert {path: calls[path] for path in unique} == {path: 1 for path in unique}
+
+
+@pytest.mark.parametrize('field,value', [('sha256', '0' * 64), ('bytes', 1)])
+def test_recipe_proof_rejects_contradictory_shared_file(tmp_path, monkeypatch, field, value):
+    _, save, proof, part = prepared(tmp_path, monkeypatch)
+    second = copy.deepcopy(part)
+    second['new_index'][field] = value
+    proof['indexes'].append(second)
+    with pytest.raises(ValueError):
+        recipe._classification_proof(save())
+
+
+def test_recipe_proof_rejects_rewritten_shared_policy_during_call(tmp_path, monkeypatch):
+    import os
+    from natlang_neuralese.train import native_source_classification as source
+    _, save, _, part = prepared(tmp_path, monkeypatch)
+    roles = save()
+    policy = Path(next(iter(part['old_policy'].values()))['path'])
+    original = source._checked
+    def checked(ref):
+        result = original(ref)
+        if ref['path'] == policy.as_posix():
+            state = policy.stat()
+            raw = policy.read_bytes()
+            policy.write_bytes(bytes([raw[0] ^ 1]) + raw[1:])
+            os.utime(policy, ns=(state.st_atime_ns, state.st_mtime_ns))
+        return result
+    monkeypatch.setattr(source, '_checked', checked)
+    with pytest.raises(ValueError):
+        recipe._classification_proof(roles)

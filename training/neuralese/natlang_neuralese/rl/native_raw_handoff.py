@@ -612,6 +612,23 @@ def _external_recipe_plans(record, old_plan, recipes):
     if package is None:
         raise ValueError('historical recipe reconstruction lost its captured runtime')
     _external_frozen_package(record, package, old_plan)
+    return _package_recipe_plans(package, old_plan['code'], recipes, old_plan['device'])
+
+
+def _package_recipe_plans(package, code, recipes, device):
+    """Replay exact historical reader code in an isolated CPU import context.
+
+    Reader dependencies are part of the original metadata plan. Changing their
+    implementation is legitimate future work, never an excuse to reinterpret
+    an earned historical plan with today's implementation.
+    """
+    import os
+    import subprocess
+    import sys
+    from ..train.native_resident import code_inventory
+    package = Path(package).resolve(strict=True)
+    if code_inventory(package) != code:
+        raise ValueError('historical recipe runtime differs from declared code')
     root = package.resolve().parents[2]
     program = '''import sys,json
 from pathlib import Path
@@ -621,19 +638,28 @@ from natlang_neuralese.train.native_readiness import _bound
 request=json.load(sys.stdin)
 print(json.dumps([_recipe_plan(_bound(ref),request['device'])for ref in request['recipes']]))
 '''
-    request = {'device': old_plan['device'], 'recipes': [
-        {'path': ref['path'], 'sha256': ref.get('file_sha256', ref['sha256'])}
-        for ref in recipes]}
+    references=[{'path':ref['path'],'sha256':ref.get('file_sha256',ref['sha256']),
+        **({'bytes':ref['bytes']}if'bytes'in ref else{})}for ref in recipes]
+    def check_recipes():
+        for ref in references:
+            path=_bound(ref)
+            if 'bytes'in ref and path.stat().st_size!=ref['bytes']:
+                raise ValueError('historical recipe byte count changed')
+    check_recipes()
+    request = {'device': device, 'recipes': references}
     result = subprocess.run([sys.executable, '-c', program, str(package)],
         input=json.dumps(request), capture_output=True, text=True,
         env={**os.environ, 'CUDA_VISIBLE_DEVICES': '', 'NATLANG_REPO': str(root),
              'PYTHONPATH': str(package.parent)+':'+str(root)})
     if result.returncode:
         raise ValueError('historical recipe reconstruction failed: '+result.stderr[-2000:])
-    if code_inventory(package) != old_plan['code']:
+    if code_inventory(package) != code:
         raise ValueError('historical recipe runtime changed during reconstruction')
+    check_recipes()
     plans = json.loads(result.stdout)
-    if not isinstance(plans, list) or len(plans) != len(recipes):
+    if (not isinstance(plans, list) or len(plans) != len(recipes)
+            or any(not isinstance(plan,dict)or plan.get('schema')!='natlang.neuralese-recipe-plan/1'
+                   or plan.get('device')!=device for plan in plans)):
         raise ValueError('historical recipe reconstruction lost its exact inventory')
     return plans
 
@@ -823,10 +849,20 @@ def verify_drained_recipe_handoff(reference, *, handoff, verified_handoff=None):
     next_plan=json.loads(_bound(value['new_plan']).read_text())
     proposed=_recipe_plan(_bound(value['recipe']),prior['device'])
     out=Path(record['resident']['directory']).parent
-    expected=lineage_handoff(prior,proposed,old_package,new_package,out/'recipe-plan.json',out,dry_run=True,started_stage_ids=started)
-    if (_stable_handoff_plan(expected)!=_stable_handoff_plan(next_plan)
+    try:
+        expected=lineage_handoff(prior,proposed,old_package,new_package,out/'recipe-plan.json',out,dry_run=True,started_stage_ids=started)
+    except ValueError:
+        # Changed current readers can reject a historical input before the
+        # final plan comparison. The exact frozen replay still must pass every
+        # lineage check; no exception or dependency is waived.
+        expected=None
+    if (expected is None or _stable_handoff_plan(expected)!=_stable_handoff_plan(next_plan)
             or next_plan['code']!=value['new_code']):
-        raise ValueError('drained recipe handoff plan differs from verified continuation')
+        proposed=_package_recipe_plans(new_package,value['new_code'],[value['recipe']],prior['device'])[0]
+        expected=lineage_handoff(prior,proposed,old_package,new_package,out/'recipe-plan.json',out,dry_run=True,started_stage_ids=started)
+        if (_stable_handoff_plan(expected)!=_stable_handoff_plan(next_plan)
+                or next_plan['code']!=value['new_code']):
+            raise ValueError('drained recipe handoff plan differs from verified continuation')
     return value
 
 
