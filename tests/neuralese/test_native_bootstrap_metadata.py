@@ -333,3 +333,12 @@ def test_actor_runtime_retargets_default_factory_command_and_rejects_stale_ident
         validate_actor_runtime_configuration(stale)
     with pytest.raises(ValueError,match='direct-checkpoint entry point'):
         bind_actor_runtime_command(['/usr/bin/python','-c','custom actor'],new)
+
+
+@pytest.mark.parametrize('control',[None,[],{'plan':{'path':'old','sha256':'a'*64}}])
+def test_completed_stale_or_malformed_scheduling_control_invalidates_cache_before_reuse(tmp_path,control):
+    from natlang_neuralese.rl import native_bootstrap_metadata as metadata
+    plan=tmp_path/'plan.json';write(plan,{'models':[]})
+    config={'rl_scheduling_control':control}
+    assert metadata.unchanged(tmp_path/'unused-cache.json',plan,
+        {'completed_supervised_adaptation':{'path':'unused-proof','sha256':'b'*64}},None,config)is False
