@@ -28,8 +28,9 @@ def bound_output_checkpoint(reference,role,*,production_root='/work/native-produ
     allowed=pathlib.Path(reference.get('allowed_output_root',str(standard))).resolve()
     if allowed!=standard:
         control=pathlib.Path(control_root).resolve()
-        control_output=(allowed.parent==control
-            and re.fullmatch(re.escape(role)+r'(?:[0-9a-f]{3,40})?-.+',allowed.name)is not None)
+        control_parts=allowed.relative_to(control).parts if allowed.is_relative_to(control) else ()
+        control_output=(bool(control_parts)
+            and re.fullmatch(re.escape(role)+r'(?:[0-9a-f]{3,40})?-.+',control_parts[0])is not None)
         parts=allowed.relative_to(pathlib.Path(production_root).resolve()).parts
         round_output=any(parts[index]=='rounds' and index+1<len(parts) and parts[index+1]==role
                          for index in range(len(parts)))
