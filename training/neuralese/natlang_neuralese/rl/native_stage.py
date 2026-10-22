@@ -117,6 +117,10 @@ def main(argv=None):
     parser.add_argument('--foundation-qualification-request', type=Path)
     parser.add_argument('--resident-data-directory', type=Path)
     parser.add_argument('--resident-geometry-qualification', type=Path)
+    # A resumed supervised controller can carry its original capacity request.
+    # It describes the parent's CE source/objective, never the sampled RL graph.
+    # _admit_and_train builds the mandatory policy-capacity request below.
+    parser.add_argument('--memory-qualification')
     # Optional owner-follow metadata is a control-plane pointer. The RL stage
     # passes it to the real nested trainer boundary below; it never changes the
     # rollout objective or trainer arguments.
