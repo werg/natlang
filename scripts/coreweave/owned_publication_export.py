@@ -12,11 +12,16 @@ import uuid
 from .cursor_checkpoint_export import bound_output_checkpoint
 
 
-def remote_code(spec, *, known_sha256=None, known_step=-1):
+def remote_code(spec, *, known_sha256=None, known_step=-1, hash_cache_path=None):
     """Render the same verifier against the owner's explicitly frozen runtime."""
     return (
         'import hashlib,json,os,pathlib,re,shutil,subprocess,sys,uuid\nfrom pathlib import Path\n'
+        + 'HASH_CACHE=' + repr(None if hash_cache_path is None else str(hash_cache_path)) + '\n'
         + 'SPEC=' + repr(spec) + '\n'
+        + "if HASH_CACHE is not None:\n"
+        + " p=Path(HASH_CACHE);root=Path(SPEC['production_root'])\n"
+        + " if not p.is_absolute() or str(p)!=os.path.normpath(str(p)) or p.is_symlink() or p.parent.is_symlink() or p.parent.resolve()!= (root/'cache').resolve():raise ValueError('owned hash cache escaped production/cache')\n"
+        + ' os.environ["NATLANG_HASH_CACHE"]=HASH_CACHE\n'
         + "sys.path[:0]=[str(Path(SPEC['runtime'])/'training/neuralese'),SPEC['runtime']]\n"
         + 'from natlang_neuralese.train.native_resident import code_inventory,digest\n'
         + "assert digest(code_inventory(Path(SPEC['runtime'])/'training/neuralese/natlang_neuralese'))==SPEC['runtime_code_sha256']\n"
@@ -193,7 +198,7 @@ def verify_owned_publication_command(command, spec, trainer_invocation):
 
 def owner_remote_code(pointer_path, *, role, known_generation=None, known_sha256=None,
                       known_step=-1, production_root='/work/native-production',
-                      control_root='/work/native-production/control'):
+                      control_root='/work/native-production/control', hash_cache_path=None):
     """Observe whatever exact learner the supervisor has most recently selected."""
     # The source is serialized and executed on the remote machine. Never embed
     # a host-side PosixPath repr (which is not defined in that source).
@@ -206,8 +211,13 @@ def owner_remote_code(pointer_path, *, role, known_generation=None, known_sha256
     trainer_parser = inspect.getsource(native_publication_owner._trainer_invocation)
     source = (
         'import hashlib,json,os,pathlib,re,shutil,subprocess,sys,uuid\nfrom pathlib import Path\n'
+        + 'HASH_CACHE=' + repr(None if hash_cache_path is None else str(hash_cache_path)) + '\n'
         + 'POINTER=' + repr(str(pointer_path)) + '\nROLE=' + repr(role) + '\n'
         + 'PRODUCTION_ROOT=' + repr(production_root) + '\nCONTROL_ROOT=' + repr(control_root) + '\n'
+        + "if HASH_CACHE is not None:\n"
+        + " p=Path(HASH_CACHE);root=Path(PRODUCTION_ROOT)\n"
+        + " if not p.is_absolute() or str(p)!=os.path.normpath(str(p)) or p.is_symlink() or p.parent.is_symlink() or p.parent.resolve()!= (root/'cache').resolve():raise ValueError('owned hash cache escaped production/cache')\n"
+        + ' os.environ["NATLANG_HASH_CACHE"]=HASH_CACHE\n'
         + 'TRAINER_MODULES=' + repr(tuple(native_publication_owner.TRAINER_MODULES)) + '\n'
         + helper_source + '\n' + trainer_parser + '\n' + command_helper + '\n'
         + "if Path(POINTER).is_symlink():raise ValueError('owned publication pointer may not be a symlink')\n"

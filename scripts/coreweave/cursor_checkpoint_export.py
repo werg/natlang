@@ -12,6 +12,7 @@ import subprocess
 import sys
 import threading
 import time
+import traceback
 
 
 def bound_output_checkpoint(reference,role,*,production_root='/work/native-production',control_root='/work/native-production/control'):
@@ -40,6 +41,56 @@ def bound_output_checkpoint(reference,role,*,production_root='/work/native-produ
             raise ValueError('configured output is outside its role-owned control, round or recovery namespace')
     if not output.is_relative_to(allowed):raise ValueError('owner output escapes configured root')
     return output/'checkpoint.pt'
+
+
+def validate_owned_hash_cache(path, production_root):
+    """Keep the operator-selected strong digest cache within production/cache."""
+    if not isinstance(path, str) or not path or not pathlib.Path(path).is_absolute():
+        raise ValueError('owned hash cache needs an absolute operator-selected path')
+    root = pathlib.Path(production_root)
+    if not root.is_absolute():
+        raise ValueError('owned hash cache production root must be absolute')
+    expected_parent = (root/'cache').resolve(strict=False)
+    candidate = pathlib.Path(path)
+    if pathlib.Path(os.path.normpath(path)) != candidate:
+        raise ValueError('owned hash cache path must be normalized')
+    if candidate.parent.resolve(strict=False) != expected_parent:
+        raise ValueError('owned hash cache escaped the production cache namespace')
+    if candidate.exists() and candidate.is_symlink():
+        raise ValueError('owned hash cache may not be a symlink')
+    return str(candidate)
+
+
+_SECRET_ASSIGNMENT = re.compile(r'(?i)((?:--)?[A-Z0-9_-]*(?:api[_-]?key|token|auth(?:orization)?|password|secret|launch[_-]?token)[A-Z0-9_-]*\s*(?:=|:)\s*)([^\s,;]+)')
+_SECRET_ARGUMENT = re.compile(r'(?i)((?:--)(?:api[_-]?key|access[_-]?token|token|password|secret|launch[_-]?token)\s+)([^\s,;]+)')
+_BEARER_SECRET = re.compile(r'(?i)(\bbearer\s+)[A-Za-z0-9._~+/-]+=*')
+_URL_PASSWORD = re.compile(r'(?i)(https?://[^:/\s]+:)[^@/\s]+(@)')
+
+
+def _redact_failure_text(value, limit):
+    value = str(value)
+    value = _SECRET_ASSIGNMENT.sub(r'\1[REDACTED]', value)
+    value = _SECRET_ARGUMENT.sub(r'\1[REDACTED]', value)
+    value = _BEARER_SECRET.sub(r'\1[REDACTED]', value)
+    value = _URL_PASSWORD.sub(r'\1[REDACTED]\2', value)
+    return value[:limit]
+
+
+def failure_details(error):
+    """Return bounded, redacted diagnostics without serializing process env."""
+    inherited = getattr(error, 'owned_worker_failure', None)
+    if isinstance(inherited, dict):
+        trace = _redact_failure_text(inherited.get('traceback', ''), 10000)
+        return {'type': _redact_failure_text(inherited.get('type', 'RuntimeError'), 100),
+                'message': _redact_failure_text(inherited.get('message', ''), 2000),
+                'traceback': trace,
+                'traceback_truncated': bool(inherited.get('traceback_truncated'))
+                    or len(str(inherited.get('traceback', ''))) > 10000}
+    message = _redact_failure_text(error, 2000)
+    rendered = ''.join(traceback.format_exception(type(error), error, error.__traceback__))
+    return {'type': type(error).__name__, 'message': message,
+            'traceback': _redact_failure_text(rendered, 10000),
+            'traceback_truncated': len(rendered) > 10000}
 
 
 REMOTE_SOURCE = "import pathlib,json,os,time,torch,subprocess,gc\nimport fcntl,uuid\nroot=pathlib.Path(ROOT);remote_lock=(root/f'{ROLE}-cursor-durable-export.lock').open('a');fcntl.flock(remote_lock,fcntl.LOCK_EX|fcntl.LOCK_NB);paths=set(root.glob(f'rounds/{ROLE}/production/round-*/learner/checkpoint.pt'))|set(root.glob(f'rounds/{ROLE}/cycles/*/supervised/*/**/learner/checkpoint.pt'))\nfor candidate in paths:\n if not candidate.resolve().is_relative_to(root.resolve()/'rounds'/ROLE):raise ValueError('canonical checkpoint escaped its role namespace')\ncursor_path=root/f'rounds/{ROLE}/cycle.json';cursor=json.loads(cursor_path.read_text())if cursor_path.exists()else {};c=cursor.get('current_checkpoint');c=c.get('path')if isinstance(c,dict)else c\nif EXTRA is not None:paths.add(bound_output_checkpoint(EXTRA,ROLE))\nif isinstance(c,str):\n p=pathlib.Path(c).resolve()\n if p.is_relative_to(root/f'rounds/{ROLE}'):paths.add(p)\nchanged=[]\nfor p in paths:\n if not p.is_file():continue\n s=p.stat();identity=[s.st_dev,s.st_ino,s.st_size,s.st_mtime_ns]\n if KNOWN.get(str(p),{}).get('stat')!=identity:changed.append((s.st_mtime_ns,p,identity))\nupdates={};chosen=None\nfor _,p,identity in sorted(changed,reverse=True):\n available=int(next(x.split()[1]for x in pathlib.Path('/proc/meminfo').read_text().splitlines()if x.startswith('MemAvailable:')))*1024\n if available<MIN_AVAILABLE_BYTES:break\n # Copy first: atomic slot replacement may race, but the snapshot's own saved step is decisive.\n temp=pathlib.Path(PIN_DIRECTORY)/('.'+ROLE+'-cursor-observation-'+uuid.uuid4().hex+'.pt');temp.parent.mkdir(parents=True,exist_ok=True)\n try:\n  subprocess.run(['cp','--reflink=auto','--preserve=mode,timestamps','--',str(p),str(temp)],check=True);assert temp.stat().st_ino!=p.stat().st_ino\n  with temp.open('rb')as snapshot:os.fsync(snapshot.fileno())\n  with torch.serialization.safe_globals([torch.torch_version.TorchVersion]):value=torch.load(temp,map_location='cpu',mmap=True,weights_only=True)\n  training=value['training'];assert training['optimizer']and training['rng']and training['source_receipts'];step=int(value['step']);del value,training;gc.collect();updates[str(p)]={'stat':identity,'step':step}\n  if step>LAST:\n   target=temp.with_name(f'{ROLE}-native-checkpoint-step-'+str(step)+'.pt')\n   if target.exists():\n    import hashlib\n    assert target.stat().st_size==temp.stat().st_size and hashlib.file_digest(target.open('rb'),'sha256').hexdigest()==hashlib.file_digest(temp.open('rb'),'sha256').hexdigest(),'existing immutable step pin differs'\n    temp.unlink()\n   else:os.replace(temp,target)\n   fd=os.open(target.parent,os.O_DIRECTORY);os.fsync(fd);os.close(fd);chosen={'source':str(p),'pin':str(target),'step':step,'bytes':target.stat().st_size};break\n  temp.unlink()\n finally:\n  if temp.exists():temp.unlink()\nprint(json.dumps({'at':time.time(),'observations':updates,'chosen':chosen,'cursor_binding_only':c}))"
@@ -126,7 +177,8 @@ class OwnerFollowWorkers:
                 self._old_active=None
             def work():
                 try:event={'key':key,'result':fn()}
-                except Exception as error:event={'key':key,'error':type(error).__name__}
+                except Exception as error:event={'key':key,'error':type(error).__name__,
+                    'failure':failure_details(error)}
                 with self._lock:
                     self._events.append(event)
                     if old and self._old_active==key:self._old_active=None
@@ -151,7 +203,10 @@ class OwnerFollowWorkers:
         with self._lock:
             event=next((value for value in reversed(self._events) if value['key']==key),None)
         if event and event.get('error'):
-            raise RuntimeError('owned publication export worker failed: '+event['error'])
+            error=RuntimeError('owned publication export worker failed: '+
+                event['failure']['type']+': '+event['failure']['message'])
+            error.owned_worker_failure=event['failure']
+            raise error from None
         return event.get('result') if event else None
 
     def drain_events(self):
@@ -247,7 +302,7 @@ def run_owner_follow_once(directory, role, *, observe, export, workers=None, wai
                 ValueError('pending publication recovery must not observe a new owner')),export=export)
         except Exception as error:
             pending_failures.append({'generation_sha256':old_generation,
-                'type':type(error).__name__})
+                'failure':failure_details(error)})
     if not owner:
         return {'owner_pending':True,'pending_failures':pending_failures} if pending_failures else None
     owner_dir=owner_root/new_generation
@@ -451,6 +506,8 @@ def main(argv=None):
                         help='Exact owned-publication export specification; separate owner journal required')
     parser.add_argument('--publication-spec-sha256')
     parser.add_argument('--publication-owner-pointer', help='Remote current-owner pointer produced by the supervised controller')
+    parser.add_argument('--owned-hash-cache',
+                        help='Optional exact cache file under <production-root>/cache for strong owned-checkpoint hashes')
     parser.add_argument('--pin-directory', default='/work/production/durable-exports')
     parser.add_argument('--minimum-available-bytes', type=int, default=16*1024**3)
     parser.add_argument('--actor-view-directory', type=pathlib.Path)
@@ -467,6 +524,13 @@ def main(argv=None):
     publication = None
     if args.publication_spec and args.publication_owner_pointer:
         parser.error('choose one fixed publication selection or current-owner following')
+    owned_publication = bool(args.publication_owner_pointer or args.publication_spec)
+    hash_cache_path = None
+    if args.owned_hash_cache:
+        if not owned_publication:
+            parser.error('owned hash cache applies only to owned publication observation')
+        try: hash_cache_path = validate_owned_hash_cache(args.owned_hash_cache, str(args.root))
+        except ValueError as error: parser.error(str(error))
     if args.publication_owner_pointer and (args.bound_output or args.actor_view_directory or args.actor_view_runtime
             or args.actor_view_sidecar or args.actor_view_sidecar_sha256 or args.training_summary_spec
             or args.training_summary_runtime or args.checkpoint_control_spec):
@@ -525,6 +589,7 @@ def main(argv=None):
             except ImportError:
                 from scripts.coreweave.owned_publication_export import owner_remote_code
             code=owner_remote_code(args.publication_owner_pointer,role=args.role,
+                hash_cache_path=hash_cache_path,
                 known_generation=kwargs.get('known_owner_generation'),known_sha256=kwargs.get('known_sha256'),
                 known_step=kwargs.get('known_step',-1),production_root=str(args.root),
                 control_root=str(pathlib.Path(args.root)/'control'))
@@ -535,7 +600,8 @@ def main(argv=None):
                 from scripts.coreweave.owned_publication_export import remote_code as owned_code
             state_path=paths_for(args.state_dir,args.role)['state']
             state=json.loads(state_path.read_text()) if state_path.exists() else {}
-            code=owned_code(publication,known_sha256=(state.get('receipt') or {}).get('identity',{}).get('sha256'),
+            code=owned_code(publication,hash_cache_path=hash_cache_path,
+                            known_sha256=(state.get('receipt') or {}).get('identity',{}).get('sha256'),
                             known_step=state.get('last_verified_step',-1))
         else:
             code = remote_code(role=args.role, root=args.root, extra=extra,
@@ -574,9 +640,11 @@ def main(argv=None):
             if args.once: return 0
             time.sleep(args.interval)
         except Exception as error:
-            save(paths_for(args.state_dir,args.role)['error'], {'at':time.time(),'type':type(error).__name__,
-                'error':'source export retry; inspect owned unit log','traceback_class_only':True})
-            print(json.dumps({'at':time.time(),'retry':type(error).__name__}),flush=True)
+            detail=failure_details(error)
+            save(paths_for(args.state_dir,args.role)['error'], {'at':time.time(),**detail,
+                'retrying':True})
+            print(json.dumps({'at':time.time(),'retry':detail['type'],
+                'message':detail['message']}),flush=True)
             if args.once: raise
             time.sleep(min(60,args.interval))
 
