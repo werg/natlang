@@ -139,6 +139,32 @@ hindsight-kb training, have separate sandboxes: identify their ownership and
 preserve them. A control-plane `Running` label alone does not establish a healthy
 learner; monitor actual logs, progress and command responsiveness.
 
+## Sandbox recovery coverage (engineering finding, 2026-10-23)
+
+The quota incident stopped both learners, the teacher and both evaluators.
+Full checkpoint exports and exported teacher archives survived, but those
+sandboxes had no mounted snapshot storage. Both normal and authenticated gateway
+file reads reject a completed sandbox; a stale container `Running` field does
+not grant recovery access. Snapshot requests after shutdown failed because no
+snapshot storage was configured. Unexported state requires provider recovery.
+
+Prepare new production sandboxes with an explicit recovery workspace volume and
+snapshot schedule alongside independent full-checkpoint and source-data exports.
+The shared launcher accepts a one-GPU-only request, an optional measured RAM
+minimum, and `scratch.restore_from_snapshot_id` for an explicit mounted-volume
+restore. Do not silently discard a requested restore or mount it on ephemeral
+root storage. A storage declaration or accepted snapshot request is not a backup:
+record the actual READY snapshot and verify restored artifacts before relying
+on it. Platform snapshot failures remain concrete operational work; do not claim
+this incident's snapshot recovery is implemented or qualified from offline tests.
+Retain the latest verified recovery state and its active dependencies; prune a
+superseded snapshot/export only after its replacement is actually durable.
+
+Every supervised entry, including zero-success RL seed fallback, must use the
+shared exact-source resume and publication-owner mechanism. Otherwise useful
+updates can remain invisible to the durable exporter. Preserve optimizer, RNG
+and exposure; do not reinterpret an older exported parent as newer earned work.
+
 ## Neuralese architecture replacement (owner, 2026-10-15)
 
 The destination is shared positional KV and hybrid-state spans, replacing the

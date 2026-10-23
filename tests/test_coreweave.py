@@ -36,7 +36,7 @@ def base_job(**changes):
     ({'env': {'WANDB_API_KEY': 'x'}}, 'must not carry credentials'),
     ({'lifetime_hours': 721}, 'at most 720'),
     ({'placement': {}}, 'placement.reason'),
-    ({'resources': {'cpu': '8', 'gpu': 1}}, 'needs cpu and memory'),
+    ({'resources': {'cpu': '8'}}, 'needs cpu and memory'),
     ({'resources': {'cpu': '8', 'memory': '32', 'gpu': 1}}, 'binary unit'),
     ({'id': 'Has Spaces'}, 'lower-case'),
     ({'bundle': 'bundles/x.json'}, 'set bucket'),
@@ -71,6 +71,31 @@ def test_cost_estimate_is_request_based_and_gpu_rate_unknown_by_default():
     assert cost['gpu_rate_known'] is False and cost['max_total'] is None
     priced = job.cost_estimate(base_job(), gpu_hour_price=2.5)
     assert priced['max_total'] == round((8 * 0.128 + 32 * 0.0212 + 2.5) * 2, 2)
+
+
+@pytest.mark.parametrize('resources', [{'gpu': 1}, {'gpu': 1, 'memory': '24Gi'}])
+def test_one_gpu_request_keeps_only_declared_resource_filters(resources):
+    declaration=base_job(resources=resources)
+    request=job.sandbox_request(declaration,'echo boot')
+    assert request['resources']=={**{k:v for k,v in resources.items() if k!='gpu'},'gpu':{'count':1}}
+    cost=job.cost_estimate(declaration,gpu_hour_price=2.5)
+    assert cost['gpu_rate_known'] and cost['gpu_per_hour']==2.5
+    assert cost['cpu_memory_per_hour'] is None and not cost['cpu_memory_rate_known']
+    assert cost['max_total'] is None  # Assigned CPU/RAM cannot be priced before allocation.
+
+
+def test_snapshot_restore_is_explicit_and_requires_a_mounted_volume():
+    scratch={'path':'/work','size':'200Gi','restore_from_snapshot_id':'retained-snapshot-id'}
+    request=job.sandbox_request(base_job(resources={'gpu':1},scratch=scratch),'echo boot')
+    assert request['file_system_snapshot']=={'name':'work','mount_path':'/work','size':'200Gi',
+        'file_system_snapshot_id':'retained-snapshot-id'}
+    assert 'volumes' not in request and request['resources']=={'gpu':{'count':1}}
+    assert job.validate(job.validate(base_job(scratch=scratch)))['scratch']=={**scratch,'storage':'volume'}
+    with pytest.raises(job.JobError,match='requires volume storage'):
+        job.validate(base_job(scratch={**scratch,'storage':'root'}))
+    for bad in ('', ' ', ' id ', 17):
+        with pytest.raises(job.JobError,match='nonempty snapshot ID'):
+            job.validate(base_job(scratch={**scratch,'restore_from_snapshot_id':bad}))
 
 
 def test_root_work_path_omits_vendor_volume_without_changing_bootstrap_or_outputs():

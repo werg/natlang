@@ -73,10 +73,14 @@ def validate(job: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(job.get('image'), str) or not job['image']:
         raise JobError('image: a public image reference, e.g. nvcr.io/nvidia/pytorch:26.09-py3 (x86_64 variant)')
     resources = job.get('resources')
-    if not isinstance(resources, dict) or 'cpu' not in resources or 'memory' not in resources:
-        raise JobError('resources needs cpu and memory: a GPU request reserves only the GPU (docs gpu-sandboxes.md)')
-    cpu_cores(resources['cpu'])
-    memory_gib(resources['memory'])
+    if not isinstance(resources, dict):
+        raise JobError('resources must declare a GPU count or CPU and memory requirements')
+    if not resources.get('gpu') and ('cpu' not in resources or 'memory' not in resources):
+        raise JobError('a CPU-only request needs cpu and memory')
+    if 'cpu' in resources:
+        cpu_cores(resources['cpu'])
+    if 'memory' in resources:
+        memory_gib(resources['memory'])
     gpus = resources.get('gpu', 0)
     if not isinstance(gpus, int) or gpus < 0:
         raise JobError('resources.gpu is a GPU count (0 or 1 on serverless)')
@@ -116,6 +120,13 @@ def validate(job: dict[str, Any]) -> dict[str, Any]:
     if storage not in ('volume', 'root'):
         raise JobError('scratch.storage is "volume" or "root" (ephemeral root filesystem, no reserved size)')
     job['scratch'] = {'path': scratch['path'], 'size': scratch.get('size', '200Gi'), 'storage': storage}
+    snapshot = scratch.get('restore_from_snapshot_id')
+    if snapshot is not None:
+        if storage != 'volume':
+            raise JobError('scratch.restore_from_snapshot_id requires volume storage')
+        if not isinstance(snapshot, str) or not snapshot.strip() or snapshot != snapshot.strip():
+            raise JobError('scratch.restore_from_snapshot_id must be a nonempty snapshot ID')
+        job['scratch']['restore_from_snapshot_id'] = snapshot
     job['env'] = env
     job.setdefault('transport', 'bucket' if bucket else 'api')
     if job['transport'] not in ('bucket', 'api') or (job['transport'] == 'bucket' and not bucket):
@@ -163,7 +174,8 @@ def bootstrap_env(job: dict[str, Any]) -> dict[str, str]:
 def sandbox_request(job: dict[str, Any], bootstrap: str) -> dict[str, Any]:
     """Keyword arguments for cwsandbox.Sandbox.run (dict forms, which the client converts itself)."""
     job = validate(job)
-    resources: dict[str, Any] = {'cpu': str(job['resources']['cpu']), 'memory': str(job['resources']['memory'])}
+    resources: dict[str, Any] = {key: str(job['resources'][key])
+        for key in ('cpu', 'memory') if key in job['resources']}
     if job['resources'].get('gpu'):
         # Serverless picks the GPU type; a `type` filter that matches nothing fails (docs gpu-sandboxes.md).
         resources['gpu'] = {'count': job['resources']['gpu']}
@@ -185,7 +197,12 @@ def sandbox_request(job: dict[str, Any], bootstrap: str) -> dict[str, Any]:
         'data_plane_mode': job.get('data_plane_mode', 'gateway'),
     }
     if job['scratch']['storage'] == 'volume':
-        request['volumes'] = [{'name': 'work', 'mount_path': job['scratch']['path'], 'size': job['scratch']['size']}]
+        volume = {'name': 'work', 'mount_path': job['scratch']['path'], 'size': job['scratch']['size']}
+        if job['scratch'].get('restore_from_snapshot_id'):
+            request['file_system_snapshot'] = {**volume,
+                'file_system_snapshot_id': job['scratch']['restore_from_snapshot_id']}
+        else:
+            request['volumes'] = [volume]
     if job.get('bucket'):
         request['object_storage_access'] = {'buckets': [job['bucket']], 'permission': 'read_write'}
     if job.get('runner_ids'):
@@ -197,11 +214,14 @@ def cost_estimate(job: dict[str, Any], gpu_hour_price: float | None = None) -> d
     """Upper bound in USD for the declared lifetime (billing follows the request, not the use)."""
     job = validate(job)
     hours = float(job['lifetime_hours'])
-    cpu = cpu_cores(job['resources']['cpu']) * PRICE_CPU_CORE_HOUR
-    memory = memory_gib(job['resources']['memory']) * PRICE_MEMORY_GIB_HOUR
+    declared = job['resources']
+    cpu_memory = (cpu_cores(declared['cpu']) * PRICE_CPU_CORE_HOUR
+        + memory_gib(declared['memory']) * PRICE_MEMORY_GIB_HOUR
+        if 'cpu' in declared and 'memory' in declared else None)
     gpus = job['resources'].get('gpu', 0)
     gpu = None if gpus and gpu_hour_price is None else gpus * (gpu_hour_price or 0.0)
-    per_hour = None if gpu is None else round(cpu + memory + gpu, 4)
-    return {'cpu_memory_per_hour': round(cpu + memory, 4), 'gpu_per_hour': gpu, 'per_hour': per_hour,
+    per_hour = None if gpu is None or cpu_memory is None else round(cpu_memory + gpu, 4)
+    return {'cpu_memory_per_hour': None if cpu_memory is None else round(cpu_memory, 4),
+            'cpu_memory_rate_known': cpu_memory is not None, 'gpu_per_hour': gpu, 'per_hour': per_hour,
             'lifetime_hours': hours, 'max_total': None if per_hour is None else round(per_hour * hours, 2),
             'gpu_rate_known': gpu is not None}

@@ -673,3 +673,40 @@ remotely. Ledgered quick-main checks passed. The full-main run for commit
 pending; its partial output is not a full-main pass. NGC CUDA 13.4 kernels,
 large-model training/resume, production teacher serving and actual filesystem
 snapshot restore still need their declared benchmark/qualification jobs.
+
+
+## Recovery incident and launcher update (2026-10-23)
+
+At 19:52:35 UTC the two learners, self-hosted teacher and two evaluators
+became Completed. Their observed specifications had no volumes or volume
+mounts. Public SDK and authenticated gateway ReadFile requests reject them
+as not running. Direct snapshot requests for both learners and the teacher
+returned `this sandbox has no file system snapshot storage`. Backend container
+Running fields do not prove the underlying files are still accessible. Provider
+retention/recovery remains unverified.
+
+Private exports survive independently: LFM's step-35690 full model/optimizer/RNG
+checkpoint has been downloaded and SHA-256 verified locally; Mellum's exported
+step-35223 full state is being fetched. Mellum's newer step-36223 state was
+saved on its sandbox but has no located durable export. All 197 exported
+internal teacher archives were downloaded and hash-verified. Actual range GETs
+and exact-length checks also passed for 523 archived input/runtime bundles;
+those checks establish current readability, not a new full-object SHA check.
+Current custody and provider recovery details live under
+`/home/werg/data/dgxops/full-service-recovery-root-20261023-v1`.
+
+The shared job mechanism now accepts `resources: {"gpu": 1}` and an optional
+explicit RAM requirement without inventing CPU/RAM defaults. Cost estimates
+remain unknown where assigned CPU/RAM are unknown. A volume declaration may
+include `scratch.restore_from_snapshot_id`; this is serialized through the
+SDK's named filesystem-snapshot mount, preserving the requested mount and size.
+Root storage cannot accept a restore selector. A filesystem restore does not
+automatically qualify or resume a model; its exact checkpoint, source, optimizer,
+RNG and exposure still need the normal continuation checks.
+
+Offline request serialization and launcher tests do not establish working
+backend snapshots. New production allocations need explicit recovery storage
+and a periodic snapshot operator in addition to full-state/source exports.
+The first READY snapshot and a verified restore must be observed before
+snapshot recovery is reported as covered. Keep snapshot failures visible and
+retain the latest independently verified backups while resolving them.
