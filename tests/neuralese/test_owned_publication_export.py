@@ -64,6 +64,18 @@ def test_actual_recovered_publication_uses_sha_and_never_decodes(publication, mo
     assert module.observe_publication(spec, known_sha256=value['sha256']) is None
 
 
+def test_known_hash_with_pruned_pin_is_noop_without_recopied_checkpoint(publication, monkeypatch):
+    spec, source, _ = publication
+    value = module.observe_publication(spec)
+    Path(value['pin']).unlink()
+    def forbidden(*args, **kwargs):
+        raise AssertionError('already accepted hash must not reverify or recopy the full checkpoint')
+    monkeypatch.setattr(module.subprocess, 'run', forbidden)
+    assert module.observe_publication(spec, known_sha256=value['sha256'],
+                                     known_step=value['step'], verify=forbidden) is None
+    assert not Path(value['pin']).exists()
+
+
 @pytest.mark.parametrize('change', ['parent', 'producer', 'argv', 'foreign-status', 'conflicting-pin'])
 def test_wrong_authority_or_pin_is_never_exported(publication, change):
     spec, source, state = publication

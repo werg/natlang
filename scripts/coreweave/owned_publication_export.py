@@ -78,6 +78,26 @@ def observe_publication(spec, *, known_sha256=None, known_step=-1, verify=None):
     control = checked_file(reference)
     if not control.is_relative_to(directory.resolve()):
         raise ValueError('publication control escaped its owned source directory')
+    if known_sha256 is not None and checkpoint.get('sha256') == known_sha256:
+        # This exact content identity was already durably accepted. The local
+        # pin may since have been pruned; authenticate the captured control's
+        # source/context/parent bindings and return without recopying the full
+        # checkpoint merely to report no newly observed content.
+        value = json.loads(control.read_bytes())
+        context = {'namespace': str(Path(selected['namespace']).absolute()),
+                   'readonly_input_roots': sorted(selected['readonly_input_roots'])}
+        publication = value.get('publication') or {}
+        if (value.get('schema') != 'natlang.native-checkpoint-control/1'
+                or value.get('source') != checkpoint
+                or value.get('producer') != selected['producer']
+                or value.get('dependency_producer') != selected['dependency_producer']
+                or value.get('dependency_context') != context
+                or publication.get('schema') != 'natlang.native-checkpoint-publication/1'
+                or publication.get('full_optimizer_rng_validated') is not True
+                or publication.get('parent_checkpoint_sha256') != spec['parent']['sha256']
+                or type(value.get('step')) is not int or value['step'] < 0):
+            raise ValueError('known publication hash does not match its captured control/context/parent')
+        return None
     kwargs = dict(producer=selected['producer'],
         dependency_producer=selected['dependency_producer'],
         namespace=selected['namespace'], readonly_input_roots=selected['readonly_input_roots'])
