@@ -1914,3 +1914,43 @@ numerical/controller fixes and all live data appends during cutover.
 Exporter recovery-namespace support passed67focused plus full/quick checks and
 is published in5024148ad. Retention remains disabled until current full-state,
 inference and evaluation dependencies are correctly bound and remotely present.
+
+
+## October 23 supply-chain recovery and shared runtime fixes
+
+At 00:00 UTC, both current shared-state learners were advancing: LFM had
+reached 30541 in cycle14 preference training, and Mellum32609 in its current
+full-SFT continuation. LFM's recovered30463 policy checkpoint received an
+independent full-state private readback; normal mandatory training resumed from
+that earned state. Genuine communication foundation exposure and comprehensive
+recipe completion remain incomplete; no cross-model VAE readiness is claimed.
+
+Mellum adopted the latest545 teacher rows at32523, bringing TRAIN to1476227
+with25968 held unchanged. LFM's combined1934-row addition is ready and its
+stager waits for the real CE learner after the current preference stage; it has
+not been adopted or exposed. An exact census found no additional admitted
+selected-teacher corpora beyond completed preparation waves12–22. This does
+not account for unadmitted source backlog.
+
+The selected Qwen3.6 generator remained productive, but its host exporter had
+exited22:56 UTC because its pinned guardian793e configuration preceded the
+actual4f91 capacity change. Root verified that only primary worker capacity
+and overlap workers changed, retained actor/runtime/boot identities and the
+existing durable journal, and launched a publisher with the exact current
+binding. Supply-chain monitoring now checks generation, export and admission
+separately. A live restarted publisher alone is not verified backlog recovery.
+Evidence: selected-teacher-export-capacity-binding-restart-intent-root-20261023.json
+and selected-teacher-supply-chain-latest-root-20261023.json under DGX dgxops.
+
+Shared fix be296d371 passed every full check and was merged/pushed through
+12aff896a. It consumes inherited parent SFT memory qualification at the RL
+CLI boundary while retaining the actual sampled-policy capacity request.
+The live recovered30463 operation already removed that stale parent argument
+explicitly; canonical code integration does not update frozen sandbox runtimes.
+Both boxes now have inactive runtime successors containing this fix, the
+aa27761f7 single mask-preparation fix and0340e3aa0 exact optimizer-restore
+optimization. They preserve their respective architecture-specific package
+bases and change only those three shared modules. Actual controller/runtime
+cutover and earned updates under the successor packages remain outstanding;
+source staging is not deployment. Exact per-role inventories are recorded in
+stage-common-production-runtime-fixes-{lfm,mellum}-root-20261023.json.

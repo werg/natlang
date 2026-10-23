@@ -46,9 +46,23 @@ This supersedes the earlier three-sandbox allocation plan. Stop the current DGX
 Mellum evaluation, preserve its partial evidence, investigate and repair concrete
 problems, and launch the next evaluation on a sandbox.
 Owner follow-up (2026-10-22): a minimal RAM requirement is also authorized when
-useful. The evaluator replacement requests one GPU plus 8Gi RAM, with CPU,
-GPU model and GPU memory unspecified. Prefer the unconstrained one-GPU request
-when capacity is scarce; measure assigned resources and actual loading needs.
+useful. Keep CPU, GPU model and GPU memory unspecified; choose a RAM minimum
+from measured workload needs. The Mellum evaluator completed on 16Gi without
+OOM, but experienced substantial memory-limit pressure; its current replacement
+uses 24Gi. These observations apply to evaluation, not training capacity.
+Prefer an unconstrained one-GPU request when capacity is scarce and adapt to the
+actual assigned resources.
+
+Generation supply-chain supervision (engineering finding, 2026-10-23): monitor
+the actual generator, exporter and admission worker separately. A busy teacher
+GPU does not prove that new trajectories are reaching training. When changing
+the guardian configuration, update each exact dependent publisher binding after
+verifying the actual transition; a capacity-only change can still invalidate its
+old configuration digest. Preserve historical actor/runtime identities, source
+receipts and the durable closed-boundary/tranche journal. Recover the backlog
+through the existing verifier; never relax an identity check to keep a publisher
+alive. Distinguish a live restarted exporter from verified new exports and
+actual learner exposure.
 
 Owner instruction (2026-10-21): test `RecursiveSI/flint` as the generation
 teacher and replace Qwen if its actual natlang task performance is decent.
