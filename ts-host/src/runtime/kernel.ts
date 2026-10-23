@@ -554,6 +554,10 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     }
   }
   const callId = task.nextCallId();
+  const siblingOrdinal=task.reserveExecutionSiblingOrdinal(frame.parentCallId,definition.id);
+  const parentOccurrenceEvent=frame.parentCallId?traceFor(frame.parentCallId)?.events.find(event=>event.kind==='invocation'&&
+    event.phase==='start'&&event.call_id===frame.parentCallId):undefined;
+  const parentOccurrence=parentOccurrenceEvent?.native_occurrence;
   // A file-backed call owns the files from its own companion folder. Inline calls inherit their
   // caller's bound skill set unless one is explicitly supplied for that inline definition.
   const invocationSkillFiles = options.manifest?.inline ? (options.skillFiles ?? frame.skillFiles) : options.skillFiles;
@@ -625,6 +629,8 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     frame: childFrame, services, declarations: task.serviceDeclarations, serviceScopes: task.serviceScopes,
     neuralese: task.runtime.options.neuralese,
     manifest: { definition_id: definition.id, definition_name: definition.name, task_id: task.id,
+      sibling_ordinal:siblingOrdinal,
+      ...(parentOccurrence&&typeof parentOccurrence==='object'?{parent_occurrence:structuredClone(parentOccurrence)}:{}),
       ...(definition.representation ? { representation: definition.representation } : {}),
       context_id: definition.contextId ?? FILE_CONTEXT,
       graph: graphManifest({ model: model ? { id: model.id ?? (model.driver as { model?: string }).model ?? (model.driver.name || null),

@@ -280,6 +280,18 @@ def _run_member(run_dir, task_id, sample):
     if (result.get('task',{}).get('program_ir')!=task or finish is None
             or result.get('outcome',{}).get('status') not in ('done','failed','quiesced')):
         raise ValueError('collector result, terminal journal and exact task packet disagree')
+    teacher_forced=[]
+    for turn_ordinal,turn in enumerate(result.get('trajectory') or []):
+        capture=((turn.get('model_response') or {}).get('rl_sampling') or {})
+        if capture.get('schema')!='natlang.native-teacher-forced-capture/1':continue
+        source_receipt=capture.get('teacher_source_receipt')
+        verified_source=_verify_teacher_turn_source(source_receipt)
+        expected_prompt=canonical_json_sha256_hex({'messages':turn.get('context'),'tools':turn.get('tools_offered') or []})
+        if capture.get('replay_prompt_sha256')!=expected_prompt:
+            raise ValueError('Qwen forced target did not execute against the actual original unhinted student request')
+        teacher_forced.append({'source_receipt':source_receipt,'source_row_id':source_receipt['row_id'],
+            'source_program_ir_sha256':verified_source['program_ir_sha256'],'replay_prompt_sha256':expected_prompt,
+            'turn_ordinal':turn_ordinal})
     binding_path,expected_identity,runtime_sha,collector_runtime_sha=_collector_actor_binding(run_dir,preparation)
     for step in result.get('trajectory') or []:
         capture=((step.get('model_response') or {}).get('rl_sampling') or {})
@@ -306,6 +318,7 @@ def _run_member(run_dir, task_id, sample):
         'finish_sha256':canonical_json_sha256_hex(finish),
         'collection_binding_sha256':sha256_file_hex_cached(binding_path),
         'actor_runtime_sha256':runtime_sha,'collector_runtime_inventory_sha256':collector_runtime_sha}
+    if teacher_forced:evidence['teacher_forced_sources']=teacher_forced
     evaluator=Path(__file__).resolve().parents[1]/'eval/task_packet.py'
     evidence['evaluation_receipt']={'schema':'natlang.task-oracle-evaluation/1',
         **{key:evidence[key] for key in ('outcome','task_sha256','world_sha256','oracle_sha256',
@@ -400,6 +413,76 @@ def _score_reference(model,example,actions,*,reference_identity,runtime_sha256,c
     return bound_actions,receipt
 
 
+def _verify_teacher_turn_source(receipt):
+    """Authenticate a Qwen forced-turn source against its retained tranche and actor proof files."""
+    from ..common.hashing import sha256_file_hex_cached
+    from ..eval.task_packet import read_jsonl
+    if (not isinstance(receipt,dict) or receipt.get('schema')!='natlang.teacher-turn-source/1'
+            or receipt.get('source_view') not in ('unhinted','privileged-hint')
+            or type(receipt.get('ordinal')) is not int or receipt['ordinal']<0):
+        raise ValueError('forced repair capture lacks an explicit teacher turn source view and ordinal')
+    path_keys=('source_path','source_verification_path','transfer_receipt_path')
+    hash_keys=('source_file_sha256','source_verification_sha256','transfer_receipt_sha256')
+    actor=receipt.get('actor') or {};actor_path_keys=('actor_source_path','execution_identity_path')
+    actor_hash_keys=('actor_source_sha256','execution_identity_sha256')
+    if (any(not isinstance(receipt.get(key),str) or not receipt[key] for key in path_keys+actor_path_keys)
+            or any(not isinstance(receipt.get(key),str) or len(receipt[key])!=64 for key in hash_keys+actor_hash_keys)
+            or actor.get('model')!='nvidia/Qwen3.6-35B-A3B-NVFP4'
+            or actor.get('revision')!='1355db6a052410cfd62085d94b58866fd0f2c3c5'):
+        raise ValueError('teacher source receipt is missing selected Qwen source, actor, or proof bindings')
+    paths={key:Path(receipt[key]).resolve(strict=True) for key in (*path_keys,*actor_path_keys)}
+    expected={**dict(zip(path_keys,hash_keys)),
+        **dict(zip(actor_path_keys,actor_hash_keys))}
+    for path_key,hash_key in expected.items():
+        if sha256_file_hex_cached(paths[path_key])!=receipt[hash_key]:
+            raise ValueError(f'teacher source proof bytes changed: {path_key}')
+    source_proof=json.loads(paths['source_verification_path'].read_text())
+    transfer=json.loads(paths['transfer_receipt_path'].read_text())
+    actor_doc=json.loads(paths['actor_source_path'].read_text())
+    execution=json.loads(paths['execution_identity_path'].read_text())
+    if (source_proof.get('schema')!='natlang.teacher-live-tranche-canonical-source-verification/1'
+            or source_proof.get('status')!='passed' or source_proof.get('training_admission') is not False
+            or source_proof.get('source',{}).get('path')!=str(paths['source_path'])
+            or source_proof.get('source',{}).get('sha256')!=receipt['source_file_sha256']
+            or source_proof.get('actor',{}).get('sha256')!=receipt['actor']['actor_source_sha256']
+            or source_proof.get('execution_identity',{}).get('sha256')!=receipt['actor']['execution_identity_sha256']
+            or transfer.get('schema')!='natlang.verified-teacher-trajectory-transfer/1'):
+        raise ValueError('Qwen source verification and transfer manifests do not bind this forced-turn receipt')
+    transfer_files=transfer.get('files') or []
+    expected_files={str(paths['actor_source_path']):receipt['actor']['actor_source_sha256'],
+        str(paths['execution_identity_path']):receipt['actor']['execution_identity_sha256']}
+    if any(not any(item.get('path')==path and item.get('sha256')==digest for item in transfer_files)
+            for path,digest in expected_files.items()):
+        raise ValueError('Qwen actor proof paths are not present in the retained transfer receipt')
+    if (actor_doc.get('schema')!='natlang.selected-teacher-actor-source/1'
+            or actor_doc.get('model')!=receipt['actor']['model'] or actor_doc.get('revision')!=receipt['actor']['revision']
+            or execution.get('schema')!='natlang.self-hosted-teacher-execution-identity/1'
+            or execution.get('model_id')!='qwen3.6-35b-a3b'
+            or execution.get('actor',{}).get('sha256')!=receipt['actor']['actor_source_sha256']
+            or transfer.get('teacher',{}).get('model')!=actor_doc.get('model')
+            or transfer.get('teacher',{}).get('revision')!=actor_doc.get('revision')):
+        raise ValueError('Qwen forced turn was not produced by the selected self-hosted teacher actor')
+    rows=read_jsonl(str(paths['source_path']))
+    candidates=[row for row in rows if row.get('id')==receipt.get('row_id')]
+    if len(candidates)!=1:raise ValueError('Qwen source row is missing or ambiguous in the verified tranche')
+    row=candidates[0]
+    if (canonical_json_sha256_hex(row.get('task'))!=receipt.get('task_sha256')
+            or canonical_json_sha256_hex((row.get('task') or {}).get('program_ir'))!=receipt.get('program_ir_sha256')
+            or (row.get('provenance') or {}).get('model')!='qwen3.6-35b-a3b'
+            or (row.get('outcome') or {}).get('accepted') is not True):
+        raise ValueError('Qwen source row task, actor, or verified outcome differs from its turn receipt')
+    turns=[turn for turn in row.get('trajectory') or [] if turn.get('invocation_id')==receipt.get('invocation_id')]
+    ordinal=receipt['ordinal']
+    if ordinal>=len(turns):raise ValueError('Qwen teacher source invocation/turn ordinal is outside its trajectory')
+    turn=turns[ordinal]
+    prompt={'messages':turn.get('context'),'tools':turn.get('tools_offered') or []}
+    if (canonical_json_sha256_hex(turn)!=receipt.get('turn_sha256')
+            or canonical_json_sha256_hex(prompt)!=receipt.get('prompt_sha256')):
+        raise ValueError('Qwen teacher source turn or its teacher-visible prompt changed')
+    return {'row':row,'turn':turn,'source_view':receipt['source_view'],
+        'program_ir_sha256':receipt['program_ir_sha256']}
+
+
 def admit_run_pair(*,failed_run_dir,repaired_run_dir,task_id,failed_sample,repaired_sample,reference_checkpoint,
                    base,held_native_graphs,block_bundle,output_dir,continue_from,stage_id,
                    requires=(),device='cpu',beta=.1,_context=None):
@@ -416,6 +499,9 @@ def admit_run_pair(*,failed_run_dir,repaired_run_dir,task_id,failed_sample,repai
     task_b,repaired,repaired_evidence=_run_member(repaired_run_dir,task_id,repaired_sample)
     if canonical_json_sha256_hex(task_a)!=canonical_json_sha256_hex(task_b):
         raise ValueError('failed and repaired task packets differ in source, world, or oracle')
+    for source in repaired_evidence.get('teacher_forced_sources',[]):
+        if source.get('source_program_ir_sha256')!=canonical_json_sha256_hex(task_a):
+            raise ValueError('Qwen correction row is not bound to this exact original task packet')
     if failed_evidence['outcome'] not in {'invalid_action','repetition','budget_exhaustion','model_incomplete','semantic_mismatch'}:
         raise ValueError('original case did not have an exact task-caused failure outcome')
     if repaired_evidence['outcome']!='task_success':
@@ -477,7 +563,8 @@ def admit_run_pair(*,failed_run_dir,repaired_run_dir,task_id,failed_sample,repai
             'actor_id':canonical_json_sha256_hex(actor_identity)}
         capture_actions=[{key:action[key] for key in ('node','position','token_id','kind')}
             for action in actions]
-        prompt_sha=canonical_json_sha256_hex(rollout['turns'][0]['messages'])
+        prompt_sha=canonical_json_sha256_hex({'messages':rollout['turns'][0]['messages'],
+            'tools':rollout['turns'][0].get('tools') or []})
         capture_receipt={'schema':'natlang.native-failure-execution-capture/1',
             'task_sha256':evidence['task_sha256'],'world_sha256':evidence['world_sha256'],
             'prompt_sha256':prompt_sha,'actions':capture_actions,'actor':actor,
@@ -501,7 +588,8 @@ def admit_run_pair(*,failed_run_dir,repaired_run_dir,task_id,failed_sample,repai
     prompt_sha=alternatives['failed']['prompt_sha256']
     if alternatives['repaired']['prompt_sha256']!=prompt_sha:
         raise ValueError('corrected execution prompt differs from the original unhinted task view')
-    if failed['turns'][0]['messages']!=repaired['turns'][0]['messages']:
+    if (failed['turns'][0]['messages']!=repaired['turns'][0]['messages'] or
+            (failed['turns'][0].get('tools') or [])!=(repaired['turns'][0].get('tools') or [])):
         raise ValueError('same-task repaired capture does not use the exact original unhinted first-turn prompt')
     record={'schema':PAIR_SCHEMA,'split':'train','protected':False,
         'original_task':{'task_sha256':failed_evidence['task_sha256'],'world_sha256':failed_evidence['world_sha256'],

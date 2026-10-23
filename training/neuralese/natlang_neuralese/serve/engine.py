@@ -1008,11 +1008,15 @@ class Engine:
         if (source.get('schema')!='natlang.teacher-turn-source/1' or not isinstance(actor,dict)
                 or not isinstance(source.get('source_path'),str) or not source['source_path']
                 or not isinstance(source.get('source_view'),str) or source['source_view'] not in {'unhinted','privileged-hint'}
+                or not isinstance(source.get('source_verification_path'),str) or not source['source_verification_path']
+                or not isinstance(source.get('transfer_receipt_path'),str) or not source['transfer_receipt_path']
                 or not isinstance(source.get('invocation_id'),str) or not source['invocation_id']
                 or type(source.get('ordinal')) is not int or source['ordinal']<0
                 or any(not valid_hash(source.get(key)) for key in ('turn_sha256','prompt_sha256','task_sha256','source_file_sha256'))
                 or actor.get('model')!='nvidia/Qwen3.6-35B-A3B-NVFP4'
                 or actor.get('revision')!='1355db6a052410cfd62085d94b58866fd0f2c3c5'
+                or not isinstance(actor.get('actor_source_path'),str) or not actor['actor_source_path']
+                or not isinstance(actor.get('execution_identity_path'),str) or not actor['execution_identity_path']
                 or any(not valid_hash(actor.get(key)) for key in ('actor_source_sha256','execution_identity_sha256'))):
             raise RequestError('forced-message','teacher turn source binding is incomplete or has the wrong teacher actor')
         if not isinstance(message,dict) or message.get('role')!='assistant':
@@ -1020,46 +1024,89 @@ class Engine:
         import copy,secrets,re
         target=copy.deepcopy(message);markers={}
         vocab=getattr(self.tokenizer,'get_vocab',lambda:{})()
-        candidates=[token for token,_ in sorted(vocab.items(),key=lambda item:item[1])
-            if isinstance(token,str) and re.fullmatch(r'[A-Za-z0-9_]{2,}',token)
-            and token not in getattr(self,'specials',())]
         def marker_for(body):
             body_ids=self.tokenizer(body,add_special_tokens=False,split_special_tokens=True)['input_ids']
-            for token in candidates:
+            supplied=json.dumps({'target':target,'opening':opening},ensure_ascii=False,sort_keys=True)
+            for attempt in range(64):
+                token='NATLANGFORCEDNATIVE'+secrets.token_hex(24)+'END'
                 ids=self._tokens(token)
-                if token not in body and ids and not any(body_ids[index:index+len(ids)]==ids
-                        for index in range(len(body_ids)-len(ids)+1)) and token not in markers:
+                if (token not in supplied and token not in body and ids and
+                        not any(body_ids[index:index+len(ids)]==ids for index in range(len(body_ids)-len(ids)+1))):
                     markers[token]=body
                     return token
-            token='NATLANGFORCEDNATIVE'+secrets.token_hex(16)+'END';markers[token]=body;return token
-        def mark_parts(value):
-            if isinstance(value,list):return [mark_parts(item) for item in value]
-            if isinstance(value,dict):
-                if value.get('type')=='teacher_native_text':
-                    body=value.get('text')
-                    if not isinstance(body,str) or not body:raise RequestError('forced-message','native teacher text must be nonempty')
-                    return {'type':'text','text':marker_for(body)}
-                return {key:mark_parts(item) for key,item in value.items()}
-            return value
-        target['content']=mark_parts(target.get('content'))
+            raise RequestError('forced-message','could not allocate a collision-free exact teacher-span marker')
+        spans=forced.get('native_text_spans')
+        if not isinstance(spans,list):raise RequestError('forced-message','teacher native spans need explicit typed occurrence paths')
+        seen_spans=set();parsed_arguments={}
+        for span in spans:
+            if (not isinstance(span,dict) or not isinstance(span.get('path'),list) or
+                    not isinstance(span.get('marker'),str) or not span['marker'] or
+                    not isinstance(span.get('text'),str) or not span['text']):
+                raise RequestError('forced-message','teacher native span path, marker, or typed body is malformed')
+            path=span['path'];marker=span['marker'];body=span['text']
+            if marker in seen_spans or json.dumps(target,ensure_ascii=False).count(marker)!=1:
+                raise RequestError('forced-message','teacher span marker is duplicate or ambiguous in its exact assistant target')
+            seen_spans.add(marker)
+            if path==['content']:
+                value=target.get('content')
+                if not isinstance(value,str) or value.count(marker)!=1:
+                    raise RequestError('forced-message','teacher content span does not resolve to one exact typed occurrence')
+                target['content']=value.replace(marker,marker_for(body),1)
+                continue
+            if len(path)<4 or path[0]!='tool_calls' or type(path[1]) is not int or path[2]!='arguments':
+                raise RequestError('forced-message','teacher tool span must name an exact tool argument field')
+            index=path[1];calls=target.get('tool_calls') or []
+            if index<0 or index>=len(calls):raise RequestError('forced-message','teacher tool span call ordinal is outside the target')
+            function=calls[index].get('function') or {};name=function.get('name')
+            argument_path=path[3:]
+            if not ((name=='eval' and argument_path and argument_path[0]=='code') or
+                    (name=='return_result' and argument_path and argument_path[0]=='value')):
+                raise RequestError('forced-message','typed teacher span is not at a supported eval-code or typed return-result occurrence')
+            if index not in parsed_arguments:
+                try:parsed_arguments[index]=json.loads(function.get('arguments'))
+                except (TypeError,json.JSONDecodeError) as error:
+                    raise RequestError('forced-message','teacher tool arguments are not exact structured JSON') from error
+            value=parsed_arguments[index]
+            for part in argument_path[:-1]:
+                if isinstance(value,dict) and isinstance(part,str) and part in value:value=value[part]
+                elif isinstance(value,list) and type(part) is int and 0<=part<len(value):value=value[part]
+                else:raise RequestError('forced-message','teacher typed span path is missing in structured tool arguments')
+            leaf=argument_path[-1]
+            if isinstance(value,dict) and isinstance(leaf,str) and isinstance(value.get(leaf),str) and value[leaf].count(marker)==1:
+                value[leaf]=value[leaf].replace(marker,marker_for(body),1)
+            elif isinstance(value,list) and type(leaf) is int and 0<=leaf<len(value) and isinstance(value[leaf],str) and value[leaf].count(marker)==1:
+                value[leaf]=value[leaf].replace(marker,marker_for(body),1)
+            else:
+                raise RequestError('forced-message','teacher tool span does not resolve to one exact typed string occurrence')
+        for index,arguments in parsed_arguments.items():
+            target['tool_calls'][index]['function']['arguments']=json.dumps(arguments,ensure_ascii=False,separators=(',',':'))
         from .chat import assistant_reply_segments,normalize_tool_call_arguments
         target=normalize_tool_call_arguments([target])[0][0]
         apply=lambda messages,generation:self.tokenizer.apply_chat_template(messages,tools=tools or None,
             tokenize=False,add_generation_prompt=generation)
         segments=assistant_reply_segments(apply,target,self.specials,opening=opening)
         if segments is None:raise RequestError('forced-message','assistant response does not continue this exact actual prompt')
-        plan=[]
+        plan=[];found={marker:0 for marker in markers}
+        def append_text(text,escaped):
+            if text:
+                plan.extend(self.tokenizer(text,add_special_tokens=False,split_special_tokens=True)['input_ids']
+                    if escaped else self._template_tokens(text))
         for text,escaped in segments:
-            if text:plan.extend(self.tokenizer(text,add_special_tokens=False,split_special_tokens=True)['input_ids']
-                if escaped else self._template_tokens(text))
-        for marker,body in markers.items():
-            needle=self._tokens(marker);body_ids=self.tokenizer(body,add_special_tokens=False,split_special_tokens=True)['input_ids']
-            matches=[index for index in range(len(plan)-len(needle)+1) if plan[index:index+len(needle)]==needle]
-            if not needle or not body_ids or len(matches)!=1:
-                raise RequestError('forced-message','native teacher text occurrence is absent, ambiguous, or tokenized empty')
-            if any(token in self.stop_ids for token in body_ids):
-                raise RequestError('forced-message','native teacher text contains an exact model stop token and cannot be forced safely')
-            index=matches[0];plan[index:index+len(needle)]=[self.role_tokens.produce_open,*body_ids,self.role_tokens.produce_close]
+            cursor=0
+            while cursor<len(text):
+                positions=[(text.find(marker,cursor),marker,body) for marker,body in markers.items()
+                    if text.find(marker,cursor)>=0]
+                if not positions:
+                    append_text(text[cursor:],escaped);break
+                start,marker,body=min(positions,key=lambda item:item[0])
+                append_text(text[cursor:start],escaped)
+                body_ids=self.tokenizer(body,add_special_tokens=False,split_special_tokens=True)['input_ids']
+                if not body_ids or any(token in self.stop_ids for token in body_ids):
+                    raise RequestError('forced-message','native teacher text is empty or contains an exact model stop token')
+                plan.extend([self.role_tokens.produce_open,*body_ids,self.role_tokens.produce_close])
+                found[marker]+=1;cursor=start+len(marker)
+        if any(count!=1 for count in found.values()):
+            raise RequestError('forced-message','native teacher text marker does not resolve to one exact token aligned occurrence')
         return plan
 
     def _native_write_text_impl(self, text: str, *, value_type: str | None = None):

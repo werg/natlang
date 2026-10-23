@@ -167,6 +167,7 @@ export class NatlangTask {
   readonly signal: AbortSignal;
   readonly episodeBudget: { limit?: number; used: number };
   readonly traces: InvocationTrace[] = [];
+  private readonly executionOccurrenceCounts = new Map<string, number>();
   readonly programView: ProgramView;
   readonly specialization?: SpecializationMode;
   readonly auditOf?: string;
@@ -291,6 +292,12 @@ export class NatlangTask {
 
   get frame(): Frame { return { task: this, chain: [], signal: this.signal }; }
   nextCallId(): string { return `${this.id}/${++this.callSequence}`; }
+  reserveExecutionSiblingOrdinal(parentCallId: string | undefined, definitionId: string): number {
+    const key = `${parentCallId ?? ''}\u0000${definitionId}`;
+    const ordinal = this.executionOccurrenceCounts.get(key) ?? 0;
+    this.executionOccurrenceCounts.set(key, ordinal + 1);
+    return ordinal;
+  }
   checkOpen(): void {
     if (this.closed) throw new Error('this natlang task has finished');
     if (this.signal.aborted) throw this.signal.reason instanceof Error ? this.signal.reason : new Error('natlang task aborted');

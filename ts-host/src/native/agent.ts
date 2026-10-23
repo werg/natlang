@@ -1259,6 +1259,7 @@ export class NativeToolAgent {
             }
           } } : {}) } : undefined;
         const turnRequest: ModelTurnRequest = { ...(callId ? { invocation_id: callId } : {}), ...(adapters.length ? { adapters } : {}),
+          ...(session.executionOccurrence() ? { native_execution_occurrence: session.executionOccurrence() } : {}),
           ...(template ? { template } : {}),
           ...(this.options.guidance && supportsNeuralese(this.driver) ? { guidance: this.options.guidance } : {}),
           messages: encoded.messages, tools: this.options.promptRendering === 'program-header' ? [] : availableTools,
