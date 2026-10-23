@@ -171,7 +171,10 @@ def main(argv=None):
                         help='collect and bind unguided development/confirmation fitness without an author')
     parser.add_argument('--server')
     parser.add_argument('--model-id', choices=('lfm', 'mellum'))
+    parser.add_argument('--runtime-continuation-from', type=Path,
+                        help='exact prior frozen evaluator runtime root for checked input-only continuation')
     parser.add_argument('--author')
+    parser.add_argument('--author-ferry', help='evaluator-local SDK ferry endpoint (loopback:8766)')
     parser.add_argument('--author-model')
     parser.add_argument('--author-provenance', type=Path)
     parser.add_argument('--recipe-base', type=Path)
@@ -194,7 +197,7 @@ def main(argv=None):
         return
     if any(getattr(args, name) is None for name in ('server', 'model_id')):
         parser.error('execution needs student server and model')
-    if not args.baseline_only and any(getattr(args, name) is None for name in ('author', 'author_model', 'author_provenance')):
+    if not args.baseline_only and any(getattr(args, name) is None for name in ('author', 'author_ferry', 'author_model', 'author_provenance')):
         parser.error('guided execution needs self-hosted author endpoint/model/provenance')
     # Each program owns a resumable journal. A failed job does not prevent other
     # ready programs from advancing; rerunning this command resumes each one.
@@ -215,8 +218,10 @@ def main(argv=None):
         if args.baseline_only:
             arguments.append('--baseline-only')
         else:
-            arguments.extend(['--author', args.author, '--author-model', args.author_model,
+            arguments.extend(['--author', args.author, '--author-ferry', args.author_ferry, '--author-model', args.author_model,
                               '--author-provenance', str(args.author_provenance)])
+        if args.runtime_continuation_from:
+            arguments.extend(['--runtime-continuation-from', str(args.runtime_continuation_from)])
         if args.recipe_base:
             arguments.extend(['--recipe-base', str(args.recipe_base)])
         if args.recipe_graph_root:

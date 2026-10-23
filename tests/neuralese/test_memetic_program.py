@@ -75,8 +75,10 @@ def test_batch_baseline_runs_without_author_credentials(tmp_path, monkeypatch):
         return {'status': 'baseline_complete'}
     monkeypatch.setattr(memetic_batch.memetic_program, 'main', fake_program)
     memetic_batch.main(['--source', str(source), '--out', str(tmp_path / 'batch'),
-        '--server', 'http://student', '--model-id', 'lfm', '--baseline-only'])
+        '--server', 'http://student', '--model-id', 'lfm', '--baseline-only',
+        '--runtime-continuation-from', str(tmp_path / 'frozen-runtime')])
     assert len(seen) == 1 and '--baseline-only' in seen[0] and '--author' not in seen[0]
+    assert seen[0][seen[0].index('--runtime-continuation-from') + 1] == str(tmp_path / 'frozen-runtime')
     progress = json.loads((tmp_path / 'batch/progress.json').read_text())
     assert progress['results'][0]['status'] == 'baseline_complete'
 
@@ -109,17 +111,22 @@ def test_binding_requires_actual_native_id_and_oracle_gain(tmp_path):
 
 
 def test_author_requires_exact_self_hosted_source_receipt(tmp_path):
+    from natlang_neuralese.common import memetic_teacher_ferry as ferry
     path = tmp_path / 'teacher.json'
-    receipt = {'schema': 'natlang.memetic-author-provenance/1', 'model_id': 'Qwen/Qwen3.6-35B-A3B',
-        'hosting': 'self-hosted-coreweave', 'endpoint': 'http://teacher', 'sandbox_id': 'sandbox-1',
+    receipt = {'schema': 'natlang.memetic-author-provenance/1',
+        'model_id': ferry.TEACHER_MODEL_ID, 'serve_alias': ferry.TEACHER_SERVE_ALIAS,
+        'revision': ferry.TEACHER_REVISION,
+        'hosting': 'self-hosted-coreweave', 'endpoint': ferry.TEACHER_URL,
+        'sandbox_id': ferry.TEACHER_SANDBOX_ID,
+        'source_bindings': list(ferry.TEACHER_SOURCE_BINDINGS),
         'checkpoint_sha256': 'a' * 64, 'tokenizer_fingerprint': 'b' * 64,
         'runtime_sha256': 'c' * 64, 'source_receipt_sha256': 'd' * 64}
     path.write_text(json.dumps(receipt))
-    assert memetic.author_provenance(path, receipt['model_id'], receipt['endpoint'])['receipt'] == receipt
-    receipt['hosting'] = 'provider'
+    assert memetic.author_provenance(path, receipt['serve_alias'], receipt['endpoint'])['receipt'] == receipt
+    receipt['sandbox_id'] = 'unbound-teacher'
     path.write_text(json.dumps(receipt))
-    with pytest.raises(ValueError, match='self-hosted'):
-        memetic.author_provenance(path, receipt['model_id'], receipt['endpoint'])
+    with pytest.raises(ValueError, match='pinned self-hosted'):
+        memetic.author_provenance(path, receipt['serve_alias'], receipt['endpoint'])
 
 
 def test_writer_rejects_wrong_student_or_missing_producer(monkeypatch):
@@ -344,13 +351,16 @@ def test_baseline_only_binds_student_and_continues_with_author(tmp_path, monkeyp
     assert [name for name, _, _ in calls] == ['unguided-dev', 'unguided-confirm']
     assert not (tmp_path / 'run/author.json').exists()
     assert not (tmp_path / 'run/binding.json').exists()
-    receipt = {'schema': 'natlang.memetic-author-provenance/1', 'model_id': 'Qwen/Qwen3.6-35B-A3B',
-        'hosting': 'self-hosted-coreweave', 'endpoint': 'http://teacher', 'sandbox_id': 'sandbox-1',
+    ferry = memetic.teacher_ferry
+    receipt = {'schema': 'natlang.memetic-author-provenance/1', 'model_id': ferry.TEACHER_MODEL_ID,
+        'serve_alias': ferry.TEACHER_SERVE_ALIAS, 'revision': ferry.TEACHER_REVISION,
+        'hosting': 'self-hosted-coreweave', 'endpoint': ferry.TEACHER_URL,
+        'sandbox_id': ferry.TEACHER_SANDBOX_ID, 'source_bindings': list(ferry.TEACHER_SOURCE_BINDINGS),
         'checkpoint_sha256': '1'*64, 'tokenizer_fingerprint': '2'*64,
         'runtime_sha256': '3'*64, 'source_receipt_sha256': '4'*64}
     path = tmp_path / 'teacher.json'; path.write_text(json.dumps(receipt))
-    author = ['--author', 'http://teacher', '--author-model', receipt['model_id'],
-              '--author-provenance', str(path)]
+    author = ['--author', ferry.TEACHER_URL, '--author-model', ferry.TEACHER_SERVE_ALIAS,
+              '--author-ferry', 'http://127.0.0.1:8766', '--author-provenance', str(path)]
     result = memetic.main([*common, *author])
     assert result['status'] == 'qualified'
     assert [name for name, _, _ in calls].count('write') == 1
@@ -406,3 +416,130 @@ def test_memetic_budget_capture_uses_exact_shared_prefix_verifier(tmp_path,monke
     monkeypatch.setattr(task_rollouts,'_budget_terminated_prefix',lambda *a,**k:None)
     assert not memetic.student_capture_reached(tmp_path,actor)
     assert not memetic.native_import_reached(tmp_path,'nzs1_'+'a'*52)
+
+
+def test_runtime_continuation_preserves_origin_and_requires_exact_nonruntime_inputs(tmp_path, monkeypatch):
+    out = tmp_path / 'run'; old_root = tmp_path / 'old-runtime'; old_root.mkdir()
+    actor = {'checkpoint_sha256': 'a' * 64}
+    old_runtime = {'schema': 'runtime', 'typescript_sha256': 'b' * 64, 'typescript_files': 8,
+                   'python': {'sha256': 'c' * 64}, 'queue_worker_sha256': 'd' * 64,
+                   'node_version': 'v22', 'python_version': '3.12'}
+    new_runtime = {**old_runtime, 'python': {'sha256': 'e' * 64}}
+    current_root = Path(memetic.__file__).resolve().parents[4]
+    monkeypatch.setattr(memetic, 'local_runtime_binding',
+        lambda root=None: new_runtime if root is None or Path(root) == current_root else old_runtime)
+    monkeypatch.setattr(memetic, '_definition_bindings', lambda root: {'collector_core': 'same'})
+    original = {'program_id': 'p', 'student': actor, 'sampling': {'samples': 2},
+                'evaluator_runtime': old_runtime}
+    old_sha, _ = memetic.evaluator_inputs(out, original, actor, None)
+    old_bytes = (out / 'inputs.json').read_bytes()
+    updated = {**original, 'evaluator_runtime': new_runtime}
+    new_sha, receipt = memetic.evaluator_inputs(out, updated, actor, old_root)
+    assert new_sha != old_sha
+    assert (out / 'inputs.json').read_bytes() == old_bytes
+    assert receipt['origin_inputs_sha256'] == old_sha
+    assert receipt['current_inputs'] == updated
+    assert receipt['history'][0]['from_inputs'] == original
+    assert receipt['history'][0]['to_inputs'] == updated
+
+    changed_actor = {**updated, 'student': {**actor, 'checkpoint_sha256': 'e' * 64}}
+    with pytest.raises(ValueError, match='resume changed actor'):
+        memetic.evaluator_inputs(out, changed_actor, changed_actor['student'], old_root)
+
+
+def test_runtime_continuation_rejects_changed_collector_semantics(tmp_path, monkeypatch):
+    out = tmp_path / 'run'; old_root = tmp_path / 'old-runtime'; old_root.mkdir()
+    actor = {'checkpoint_sha256': 'a' * 64}
+    old_runtime = {'schema': 'runtime', 'typescript_sha256': 'b' * 64, 'typescript_files': 8,
+                   'python': {'sha256': 'c' * 64}, 'queue_worker_sha256': 'd' * 64,
+                   'node_version': 'v22', 'python_version': '3.12'}
+    new_runtime = {**old_runtime, 'python': {'sha256': 'e' * 64}}
+    current_root = Path(memetic.__file__).resolve().parents[4]
+    monkeypatch.setattr(memetic, 'local_runtime_binding',
+        lambda root=None: new_runtime if root is None or Path(root) == current_root else old_runtime)
+    monkeypatch.setattr(memetic, '_definition_bindings',
+        lambda root: {'collector_core': 'changed' if Path(root) == current_root else 'old'})
+    original = {'program_id': 'p', 'student': actor, 'sampling': {'samples': 2},
+                'evaluator_runtime': old_runtime}
+    memetic.evaluator_inputs(out, original, actor, None)
+    updated = {**original, 'evaluator_runtime': new_runtime}
+    with pytest.raises(ValueError, match='collector or policy-scoring mechanism'):
+        memetic.evaluator_inputs(out, updated, actor, old_root)
+
+    monkeypatch.setattr(memetic, '_definition_bindings', lambda root: {'collector_core': 'exact'})
+    changed_ts_runtime = {**new_runtime, 'typescript_sha256': 'f' * 64}
+    monkeypatch.setattr(memetic, 'local_runtime_binding',
+        lambda root=None: changed_ts_runtime if root is None or Path(root) == current_root else old_runtime)
+    changed_ts = {**original, 'evaluator_runtime': changed_ts_runtime}
+    with pytest.raises(ValueError, match='compiled TypeScript runtime'):
+        memetic.evaluator_inputs(out, changed_ts, actor, old_root)
+
+
+@pytest.mark.parametrize('budget_empty', [False, True])
+def test_runtime_scorer_replay_uses_exact_saved_rows_without_rewriting_them(tmp_path, budget_empty):
+    from natlang_neuralese.rl.task_rollouts import authored_root_row, build_queue
+    evaluation = tmp_path / 'eval'; evaluation.mkdir()
+    packet = evaluation / 'packet.jsonl'
+    packet.write_text(json.dumps(authored_root_row(case('one'))) + '\n')
+    packet_sha = hashlib.sha256(packet.read_bytes()).hexdigest()
+    (evaluation / 'preparation.json').write_text(json.dumps({
+        'schema': 'natlang.task-rollout-preparation/1', 'root_mode': 'authored', 'packet_sha256': packet_sha}) + '\n')
+    entries = build_queue(packet, 1, 2, evaluation, temperature=0.7, case_seconds=60,
+                          max_model_requests=8, max_turns=8, seed_base=5)
+    finish_rows = []
+    for entry in entries:
+        output = Path(entry['output']); output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text('' if budget_empty else json.dumps({'outcome': {'status': 'done', 'accepted': True}}) + '\n')
+        finish_rows.append({'event': 'finish', 'key': entry['key'], 'status': 'failed' if budget_empty else 'complete',
+                            **({'resource_limit_reason': 'model_request_budget'} if budget_empty else {})})
+    (evaluation / 'queue.jsonl').write_text(''.join(json.dumps(row) + '\n' for row in entries))
+    (evaluation / 'journal.jsonl').write_text(''.join(json.dumps(row) + '\n' for row in finish_rows))
+    before = {path: path.read_bytes() for path in [packet, evaluation / 'queue.jsonl', *[Path(row['output']) for row in entries]]}
+    root = Path(memetic.__file__).resolve().parents[4]
+    report = memetic._score_on_runtime(root, evaluation)
+    assert report['scored'] == 2 and report['successes'] == (0 if budget_empty else 2)
+    assert all(path.read_bytes() == payload for path, payload in before.items())
+    assert not (evaluation / 'score.json').exists() and not (evaluation / 'rewards.jsonl').exists()
+
+
+def test_runtime_continuation_reuses_only_score_equivalent_exact_actor_fits(tmp_path, monkeypatch):
+    import shutil
+    from natlang_neuralese.rl.task_rollouts import authored_root_row, build_queue
+    source_root = Path(memetic.__file__).resolve().parents[4]
+    old_root = tmp_path / 'old-runtime'; old_root.mkdir()
+    shutil.copytree(source_root / 'training/neuralese', old_root / 'training/neuralese')
+    actor = {key: f'actor-{key}' for key in memetic.IDENTITY}
+    out = tmp_path / 'program'; target = out / 'evals/unguided-dev'; target.mkdir(parents=True)
+    packet = target / 'packet.jsonl'; packet.write_text(json.dumps(authored_root_row(case('one'))) + '\n')
+    packet_sha = hashlib.sha256(packet.read_bytes()).hexdigest()
+    (target / 'preparation.json').write_text(json.dumps({
+        'schema': 'natlang.task-rollout-preparation/1', 'root_mode': 'authored', 'packet_sha256': packet_sha}) + '\n')
+    entries = build_queue(packet, 1, 2, target, temperature=0.7, case_seconds=60,
+                          max_model_requests=8, max_turns=8, seed_base=7)
+    finishes = []
+    for entry in entries:
+        output = Path(entry['output']); output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(json.dumps({'trajectory': [{'model_response': {'rl_sampling': {'policy': actor}}}],
+                                      'outcome': {'status': 'done', 'accepted': True}}) + '\n')
+        finishes.append({'event': 'finish', 'key': entry['key'], 'status': 'complete'})
+    (target / 'queue.jsonl').write_text(''.join(json.dumps(row) + '\n' for row in entries))
+    (target / 'journal.jsonl').write_text(''.join(json.dumps(row) + '\n' for row in finishes))
+    old_sha = '1' * 64
+    fit_path = out / 'unguided-dev-fit.json'
+    fit_path.write_text(json.dumps({'evaluation_inputs_sha256': old_sha, 'actor_capture_reached_model': True,
+                                    'scored': 2, 'successes': 2}) + '\n')
+    runtime_old = {'typescript_sha256': 'a' * 64, 'typescript_files': 8, 'python': {'sha256': 'b' * 64},
+                   'queue_worker_sha256': 'c' * 64, 'node_version': 'v22', 'python_version': '3.12'}
+    runtime_new = {**runtime_old, 'python': {'sha256': 'd' * 64}}
+    monkeypatch.setattr(memetic, 'local_runtime_binding', lambda root=None: runtime_old if Path(root) == old_root else runtime_new)
+    monkeypatch.setattr(memetic, '_definition_bindings', lambda root: {'collector_core': 'exact'})
+    rows = memetic._verify_existing_fit_outputs(out, actor, old_root, source_root, {old_sha})
+    assert len(rows) == 1 and rows[0]['name'] == 'unguided-dev'
+
+    old_score = old_root / 'training/neuralese/natlang_neuralese/rl/task_rollouts.py'
+    text = old_score.read_text()
+    needle = '"successes": sum(r["reward"] == 1.0 for r in rollouts),'
+    assert needle in text
+    old_score.write_text(text.replace(needle, '"successes": 0,'))
+    with pytest.raises(ValueError, match='changes under the current scorer'):
+        memetic._verify_existing_fit_outputs(out, actor, old_root, source_root, {old_sha})

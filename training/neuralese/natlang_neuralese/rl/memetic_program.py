@@ -22,6 +22,7 @@ from ..common.jsonio import write_json_durable
 from ..common.runtime_inventory import python_runtime_binding, task_runtime_inventory
 from ..eval.task_packet import read_jsonl
 from . import memetic_task_runner as runner
+from ..common import memetic_teacher_ferry as teacher_ferry
 from .task_rollouts import authored_root_row
 
 STATE_ID = re.compile(r"nzs1_[a-z2-7]{52}\Z")
@@ -111,23 +112,22 @@ def archive_state(server: str, out: Path, written: dict):
 
 def actor_identity(server: str, info=None):
     info = info if info is not None else request_json(server, '/v1/neuralese/info')
-    state = info.get('native_state') or {}
-    binding = info.get('rl_policy_binding') or {}
-    identity = binding.get('native_identity') or {}
-    if (state.get('enabled') is not True or binding.get('schema') != 'natlang.rl-policy-binding/2'
-            or binding.get('communication') not in ('native-state', 'semantic-state')
-            or any(not isinstance(identity.get(key), str) or not identity[key] or
-                   state.get(key) != identity[key] for key in IDENTITY)
-            or binding.get('checkpoint_sha256') != identity.get('checkpoint_sha256')):
-        raise ValueError('memetic guidance requires a consistent native RL policy and state identity')
-    return {key: identity[key] for key in IDENTITY}
+    return teacher_ferry.served_native_identity(info)
 
 
-def local_runtime_binding() -> dict:
+def local_runtime_binding(runtime_root: Path | None = None) -> dict:
     """Bind the built collector, its deployment files, and the Python scorer."""
     import subprocess
     import sys
-    root = Path(__file__).resolve().parents[4]
+    root = Path(runtime_root).resolve(strict=True) if runtime_root is not None else Path(__file__).resolve().parents[4]
+    if runtime_root is not None and root != Path(__file__).resolve().parents[4]:
+        # Recompute a historical runtime with its own inventory implementation, not today's code.
+        package_root = root / 'training' / 'neuralese'
+        code = ('import json,sys;sys.path.insert(0,' + repr(str(package_root)) + ');'
+                'from natlang_neuralese.rl.memetic_program import local_runtime_binding;'
+                'print(json.dumps(local_runtime_binding(),sort_keys=True,separators=(",",":")))')
+        result = subprocess.run([sys.executable, '-c', code], cwd=root, check=True, capture_output=True, text=True)
+        return json.loads(result.stdout.strip().splitlines()[-1])
     inventory = task_runtime_inventory(root / 'ts-host')
     command = root / 'scripts/run_bonsai_queue.py'
     return {'schema': 'natlang.memetic-evaluator-runtime/1',
@@ -139,22 +139,231 @@ def local_runtime_binding() -> dict:
             'python_version': sys.version}
 
 
-def author_provenance(path: Path, model: str, endpoint: str):
-    """Require an independently prepared self-hosted teacher source receipt."""
+def _definition_bindings(root: Path) -> dict[str, str]:
+    """Hash the exact Python evaluation functions and compiled task collector entrypoints."""
+    import ast
+    files = {
+        'queue_worker': 'scripts/run_bonsai_queue.py',
+        'task_classifier': 'training/neuralese/natlang_neuralese/eval/task_packet.py',
+        'task_rollouts': 'training/neuralese/natlang_neuralese/rl/task_rollouts.py',
+        'memetic_program': 'training/neuralese/natlang_neuralese/rl/memetic_program.py',
+        'memetic_runner': 'training/neuralese/natlang_neuralese/rl/memetic_task_runner.py',
+        'collector_cli': 'ts-host/dist/teacher/cli.js',
+        'collector_core': 'ts-host/dist/teacher/collector.js',
+    }
+    result = {name: sha256_file_hex(root / relative) for name, relative in files.items()
+              if name in {'queue_worker', 'task_classifier', 'collector_cli', 'collector_core'}}
+    definitions = {
+        'task_rollouts': ('build_queue', 'reward_of', 'rollout_turns'),
+        'memetic_program': ('prepare_slices', 'evaluate'),
+        'memetic_runner': ('default_system_prompt', 'evaluate'),
+    }
+    for module, names in definitions.items():
+        path = root / files[module]
+        text = path.read_text(encoding='utf-8')
+        tree = ast.parse(text)
+        found = {node.name: node for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
+        if any(name not in found for name in names):
+            raise ValueError(f'evaluator continuation source is missing {module} behavior bindings')
+        for name in names:
+            source = ast.get_source_segment(text, found[name])
+            result[f'{module}.{name}'] = hashlib.sha256(source.encode()).hexdigest()
+    return result
+
+
+def _score_on_runtime(runtime_root: Path, evaluation: Path) -> dict:
+    """Replay task outcomes read-only; the caller verifies complete actor capture separately.
+
+    Empty result files are normal for verified request-budget prefixes. Their
+    journal outcome is still scored; this function grants no capture admission.
+    """
+    import subprocess
+    import sys
+    code = r'''import json,shutil,sys,tempfile
+from pathlib import Path
+root=Path(sys.argv[1]); source=Path(sys.argv[2]); sys.path.insert(0,str(root/'training/neuralese'))
+from natlang_neuralese.rl.task_rollouts import score,read_jsonl
+with tempfile.TemporaryDirectory(prefix='natlang-score-replay-') as temp:
+ target=Path(temp); packet=target/'packet.jsonl'; shutil.copyfile(source/'packet.jsonl',packet)
+ for name in ('preparation.json','journal.jsonl'):
+  shutil.copyfile(source/name,target/name)
+ queue=read_jsonl(source/'queue.jsonl'); copied=[]
+ for index,entry in enumerate(queue):
+  original=Path(entry['output'])
+  if not original.is_file(): raise RuntimeError('scorer replay requires saved result files')
+  output=target/f'output-{index:06d}.jsonl'; shutil.copyfile(original,output)
+  copied.append({**entry,'output':str(output),'jobs':str(target/f'jobs-{index:06d}')})
+ (target/'queue.jsonl').write_text(''.join(json.dumps(row,sort_keys=True)+'\n' for row in copied),encoding='utf-8')
+ report=score(target)
+ print(json.dumps(report,sort_keys=True,separators=(',',':')))
+'''
+    process = subprocess.run([sys.executable, '-c', code, str(runtime_root), str(evaluation)],
+                             cwd=runtime_root, check=True, capture_output=True, text=True)
+    lines = process.stdout.strip().splitlines()
+    if not lines:
+        raise ValueError('isolated scorer replay produced no report')
+    return json.loads(lines[-1])
+
+
+def _manifest_digest(value: dict) -> str:
+    unsigned = {key: item for key, item in value.items() if key != 'manifest_sha256'}
+    return canonical_json_sha256_hex(unsigned)
+
+
+def _load_runtime_continuation(out: Path) -> dict | None:
+    path = out / 'evaluator-runtime-continuation.json'
+    if not path.exists():
+        return None
     value = json.loads(path.read_text())
+    if value.get('schema') != 'natlang.memetic-evaluator-runtime-continuation/1' or \
+            value.get('manifest_sha256') != _manifest_digest(value):
+        raise ValueError('evaluator runtime continuation receipt is invalid')
+    current, current_sha = value.get('origin_inputs'), value.get('origin_inputs_sha256')
+    if not isinstance(current, dict) or current_sha != _pretty_json_sha256(current):
+        raise ValueError('evaluator runtime continuation has an invalid origin binding')
+    for row in value.get('history', []):
+        if (row.get('from_inputs') != current or row.get('from_inputs_sha256') != current_sha or
+                row.get('from_inputs_sha256') != _pretty_json_sha256(row.get('from_inputs')) or
+                row.get('to_inputs_sha256') != _pretty_json_sha256(row.get('to_inputs')) or
+                row.get('from_evaluator_runtime') != row.get('from_inputs', {}).get('evaluator_runtime') or
+                row.get('to_evaluator_runtime') != row.get('to_inputs', {}).get('evaluator_runtime')):
+            raise ValueError('evaluator runtime continuation chain is broken')
+        current, current_sha = row['to_inputs'], row['to_inputs_sha256']
+    if value.get('current_inputs') != current or value.get('current_inputs_sha256') != current_sha:
+        raise ValueError('evaluator runtime continuation current input differs from its chain')
+    return value
+
+
+def _pretty_json_sha256(value: dict) -> str:
+    return hashlib.sha256(json.dumps(value, indent=2, sort_keys=True).encode('utf-8')).hexdigest()
+
+
+def _verify_existing_fit_outputs(out: Path, actor: dict, previous_root: Path,
+                                 current_root: Path, prior_inputs: set[str]) -> list[dict]:
+    fits = []
+    for fit_path in sorted(out.glob('*-fit.json')):
+        name = fit_path.name[:-len('-fit.json')]
+        fit = json.loads(fit_path.read_text())
+        target = out / 'evals' / name
+        if (fit.get('evaluation_inputs_sha256') not in prior_inputs or
+                fit.get('actor_capture_reached_model') is not True or
+                fit.get('scored') != len(read_jsonl(target / 'queue.jsonl')) or
+                not student_capture_reached(target, actor)):
+            raise ValueError(f'cached evaluation {name} is not a complete exact-actor measurement')
+        # The rows already exist, so compare old and new score semantics without rerunning the collector.
+        old_report = _score_on_runtime(previous_root, target)
+        new_report = _score_on_runtime(current_root, target)
+        if old_report != new_report or fit.get('successes') != new_report.get('successes') or \
+                fit.get('scored') != new_report.get('scored'):
+            raise ValueError(f'cached evaluation {name} changes under the current scorer')
+        fits.append({'name': name, 'fit_sha256': sha256_file_hex(fit_path),
+                     'evaluation_inputs_sha256': fit['evaluation_inputs_sha256'],
+                     'score_sha256': canonical_json_sha256_hex(new_report),
+                     'actor_sha256': canonical_json_sha256_hex(actor)})
+    return fits
+
+
+def _fit_receipt_continued(out: Path, name: str, fit_path: Path, fit: dict) -> bool:
+    manifest = _load_runtime_continuation(out)
+    if not manifest:
+        return False
+    digest = sha256_file_hex(fit_path)
+    return any(row.get('name') == name and row.get('fit_sha256') == digest and
+               row.get('evaluation_inputs_sha256') == fit.get('evaluation_inputs_sha256')
+               for transition in manifest.get('history', [])
+               for row in transition.get('verified_fits', []))
+
+
+def evaluator_inputs(out: Path, inputs: dict, actor: dict, previous_runtime: Path | None) -> tuple[str, dict]:
+    """Keep original input provenance immutable and chain an explicitly checked runtime continuation."""
+    out.mkdir(parents=True, exist_ok=True)
+    input_path = out / 'inputs.json'
+    continuation_path = out / 'evaluator-runtime-continuation.json'
+    if not input_path.exists():
+        write_json_durable(input_path, inputs)
+    origin_inputs = json.loads(input_path.read_text())
+    origin_sha = sha256_file_hex(input_path)
+    current_root = Path(__file__).resolve().parents[4]
+    manifest = _load_runtime_continuation(out)
+    previous_inputs = manifest['current_inputs'] if manifest else origin_inputs
+    previous_sha = manifest['current_inputs_sha256'] if manifest else origin_sha
+    if previous_inputs != inputs:
+        old_nonruntime = {k: v for k, v in previous_inputs.items() if k != 'evaluator_runtime'}
+        new_nonruntime = {k: v for k, v in inputs.items() if k != 'evaluator_runtime'}
+        if old_nonruntime != new_nonruntime:
+            raise ValueError('resume changed actor, task splits, packets or sampling; runtime continuation cannot authorize it')
+        if previous_runtime is None:
+            raise ValueError('evaluator inputs changed; a verified --runtime-continuation-from is required')
+        previous_root = previous_runtime.resolve(strict=True)
+        old_runtime = local_runtime_binding(previous_root)
+        new_runtime = local_runtime_binding(current_root)
+        if old_runtime != previous_inputs.get('evaluator_runtime') or new_runtime != inputs.get('evaluator_runtime'):
+            raise ValueError('evaluator continuation runtime roots do not match their exact input receipts')
+        if any(old_runtime.get(key) != new_runtime.get(key) for key in
+               ('typescript_sha256', 'typescript_files', 'queue_worker_sha256', 'node_version', 'python_version')):
+            raise ValueError('evaluator continuation changed the compiled TypeScript runtime, queue worker or language runtime')
+        old_semantics = _definition_bindings(previous_root)
+        new_semantics = _definition_bindings(current_root)
+        exact_keys = ('queue_worker', 'task_classifier', 'collector_cli', 'collector_core',
+                      'task_rollouts.build_queue', 'task_rollouts.reward_of', 'task_rollouts.rollout_turns',
+                      'memetic_program.prepare_slices',
+                      'memetic_runner.default_system_prompt', 'memetic_runner.evaluate')
+        if any(old_semantics.get(key) != new_semantics.get(key) for key in exact_keys):
+            raise ValueError('evaluator continuation changed a task collector or policy-scoring mechanism')
+        prior_inputs = {origin_sha, previous_sha}
+        if manifest:
+            prior_inputs.update(row['to_inputs_sha256'] for row in manifest.get('history', []))
+            prior_inputs.update(row['from_inputs_sha256'] for row in manifest.get('history', []))
+        verified_fits = _verify_existing_fit_outputs(out, actor, previous_root, current_root, prior_inputs)
+        if manifest is None:
+            manifest = {'schema': 'natlang.memetic-evaluator-runtime-continuation/1',
+                        'origin_inputs': origin_inputs, 'origin_inputs_sha256': origin_sha,
+                        'current_inputs': previous_inputs, 'current_inputs_sha256': previous_sha, 'history': []}
+        transition = {'from_inputs': previous_inputs, 'from_inputs_sha256': previous_sha,
+                      'to_inputs': inputs, 'to_inputs_sha256': _pretty_json_sha256(inputs),
+                      'from_runtime_root': str(previous_root), 'to_runtime_root': str(current_root),
+                      'from_evaluator_runtime': old_runtime, 'to_evaluator_runtime': new_runtime,
+                      'behavioral_bindings': new_semantics, 'verified_fits': verified_fits}
+        manifest['history'].append(transition)
+        manifest['current_inputs'] = inputs
+        manifest['current_inputs_sha256'] = transition['to_inputs_sha256']
+        manifest['manifest_sha256'] = _manifest_digest(manifest)
+        write_json_durable(continuation_path, manifest)
+        return manifest['current_inputs_sha256'], manifest
+    if manifest is None:
+        manifest = {'schema': 'natlang.memetic-evaluator-runtime-continuation/1',
+                    'origin_inputs': origin_inputs, 'origin_inputs_sha256': origin_sha,
+                    'current_inputs': inputs, 'current_inputs_sha256': origin_sha,
+                    'history': []}
+        manifest['manifest_sha256'] = _manifest_digest(manifest)
+        write_json_durable(continuation_path, manifest)
+    elif manifest.get('origin_inputs_sha256') != origin_sha:
+        raise ValueError('evaluator continuation changed its immutable origin input receipt')
+    return manifest['current_inputs_sha256'], manifest
+
+
+def author_provenance(path: Path, model: str, endpoint: str):
+    """Bind authoring to the existing self-hosted Qwen source and runtime."""
+    value = json.loads(path.read_text())
+    exact_sources = list(teacher_ferry.TEACHER_SOURCE_BINDINGS)
     if (value.get('schema') != 'natlang.memetic-author-provenance/1'
-            or value.get('model_id') != model
+            or model != teacher_ferry.TEACHER_SERVE_ALIAS
+            or value.get('model_id') != teacher_ferry.TEACHER_MODEL_ID
+            or value.get('serve_alias') != teacher_ferry.TEACHER_SERVE_ALIAS
+            or value.get('revision') != teacher_ferry.TEACHER_REVISION
             or value.get('hosting') != 'self-hosted-coreweave'
-            or value.get('endpoint') != endpoint.rstrip('/')
-            or not isinstance(value.get('sandbox_id'), str) or not value['sandbox_id']
+            or endpoint.rstrip('/') != teacher_ferry.TEACHER_URL
+            or value.get('endpoint') != teacher_ferry.TEACHER_URL
+            or value.get('sandbox_id') != teacher_ferry.TEACHER_SANDBOX_ID
+            or value.get('source_bindings') != exact_sources
             or any(not isinstance(value.get(key), str) or not re.fullmatch(r'[0-9a-f]{64}', value[key])
                    for key in ('checkpoint_sha256', 'tokenizer_fingerprint', 'runtime_sha256', 'source_receipt_sha256'))):
-        raise ValueError('memetic author needs exact self-hosted teacher checkpoint/tokenizer/runtime provenance')
+        raise ValueError('memetic author needs the exact pinned self-hosted Qwen teacher checkpoint/tokenizer/runtime/source receipt')
     return {'path': str(path.resolve()), 'sha256': hashlib.sha256(path.read_bytes()).hexdigest(), 'receipt': value}
 
 
 def evaluate(args, out: Path, name: str, guidance: str, rows: list[dict], *, base_system: str,
-             actor: dict, server_info_sha256: str):
+             actor: dict, server_info_sha256: str, evaluation_inputs_sha256: str | None = None):
     packet = out / (name + '-packet.jsonl')
     packet_bytes = ''.join(json.dumps(row, ensure_ascii=False) + '\n' for row in rows).encode()
     if packet.exists() and packet.read_bytes() != packet_bytes:
@@ -164,12 +373,16 @@ def evaluate(args, out: Path, name: str, guidance: str, rows: list[dict], *, bas
         write_bytes_durable(packet, packet_bytes)
     target = out / 'evals' / name
     fit_path = out / (name + '-fit.json')
-    receipt = {'evaluation_inputs_sha256': sha256_file_hex(out / 'inputs.json'),
+    receipt = {'evaluation_inputs_sha256': evaluation_inputs_sha256 or sha256_file_hex(out / 'inputs.json'),
                'guidance_sha256': hashlib.sha256(guidance.encode()).hexdigest(),
                'packet_sha256': hashlib.sha256(packet_bytes).hexdigest()}
     if fit_path.exists():
         fit = json.loads(fit_path.read_text())
-        if any(fit.get(key) != value for key, value in receipt.items()):
+        exact_receipt = all(fit.get(key) == value for key, value in receipt.items()
+                            if key != 'evaluation_inputs_sha256')
+        same_input = fit.get('evaluation_inputs_sha256') == receipt['evaluation_inputs_sha256']
+        continued_input = _fit_receipt_continued(out, name, fit_path, fit)
+        if not exact_receipt or (not same_input and not continued_input):
             raise ValueError('cached guidance fitness is not bound to this student evaluation')
         if (fit.get('scored') != len(rows) * args.samples or fit.get('actor_capture_reached_model') is not True
                 or not student_capture_reached(target, actor)):
@@ -465,7 +678,10 @@ def main(argv=None):
     parser.add_argument('--server', required=True)
     parser.add_argument('--model-id', choices=('lfm', 'mellum'), required=True)
     parser.add_argument('--baseline-only', action='store_true')
+    parser.add_argument('--runtime-continuation-from', type=Path,
+                        help='exact prior frozen evaluator runtime root for a verified coordinator-only continuation')
     parser.add_argument('--author')
+    parser.add_argument('--author-ferry', help='durable evaluator-local teacher transport on loopback:8766')
     parser.add_argument('--author-model')
     parser.add_argument('--author-provenance', type=Path)
     parser.add_argument('--generations', type=int, default=3)
@@ -498,15 +714,16 @@ def main(argv=None):
         'shards': args.shards, 'case_seconds': args.case_seconds,
         'max_model_requests': args.max_model_requests, 'max_turns': args.max_turns}
     input_path = out / 'inputs.json'
-    if input_path.exists() and json.loads(input_path.read_text()) != inputs:
-        raise ValueError('resume changed program, split, student or sampling identity')
-    write_json_durable(input_path, inputs)
+    current_inputs_sha256, _ = evaluator_inputs(
+        out, inputs, identity, args.runtime_continuation_from)
     state_path = out / 'state.json'
     state = json.loads(state_path.read_text()) if state_path.exists() else {'generation': 0, 'best': None, 'baseline': None, 'history': []}
     measured_baseline = {'development': evaluate(args, out, 'unguided-dev', '', dev,
-                             base_system=base_system, actor=identity, server_info_sha256=server_info_sha256),
+                             base_system=base_system, actor=identity, server_info_sha256=server_info_sha256,
+                             evaluation_inputs_sha256=current_inputs_sha256),
                          'confirmation': evaluate(args, out, 'unguided-confirm', '', confirm,
-                             base_system=base_system, actor=identity, server_info_sha256=server_info_sha256)}
+                             base_system=base_system, actor=identity, server_info_sha256=server_info_sha256,
+                             evaluation_inputs_sha256=current_inputs_sha256)}
     if state.get('baseline') is not None and state['baseline'] != measured_baseline:
         raise ValueError('resumed baseline fitness differs from its exact cached evaluation receipt')
     if state.get('baseline') is None:
@@ -516,6 +733,8 @@ def main(argv=None):
         result = {'schema': 'natlang.memetic-baseline-result/1', 'status': 'baseline_complete',
                   'program_id': args.program_id, 'student': identity,
                   'inputs_sha256': sha256_file_hex(input_path),
+                  'current_inputs_sha256': current_inputs_sha256,
+                  'runtime_continuation_sha256': sha256_file_hex(out / 'evaluator-runtime-continuation.json'),
                   'development': {key: measured_baseline['development'][key] for key in ('successes', 'scored')},
                   'confirmation': {key: measured_baseline['confirmation'][key] for key in ('successes', 'scored')}}
         write_json_durable(out / 'baseline-result.json', result)
@@ -523,9 +742,11 @@ def main(argv=None):
         return result
     if any(value is None for value in (args.author, args.author_model, args.author_provenance)):
         parser.error('guided iteration requires --author, --author-model and --author-provenance')
+    if args.author_ferry != 'http://127.0.0.1:8766':
+        parser.error('--author-ferry must be the evaluator-local http://127.0.0.1:8766 endpoint')
     teacher = author_provenance(args.author_provenance, args.author_model, args.author)
     author_inputs = {'schema': 'natlang.memetic-author-inputs/1', 'author': teacher,
-                     'author_server': args.author, 'min_gain_fraction': args.min_gain_fraction,
+                     'author_server': args.author, 'author_ferry': args.author_ferry, 'min_gain_fraction': args.min_gain_fraction,
                      'recipe_base': (hashlib.sha256(args.recipe_base.read_bytes()).hexdigest()
                                      if args.recipe_base else None),
                      'foundation_id': args.foundation_id, 'recipe_graph_path': args.recipe_graph_path}
@@ -540,9 +761,11 @@ def main(argv=None):
         seed = {'text': seed_text, 'write': seed_write,
                 'archive': archive_state(args.server, out, seed_write)}
         seed['development'] = evaluate(args, out, 'seed-dev', state_guidance(seed_text, seed_write['id']), dev,
-                                       base_system=base_system, actor=identity, server_info_sha256=server_info_sha256)
+                                       base_system=base_system, actor=identity, server_info_sha256=server_info_sha256,
+                                       evaluation_inputs_sha256=current_inputs_sha256)
         seed['confirmation'] = evaluate(args, out, 'seed-confirm', state_guidance(seed_text, seed_write['id']), confirm,
-                                        base_system=base_system, actor=identity, server_info_sha256=server_info_sha256)
+                                        base_system=base_system, actor=identity, server_info_sha256=server_info_sha256,
+                                        evaluation_inputs_sha256=current_inputs_sha256)
         state['best'] = seed
         write_json_durable(state_path, state)
     while state['generation'] < args.generations:
@@ -562,9 +785,11 @@ def main(argv=None):
         proposed, written = candidate['text'], candidate['write']
         prefix = f'candidate-{generation:03d}'
         candidate['development'] = evaluate(args, out, prefix + '-dev', state_guidance(proposed, written['id']), dev,
-                                             base_system=base_system, actor=identity, server_info_sha256=server_info_sha256)
+                                             base_system=base_system, actor=identity, server_info_sha256=server_info_sha256,
+                                             evaluation_inputs_sha256=current_inputs_sha256)
         candidate['confirmation'] = evaluate(args, out, prefix + '-confirm', state_guidance(proposed, written['id']), confirm,
-                                              base_system=base_system, actor=identity, server_info_sha256=server_info_sha256)
+                                              base_system=base_system, actor=identity, server_info_sha256=server_info_sha256,
+                                              evaluation_inputs_sha256=current_inputs_sha256)
         accepted = (acceptance(best['development'], candidate['development'])
                     and acceptance(best['confirmation'], candidate['confirmation']))
         state['history'].append({'generation': generation, 'accepted': accepted, 'candidate': candidate})
@@ -583,7 +808,10 @@ def main(argv=None):
                'best': {split: {key: best[split][key] for key in ('successes', 'scored')}
                         for split in ('development', 'confirmation')},
                'min_gain_fraction': args.min_gain_fraction,
-               'accepted_revisions': sum(item['accepted'] for item in state['history'])}
+               'accepted_revisions': sum(item['accepted'] for item in state['history']),
+               'inputs_sha256': sha256_file_hex(input_path),
+               'current_inputs_sha256': current_inputs_sha256,
+               'runtime_continuation_sha256': sha256_file_hex(out / 'evaluator-runtime-continuation.json')}
     write_json_durable(out / 'result.json', outcome)
     if not qualified:
         (out / 'binding.json').unlink(missing_ok=True)
@@ -598,7 +826,9 @@ def main(argv=None):
         'confirmation': outcome['best']['confirmation'],
         'unguided_baseline': outcome['baseline'],
         'min_gain_fraction': args.min_gain_fraction,
-        'inputs_sha256': sha256_file_hex(input_path), 'author_sha256': sha256_file_hex(author_path)}
+        'inputs_sha256': sha256_file_hex(input_path), 'current_inputs_sha256': current_inputs_sha256,
+        'runtime_continuation_sha256': sha256_file_hex(out / 'evaluator-runtime-continuation.json'),
+        'author_sha256': sha256_file_hex(author_path)}
     if args.recipe_base is not None:
         binding['native_training_graphs'] = export_training_graphs(Path(best['development']['dir']), out,
             program_id=args.program_id, confirmation_ids={row['id'] for row in confirm},
