@@ -1,4 +1,5 @@
 import json
+import hashlib
 from pathlib import Path
 
 import pytest
@@ -6,6 +7,10 @@ import pytest
 from scripts.coreweave import teacher_internal_admission_worker as worker
 from scripts.coreweave import teacher_internal_conversion as conversion_module
 from scripts.coreweave.teacher_tranche_admission import file_binding, preceding_tranches
+from scripts.neuralese_data.build_native_semantic_pairs_e2e import CompressedRows
+from scripts.neuralese_data.build_verified_teacher_trajectory_graphs import (
+    graph_content_sha256, teacher_action_graph_id,
+)
 
 
 def write_json(path: Path, value: dict) -> dict:
@@ -29,14 +34,20 @@ def register_proof(root: Path, corpus_id: str, proof_ref: dict) -> None:
 
 def zero_conversion(tmp_path: Path) -> Path:
     source = tmp_path / 'source.jsonl'
-    source.write_text('{"source":"verified"}\n')
-    source_ref = file_binding(source)
-    source_proof_path = tmp_path / 'source-proof.json'
-    source_proof = {'status': 'passed', 'training_admission': False,
-                    'source': source_ref, 'actor': {'sha256': 'a' * 64},
-                    'execution_identity': {'sha256': 'b' * 64},
-                    'current_protection': {'sha256': 'd' * 64}}
-    source_proof_ref = write_json(source_proof_path, source_proof)
+    source_row = {'id': 'source-row-1', 'trajectory': [{
+        'phase': 'action', 'invocation_id': 'invocation-1', 'request_sha256': 'a' * 64,
+        'raw_response_sha256': 'b' * 64, 'assistant': {'content': 'captured answer'},
+        'model_response': {'raw_calls': []},
+    }]}
+    source.write_text(json.dumps(source_row, sort_keys=True) + '\n')
+    source_row_sha = hashlib.sha256(source.read_bytes().rstrip(b'\r\n')).hexdigest()
+    source_ref = {**file_binding(source), 'rows': 1,
+                  'row_bindings': [{'id': 'source-row-1', 'sha256': source_row_sha}]}
+    source_proof_ref = write_json(tmp_path / 'source-proof.json', {
+        'status': 'passed', 'training_admission': False, 'source': source_ref,
+        'actor': {'sha256': 'a' * 64}, 'execution_identity': {'sha256': 'b' * 64},
+        'current_protection': {'sha256': 'd' * 64}, 'rows': 1, 'teacher_action_turns': 1,
+    })
     settings_ref = write_json(tmp_path / 'settings.json', {
         'teacher_namespace': 'qwen36-verified-positive-native-graphs-20261022-recovery7853',
         'internal_continuation': {'schema': 'natlang.teacher-internal-source-continuation/1',
@@ -44,57 +55,89 @@ def zero_conversion(tmp_path: Path) -> Path:
     })
     predecessor_id = 'registered-native-predecessor'
     package = tmp_path / 'runs' / predecessor_id
-    manifest_files = []
-    model_graphs = {}
+    manifest_files, graph_refs, receipts, models = [], {}, {}, []
+    decisions_row = {'id': 'source-row-1:decision:0000',
+        'source_ref': {'trajectory_id': 'source-row-1', 'invocation_id': 'invocation-1'},
+        'decision': {'index': 0, 'training_approved': True, 'failed_action': False,
+                     'source_raw_response_sha256': 'b' * 64},
+        'training_admission': {'approved': True, 'reason': 'qualified'}}
     for model in ('lfm25', 'mellum21'):
-        represented = package / model / 'train/native-graphs.jsonl.zst'
-        represented.parent.mkdir(parents=True, exist_ok=True)
-        represented.write_bytes((model + ' graph').encode())
-        represented_ref = file_binding(represented)
-        model_graphs[model] = represented_ref
+        fingerprint = ('be949ec48f44e17b2b17e1131aeb1dab4262175ba20f9783ecd8e59c27a58105'
+                       if model == 'lfm25' else
+                       'fbf22d8773d09be802cb9977895067db36cdfba747fcb24b02ddbf1312d3778f')
+        graph_id = 'text:' + teacher_action_graph_id('source-row-1', source_row_sha, 0,
+            'keep' if model == 'lfm25' else None, 'mask-runtime-failures')
+        graph = {'schema': 'natlang.neuralese-native-graph/1', 'id': graph_id,
+                 'split': 'train', 'source_groups': ['fixture:train'],
+                 'tokenizer_fingerprint': fingerprint,
+                 'nodes': [{'name': 'action', 'token_ids': [1, 2], 'target_weights': [0, 1]}]}
+        graph_path = package / model / 'train/native-graphs.jsonl.zst'
+        graph_path.parent.mkdir(parents=True, exist_ok=True)
+        graph_writer = CompressedRows(graph_path); graph_writer.write(graph); graph_writer.finish()
+        graph_ref = file_binding(graph_path); graph_refs[model] = graph_ref
         manifest_files.append({'path': f'{model}/train/native-graphs.jsonl.zst',
-                               'sha256': represented_ref['sha256'], 'bytes': represented_ref['bytes']})
-    write_json(tmp_path / 'training/neuralese_corpora.json', {
-        'corpora': [{'id': predecessor_id, 'path': f'runs/{predecessor_id}',
-                     'training_admission': True}]})
+                               'sha256': graph_ref['sha256'], 'bytes': graph_ref['bytes']})
+    write_json(tmp_path / 'training/neuralese_corpora.json', {'corpora': [
+        {'id': predecessor_id, 'path': f'runs/{predecessor_id}', 'training_admission': True}]})
     write_json(tmp_path / 'training/corpus-manifests' / f'{predecessor_id}.json', {
         'id': predecessor_id, 'path': f'runs/{predecessor_id}', 'files': manifest_files})
-    models = []
+    converter = Path(conversion_module.__file__).resolve().parents[2] / 'scripts/neuralese_data/build_verified_teacher_trajectory_graphs.py'
     for model in ('lfm25', 'mellum21'):
-        represented_ref = model_graphs[model]
+        fingerprint = ('be949ec48f44e17b2b17e1131aeb1dab4262175ba20f9783ecd8e59c27a58105'
+                       if model == 'lfm25' else
+                       'fbf22d8773d09be802cb9977895067db36cdfba747fcb24b02ddbf1312d3778f')
+        decision_dir = tmp_path / model / 'decision-admission-cache'
+        decisions_path = decision_dir / 'decisions.jsonl'
+        decisions_path.parent.mkdir(parents=True, exist_ok=True)
+        decisions_path.write_text(json.dumps(decisions_row) + '\n')
+        decision_receipt_ref = write_json(decision_dir / 'receipt.json', {
+            'schema': 'natlang.verified-teacher-decision-materialization/1',
+            'identity': {'source_sha256': source_ref['sha256'], 'direct_answers': True,
+                         'runtime': {'reader.js': 'c' * 64}},
+            'output_sha256': file_binding(decisions_path)['sha256'],
+            'summary': {'training_decisions': 1, 'output': 'decisions.jsonl'},
+        })
         outputs = {}
         for split in ('train', 'test'):
             output_path = tmp_path / model / split / 'native-graphs.jsonl.zst'
             output_path.parent.mkdir(parents=True, exist_ok=True)
-            output_path.write_bytes(b'empty native graph stream')
-            outputs[split] = {**file_binding(output_path), 'rows': 0}
-        receipt_path = tmp_path / model / 'receipt.json'
-        receipt = {'status': 'passed', 'model_key': model,
-                   'source': {'sha256': source_ref['sha256']},
-                   'tokenizer': {'expanded_fingerprint': (
-                       'be949ec48f44e17b2b17e1131aeb1dab4262175ba20f9783ecd8e59c27a58105'
-                       if model == 'lfm25' else
-                       'fbf22d8773d09be802cb9977895067db36cdfba747fcb24b02ddbf1312d3778f')},
-                   'explicit_history_reasoning_policy': 'keep' if model == 'lfm25' else None,
-                   'failed_assistant_history_policy': 'mask-runtime-failures',
-                   'outputs': outputs,
-                   'deduplication': {'inputs': [{'path': represented_ref['path'],
-                                                 'sha256': represented_ref['sha256']}],
-                                     'emitted_rows': 0, 'omitted_rows': 1,
-                                     'omissions': [{'content_sha256': 'a' * 64,
-                                         'represented_by': {'path': represented_ref['path'],
-                                                            'id': 'sample-native-row'}}]}}
-        models.append({'model': model, 'receipt': write_json(receipt_path, receipt)})
+            writer = CompressedRows(output_path); outputs[split] = {
+                **writer.finish(), 'tokens': 0, 'max_row_tokens': 0}
+        graph = {'schema': 'natlang.neuralese-native-graph/1', 'id':
+                 'text:' + teacher_action_graph_id('source-row-1', source_row_sha, 0,
+                   'keep' if model == 'lfm25' else None, 'mask-runtime-failures'),
+                 'split': 'train', 'source_groups': ['fixture:train'],
+                 'tokenizer_fingerprint': fingerprint,
+                 'nodes': [{'name': 'action', 'token_ids': [1, 2], 'target_weights': [0, 1]}]}
+        content_sha = graph_content_sha256(graph)
+        receipt = {'schema': 'natlang.verified-teacher-native-graph-build/1', 'status': 'passed',
+            'model_key': model, 'source': {'path': str(source), 'sha256': source_ref['sha256'], 'rows': 1,
+                'row_bindings': [{'id': 'source-row-1', 'sha256': source_row_sha}]},
+            'tokenizer': {'expanded_fingerprint': fingerprint,
+                **({'history_reasoning': {'policy': 'keep'}} if model == 'lfm25' else {})},
+            **({'explicit_history_reasoning_policy': 'keep'} if model == 'lfm25' else {}),
+            'failed_assistant_history_policy': 'mask-runtime-failures', 'turns': 1,
+            'action_omissions': [], 'outputs': outputs,
+            'decision_admission': {'path': decision_receipt_ref['path'],
+                'sha256': decision_receipt_ref['sha256'],
+                'output_sha256': file_binding(decisions_path)['sha256'],
+                'summary': {'training_decisions': 1, 'output': 'decisions.jsonl'}},
+            'deduplication': {'inputs': [{'path': graph_refs[model]['path'],
+                'sha256': graph_refs[model]['sha256'], 'bytes': graph_refs[model]['bytes'], 'rows': 1}],
+                'emitted_rows': 0, 'omitted_rows': 1,
+                'omissions': [{'id': graph['id'], 'content_sha256': content_sha,
+                    'reason': 'exact token IDs and target weights already represented',
+                    'represented_by': {'path': graph_refs[model]['path'], 'id': graph['id']}}]},
+        }
+        receipts[model] = write_json(tmp_path / model / 'receipt.json', receipt)
+        models.append({'model': model, 'receipt': receipts[model]})
     conversion = tmp_path / 'conversion'
     write_json(conversion / 'both-port-conversion.json', {
-        'schema': 'natlang.teacher-internal-both-port-conversion/1',
-        'batch': 21, 'tranche': 1,
-        'source': source_ref, 'source_proof': source_proof_ref,
-        'settings': settings_ref,
-        'protection_manifest': {'sha256': 'd' * 64},
+        'schema': 'natlang.teacher-internal-both-port-conversion/1', 'batch': 21, 'tranche': 1,
+        'source': source_ref, 'source_proof': source_proof_ref, 'settings': settings_ref,
+        'converter': file_binding(converter), 'protection_manifest': {'sha256': 'd' * 64},
         'training_registration': False, 'training_exposure': False,
-        'admitted_predecessors': [predecessor_id],
-        'same_actor_source_boundary_inputs': [],
+        'admitted_predecessors': [predecessor_id], 'same_actor_source_boundary_inputs': [],
         'models': models,
     })
     return conversion
@@ -104,6 +147,7 @@ def test_zero_rows_require_both_exact_dedup_receipts_and_bound_inputs(tmp_path, 
     conversion = zero_conversion(tmp_path)
     monkeypatch.setattr(worker, 'ROOT', tmp_path)
     monkeypatch.setattr(worker, '_registered_ids', lambda: set())
+    monkeypatch.setattr(conversion_module, '_legacy_inputs', lambda root, model: [])
     ctx = worker.Tranche(21, 1, teacher_namespace='qwen36-verified-positive-native-graphs-20261022-recovery7853')
     result = worker._publish_if_new_delta(ctx, conversion)
     assert result['status'] == 'verified-zero-delta'
@@ -131,6 +175,50 @@ def test_zero_rows_require_both_exact_dedup_receipts_and_bound_inputs(tmp_path, 
         worker._publish_if_new_delta(ctx, conversion)
 
 
+@pytest.mark.parametrize('field,value', [('content_sha256', '0' * 64), ('represented_id', 'forged-row-id')])
+def test_zero_row_rejects_forged_content_or_represented_id_with_same_graph_bytes(tmp_path, monkeypatch, field, value):
+    conversion = zero_conversion(tmp_path)
+    monkeypatch.setattr(worker, 'ROOT', tmp_path)
+    monkeypatch.setattr(worker, '_registered_ids', lambda: set())
+    monkeypatch.setattr(conversion_module, '_legacy_inputs', lambda root, model: [])
+    proof_path = conversion / 'both-port-conversion.json'
+    proof = json.loads(proof_path.read_text())
+    receipt_path = Path(proof['models'][0]['receipt']['path'])
+    receipt = json.loads(receipt_path.read_text())
+    omission = receipt['deduplication']['omissions'][0]
+    if field == 'content_sha256':
+        omission['content_sha256'] = value
+    else:
+        omission['represented_by']['id'] = value
+    receipt_ref = write_json(receipt_path, receipt)
+    proof['models'][0]['receipt'] = receipt_ref
+    write_json(proof_path, proof)
+    with pytest.raises(ValueError, match='(omission|deduplication identity)'):
+        worker._publish_if_new_delta(worker.Tranche(21, 1,
+            teacher_namespace='qwen36-verified-positive-native-graphs-20261022-recovery7853'), conversion)
+
+
+def test_zero_row_requires_readable_empty_native_output_streams(tmp_path, monkeypatch):
+    conversion = zero_conversion(tmp_path)
+    monkeypatch.setattr(worker, 'ROOT', tmp_path)
+    monkeypatch.setattr(worker, '_registered_ids', lambda: set())
+    monkeypatch.setattr(conversion_module, '_legacy_inputs', lambda root, model: [])
+    proof_path = conversion / 'both-port-conversion.json'
+    proof = json.loads(proof_path.read_text())
+    receipt_path = Path(proof['models'][0]['receipt']['path'])
+    receipt = json.loads(receipt_path.read_text())
+    output_path = receipt_path.parent / 'train/native-graphs.jsonl.zst'
+    output_path.write_bytes(b'not-a-zstd-stream')
+    output_ref = file_binding(output_path)
+    receipt['outputs']['train'].update({key: output_ref[key] for key in ('path', 'sha256', 'bytes')})
+    receipt_ref = write_json(receipt_path, receipt)
+    proof['models'][0]['receipt'] = receipt_ref
+    write_json(proof_path, proof)
+    with pytest.raises((ValueError, OSError, RuntimeError)):
+        worker._publish_if_new_delta(worker.Tranche(21, 1,
+            teacher_namespace='qwen36-verified-positive-native-graphs-20261022-recovery7853'), conversion)
+
+
 def test_registered_exact_conversion_is_idempotent_but_immutable_conflicts_fail(tmp_path, monkeypatch):
     conversion = tmp_path / 'conversion.json'
     conversion_ref = write_json(conversion, {'conversion': 'exact'})
@@ -146,6 +234,23 @@ def test_registered_exact_conversion_is_idempotent_but_immutable_conflicts_fail(
     with pytest.raises(ValueError, match='different conversion'):
         worker._existing_conversion(corpus_id, {'sha256': '0' * 64,
                                                 'bytes': conversion_ref['bytes']})
+
+
+@pytest.mark.parametrize('missing', ['manifest', 'proof'])
+def test_registered_conversion_with_missing_manifest_or_proof_fails_closed(tmp_path, monkeypatch, missing):
+    conversion_ref = write_json(tmp_path / 'conversion.json', {'conversion': 'exact'})
+    corpus_id = 'qwen36-verified-positive-native-graphs-20261023-internal-batch0021-tranche0001'
+    proof_path = tmp_path / 'runs' / corpus_id / 'evidence/registration-proof.json'
+    proof_ref = write_json(proof_path, {
+        'schema': 'natlang.teacher-internal-tranche-registration-proof/1',
+        'corpus_id': corpus_id, 'training_admission': True, 'conversion': conversion_ref})
+    register_proof(tmp_path, corpus_id, proof_ref)
+    monkeypatch.setattr(worker, 'ROOT', tmp_path)
+    missing_path = (tmp_path / 'training/corpus-manifests' / f'{corpus_id}.json'
+                    if missing == 'manifest' else proof_path)
+    missing_path.unlink()
+    with pytest.raises(FileNotFoundError):
+        worker._existing_conversion(corpus_id, conversion_ref)
 
 
 def test_repeated_poll_recognizes_exact_registered_conversion_without_republishing(tmp_path, monkeypatch):
@@ -187,6 +292,7 @@ def internal_predecessor_fixture(root: Path, *, source=b'raw source', actor='a' 
     source_proof_ref = write_json(source_proof_path, {
         'status': 'passed', 'training_admission': False, 'source': source_ref,
         'actor': {'sha256': actor}, 'execution_identity': {'sha256': runtime},
+        'current_protection': {'sha256': 'd' * 64},
     })
     source_result_ref = write_json(package / 'evidence/source-result.json', {
         'training_admission': False, 'training_exposure': False,
@@ -253,7 +359,7 @@ def internal_predecessor_fixture(root: Path, *, source=b'raw source', actor='a' 
     return rows, source_ref
 
 
-def test_internal_predecessor_graphs_require_same_actor_source_and_history_contract(tmp_path):
+def test_internal_predecessor_graphs_keep_exact_historical_identity_without_relabeling(tmp_path):
     rows, source_ref = internal_predecessor_fixture(tmp_path)
     ctx = worker.Tranche(21, 1, teacher_namespace='qwen36-verified-positive-native-graphs-20261022-recovery7853')
     source_proof = {'source': {'sha256': source_ref['sha256']},
@@ -274,9 +380,10 @@ def test_internal_predecessor_graphs_require_same_actor_source_and_history_contr
         {**source_proof, 'execution_identity': {'sha256': 'f' * 64}},
         {**source_proof, 'current_protection': {'sha256': '0' * 64}},
     ):
-        with pytest.raises(ValueError):
-            conversion_module._verified_internal_predecessors(
-                tmp_path, ctx, changed, contracts, rows)
+        # These values describe the current boundary. Historical graphs retain
+        # their exact actor/runtime/protection and remain dedup inputs.
+        assert conversion_module._verified_internal_predecessors(
+            tmp_path, ctx, changed, contracts, rows)
     source_path = Path(source_ref['path'])
     source_path.write_bytes(b'changed source')
     with pytest.raises(ValueError, match='source custody'):

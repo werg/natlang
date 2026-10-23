@@ -120,28 +120,25 @@ def _registered_ids()->set[str]:
 
 def _existing_conversion(corpus_id:str,conversion_ref:dict)->dict|None:
     """Return a prior exact publication; reject immutable-ID content conflicts."""
-    try:
-        registry_ref=file_binding(ROOT/'training/neuralese_corpora.json')
-        registry=read_bound(registry_ref)
-        matches=[entry for entry in registry.get('corpora',[]) if entry.get('id')==corpus_id]
-        if len(matches)!=1 or matches[0].get('training_admission') is not True:
-            raise ValueError(f'existing publication is not one admitted registry entry: {corpus_id}')
-        entry=matches[0]
-        manifest_ref=file_binding(ROOT/'training/corpus-manifests'/f'{corpus_id}.json')
-        manifest=read_bound(manifest_ref)
-        if manifest.get('id')!=corpus_id or manifest.get('path')!=entry.get('path'):
-            raise ValueError(f'existing publication manifest differs from registry: {corpus_id}')
-        proof_rel='evidence/registration-proof.json'
-        proof_members=[row for row in manifest.get('files',[]) if row.get('path')==proof_rel]
-        registry_proof=(entry.get('source_binding') or {}).get('registration_proof') or {}
-        if (len(proof_members)!=1 or registry_proof.get('path')!=f"{entry['path']}/{proof_rel}"
-                or any(registry_proof.get(key)!=proof_members[0].get(key) for key in ('sha256','bytes'))):
-            raise ValueError(f'existing publication does not bind its exact registration proof: {corpus_id}')
-        entry_path=ROOT/entry['path']/proof_rel
-        proof_ref=file_binding(entry_path)
-        proof=read_bound(proof_ref)
-    except FileNotFoundError:
-        return None
+    registry_ref=file_binding(ROOT/'training/neuralese_corpora.json')
+    registry=read_bound(registry_ref)
+    matches=[entry for entry in registry.get('corpora',[]) if entry.get('id')==corpus_id]
+    if len(matches)!=1 or matches[0].get('training_admission') is not True:
+        raise ValueError(f'existing publication is not one admitted registry entry: {corpus_id}')
+    entry=matches[0]
+    manifest_ref=file_binding(ROOT/'training/corpus-manifests'/f'{corpus_id}.json')
+    manifest=read_bound(manifest_ref)
+    if manifest.get('id')!=corpus_id or manifest.get('path')!=entry.get('path'):
+        raise ValueError(f'existing publication manifest differs from registry: {corpus_id}')
+    proof_rel='evidence/registration-proof.json'
+    proof_members=[row for row in manifest.get('files',[]) if row.get('path')==proof_rel]
+    registry_proof=(entry.get('source_binding') or {}).get('registration_proof') or {}
+    if (len(proof_members)!=1 or registry_proof.get('path')!=f"{entry['path']}/{proof_rel}"
+            or any(registry_proof.get(key)!=proof_members[0].get(key) for key in ('sha256','bytes'))):
+        raise ValueError(f'existing publication does not bind its exact registration proof: {corpus_id}')
+    entry_path=ROOT/entry['path']/proof_rel
+    proof_ref=file_binding(entry_path)
+    proof=read_bound(proof_ref)
     if (proof.get('schema')!='natlang.teacher-internal-tranche-registration-proof/1'
             or proof.get('corpus_id')!=corpus_id or proof.get('training_admission') is not True):
         raise ValueError(f'existing publication has an invalid registration proof: {corpus_id}')
@@ -271,14 +268,18 @@ def run(*,once:bool,poll_seconds:int,batches:set[int]|None=None,tranches:set[int
                 conversion=_next_conversion(ctx)
                 if conversion is None: raise RuntimeError('conversion did not produce a durable both-port receipt')
                 result=_publish_if_new_delta(ctx,conversion)
+                idempotent=isinstance(result,dict) and result.get('idempotent') is True
+                zero_delta=isinstance(result,dict) and result.get('status')=='verified-zero-delta'
                 record.update({'source_proof':file_binding(ctx.admission(SPOOL)/'canonical-source-verification.json'),
                     'conversion':file_binding(conversion/'both-port-conversion.json'),
                     'row_counts':{x['model']:read_bound(x['receipt'])['outputs']['train']['rows']
                                   for x in read_bound(file_binding(conversion/'both-port-conversion.json'))['models']},
                     'publication':result,
-                    'status':('no-new-numeric-rows' if isinstance(result,dict) and result.get('status')=='verified-zero-delta'
-                              else 'registered' if result else 'no-new-numeric-rows'),
-                    'training_admission':bool(result) and not (isinstance(result,dict) and result.get('status')=='verified-zero-delta'),
+                    'status':('verified-zero-delta' if zero_delta else
+                              'idempotent-existing-publication' if idempotent else
+                              'registered' if result else 'no-new-numeric-rows'),
+                    'new_registration':bool(result) and not idempotent and not zero_delta,
+                    'training_admission':bool(result) and not zero_delta,
                     'training_exposure':False})
             except Exception as error:
                 record.update({'status':'error','error':f'{type(error).__name__}: {error}',

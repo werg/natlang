@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import errno
+import hashlib
 import json
 import os
 import subprocess
@@ -16,10 +17,12 @@ from natlang_neuralese.common.hashing import sha256_file_hex, canonical_json_sha
 from natlang_neuralese.common.paths import resolve
 from scripts.coreweave.teacher_tranche_admission import (
     LEGACY_TEACHER_NAMESPACE, Tranche, admitted_predecessors, file_binding,
-    preceding_tranches, read_bound,
+    preceding_tranches, read_bound, verify_teacher_model_actions,
 )
 from scripts.neuralese_data.build_verified_teacher_trajectory_graphs import (
-    _content_index_policy_sha256, tokenizer_fingerprint, provision,
+    _content_index_policy_sha256, _valid_content_index, _validated_content_fingerprints, graph_content_sha256,
+    file_rows, open_jsonl_text, provision, registered_cached_content_index,
+    reviewed_guided_decision_authority, tokenizer_fingerprint,
 )
 
 
@@ -238,12 +241,9 @@ def _verified_internal_predecessors(root: Path, ctx: Tranche, source_proof: dict
     The immutable registration proof and both model receipts bind that
     relocation to the exact source actor/runtime and current rendering law.
     """
-    current_actor = (source_proof.get('actor') or {}).get('sha256')
-    current_runtime = (source_proof.get('execution_identity') or {}).get('sha256')
     current_protection = (source_proof.get('current_protection') or {}).get('sha256')
-    if not all(isinstance(value, str) and len(value) == 64
-               for value in (current_actor, current_runtime, current_protection)):
-        raise ValueError('current source proof lacks exact actor/runtime/protection identity')
+    if not isinstance(current_protection, str) or len(current_protection) != 64:
+        raise ValueError('current source proof lacks exact protection identity')
     registry_path = root / 'training/neuralese_corpora.json'
     registry_ref = file_binding(registry_path)
     registry = read_bound(registry_ref)
@@ -326,7 +326,8 @@ def _verified_internal_predecessors(root: Path, ctx: Tranche, source_proof: dict
                 or proof.get('training_exposure') is not False or proof.get('corpus_id') != ident
                 or proof.get('source_namespace') != ctx.teacher_namespace
                 or proof.get('batch') != batch or proof.get('tranche') != number
-                or proof.get('current_protection_manifest_sha256') != current_protection):
+                or not isinstance(proof.get('current_protection_manifest_sha256'), str)
+                or len(proof['current_protection_manifest_sha256']) != 64):
             raise ValueError(f'internal predecessor proof identity/protection differs: {ident}')
         if (batch, number) >= (ctx.batch, ctx.number):
             continue
@@ -363,10 +364,13 @@ def _verified_internal_predecessors(root: Path, ctx: Tranche, source_proof: dict
         source_result = read_bound(source_result_ref)
         actor = (source_verification.get('actor') or {}).get('sha256')
         runtime = (source_verification.get('execution_identity') or {}).get('sha256')
+        source_protection = (source_verification.get('current_protection') or {}).get('sha256')
         if (source_verification.get('status') != 'passed' or source_verification.get('training_admission') is not False
                 or source_verification.get('source', {}).get('sha256') != source_ref['sha256']
                 or source_verification.get('source', {}).get('bytes') != source_ref['bytes']
-                or actor != current_actor or runtime != current_runtime
+                or not isinstance(actor, str) or len(actor) != 64
+                or not isinstance(runtime, str) or len(runtime) != 64
+                or source_protection != proof.get('current_protection_manifest_sha256')
                 or source_result.get('training_admission') is not False
                 or source_result.get('training_exposure') is not False
                 or any((source_result.get('source_proof') or {}).get(key) != source_proof_ref.get(key)
@@ -437,9 +441,9 @@ def _verified_zero_conversion(root: Path, path: Path, ctx: Tranche,
             or source_proof.get('source') != source_ref
             or source_file.get('sha256') != source_ref.get('sha256')
             or source_file.get('bytes') != source_ref.get('bytes')
-            or actor != (current_source_proof.get('actor') or {}).get('sha256')
-            or runtime != (current_source_proof.get('execution_identity') or {}).get('sha256')
-            or protection != (current_source_proof.get('current_protection') or {}).get('sha256')
+            or not isinstance(actor, str) or len(actor) != 64
+            or not isinstance(runtime, str) or len(runtime) != 64
+            or not isinstance(protection, str) or len(protection) != 64
             or conversion.get('protection_manifest', {}).get('sha256') != protection):
         raise ValueError('zero boundary source/actor/runtime/protection custody differs')
     rows = conversion.get('models')
@@ -453,6 +457,70 @@ def _verified_zero_conversion(root: Path, path: Path, ctx: Tranche,
     registry = read_bound(registry_ref)
     by_id = {row.get('id'): row for row in registry.get('corpora', [])}
     manifest_refs = []
+    raw_rows, raw_row_shas = {}, {}
+    for raw, source_row in file_rows(Path(source_ref['path'])):
+        ident = source_row.get('id')
+        if not isinstance(ident, str) or ident in raw_rows:
+            raise ValueError('zero-boundary source has missing or duplicate trajectory IDs')
+        raw_rows[ident] = source_row
+        raw_row_shas[ident] = hashlib.sha256(raw.rstrip(b'\r\n')).hexdigest()
+    source_actions = sum(len(row.get('trajectory', [])) for row in raw_rows.values())
+    if (len(raw_rows) != source_ref.get('rows') or len(raw_rows) != source_proof.get('rows')
+            or source_actions != source_proof.get('teacher_action_turns')):
+        raise ValueError('zero-boundary raw source rows/actions differ from canonical source proof')
+    builder = Path(__file__).resolve().parents[2] / 'scripts/neuralese_data/build_verified_teacher_trajectory_graphs.py'
+    builder_ref = file_binding(builder)
+    if any(conversion.get('converter', {}).get(key) != builder_ref.get(key)
+           for key in ('sha256', 'bytes')):
+        raise ValueError('zero-boundary converter implementation differs from exact current action verifier')
+
+    def exact_decisions(receipt: dict) -> dict:
+        declared = receipt.get('decision_admission') or {}
+        decision_receipt_ref = file_binding(declared.get('path', ''))
+        if decision_receipt_ref.get('sha256') != declared.get('sha256'):
+            raise ValueError('zero-boundary decision receipt differs from its converter binding')
+        materialized = read_bound(decision_receipt_ref)
+        if (materialized.get('schema') != 'natlang.verified-teacher-decision-materialization/1'
+                or materialized.get('identity', {}).get('source_sha256') != source_ref.get('sha256')
+                or materialized.get('identity', {}).get('direct_answers') is not True
+                or materialized.get('summary') != declared.get('summary')
+                or materialized.get('output_sha256') != declared.get('output_sha256')):
+            raise ValueError('zero-boundary materialized decision proof differs from exact source receipt')
+        runtime = materialized.get('identity', {}).get('runtime')
+        if (not isinstance(runtime, dict) or not runtime
+                or any(not isinstance(name, str) or not isinstance(digest, str) or len(digest) != 64
+                       for name, digest in runtime.items())):
+            raise ValueError('zero-boundary decision proof lacks its exact reader runtime inventory')
+        output_path = Path(decision_receipt_ref['path']).parent / materialized['summary']['output']
+        output_ref = file_binding(output_path)
+        if output_ref.get('sha256') != materialized.get('output_sha256'):
+            raise ValueError('zero-boundary materialized decisions differ from their receipt')
+        decisions = {}
+        for raw_decision in output_path.open():
+            record = json.loads(raw_decision)
+            reference, decision = record.get('source_ref') or {}, record.get('decision') or {}
+            key = (reference.get('trajectory_id'), decision.get('index'))
+            if not isinstance(key[0], str) or type(key[1]) is not int or key in decisions:
+                raise ValueError('zero-boundary decisions lack unique exact source action identities')
+            decisions[key] = {
+                'approved': (record.get('training_admission') or {}).get('approved') is True
+                    and decision.get('training_approved') is True and decision.get('failed_action') is False,
+                'reason': (record.get('training_admission') or {}).get('reason'),
+                'invocation_id': reference.get('invocation_id'),
+                'raw_response_sha256': decision.get('source_raw_response_sha256'),
+                **({'parent_quality_hold': reference['parent_quality_hold'], 'parent_task_qualified': False,
+                    **({'assistant_history_input_sha256': reference['assistant_history_input_sha256']}
+                       if reference.get('assistant_history_input_sha256') else {})}
+                   if reference.get('parent_quality_hold') else {}),
+                **reviewed_guided_decision_authority(
+                    record, review_bound='decision_review' in materialized.get('identity', {})),
+                'materialized_decision_id': record['id'],
+                'materialized_decision_sha256': canonical_json_sha256_hex(record),
+            }
+        if len(decisions) != materialized.get('summary', {}).get('training_decisions'):
+            raise ValueError('zero-boundary materialized decision count differs from exact receipt')
+        return decisions
+
     for row in rows:
         model = row['model']
         bound_inputs.append(row['receipt'])
@@ -473,38 +541,179 @@ def _verified_zero_conversion(root: Path, path: Path, ctx: Tranche,
                 or dedup.get('omitted_rows') < 1 or not isinstance(omissions, list)
                 or len(omissions) != dedup.get('omitted_rows')):
             raise ValueError(f'{model} zero-boundary receipt does not prove complete exact deduplication')
+        bindings = receipt.get('source', {}).get('row_bindings')
+        expected_bindings = [{'id': ident, 'sha256': raw_row_shas[ident]}
+                             for ident in raw_rows]
+        if (not isinstance(bindings, list) or len(bindings) != len(expected_bindings)
+                or any(not isinstance(actual, dict) or actual.get('id') != expected['id']
+                       or actual.get('sha256') != expected['sha256']
+                       for actual, expected in zip(bindings, expected_bindings))):
+            raise ValueError(f'{model} zero-boundary receipt does not bind every exact source row')
+        verify_teacher_model_actions([], receipt, raw_rows=raw_rows, raw_row_shas=raw_row_shas,
+            source_sha256=source_ref['sha256'], decision_keys=exact_decisions(receipt), hold_ids=set())
         receipt_path = Path(row['receipt']['path'])
         for split in ('train', 'test'):
             output = receipt.get('outputs', {}).get(split) or {}
             output_path = receipt_path.parent / split / 'native-graphs.jsonl.zst'
             output_ref = file_binding(output_path)
-            if (output.get('rows') != 0 or output_ref.get('sha256') != output.get('sha256')
+            if (output.get('path') != output_ref.get('path') or output.get('rows') != 0
+                    or output.get('tokens') != 0 or output.get('max_row_tokens') != 0
+                    or output_ref.get('sha256') != output.get('sha256')
                     or output_ref.get('bytes') != output.get('bytes')):
                 raise ValueError(f'{model} zero-boundary {split} file differs from its exact receipt')
+            with open_jsonl_text(output_path) as stream:
+                if any(line.strip() for line in stream):
+                    raise ValueError(f'{model} zero-boundary {split} stream is not actually empty')
             bound_inputs.append(output_ref)
+
+        legacy = {str(path): file_binding(path) for path in _legacy_inputs(root, model)}
+        target_representations = {
+            item.get('content_sha256'): item.get('represented_by')
+            for item in omissions if isinstance(item, dict)
+        }
+        seen_contents = {}
+        input_ids = set()
+        policy = _content_index_policy_sha256()
+        for input_binding in dedup.get('inputs', []):
+            input_path = input_binding.get('path')
+            if not isinstance(input_path, str):
+                raise ValueError(f'{model} zero-boundary dedup input lacks its exact path')
+            if input_path.startswith('registered-cache:'):
+                target = input_path.removeprefix('registered-cache:')
+                parts = target.split('/')
+                if len(parts) != 4 or parts[1:] != [model, 'train', 'native-graphs.jsonl.zst']:
+                    raise ValueError(f'{model} zero-boundary cache input has a mismatched model/member')
+                ident = parts[0]
+                if (ident not in admitted
+                        and not (model == 'lfm25' and ident == LFM_HISTORY_KEEP)):
+                    raise ValueError(f'{model} zero-boundary cache input is outside admitted predecessor closure')
+                predecessor = by_id.get(ident)
+                if predecessor is None or predecessor.get('training_admission') is not True:
+                    raise ValueError(f'{model} zero-boundary cache input is not an admitted registry entry: {ident}')
+                manifest_ref = file_binding(root / 'training/corpus-manifests' / f'{ident}.json')
+                manifest_refs.append(manifest_ref)
+                manifest = read_bound(manifest_ref)
+                cached, contents = registered_cached_content_index(
+                    root, ident, model, receipt['tokenizer']['expanded_fingerprint'], policy,
+                    registry_ref=registry_ref, registry_entry=predecessor,
+                    manifest_ref=manifest_ref, manifest=manifest, verify_bindings=False)
+                if any(input_binding.get(key) != cached.get(key)
+                       for key in ('path', 'sha256', 'bytes', 'rows', 'content_index_cache', 'content_index_key')):
+                    raise ValueError(f'{model} zero-boundary cache input differs from its admitted content index')
+                input_ids.add(ident)
+                bound_inputs.append(file_binding(cached['content_index_cache']['path']))
+            else:
+                actual_input = file_binding(input_path)
+                if (actual_input.get('sha256') != input_binding.get('sha256')
+                        or ('bytes' in input_binding and actual_input.get('bytes') != input_binding.get('bytes'))):
+                    raise ValueError(f'{model} zero-boundary dedup input changed from its exact receipt')
+                if input_path in legacy:
+                    if legacy[input_path].get('sha256') != actual_input.get('sha256'):
+                        raise ValueError(f'{model} zero-boundary legacy dedup source differs from its exact v21 receipt')
+                    ident = next((part for part in Path(input_path).parts if part.startswith('qwen-verified-positive-native-graphs-20261015-v21')), None)
+                    if ident:
+                        input_ids.add(ident)
+                else:
+                    marker = '/runs/'
+                    if marker not in input_path:
+                        raise ValueError(f'{model} zero-boundary input has no admitted corpus identity')
+                    ident = input_path.split(marker, 1)[1].split('/', 1)[0]
+                    if ident not in admitted:
+                        raise ValueError(f'{model} zero-boundary input is outside admitted predecessor closure')
+                    entry = by_id.get(ident)
+                    if entry is None or entry.get('training_admission') is not True:
+                        raise ValueError(f'{model} zero-boundary input source is not admitted: {ident}')
+                    relative = Path(input_path).resolve(strict=True).relative_to(
+                        (root / entry['path']).resolve(strict=True)).as_posix()
+                    if relative != f'{model}/train/native-graphs.jsonl.zst':
+                        raise ValueError(f'{model} zero-boundary input is not its admitted train graph: {ident}')
+                    manifest_ref = file_binding(root / 'training/corpus-manifests' / f'{ident}.json')
+                    manifest_refs.append(manifest_ref)
+                    manifest = read_bound(manifest_ref)
+                    members = [member for member in manifest.get('files', [])
+                               if member.get('path') == relative]
+                    if (manifest.get('id') != ident or manifest.get('path') != entry.get('path')
+                            or len(members) != 1 or any(members[0].get(key) != actual_input.get(key)
+                                                       for key in ('sha256', 'bytes'))):
+                        raise ValueError(f'{model} zero-boundary input differs from admitted manifest: {ident}')
+                    input_ids.add(ident)
+                # Reuse the exact parser/tokenizer/policy-addressed content
+                # index used by native conversion when present. The key binds
+                # the admitted graph bytes; otherwise parse the graph stream
+                # itself before trusting an omission.
+                from natlang_neuralese.common import row_index
+                cache_key = {'source_sha256': actual_input['sha256'],
+                    'tokenizer_fingerprint': receipt['tokenizer']['expanded_fingerprint'],
+                    'policy_sha256': policy, 'kind': 'teacher-content-fingerprints-v1'}
+                cache_path = row_index.entry_path('teacher-content', canonical_json_sha256_hex(cache_key))
+                cached = row_index.load(cache_path)
+                if _valid_content_index(cached, cache_key):
+                    contents, count = cached['fingerprints'], cached['rows']
+                    bound_inputs.append(file_binding(cache_path))
+                else:
+                    contents, count = _validated_content_fingerprints(
+                        input_path, receipt['tokenizer']['expanded_fingerprint'])
+                if count != input_binding.get('rows'):
+                    raise ValueError(f'{model} zero-boundary input row count differs from current graph parser')
+                bound_inputs.append(actual_input)
+            for content, identifier in contents.items():
+                if content in target_representations:
+                    expected = target_representations[content] or {}
+                    actual = {'path': input_path, 'id': identifier}
+                    if (expected.get('path') == input_path and expected.get('id') == identifier):
+                        seen_contents[content] = actual
+            # Content indexes may contain hundreds of thousands of rows.
+            # Retain only the omission witnesses while checking each input.
+            del contents
+            if 'cached' in locals():
+                del cached
+        if not set(conversion.get('admitted_predecessors', [])) <= input_ids:
+            raise ValueError(f'{model} zero-boundary receipt dropped an admitted predecessor input')
+        expected_same_actor = {item.get('corpus_id') for item in conversion.get('same_actor_source_boundary_inputs', [])
+                               if item.get('model') == model}
+        if not expected_same_actor <= input_ids:
+            raise ValueError(f'{model} zero-boundary receipt dropped a same-actor source input')
         for omission in omissions:
             represented = omission.get('represented_by') or {}
             input_row = inputs.get(represented.get('path'))
-            if (input_row is None or not represented.get('id') or not omission.get('content_sha256')
-                    or file_binding(represented['path']).get('sha256') != input_row.get('sha256')
-                    or '/runs/' not in represented['path']):
+            content = omission.get('content_sha256')
+            actual_representation = seen_contents.get(content)
+            if (input_row is None or not isinstance(content, str) or len(content) != 64
+                    or any(char not in '0123456789abcdef' for char in content)
+                    or actual_representation != represented):
                 raise ValueError(f'{model} zero-boundary omission is not bound to an exact input graph')
-            ident = represented['path'].split('/runs/', 1)[1].split('/', 1)[0]
+            represented_path = represented['path']
+            if represented_path.startswith('registered-cache:'):
+                ident = represented_path.removeprefix('registered-cache:').split('/', 1)[0]
+                if not (ident in admitted or (model == 'lfm25' and ident == LFM_HISTORY_KEEP)):
+                    raise ValueError(f'{model} zero-boundary omission is outside admitted predecessor closure')
+            else:
+                if '/runs/' not in represented_path:
+                    raise ValueError(f'{model} zero-boundary omission path has no admitted corpus identity')
+                ident = represented_path.split('/runs/', 1)[1].split('/', 1)[0]
+                if ident not in admitted:
+                    raise ValueError(f'{model} zero-boundary omission is outside admitted predecessor closure')
             entry = by_id.get(ident)
-            if ident not in admitted or entry is None or entry.get('training_admission') is not True:
+            if entry is None or entry.get('training_admission') is not True:
                 raise ValueError(f'{model} zero-boundary omission is outside admitted predecessor closure')
             manifest_ref = file_binding(root / 'training/corpus-manifests' / f'{ident}.json')
             manifest_refs.append(manifest_ref)
             manifest = read_bound(manifest_ref)
             rel = f'{model}/train/native-graphs.jsonl.zst'
             member = [item for item in manifest.get('files', []) if item.get('path') == rel]
-            graph = file_binding(root / entry['path'] / rel)
-            bound_inputs.append(graph)
-            if (manifest.get('id') != ident or manifest.get('path') != entry.get('path')
-                    or len(member) != 1 or graph.get('sha256') != member[0].get('sha256')
-                    or graph.get('bytes') != member[0].get('bytes')
-                    or graph.get('sha256') != input_row.get('sha256')):
+            if manifest.get('id') != ident or manifest.get('path') != entry.get('path') or len(member) != 1:
                 raise ValueError(f'{model} zero-boundary omission graph is not an admitted manifest member')
+            if represented_path.startswith('registered-cache:'):
+                if (member[0].get('sha256') != input_row.get('sha256')
+                        or member[0].get('bytes') != input_row.get('bytes')):
+                    raise ValueError(f'{model} zero-boundary cached omission differs from its admitted manifest')
+            else:
+                graph = file_binding(root / entry['path'] / rel)
+                bound_inputs.append(graph)
+                if (graph.get('sha256') != member[0].get('sha256')
+                        or graph.get('bytes') != member[0].get('bytes')
+                        or graph.get('sha256') != input_row.get('sha256')):
+                    raise ValueError(f'{model} zero-boundary omission graph is not an admitted manifest member')
     if (file_binding(root / 'training/neuralese_corpora.json') != registry_ref
             or any(file_binding(ref['path']) != ref for ref in [*bound_inputs, *manifest_refs])):
         raise ValueError('zero-boundary conversion custody changed during verification')
