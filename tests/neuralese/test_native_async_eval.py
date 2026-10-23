@@ -43,7 +43,7 @@ def test_real_native_async_restore_exact_binding_and_landed_result(tmp_path,monk
     assert engine.native_identity['checkpoint_sha256']==export['receipt']['identity']['sha256']
     def execute(self,run,repeat=0):
         run.mkdir(parents=True,exist_ok=True)
-        assert self.engine.heads is None and self.engine.shared_model is not None
+        assert self.engine.shared_model is not None and self.engine.native_state_enabled
         return {'task_successes':0,'task_success_rate':0,'complete':True,'cases':[],
                 'cases_expected':1,'outcome_counts':{'task_success':0,'semantic_mismatch':1,'infrastructure_error':0,'unresolved':0}},[0]
     monkeypatch.setattr(task_cadence.TaskEval,'_execute',execute)

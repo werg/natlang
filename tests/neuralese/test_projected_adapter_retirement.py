@@ -11,9 +11,10 @@ def test_server_cli_no_longer_advertises_projection_loading(capsys):
 
 
 
-def test_legacy_adapter_capabilities_are_not_advertised():
-    from natlang_neuralese.serve.http import CAPABILITIES
-    assert not any(capability.startswith("adapters.") for capability in CAPABILITIES)
+def test_only_current_native_adapter_capabilities_are_advertised():
+    from natlang_neuralese.serve.http import NATIVE_CAPABILITIES
+    assert {"native.adapters", "adapters.create"} <= set(NATIVE_CAPABILITIES)
+    assert not {"encode", "embed", "write", "store.block", "grad.flat"} & set(NATIVE_CAPABILITIES)
 
 
 def test_legacy_adapter_request_is_rejected_before_runtime_execution():
@@ -34,7 +35,7 @@ def test_legacy_adapter_request_is_rejected_before_runtime_execution():
         with pytest.raises(urllib.error.HTTPError) as response:
             urllib.request.urlopen(request)
         assert response.value.code == 400
-        assert json.load(response.value)["error"]["code"] == "bad-request-field"
+        assert json.load(response.value)["error"]["code"] == "neuralese-native-grad-schema"
         with pytest.raises(urllib.error.HTTPError) as missing:
             urllib.request.urlopen(endpoint + "/v1/neuralese/adapters/nz1_" + "a" * 52 + "/lora")
         assert missing.value.code == 404
