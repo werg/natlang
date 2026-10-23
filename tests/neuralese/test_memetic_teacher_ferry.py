@@ -2,6 +2,7 @@ import base64
 import concurrent.futures
 import contextlib
 import hashlib
+import http.server
 import io
 import json
 import os
@@ -12,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from natlang_neuralese.common import memetic_teacher_ferry as ferry
+from natlang_neuralese.rl import memetic_task_runner
 from scripts.coreweave import memetic_teacher_ferry as sdk_ferry
 
 
@@ -236,6 +238,42 @@ def test_request_ids_bind_exact_body_and_reject_rebinding(tmp_path):
     changed = raw.replace(b'brief', b'short')
     with pytest.raises(ValueError, match='Idempotency-Key'):
         queue.enqueue(changed, ident)
+
+
+def test_evaluator_http_returns_exact_signed_teacher_call_custody(monkeypatch, tmp_path):
+    profile = ferry.evaluator_profile('lfm')
+    prompt = 'stable program and generation attempt context'
+    raw = memetic_task_runner.author_request_body(ferry.TEACHER_SERVE_ALIAS, prompt)
+    ident = ferry.request_id(ferry.TEACHER_SERVE_ALIAS, raw, profile['sandbox_id'], profile['native_identity'])
+    queue = ferry.EvaluatorQueue(tmp_path / 'evaluator.sqlite3', KEY, profile['native_identity'],
+        evaluator_sandbox_id=profile['sandbox_id'])
+    queue.enqueue(raw, ident)
+    response = json.dumps({'id': 'teacher-call', 'model': ferry.TEACHER_SERVE_ALIAS,
+        'choices': [{'message': {'role': 'assistant', 'content': '<guidance>Exact result.</guidance>'}}]},
+        separators=(',', ':')).encode()
+    monkeypatch.setattr(ferry, '_validate_launch_process', lambda *args, **kwargs: None)
+    teacher = teacher_identity()
+    receipt = ferry.sign_receipt({'schema': ferry.RECEIPT_SCHEMA, 'request_id': ident,
+        'request_sha256': hashlib.sha256(raw).hexdigest(), 'status': 'complete', 'response_status': 200,
+        'response_sha256': hashlib.sha256(response).hexdigest(), 'response_bytes': len(response),
+        'teacher': teacher, 'evaluator_sandbox_id': profile['sandbox_id'],
+        'evaluator_identity': profile['native_identity'], 'created_at': 1.0}, KEY)
+    queue.complete(ident, response, receipt)
+    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), ferry._EvaluatorHandler)
+    server.queue = queue
+    thread = threading.Thread(target=server.serve_forever, daemon=True); thread.start()
+    try:
+        result = memetic_task_runner.author_call(f'http://127.0.0.1:{server.server_address[1]}',
+            ferry.TEACHER_SERVE_ALIAS, prompt)
+    finally:
+        server.shutdown(); server.server_close(); thread.join(timeout=5)
+    custody = result['custody']
+    assert result['text'] == '<guidance>Exact result.</guidance>'
+    assert custody['request_id'] == ident
+    assert custody['request_sha256'] == hashlib.sha256(raw).hexdigest()
+    assert custody['response_sha256'] == hashlib.sha256(response).hexdigest()
+    assert custody['ferry_receipt'] == receipt
+    assert custody['ferry_receipt_sha256'] == hashlib.sha256(ferry.canonical_bytes(receipt)).hexdigest()
 
 
 def test_teacher_transport_timeout_is_terminal_and_never_reposts(tmp_path):
