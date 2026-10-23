@@ -1334,3 +1334,17 @@ were preserved. The existing publisher runtime-epoch mechanism authenticates
 both old and new batches. Actual execution on batch2 remains a separate next
 observation; no historical held trace is cleared by this measurement.
 Evidence: `/home/werg/data/dgxops/flint-writer-runtime-live48-and-adoption-root-20261022.json`.
+
+
+## 2026-10-23: typed text-reader system header, revision11 (not yet adopted)
+
+The text-emulation adapter created two system messages for a normal typed read,
+causing the Qwen teacher to reject the request before inference. Revision11
+prepends the same directive inside the existing system header, preserving its
+content and metadata. No-system requests receive one initial header. Historical
+revision10 source artifacts stay unchanged. Exact failing/live-source evidence
+is under DGX dgxops/qwen36-guided-child-review-20261023; the real typed library
+read test reproduces the two-header failure. Run48 live self-hosted teacher
+reads and record results before deployment; this is outstanding measurement
+debt until that actual evidence exists. See
+[decomposition](neuralese/teacher/TEXT_READER_SYSTEM_HEADER_DECOMPOSITION_20261023.md).

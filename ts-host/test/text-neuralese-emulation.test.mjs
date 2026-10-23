@@ -82,7 +82,7 @@ test('native teacher collection emulates typed Neuralese markers through a recor
     const enabledIdentity = expectedProvenance(record, options);
     const disabledIdentity = expectedProvenance(record, { ...options, textNeuraleseEmulation: false });
     assert.equal(enabledIdentity.text_neuralese_transport.mode, 'text-marker-standin/2');
-    assert.equal(enabledIdentity.text_neuralese_transport.prompt_revision, 'text-marker-guidance/10');
+    assert.equal(enabledIdentity.text_neuralese_transport.prompt_revision, 'text-marker-guidance/11');
     assert.equal(Object.hasOwn(disabledIdentity, 'text_neuralese_transport'), false);
     assert.notEqual(enabledIdentity.system_prompt_sha256, disabledIdentity.system_prompt_sha256);
     const row = await nativeJobRunner(options)(item, expectedProvenance(record, options));
@@ -117,7 +117,7 @@ test('native teacher collection emulates typed Neuralese markers through a recor
       [turn.model_response.transport_provenance] : []);
     assert.ok(provenance.length >= 1);
     assert.ok(provenance.every(item => item.version === 'text-marker-standin/2' &&
-      item.prompt_revision === 'text-marker-guidance/10' &&
+      item.prompt_revision === 'text-marker-guidance/11' &&
       item.vector_semantics.includes('non-learned') && item.rendered_request_sha256));
     const typedReadouts = provenance.map(item => item.text_template_readout).filter(Boolean);
     assert.equal(typedReadouts.length, 5, 'template interpolation, +=, +, String, and JSON.stringify each use declared read');
@@ -237,7 +237,7 @@ test('partial resume replays a typed child body across fresh task IDs without du
 });
 
 test('text transport prompt explains typed text result promotion and literal markers', () => {
-  assert.equal(TEXT_NEURALESE_PROMPT_REVISION, 'text-marker-guidance/10');
+  assert.equal(TEXT_NEURALESE_PROMPT_REVISION, 'text-marker-guidance/11');
   assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /marker is transport syntax, not a JavaScript string/);
   assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /return the computed plain text as the result/);
   assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /stage it with return_result\(text\) inside eval/);
@@ -500,6 +500,9 @@ test('explicit text read source uses the declared read body, typed block context
   const value = neuraleseRef('Neuralese<string>', input.id);
   const providerResponses = [];
   const sendText = emulation.wrap(async request => {
+    assert.equal(request.messages[0]?.role, 'system');
+    assert.equal(request.messages.filter(message => message.role === 'system').length, 1,
+      'strict provider rejects a second system message before typed reader inference');
     assert.equal(Object.hasOwn(request, 'template'), false);
     assert.equal(request.tool_choice, 'required');
     assert.deepEqual(request.tools.map(tool => tool.function.name), ['return_result']);
@@ -647,7 +650,7 @@ test('repeated eval and return marker bytes preserve actual teacher writer occur
     const enabledIdentity = expectedProvenance(record, options);
     const disabledIdentity = expectedProvenance(record, { ...options, textNeuraleseEmulation: false });
     assert.equal(enabledIdentity.text_neuralese_transport.mode, 'text-marker-standin/2');
-    assert.equal(enabledIdentity.text_neuralese_transport.prompt_revision, 'text-marker-guidance/10');
+    assert.equal(enabledIdentity.text_neuralese_transport.prompt_revision, 'text-marker-guidance/11');
     assert.equal(Object.hasOwn(disabledIdentity, 'text_neuralese_transport'), false);
     assert.notEqual(enabledIdentity.system_prompt_sha256, disabledIdentity.system_prompt_sha256);
     const row = await nativeJobRunner(options)(item, expectedProvenance(record, options));
@@ -691,3 +694,40 @@ test('repeated eval and return marker bytes preserve actual teacher writer occur
   } finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
 });
 
+
+
+test('typed text readout preserves string and part headers without mutating the request', async () => {
+  for (const originalHeader of [
+    { role: 'system', content: 'Original reader context.', name: 'original-header' },
+    { role: 'system', content: [{ type: 'text', text: 'Original reader context.' }], name: 'original-header' },
+    undefined,
+  ]) {
+    const emulation = createTextNeuraleseEmulation();
+    await emulation.standardLibraryReady;
+    const messages = [...(originalHeader ? [structuredClone(originalHeader)] : []),
+      { role: 'user', content: 'Read this typed input.' }];
+    const request = { messages, tools: [{ type: 'function', function: { name: 'return_result' } }],
+      template: { call: 'return_result', value: 'decode', value_type: 'string' } };
+    const before = structuredClone(request);
+    const send = emulation.wrap(async actual => {
+      assert.equal(actual.messages[0].role, 'system');
+      assert.equal(actual.messages.filter(message => message.role === 'system').length, 1);
+      assert.match(JSON.stringify(actual.messages[0].content), /typed Neuralese read call/);
+      if (originalHeader) {
+        assert.equal(actual.messages[0].name, originalHeader.name);
+        assert.match(JSON.stringify(actual.messages[0].content), /Original reader context/);
+        if (Array.isArray(originalHeader.content))
+          for (const part of originalHeader.content)
+            assert.ok(JSON.stringify(actual.messages[0].content).includes(part.text),
+              'the existing text renderer retains each original header part');
+      }
+      assert.deepEqual(actual.messages.slice(1), [before.messages.at(-1)]);
+      return { calls: [['return_result', { status: 'success', value: 'checked' }]] };
+    });
+    const result = await send(request);
+    assert.equal(result.calls[0][1].value, 'checked');
+    assert.deepEqual(request, before);
+    assert.equal(result.transport_provenance.prompt_revision, 'text-marker-guidance/11');
+    assert.deepEqual(result.transport_provenance.rendered_messages[0].role, 'system');
+  }
+});

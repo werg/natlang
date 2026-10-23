@@ -12,7 +12,7 @@ import { COMBINATORS, type StandardLibrary } from '../neuralese/combinators.js';
 import { hexDigest } from '../native/hash.js';
 
 export const TEXT_NEURALESE_EMULATION_VERSION = 'text-marker-standin/2';
-export const TEXT_NEURALESE_PROMPT_REVISION = 'text-marker-guidance/10';
+export const TEXT_NEURALESE_PROMPT_REVISION = 'text-marker-guidance/11';
 export const TEXT_NEURALESE_DIALECT = 'nd:text-teacher-emulation/1';
 export const TEXT_NEURALESE_WIDTH = 32;
 
@@ -36,6 +36,21 @@ function canonical(value: unknown): string {
   if (value && typeof value === 'object') return `{${Object.entries(value as Record<string, unknown>)
     .sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`).join(',')}}`;
   return JSON.stringify(value);
+}
+
+/** Add the read directive to the original header, preserving all existing content. */
+function withReadoutInstruction(messages: unknown[], instruction: string): unknown[] {
+  const first = messages[0];
+  if (!first || typeof first !== 'object' || Array.isArray(first) ||
+      (first as Record<string, unknown>).role !== 'system')
+    return [{ role: 'system', content: instruction }, ...messages];
+  const header = first as Record<string, unknown>;
+  const content = header.content;
+  const prefixed = typeof content === 'string' ? `${instruction}\n\n${content}`
+    : Array.isArray(content) ? [{ type: 'text', text: instruction }, ...content]
+    : content == null ? instruction : undefined;
+  if (prefixed === undefined) throw new TypeError('typed text readout system header needs text or content parts');
+  return [{ ...header, content: prefixed }, ...messages.slice(1)];
 }
 
 function markerBodies(value: unknown, out: string[] = []): string[] {
@@ -218,7 +233,7 @@ export function createTextNeuraleseEmulation(options: { store?: NeuraleseStore; 
       const readInstruction = template ? `This is a typed Neuralese read call. Interpret the exact visible input block using the displayed declared result type and read instruction. ` +
         `Return one call to return_result with arguments {"status":"success","value":<the decoded value>}. ` +
         `The value must match the declared result type exactly. Do not use any other tool and do not return an explanation.` : undefined;
-      const renderedMessages = textReadout ? [{ role: 'system', content: readInstruction! }, ...rendered] : rendered;
+      const renderedMessages = textReadout ? withReadoutInstruction(rendered, readInstruction!) : rendered;
       const { template: _template, ...withoutTemplate } = request;
       const renderedRequest = { ...(template || auxiliaryPlan ? withoutTemplate : request),
         ...(template ? { tools: [returnTool!], tool_choice: 'required' as const } : {}), messages: renderedMessages };
