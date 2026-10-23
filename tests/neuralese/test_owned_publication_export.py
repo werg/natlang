@@ -61,8 +61,7 @@ def test_actual_recovered_publication_uses_sha_and_never_decodes(publication, mo
     replacement.write_bytes(b'later checkpoint publication still pending')
     replacement.replace(source)
     assert _file_binding(pin)['sha256'] == value['sha256']
-    with pytest.raises(ValueError):
-        module.observe_publication(spec)
+    assert module.observe_publication(spec, known_sha256=value['sha256']) is None
 
 
 @pytest.mark.parametrize('change', ['parent', 'producer', 'argv', 'foreign-status', 'conflicting-pin'])
@@ -86,7 +85,7 @@ def test_wrong_authority_or_pin_is_never_exported(publication, change):
         module.observe_publication(spec)
 
 
-def test_copy_race_does_not_publish_a_misbound_pin(publication, monkeypatch):
+def test_atomic_source_advance_after_snapshot_keeps_exact_old_publication(publication, monkeypatch):
     spec, source, state = publication
     original = module.subprocess.run
     def racing(*args, **kwargs):
@@ -96,9 +95,36 @@ def test_copy_race_does_not_publish_a_misbound_pin(publication, monkeypatch):
         replacement.replace(source)
         return result
     monkeypatch.setattr(module.subprocess, 'run', racing)
-    with pytest.raises(ValueError, match='advanced'):
+    value = module.observe_publication(spec)
+    pin = Path(value['pin'])
+    assert _file_binding(pin)['sha256'] == value['sha256']
+    assert pin.read_bytes() != source.read_bytes()
+    assert pin.stat().st_ino != source.stat().st_ino
+
+
+def test_newer_or_mismatched_snapshot_cannot_use_captured_old_control(publication, monkeypatch):
+    spec, source, state = publication
+    original = module.subprocess.run
+    def advance_before_copy(argv, **kwargs):
+        replacement = source.with_suffix('.replacement')
+        replacement.write_bytes(b'new save before cp opens the slot')
+        replacement.replace(source)
+        return original(argv, **kwargs)
+    monkeypatch.setattr(module.subprocess, 'run', advance_before_copy)
+    with pytest.raises(ValueError):
         module.observe_publication(spec)
-    assert not list(Path(spec['pin_directory']).iterdir())
+    assert not list(Path(spec['pin_directory']).glob('*.pt'))
+
+
+def test_forged_status_control_reference_is_rejected_before_copy(publication, monkeypatch):
+    spec, source, _ = publication
+    status = source.parent/'checkpoint-publication-status.json'
+    value = json.loads(status.read_text())
+    value['control'] = {**value['control'], 'sha256': '0'*64}
+    status.write_text(json.dumps(value))
+    monkeypatch.setattr(module.subprocess, 'run', lambda *a, **k:pytest.fail('must reject forged control before copying'))
+    with pytest.raises(ValueError):
+        module.observe_publication(spec)
 
 
 def test_same_continuation_cannot_regress_its_own_step(publication):

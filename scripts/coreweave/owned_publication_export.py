@@ -50,10 +50,20 @@ def observe_publication(spec, *, known_sha256=None, known_step=-1, verify=None):
     source = bound_output_checkpoint(spec['effective_argv'], spec['role'],
         production_root=spec['production_root'], control_root=spec['control_root'])
     status = source.parent/'checkpoint-publication-status.json'
+    if status.is_symlink():
+        raise ValueError('publication status may not be a symlink')
     if not status.exists():
         return None
+    if source.is_symlink() or not source.is_file():
+        raise ValueError('owned learner checkpoint must be a regular nonsymlink file')
     status_before = source_stat(status)
-    published = json.loads(status.read_bytes())
+    status_raw = status.read_bytes()
+    # Bind one complete status record before doing any checkpoint I/O. A
+    # concurrent atomic status replacement is fine after this capture: the
+    # captured control below decides whether the copied bytes are its save.
+    if source_stat(status) != status_before:
+        raise ValueError('publication status changed while being captured; retry')
+    published = json.loads(status_raw)
     if published.get('passed') is not True:
         # A failed derivation must remain observable: treating it like an
         # absent first save would leave quality evaluation waiting forever.
@@ -71,16 +81,10 @@ def observe_publication(spec, *, known_sha256=None, known_step=-1, verify=None):
     kwargs = dict(producer=selected['producer'],
         dependency_producer=selected['dependency_producer'],
         namespace=selected['namespace'], readonly_input_roots=selected['readonly_input_roots'])
+    # The learner writes checkpoint.pt by atomic replacement. Hashing that
+    # mutable path first can race a 10s-of-GB write; snapshot first, then let
+    # the immutable control authenticate exactly which save was copied.
     source_before = source_stat(source)
-    actual = verify(source, reference, spec['parent'], **kwargs)
-    if actual['checkpoint'] != checkpoint:
-        raise ValueError('publication status and verified checkpoint differ')
-    if (source_stat(status) != status_before or source_stat(source) != source_before):
-        raise ValueError('publication changed during selection; retry latest committed source')
-    if checkpoint['sha256'] == known_sha256:
-        return None
-    if actual['step'] <= known_step:
-        raise ValueError('owned continuation publication regressed or changed an already exported step')
     pins = Path(spec['pin_directory']).resolve()
     pins.mkdir(parents=True, exist_ok=True)
     target = pins/(spec['role']+'-'+checkpoint['sha256']+'.pt')
@@ -91,28 +95,49 @@ def observe_publication(spec, *, known_sha256=None, known_step=-1, verify=None):
         raise ValueError('insufficient storage for independent full publication pin and reserve')
     temporary = pins/('.owned-publication-'+uuid.uuid4().hex+'.pt')
     try:
+        created = False
+        actual = None
+        if target.exists():
+            if target.is_symlink() or not target.is_file():
+                raise ValueError('publication pin must be a regular nonsymlink file')
+            if source_stat(target)[:2] in (source_before[:2], source_stat(source)[:2]):
+                raise ValueError('publication pin must be an independent regular file')
+            os.chmod(target, target.stat().st_mode & ~0o222)
         if not target.exists():
             subprocess.run(['cp', '--reflink=auto', '--preserve=mode,timestamps',
                             '--', str(source), str(temporary)], check=True)
-            if source_stat(source) != source_before:
-                raise ValueError('source advanced while copying publication; retry')
-            if source_stat(temporary)[:2] == source_before[:2]:
+            temporary_identity = source_stat(temporary)[:2]
+            if temporary_identity in (source_before[:2], source_stat(source)[:2]):
                 raise ValueError('publication export requires an independent inode')
+            os.chmod(temporary, temporary.stat().st_mode & ~0o222)
             with temporary.open('rb') as stream:
                 os.fsync(stream.fileno())
-            # A later atomic replacement of the learner slot cannot change this pin.
-            pinned = verify(temporary, reference, spec['parent'], **kwargs)
-            if pinned != actual:
-                raise ValueError('copied publication differs from verified source')
+            # The temporary is now the immutable candidate. Its content must
+            # match the captured status and its exact content-addressed
+            # control; the source slot may already have advanced.
+            actual = verify(temporary, reference, spec['parent'], **kwargs)
+            if actual['checkpoint'] != checkpoint:
+                raise ValueError('copied publication differs from captured status')
+            if actual['step'] <= known_step:
+                raise ValueError('owned continuation publication regressed or changed an already exported step')
+            if known_sha256 is not None and actual['checkpoint']['sha256'] == known_sha256:
+                return None
             # Exclusive publish: never replace an existing immutable export pin.
             try:
                 os.link(temporary, target)
+                created = True
             except FileExistsError:
                 pass
-        if target.is_symlink() or source_stat(target)[:2] == source_before[:2]:
-            raise ValueError('publication pin must be an independent regular file')
-        if verify(target, reference, spec['parent'], **kwargs) != actual:
-            raise ValueError('existing publication pin differs from selected source')
+        if not created:
+            # Reverify an extant or concurrently-created pin. A pin created by
+            # this call is the same inode as the just-verified snapshot.
+            actual = verify(target, reference, spec['parent'], **kwargs)
+        if actual['checkpoint'] != checkpoint:
+            raise ValueError('existing publication pin differs from captured status')
+        if known_sha256 is not None and actual['checkpoint']['sha256'] == known_sha256:
+            return None
+        if actual['step'] <= known_step:
+            raise ValueError('owned continuation publication regressed or changed an already exported step')
         descriptor = os.open(pins, os.O_DIRECTORY)
         try:
             os.fsync(descriptor)
