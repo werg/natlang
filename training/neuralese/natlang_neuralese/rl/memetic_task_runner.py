@@ -61,6 +61,8 @@ def evaluate(args, ind: dict, packet: Path, base_system: str) -> dict:
     (out / "packet.jsonl").write_text(packet.read_text())
     system = out / "system.md"
     system.write_text(guided_system(base_system, ind["guidance"]))
+    capture_config = out / 'native-capture.json'
+    capture_config.write_text(json.dumps({'x_natlang_rl_capture': True}))
     entries = build_queue(out / "packet.jsonl", args.rows, args.samples, out, temperature=args.temperature,
                           case_seconds=args.case_seconds, max_model_requests=args.max_model_requests,
                           max_turns=args.max_turns, seed_base=args.seed_base)
@@ -77,7 +79,8 @@ def evaluate(args, ind: dict, packet: Path, base_system: str) -> dict:
         procs.append(subprocess.Popen([sys.executable, str(ROOT / "scripts/run_bonsai_queue.py"), str(shards / f"queue-{s}.jsonl"),
                                        str(shards / f"journal-{s}.jsonl"), "--runtime", str(ROOT / "ts-host"),
                                        "--server", args.server, "--chat-completions-url", args.server.rstrip("/") + "/v1/chat/completions",
-                                       "--model-id", getattr(args, 'model_id', 'lfm'), "--model-concurrency", "2"], stdout=log, stderr=subprocess.STDOUT))
+                                       "--model-id", args.model_id, "--model-concurrency", "2",
+                                       "--neuralese-server", "--chat-request-config", str(capture_config)], stdout=log, stderr=subprocess.STDOUT))
     for proc in procs:
         proc.wait()
     (out / "journal.jsonl").write_text("".join((shards / f"journal-{s}.jsonl").read_text()

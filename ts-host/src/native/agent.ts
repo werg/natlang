@@ -20,6 +20,19 @@ import { SHOWN_CHARS, SCOPE_VALUE_CHARS, shownCharsFor, note as cutNote } from '
 /** Scope and input values show at least SCOPE_VALUE_CHARS, and never less than a tool output of the call may. */
 const scopeValueChars = (session: NativeSession) => Math.max(SCOPE_VALUE_CHARS, session.pages.budget);
 const nativeProgramGuidanceWrites = new WeakMap<NeuraleseStore, Map<string, Promise<string>>>();
+const nativeProgramGuidancePins = new WeakMap<NeuraleseStore, Map<string, Promise<void>>>();
+
+async function pinNativeProgramGuidance(store: NeuraleseStore, id: string): Promise<void> {
+  let pins = nativeProgramGuidancePins.get(store);
+  if (!pins) nativeProgramGuidancePins.set(store, pins = new Map());
+  let pending = pins.get(id);
+  if (!pending) {
+    pending = store.pin(id);
+    pins.set(id, pending);
+    void pending.catch(() => { if (pins!.get(id) === pending) pins!.delete(id); });
+  }
+  await pending;
+}
 import { listingViewInstructions, viewNote } from './prompt.js';
 import { untrustedBlock, type UntrustedRegistry } from './untrusted.js';
 import { writtenReturnResult } from './pseudo-call.js';
@@ -1104,7 +1117,7 @@ export class NativeToolAgent {
     };
     const putInPrompt = async (id: string): Promise<string> => {
       const artifact = verifyStored(await neuralese.store.getNativeState?.(id), id);
-      await neuralese.store.pin(id);
+      await pinNativeProgramGuidance(neuralese.store, id);
       return '\n\n<natlang_program_guidance>\n' + nativeStateSentinel(artifact.id) + '\n</natlang_program_guidance>\n';
     };
     if (binding && matches(consumer, binding.student)) {
@@ -1113,7 +1126,7 @@ export class NativeToolAgent {
         if (stored.id !== binding.native_state_id || stored.metadata.schema !== 'neuralese.native-state/1' ||
             stored.metadata.text !== guidance.text || !matches(stored.metadata, binding.student) || !matches(stored.metadata, consumer))
           throw new NeuraleseUnsupportedError('memetic guidance artifact does not match its declared student or text');
-        await neuralese.store.pin(binding.native_state_id);
+        await pinNativeProgramGuidance(neuralese.store, binding.native_state_id);
         return '\n\n<natlang_program_guidance>\n' + nativeStateSentinel(stored.id) + '\n</natlang_program_guidance>\n';
       }
     }
@@ -1137,7 +1150,7 @@ export class NativeToolAgent {
         if (stored.id !== block.id || stored.metadata.schema !== 'neuralese.native-state/1' ||
             stored.metadata.text !== guidance.text || !matches(stored.metadata, consumer))
           throw new NeuraleseUnsupportedError('persisted native program guidance differs from the exact writer result');
-        await neuralese.store.pin(block.id);
+        await pinNativeProgramGuidance(neuralese.store, block.id);
         return block.id;
       })();
       cache.set(key, pending);
