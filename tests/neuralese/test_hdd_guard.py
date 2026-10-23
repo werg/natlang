@@ -127,19 +127,63 @@ def test_native_source_manifest_staging_keeps_relative_transitive_leaves_for_rea
     root.write_text(json.dumps({'schema': 'natlang.native-graph-sources/1', 'sources': [
         {'kind': 'native-graphs', 'path': 'child.json', 'sha256': _json_hash(child)}]}))
     dependencies = [{'path': str(path), 'sha256': _json_hash(path)} for path in (child, leaf)]
-    staged = _staged_inputs({'native_graphs': {'path': str(root), 'sha256': _json_hash(root),
-        'dependencies': dependencies}})['native_graphs']['path']
+    staged = hdd_guard.stage_input(root, _json_hash(root))
     staged_root = Path(staged)
     assert staged_root.read_bytes() == root.read_bytes()
     assert (staged_root.parent / 'child.json').read_bytes() == child.read_bytes()
     assert (staged_root.parent.parent / 'rows' / 'train.jsonl').read_bytes() == leaf.read_bytes()
     source = NativeGraphSource(staged_root, 'tok', required_split='train')
     assert [entry['id'] for entry in source.entries] == ['train-row']
+    assert any(item['source'] == str(leaf) and item['staged'].endswith('/rows/train.jsonl')
+               for item in hdd_guard.RECORDS[-1]['dependencies'])
 
     leaf.write_text(leaf.read_text().replace('train-row', 'tampered-row'))
     with pytest.raises(ValueError, match='manifest dependency .*SHA-256'):
         _staged_inputs({'native_graphs': {'path': str(root), 'sha256': _json_hash(root),
             'dependencies': dependencies}})
+
+
+def test_native_source_reader_routes_absolute_references_to_exact_staged_leaves(hdd, tmp_path):
+    import json
+    from natlang_neuralese.data.native_sources import NativeGraphSource
+
+    leaf = hdd / 'absolute-row.jsonl'
+    leaf.write_text(json.dumps({'schema': 'natlang.neuralese-native-graph/1', 'id': 'absolute-row',
+        'split': 'train', 'source_groups': ['world-b'], 'tokenizer_fingerprint': 'tok',
+        'nodes': [{'name': 'text', 'token_ids': [3, 4], 'target_weights': [0., 1.]}]}) + '\n')
+    child = hdd / 'child.json'
+    child.write_text(json.dumps({'schema': 'natlang.native-graph-sources/1', 'sources': [
+        {'kind': 'native-graphs', 'path': str(leaf), 'sha256': _json_hash(leaf)}]}))
+    root = hdd / 'nested' / 'deeper' / 'root.json'
+    root.parent.mkdir(parents=True)
+    root.write_text(json.dumps({'schema': 'natlang.native-graph-sources/1', 'sources': [
+        {'kind': 'native-graphs', 'path': '../../child.json', 'sha256': _json_hash(child)}]}))
+    staged = Path(hdd_guard.stage_input(root, _json_hash(root)))
+    assert staged.read_bytes() == root.read_bytes()
+    reader = NativeGraphSource(staged, 'tok', required_split='train')
+    assert [entry['id'] for entry in reader.entries] == ['absolute-row']
+    assert reader.children[0].path.is_relative_to(Path(staged_guard_root(staged)))
+    assert reader.children[0].receipt()['path'] == str(child.resolve())
+
+
+def staged_guard_root(staged):
+    """Locate the directory carrying hdd_guard's per-closure absolute path map."""
+    for parent in Path(staged).resolve().parents:
+        if (parent / '.natlang-source-map.json').is_file():
+            return parent
+    raise AssertionError('staged source map missing')
+
+
+def test_nvme_manifest_fastpath_does_not_hash_leaf_corpus(tmp_path, monkeypatch):
+    import json
+    manifest = tmp_path / 'graphs.json'
+    leaf = tmp_path / 'large-corpus.jsonl'
+    leaf.write_text('this path must not be hashed by the staging fast path')
+    manifest.write_text(json.dumps({'schema': 'natlang.native-graph-sources/1', 'sources': [
+        {'kind': 'native-graphs', 'path': leaf.name, 'sha256': '0' * 64}]}))
+    monkeypatch.setenv('NATLANG_HDD_PREFIX', str(tmp_path / 'other-drive'))
+    monkeypatch.setattr(hdd_guard, '_sha', lambda path: (_ for _ in ()).throw(AssertionError('unexpected leaf hash')))
+    assert hdd_guard.stage_input(manifest, '1' * 64) == str(manifest)
 
 
 def test_directory_rl_bundle_staging_preserves_real_bundle_reader_and_repairs_tampered_cache(hdd, tmp_path):

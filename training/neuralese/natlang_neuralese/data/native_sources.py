@@ -32,6 +32,8 @@ class NativeGraphSource:
         from ..common import row_index
         from ..common.hashing import canonical_json_sha256_hex
         self.path = Path(path)
+        from .native_source_tree import _source_identity
+        self.source_identity_path = _source_identity(self.path)
         if self.path.resolve() in _parents:
             raise ValueError('native graph source manifests cannot contain cycles')
         self.kind = 'semantic-pairs' if pair_model is not None else 'native-graphs'
@@ -241,7 +243,7 @@ class NativeGraphSource:
                 value = counts.setdefault(group, {'examples': 0, 'supervised_tokens': 0})
                 value['examples'] += 1
                 value['supervised_tokens'] += entry['supervised_tokens']
-        return {'path': str(self.path.resolve()), 'sha256': self.file_sha256,
+        return {'path': str(self.source_identity_path.resolve()), 'sha256': self.file_sha256,
                 'rows': len(self.entries), 'by_source_group': counts,
                 'communication_graphs': sum(bool(entry.get('communication')) for entry in self.entries),
                 **({'sources': [child.receipt() for child in self.children]} if self.kind == 'manifest' else {})}

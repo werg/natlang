@@ -4,6 +4,43 @@ from pathlib import Path
 from ..common.hashing import sha256_file_hex_cached
 
 
+def _staged_path(manifest_path, reference):
+    """Route absolute source references to exact staged copies without changing manifest bytes."""
+    path = Path(reference)
+    if not path.is_absolute():
+        return path
+    original = str(path.resolve())
+    for parent in Path(manifest_path).resolve().parents:
+        index = parent / '.natlang-source-map.json'
+        if not index.is_file():
+            continue
+        value = json.loads(index.read_text())
+        if value.get('schema') != 'natlang.staged-source-map/1' or not isinstance(value.get('paths'), dict):
+            raise ValueError(f'invalid staged native source map: {index}')
+        staged = value['paths'].get(original)
+        if staged:
+            target = Path(staged)
+            if not target.is_file():
+                raise ValueError(f'staged native source dependency is missing: {target}')
+            return target
+    return path
+
+
+def _source_identity(path):
+    """Recover the original absolute identity for a staged file without changing its bytes."""
+    target = str(Path(path).resolve())
+    for parent in Path(path).resolve().parents:
+        index = parent / '.natlang-source-map.json'
+        if not index.is_file():
+            continue
+        value = json.loads(index.read_text())
+        if value.get('schema') == 'natlang.staged-source-map/1' and isinstance(value.get('paths'), dict):
+            for original, staged in value['paths'].items():
+                if str(Path(staged).resolve()) == target:
+                    return Path(original)
+    return Path(path)
+
+
 def initialize_manifest(source, parents, *, load_child):
     # Manifest assembly is always verified; only leaf row indexes are cached.
     before = source.path.stat()
@@ -22,7 +59,7 @@ def initialize_manifest(source, parents, *, load_child):
             raise ValueError('native graph manifest source kind must be explicit')
         if kind == 'semantic-pairs' and not isinstance(binding.get('model'), str):
             raise ValueError('semantic graph source must select its exact model view')
-        path = Path(binding['path'])
+        path = _staged_path(source.path, binding['path'])
         if not path.is_absolute():
             path = source.path.parent / path
         if sha256_file_hex_cached(path) != binding.get('sha256'):

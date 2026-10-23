@@ -106,7 +106,8 @@ def _evict(cache: Path, incoming: int, *, exclude: Path | None = None) -> None:
         return
     entries = []
     for file in cache.rglob('*'):
-        if not file.is_file() or '.locks' in file.parts or exclude is not None and file.is_relative_to(exclude):
+        if (not file.is_file() or '.locks' in file.parts or file.name == '.natlang-source-map.json'
+                or exclude is not None and file.is_relative_to(exclude)):
             continue
         try:
             state = file.stat()
@@ -213,11 +214,10 @@ def _input_closure(path: Path, sha256: str | None, dependencies=None) -> tuple[l
     pending = []
     seen_manifests = set()
     if not primary_is_dir:
-        pending.append((primary, _manifest_refs(primary)))
+        pending.append((primary, [*_manifest_refs(primary), *(dependencies or [])]))
     else:
         for item in members:
             pending.append((item, _manifest_refs(item)))
-    pending.append((primary, dependencies or []))
     while pending:
         manifest_path, refs = pending.pop()
         logical = Path(os.path.abspath(manifest_path))
@@ -264,7 +264,7 @@ def _input_closure(path: Path, sha256: str | None, dependencies=None) -> tuple[l
     return [{'path': item, **members[item]} for item in sorted(members)], common, root_digest
 
 
-def _stage_files(primary: Path, members: list[dict], common: Path, digest: str, *, directory_input: bool) -> Path:
+def _stage_files(primary: Path, members: list[dict], common: Path, digest: str, *, directory_input: bool) -> tuple[Path, Path]:
     cache = cache_dir()
     # The file digest already binds declared child names/hashes. Include the expanded
     # closure too, so conflicting runtime dependency inventories cannot share a cache key.
@@ -296,7 +296,7 @@ def _stage_files(primary: Path, members: list[dict], common: Path, digest: str, 
                 cached = entry / ('tree' / Path(item['path']).relative_to(common) if len(members) > 1 or directory_input
                                   else Path(item['path']).name)
                 os.utime(cached)
-            return staged_input
+            return staged_input, entry
         incoming = sum(item['bytes'] for item in members)
         _evict(cache, incoming, exclude=entry)
         entry.parent.mkdir(parents=True, exist_ok=True)
@@ -310,27 +310,39 @@ def _stage_files(primary: Path, members: list[dict], common: Path, digest: str, 
                 shutil.copyfile(source, target)
                 if target.stat().st_size != item['bytes'] or _sha(target) != item['sha256']:
                     raise ValueError(f'staged copy of {source} does not match its exact SHA-256 and size')
+            path_map = {str(Path(item['path']).resolve()): str(
+                entry / 'tree' / Path(item['path']).relative_to(common) if len(members) > 1 or directory_input
+                else entry / Path(item['path']).name) for item in members}
+            (temp / '.natlang-source-map.json').write_text(json.dumps(
+                {'schema': 'natlang.staged-source-map/1', 'paths': path_map}, sort_keys=True,
+                separators=(',', ':')))
             if entry.exists(): shutil.rmtree(entry)
             os.replace(temp, entry)
         except BaseException:
             shutil.rmtree(temp, ignore_errors=True)
             raise
-    return staged_input
+    return staged_input, entry
 
 
 def stage_input(path, sha256: str | None = None, dependencies=None) -> str:
     """Stage a file, a directory bundle, or a manifest and its transitive relative-file closure."""
     logical = Path(os.path.abspath(path))
-    refs = [] if logical.is_dir() else _manifest_refs(logical)
-    if not logical.is_dir() and not on_hdd(logical) and not dependencies and not refs:
+    refs = [] if logical.is_dir() else [*_manifest_refs(logical), *(dependencies or [])]
+    if not logical.is_dir() and not on_hdd(logical):
+        # Inspect only the small manifest and declared paths before deciding to
+        # hash any corpus leaves. NVMe-resident source trees stay on the fast path.
+        if not any(isinstance(ref, dict) and isinstance(ref.get('path'), str) and
+                   on_hdd(Path(ref['path']) if Path(ref['path']).is_absolute() else logical.parent / ref['path'])
+                   for ref in refs):
+            return str(path)
+    elif logical.is_dir() and not on_hdd(logical):
         return str(path)
     if logical.is_symlink() and not dependencies and not refs:
         logical = Path(os.path.realpath(logical))
     members, common, digest = _input_closure(logical, sha256, dependencies)
     if not any(on_hdd(item['path']) for item in members):
         return str(path)
-    staged = _stage_files(logical, members, common, digest, directory_input=logical.is_dir())
-    entry = staged.parents[1] if logical.is_dir() or len(members) > 1 else staged.parent
+    staged, entry = _stage_files(logical, members, common, digest, directory_input=logical.is_dir())
     def cached_member(item):
         source = Path(item['path'])
         if logical.is_dir() or len(members) > 1:
