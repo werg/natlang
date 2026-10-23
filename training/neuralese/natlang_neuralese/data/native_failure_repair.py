@@ -54,6 +54,7 @@ def _validate_pair(record, tokenizer_fingerprint, *, protected_groups):
                    or value['evaluation_receipt'].get('source_groups')!=value.get('source_groups')
                    or value['evaluation_receipt'].get('packet_sha256')!=value.get('packet_sha256')
                    or value['evaluation_receipt'].get('result_sha256')!=value.get('result_sha256')
+                   or value['evaluation_receipt'].get('collection_binding_sha256')!=value.get('collection_binding_sha256')
                    or not value['evaluation_receipt'].get('evaluator_sha256')
                    for value in (failed,repaired))):
         raise ValueError('oracle receipts do not prove a task-caused failure and exact repaired success on the same task')
@@ -279,15 +280,14 @@ def _run_member(run_dir, task_id, sample):
     if (result.get('task',{}).get('program_ir')!=task or finish is None
             or result.get('outcome',{}).get('status') not in ('done','failed','quiesced')):
         raise ValueError('collector result, terminal journal and exact task packet disagree')
+    binding_path,expected_identity,runtime_sha=_collector_actor_binding(run_dir,preparation)
+    for step in result.get('trajectory') or []:
+        capture=((step.get('model_response') or {}).get('rl_sampling') or {})
+        policy=capture.get('policy')
+        if policy is not None and policy!=expected_identity:
+            raise ValueError('captured native policy identity differs from exact collection binding')
     outcome=classify_case(result,finish);reward=reward_of(outcome,finish)
     if reward not in (0.,1.):raise ValueError('infrastructure, unresolved, or unscored task outcome cannot be DPO evidence')
-    runtime_candidates=[preparation.get('policy_runtime_sha256'),preparation.get('runtime_sha256'),
-        entry.get('policy_runtime_sha256'),entry.get('runtime_sha256'),result.get('policy_runtime_sha256'),
-        (result.get('policy') or {}).get('runtime_sha256')]
-    runtime_sha=next((value for value in runtime_candidates if isinstance(value,str) and len(value)==64
-        and all(char in '0123456789abcdef' for char in value)),None)
-    if runtime_sha is None:
-        raise ValueError('collector evidence lacks the exact policy runtime digest; actor runtime cannot be inferred')
     rollout={'schema':'natlang.rollout/1','task_id':task_id,'split':task.get('split'),
         'group':entry['group'],'sample':sample,'policy':{'checkpoint_sha256':preparation.get('policy_checkpoint_sha256')},
         'turns':rollout_turns(result),
@@ -301,16 +301,39 @@ def _run_member(run_dir, task_id, sample):
     evidence={'outcome':outcome,'task_sha256':canonical_json_sha256_hex(task),
         'world_sha256':canonical_json_sha256_hex(task.get('world',task.get('environment',task))),
         'oracle_sha256':canonical_json_sha256_hex(task.get('oracle',task.get('semantics',task))),
-        'source_groups':task.get('source_groups') or [],'packet_sha256':packet_sha,
+        'source_groups':sorted(set(task.get('source_groups') or [])),'packet_sha256':packet_sha,
         'result_sha256':sha256_file_hex_cached(result_path),'result_path':str(result_path),
-        'finish_sha256':canonical_json_sha256_hex(finish),'actor_runtime_sha256':runtime_sha}
+        'finish_sha256':canonical_json_sha256_hex(finish),
+        'collection_binding_sha256':sha256_file_hex_cached(binding_path),
+        'actor_runtime_sha256':runtime_sha}
     evaluator=Path(__file__).resolve().parents[1]/'eval/task_packet.py'
     evidence['evaluation_receipt']={'schema':'natlang.task-oracle-evaluation/1',
         **{key:evidence[key] for key in ('outcome','task_sha256','world_sha256','oracle_sha256',
             'source_groups','packet_sha256','result_sha256','finish_sha256')},
-        'task_id':task_id,'evaluator_sha256':sha256_file_hex_cached(evaluator)}
+        'task_id':task_id,'evaluator_sha256':sha256_file_hex_cached(evaluator),
+        'collection_binding_sha256':evidence['collection_binding_sha256']}
     evidence['evaluation_receipt_sha256']=canonical_json_sha256_hex(evidence['evaluation_receipt'])
     return task,rollout,evidence
+
+
+def _collector_actor_binding(run_dir,preparation):
+    """Read the exact native actor/runtime receipt sealed by this collector round."""
+    from ..common.hashing import sha256_file_hex_cached
+    path=Path(run_dir)/'collection-binding.json';value=json.loads(path.read_text())
+    expected=value.get('expected_native_actor') or {};identity=expected.get('native_identity') or {}
+    runtime=expected.get('python_runtime') or {};digest=runtime.get('sha256')
+    if (value.get('schema')!='natlang.rl-collection-binding/1'
+            or value.get('policy_id')!=preparation.get('policy_checkpoint_sha256')
+            or identity.get('checkpoint_sha256')!=preparation.get('policy_checkpoint_sha256')
+            or runtime.get('schema')!='natlang.python-runtime/1'
+            or type(runtime.get('files')) is not int or runtime['files']<1
+            or not isinstance(digest,str) or len(digest)!=64
+            or any(char not in '0123456789abcdef' for char in digest)
+            or not isinstance(value.get('runtime'),dict) or not value['runtime']):
+        raise ValueError('collector binding lacks its exact native actor/runtime receipt')
+    if runtime['files']!=len(value['runtime']):
+        raise ValueError('collector runtime inventory count differs from its native actor receipt')
+    return path,identity,digest
 
 
 def _replay_rollout(rollout, *, identity, roles, fetch_block):
@@ -355,11 +378,12 @@ def _score_reference(model,example,actions,*,reference_identity,runtime_sha256,c
     from ..rl.native_replay import action_logps,graph_identity
     if example.external_states:
         raise ValueError('failure DPO scoring requires complete internal producer graphs; external detached state is unsupported')
-    with torch.no_grad():result=model(example.plan,retain_states=False)
     model_actions=[{'query':example.plan.offsets[next(i for i,node in enumerate(example.plan.invocations)
         if node.name==item['node'])]+item['position']-1,'token_id':item['token_id'],'temperature':1.,
         'allowed_token_ids':None,'banned_token_ids':None,'behavior_logp':0.} for item in actions]
-    logps,_=action_logps(model,result['h_final'][0],model_actions,chunk_tokens=chunk_tokens)
+    with torch.no_grad():
+        result=model(example.plan,retain_states=False)
+        logps,_=action_logps(model,result['h_final'][0],model_actions,chunk_tokens=chunk_tokens)
     if len(actions)!=len(logps) or not torch.isfinite(logps).all():
         raise ValueError('reference model produced incomplete or nonfinite exact action scores')
     scores=[float(value) for value in logps.detach().cpu()]
@@ -382,7 +406,6 @@ def admit_run_pair(*,failed_run_dir,repaired_run_dir,task_id,failed_sample,repai
     from ..data.native_sources import NativeGraphSource
     from ..model.shared_state import RoleTokens
     from ..rl.graph_replay import NativeBundleStore
-    from ..rl.native_replay import capture_invocation_actors
     from ..common.hashing import canonical_json_sha256_hex
     task_a,failed,failed_evidence=_run_member(failed_run_dir,task_id,failed_sample)
     task_b,repaired,repaired_evidence=_run_member(repaired_run_dir,task_id,repaired_sample)
@@ -410,13 +433,16 @@ def admit_run_pair(*,failed_run_dir,repaired_run_dir,task_id,failed_sample,repai
     # The capture runtime actor can differ from the fixed DPO reference policy;
     # replay is bound to the exact actual invocation identity in each capture.
     capture_base=captured_policies[0]
-    bundle=NativeBundleStore(block_bundle,policy_id=capture_base['checkpoint_sha256'])
+    bundle=NativeBundleStore(block_bundle,policy_id=capture_base['checkpoint_sha256']) if block_bundle else None
     if any(value.get('checkpoint_sha256')!=capture_base['checkpoint_sha256'] for value in captured_policies):
         raise ValueError('one complete actor bundle is required per graph-capture policy; mixed actor bundles need explicit per-turn custody')
+    def fetch_block(block_id):
+        if bundle is None:raise ValueError('captured native state requires its exact collection block bundle')
+        return bundle.state(block_id)
     replays=[]
     for rollout in (failed,repaired):
         identity=rollout['turns'][0]['sampling']['policy']
-        replay,actors=_replay_rollout(rollout,identity=identity,roles=roles,fetch_block=bundle.state)
+        replay,actors=_replay_rollout(rollout,identity=identity,roles=roles,fetch_block=fetch_block)
         if replay.external_blocks:
             raise ValueError('failure repair capture is incomplete: every imported producer must be in the captured graph')
         graph,example,actions=_graph_from_replay(rollout,replay,tokenizer_fingerprint=fingerprint,source_groups=task_groups)
@@ -431,14 +457,17 @@ def admit_run_pair(*,failed_run_dir,repaired_run_dir,task_id,failed_sample,repai
         bound_actions,score_receipt=_score_reference(model,example,actions,reference_identity={
             'checkpoint_sha256':sha256_file_hex_cached(reference_checkpoint),
             'tokenizer_fingerprint':fingerprint},runtime_sha256=runtime_sha,chunk_tokens=128)
-        score_receipt['receipt_sha256']=canonical_json_sha256_hex(score_receipt)
+        score_receipt_sha=canonical_json_sha256_hex(score_receipt)
         actor_identity=rollout['turns'][0]['sampling']['policy']
+        actor={'checkpoint_sha256':actor_identity['checkpoint_sha256'],
+            'runtime_sha256':evidence['actor_runtime_sha256'],
+            'actor_id':canonical_json_sha256_hex(actor_identity)}
         capture_actions=[{key:action[key] for key in ('node','position','token_id','kind')}
             for action in actions]
         prompt_sha=canonical_json_sha256_hex(rollout['turns'][0]['messages'])
         capture_receipt={'schema':'natlang.native-failure-execution-capture/1',
             'task_sha256':evidence['task_sha256'],'world_sha256':evidence['world_sha256'],
-            'prompt_sha256':prompt_sha,'actions':capture_actions,'actor':actor_identity,
+            'prompt_sha256':prompt_sha,'actions':capture_actions,'actor':actor,
             'result_sha256':evidence['result_sha256'],'execution_graph_sha256':canonical_json_sha256_hex(rollout['execution_graph'])}
         capture_sha=canonical_json_sha256_hex(capture_receipt)
         replay_receipt={'schema':'natlang.native-graph-replay-receipt/1',
@@ -451,11 +480,10 @@ def admit_run_pair(*,failed_run_dir,repaired_run_dir,task_id,failed_sample,repai
             'execution_capture_sha256':capture_sha,'execution_receipt':capture_receipt,
             'graph_replay_sha256':canonical_json_sha256_hex(replay_receipt),
             'graph_replay_receipt':replay_receipt,'complete_graph':True,
-            'occurrence_bindings_verified':True,'actor':{'checkpoint_sha256':actor_identity['checkpoint_sha256'],
-                'runtime_sha256':evidence['actor_runtime_sha256'],'actor_id':canonical_json_sha256_hex(actor_identity)},
+            'occurrence_bindings_verified':True,'actor':actor,
             'reference_score':{**{key:score_receipt[key] for key in
                 ('checkpoint_sha256','tokenizer_fingerprint','runtime_sha256','graph_action_sha256','normalization')},
-                'receipt':score_receipt,'receipt_sha256':score_receipt['receipt_sha256']},
+                'receipt':score_receipt,'receipt_sha256':score_receipt_sha},
             'capture_actor_identity':actor_identity,'capture_invocation_actors':actors}
     prompt_sha=alternatives['failed']['prompt_sha256']
     if alternatives['repaired']['prompt_sha256']!=prompt_sha:
@@ -486,7 +514,8 @@ def main(argv=None):
     parser.add_argument('--reference-checkpoint',required=True,type=Path)
     parser.add_argument('--base',required=True,type=Path)
     parser.add_argument('--held-native-graphs',required=True,type=Path)
-    parser.add_argument('--block-bundle',required=True,type=Path)
+    parser.add_argument('--block-bundle',type=Path,
+        help='exact actor state archive; optional only when both captures have no imported native states')
     parser.add_argument('--output-dir', required=True, type=Path)
     parser.add_argument('--continue-from',required=True,type=Path)
     parser.add_argument('--stage-id',required=True)

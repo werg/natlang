@@ -8,7 +8,8 @@ import torch
 from torch import nn
 
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex
-from natlang_neuralese.data.native_failure_repair import _merge_graphs, _write_admitted_rows, PAIR_SCHEMA
+from natlang_neuralese.data.native_failure_repair import (_merge_graphs, _write_admitted_rows,
+    _collector_actor_binding, PAIR_SCHEMA)
 from natlang_neuralese.data.native_graph_schema import SCHEMA, parse_graph
 from natlang_neuralese.rl.native_replay import graph_identity
 from natlang_neuralese.train.native_preference import NativePreferenceObjective
@@ -58,7 +59,7 @@ def record(task_sha='a'*64):
             'task_sha256':original['task_sha256'],'world_sha256':original['world_sha256'],
             'oracle_sha256':original['oracle_sha256'],'source_groups':original['source_groups'],
             'packet_sha256':'4'*64,'result_sha256':('5' if label=='failed' else '6')*64,
-            'finish_sha256':'7'*64}
+            'finish_sha256':'7'*64,'collection_binding_sha256':'9'*64}
         receipt={'schema':'natlang.task-oracle-evaluation/1',**evidence,
             'task_id':'task-1','evaluator_sha256':'8'*64}
         evidence['evaluation_receipt']=receipt
@@ -187,3 +188,19 @@ def test_objective_loader_rechecks_reference_receipt_custody(tmp_path):
     path=tmp_path/'forged-objective.json';path.write_text(json.dumps(spec))
     with pytest.raises(ValueError,match='reference score receipt'):
         NativePreferenceObjective(path)
+
+
+def test_actual_collector_binding_supplies_native_checkpoint_and_runtime(tmp_path):
+    path=tmp_path/'collection-binding.json'
+    checkpoint='1'*64;identity={'architecture':'lfm2','checkpoint_sha256':checkpoint,
+        'embedding_weight_sha256':'2'*64,'tokenizer_fingerprint':'3'*64}
+    runtime={'schema':'natlang.python-runtime/1','files':1,'sha256':'4'*64}
+    path.write_text(json.dumps({'schema':'natlang.rl-collection-binding/1','policy_id':checkpoint,
+        'expected_native_actor':{'native_identity':identity,'python_runtime':runtime},
+        'runtime':{'serve/engine.py':'5'*64}}))
+    got_path,got_identity,got_runtime=_collector_actor_binding(tmp_path,{'policy_checkpoint_sha256':checkpoint})
+    assert got_path==path and got_identity==identity and got_runtime==runtime['sha256']
+    value=json.loads(path.read_text());value['expected_native_actor']['native_identity']['checkpoint_sha256']='6'*64
+    path.write_text(json.dumps(value))
+    with pytest.raises(ValueError,match='collector binding'):
+        _collector_actor_binding(tmp_path,{'policy_checkpoint_sha256':checkpoint})
