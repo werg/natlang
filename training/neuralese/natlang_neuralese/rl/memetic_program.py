@@ -473,6 +473,7 @@ def main(argv=None):
     parser.add_argument('--model-id', choices=('lfm', 'mellum'), required=True)
     parser.add_argument('--baseline-only', action='store_true')
     parser.add_argument('--author')
+    parser.add_argument('--author-ferry', help='durable evaluator-local teacher transport on loopback:8766')
     parser.add_argument('--author-model')
     parser.add_argument('--author-provenance', type=Path)
     parser.add_argument('--generations', type=int, default=3)

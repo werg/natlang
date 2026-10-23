@@ -349,13 +349,16 @@ def test_baseline_only_binds_student_and_continues_with_author(tmp_path, monkeyp
     assert [name for name, _, _ in calls] == ['unguided-dev', 'unguided-confirm']
     assert not (tmp_path / 'run/author.json').exists()
     assert not (tmp_path / 'run/binding.json').exists()
-    receipt = {'schema': 'natlang.memetic-author-provenance/1', 'model_id': 'Qwen/Qwen3.6-35B-A3B',
-        'hosting': 'self-hosted-coreweave', 'endpoint': 'http://teacher', 'sandbox_id': 'sandbox-1',
+    ferry = memetic.teacher_ferry
+    receipt = {'schema': 'natlang.memetic-author-provenance/1', 'model_id': ferry.TEACHER_MODEL_ID,
+        'serve_alias': ferry.TEACHER_SERVE_ALIAS, 'revision': ferry.TEACHER_REVISION,
+        'hosting': 'self-hosted-coreweave', 'endpoint': ferry.TEACHER_URL,
+        'sandbox_id': ferry.TEACHER_SANDBOX_ID, 'source_bindings': list(ferry.TEACHER_SOURCE_BINDINGS),
         'checkpoint_sha256': '1'*64, 'tokenizer_fingerprint': '2'*64,
         'runtime_sha256': '3'*64, 'source_receipt_sha256': '4'*64}
     path = tmp_path / 'teacher.json'; path.write_text(json.dumps(receipt))
-    author = ['--author', 'http://teacher', '--author-model', receipt['model_id'],
-              '--author-provenance', str(path)]
+    author = ['--author', ferry.TEACHER_URL, '--author-model', ferry.TEACHER_SERVE_ALIAS,
+              '--author-ferry', 'http://127.0.0.1:8766', '--author-provenance', str(path)]
     result = memetic.main([*common, *author])
     assert result['status'] == 'qualified'
     assert [name for name, _, _ in calls].count('write') == 1
