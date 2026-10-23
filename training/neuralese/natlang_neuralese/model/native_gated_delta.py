@@ -90,7 +90,13 @@ def replay(module, payload, *, conv_prefix=None, recurrent_state=None, linear=No
         key = key.repeat_interleave(repeat, dim=2)
     from transformers.models.qwen3_5.modeling_qwen3_5 import (
         torch_chunk_gated_delta_rule, torch_recurrent_gated_delta_rule)
-    recurrence = (torch_recurrent_gated_delta_rule if steps == 1 else torch_chunk_gated_delta_rule)
+    # FLA's fused recurrent path is inference-only: it does not provide a
+    # backward. HF's torch recurrent wrapper may select that kernel when GPU
+    # training kernels are enabled, so a one-token differentiable replay must
+    # still use the chunk rule. Keep the recurrent path for no-grad decode.
+    recurrence = (torch_recurrent_gated_delta_rule
+                  if steps == 1 and not torch.is_grad_enabled()
+                  else torch_chunk_gated_delta_rule)
     core, final = recurrence(
         query, key, value, g=g, beta=beta, initial_state=recurrent_state,
         output_final_state=True, use_qk_l2norm_in_kernel=True)

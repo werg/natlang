@@ -2,6 +2,8 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { Worker } from 'node:worker_threads';
 import { TypeScriptEnvironment } from '../environment.js';
+import type { EvalEnvironment, EnvironmentMode } from '../native/evaluator.js';
+import type { NatlangRuntimeOptions } from './runtime.js';
 import { WorkspaceModules, findPackageWorkspace } from '../workspace-modules.js';
 import { currentFrame, setContextStore, type Frame } from './context.js';
 import { setDefaultCallStoreFactory, setDefaultEnvironmentFactory } from './runtime.js';
@@ -16,6 +18,41 @@ const storage = new AsyncLocalStorage<Frame | undefined>();
 setContextStore({ current: () => storage.getStore(), run: (frame, fn) => storage.run(frame, fn) });
 setDefaultEnvironmentFactory(options => new TypeScriptEnvironment({ workspace: options.workspace, network: options.network }));
 setModuleRealm(() => new TypeScriptEnvironment({ mode: 'retained' }));
+
+/**
+ * Explicit, process-wide opt-in for an *owned* guest interpreter.
+ *
+ * Installs both natlang evaluation seams. The factory is supplied by the
+ * embedding application (for example tracing-js-self/natlang), so the
+ * natlang distribution never silently imports an untraced fallback runtime.
+ * This does NOT claim general callback/package/module compatibility: a
+ * bounded interpreter must reject any unsupported natlang-generated code.
+ *
+ * Call before starting tasks or loading callable-folder modules. This mutates
+ * the platform defaults; already-created module instances are not migrated.
+ */
+export function installOwnedTracingEnvironment(
+  factory: (mode: EnvironmentMode, options?: NatlangRuntimeOptions) => EvalEnvironment
+): void {
+  if (typeof factory !== 'function') throw new TypeError('Owned tracing evaluator factory required');
+  function instantiate(mode: EnvironmentMode, options?: NatlangRuntimeOptions): EvalEnvironment {
+    const evaluator = factory(mode, options);
+    if (!evaluator || evaluator.mode !== mode ||
+        typeof evaluator.authority !== 'string' ||
+        !evaluator.authority.startsWith('owned-') ||
+        typeof evaluator.execute !== 'function' ||
+        typeof evaluator.executeAsync !== 'function' ||
+        typeof evaluator.evaluateModule !== 'function' ||
+        typeof evaluator.close !== 'function' ||
+        typeof evaluator.fork !== 'function')
+      throw new TypeError('Owned tracing factory returned an incompatible evaluator; native fallback forbidden');
+    if (evaluator.scopeCapabilities?.allowNetwork)
+      throw new TypeError('An owned tracing evaluator cannot declare ambient network access');
+    return evaluator;
+  }
+  setDefaultEnvironmentFactory(options => instantiate('fresh', options));
+  setModuleRealm(() => instantiate('retained'));
+}
 // Every runtime records to the machine's call store unless it says otherwise (NATLANG_CALL_STORE=off disables it).
 setDefaultCallStoreFactory(() => { const root = machineStoreRoot(); return root ? CallStore.open(root) : undefined; });
 
