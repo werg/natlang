@@ -190,20 +190,28 @@ def _budget_terminated_prefix(entry: dict[str, Any], task: dict[str, Any], finis
         return None
     if sum(row.get("kind") == "execution_snapshot" for row in payloads if isinstance(row, dict)) != 1:
         return None
-    action_frames = [row for row in payloads if isinstance(row, dict) and row.get("kind") == "teacher_action_frame" and
-                     row.get("source") in {"live_provider", "journal_replay", "handoff_replay"}]
+    all_action_frames = [row for row in payloads if isinstance(row, dict) and
+                         row.get("kind") == "teacher_action_frame"]
+    policy_sources = {"live_provider", "journal_replay", "handoff_replay"}
+    known_sources = policy_sources | {"authored_reference_root"}
+    if any(row.get("source") not in known_sources for row in all_action_frames):
+        return None
+    action_frames = [row for row in all_action_frames if row.get("source") in policy_sources]
     frames = [row.get("response_frame") for row in action_frames]
+    verified_action_frames = action_frames + [row for row in all_action_frames
+                                              if row.get("source") == "authored_reference_root"]
+    verified_frames = [row.get("response_frame") for row in verified_action_frames]
     if (not frames or any(not isinstance(frame, dict) or frame.get("phase") != "action" or
                           not isinstance(frame.get("invocation_id"), str) or
                           not isinstance(frame.get("context"), list) or
                           not isinstance(frame.get("model_response"), dict) or
-                          "raw_calls" not in frame["model_response"] for frame in frames)):
+                          "raw_calls" not in frame["model_response"] for frame in verified_frames)):
         return None
     saved_turns = partial.get("turns")
     if not isinstance(saved_turns, list):
         return None
     saved_indexes = []
-    for evidence_row, frame in zip(action_frames, frames):
+    for evidence_row, frame in zip(verified_action_frames, verified_frames):
         index = evidence_row.get("saved_turn_index")
         if (type(index) is not int or index < 0 or index >= len(saved_turns) or
                 index in saved_indexes or not isinstance(evidence_row.get("request_sha256"), str) or
@@ -216,7 +224,9 @@ def _budget_terminated_prefix(entry: dict[str, Any], task: dict[str, Any], finis
         if (not isinstance(response, dict) or saved.get("request_sha256") != evidence_row.get("request_sha256") or
                 saved.get("invocation_id") != evidence_row.get("invocation_id") or
                 response.get("calls") != model_response.get("calls") or
-                response.get("raw_calls") != model_response.get("raw_calls") or
+                # The native collector's durable turn envelope stores transport metadata under raw_response;
+                # the exact raw call payload is retained in the separately hashed action frame above.
+                ("raw_calls" in response and response.get("raw_calls") != model_response.get("raw_calls")) or
                 not isinstance(model_response.get("raw_calls"), list) or
                 response.get("text", "") != model_response.get("text", "")):
             return None
@@ -241,6 +251,40 @@ def _budget_terminated_prefix(entry: dict[str, Any], task: dict[str, Any], finis
             return None
     graph = [row["event"] for row in trace_rows if isinstance(row.get("event"), dict) and
              isinstance(row["event"].get("node"), str) and isinstance(row["event"].get("inputs"), list)]
+    reference_roots = [row for row in verified_action_frames if row.get("source") == "authored_reference_root"]
+    if reference_roots:
+        # An authored root is harness reference material, not a sampled policy turn. Keep its
+        # invocation node as the exact caller edge, but never detach its model/state dependencies
+        # from the child's trainable graph.
+        if len(reference_roots) != 1:
+            return None
+        reference = reference_roots[0]
+        root_invocation = reference.get("invocation_id")
+        if (root_invocation != snapshot.get("run_id") or
+                reference.get("response_frame", {}).get("invocation_id") != root_invocation):
+            return None
+        root_events = [row["event"] for row in trace_rows if row.get("trace_role") == "root" and
+                       isinstance(row.get("event"), dict) and isinstance(row["event"].get("node"), str) and
+                       isinstance(row["event"].get("inputs"), list)]
+        root_turns = [event for event in root_events if event.get("kind") == "model_turn"]
+        root_call_node = f"call:{root_invocation}"
+        root_calls = [event for event in root_events if event.get("kind") == "invocation" and
+                      event.get("node") == root_call_node]
+        if (len(root_turns) != 1 or root_turns[0].get("node") != f"{root_invocation}#turn1" or
+                len(root_calls) != 1 or any(event.get("kind") in {"block_write", "block_read"}
+                                           for event in root_events)):
+            return None
+        child_events = [row["event"] for row in trace_rows if row.get("trace_role") == "child" and
+                        isinstance(row.get("event"), dict) and isinstance(row["event"].get("node"), str) and
+                        isinstance(row["event"].get("inputs"), list)]
+        for event in child_events:
+            for edge in event["inputs"]:
+                if isinstance(edge, dict) and edge.get("node") == root_turns[0]["node"]:
+                    return None
+                if isinstance(edge, dict) and edge.get("node") == root_call_node and not (
+                        event.get("kind") == "invocation" and edge.get("port") == "caller"):
+                    return None
+        graph = child_events + root_calls
     trajectory = {"trajectory": frames}
     turns = rollout_turns(trajectory)
     if not turns:
