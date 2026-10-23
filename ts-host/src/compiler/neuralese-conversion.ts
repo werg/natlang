@@ -87,6 +87,8 @@ export type NativeSourceOccurrence = {
   source_row_sha256?: string;
   invocation_id: string;
   decision_index?: number;
+  stop_gradient?: true;
+  source_occurrence?: string;
 };
 type Message = Record<string, unknown> & { role: string; content?: unknown; tool_calls?: { id?: string; function: { name: string; arguments: string } }[] };
 export type SoftPiece = { name: string; kind: 'system-prompt' | 'program-guidance' | 'function-body'; text: string };
@@ -211,6 +213,10 @@ type ChildResultRun = { returned: Set<string>; producers: ChildResultProducer[];
 
 function sha256Text(value: string): string { return createHash('sha256').update(value).digest('hex'); }
 
+function sourceUseKey(id: string, stopGradient = false, sourceOccurrence?: string): string {
+  return JSON.stringify([id, stopGradient, sourceOccurrence ?? null]);
+}
+
 function nativeOccurrenceId(trajectoryId: string, rowId: string, invocationId: string,
   role: 'producer' | 'consumer', path: readonly string[], reference: string): string {
   const digest = sha256Text(canonical([trajectoryId, rowId, invocationId, role, path, reference]));
@@ -238,13 +244,15 @@ function nativeSourceView(record: Record<string, unknown>, messages: Message[], 
   const unresolved: Record<string, unknown>[] = [];
   const sourceReceipts: Record<string, unknown>[] = [];
   const add = (role: 'producer' | 'consumer', reference: string, body: string, sourceKind: string,
-    path: string[]) => {
+    path: string[], custody?: { stop_gradient?: true; source_occurrence?: string }) => {
     const bodySha = sha256Text(body);
     occurrences.push({ schema: 'natlang.native-source-occurrence/1',
       id: nativeOccurrenceId(trajectoryId, rowId, invocationId, role, path, reference), role, reference, path,
       body, body_sha256: bodySha, source_kind: sourceKind, trajectory_id: trajectoryId,
       ...(typeof sourceRef.source_row_sha256 === 'string' ? { source_row_sha256: sourceRef.source_row_sha256 } : {}),
-      invocation_id: invocationId, ...(Number.isSafeInteger(decision.index) ? { decision_index: Number(decision.index) } : {}) });
+      invocation_id: invocationId, ...(Number.isSafeInteger(decision.index) ? { decision_index: Number(decision.index) } : {}),
+      ...(custody?.stop_gradient ? { stop_gradient: true as const } : {}),
+      ...(custody?.source_occurrence ? { source_occurrence: custody.source_occurrence } : {}) });
   };
   for (const [index, write] of selectedRuntimeResultWrites.entries()) {
     if (typeof write.target_write_name !== 'string' || typeof write.body_source !== 'string' ||
@@ -252,7 +260,10 @@ function nativeSourceView(record: Record<string, unknown>, messages: Message[], 
       throw new Error('selected native runtime writer lacks its exact source body and occurrence identity');
     add('producer', write.target_write_name, write.body_source,
       typeof write.source_kind === 'string' ? write.source_kind : 'typed-text-result',
-      ['selected_runtime_result_writes', String(index), 'body_source']);
+      ['selected_runtime_result_writes', String(index), 'body_source'], {
+        ...(write.stop_gradient === true ? { stop_gradient: true as const } : {}),
+        ...(typeof write.source_occurrence === 'string' ? { source_occurrence: write.source_occurrence } : {}),
+      });
   }
   if (inlineInstructionRead && !occurrences.some(item => item.role === 'consumer' &&
       item.reference === inlineInstructionRead.writer_id && item.body === inlineInstructionRead.body_source))
@@ -274,7 +285,10 @@ function nativeSourceView(record: Record<string, unknown>, messages: Message[], 
     if (item.type === 'read') {
       if (typeof item.name !== 'string' || !item.name || typeof item.source !== 'string')
         throw new Error('native source conversion read needs an exact source name and body');
-      add('consumer', item.name, item.source, 'authenticated-static-read', path);
+      add('consumer', item.name, item.source, 'authenticated-static-read', path, {
+        ...(item.stop_gradient === true ? { stop_gradient: true as const } : {}),
+        ...(typeof item.source_occurrence === 'string' ? { source_occurrence: item.source_occurrence } : {}),
+      });
       return { type: 'text', text: item.source };
     }
     if (item.type === 'view') {
@@ -287,9 +301,13 @@ function nativeSourceView(record: Record<string, unknown>, messages: Message[], 
     }
     if (item.type === 'neuralese' || item.type === 'native_state') {
       const unresolvedId = typeof item.id === 'string' ? item.id : null;
-      const exact = unresolvedId ? externalSources.get(unresolvedId) : undefined;
+      const exact = unresolvedId ? externalSources.get(sourceUseKey(unresolvedId, item.stop_gradient === true,
+        typeof item.source_occurrence === 'string' ? item.source_occurrence : undefined)) : undefined;
       if (exact) {
-        add('consumer', exact.reference, exact.body, exact.sourceKind, path);
+      add('consumer', exact.reference, exact.body, exact.sourceKind, path, {
+        ...(item.stop_gradient === true ? { stop_gradient: true as const } : {}),
+        ...(typeof item.source_occurrence === 'string' ? { source_occurrence: item.source_occurrence } : {}),
+      });
         return { type: 'text', text: exact.body };
       }
       unresolved.push({ schema: 'natlang.unresolved-native-source-reference/1', path,
@@ -305,7 +323,10 @@ function nativeSourceView(record: Record<string, unknown>, messages: Message[], 
         path[0] === 'target' && record.derived_target &&
           typeof record.derived_target === 'object' ? 'derived-equivalent-pure-terminal-eval-finish-target' :
           String(write.type ?? 'typed-result');
-      add('producer', write.name, write.source, sourceKind, path);
+      add('producer', write.name, write.source, sourceKind, path, {
+        ...(write.stop_gradient === true ? { stop_gradient: true as const } : {}),
+        ...(typeof write.source_occurrence === 'string' ? { source_occurrence: write.source_occurrence } : {}),
+      });
       if (write.source_encoding === 'json' || write.type === 'Neuralese<unknown>') {
         try { return JSON.parse(write.source); } catch { /* Preserve exact source text if it is not valid JSON. */ }
       }
@@ -744,7 +765,13 @@ const OPENING_CALL = /^You are inside this call: (\w+)\(/;
 /** The record's parts and soft pieces, with site counts. */
 function providerContextWriterSourceValid(writer: Record<string, unknown> | null | undefined, sourceClass: unknown,
   witness: Record<string, unknown> | null | undefined, blockType: unknown, blockId: string): boolean {
-  return sourceClass === 'modern-typed-text-result' ?
+  return sourceClass === 'native-positional-state-writer' ?
+    writer?.producer === 'native-state-producer' && writer.format === 'native-state' &&
+      writer.source_kind === 'native-state-producer' && writer.block === blockId &&
+      writer.result_type === blockType && writer.truncated === false && writer.learned_vectors === false &&
+      typeof writer.node === 'string' && typeof writer.text_body_sha256 === 'string' &&
+      !!writer.native_identity && typeof writer.native_identity === 'object' :
+    sourceClass === 'modern-typed-text-result' ?
     writer?.producer === 'text-marker-emulation' && writer.source_kind === 'typed-text-result' :
     sourceClass === 'legacy-text-marker-standin-eval-code' ?
       writer?.emulation_version === 'text-marker-standin/2' && writer.marker_context === 'eval-code' &&
@@ -856,7 +883,7 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
         throw new Error(`provider-expanded context graph or transport binding mismatch for ${id}`);
       if (['natlang.provider-expanded-read-context/2', 'natlang.provider-expanded-read-context/3'].includes(String(receipt.schema)) &&
           (receipt.origin !== 'same-run-producer' || receipt.writer_target_selected !== false ||
-          !['modern-typed-text-result', 'legacy-text-marker-standin-eval-code',
+          !['native-positional-state-writer', 'modern-typed-text-result', 'legacy-text-marker-standin-eval-code',
              'legacy-text-marker-standin-return-result', 'legacy-text-marker-standin-eval-finish',
              'legacy-text-marker-standin-eval-return']
              .includes(String(receipt.writer_source_class)) ||
@@ -1533,6 +1560,10 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
                 !['typed-text-result', 'typed-text-result-field', 'typed-json-result'].includes(String(receipt.source_kind)) ||
                 typeof receipt.block_id !== 'string' ||
                 !(/^nzs1_[a-z2-7]{52}$/.test(receipt.block_id) || /^nz1_[a-z2-7]{20,}$/.test(receipt.block_id)) ||
+                (receipt.block_id.startsWith('nzs1_') && (receipt.source_occurrence !== receipt.writer_node ||
+                  receipt.stop_gradient !== undefined && receipt.stop_gradient !== true)) ||
+                (receipt.block_id.startsWith('nz1_') &&
+                  (receipt.source_occurrence !== undefined || receipt.stop_gradient !== undefined)) ||
                 typeof receipt.writer_node !== 'string' || typeof receipt.result_type !== 'string' ||
                 !receipt.result_type.startsWith('Neuralese<') || typeof receipt.body_sha256 !== 'string' ||
                 !/^[0-9a-f]{64}$/.test(receipt.body_sha256) || typeof receipt.body_source !== 'string' ||
@@ -1576,7 +1607,10 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
                 `typed-result:${receipt.block_id}:${sha12(JSON.stringify([receipt.writer_node, resultPath]))}`;
               const write = { $write: { name, block_id: receipt.block_id, type: receipt.result_type,
                 source_kind: receipt.source_kind,
-                source: receipt.body_source, ...(receipt.source_kind === 'typed-json-result' ? { source_encoding: 'json' } : {}) } };
+                source: receipt.body_source,
+                ...(receipt.stop_gradient === true ? { stop_gradient: true } : {}),
+                ...(typeof receipt.source_occurrence === 'string' ? { source_occurrence: receipt.source_occurrence } : {}),
+                ...(receipt.source_kind === 'typed-json-result' ? { source_encoding: 'json' } : {}) } };
               if (directSemanticText) selectedRuntimeResultWrites.push({
                 schema: 'natlang.selected-runtime-result-write/1',
                 role: 'selected-direct-typed-text-semantic-writer',
@@ -1592,6 +1626,8 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
                 target_write_sha256: createHash('sha256').update(stableJson(write) ?? '').digest('hex'),
                 source_kind: receipt.source_kind,
                 body_source: receipt.body_source,
+                ...(receipt.stop_gradient === true ? { stop_gradient: true } : {}),
+                ...(typeof receipt.source_occurrence === 'string' ? { source_occurrence: receipt.source_occurrence } : {}),
                 body_source_basis: receipt.body_source_basis,
                 learned_vectors: false, qualification_certificate: false, training_admission: false,
               });
@@ -1677,7 +1713,7 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
     if (Array.isArray(value)) return value.reduce((count, item) => count + countReferences(item, id), 0);
     if (!value || typeof value !== 'object') return 0;
     const item = value as Record<string, unknown>;
-    let count = item.type === 'neuralese' && item.id === id ? 1 : 0;
+    let count = (item.type === 'neuralese' || item.type === 'native_state') && item.id === id ? 1 : 0;
     for (const [key, child] of Object.entries(item)) {
       if (key === 'arguments' && typeof child === 'string') {
         try { count += countReferences(JSON.parse(child), id); } catch { /* Preserve opaque arguments. */ }
@@ -1795,16 +1831,31 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
     const block = receipt.block as Record<string, unknown>;
     const id = typeof block.id === 'string' ? block.id : undefined;
     if (!id) continue;
-    const reference = typeof receipt.origin === 'string' && receipt.origin === 'same-run-producer' &&
-        typeof receipt.producer_write === 'object' && receipt.producer_write !== null &&
-        receipt.writer_target_selected === true ?
-      directTypedResultEventName(id, trajectoryId,
-        String((receipt.producer_write as Record<string, unknown>).call_id ?? ''),
-        String((receipt.producer_write as Record<string, unknown>).node ?? '')) : `context-only:${id}`;
-    if (externalSources.has(id) && externalSources.get(id)?.body !== value.body)
-      throw new Error(`native source conversion has conflicting exact external bodies for ${id}`);
-    externalSources.set(id, { body: value.body, reference,
-      sourceKind: receipt.origin === 'same-run-producer' ? 'authenticated-provider-context' : 'external-provider-context' });
+    const sourceKind = receipt.origin === 'same-run-producer' ? 'authenticated-provider-context' : 'external-provider-context';
+    const addSource = (stopGradient: boolean, sourceOccurrence: string | undefined,
+      writer: Record<string, unknown> | undefined) => {
+      const key = sourceUseKey(id, stopGradient, sourceOccurrence);
+      const reference = sourceOccurrence && writer ? directTypedResultEventName(id, trajectoryId,
+        String(writer.call_id ?? ''), sourceOccurrence) : `context-only:${id}`;
+      const previous = externalSources.get(key);
+      if (previous && (previous.body !== value.body || previous.reference !== reference))
+        throw new Error(`native source conversion has conflicting exact external occurrence custody for ${id}`);
+      externalSources.set(key, { body: value.body, reference, sourceKind });
+    };
+    if (receipt.origin === 'same-run-producer') {
+      const pairs = [{ read: receipt.block_read as Record<string, unknown> | undefined,
+        writer: receipt.producer_write as Record<string, unknown> | undefined },
+      ...((Array.isArray(receipt.additional_read_turn_pairs) ? receipt.additional_read_turn_pairs : []) as Record<string, unknown>[])
+        .map(pair => ({ read: pair.block_read as Record<string, unknown> | undefined,
+          writer: (pair.producer_write ?? receipt.producer_write) as Record<string, unknown> | undefined }))];
+      for (const pair of pairs) {
+        if (!pair.read || !pair.writer || typeof pair.writer.node !== 'string')
+          throw new Error(`native source conversion lacks exact producer occurrence for ${id}`);
+        addSource(pair.read.stop_gradient === true, pair.writer.node, pair.writer);
+      }
+      if (pairs.length === 1 && pairs[0]?.read?.stop_gradient !== true)
+        addSource(false, undefined, undefined); // exact historical id-only source form
+    } else addSource(false, undefined, undefined);
   }
   const native = nativeSourceView(record as Record<string, unknown>, messages, target, sourceTarget,
     pieces, sourceMessagesSha256, sourceTargetSha256, externalSources, selectedRuntimeResultWrites,

@@ -523,7 +523,9 @@ function attestSnapshotBody(site: Dict, code: string, span: { start: number; end
     body_source_sha256: bodyHash, captures: bindingRows, parent_invocation_id: stringAt(asDict(parent.source_ref), 'invocation_id') ?? '',
     parent_scope_sha256: parentScopeDigest, child_scope_sha256: childScopeDigest };
   if (!plan.parent_invocation_id) return { valid: false, reason: 'capture-parent-invocation-missing' };
-  if (bodyId ? !bodyInChildInstructions(child, bodyId) : !openingText(child)?.includes(bodySource.endsWith('\n') ? bodySource : `${bodySource}\n`))
+  if (bodyId ? !bodyInChildInstructions(child, bodyId, site.soft_body_stop_gradient === true,
+    typeof site.soft_body_source_occurrence === 'string' ? site.soft_body_source_occurrence : undefined) :
+    !openingText(child)?.includes(bodySource.endsWith('\n') ? bodySource : `${bodySource}\n`))
     return { valid: false, reason: 'instruction-body-not-visible-in-child' };
   return { valid: true, plan, bodySource, bodyCodeSource };
 }
@@ -606,7 +608,7 @@ function childScopeDeclarations(row: Row): string {
   return '';
 }
 
-function bodyInChildInstructions(row: Row, id: string): boolean {
+function bodyInChildInstructions(row: Row, id: string, stopGradient = false, sourceOccurrence?: string): boolean {
   const opening = (row.messages ?? []).map(asDict).find(item => item?.role === 'user');
   if (!opening) return false;
   const content = opening.content;
@@ -621,9 +623,14 @@ function bodyInChildInstructions(row: Row, id: string): boolean {
   const tail = parts.slice(marker + 'Instructions:\n'.length);
   const boundary = /\n\n(?:In eval\b|Eval also\b)/.exec(tail);
   const section = boundary ? tail.slice(0, boundary.index + 1) : '';
-  const occurrences = !!section ? [...section.matchAll(/(nzs1_[a-z2-7]{52})(?:!)?(?:@[^]+)?/g)]
+  const occurrences = !!section ? [...section.matchAll(/(nzs1_[a-z2-7]{52})(!)?(?:@([^]+))?/g)]
     .filter(match => match[1] === id) : [];
-  return occurrences.length === 1;
+  if (occurrences.length !== 1) return false;
+  const match = occurrences[0]!;
+  let occurrence: string | undefined;
+  try { occurrence = match[3] === undefined ? undefined : decodeURIComponent(match[3]); }
+  catch { return false; }
+  return (match[2] === '!' ) === stopGradient && occurrence === sourceOccurrence;
 }
 
 function openingText(row: Row): string | undefined {

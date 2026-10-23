@@ -125,6 +125,7 @@ test('the converter selects a modern result receipt but excludes the same action
     schema: 'natlang.typed-result-write/1', trajectory_id: 'boundary-run', source_row_sha256: 'row-sha',
     invocation_id: 'call-1', writer_call_id: 'call-1', writer_node: 'call-1#9',
     block_id: `nzs1_${'a'.repeat(52)}`, source_kind: 'typed-text-result', source: 'return_result',
+    source_occurrence: 'call-1#9',
     result_type: 'Neuralese<string>', marker_context: 'return-result', result_path: ['return'],
     body_source: body, body_sha256: bodySha, body_source_basis: 'exact-raw-model-result-string',
     request_sha256: 'b'.repeat(64), raw_response_sha256: 'c'.repeat(64),
@@ -154,6 +155,7 @@ test('the converter selects a modern result receipt but excludes the same action
   assert.equal(selected.neuralese_conversion.selected_runtime_result_writes[0].block_id, resultReceipt.block_id);
 
   const historicalReceipt = { ...resultReceipt, block_id: `nz1_${'h'.repeat(32)}` };
+  delete historicalReceipt.source_occurrence;
   const historical = convertTrajectory(makeRow(historicalReceipt)).record;
   const historicalOccurrence = historical.native_source_conversion.occurrences.find(item => item.role === 'producer');
   assert.ok(historicalOccurrence, 'the exact frozen source reader remains usable during current conversion');

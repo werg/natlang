@@ -6,12 +6,14 @@ import { pathToFileURL } from 'node:url';
 import { test } from 'node:test';
 
 const dist = process.env.NATLANG_TEST_DIST ? resolve(process.env.NATLANG_TEST_DIST) : resolve('dist');
-const [decisionReview, materializer] = await Promise.all([
+const [decisionReview, materializer, converter] = await Promise.all([
   import(pathToFileURL(join(dist, 'native/decision-review.js'))),
   import(pathToFileURL(join(dist, 'teacher/native-materializer.js'))),
+  import(pathToFileURL(join(dist, 'compiler/neuralese-conversion.js'))),
 ]);
 const { nativeDecisionTargetDigest } = decisionReview;
 const { markAuthoredStaticReferencePending, materializeNativeRows, nativeRowDigest } = materializer;
+const { convertTrajectory } = converter;
 const canonical = value => Array.isArray(value) ? `[${value.map(canonical).join(',')}]` :
   value && typeof value === 'object' ? `{${Object.entries(value).sort(([a], [b]) => a.localeCompare(b))
     .map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`).join(',')}}` : JSON.stringify(value);
@@ -1563,6 +1565,47 @@ test('materialization preserves same-call provider-expanded read provenance with
     assert.equal(item.qualification_certificate, false);
     assert.equal(item.training_admission, false);
   }
+
+  const nativeRepeated = structuredClone(row);
+  const nativeNoteId = `nzs1_${'n'.repeat(52)}`;
+  const nativeBlock = { ...noteBlock, id: nativeNoteId };
+  const firstWriter = 'producer-call#5', secondWriter = 'producer-call#9';
+  nativeRepeated.trajectory[0].context = [system, { ...opening, content: [
+    { type: 'text', text: opening.content },
+    { type: 'native_state', id: nativeNoteId, source_occurrence: firstWriter },
+    { type: 'native_state', id: nativeNoteId, stop_gradient: true, source_occurrence: secondWriter },
+  ] }];
+  nativeRepeated.trajectory[0].model_response.transport_provenance.expanded_input_blocks = [functionBlock, nativeBlock];
+  nativeRepeated.outcome.execution_graph = [
+    { kind: 'invocation', phase: 'start', seq: 1, call_id: invocation,
+      definition: { id: `nz-fn:${functionId}` }, signature: '(v: Neuralese<string>) => string' },
+    ...[firstWriter, secondWriter].map((node, index) => ({ kind: 'block_write', seq: 2 + index,
+      call_id: `producer-call-${index + 1}`, turn: `${node}-turn`, block: nativeNoteId, node,
+      producer: 'native-state-producer', format: 'native-state', source_kind: 'native-state-producer',
+      learned_vectors: false, native_identity: { architecture: 'fixture' }, result_type: nativeBlock.type,
+      text_body_sha256: nativeBlock.body_sha256, truncated: false })),
+    { kind: 'block_read', seq: 4, call_id: invocation, block: functionId, node: `${invocation}#6` },
+    { kind: 'block_read', seq: 5, call_id: invocation, block: nativeNoteId, node: `${invocation}#7`,
+      inputs: [{ node: firstWriter, block: nativeNoteId, port: 'block' }] },
+    { kind: 'block_read', seq: 6, call_id: invocation, block: nativeNoteId, node: `${invocation}#8`, stop_gradient: true,
+      inputs: [{ node: secondWriter, block: nativeNoteId, port: 'block' }] },
+    { kind: 'model_turn', seq: 7, call_id: invocation, turn: 1, calls: ['write'], node: `${invocation}#turn1`, inputs: [
+      { node: `${invocation}#6`, port: 'read', block: functionId },
+      { node: `${invocation}#7`, port: 'read', block: nativeNoteId },
+      { node: `${invocation}#8`, port: 'read', block: nativeNoteId }] },
+  ];
+  const nativeTurn = materializeNativeRows([nativeRepeated]).turns[0];
+  assert.ok(nativeTurn, 'current native-state read receipts survive materialization');
+  const nativeConverted = convertTrajectory(nativeTurn).record;
+  const nativeConsumers = nativeConverted.native_source_conversion.occurrences.filter(item => item.role === 'consumer' &&
+    item.body === noteBody && item.source_kind === 'authenticated-provider-context');
+  assert.equal(nativeConsumers.length, 2);
+  assert.deepEqual(nativeConsumers.map(item => [item.source_occurrence, item.stop_gradient]).sort(), [
+    [firstWriter, undefined], [secondWriter, true],
+  ].sort());
+  assert.notEqual(nativeConsumers[0].reference, nativeConsumers[1].reference,
+    'equal state IDs retain distinct authenticated writer occurrences');
+
   const corrupt = structuredClone(row);
   corrupt.trajectory[0].model_response.transport_provenance.expanded_input_blocks[1].body_sha256 = 'f'.repeat(64);
   const corruptReceipt = materializeNativeRows([corrupt]).turns[0].source_ref.provider_expanded_read_contexts;
@@ -1790,5 +1833,49 @@ test('links structured Neuralese value returns using exact declared type and cap
     const checked = materializeNativeRows([row], { directAnswers: true });
     assert.equal(checked.acceptedRows, 0, `structured-value corruption ${index}`);
     assert.equal(checked.turns.length, 0);
+  }
+});
+
+test('native structured returns bind metadata across model action, host capture, and the exact writer', () => {
+  const id = `nzs1_${'q'.repeat(52)}`;
+  const writer = `${softCallId}#6`;
+  const make = () => {
+    const row = softReturnRow('native-structured-value-return');
+    row.outcome.execution_graph[1].block = id;
+    row.outcome.execution_graph[1].node = writer;
+    row.outcome.execution_graph[1].result_type = 'Neuralese<string>';
+    row.outcome.execution_graph[1].truncated = false;
+    row.outcome.execution_graph[1].marker_context = 'return-result';
+    row.outcome.execution_graph[1].text_body_sha256 = createHash('sha256')
+      .update(softMarker.slice('<|neuralese|>'.length, -'<|/neuralese|>'.length)).digest('hex');
+    const action = row.outcome.action_ledger[0];
+    action.tool_call_id = 'native-structured-return-call';
+    action.arguments.value = [{ type: 'native_state', id, source_occurrence: writer }];
+    const step = row.trajectory[0];
+    step.assistant.calls[0].arguments.value = softMarker;
+    step.model_response.raw_calls[0].id = action.tool_call_id;
+    step.model_response.raw_calls[0].function.arguments = JSON.stringify(step.assistant.calls[0].arguments);
+    const host = row.outcome.invocation_ledger[0].host_result;
+    host.value.$neuralese = { type: 'Neuralese<string>', id, source_occurrence: writer };
+    host.value_sha256 = createHash('sha256').update(JSON.stringify(host.value)).digest('hex');
+    return row;
+  };
+  const accepted = materializeNativeRows([make()], { directAnswers: true });
+  assert.equal(accepted.acceptedRows, 1);
+  assert.equal(accepted.unlinked.length, 0);
+
+  const mutations = [
+    row => { row.outcome.action_ledger[0].arguments.value[0].source_occurrence = `${softCallId}#999`; },
+    row => { row.outcome.invocation_ledger[0].host_result.value.$neuralese.source_occurrence = `${softCallId}#999`;
+      row.outcome.invocation_ledger[0].host_result.value_sha256 = createHash('sha256')
+        .update(JSON.stringify(row.outcome.invocation_ledger[0].host_result.value)).digest('hex'); },
+    row => { row.outcome.action_ledger[0].arguments.value[0].stop_gradient = true; },
+    row => { row.outcome.execution_graph[1].node = `${softCallId}#999`; },
+  ];
+  for (const [index, mutate] of mutations.entries()) {
+    const row = make(); mutate(row);
+    const result = materializeNativeRows([row], { directAnswers: true });
+    assert.equal(result.acceptedRows, 0, `native metadata mismatch ${index} must not link`);
+    assert.equal(result.turns.length, 0);
   }
 });
