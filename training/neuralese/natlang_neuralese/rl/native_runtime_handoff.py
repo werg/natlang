@@ -579,6 +579,39 @@ def configure_runtime_handoff(plan_path,declaration,bootstrap,config_path,*,veri
         return _configure_runtime_handoff(plan_path,declaration,bootstrap,config_path,verified_handoff=verified_handoff)
 
 
+def _resident_recipe_ancestry(adopted, transition, proof, declaration, cursor):
+    """Authenticate a resident history rebased by a completed zero-update retry.
+
+    Retry installs its genuinely verified future recipe as a new resident root.
+    Its durable no-credit receipt bridges the previous runtime recipe; it does
+    not grant training credit or authorize changing any current model state.
+    """
+    from ..train.recipe import recipe_identity_sha256
+    history = [adopted['payload']['prior_recipe']['sha256'],
+               *[item['recipe']['sha256'] for item in adopted['history']]]
+    if recipe_identity_sha256(_bound(transition['recipe'])) in history:
+        return True
+    reference = declaration.get('failed_supervised_retry')
+    if reference is None:
+        return False
+    if isinstance(reference, str):
+        reference = binding(reference)
+    from .native_failed_supervised_retry import verify_release
+    release = verify_release(reference, declaration)
+    receipt = _read(reference)
+    expected = {'receipt': reference, 'stage_id': receipt['stage_id'],
+                'checkpoint': receipt['checkpoint'], 'training_credit': 0,
+                'readiness_granted': False}
+    if expected not in (cursor.get('failed_supervised_retry_history') or []):
+        return False
+    intent = _read(receipt['intent'])
+    predecessor = _read(intent['snapshots']['config'])
+    return (release['prior_runtime_handoff'] == declaration.get('runtime_handoff')
+            and release['recipe_lineage_sha256'] == proof['lineage']
+            and release['recipe_sha256'] in history
+            and binding(predecessor['production_recipe']) == transition['recipe'])
+
+
 def _configure_runtime_handoff(plan_path,declaration,bootstrap,config_path,*,verified_handoff=None):
     """Rebind invocation metadata; never republish a parent or rewrite a cursor."""
     reference=declaration['runtime_handoff'];proof=verify_runtime_handoff(reference,bootstrap=bootstrap,verified_handoff=verified_handoff)
@@ -615,7 +648,8 @@ def _configure_runtime_handoff(plan_path,declaration,bootstrap,config_path,*,ver
         adopted=current(_bound(resident_reference).parent) if resident_reference else None
         if (not adopted or binding(config['production_recipe'])['sha256']!=adopted['payload']['recipe']['file_sha256']
                 or adopted['payload']['plan']['recipe_sha256']!=proof['lineage']
-                or recipe_identity_sha256(_bound(transition['recipe'])) not in [adopted['payload']['prior_recipe']['sha256'],*[item['recipe']['sha256'] for item in adopted['history']]]):
+                or not _resident_recipe_ancestry(adopted, transition, proof, declaration,
+                    json.loads(Path(proof['sources']['cursor']['path']).read_text()))):
             raise ValueError('runtime handoff later recipe lacks its actual resident adoption history')
     if not already:
         config.update(production_recipe=transition['recipe']['path'],seed_native_graphs=inputs['native_graphs']['path'],
