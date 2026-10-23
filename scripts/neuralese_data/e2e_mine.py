@@ -157,7 +157,7 @@ def target_text(row):
 
 
 def convert_shard(shard: Path, tokenizer, preconverted_pieces=None):
-    from natlang_neuralese.train.trajectories import authenticated_recurrence_context_view
+    from natlang_neuralese.data.trajectory_text import authenticated_recurrence_context_view
     stem = shard.with_suffix('')
     omissions = []
     if preconverted_pieces:
@@ -224,7 +224,7 @@ def unresolved_authentication_trajectories(records, omissions):
 
 
 def derive(stem, records, pieces, conversion, omissions, tokenizer):
-    from natlang_neuralese.train.trajectories import authenticated_recurrence_context_view
+    from natlang_neuralese.data.trajectory_text import authenticated_recurrence_context_view
     # Producer->consumer edges never cross trajectories, and writer names (handover:<note sha>, result:...) are unique
     # only within one: authenticate each trajectory on its own, so one trajectory's failure is registered alone.
     groups = collections.defaultdict(list)
@@ -375,7 +375,7 @@ def repair_legacy_edge_metadata(records, pieces, edges):
                 if not edge.get('write_name') or not edge.get('body_sha256')}
     if not affected:
         return edges, None
-    from natlang_neuralese.train.trajectories import authenticated_recurrence_context_view
+    from natlang_neuralese.data.trajectory_text import authenticated_recurrence_context_view
     groups = collections.defaultdict(list)
     for row in records:
         if trajectory_of(row) in affected:
@@ -658,7 +658,7 @@ def cmd_slice(a):
     family; test chains up to --test-records endpoint records, train chains up to --train-records; a chain whose
     writer name already occurs is left for another slice.
     """
-    from natlang_neuralese.train.trajectories import target_writes
+    from natlang_neuralese.data.trajectory_text import target_writes
     src = Path(a.source) if '/' in a.source else Path(resolve_str('data_nvme', 'natlang-corpora', a.source))
     chains = [json.loads(l) for l in read_lines(src / 'chains.jsonl')]
     ends = collections.defaultdict(set)
@@ -724,7 +724,7 @@ def cmd_partition(a):
     (so each part re-authenticates as one file); chains are dealt round-robin over families so every part is
     family-mixed. Parts: <ID>/part-NNN/{records,edges,chains}.jsonl, one shared pieces.jsonl, receipt.json.
     """
-    from natlang_neuralese.train.trajectories import target_writes
+    from natlang_neuralese.data.trajectory_text import target_writes
     src = Path(a.source) if '/' in a.source else Path(resolve_str('data_nvme', 'natlang-corpora', a.source))
     chains = [json.loads(l) for l in read_lines(src / 'chains.jsonl')]
     index = {(c['source'], c['trajectory']): i for i, c in enumerate(chains)}

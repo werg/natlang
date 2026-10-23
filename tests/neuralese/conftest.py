@@ -32,7 +32,7 @@ def _isolate_stop_signal_handlers():
     """Put back SIGTERM/SIGINT handlers after each test. A trainer's ``main`` installs a StopSignal and leaves it in
     place when it returns, so after the first in-process trainer test the pytest process swallowed SIGTERM: a ledger
     preemption had to SIGKILL it after its grace (full check 724ece2f, 2026-10-13 00:09), and a SIGTERM landing in a
-    later trainer test stopped that run before its first update (text_warmup ``checkpointed_on_signal`` at step 0)."""
+    later trainer test stopped that run before its first update (checkpointed-on-signal at step 0)."""
     import signal
     saved = {sig: signal.getsignal(sig) for sig in (signal.SIGTERM, signal.SIGINT)}
     yield

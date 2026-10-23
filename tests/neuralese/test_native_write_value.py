@@ -58,7 +58,7 @@ def test_nested_unknown_write_boundary_keeps_structured_json():
 
 
 def test_concrete_json_writer_uses_unknown_serialization_family_without_losing_declared_type():
-    from natlang_neuralese.train.trajectories import native_writer_prefix, write_value_type
+    from natlang_neuralese.data.trajectory_text import native_writer_prefix, write_value_type
 
     declared_type = 'Neuralese<{ count: number, flag: boolean }>'
     body = '{"count":4,"flag":true}'

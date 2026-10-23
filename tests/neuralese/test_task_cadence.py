@@ -158,86 +158,6 @@ def _light_evaluator(spec, out):
     return evaluator
 
 
-def test_an_async_evaluation_is_submitted_from_a_weights_only_snapshot_and_lands_later(tmp_path, monkeypatch):
-    """Coordinator 2026-10-13: the trainer links its just-written slot, a child prunes it to weights only, training
-    goes on; the job restores the weights, appends the row with its step and deletes the snapshot."""
-    import json
-    import torch
-    from natlang_neuralese.eval import task_cadence
-    spec = parse_task_eval({'packet': {'path': 'p', 'sha256': 's'}, 'cases': [0], 'noise_repeats': 1,
-                            'async': True})
-    evaluator = _light_evaluator(spec, tmp_path)
-    monkeypatch.setattr(task_cadence, 'request_queue', lambda: tmp_path / 'queue')
-    monkeypatch.setenv('NATLANG_CHECKPOINT_OFFLOAD_HDD_FLOOR_GB', '0')
-    slot = tmp_path / 'checkpoint.pt'
-    torch.save({'schema': 'natlang.neuralese-direct/1', 'step': 40,
-                'student_parameters': {'backbone.w': torch.ones(2)},
-                'optimizer': {'state': {'m': torch.zeros(2)}}}, slot)
-    pending = evaluator.submit(40, slot, heads='heads.pt', device='cpu')
-    assert pending['pending'] is True and pending['eligible'] is None
-    request_dir = tmp_path / 'task-eval' / 'async' / 'step-0000040'
-    for thread in __import__('threading').enumerate():
-        if thread.name.startswith('task-eval-prune'):
-            thread.join(60)
-    weights = torch.load(request_dir / 'weights.pt', weights_only=False)
-    assert 'optimizer' not in weights and weights['optimizer_pruned'] is True
-    assert not (request_dir / 'full.pt').exists()
-    torch.save({'step': 41}, tmp_path / 'next.pt')
-    (tmp_path / 'next.pt').replace(slot)  # the next rolling write never touches the snapshot
-    assert task_cadence.pending_requests(tmp_path) == [request_dir]
-    assert [json.loads(p.read_text())['request'] for p in (tmp_path / 'queue').iterdir()] == [str(request_dir)]
-
-    monkeypatch.setattr(task_cadence.TaskEval, '__init__',
-                        lambda self, spec, out, engine, prompt_rendering:
-                        self.__dict__.update(_light_evaluator(spec, out).__dict__))
-    seen = {}
-
-    def execute(self, run):
-        run.mkdir(parents=True, exist_ok=True)
-        seen['engine'] = self.engine
-        return {'task_successes': 3, 'task_success_rate': 3 / 16, 'complete': True, 'cases': [],
-                'cases_expected': 1, 'outcome_counts': {'task_success': 1, 'infrastructure_error': 0,
-                                                        'unresolved': 0}}, [0]
-    monkeypatch.setattr(task_cadence.TaskEval, '_execute', execute)
-    summary = task_cadence.run_request(request_dir, engine_factory=lambda request: ('engine', request['heads']))
-    assert seen['engine'] == ('engine', 'heads.pt') and summary['step'] == 40 and summary['eligible'] is True
-    assert not request_dir.exists() and task_cadence.pending_requests(tmp_path) == []
-    rows = [json.loads(line) for line in (tmp_path / 'task-eval.jsonl').read_text().splitlines()]
-    assert [(r['step'], r['task_successes']) for r in rows] == [(40, 3)]
-    # A requeued job after the row landed only cleans up.
-    request_dir.mkdir(parents=True)
-    (request_dir / 'request.json').write_text(json.dumps({'step': 40, 'spec': spec, 'stage_out': str(tmp_path),
-                                                          'prompt_rendering': 'full'}))
-    assert task_cadence.run_request(request_dir)['task_successes'] == 3 and not request_dir.exists()
-
-
-def test_a_failed_async_job_is_an_ineligible_row_and_pending_ones_are_no_failure(tmp_path, monkeypatch):
-    import json
-    from natlang_neuralese.eval import task_cadence
-    spec = parse_task_eval({'packet': {'path': 'p', 'sha256': 's'}, 'cases': [0], 'async': True,
-                            'max_consecutive_failures': 2})
-    evaluator = _light_evaluator(spec, tmp_path)
-    monkeypatch.setattr(task_cadence, 'request_queue', lambda: tmp_path / 'queue')
-    request_dir = tmp_path / 'task-eval' / 'async' / 'step-0000010'
-    request_dir.mkdir(parents=True)
-    (request_dir / 'request.json').write_text(json.dumps({'step': 10, 'spec': spec, 'stage_out': str(tmp_path),
-                                                          'prompt_rendering': 'full'}))
-    monkeypatch.setattr(task_cadence.TaskEval, '__init__',
-                        lambda self, spec, out, engine, prompt_rendering:
-                        self.__dict__.update(_light_evaluator(spec, out).__dict__))
-    summary = task_cadence.run_request(request_dir)  # no snapshot: recorded, not raised
-    assert summary['eligible'] is False and 'FileNotFoundError' in summary['error'] and not request_dir.exists()
-    assert evaluator.consecutive_failures() == 1
-    slot = tmp_path / 'checkpoint.pt'
-    slot.write_bytes(b'x')
-    monkeypatch.setattr(task_cadence, 'prune_snapshot', lambda d: None)
-    monkeypatch.setattr(task_cadence.threading, 'Thread', lambda **k: type('T', (), {'start': lambda s: None})())
-    assert evaluator.submit(20, slot, heads=None)['pending'] is True  # one landed failure, one pending: continues
-    evaluator.record_failure(20, 'job ended without a result')
-    with pytest.raises(RuntimeError, match='2 times in a row'):
-        evaluator.submit(30, slot, heads=None)
-
-
 def test_the_dispatcher_finds_requests_through_the_queue_pointers(tmp_path, monkeypatch):
     import importlib.util
     import json
@@ -256,34 +176,6 @@ def test_the_dispatcher_finds_requests_through_the_queue_pointers(tmp_path, monk
     assert sorted(p.name for p in queue.iterdir()) == ['a-step-0000400.json']  # landed requests drop their pointer
     (request_dir / 'weights.pt').write_bytes(b'\0' * 2**20)
     assert dispatch.budget_gb(request_dir) == round(2**20 / 2**30 * 1.3 + 8, 1)
-
-
-def test_pending_requests_are_capped_and_a_full_mirror_skips_without_failing(tmp_path, monkeypatch):
-    """Coordinator 2026-10-13 (ENOSPC lesson): at most max_pending unlanded snapshots per stage, older ones dropped
-    as superseded; no snapshot below the mirror's floor. Neither counts as a failed evaluation."""
-    import json
-    from natlang_neuralese.eval import task_cadence
-    from natlang_neuralese.train import checkpoint_offload
-    spec = parse_task_eval({'packet': {'path': 'p', 'sha256': 's'}, 'cases': [0], 'async': True,
-                            'max_consecutive_failures': 1})
-    evaluator = _light_evaluator(spec, tmp_path)
-    monkeypatch.setattr(task_cadence, 'request_queue', lambda: tmp_path / 'queue')
-    monkeypatch.setattr(task_cadence.threading, 'Thread', lambda **k: type('T', (), {'start': lambda s: None})())
-    slot = tmp_path / 'checkpoint.pt'
-    slot.write_bytes(b'x' * 1000)
-    for step in (100, 200, 300):
-        evaluator.submit(step, slot, heads=None)  # max_consecutive_failures 1: a superseded row must not raise
-    assert [p.name for p in task_cadence.pending_requests(tmp_path)] == ['step-0000200', 'step-0000300']
-    rows = [json.loads(line) for line in (tmp_path / 'task-eval.jsonl').read_text().splitlines()]
-    assert [(r['step'], r['superseded']) for r in rows] == [(100, True)] and evaluator.consecutive_failures() == 0
-    floor = checkpoint_offload.OffloadSettings(hdd_floor_bytes=10**18)
-    monkeypatch.setattr(checkpoint_offload.OffloadSettings, 'from_env', classmethod(lambda cls: floor))
-    request_dir = tmp_path / 'task-eval' / 'async' / 'step-0000300'
-    evaluator._prune_in_background(request_dir)
-    assert not request_dir.exists()
-    last = json.loads((tmp_path / 'task-eval.jsonl').read_text().splitlines()[-1])
-    assert last['step'] == 300 and last['skipped'] is True and 'floor' in last['error']
-    assert evaluator.consecutive_failures() == 0
 
 
 def test_partial_diagnostic_preserves_runtime_counter_and_unqualified_score(tmp_path):
@@ -350,20 +242,6 @@ def test_explicit_report_keeps_routine_failures_unscored_and_final_strict(tmp_pa
     with pytest.raises(RuntimeError, match='times in a row'):
         evaluator.cadence(3000, final=True)
     assert evaluator.consecutive_failures() == 3
-
-
-def test_explicit_report_async_submit_preserves_failed_result_counter(tmp_path, monkeypatch):
-    from natlang_neuralese.eval import task_cadence
-    spec = parse_task_eval({'packet': {'path': 'p', 'sha256': 's'}, 'cases': [0], 'async': True,
-                            'runtime_failure_policy': 'report', 'max_consecutive_failures': 1})
-    evaluator = _light_evaluator(spec, tmp_path)
-    monkeypatch.setattr(task_cadence, 'request_queue', lambda: tmp_path/'queue')
-    monkeypatch.setattr(evaluator, '_prune_in_background', lambda request: None)
-    monkeypatch.setattr(task_cadence.threading, 'Thread', lambda **kw: type('Thread', (), {'start': lambda self: None})())
-    slot = tmp_path/'checkpoint.pt'; slot.write_bytes(b'actual snapshot')
-    evaluator.record_failure(10, 'collector broken')
-    assert evaluator.submit(20, slot, heads=None)['pending'] is True
-    assert evaluator.consecutive_failures() == 1
 
 
 def test_legacy_partial_policy_uses_observed_count_without_creating_score(tmp_path):

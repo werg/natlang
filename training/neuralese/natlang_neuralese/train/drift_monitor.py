@@ -101,9 +101,14 @@ def setup_monitor(monitor, out: Path, hf, tokenizer, *, behaviour=None, gate_hel
 
 
 def drift_level(drift, a) -> str:
-    """The drift guard's level on a ``behaviour_drift`` report (``text_warmup.behaviour_drift_level``)."""
-    from .text_warmup import behaviour_drift_level
-    return behaviour_drift_level(drift, a)
+    """Report base-relative behavior change without turning it into a capability stop condition."""
+    kl = drift.get('held_response_kl')
+    agreement = drift.get('held_response_agreement')
+    if ((bool(getattr(a, 'drift_warn', 0)) and kl is not None and kl > a.drift_warn) or
+            (bool(getattr(a, 'drift_agreement_warn', 0)) and agreement is not None and
+             agreement < a.drift_agreement_warn)):
+        return 'warn'
+    return 'ok'
 
 
 class DriftMonitor:

@@ -21,7 +21,7 @@ def tiny(extra=(), drop=(), seed=0):
 
 
 def build_port(named, vocab=VOCAB):
-    """Mirrors text_warmup: Muon + AdamW children, each split into a backbone-lr and a heads-lr group (4 groups)."""
+    """Build a split-rate optimizer over shared and task-specific parameter groups."""
     opt = PortMuonAdamW(list(named.items()), lr=1e-2, vocab_size=vocab)
     for child in (opt.muon, opt.auxiliary):
         if child is None:

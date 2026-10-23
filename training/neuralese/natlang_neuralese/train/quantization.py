@@ -599,26 +599,11 @@ def layer_sensitivity(model, windows, *, group, fmt, options=None, layer_count, 
 
 
 def main(argv=None):
-    """``sensitivity``: write a pinned per-layer probe for a ``layers.least_sensitive`` selection.
-
-        python -m natlang_neuralese.train.quantization sensitivity --heads HEADS.pt --text-data T.jsonl \
-            --group attention --format ternary --windows 8 --tokens 512 --out probe.json
-    """
+    """Run the native model's registered initialization gate."""
     import argparse
 
     parser = argparse.ArgumentParser(description=main.__doc__)
     sub = parser.add_subparsers(dest='command', required=True)
-    probe = sub.add_parser('sensitivity')
-    probe.add_argument('--heads', required=True, help='a port heads checkpoint naming the backbone')
-    probe.add_argument('--text-data', required=True, help='JSONL with a "text" field')
-    probe.add_argument('--group', choices=GROUPS, required=True)
-    probe.add_argument('--format', choices=FORMATS, required=True)
-    probe.add_argument('--option-group', type=int, default=None, help='int4 block (default 32)')
-    probe.add_argument('--nested-group', type=int, default=None, help='ternary over the int4 grid of this block')
-    probe.add_argument('--windows', type=int, default=8)
-    probe.add_argument('--tokens', type=int, default=512)
-    probe.add_argument('--device', default='cuda')
-    probe.add_argument('--out', type=Path, required=True)
     init = sub.add_parser('init-gate', help='decide a recipe init: registered latents at λ = 0 against BF16')
     init.add_argument('--model', required=True, help='the BF16 published model directory')
     init.add_argument('--recipe', type=Path, required=True, help='the recipe declaring init and quantization.gate')
@@ -627,33 +612,7 @@ def main(argv=None):
     init.add_argument('--device', default='cuda')
     init.add_argument('--out', type=Path, required=True)
     args = parser.parse_args(argv)
-    if args.command == 'init-gate':
-        return init_gate(args)
-    from ..serve import load_engine
-
-    engine = load_engine(heads_checkpoint=args.heads, device=args.device)
-    backbone = engine.backbone
-    windows, buffer = [], []
-    for line in open(args.text_data):
-        buffer += engine.tokenizer(json.loads(line)['text'], add_special_tokens=False).input_ids
-        while len(buffer) >= args.tokens and len(windows) < args.windows:
-            windows.append(buffer[:args.tokens])
-            buffer = buffer[args.tokens:]
-        if len(windows) >= args.windows:
-            break
-    options = {k: v for k, v in (('group', args.option_group), ('nested_group', args.nested_group)) if v}
-    spec = {'schema': SCHEMA, 'points': [{'name': 'probe', 'ramp': {'start': 0.0, 'end': 1.0},
-                                          'modules': {args.group: {'format': args.format, **options}}}]}
-    quantization = Quantization({**spec, 'stage': {'id': 'probe', 'progress': [1.0, 1.0], 'start': 0, 'end': 1}})
-    quantization.install(backbone.hf, layer_count=backbone.num_layers)
-    scores = layer_sensitivity(backbone.hf, windows, group=args.group, fmt=args.format, options=options,
-                               layer_count=backbone.num_layers)
-    args.out.write_text(json.dumps({'schema': 'natlang.neuralese-quant-sensitivity/1', 'heads': str(args.heads),
-                                    'text_data': str(args.text_data), 'group': args.group, 'format': args.format,
-                                    'options': options, 'windows': len(windows), 'tokens': args.tokens,
-                                    'metric': 'mean next-token KL(bf16 || one layer quantized)', 'layers': scores},
-                                   indent=1) + '\n')
-    print(json.dumps({'out': str(args.out), 'most_sensitive': sorted(scores, key=scores.get)[-3:]}))
+    return init_gate(args)
 
 
 

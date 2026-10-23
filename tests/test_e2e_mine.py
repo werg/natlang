@@ -350,7 +350,7 @@ def test_neuralese_reference_metadata_retains_two_edges_between_same_records(mon
     actual = module.edges_from_authenticated_decisions(rows, review['decisions'])
     assert [(edge['write_name'], edge['body_sha256']) for edge in actual] == [
         ('result:a', 'a' * 64), ('result:b', 'b' * 64)]
-    from natlang_neuralese.train import trajectories
+    from natlang_neuralese.data import trajectory_text as trajectories
     calls = []
     def authenticate(records, pieces):
         calls.append((records, pieces))
@@ -377,7 +377,7 @@ def test_neuralese_reference_metadata_retains_two_edges_between_same_records(mon
 def test_derive_does_not_keep_a_known_unresolved_writer_because_it_has_a_valid_outgoing_edge(tmp_path, monkeypatch):
     spec = importlib.util.spec_from_file_location('e2e_unresolved_writer', Path(__file__).parents[1] / 'scripts/neuralese_data/e2e_mine.py')
     module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
-    from natlang_neuralese.train import trajectories
+    from natlang_neuralese.data import trajectory_text as trajectories
     rows = [{'id': rid, 'split': 'train', 'source_ref': {'trajectory_id': 'chain'},
              'target': {'role': 'assistant', 'content': rid}} for rid in ['writer', 'reader']]
     review = {'excluded': [{'id': 'writer', 'reason': 'missing producer receipt'}],

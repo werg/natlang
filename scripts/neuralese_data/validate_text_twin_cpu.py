@@ -10,7 +10,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "training/neuralese"))
 from transformers import AutoTokenizer
 import transformers, torch
-from natlang_neuralese.train.text_warmup import load_text_rows
+from natlang_neuralese.data.native_text_rows import load_native_text_rows
 from natlang_neuralese.data.text_corpus import tokenizer_fingerprint
 
 from natlang_neuralese.common.hashing import sha256_file_hex as sha
@@ -36,7 +36,7 @@ ap.add_argument("--context", type=int, nargs="*", default=[7168, 31744])
 a = ap.parse_args()
 before = sha(a.twin)
 tok = AutoTokenizer.from_pretrained(a.tokenizer, local_files_only=True)
-rows, receipt = load_text_rows(None, None, a.twin, tokenizer=tok)
+rows, receipt = load_native_text_rows(None, None, a.twin, tokenizer=tok)
 fp = tokenizer_fingerprint(tok)
 src = [json.loads(l) for l in open(a.source)]
 counts = {s: sum(r["split"] == s for r in rows) for s in ("train", "test")}

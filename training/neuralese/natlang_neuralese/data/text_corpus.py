@@ -1496,8 +1496,8 @@ def _static_context_replacements(record, replacements, bodies, read_bodies, sour
 
 def authenticated_crisp_context_messages(record, piece_map, writer_sources, *, static_replacements=None, transformation_evidence=None, static_sources=None):
     """Render one native context using the same authenticated hydration as ordinary gold text."""
-    from ..train.trajectories import (authenticated_capture_context_augmentation, crisp_messages,
-                                      handover_notes, write_sites)
+    from .trajectory_text import (authenticated_capture_context_augmentation, crisp_messages,
+                                  handover_notes, write_sites)
 
     split = record.get("split")
     groups = sorted(set(g for g in (record.get("source_groups") or []) if isinstance(g, str) and g))
@@ -1748,7 +1748,7 @@ def gold_text_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping[str, st
                    writer_context_records: Iterable[Mapping[str, Any]] | None = None):
     """Return ``(rows, receipt, omissions, provenance)`` for renderer-qualified records.
 
-    Each row has the shared ``text_warmup.load_text_rows`` schema. Text is a
+    Each row has the shared ``native_text_rows.load_native_text_rows`` schema. Text is a
     native chat rendering of crisp messages plus the actual gold target,
     preserving roles and tool schemas/calls. Pretokenized IDs preserve the
     serving distinction between template structure and quoted content markers. Tool
@@ -1864,7 +1864,7 @@ def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_indepen
                     ordinary_text_admission_receipt=None,
                     ordinary_text_admission_receipt_sha256=None, prompt_rendering="full",
                     target_reasoning=False, include_token_offsets=False, tokenizer_sha256=None, static_derivations=None, writer_context_records=None):
-    from ..train.trajectories import crisp_messages, handover_notes
+    from .trajectory_text import crisp_messages, handover_notes
     from .prompt_rendering import PROMPT_RENDERINGS
     if prompt_rendering not in PROMPT_RENDERINGS:
         raise ValueError(f"unknown prompt_rendering {prompt_rendering!r} (declared: {PROMPT_RENDERINGS})")

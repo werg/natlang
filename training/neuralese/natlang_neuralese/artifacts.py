@@ -361,7 +361,7 @@ def register_run(run: Path, identity: str, *, backbone_revision: str | None = No
         raise ArtifactError(f"{run} does not record its backbone; register it with the CLI")
     return register_output(path, identity=identity, kind="prompt-bank", dialect=dialects[0],
                            backbone=backbone_identity(model, backbone_revision or backbone.get("revision")),
-                           trainer=trainer or summary.get("trainer") or "natlang_neuralese.train.trajectories",
+                           trainer=trainer or summary.get("trainer") or "unspecified",
                            commit=commit, corpora=corpora, parent=parent[0] if parent else None,
                            run=str(run.resolve()), notes=f"inputs not registered as corpora: "
                            f"{len(shas) - len(corpora_by_sha(shas, repo))} of {len(shas)}", repo=repo)

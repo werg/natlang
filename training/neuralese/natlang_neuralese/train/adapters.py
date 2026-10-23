@@ -247,6 +247,11 @@ def adapter_layers(backbone: PortBackbone) -> list[int]:
     return sorted({_layer_index(name) for name, _ in backbone.hf.named_parameters() if 'lora_' in name})
 
 
+def adapter_layer_indices(names) -> list[int]:
+    """Layer IDs represented by exact named adapter tensors, including nested hybrid-model paths."""
+    return sorted({_layer_index(name) for name in names})
+
+
 def _layer_index(name):
     marker = '.layers.'
     if marker not in name:

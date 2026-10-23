@@ -5,7 +5,7 @@ from natlang_neuralese.data.text_corpus import (authenticated_context_writer_sou
                                                 gold_text_preview_rows, gold_text_rows)
 from natlang_neuralese.data.context_refs import context_ref_count, typed_neuralese_ref_count
 from natlang_neuralese.train.write_sites import extract_write_sites
-from natlang_neuralese.train.trajectories import handover_notes, native_writer_prefix, producer_text_target
+from natlang_neuralese.data.trajectory_text import handover_notes, native_writer_prefix, producer_text_target
 
 
 def test_shared_context_occurrence_counter_matches_typed_marker_and_read_contract():

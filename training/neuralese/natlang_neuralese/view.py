@@ -13,9 +13,8 @@ the value, the reply and a small margin) is viewed in one write. A longer value 
 ("part i of n"), and a combine site, which reads the part views as blocks, writes the final view. Every write is the
 ordinary template write, so in training each one is differentiable and the view's readers train all of them.
 
-The servers (`POST /v1/neuralese/view`) and the trainer (`train.trajectories --view written`) both use this module's
-sites, template and `plan`, so what is trained is what runs; tests/fixtures/view-site.json pins the site (the runtime
-and the C++ server are checked against it too).
+The native server (`POST /v1/neuralese/view`) uses this module's view plan and instructions. Native graph training
+records the actual producer and consumer state positions; it does not replay this legacy block-writing path.
 
 The runtime's opening listing shows the view of each argument it would cut off, written for the receiving call
 (`listing_instructions`, ts-host native/prompt.ts `listingViewInstructions`), followed by `view_note`.

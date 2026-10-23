@@ -1,83 +1,13 @@
-"""Record cohorts for the trajectory trainer and the cohort assembler (no model loads)."""
+"""Provenance-pinned cohort assembly (no model loads)."""
 import hashlib
 import json
 import subprocess
 import sys
-from collections import Counter
 from pathlib import Path
 
-import pytest
 
-from natlang_neuralese.train.record_cohorts import RecordCohortSampler, record_cohort, trajectory_coverage
 
 REPO = Path(__file__).resolve().parents[2]
-
-
-def trajectory(prefix, turns):
-    """Records at the given turns of one synthetic trajectory (user, then assistant/tool pairs)."""
-    messages = [{'role': 'system', 'content': [{'type': 'soft', 'name': 'prompt:x'}]},
-                {'role': 'user', 'content': 'task ' + prefix}]
-    for i in range(max(turns) + 1):
-        messages += [{'role': 'assistant', 'content': f'{prefix} step {i}'}, {'role': 'tool', 'content': f'out {i}'}]
-    records = []
-    for turn in turns:
-        cut = 2 + 2 * turn
-        records.append({'id': f'{prefix}:{turn}', 'messages': messages[:cut], 'target': messages[cut],
-                        'split': 'train'})
-    return records
-
-
-def test_coverage_counts_only_replies_an_earlier_record_supervises():
-    records = trajectory('a', [0, 3, 4, 9]) + trajectory('b', [2])
-    coverage = trajectory_coverage(records)
-    # a:0 has no earlier record; a:3 continues a:0 (its prompt and target: one reply); a:4 continues a:3 (4 replies).
-    assert coverage == {'a:0': 0, 'a:3': 1, 'a:4': 4, 'a:9': 5, 'b:2': 0}
-    # Without the intermediate records nothing between them is assumed supervised.
-    assert trajectory_coverage([records[0], records[3]]) == {'a:0': 0, 'a:9': 1}
-    # A changed earlier message breaks the chain: no coverage is inferred.
-    changed = json.loads(json.dumps(records[2]))
-    changed['messages'][3]['content'] = 'edited'
-    assert trajectory_coverage([records[1], changed])[changed['id']] == 0
-
-
-def test_sampler_draws_cohorts_by_fraction_and_replays_by_cursor():
-    native = [{'id': f'n{i}', 'messages': [], 'target': {}} for i in range(30)]
-    harness = [{'id': f'h{i}', 'cohort': 'harness_bench', 'messages': [], 'target': {}} for i in range(5)]
-    sampler = RecordCohortSampler(native + harness, {'native': .75, 'harness_bench': .25}, seed=3)
-    draws = [sampler.record(cursor)['id'] for cursor in range(4000)]
-    share = sum(d.startswith('h') for d in draws) / len(draws)
-    assert abs(share - .25) < .03
-    assert Counter(d for d in draws if d.startswith('h')).keys() == {f'h{i}' for i in range(5)}
-    again = RecordCohortSampler(native + harness, {'native': .75, 'harness_bench': .25}, seed=3)
-    assert [again.record(c)['id'] for c in (17, 3999, 0)] == [draws[17], draws[3999], draws[0]]
-    assert RecordCohortSampler(native + harness, {'native': .75, 'harness_bench': .25}, seed=4).record(0) is not None
-    receipt = sampler.receipt()
-    assert receipt['documents'] == {'harness_bench': 5, 'native': 30} and receipt['admission_granted'] is False
-    with pytest.raises(ValueError):
-        RecordCohortSampler(native + harness, {'native': 1.}, seed=0)
-    with pytest.raises(ValueError):
-        record_cohort({'id': 'x', 'cohort': ''})
-
-
-def test_trajectory_trainer_accepts_the_declared_cohort_options():
-    from natlang_neuralese.train import trajectories
-    from natlang_neuralese.train.recipe import stage_parameter_args
-
-    # The harness cohort's trajectory-trainer options as the raw-recurrence recipes declared them.
-    declared = {'view': 'written', 'view_window': 4096, 'distill': 1.0, 'context_weight': 1.0,
-                'feedback_weight': 0.25, 'context_coverage': 'records',
-                'cohort_weights': {'native': 0.75, 'harness_bench': 0.25}, 'qualification_cohort': 'native'}
-    args = stage_parameter_args(declared)
-    out = subprocess.run([sys.executable, '-m', 'natlang_neuralese.train.trajectories', '--records', 'r', '--pieces',
-                          'p', '--out', 'o', '--inspect-training-config', *args],
-                         capture_output=True, text=True, check=True, cwd=REPO / 'training/neuralese').stdout
-    config = json.loads(out)
-    assert config['view'] == declared['view'] == 'written' and config['view_window'] == 4096
-    assert config['distill'] == 1.0 and config['context_weight'] == 1.0 and config['feedback_weight'] == .25
-    assert config['context_coverage'] == declared['context_coverage'] == 'records'
-    assert json.loads(config['cohort_weights']) == declared['cohort_weights']
-    assert config['qualification_cohort'] == 'native'
-    assert trajectories is not None
 
 
 def sha(path):

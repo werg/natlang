@@ -19,8 +19,8 @@ class Clock:
         return self.now
 
 
-def old_text_warmup_loop(start, total, stop_at=None, qualify_at=None):
-    """The text warm-up's loop as written inline: `for _ in range(step, steps): if stop[0]: break ...`."""
+def old_inline_loop(start, total, stop_at=None, qualify_at=None):
+    """Representative prior inline loop: stop requests land after an update; qualification ends at its boundary."""
     stop, step, ran = [False], start, []
     for _ in range(step, total):
         if stop[0]:
@@ -48,8 +48,8 @@ def old_trajectory_loop(start, total, stop_at=None, stopped_first=False):
 
 @pytest.mark.parametrize('start,total,stop_at,qualify_at', [
     (0, 5, None, None), (3, 5, None, None), (5, 5, None, None), (0, 6, 3, None), (0, 6, None, 4), (0, 6, 2, 2)])
-def test_text_warmup_style_loop_matches_the_inline_loop(start, total, stop_at, qualify_at):
-    expected, expected_stop = old_text_warmup_loop(start, total, stop_at, qualify_at)
+def test_training_loop_matches_inline_update_boundaries(start, total, stop_at, qualify_at):
+    expected, expected_stop = old_inline_loop(start, total, stop_at, qualify_at)
     stop, ran = StopSignal(), []
     loop = TrainingLoop(start, total, stop)
     for step in loop:

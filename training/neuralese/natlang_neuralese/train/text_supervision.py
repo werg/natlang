@@ -184,7 +184,7 @@ positions are all excluded has weight 0 everywhere.
 
 def segmented_position_weights(span, spans, *, roles=None, context_weight=1., feedback_weight=.25, exclude=None):
     """``balanced_position_weights`` for one window that holds several observed suffixes (a merged decision chain,
-    ``text_warmup.merge_prefix_rows``): ``spans`` are the window's ``[begin, end)`` suffix spans, sorted and disjoint.
+    ``spans`` are the window's ``[begin, end)`` suffix spans, sorted and disjoint.
 
     Each decision keeps the policy it had as its own document: the window is cut into segments at every suffix end
     (segment j runs from the previous suffix end to suffix j's end; positions after the last suffix are a context-only

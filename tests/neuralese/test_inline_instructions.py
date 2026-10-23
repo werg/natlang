@@ -343,7 +343,7 @@ def test_schema2_snapshot_uses_host_canonical_number_payload_without_python_refo
 
 
 def test_actual_trajectory_rendering_enumerates_all_writers_and_preserves_gold_producer_bodies():
-    from natlang_neuralese.train.trajectories import (render,handover_notes,write_site,
+    from natlang_neuralese.data.trajectory_text import (render,handover_notes,write_site,
         target_writes,inline_write_prefix,producer_text_target)
     _,raw,metadata=two_site_example()
     call={'id':'teacher_0_0','function':{'name':'eval','arguments':raw},'neuralese_code':metadata}
@@ -354,20 +354,16 @@ def test_actual_trajectory_rendering_enumerates_all_writers_and_preserves_gold_p
     assert write_site(selected)==('eval',{},'code','inline-site:b')
     assert inline_write_prefix(selected,'inline-site:b').endswith('const second = nl<boolean>`')
     assert handover_notes(record)=={'inline-site:a':'First prompt.','inline-site:b':'Second prompt.'}
-    blocks={'inline-site:a':'nz1_'+'a'*52,'inline-site:b':'nz1_'+'b'*52}
     crisp=render([target],lambda name:None,handover_notes(record))[0]
     assert crisp['tool_calls'][0]['function']['arguments']==raw
     assert 'neuralese_code' not in crisp['tool_calls'][0]
-    written=render([target],lambda name:None,handover_notes(record),blocks)[0]
-    code=json.loads(written['tool_calls'][0]['function']['arguments'])['code']
-    assert [part['id'] for part in code if part['type']=='neuralese']==list(blocks.values())
-    gold=producer_text_target(record,{},blocks)
+    gold=producer_text_target(record,{}, {})
     assert gold['tool_calls'][0]['function']['arguments']==raw
 
 
 def test_trajectory_sidecar_validation_never_renders_a_corrupted_partial_code():
     import pytest
-    from natlang_neuralese.train.trajectories import render,write_sites
+    from natlang_neuralese.data.trajectory_text import render,write_sites
     _,raw,metadata=two_site_example()
     metadata['code_sha256']='bad'
     target={'role':'assistant','tool_calls':[{'function':{'name':'eval','arguments':raw},'neuralese_code':metadata}]}
@@ -378,7 +374,7 @@ def test_trajectory_sidecar_validation_never_renders_a_corrupted_partial_code():
 
 
 def test_native_writer_prefix_stops_at_each_actual_body_in_native_argument_syntax():
-    from natlang_neuralese.train.trajectories import native_writer_prefix,inline_write_prefix
+    from natlang_neuralese.data.trajectory_text import native_writer_prefix,inline_write_prefix
     _,raw,metadata=two_site_example()
     record={'target':{'role':'assistant','tool_calls':[{'function':{'name':'eval','arguments':raw},'neuralese_code':metadata}]}}
     def template(messages,generate):
@@ -463,7 +459,7 @@ def test_schema3_capture_plan_authenticates_visible_preview_and_separate_snapsho
     capture['context_augmentation']={'mode':'authenticated-runtime-capture-snapshot',
                                      'value_sha256':capture['host_snapshot']['value_sha256']}
     assert validate_inline_instruction_code(raw,metadata).valid
-    from natlang_neuralese.train.trajectories import authenticated_capture_context_augmentation
+    from natlang_neuralese.data.trajectory_text import authenticated_capture_context_augmentation
     augmentation, augmentation_sha256 = authenticated_capture_context_augmentation(
         {'target':{'tool_calls':[{'id':'eval-call','function':{'name':'eval','arguments':raw},'neuralese_code':metadata}]}},
         'site')
