@@ -253,6 +253,9 @@ def test_real_collector_imports_written_state_from_tiny_shared_http_server(tmp_p
         checkpoint_sha256=identity['checkpoint_sha256'],
         embedding_weight_sha256=identity['embedding_weight_sha256'], device='cpu')
     engine.native_identity = identity
+    engine.rl_policy_binding = {'schema': 'natlang.rl-policy-binding/2',
+        'checkpoint_sha256': identity['checkpoint_sha256'], 'communication': 'native-state',
+        'native_identity': dict(identity)}
     engine.context = 8192
     monkeypatch.setattr(engine, '_native_token', lambda sequence: (2, -.1))
     engine.start()
@@ -260,10 +263,25 @@ def test_real_collector_imports_written_state_from_tiny_shared_http_server(tmp_p
     thread = threading.Thread(target=server.serve_forever, daemon=True); thread.start()
     try:
         url = f'http://127.0.0.1:{server.server_address[1]}'
+        assert memetic.actor_identity(url) == identity
+        info = memetic.request_json(url, '/v1/neuralese/info')
+        stale_info = json.loads(json.dumps(info))
+        stale_info['native_state']['checkpoint_sha256'] = '9' * 64
+        with pytest.raises(ValueError, match='consistent native RL policy'):
+            memetic.actor_identity(url, stale_info)
+        unbound_info = json.loads(json.dumps(info))
+        unbound_info['native_identity'] = identity
+        del unbound_info['rl_policy_binding']
+        with pytest.raises(ValueError, match='consistent native RL policy'):
+            memetic.actor_identity(url, unbound_info)
         written = memetic.write_state(url, 'guide', identity)
         task = {**case('one'), 'version': 'natlang.program/2', 'kind': 'lambda_source',
             'semantics': {'root': 'task.nl', 'files': {'task.nl': '---\nargs: {}\nreturns: "number"\n---\nReturn 1.\n'},
                           'inputs': {}, 'expected': 1}}
+        # The authored root calls the student in a child; a direct return would
+        # only replay reference code and never exercise the server.
+        task['curriculum']['reference']['root'][0][1]['code'] = (
+            'const f = nl<() => Promise<number>>`Return 1.`; return await f();')
         packet = tmp_path / 'packet.jsonl'; packet.write_text(json.dumps(task) + '\n')
         args = Namespace(out=tmp_path, rows=1, samples=2, shards=1, temperature=1.,
             case_seconds=40, max_model_requests=2, max_turns=2, seed_base=7,
@@ -274,6 +292,16 @@ def test_real_collector_imports_written_state_from_tiny_shared_http_server(tmp_p
         assert fit['rollouts'] == 2
         assert memetic.native_import_reached(tmp_path / 'evals/actual', written['id'])
         assert memetic.student_capture_reached(tmp_path / 'evals/actual', identity)
+        development, confirmation = tmp_path / 'dev.jsonl', tmp_path / 'confirmation.jsonl'
+        for path, ids in ((development, ('a', 'b')), (confirmation, ('c', 'd'))):
+            path.write_text(''.join(json.dumps({**task, 'id': name}) + '\n' for name in ids))
+        baseline = memetic.main(['--program-id', 'p', '--development', str(development),
+            '--confirmation', str(confirmation), '--out', str(tmp_path / 'memetic-baseline'),
+            '--server', url, '--model-id', 'lfm', '--baseline-only', '--samples', '2',
+            '--shards', '1', '--case-seconds', '40', '--max-model-requests', '2', '--max-turns', '2'])
+        assert baseline['status'] == 'baseline_complete'
+        assert baseline['student'] == identity
+        assert baseline['development']['scored'] == baseline['confirmation']['scored'] == 4
     finally:
         server.shutdown(); server.server_close(); engine.stop(); thread.join(timeout=5)
 
@@ -281,7 +309,9 @@ def test_real_collector_imports_written_state_from_tiny_shared_http_server(tmp_p
 def test_baseline_only_binds_student_and_continues_with_author(tmp_path, monkeypatch):
     actor = {'checkpoint_sha256': 'a' * 64, 'tokenizer_fingerprint': 'b' * 64,
              'embedding_weight_sha256': 'c' * 64, 'architecture': 'lfm2'}
-    student = {'native_identity': actor, 'native_state': {'enabled': True}}
+    student = {'native_state': {'enabled': True, **actor},
+        'rl_policy_binding': {'schema': 'natlang.rl-policy-binding/2', 'communication': 'native-state',
+                              'checkpoint_sha256': actor['checkpoint_sha256'], 'native_identity': dict(actor)}}
     monkeypatch.setattr(memetic, 'request_json', lambda *args, **kwargs: student)
     monkeypatch.setattr(memetic, 'local_runtime_binding', lambda: {'sha256': 'd' * 64})
     monkeypatch.setattr(memetic.runner, 'default_system_prompt', lambda: 'exact-system')
@@ -320,10 +350,15 @@ def test_baseline_only_binds_student_and_continues_with_author(tmp_path, monkeyp
     assert result['status'] == 'qualified'
     assert [name for name, _, _ in calls].count('write') == 1
     assert json.loads((tmp_path / 'run/binding.json').read_text())['unguided_baseline']['development']['successes'] == 0
-    student['native_identity'] = {**actor, 'checkpoint_sha256': '9'*64}
+    new_actor = {**actor, 'checkpoint_sha256': '9'*64}
+    student['rl_policy_binding']['native_identity'] = new_actor
+    student['rl_policy_binding']['checkpoint_sha256'] = new_actor['checkpoint_sha256']
+    student['native_state']['checkpoint_sha256'] = new_actor['checkpoint_sha256']
     with pytest.raises(ValueError, match='resume changed'):
         memetic.main([*common, '--baseline-only'])
-    student['native_identity'] = actor
+    student['rl_policy_binding']['native_identity'] = actor
+    student['rl_policy_binding']['checkpoint_sha256'] = actor['checkpoint_sha256']
+    student['native_state']['checkpoint_sha256'] = actor['checkpoint_sha256']
     with pytest.raises(ValueError, match='resume changed'):
         memetic.main([*common, '--baseline-only', '--max-turns', '21'])
     monkeypatch.setattr(memetic.runner, 'default_system_prompt', lambda: 'changed-system')
