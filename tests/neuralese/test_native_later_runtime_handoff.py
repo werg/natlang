@@ -164,7 +164,7 @@ def test_actor_command_environment_and_runtime_move_only_at_free_boundary(later,
     roots=[]
     for name in ('old-actor','new-actor'):
         root=tmp_path/name
-        entry=root/'scripts/neuralese_data/serve_direct_checkpoint.py'
+        entry=root/'scripts/neuralese_data/serve_native_checkpoint.py'
         entry.parent.mkdir(parents=True);entry.write_text('# '+name+'\n')
         package=root/'training/neuralese/natlang_neuralese';package.mkdir(parents=True)
         (package/'__init__.py').write_text('# '+name+'\n')
@@ -181,7 +181,7 @@ def test_actor_command_environment_and_runtime_move_only_at_free_boundary(later,
         x['config'],tmp_path/'actor-runtime-handoff.json')
     declaration=copy.deepcopy(x['declaration']);declaration.update(runtime_handoff=proof,actor_runtime=str(new_actor))
     declaration['commands']['actor_command']=['env','NATLANG_REPO='+str(old_actor),
-        'PYTHONPATH=stale-imports','python',str(old_actor/'scripts/neuralese_data/serve_direct_checkpoint.py')]
+        'PYTHONPATH=stale-imports','python',str(old_actor/'scripts/neuralese_data/serve_native_checkpoint.py')]
     original=copy.deepcopy(declaration);write(x['plan'],{'models':[declaration]})
     runtime.configure_runtime_handoff(x['plan'],declaration,x['bootstrap'],x['config'])
     actual=json.loads(x['config'].read_text())
@@ -193,7 +193,7 @@ def test_actor_command_environment_and_runtime_move_only_at_free_boundary(later,
         assert actual['actor_command']==config['actor_command']
         assert actual['cases']==config['cases'] and actual['runtime']==config['runtime']
     else:
-        assert actual['actor_command'][-1]==str(new_actor/'scripts/neuralese_data/serve_direct_checkpoint.py')
+        assert actual['actor_command'][-1]==str(new_actor/'scripts/neuralese_data/serve_native_checkpoint.py')
         assert 'NATLANG_REPO='+str(new_actor) in actual['actor_command']
         assert 'PYTHONPATH='+expected['actor_environment']['PYTHONPATH'] in actual['actor_command']
 
@@ -202,7 +202,7 @@ def test_actor_runtime_factory_requires_real_entry_and_python_inventory(tmp_path
     from natlang_neuralese.rl.production import actor_runtime_configuration
     with pytest.raises(ValueError,match='serving entry'):
         actor_runtime_configuration(tmp_path)
-    entry=tmp_path/'scripts/neuralese_data/serve_direct_checkpoint.py'
+    entry=tmp_path/'scripts/neuralese_data/serve_native_checkpoint.py'
     entry.parent.mkdir(parents=True);entry.write_text('# real entry\n')
     with pytest.raises(ValueError,match='no source inventory'):
         actor_runtime_configuration(tmp_path)

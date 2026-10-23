@@ -152,7 +152,7 @@ def test_actual_actor_cli_and_provider_consumed_closure(source,tmp_path,monkeypa
     engine,path,state,signature=source
     ref=write_actor_view(path,tmp_path/'views',validated_state=state,decoded_source_stat=signature)
     root=Path(__file__).parents[2]
-    spec=importlib.util.spec_from_file_location('real_actor_cli',root/'scripts/neuralese_data/serve_direct_checkpoint.py')
+    spec=importlib.util.spec_from_file_location('real_actor_cli',root/'scripts/neuralese_data/serve_native_checkpoint.py')
     cli=importlib.util.module_from_spec(spec);spec.loader.exec_module(cli)
     seen=[]
     def serve(actual,host,port):

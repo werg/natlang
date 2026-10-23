@@ -22,7 +22,7 @@ def test_native_actor_cli_restores_actual_checkpoint_and_exposes_exact_policy(tm
     torch.save({'schema': CHECKPOINT_SCHEMA, 'model_config': config, **model_state(model)}, checkpoint)
     digest = sha256_file_hex_cached(checkpoint)
     root = Path(__file__).resolve().parents[2]
-    argv = [sys.executable, str(root/'scripts/neuralese_data/serve_direct_checkpoint.py'),
+    argv = [sys.executable, str(root/'scripts/neuralese_data/serve_native_checkpoint.py'),
             '--checkpoint', str(checkpoint), '--checkpoint-sha256', digest,
             '--native-state', '--device', 'cpu', '--port', '0',
             '--store-dir', str(tmp_path/'actor-store')]

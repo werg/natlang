@@ -63,7 +63,7 @@ def _no_active_operation(root):
             args=[part.decode()for part in raw[:-1].split(b'\0')]
             critical=any(part in args for part in('natlang_neuralese.train.native_state_sft',
                 'natlang_neuralese.train.native_preference','natlang_neuralese.rl.native_stage')) or any(
-                    part.endswith(('/worker-entry.py','/serve_direct_checkpoint.py'))for part in args)
+                    part.endswith(('/worker-entry.py','/serve_native_checkpoint.py'))for part in args)
             if critical and any(part.startswith(str(root)+'/')for part in args):
                 raise ValueError('completed adaptation still has an actual operation owner')
         except (FileNotFoundError,ProcessLookupError,PermissionError):continue

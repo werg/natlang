@@ -300,7 +300,7 @@ def test_native_factory_retains_full_recipe_budget_and_uses_headless_actor(tmp_p
     monkeypatch.setattr(recipe,'resolve_stage_inputs',lambda *args:{'foundation_native_graphs':{'path':str(tmp_path/'exact-foundation')}})
     if separate_actor:
         actor = tmp_path/'actor-snapshot'
-        entry = actor/'scripts/neuralese_data/serve_direct_checkpoint.py'
+        entry = actor/'scripts/neuralese_data/serve_native_checkpoint.py'
         entry.parent.mkdir(parents=True); entry.write_text('# exact actor entry\n')
         package = actor/'training/neuralese/natlang_neuralese'
         package.mkdir(parents=True); (package/'__init__.py').write_text('# exact package\n')
