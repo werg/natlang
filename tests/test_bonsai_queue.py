@@ -651,6 +651,73 @@ def test_native_decode_observer_uses_actual_loopback_origin_only(monkeypatch):
     assert len(seen) == 1
 
 
+def test_repetition_guard_wakes_on_atomic_partial_progress_and_skips_unchanged_file(tmp_path, monkeypatch):
+    entry = queue_entry(tmp_path, key='rapid-repeat', max_turns=100)
+    queue_path, journal = tmp_path / 'queue.jsonl', tmp_path / 'journal.jsonl'
+    queue_path.write_text(json.dumps(entry) + '\n')
+    job = queue_module.resolve_entry_jobs(entry, TS_HOST)[0]
+    jobs = Path(entry['jobs']); jobs.mkdir(parents=True)
+    partial_path = jobs / f"{job['key']}.partial.json"
+
+    def repeated_turn(index):
+        return {'request_sha256': f'{index:064x}', 'invocation_id': 'actual-child',
+                'response': {'calls': [['eval', {'code': '2'}]], 'raw_response': {'sampled': True}},
+                'last_tool_observation': {'content_sha256': 'a' * 64}}
+
+    def publish(turns):
+        temp = partial_path.with_suffix('.tmp')
+        temp.write_text(json.dumps({'program_id': job['program_id'],
+            'provenance': {'program_ir_sha256': job['digest']}, 'turns': turns}))
+        os.replace(temp, partial_path)
+
+    publish([repeated_turn(0), repeated_turn(1)])
+    waits, checks, children = [], [], []
+    original_guard = queue_module.identical_turn_streak
+    def counted_guard(*args, **kwargs):
+        checks.append(1)
+        return original_guard(*args, **kwargs)
+    monkeypatch.setattr(queue_module, 'identical_turn_streak', counted_guard)
+
+    class Child:
+        def __init__(self, command, **kwargs):
+            self.command = command; self.terminated = False; self.reaped = False
+            self.wait_count = 0; children.append(self)
+        def wait(self, timeout=None):
+            self.wait_count += 1; waits.append(timeout)
+            if self.terminated:
+                self.reaped = True
+                return -15
+            assert timeout <= queue_module.REPETITION_GUARD_POLL_SECONDS
+            if self.wait_count == 1:
+                # Attach once to the already-present durable partial.
+                raise queue_module.subprocess.TimeoutExpired(self.command, timeout)
+            if self.wait_count == 2:
+                # The supervisor must not reread or re-evaluate an unchanged partial.
+                raise queue_module.subprocess.TimeoutExpired(self.command, timeout)
+            if self.wait_count == 3:
+                publish([repeated_turn(0), repeated_turn(1), repeated_turn(2)])
+                raise queue_module.subprocess.TimeoutExpired(self.command, timeout)
+            pytest.fail('the exact three-repeat guard should terminate before a fourth poll')
+        def terminate(self): self.terminated = True
+        def kill(self): pytest.fail('the owned child should terminate cooperatively')
+
+    install_child(monkeypatch, Child)
+    class Healthy:
+        status = 200
+        def __enter__(self): return self
+        def __exit__(self, *args): return False
+    monkeypatch.setattr(queue_module.urllib.request, 'urlopen', lambda *a, **k: Healthy())
+    assert run_queue(queue_path, journal, TS_HOST, seconds=60, identical_turn_limit=3) == 2
+    assert checks == [1, 1] and waits[:3] == [1.0, 1.0, 1.0]
+    assert children[0].terminated and children[0].reaped
+    events = [json.loads(line) for line in journal.read_text().splitlines()]
+    detected = next(row for row in events if row['event'] == 'repetition_detected')
+    finished = next(row for row in events if row['event'] == 'finish')
+    assert detected['limit'] == 3 and detected['saved_turns'] == 3
+    assert finished['status'] == 'repetition'
+    assert finished['resource_limit_reason'] == 'identical_turn_limit'
+
+
 def test_saved_authored_actions_are_not_counted_as_model_replies(tmp_path):
     entry = queue_entry(tmp_path, count=2)
     jobs = queue_module.resolve_entry_jobs(entry, TS_HOST)
