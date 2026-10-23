@@ -111,7 +111,7 @@ def test_binding_requires_actual_native_id_and_oracle_gain(tmp_path):
 
 
 def test_author_requires_exact_self_hosted_source_receipt(tmp_path):
-    from natlang_neuralese.rl import memetic_teacher_ferry as ferry
+    from natlang_neuralese.common import memetic_teacher_ferry as ferry
     path = tmp_path / 'teacher.json'
     receipt = {'schema': 'natlang.memetic-author-provenance/1',
         'model_id': ferry.TEACHER_MODEL_ID, 'serve_alias': ferry.TEACHER_SERVE_ALIAS,
