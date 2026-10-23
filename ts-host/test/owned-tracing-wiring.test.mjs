@@ -49,7 +49,7 @@ test('opt-in owned evaluator wiring replaces the per-call Node evaluator without
   }
 });
 
-test('owned dual-seam factory rejects missing capabilities or invalid mode',()=>{
+test('owned dual-seam factory rejects missing capabilities or invalid mode',async()=>{
   assert.throws(()=>installOwnedTracingEnvironment(null),/factory required/);
   const bad=createNatlangRuntime();
   try{
@@ -57,7 +57,7 @@ test('owned dual-seam factory rejects missing capabilities or invalid mode',()=>
       authority:'owned-training-js/1',mode:'retained',
       execute(){},executeAsync(){},evaluateModule(){},close(){},fork(){}
     }));
-    assert.rejects(bad.run(()=>currentFrame().task.environment()),/incompatible evaluator/);
+    await assert.rejects(bad.run(()=>currentFrame().task.environment()),/incompatible evaluator/);
   }finally{
     bad.close();
     setDefaultEnvironmentFactory(options=>new TypeScriptEnvironment({
