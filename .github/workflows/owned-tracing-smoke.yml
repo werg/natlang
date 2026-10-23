@@ -1,0 +1,29 @@
+name: Owned tracing evaluator integration
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: owned-tracer-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  traced-evaluator:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned natlang dependencies
+        run: npm ci
+      - name: Compile Node evaluator and type-check integrations
+        run: npm --workspace @natlang/typescript-host run build:node
+      - name: Verify owned evaluator factory wiring and module-realm cache invalidation
+        run: node --test ts-host/test/owned-tracing-wiring.test.mjs

@@ -29,6 +29,10 @@ jobs:
       - name: Install TypeScript dependencies
         # The workspace install: the staged npm packages resolve their dependencies from it too.
         run: npm ci
+      - name: Install callable-folder application dependencies
+        # applications/pi has its own lockfile and is not an npm workspace.
+        # The application compiler needs these exact dependencies.
+        run: npm --prefix applications/pi ci
       - name: Install ffmpeg for the media workbench tests
         run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends ffmpeg
       - name: Runtime, applications, and conformance tests
