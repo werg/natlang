@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from natlang_neuralese.rl import memetic_teacher_ferry as ferry
+from natlang_neuralese.common import memetic_teacher_ferry as ferry
 from scripts.coreweave import memetic_teacher_ferry as sdk_ferry
 
 

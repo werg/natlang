@@ -22,7 +22,7 @@ from ..common.jsonio import write_json_durable
 from ..common.runtime_inventory import python_runtime_binding, task_runtime_inventory
 from ..eval.task_packet import read_jsonl
 from . import memetic_task_runner as runner
-from . import memetic_teacher_ferry as teacher_ferry
+from ..common import memetic_teacher_ferry as teacher_ferry
 from .task_rollouts import authored_root_row
 
 STATE_ID = re.compile(r"nzs1_[a-z2-7]{52}\Z")
