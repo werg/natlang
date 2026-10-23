@@ -612,6 +612,20 @@ def _resident_recipe_ancestry(adopted, transition, proof, declaration, cursor):
             and binding(predecessor['production_recipe']) == transition['recipe'])
 
 
+def _current_adopted_resident_directory(config, resident_reference, adopted, lineage):
+    """Return only the namespace bound by the current recipe adoption."""
+    from pathlib import Path
+    current_directory=_bound(resident_reference).parent.resolve()
+    configured=config.get('resident_data_directory')
+    expected=(Path(config['production_recipe']).resolve().parent/'resident-data').resolve()
+    if (not isinstance(configured,str) or Path(configured).resolve()!=current_directory
+            or current_directory!=expected
+            or adopted['payload']['recipe']['file_sha256']!=binding(config['production_recipe'])['sha256']
+            or adopted['payload']['plan']['recipe_sha256']!=lineage):
+        raise ValueError('runtime handoff current recipe lost its authenticated resident namespace')
+    return current_directory
+
+
 def _configure_runtime_handoff(plan_path,declaration,bootstrap,config_path,*,verified_handoff=None):
     """Rebind invocation metadata; never republish a parent or rewrite a cursor."""
     reference=declaration['runtime_handoff'];proof=verify_runtime_handoff(reference,bootstrap=bootstrap,verified_handoff=verified_handoff)
@@ -640,6 +654,8 @@ def _configure_runtime_handoff(plan_path,declaration,bootstrap,config_path,*,ver
             if binding(proof['sources'][key]['path'])!=proof['sources'][key]:
                 raise ValueError('runtime handoff current operation changed before application')
     config=json.loads(json.dumps(prior if already else old))
+    adopted_current=None
+    adopted_directory=None
     if already and binding(config['production_recipe'])['sha256']!=transition['recipe']['sha256']:
         if bare:raise ValueError('bare runtime handoff current recipe changed without new authority')
         from ..train.native_resident import current
@@ -651,6 +667,13 @@ def _configure_runtime_handoff(plan_path,declaration,bootstrap,config_path,*,ver
                 or not _resident_recipe_ancestry(adopted, transition, proof, declaration,
                     json.loads(Path(proof['sources']['cursor']['path']).read_text()))):
             raise ValueError('runtime handoff later recipe lacks its actual resident adoption history')
+        # A retry/completed adaptation installs a new current resident root.
+        # The old drained handoff remains the ancestry proof, but it no longer
+        # owns the active source namespace. Bind the preserved current config
+        # to the authenticated resident root before continuation_config
+        # replaces trainer_parameters from the current recipe.
+        adopted_directory=_current_adopted_resident_directory(config,resident_reference,adopted,proof['lineage'])
+        adopted_current=adopted
     if not already:
         config.update(production_recipe=transition['recipe']['path'],seed_native_graphs=inputs['native_graphs']['path'],
             held_native_graphs=inputs['held_native_graphs']['path'])
@@ -667,12 +690,21 @@ def _configure_runtime_handoff(plan_path,declaration,bootstrap,config_path,*,ver
     config['seed_trainer_parameters']={**config['trainer_parameters'],'stage_id':stage_id,'refresh_at_checkpoint':True}
     record=_read(proof['handoff'])
     if not bare:
-        source_record=record
-        if not source_record.get('resident'):
-            # A later policy owner can carry the already verified SFT frame.
-            # Its genuine source-plan authority remains the original drain.
-            source_record=_read(transition['handoff'])
-        resident_directory=(source_record.get('resident') or {}).get('directory')
+        if adopted_current is not None:
+            # Reapplication after an authenticated adoption must continue from
+            # the current recipe's resident plan, not route back to the old
+            # runtime handoff's drained source directory.
+            resident_directory=str(adopted_directory)
+            if _current_adopted_resident_directory(config, resident_reference, adopted_current,
+                    proof['lineage'])!=adopted_directory:
+                raise ValueError('runtime handoff current resident plan changed during configuration')
+        else:
+            source_record=record
+            if not source_record.get('resident'):
+                # A later policy owner can carry the already verified SFT frame.
+                # Its genuine source-plan authority remains the original drain.
+                source_record=_read(transition['handoff'])
+            resident_directory=(source_record.get('resident') or {}).get('directory')
         if not isinstance(resident_directory,str) or not Path(resident_directory).is_absolute():
             raise ValueError('resident runtime handoff lost its actual drained source directory')
         config['resident_data_directory']=resident_directory
