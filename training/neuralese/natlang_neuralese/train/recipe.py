@@ -2,9 +2,8 @@
 
 Stage implementations are shared Python modules. Extend HANDLERS with a typed
 handler and declare its dependencies in a JSON recipe. No shell command strings.
-Failed mechanisms cannot advance. A completed, numerically valid direct stage
-may continue training while its measured performance remains unqualified;
-continuation never issues a false qualification certificate (owner20261015).
+Failed mechanisms cannot advance. Native stage receipts bind their source,
+optimizer state, held split, and exact actor/runtime identity.
 """
 import argparse
 import hashlib
@@ -43,112 +42,11 @@ HANDLERS = {
                              'latent_ns', 'eval_every', 'held_eval_tokens', 'held_eval_graphs', 'checkpoint_every', 'checkpoint_seconds', 'async_checkpoint', 'checkpoint_layers', 'checkpoint_input_offload', 'checkpoint_input_offload_directory', 'chunk_tokens', 'ffn_chunk_tokens',
                              'fp8_training', 'fp8_recipe', 'fp8_amax_history_len', 'learned_row_learning_rate', 'interface_row_learning_rate', 'native_optimizer_migration', 'native_ordinary_precision', 'native_norm_execution', 'native_shared_execution', 'history_reasoning_policy', 'seed', 'task_eval',
                              'task_eval_every', 'forward_atol', 'gradient_atol', 'qualify_training_backend', 'resident_geometry_qualification', 'memory_qualification', 'communication_foundation', 'foundation_communication_batches', 'urgent_cohort_fairness', 'refresh_at_checkpoint', 'refresh_foundation_readiness', 'foundation_readiness_policy', 'refresh_after_updates', 'learn_reasoning_boundaries', 'share_causal_prefixes', 'cotangent_accumulator_backend'}, 'result': 'checkpoint.pt'},
-    # Neuralese direct v1 (plans/neuralese/NEURALESE_DIRECT_V1.md): plain target SFT from a base model with the
-    # NeuraleseProjection; the TokenChoiceProjection is declared per stage (off in v1).
-    # Its data is either prepared text (text_data, the shared declared input of neuralese-direct-v2) or records and
-    # pieces rendered by gold_text_rows: missing_stage_inputs() states that alternative.
-    'neuralese_direct': {'module':'natlang_neuralese.train.direct_sft', 'required_inputs':set(),
-                         'optional_inputs':{'records','pieces','text_data','heads','continue_from',
-                                            'continue_identity','continue_monitor_reference',
-                                            'continued_text_data'},
-                         'parameters':{'base','steps','epochs','batch_tokens','tokens','target_tokens','prefix_tokens','batch','eval_batch','eval_every',
-                           'train_target_tokens','train_min_context_tokens','merge_prefix_rows','cohort_repeats','recovery_selection','checkpoint_every','held_documents','context_weight','feedback_weight','backbone_lr',
-                           'latent_optimizer','latent_lr','head_lr','projection_blocks',
-                           'projection_hidden','projection_kernel','token_choice_projection','moe_kernel','checkpoint_layers','drift_rows','drift_every','drift_gate_every','drift_gate_rise','drift_ce_windows','gate_response_kl',
-                           'drift_warn','drift_stop','drift_agreement_warn','drift_agreement_stop','drift_gate','gate_held_rows','monitor',
-                           'seed','window_execution','latent_skip_idle','latent_cautious','latent_beta2_half_life_tokens',
-                           'latent_ns','latent_weight_decay','grad_spike_clip','stop_at','stop_after_training_seconds','weight_drift_base','save_state',
-                           'fp8_training','fp8_recipe','fp8_amax_history_len',
-                           'gradient_audit_steps','saved_tensor_audit_steps','gradient_digest_steps',
-                           'state_hash_steps','sdpa_backend','deterministic_training','task_eval','task_eval_every','upgrade_window_coverage'},'result':'report.json'},
-    # S7 RL on the full direct checkpoint (plans/neuralese/S7_RL.md §6): rl/stage.py turns scored policy rollouts into
-    # RL text data (mode rft) and runs the shared direct trainer on it, continued from the pre-RL checkpoint with the
-    # drift reference captured from those weights. Its parameters are the direct stage's plus the RL data decision;
-    # its stage_parameter_defaults inherit the recipe's neuralese_direct defaults (RL_DEFAULTS_FROM).
-    'neuralese_rl': {'module': 'natlang_neuralese.rl.stage',
-                     'required_inputs': {'rollouts', 'continue_from', 'continue_identity', 'continue_monitor_reference'},
-                     'optional_inputs': {'heads', 'rl_held_text_data'},
-                     'parameters': set(),  # filled below: neuralese_direct's parameters plus the RL ones
-                     'result': 'report.json'},
-    'core_text_warmup': {'module':'natlang_neuralese.train.text_warmup', 'required_inputs':{'records','pieces'}, 'optional_inputs':{'text_data','continue_from','heads','student_checkpoint'},
-                        'parameters':{'text_data','student_checkpoint','batch','steps','tokens','prefix_tokens','target_tokens','cutoff',
-                          'cohort_weights','qualification_cohort','context_weight','feedback_weight',
-                          'backbone_training','rank','optimizer','lr','sketch_lr','embedding_weight','sketch_weight','text_weight',
-                          'projection_patience','projection_min_evals','projection_min_improvement',
-                          'backbone_ramp_evals','pass_ramp_evals','checkpoint_every','eval_every','latent_optimizer','latent_step_in_backward','moe_kernel',
-                          'held_documents','seed','checkpoint_layers',
-                          'max_ce_delta','max_relative_mse','min_agreement','consecutive_gates',
-                          'input_map_kernel','input_map_rank','ar_feedback_fixup','channel_consistency_weight','qat_latent_lr',
-                          'member_weight','member_tokens','member_eval_windows','member_mask_system','read_adapter',
-                          'optimizer_state','optimizer_added','quantization_steps','report_column_fraction',
-                          'drift_rows','drift_warn','drift_stop','drift_agreement_warn','drift_agreement_stop'},'result':'heads.pt'},
-    'text_warmup_runtime': {'module':'natlang_neuralese.eval.text_warmup_runtime', 'required_inputs':{'records'}, 'optional_inputs':{'heads'},
-                            'parameters':set(),'result':'report.json'},
-    # The end-to-end Neuralese lineage (NEURALESE_DIRECT_V1.md "End-to-end stage"): exact runtime qualification of the
-    # direct export it starts from (AGENTS.md: runtime transport/gradient replay is qualified against those exact
-    # weights), on the stage's own machine, before any update.
-    'direct_runtime_qualification': {'module': 'natlang_neuralese.eval.direct_runtime',
-                                     'required_inputs': {'direct_artifact_manifest', 'aligned_projection'},
-                                     'optional_inputs': set(),
-                                     'parameters': {'direct_base_snapshot', 'projection_on_manifold'},
-                                     'result': 'report.json'},
-    'raw_recurrence_training': {'module': 'natlang_neuralese.train.trajectories', 'required_inputs':{'records','pieces'}, 'optional_inputs':{'heads','direct_artifact_manifest','aligned_projection','continue_from','direct_parent_proof'},
-                                'parameters': {'steps', 'batch', 'lr', 'rank', 'lora_lr', 'backbone_lr', 'backbone_training', 'max_tokens',
-                                               'train', 'eval', 'handover', 'write_curriculum', 'max_writes',
-                                               'write_depth', 'tokens_per_vector', 'heads_lr', 'token_choice_lr', 'token_choice_optimizer', 'neuralese_projection_optimizer', 'record_order', 'record_source',
-                                               'family_temperature', 'stream_held_chains', 'stream_probe_chains', 'stream_resident',
-                                               'soft_parts', 'distill',
-                                               'crisp_weight', 'memory_gb', 'backward_policy', 'graph_memory_gb',
-                                               'graph_headroom_gb', 'checkpoint_layers', 'checkpoint_attention_only',
-                                               'staged_checkpoint_attention_only', 'checkpoint_elide_rng', 'producer_batch_size',
-                                               'producer_batch_memory_gb', 'ffn_chunk_tokens',
-                                               'optimizer', 'checkpoint_every', 'eval_every', 'seed', 'writer_text_weight',
-                                               'max_write_vectors', 'content_transport', 'writer_length_policy', 'writer_supervision', 'stop_supervision',
-                                               'sketch_gradient', 'sketch_target_weight', 'sketch_target_backbone_scale',
-                                               'projection_anchor_weight', 'projection_anchor_backbone_scale',
-                                               'projection_anchor_decay_steps', 'read_adapter',
-                                               'local_stage_batch_size', 'train_control_rows', 'token_cache_mib',
-                                               'qat_latent_lr', 'latent_optimizer', 'latent_step_in_backward', 'moe_kernel', 'member_weight', 'member_tokens', 'member_eval',
-                                               'member_mask_system', 'member_full_weight',
-                                               'view', 'view_window', 'context_weight', 'feedback_weight',
-                                               'context_coverage', 'cohort_weights', 'qualification_cohort',
-                                               'stop_pg', 'purpose_contrast', 'purpose_margin', 'view_tokens_per_vector',
-                                               'optimizer_state', 'optimizer_added', 'direct_base_snapshot', 'prompt_rendering', 'curriculum_change',
-                                               'latent_lr', 'latent_ns', 'latent_weight_decay', 'grad_spike_clip',
-                                               'monitor', 'drift_rows', 'drift_every', 'drift_gate_every', 'drift_gate_rise',
-                                               'gate_response_kl', 'drift_warn', 'drift_stop', 'drift_agreement_warn',
-                                               'drift_agreement_stop', 'drift_gate', 'gate_held_rows', 'task_eval', 'task_eval_every'},
-                                'result': 'checkpoint.pt'},
-    # The view operator gate (eval/view_gate.py; TRAINING_RECIPE.md "The view operator stage") on the exact weights of
-    # the view stage it requires (that stage's recurrence checkpoint).
-    'view_operator_gate': {'module': 'natlang_neuralese.eval.view_gate', 'required_inputs': {'records'},
-                           'optional_inputs': {'pieces', 'harness_records', 'harness_pieces'},
-                           'parameters': {'split', 'per_artifact', 'harness_limit', 'seed', 'view_window',
-                                          'min_reconstruction_recovery', 'min_qa_recovery', 'min_shuffle_margin',
-                                          'min_purpose_margin', 'max_next_action_delta'},
-                           'result': 'view-gate.json'},
-    'raw_runtime_qualification': {'module': 'natlang_neuralese.eval.raw_port_handoff', 'required_inputs':{'records'}, 'optional_inputs':set(),
-                                  'parameters': {'limit', 'max_length'}, 'result': 'heads.pt'},
-    'verified_heads_handoff': {'module':'natlang_neuralese.train.verified_heads_handoff',
-                               'required_inputs':{'warmup_checkpoint','warmup_manifest','warmup_heads','warmup_runtime_report'},
-                               'optional_inputs':set(),
-                               'parameters':{'max_ce_delta','max_relative_mse','min_agreement'},'result':'report.json'},
-    'token_identity': {'module': 'natlang_neuralese.eval.foundation', 'required_inputs':{'records'}, 'optional_inputs':set(),
-                       'parameters': {'limit', 'max_tokens'}, 'result': 'identity.json'},
-    'causal_embedding_distillation': {'module': 'natlang_neuralese.train.causal_bootstrap', 'required_inputs':{'records'}, 'optional_inputs':{'pieces'},
-                                     'parameters': {'cutoff', 'steps', 'batch', 'lr', 'tokens', 'contexts',
-                                                    'context_tokens', 'eval_every', 'checkpoint_every',
-                                                    'seed', 'agreement_gate', 'kl_gate', 'source_fraction',
-                                                    'argmax_weight', 'continue_from', 'stop_on_gate'}, 'result': 'best-checkpoint.pt'},
+
 }
 
-# The RL stage takes every direct-trainer parameter plus its data decision (rl/stage.py).
-RL_PARAMETERS = {'rft_document_kind', 'rl_mode', 'rl_tokenizer', 'rl_prompt_rendering', 'rft_max_success_rate', 'rft_held_fraction',
-                 'rl_policy_id', 'rl_clip_low', 'rl_clip_high', 'rl_block_bundle', 'rl_held_documents'}
-HANDLERS['neuralese_rl']['parameters'] = set(HANDLERS['neuralese_direct']['parameters']) | RL_PARAMETERS
-# A stage kind whose parameter defaults start from another kind's declared defaults.
-RL_DEFAULTS_FROM = {'neuralese_rl': 'neuralese_direct','native_offline_preference':'native_state_sft'}
-DIRECT_STAGE_SCHEMA = 'natlang.neuralese-declared-direct-stage/1'
+# Native offline preference inherits the exact full-state SFT parameter contract.
+RL_DEFAULTS_FROM = {'native_offline_preference': 'native_state_sft'}
 
 INPUT_BINDING_NAME = re.compile(r'[a-z][a-z0-9_.-]*')
 
@@ -308,6 +206,8 @@ def validate_input_bindings(recipe):
         if not isinstance(selected, dict):
             raise ValueError('stage inputs must map input roles to named bindings')
         kind = stage['kind']
+        if kind not in HANDLERS:
+            raise ValueError('unknown stage implementation: ' + str(kind))
         allowed = HANDLERS[kind]['required_inputs'] | HANDLERS[kind]['optional_inputs']
         if not set(selected) <= allowed or missing_stage_inputs(kind, selected):
             raise ValueError('stage input roles do not satisfy handler contract: ' + stage['id'])
@@ -667,8 +567,6 @@ def resolve_recipe_data(path, _chain=(), *, _files=None):
         if 'overrides' in recipe:
             raise ValueError('overrides without extends')
         return recipe
-    if recipe.get('schema') == DIRECT_STAGE_SCHEMA:
-        raise ValueError('direct-stage recipes do not support extends')
     parent_id, overrides = recipe['extends'], recipe.get('overrides', {})
     if not isinstance(parent_id, str) or not isinstance(overrides, dict) or not isinstance(recipe.get('id'), str):
         raise ValueError('extends must name a recipe id, overrides must be an object, and the recipe needs an id')
@@ -787,28 +685,8 @@ def checkpoint_recipe_binding(path, *, participant):
     return training_recipe_binding(CheckpointPolicy.load(path,shared_participant=participant),participant=participant)
 
 
-DIRECT_IDENTITY_QUALIFICATION = 'neuralese_direct_step0_identity'
-# The end-to-end lineage (owner decision 2026-10-12, plans/neuralese/NEURALESE_DIRECT_V1.md "End-to-end stage"):
-# it starts from a direct export, which the lineage's first stage runtime-qualifies on those exact weights; the
-# trainer's step 0 adds the identity TokenChoiceProjection, so its logits equal the export's. Its acceptance is the
-# recipe's ``e2e_acceptance`` (train/e2e_acceptance.py). The direct phases no longer hand off into it at a readiness
-# moment: e2e updates join the running direct stage (``e2e_mix``, the mixed run, owner 2026-10-13).
-DIRECT_E2E_QUALIFICATION = 'direct_e2e_runtime_qualified_export'
-DIRECT_E2E_KINDS = frozenset({'direct_runtime_qualification', 'raw_recurrence_training'})
-
-
-def direct_e2e_lineage(recipe):
-    """True for a lineage made of direct-export runtime qualification and direct-artifact recurrence stages."""
-    stages = recipe.get('stages') or []
-    return bool(stages) and all(
-        s.get('kind') in DIRECT_E2E_KINDS and 'direct_artifact_manifest' in (s.get('inputs') or {}) for s in stages)
-
-
 def load_recipe(path):
     recipe = resolve_recipe_data(path)
-    if recipe.get('schema') == DIRECT_STAGE_SCHEMA:
-        validate_direct_stage_recipe(recipe)
-        return recipe
     if recipe.get('schema') != 'natlang.neuralese-training-recipe/1' or not recipe.get('stages'):
         raise ValueError('invalid or empty training recipe')
     parameter_defaults = recipe.get('stage_parameter_defaults', {})
@@ -822,7 +700,7 @@ def load_recipe(path):
         validate_stage_parameters(kind, defaults)
         if not any(stage.get('kind') == kind for stage in recipe['stages']):
             raise ValueError('unused stage parameter defaults for ' + str(kind))
-    declared, complete, identity_stages, embedding_stages, runtime_stages = set(), set(), set(), set(), set()
+    declared, complete = set(), set()
     for stage in recipe['stages']:
         name, kind = stage.get('id'), stage.get('kind')
         if not isinstance(name, str) or not re.fullmatch(r'[a-z][a-z0-9_-]*', name) or name in declared:
@@ -832,124 +710,19 @@ def load_recipe(path):
         required = stage.get('requires')
         if not isinstance(required, list) or len(set(required)) != len(required) or not set(required) <= complete:
             raise ValueError('stage dependencies must precede the stage')
-        check_direct_phase_continuation(recipe, stage)
         parameters = stage.get('parameters')
         refuse_retired_parameters(parameters)
         if not isinstance(parameters, dict) or not set(parameters) <= HANDLERS[kind]['parameters']:
             raise ValueError('unknown stage parameters')
         validate_stage_parameters(kind, parameters)
-        if 'text_data' in parameters and 'text_data' in stage.get('inputs', {}):
-            raise ValueError('text_data must be declared either as a named stage input or a legacy parameter')
-        if kind == 'core_text_warmup':
-            ar_feedback_fixup = parameters.get('ar_feedback_fixup', False)
-            if type(ar_feedback_fixup) is not bool:
-                raise ValueError('ar_feedback_fixup must be boolean')
-            if ar_feedback_fixup and not isinstance(stage.get('inputs', {}), dict):
-                raise ValueError('AR feedback fixup stage inputs must be an object')
-            if ar_feedback_fixup and not any(
-                    prior['id'] in required and prior['kind']=='core_text_warmup' and
-                    not prior.get('parameters',{}).get('ar_feedback_fixup',False)
-                    for prior in recipe['stages']):
-                raise ValueError('AR feedback fixup requires a preceding mapped-input warm-up stage')
-            for option_name in ('input_map_kernel', 'input_map_rank'):
-                value = parameters.get(option_name, 4 if option_name == 'input_map_kernel' else 64)
-                if type(value) is not int or value < 1:
-                    raise ValueError('invalid core text warm-up ' + option_name)
-        if kind == 'token_identity':
-            identity_stages.add(name)
-        if kind == 'causal_embedding_distillation' and not set(required) & identity_stages:
-            raise ValueError('embedding distillation requires an explicit token identity gate')
-        if kind == 'causal_embedding_distillation':
-            embedding_stages.add(name)
-        if kind == 'raw_runtime_qualification' and not set(required) & embedding_stages:
-            raise ValueError('runtime qualification requires an explicit embedding foundation')
-        if kind == 'raw_runtime_qualification':
-            runtime_stages.add(name)
-        if kind == 'verified_heads_handoff' and not set(required) & runtime_stages:
-            raise ValueError('verified heads handoff requires the raw runtime qualification stage')
-        if kind == 'core_text_warmup' and 'continue_from' in stage.get('inputs', {}) and not stage.get('parameters',{}).get('ar_feedback_fixup',False):
-            handoffs = [s for s in recipe['stages'] if s['id'] in required and s['kind']=='verified_heads_handoff']
-            if (len(handoffs) != 1 or
-                    handoffs[0].get('inputs', {}).get('warmup_checkpoint') != stage['inputs']['continue_from'] or
-                    handoffs[0].get('inputs', {}).get('warmup_heads') != stage['inputs'].get('heads')):
-                raise ValueError('continuation checkpoint and heads must be the exact files validated by a required verified_heads_handoff')
-        if kind == 'core_text_warmup' and 'heads' in stage.get('inputs', {}) and 'continue_from' not in stage.get('inputs', {}):
-            raise ValueError('stage-specific heads input requires a verified full-state continuation checkpoint')
-        if kind == 'core_text_warmup' and stage.get('parameters',{}).get('ar_feedback_fixup',False):
-            predecessors = [s for s in recipe['stages'] if s['id'] in required and
-                           s['kind']=='core_text_warmup' and
-                           not s.get('parameters',{}).get('ar_feedback_fixup',False)]
-            if len(predecessors) != 1:
-                raise ValueError('AR feedback fixup requires exactly one mapped warm-up predecessor')
-        if kind == 'text_warmup_runtime' and 'heads' not in stage.get('inputs', {}):
-            if not any(s['id'] in required and s['kind'] == 'core_text_warmup' for s in recipe['stages']):
-                raise ValueError('adapted runtime requires a core warm-up predecessor or exact stage heads binding')
-        if kind == 'direct_runtime_qualification':
-            # The manifold gate (owner 2026-10-13): the aligned NeuraleseProjection of the exact parent export meets
-            # the declared thresholds before any end-to-end update (train/e2e_acceptance.projection_on_manifold).
-            from .e2e_acceptance import validate_manifold
-            validate_manifold(parameters.get('projection_on_manifold'))
-        if kind == 'direct_runtime_qualification' and not isinstance(parameters.get('direct_base_snapshot'), str):
-            raise ValueError('direct runtime qualification needs direct_base_snapshot (the export\'s pinned base)')
-        if kind == 'raw_recurrence_training':
-            stage_inputs = stage.get('inputs', {})
-            if 'direct_artifact_manifest' in stage_inputs:
-                # An end-to-end stage reads a direct export: its runtime gate is that export's exact runtime
-                # qualification (the same binding), not an adapted warm-up runtime.
-                runtime_dependencies = [s for s in recipe['stages'] if s['id'] in required and
-                                        s['kind'] == 'direct_runtime_qualification' and
-                                        (s.get('inputs') or {}).get('direct_artifact_manifest') ==
-                                        stage_inputs['direct_artifact_manifest']]
-                if not runtime_dependencies:
-                    raise ValueError('a direct-artifact recurrence stage requires the direct_runtime_qualification '
-                                     'stage of the same direct_artifact_manifest binding')
-                if any((s.get('inputs') or {}).get('aligned_projection') != stage_inputs.get('aligned_projection')
-                       for s in runtime_dependencies) or 'aligned_projection' not in stage_inputs:
-                    raise ValueError('a direct-artifact recurrence stage reads the aligned_projection its '
-                                     'direct_runtime_qualification stage gated (the same binding)')
-            else:
-                runtime_dependencies = [s for s in recipe['stages']
-                                        if s['id'] in required and s['kind'] == 'text_warmup_runtime']
-            if not runtime_dependencies:
-                raise ValueError('recurrence training requires an adapted warm-up runtime gate')
-            if 'heads' in stage_inputs and 'direct_artifact_manifest' in stage_inputs:
-                raise ValueError('recurrence stage must choose exactly one of heads or direct_artifact_manifest')
-            if not ({'heads', 'direct_artifact_manifest'} & set(stage_inputs)) and not any(
-                    s['id'] in required and s['kind'] == 'core_text_warmup' for s in recipe['stages']):
-                raise ValueError('recurrence requires a core warm-up predecessor, exact stage heads, or direct artifact manifest')
-        if kind == 'view_operator_gate' and not any(
-                s['id'] in required and s['kind'] == 'raw_recurrence_training' for s in recipe['stages']):
-            raise ValueError('the view operator gate requires the view stage (a raw_recurrence_training stage) it measures')
         declared.add(name)
         complete.add(name)
-    # Neuralese direct v1 (owner decision 2026-10-11, AGENTS.md "Neuralese training foundation"): a lineage made only of
-    # neuralese_direct stages starts from the base model at an exact identity with no warm-up; each stage's step-0
-    # identity check (direct_sft: TokenChoiceProjection absent or the identity, so logits equal the base model's; no
-    # NeuraleseProjection since 2026-10-13, whose manifold alignment is the e2e entry gate) is its identity
-    # qualification. Older lineages keep the rule.
-    direct_lineage = all(s['kind'] in DIRECT_TRAINING_KINDS for s in recipe['stages'])
-    if direct_lineage and recipe.get('identity_qualification') != DIRECT_IDENTITY_QUALIFICATION:
-        raise ValueError('a neuralese_direct lineage must declare identity_qualification ' +
-                         repr(DIRECT_IDENTITY_QUALIFICATION))
-    e2e_lineage = direct_e2e_lineage(recipe)
-    if e2e_lineage and recipe.get('identity_qualification') != DIRECT_E2E_QUALIFICATION:
-        raise ValueError('an end-to-end lineage (direct export runtime qualification + direct-artifact recurrence) '
-                         'must declare identity_qualification ' + repr(DIRECT_E2E_QUALIFICATION))
-    native = native_lineage(recipe)
-    if any(stage['kind'] in HEADLESS_NATIVE_KINDS for stage in recipe['stages']) and not native:
-        raise ValueError('native-state recipes cannot include legacy projected training stages')
-    if native and recipe.get('identity_qualification') != NATIVE_IDENTITY_QUALIFICATION:
+    if not native_lineage(recipe):
+        raise ValueError('only native positional-KV/hybrid-state recipes are supported')
+    if recipe.get('identity_qualification') != NATIVE_IDENTITY_QUALIFICATION:
         raise ValueError('native-state recipe requires identity_qualification ' + NATIVE_IDENTITY_QUALIFICATION)
-    if not direct_lineage and not e2e_lineage and not native and (not identity_stages or
-                               not any(s['kind'] == 'causal_embedding_distillation' for s in recipe['stages'])):
-        raise ValueError('neuralese recipe must declare identity and embedding distillation stages')
-    if 'e2e_acceptance' in recipe:
-        if not e2e_lineage:
-            raise ValueError('e2e_acceptance belongs to an end-to-end lineage')
-        from .e2e_acceptance import validate_declaration
-        validate_declaration(recipe['e2e_acceptance'])
-    elif e2e_lineage:
-        raise ValueError('an end-to-end lineage declares its acceptance (e2e_acceptance)')
+    if 'e2e_acceptance' in recipe or 'e2e_mix' in recipe:
+        raise ValueError('projected end-to-end objectives are not supported by native recipes')
     validate_input_bindings(recipe)
     declared_runtime_environment(recipe)
     if 'family' in recipe:
@@ -960,8 +733,6 @@ def load_recipe(path):
         progress = (recipe.get('quantization') or {}).get('stage_progress', {})
         if any(stage_id not in progress for stage_id in recipe['family']['stages']):
             raise ValueError('a family stage needs a curriculum: name it in quantization.stage_progress')
-    if 'e2e_mix' in recipe:
-        validate_e2e_mix(recipe['e2e_mix'], {stage['id']: stage['kind'] for stage in recipe['stages']})
     if 'objective_continuation' in recipe:
         validate_objective_continuation(recipe)
     if 'quantization' in recipe:
@@ -2608,11 +2379,6 @@ def main(argv=None):
         return 0
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--recipe', type=Path, required=True)
-    parser.add_argument('--heads', type=Path,
-                        help='required by multi-stage recipes; direct stages pin heads in their input manifest')
-    parser.add_argument('--records', type=Path, help='legacy shared fallback; prefer stage inputs in declared recipes')
-    parser.add_argument('--pieces', type=Path, help='legacy shared fallback; prefer stage inputs in declared recipes')
-    parser.add_argument('--text-data', type=Path, help='legacy shared fallback for text warm-up stages')
     parser.add_argument('--input-binding', action='append', default=[], metavar='NAME=PATH',
                         help='relocate a declared named input while preserving its recipe-pinned SHA-256')
     parser.add_argument('--out', type=Path, required=True)
@@ -2623,8 +2389,7 @@ def main(argv=None):
     parser.add_argument('--inspect', action='store_true')
     parser.add_argument('--handoff', action='store_true',
                         help='resume an existing lineage on the newest code (the frozen runtime is replaced) and on a '
-                             'recipe that differs only in operational stage parameters and schedule-verified '
-                             'neuralese_direct epoch budgets; recorded in recipe-plan.json "handoffs"')
+                             'recipe that differs only in operational stage parameters; recorded in recipe-plan.json "handoffs"')
     parser.add_argument('--plan-only', action='store_true',
                         help='resolve and hash every stage input and validate the resume (or --handoff) against the '
                              'existing recipe-plan.json, print the resulting plan, and exit without writing or launching')
@@ -2646,41 +2411,20 @@ def main(argv=None):
             raise ValueError('resident recovery was launched with an unrelated recipe')
         args.recipe = Path(resident_state['payload']['recipe']['path'])
     recipe = load_recipe(args.recipe)
-    if recipe.get('schema') == DIRECT_STAGE_SCHEMA:
-        if args.recover_native_checkpoint is not None:
-            parser.error('native checkpoint plan recovery requires a declared native recipe')
-        if args.inspect:
-            print(json.dumps(recipe, indent=2))
-            return 0
-        if args.input_binding or args.records or args.pieces or args.text_data or args.until or args.heads:
-            parser.error('direct-stage recipes use only their pinned inputs and declared output')
-        if args.launch_metadata is None:
-            parser.error('direct-stage execution requires --launch-metadata')
-        return run_declared_direct_stage(recipe, args.recipe, args.out, args.launch_metadata, args.device, args.handoff)
-    e2e_lineage = direct_e2e_lineage(recipe)
     native = native_lineage(recipe)
-    if args.heads is None and not e2e_lineage and not native:
-        parser.error('multi-stage training recipes require --heads')
-    if args.heads is not None and e2e_lineage:
-        parser.error('an end-to-end lineage starts from its declared direct export, not from --heads')
-    if args.heads is not None and native:
-        parser.error('native-state recipes use their native models/checkpoints, not legacy --heads')
+    if not native:
+        parser.error('only native positional-KV/hybrid-state recipes are executable')
     if args.until and args.until not in {stage['id'] for stage in recipe['stages']}:
         parser.error('unknown stopping stage')
     if args.inspect:
         print(json.dumps(recipe, indent=2))
         return
-    if (args.records or args.pieces or args.text_data) and all(
-            'inputs' in stage for stage in recipe['stages'] if stage.get('admitted') is not False):
-        # Line parity (plans/neuralese/LINE_PARITY.md): a recipe that declares its data is the only source of it.
-        parser.error('this recipe declares its data inputs, so --records/--pieces/--text-data cannot replace them; '
-                     'relocate a declared file with --input-binding NAME=PATH (its sha256 must match)')
     args.out = args.out.resolve()
-    args.heads = args.heads.resolve() if args.heads is not None else None
+    args.heads = None
     from ..common import hdd_guard
     hdd_guard.require_nvme(args.out)
     overrides = parse_input_binding_overrides(args.input_binding)
-    defaults = {'records': args.records, 'pieces': args.pieces, 'text_data': args.text_data}
+    defaults = {}
     stage_inputs = {}
     for stage in recipe['stages']:
         stage_defaults = dict(defaults)
@@ -2690,11 +2434,7 @@ def main(argv=None):
         stage_inputs[stage['id']] = ({} if stage.get('admitted') is False else
                                      resolve_stage_inputs(recipe, stage, stage_defaults, overrides))
     require_input_decoders(stage_inputs)
-    inputs = {str(args.heads): sha(args.heads)} if args.heads is not None else {}
-    for path in (args.records, args.pieces, args.text_data):
-        if path is not None:
-            resolved = path.resolve()
-            inputs[str(resolved)] = sha(resolved)
+    inputs = {}
     for resolved in stage_inputs.values():
         for value in resolved.values():
             for dependency in _binding_files(value):
@@ -2834,8 +2574,7 @@ def main(argv=None):
                         'heads' not in stage_inputs[stage['id']]):
                     continuation_checkpoint, stage_heads = mapped_fixup_continuation(stage,reports)
                     continuation_checkpoint = str(continuation_checkpoint)
-                direct_artifact_stage = (kind in DIRECT_E2E_KINDS and
-                                         'direct_artifact_manifest' in stage_inputs[stage['id']])
+                direct_artifact_stage = False
                 if kind in ('core_text_warmup','text_warmup_runtime','raw_recurrence_training') and not direct_artifact_stage:
                     has_exact_stage_heads = 'heads' in stage_inputs[stage['id']]
                     if has_exact_stage_heads:
