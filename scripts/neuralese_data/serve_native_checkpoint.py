@@ -9,7 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'training/neuralese'))
 
-from natlang_neuralese.common.hashing import sha256_file_hex
+from natlang_neuralese.common.hashing import sha256_file_hex_cached
 from natlang_neuralese.serve import load_native_engine
 from natlang_neuralese.serve.http import serve
 
@@ -57,7 +57,7 @@ def main() -> None:
     if args.native_actor_view:
         bindings.append(('actor view', args.native_actor_view.resolve(strict=True), args.native_actor_view_sha256))
     for label, path, expected in bindings:
-        actual = sha256_file_hex(path)
+        actual = sha256_file_hex_cached(path)
         if actual != expected:
             raise ValueError(f'{label} SHA-256 mismatch: {actual} != {expected}')
 
@@ -83,9 +83,9 @@ def main() -> None:
                                    cancel_stale_reason=args.coefficient_cancel_stale_reason)
         bind_policy(engine, actual)
         engine.rl_policy_binding['coefficient_policy_binding'] = {
-            'path': str(actual), 'sha256': sha256_file_hex(actual)}
+            'path': str(actual), 'sha256': sha256_file_hex_cached(actual)}
         engine.rl_policy_binding['coefficient_policy_source'] = {
-            'path': str(source), 'sha256': sha256_file_hex(source)}
+            'path': str(source), 'sha256': sha256_file_hex_cached(source)}
     engine.start()
     server = serve(engine, args.host, args.port)
     print(json.dumps({'event': 'native_training_checkpoint_serving',
