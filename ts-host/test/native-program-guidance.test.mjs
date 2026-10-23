@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { NativeToolAgent } from '../dist/native/agent.js';
-import { nativeProgramGuidance } from '../dist/adaptation/index.js';
+import { authoredTextGuidance, nativeProgramGuidance } from '../dist/adaptation/index.js';
 import { NatlangRuntime, NatlangTask } from '../dist/runtime/runtime.js';
 import { interpreter, lambda } from './support/natlang.mjs';
 
@@ -41,7 +41,6 @@ test('native program guidance is stored for the exact student and appears in the
   assert.ok(system.some(part => part.type === 'native_state' && part.id === id));
   assert.ok(!system.some(part => part.type === 'text' && part.text.includes('Use the approved procedure.')));
 });
-
 test('an exact stored memetic binding reaches the prompt by its native state ID', async () => {
   const student = identity('a'), id = 'nzs1_' + 'c'.repeat(52), text = 'Use the approved procedure.';
   let request;
@@ -146,13 +145,14 @@ test('native task binding requires its exact program descriptor', () => {
     program: { id: 'different-program' } })), /belongs to a different program/);
 });
 
-test('plain authored text guidance is inserted into the composed system prompt once', async () => {
+test('explicit text-only authored guidance is inserted into the composed system prompt once', async () => {
   const requests = [];
   const driver = async request => {
     requests.push(request);
     return { calls: [['return_result', { status: 'success', value: 'done' }]] };
   };
-  const agent = new NativeToolAgent(driver, { programGuidance: 'Use the approved procedure.' });
+  const agent = new NativeToolAgent(driver, { authoredTextGuidance:
+    authoredTextGuidance('Use the approved procedure.', 'fixture-program') });
   const runtime = interpreter({ agent: currentSession => agent.run(currentSession) });
   await runtime.run(lambda({ type: '() => string', instructions: 'Return a string.' }));
   const prompt = requests[0].messages[0].content;

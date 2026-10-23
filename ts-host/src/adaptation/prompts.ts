@@ -7,6 +7,7 @@ export type MemeticGuidanceBinding = {
 };
 export type NativeProgramGuidance = { readonly kind: 'native-program-guidance'; readonly text: string;
   readonly program_id?: string; readonly binding?: Readonly<MemeticGuidanceBinding> };
+export type AuthoredTextGuidance = { readonly kind: 'authored-text-guidance'; readonly program_id: string; readonly text: string };
 
 /** Bind stored guidance to the current native reader when a runtime call begins. */
 export function nativeProgramGuidance(input: string | MemeticGuidanceBinding, programId?: string): NativeProgramGuidance {
@@ -32,8 +33,17 @@ export function nativeProgramGuidance(input: string | MemeticGuidanceBinding, pr
   return Object.freeze({ kind: 'native-program-guidance', text, program_id: programId });
 }
 
-export function programGuidance(guidance: string | NativeProgramGuidance): string {
-  if (typeof guidance !== 'string') return '';
-  const text = guidance;
-  return text ? '\n\n<natlang_program_guidance>\n' + text + '\n</natlang_program_guidance>\n' : '';
+/** Text-only authored policy; separate from native state and bound to one program. */
+export function authoredTextGuidance(text: string, programId: string): AuthoredTextGuidance {
+  if (typeof text !== 'string' || !text.trim() || typeof programId !== 'string' || !programId)
+    throw new TypeError('authored text guidance needs text and exact program identity');
+  return Object.freeze({ kind: 'authored-text-guidance', program_id: programId, text });
+}
+
+export function renderAuthoredTextGuidance(guidance?: AuthoredTextGuidance): string {
+  if (!guidance) return '';
+  if (guidance.kind !== 'authored-text-guidance' || typeof guidance.program_id !== 'string' || !guidance.program_id ||
+      typeof guidance.text !== 'string' || !guidance.text.trim())
+    throw new TypeError('invalid authored text guidance');
+  return '\n\n<natlang_program_guidance>\n' + guidance.text + '\n</natlang_program_guidance>\n';
 }

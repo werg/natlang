@@ -4,13 +4,14 @@ import { test } from 'node:test';
 import { canonical } from '../dist/adaptation/identity.js';
 import { ChildResultIndexBuilder, childCallIds, childFunctionNames, childReturn, convertTrajectory, instructionsDigest, invocationOf, printedResults } from '../dist/compiler/neuralese-conversion.js';
 import { COMPACTION_NOTICE, GENERATION_GUIDANCE, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN, TOOLS_PROMPT } from '../dist/native/prompt.js';
-import { programGuidance } from '../dist/adaptation/prompts.js';
+import { authoredTextGuidance, renderAuthoredTextGuidance } from '../dist/adaptation/prompts.js';
 
 const note = 'Checked lines 1-3; line 2 is a fee with no PO line. Left: prior invoices.';
 const compact = (id, text) => ({ role: 'assistant', content: '', tool_calls: [{ id, type: 'function',
   function: { name: 'compact_history', arguments: JSON.stringify({ note: text }) } }] });
 const record = () => ({ id: 'r1', messages: [
-  { role: 'system', content: TOOLS_PROMPT + GENERATION_GUIDANCE + programGuidance('Prefer the contract over emails.') },
+  { role: 'system', content: TOOLS_PROMPT + GENERATION_GUIDANCE +
+    renderAuthoredTextGuidance(authoredTextGuidance('Prefer the contract over emails.', 'fixture-program')) },
   { role: 'user', content: 'You are inside this call: judge(state: unknown): boolean\n\nInstructions:\nIs line 2 a fee?\n\nIn eval you can use state.' },
   { role: 'user', content: HANDOVER_NOTE_OPEN + note + HANDOVER_NOTE_CLOSE },
   compact('c1', note),

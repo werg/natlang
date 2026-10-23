@@ -4,6 +4,7 @@
  * with the interpreter in the caller's task, and returns the checked value or throws `NatlangCallError`.
  */
 import { DECISION_SYSTEM_PROMPT } from '../native/decision.js';
+import { authoredTextGuidance } from '../adaptation/prompts.js';
 import { hexDigest } from '../native/hash.js';
 import { NativeToolAgent } from '../native/agent.js';
 import { NativeRuntime, inferValueType } from '../native/runtime.js';
@@ -606,13 +607,18 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
       [{ node: invocationNodeId(callId), port: 'caller' }])));
   // A stopping predicate of iterateOn runs under its own addition to the system prompt (runtime/iterate.ts).
   const addendum = [frame.systemAddendum, attempt?.guidance].filter(Boolean).join('\n\n') || undefined;
+  const nativeReader = !!(task.runtime.options.neuralese?.nativeStateConsumer ||
+    task.runtime.options.neuralese?.nativeStateConsumerForCall);
+  const boundGuidance = task.nativeProgramGuidance?.binding?.program_id === owner ? task.nativeProgramGuidance : undefined;
+  const selectedNativeGuidance = eligibleGuidance ? boundGuidance ??
+    (nativeReader ? view.nativeGuidance() : undefined) : undefined;
+  const selectedAuthoredGuidance = eligibleGuidance && !selectedNativeGuidance && !nativeReader && view.guidance() && view.program?.id ?
+    authoredTextGuidance(view.guidance(), view.program.id) : undefined;
   const agent = model ? new NativeToolAgent(model.driver, {
     systemPrompt: () => task.systemPrompt() + (addendum ? `\n\n${addendum}` : ''),
     neuralese: task.runtime.options.neuralese,
-    programGuidance: eligibleGuidance && (task.nativeProgramGuidance || view.binding || view.guidance()) ?
-      task.nativeProgramGuidance?.binding?.program_id === owner ? task.nativeProgramGuidance :
-      (task.runtime.options.neuralese?.nativeStateConsumer || task.runtime.options.neuralese?.nativeStateConsumerForCall) ?
-        view.nativeGuidance() : view.guidance() : undefined,
+    programGuidance: selectedNativeGuidance,
+    authoredTextGuidance: selectedAuthoredGuidance,
     maxTurns: model.maxTurns, maxTokens: model.maxTokens, turnTokens: model.turnTokens, temperature: model.temperature,
     maxSeconds: model.maxSeconds, contextTokens: model.contextTokens,
     maxFailureRepairs: model.maxFailureRepairs, review: model.review, decisionReadout: model.decisionReadout,

@@ -1,7 +1,7 @@
 import { nativeProtocolFailure, nativeProtocolFeedback } from './native-protocol.js';
-import { programGuidance } from '../adaptation/prompts.js';
+import { renderAuthoredTextGuidance } from '../adaptation/prompts.js';
 import { fingerprint } from '../adaptation/identity.js';
-import type { NativeProgramGuidance } from '../adaptation/prompts.js';
+import type { AuthoredTextGuidance, NativeProgramGuidance } from '../adaptation/prompts.js';
 import { formatType } from './types.js';
 import type { Type, TypeEnv } from './types.js';
 import { MISSING, Reject, coerce, isLive, liveId, liveLabel, problems } from './values.js';
@@ -448,7 +448,8 @@ export class NativeToolAgent {
   readonly reviews: Record<string, unknown>[] = [];
   constructor(readonly driver: NativeModelDriver,
     readonly options: { maxTurns?: number; maxTokens?: number; turnTokens?: number;
-      temperature?: number; maxSeconds?: number; promptRendering?: PromptRendering; systemPrompt?: string | (() => string); programGuidance?: string | NativeProgramGuidance;
+      temperature?: number; maxSeconds?: number; promptRendering?: PromptRendering; systemPrompt?: string | (() => string);
+      programGuidance?: NativeProgramGuidance; authoredTextGuidance?: AuthoredTextGuidance;
       review?: NativeReviewOptions;
       maxFailureRepairs?: number;
       /** The readout's system prompt (default DECISION_SYSTEM_PROMPT; the kernel adds iteration addenda). */
@@ -1095,7 +1096,6 @@ export class NativeToolAgent {
   private async runtimeProgramGuidance(): Promise<string> {
     const guidance = this.options.programGuidance;
     if (!guidance) return '';
-    if (typeof guidance === 'string') return '';
     if (guidance.kind !== 'native-program-guidance') throw new TypeError('unknown program guidance binding');
     const neuralese = this.options.neuralese;
     const consumer = neuralese?.nativeStateConsumerForCall ? await neuralese.nativeStateConsumerForCall() : neuralese?.nativeStateConsumer;
@@ -1165,6 +1165,11 @@ export class NativeToolAgent {
   }
 
   async run(session: NativeSession): Promise<string | void> {
+    if (this.options.programGuidance && this.options.authoredTextGuidance)
+      throw new TypeError('native and authored text guidance cannot both apply to one model call');
+    if (this.options.authoredTextGuidance &&
+        (this.options.neuralese?.nativeStateConsumer || this.options.neuralese?.nativeStateConsumerForCall))
+      throw new NeuraleseUnsupportedError('authored text guidance cannot replace available native program guidance');
     // Blocks of `.nz` files loaded without a store (compiled imports, companion folders) join this runtime's store.
     if (this.options.neuralese?.store) await adoptImportedBlocks(this.options.neuralese.store);
     // The context budget sizes compaction and, from the start (the opening's reads included), the tool-output page.
@@ -1181,8 +1186,8 @@ export class NativeToolAgent {
       (Object.keys(session.lam.codebase).length ? FUNCTION_TOOLS_PROMPT : '') +
       (session.lam.projectTransaction ? directoryReducerPrompt(this.options.fileTools, allowAdHoc,
         session.lam.projectTransaction.folder.access !== 'read') : '') +
-      programGuidance(typeof this.options.programGuidance === 'string' ? this.options.programGuidance : '') + nativeGuidance;
-      if (this.options.programGuidance !== undefined) adaptedSystem = composed;
+      renderAuthoredTextGuidance(this.options.authoredTextGuidance) + nativeGuidance;
+      if (this.options.programGuidance !== undefined || this.options.authoredTextGuidance !== undefined) adaptedSystem = composed;
       return composed;
     };
     const views = await this.views(session);
@@ -1213,7 +1218,7 @@ export class NativeToolAgent {
     };
     const messages = openingMessages();
     const decided = await this.decisionReadout(session, messages,
-      programGuidance(typeof this.options.programGuidance === 'string' ? this.options.programGuidance : '') + nativeGuidance);
+      renderAuthoredTextGuidance(this.options.authoredTextGuidance) + nativeGuidance);
     if (decided !== false) return decided;
     const openingLength = messages.length;
     // Prompt tokens per character of request, calibrated from the server's reported prompt size.
