@@ -1,6 +1,7 @@
 import json
 import threading
 from argparse import Namespace
+import hashlib
 from pathlib import Path
 
 import pytest
@@ -56,6 +57,28 @@ def test_batch_derives_program_from_code_and_keeps_worlds_disjoint(tmp_path):
         extra = {**rows[0], 'id': 'new-case'}
         source.write_text(source.read_text() + json.dumps(extra) + '\n')
         memetic_batch.select(source, tmp_path / 'batch')
+
+
+def test_batch_baseline_runs_without_author_credentials(tmp_path, monkeypatch):
+    source = tmp_path / 'cases.jsonl'
+    rows = []
+    for index in range(4):
+        row = case(str(index)); del row['program_id']
+        row['semantics'] = {'root': 'task.nl', 'files': {'task.nl': 'Return the bound result.'},
+                            'inputs': {'value': index}, 'expected': index}
+        row['source_groups'] = [f'world-{index}']
+        rows.append(row)
+    source.write_text(''.join(json.dumps(row) + '\n' for row in rows))
+    seen = []
+    def fake_program(arguments):
+        seen.append(arguments)
+        return {'status': 'baseline_complete'}
+    monkeypatch.setattr(memetic_batch.memetic_program, 'main', fake_program)
+    memetic_batch.main(['--source', str(source), '--out', str(tmp_path / 'batch'),
+        '--server', 'http://student', '--model-id', 'lfm', '--baseline-only'])
+    assert len(seen) == 1 and '--baseline-only' in seen[0] and '--author' not in seen[0]
+    progress = json.loads((tmp_path / 'batch/progress.json').read_text())
+    assert progress['results'][0]['status'] == 'baseline_complete'
 
 
 def test_binding_requires_actual_native_id_and_oracle_gain(tmp_path):
@@ -250,5 +273,70 @@ def test_real_collector_imports_written_state_from_tiny_shared_http_server(tmp_p
             memetic_task_runner.default_system_prompt())
         assert fit['rollouts'] == 2
         assert memetic.native_import_reached(tmp_path / 'evals/actual', written['id'])
+        assert memetic.student_capture_reached(tmp_path / 'evals/actual', identity)
     finally:
         server.shutdown(); server.server_close(); engine.stop(); thread.join(timeout=5)
+
+
+def test_baseline_only_binds_student_and_continues_with_author(tmp_path, monkeypatch):
+    actor = {'checkpoint_sha256': 'a' * 64, 'tokenizer_fingerprint': 'b' * 64,
+             'embedding_weight_sha256': 'c' * 64, 'architecture': 'lfm2'}
+    student = {'native_identity': actor, 'native_state': {'enabled': True}}
+    monkeypatch.setattr(memetic, 'request_json', lambda *args, **kwargs: student)
+    monkeypatch.setattr(memetic, 'local_runtime_binding', lambda: {'sha256': 'd' * 64})
+    monkeypatch.setattr(memetic.runner, 'default_system_prompt', lambda: 'exact-system')
+    calls = []
+    def fake_evaluate(args, out, name, guidance, rows, **kwargs):
+        calls.append((name, guidance, kwargs['actor']))
+        return {'scored': len(rows) * args.samples, 'successes': 2 if guidance else 0,
+                'dir': str(out / 'evals' / name)}
+    monkeypatch.setattr(memetic, 'evaluate', fake_evaluate)
+    written = {'id': 'nzs1_' + 'e' * 52, 'source_capture': {'policy': actor},
+               'source_text_sha256': hashlib.sha256(b'guide').hexdigest()}
+    def fake_write(*args):
+        calls.append(('write', '', actor))
+        return written
+    monkeypatch.setattr(memetic, 'write_state', fake_write)
+    monkeypatch.setattr(memetic, 'archive_state', lambda *args: {'path': '/tmp/state', 'sha256': 'f'*64, 'bytes': 1})
+    development, confirmation = tmp_path / 'dev.jsonl', tmp_path / 'confirmation.jsonl'
+    development.write_text(''.join(json.dumps(case(index)) + '\n' for index in ('a', 'b')))
+    confirmation.write_text(''.join(json.dumps(case(index)) + '\n' for index in ('c', 'd')))
+    common = ['--program-id', 'p', '--development', str(development), '--confirmation', str(confirmation),
+              '--out', str(tmp_path / 'run'), '--server', 'http://student', '--model-id', 'lfm',
+              '--samples', '2', '--generations', '0']
+    baseline = memetic.main([*common, '--baseline-only'])
+    assert baseline['status'] == 'baseline_complete'
+    assert [name for name, _, _ in calls] == ['unguided-dev', 'unguided-confirm']
+    assert not (tmp_path / 'run/author.json').exists()
+    assert not (tmp_path / 'run/binding.json').exists()
+    receipt = {'schema': 'natlang.memetic-author-provenance/1', 'model_id': 'Qwen/Qwen3.6-35B-A3B',
+        'hosting': 'self-hosted-coreweave', 'endpoint': 'http://teacher', 'sandbox_id': 'sandbox-1',
+        'checkpoint_sha256': '1'*64, 'tokenizer_fingerprint': '2'*64,
+        'runtime_sha256': '3'*64, 'source_receipt_sha256': '4'*64}
+    path = tmp_path / 'teacher.json'; path.write_text(json.dumps(receipt))
+    author = ['--author', 'http://teacher', '--author-model', receipt['model_id'],
+              '--author-provenance', str(path)]
+    result = memetic.main([*common, *author])
+    assert result['status'] == 'qualified'
+    assert [name for name, _, _ in calls].count('write') == 1
+    assert json.loads((tmp_path / 'run/binding.json').read_text())['unguided_baseline']['development']['successes'] == 0
+    student['native_identity'] = {**actor, 'checkpoint_sha256': '9'*64}
+    with pytest.raises(ValueError, match='resume changed'):
+        memetic.main([*common, '--baseline-only'])
+    student['native_identity'] = actor
+    with pytest.raises(ValueError, match='resume changed'):
+        memetic.main([*common, '--baseline-only', '--max-turns', '21'])
+    monkeypatch.setattr(memetic.runner, 'default_system_prompt', lambda: 'changed-system')
+    with pytest.raises(ValueError, match='resume changed'):
+        memetic.main([*common, '--baseline-only'])
+
+
+def test_cached_baseline_fitness_requires_exact_evaluation_receipt(tmp_path):
+    from natlang_neuralese.common.jsonio import write_json_durable
+    write_json_durable(tmp_path / 'inputs.json', {'student': 'current'})
+    write_json_durable(tmp_path / 'unguided-dev-fit.json', {'scored': 4, 'successes': 2,
+        'evaluation_inputs_sha256': 'stale'})
+    args = Namespace(samples=2)
+    with pytest.raises(ValueError, match='cached guidance fitness'):
+        memetic.evaluate(args, tmp_path, 'unguided-dev', '', [case('a'), case('b')],
+            base_system='exact-system', actor={}, server_info_sha256='f'*64)

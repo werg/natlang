@@ -167,6 +167,8 @@ def main(argv=None):
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--min-each', type=int, default=2)
     parser.add_argument('--select-only', action='store_true')
+    parser.add_argument('--baseline-only', action='store_true',
+                        help='collect and bind unguided development/confirmation fitness without an author')
     parser.add_argument('--server')
     parser.add_argument('--model-id', choices=('lfm', 'mellum'))
     parser.add_argument('--author')
@@ -190,8 +192,10 @@ def main(argv=None):
     if args.select_only:
         print(json.dumps({'manifest': str(args.out / 'batch.json'), 'ready': sum(job['ready'] for job in manifest['jobs'])}))
         return
-    if any(getattr(args, name) is None for name in ('server', 'model_id', 'author', 'author_model', 'author_provenance')):
-        parser.error('execution needs student server/model and self-hosted author endpoint/model/provenance')
+    if any(getattr(args, name) is None for name in ('server', 'model_id')):
+        parser.error('execution needs student server and model')
+    if not args.baseline_only and any(getattr(args, name) is None for name in ('author', 'author_model', 'author_provenance')):
+        parser.error('guided execution needs self-hosted author endpoint/model/provenance')
     # Each program owns a resumable journal. A failed job does not prevent other
     # ready programs from advancing; rerunning this command resumes each one.
     results = []
@@ -202,13 +206,17 @@ def main(argv=None):
         directory = args.out / ('program-' + program_id.rsplit(':', 1)[1][:16])
         arguments = ['--program-id', program_id, '--development', job['development']['path'],
                      '--confirmation', job['confirmation']['path'], '--out', str(directory / 'learning'),
-                     '--server', args.server, '--model-id', args.model_id, '--author', args.author,
-                     '--author-model', args.author_model, '--author-provenance', str(args.author_provenance),
+                     '--server', args.server, '--model-id', args.model_id,
                      '--foundation-id', args.foundation_id, '--generations', str(args.generations),
                      '--samples', str(args.samples), '--shards', str(args.shards),
                      '--temperature', str(args.temperature), '--case-seconds', str(args.case_seconds),
                      '--max-model-requests', str(args.max_model_requests), '--max-turns', str(args.max_turns),
                      '--seed-base', str(args.seed_base), '--min-gain-fraction', str(args.min_gain_fraction)]
+        if args.baseline_only:
+            arguments.append('--baseline-only')
+        else:
+            arguments.extend(['--author', args.author, '--author-model', args.author_model,
+                              '--author-provenance', str(args.author_provenance)])
         if args.recipe_base:
             arguments.extend(['--recipe-base', str(args.recipe_base)])
         if args.recipe_graph_root:
@@ -217,7 +225,8 @@ def main(argv=None):
         try:
             outcome = memetic_program.main(arguments)
             results.append({'program_id': program_id, 'status': outcome['status'],
-                            'result': str(directory / 'learning/result.json'),
+                            'result': str(directory / 'learning' /
+                                          ('baseline-result.json' if args.baseline_only else 'result.json')),
                             **({'binding': str(directory / 'learning/binding.json')}
                                if outcome['status'] == 'qualified' else {})})
         except Exception as error:
@@ -225,6 +234,10 @@ def main(argv=None):
         write_json_durable(args.out / 'progress.json', {'schema': 'natlang.memetic-batch-progress/1', 'results': results})
     if any(result['status'] == 'failed' for result in results):
         raise RuntimeError('some memetic program jobs failed; inspect progress.json and rerun to resume')
+    if args.baseline_only:
+        print(json.dumps({'manifest': str(args.out / 'batch.json'), 'status': 'baseline_complete',
+                          'results': results}))
+        return
     if args.recipe_base:
         bindings = [json.loads(Path(result['binding']).read_text()) for result in results if result['status'] == 'qualified']
         if not bindings:

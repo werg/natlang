@@ -40,11 +40,27 @@ PYTHONPATH=training/neuralese .venv-neuralese/bin/python -m natlang_neuralese.rl
   --select-only
 PYTHONPATH=training/neuralese .venv-neuralese/bin/python -m natlang_neuralese.rl.memetic_batch \
   --source /path/to/train-cases.jsonl --out /work/memetic-batch \
+  --server http://STUDENT:PORT --model-id lfm --baseline-only
+PYTHONPATH=training/neuralese .venv-neuralese/bin/python -m natlang_neuralese.rl.memetic_batch \
+  --source /path/to/train-cases.jsonl --out /work/memetic-batch \
   --server http://STUDENT:PORT --model-id lfm \
   --author http://SELF-HOSTED-QWEN:PORT --author-model Qwen/Qwen3.6-35B-A3B \
   --author-provenance verified-qwen36-author.json \
   --recipe-base /work/current-native-production-recipe.json --generations 3
 ```
+
+`--baseline-only` uses the evaluator while the author endpoint is unavailable.
+It runs unguided development and confirmation task-oracle samples without any
+author credentials or generation. Each program saves `baseline-result.json`,
+`state.json`, and exact `inputs.json`; the batch writes `progress.json`. The
+inputs bind the program, packet bytes, student checkpoint/tokenizer/embeddings,
+server info, system prompt, built TypeScript and Python evaluator runtime,
+queue worker, Node/Python versions, sampler, seeds, concurrency, and budgets.
+Each cached fit also binds its packet, guidance and input receipt, and each
+scored rollout must carry the actual student actor capture. Reissue the normal
+batch command with the same output directory and sampling options when the
+self-hosted author is reachable. It validates that earned baseline before
+continuing, then writes separate exact author provenance.
 
 The current 36-case failed-training packet has five ready programs spanning
 30 invocations: one 8-case program, three 6-case programs and one 4-case
