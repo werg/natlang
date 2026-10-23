@@ -210,7 +210,7 @@ def test_actual_managed_actor_policy_cli_and_durable_restart(tmp_path,family):
             for line in log.read_text().splitlines():
                 if line.startswith('{'):
                     receipt=json.loads(line)
-                    if receipt.get('event')=='direct_training_checkpoint_serving':return child,receipt
+                    if receipt.get('event')=='native_training_checkpoint_serving':return child,receipt
             if child.poll() is not None:raise AssertionError(log.read_text())
             time.sleep(.05)
         child.terminate();child.wait(30)
