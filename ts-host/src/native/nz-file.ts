@@ -8,7 +8,8 @@ import {verifyNativeStateDerivationRecords} from './native-state-derivation.js';
  */
 import { decodeNativeTensorArtifact, encodeNativeTensorArtifact, nativeTensorArtifactBlockMeta, nativeTensorArtifactDependencies, nativeStateArtifactDependencies, importNativeArtifactBundle, type NativeTensorArtifact, decodeNativeState, encodeNativeState, nativeStateBlockMeta, type NativeStateArtifact, type NeuraleseBlockMeta,
   type NeuraleseStore } from './neuralese-store.js';
-import { isNativeAdapterRef, isNeuraleseRef, nativeAdapterRef, neuraleseRef, type NeuraleseRef } from './neuralese.js';
+import { isNativeAdapterRef, isNativeTensorRef, isNeuraleseRef, nativeAdapterRef, nativeTensorRef, neuraleseRef,
+  type NeuraleseRef } from './neuralese.js';
 import { readTypeAliases } from './type-aliases.js';
 import { formatType, parseType, TypeEnv, type Type } from './types.js';
 import { coerce, Reject } from './values.js';
@@ -266,6 +267,14 @@ export function loadNzSync(bytes: Uint8Array, resolve?: NzResolver): LoadedNz {
         throw new NzFileError('neuralese-file-format', `${where}: native adapter reference needs an archived coefficient artifact`);
       return nativeAdapterRef(id);
     }
+    if ('$nativeTensor' in record && Object.keys(record).length === 1) {
+      if (!isNativeTensorRef(record)) throw new NzFileError('neuralese-file-format', `${where}: malformed native tensor reference`);
+      const { id, kind } = record.$nativeTensor;
+      const artifact = nativeTensors.get(id);
+      if (!artifact || artifact.metadata.kind !== kind)
+        throw new NzFileError('neuralese-file-format', `${where}: native tensor reference kind does not match its archived artifact`);
+      return nativeTensorRef(id, kind);
+    }
     if ('$neuralese-fn' in record && Object.keys(record).length === 1) {
       const body = record['$neuralese-fn'] as { type?: unknown; body?: unknown; body_stop_gradient?: unknown; body_source_occurrence?:unknown; captures?: unknown };
       if (body.body_stop_gradient !== undefined && body.body_stop_gradient !== true) throw new NzFileError('neuralese-file-format', `${where}: invalid body constant-use metadata`);
@@ -331,11 +340,13 @@ export async function saveNz(exports: Record<string, NzSaveExport>, options: { s
   const blocks = new Map<string, Uint8Array>();
   const nativeHeaders: Record<string, { bytes: number }> = {};
   const nativeTensorHeaders: Record<string, { bytes: number }> = {};
+  const archivedTensors = new Map<string, NativeTensorArtifact>();
   const use = async (id: string, where: string) => {
     if (nativeHeaders[id] || nativeTensorHeaders[id]) return;
     if (id.startsWith('nnt1_')) {
       const artifact = await options.store.getNativeTensorArtifact(id);
       if (!artifact) throw new NzFileError('neuralese-unknown-block', `${where} uses named native tensor ${id} not held by the store`);
+      archivedTensors.set(id, artifact);
       const wire = encodeNativeTensorArtifact(artifact);
       nativeTensorHeaders[id] = { bytes: wire.length };
       blocks.set(id, wire);
@@ -361,6 +372,13 @@ export async function saveNz(exports: Record<string, NzSaveExport>, options: { s
     if (isNativeAdapterRef(value)) {
       await use(value.$nativeAdapter.id, where);
       return { $nativeAdapter: { id: value.$nativeAdapter.id } };
+    }
+    if (isNativeTensorRef(value)) {
+      await use(value.$nativeTensor.id, where);
+      const artifact = archivedTensors.get(value.$nativeTensor.id);
+      if (!artifact || artifact.metadata.kind !== value.$nativeTensor.kind)
+        throw new NzFileError('neuralese-file-type', `${where} native tensor kind does not match its archived artifact`);
+      return { $nativeTensor: { id: value.$nativeTensor.id, kind: value.$nativeTensor.kind } };
     }
     if (isSoftFunctionSpec(value)) {
       await use(value.body, where);

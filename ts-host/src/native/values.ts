@@ -1,7 +1,7 @@
 import { checkHost, DEFAULT_DIALECT, fitsType, formatType, parseType, TypeEnv } from './types.js';
 import type { Type } from './types.js';
 import { FileHandle, Folder, FolderHandle, type FolderTransaction } from './scoped-fs.js';
-import { isNeuraleseRef, neuraleseRef, soleSentinelUse, isContentParts, partsToText } from './neuralese.js';
+import { isNeuraleseRef, isNativeTensorRef, neuraleseRef, soleSentinelUse, isContentParts, partsToText } from './neuralese.js';
 import { isFusedRef } from './fusion-blocks.js';
 
 export const MISSING = Symbol('natlang-missing');
@@ -170,6 +170,10 @@ export function coerce(raw: unknown, type: Type, env: TypeEnv, path = 'value', o
   // A refinement is structural here (its base); the predicate is checked by native/refinement.ts where the value enters.
   if (wanted.kind === 'refined' || wanted.kind === 'untrusted') return coerce(raw, wanted.base, env, path, options);
   if (wanted.kind === 'host') {
+    if (wanted.name === 'NativeTensor') {
+      if (isNativeTensorRef(raw)) return raw as unknown as Value;
+      return reject(path, 'type-mismatch', wanted.name, preview(raw));
+    }
     if (isContentParts(raw) && raw.some(part => part.type !== 'text'))
       return reject(path, 'type-mismatch', wanted.name, preview(raw));
     if (checkHost(raw, wanted.contract, env.classes)) return raw as Value;

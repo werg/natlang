@@ -27,6 +27,23 @@ export function nativeAdapterRef(id: string): NativeAdapterRef {
   if (!/^nnt1_[a-z2-7]{52}$/.test(id)) throw new RangeError('native adapter references require a named nnt1 artifact ID');
   return Object.freeze({ $nativeAdapter: Object.freeze({ id }) });
 }
+/** Opaque typed reference to a named tensor artifact other than adapter coefficients. */
+export type NativeTensorRefKind = Exclude<import('./neuralese-store.js').NativeTensorArtifactMetadata['kind'], 'adapter-coefficients'>;
+export type NativeTensorRef = { readonly $nativeTensor: { readonly id: string; readonly kind: NativeTensorRefKind } };
+const NATIVE_TENSOR_REF_KINDS = new Set<NativeTensorRefKind>([
+  'parameter-set', 'parameter-gradient', 'parameter-update', 'state-gradient', 'optimizer-state',
+  'adapter-basis', 'adapter-gradient', 'derivative-program',
+]);
+export const isNativeTensorRef = (value: unknown): value is NativeTensorRef => !!value && typeof value === 'object' &&
+  !Array.isArray(value) && Object.keys(value).length === 1 && '$nativeTensor' in value &&
+  !!(value as NativeTensorRef).$nativeTensor && Object.keys((value as NativeTensorRef).$nativeTensor).length === 2 &&
+  /^nnt1_[a-z2-7]{52}$/.test((value as NativeTensorRef).$nativeTensor.id) &&
+  NATIVE_TENSOR_REF_KINDS.has((value as NativeTensorRef).$nativeTensor.kind);
+export function nativeTensorRef(id: string, kind: NativeTensorRefKind): NativeTensorRef {
+  if (!/^nnt1_[a-z2-7]{52}$/.test(id) || !NATIVE_TENSOR_REF_KINDS.has(kind))
+    throw new RangeError('native tensor references require an nnt1 artifact ID and a non-coefficient tensor kind');
+  return Object.freeze({ $nativeTensor: Object.freeze({ id, kind }) });
+}
 export type NeuraleseTextPart = { type: 'text'; text: string };
 export type NativeStateContentPart = { type: 'native_state'; id: string; stop_gradient?: true; source_occurrence?:string };
 export type ContentPart = NeuraleseTextPart | NativeStateContentPart;
@@ -106,7 +123,7 @@ export function isNeuraleseRef(value: unknown): value is NeuraleseRef {
 
 /** The conversation-text marker for a block. */
 export function neuraleseSentinel(id: string, stopGradient = false, sourceOccurrence?:string): string {
-  if (isNativeTensorArtifactId(id)) throw new Error('neuralese-native-tensor-as-state: bind coefficient artifacts with withNativeAdapters; named tensor artifacts cannot be consumed as communication state');
+  if (isNativeTensorArtifactId(id)) throw new Error('neuralese-native-tensor-as-state: named tensor artifacts are not communication state; use NativeTensor for portable tensor references and NativeAdapter only for coefficient actors');
   return nativeStateSentinel(id, stopGradient, sourceOccurrence);
 }
 

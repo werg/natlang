@@ -5,7 +5,7 @@ import { MemoryNeuraleseStore } from '../../dist/native/neuralese-store.js';
 import { nativeAdapterCreate, nativeAdapterOptimizerStep, nativeGraphGradient } from '../../dist/neuralese/native-learning-client.js';
 import { restoreNativeTensorArtifacts } from '../../dist/neuralese/native-tensor-client.js';
 import { neuraleseServerModelTurn } from '../../dist/model/neuralese-server.js';
-import { nativeAdapterRef, neuraleseRef } from '../../dist/native/neuralese.js';
+import { nativeAdapterRef, nativeTensorRef, neuraleseRef } from '../../dist/native/neuralese.js';
 import { createLearning, learningService } from '../../dist/neuralese/learning.js';
 import { nativeTextOperation } from '../../dist/model/native-state-client.js';
 import { saveNz, loadNz } from '../../dist/native/nz-file.js';
@@ -42,11 +42,13 @@ const adapted=await withNativeAdapters(nativeAdapterRef(adapter.id),()=>driver.d
 assert.notDeepEqual(adapted.log_probs,base.log_probs);
 const written=await nativeTextOperation({endpoint,store},'write-text',{text:'t5 t6',adapters:[adapter.id]});
 const bytes=await saveNz({memo:{type:'Neuralese<string>',value:neuraleseRef('Neuralese<string>',written.result.id)},adapter:{type:'NativeAdapter',value:nativeAdapterRef(adapter.id)},
-  optimizer:{type:'Neuralese<unknown>',value:neuraleseRef('Neuralese<unknown>',state)}},
+  optimizer:{type:'NativeTensor',value:nativeTensorRef(state,'optimizer-state')}},
   {store,dialect:'native-tensor/adapter-coefficients'});
 const portable=new MemoryNeuraleseStore();
 const loaded=await loadNz(bytes,{store:portable});
 assert.equal(loaded.exports.adapter.$nativeAdapter.id,adapter.id);
+assert.equal(loaded.exports.optimizer.$nativeTensor.id,state,'the portable optimizer reference retains the continuation ID');
+assert.equal(loaded.exports.optimizer.$nativeTensor.kind,'optimizer-state');
 assert.equal(loaded.nativeStates.size,1);
 assert.ok(loaded.nativeTensors.size>=3,'coefficients, exact bases, optimizer continuation travel together');
 await portable.collect(new Set([adapter.id,state]));

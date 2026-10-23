@@ -38,6 +38,9 @@ export type DialectBinding = { readonly dialect: string | null; blockDialect?(id
 /** `NativeAdapter` is an opaque reference to an archived nnt1 coefficient artifact. */
 export const NATIVE_ADAPTER_TYPE: Type = { kind: 'host', name: 'NativeAdapter',
   contract: { kind: 'shape', members: ['$nativeAdapter'] } };
+/** `NativeTensor` is an opaque ref to one archived non-coefficient nnt1 tensor artifact. */
+export const NATIVE_TENSOR_TYPE: Type = { kind: 'host', name: 'NativeTensor',
+  contract: { kind: 'shape', members: ['$nativeTensor'] } };
 
 /** Runtime check for a live host value. */
 export type HostCheck =
@@ -220,6 +223,7 @@ class Parser {
       return { kind: 'dict', element: value! };
     }
     if (token.value === 'NativeAdapter') return NATIVE_ADAPTER_TYPE;
+    if (token.value === 'NativeTensor') return NATIVE_TENSOR_TYPE;
     if (token.value === 'Neuralese' && this.peek()?.value === '<') {
       // Neuralese<T> or Neuralese<T, D>; D is a dialect name or string literal.
       this.eat('<');

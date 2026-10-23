@@ -226,6 +226,9 @@ declare module 'natlang:neuralese' {
 }
 declare module 'natlang:learning' {
   export interface NativeAdapter { readonly $nativeAdapter: { readonly id: string } }
+  export type NativeTensorKind = 'parameter-set' | 'parameter-gradient' | 'parameter-update' | 'state-gradient' |
+    'optimizer-state' | 'adapter-basis' | 'adapter-gradient' | 'derivative-program';
+  export interface NativeTensor { readonly $nativeTensor: { readonly id: string; readonly kind: NativeTensorKind } }
   export interface Loss { readonly __natlangLoss: true; valueOf(): number }
   export interface Gradient<A> { readonly __natlangGradient: A }
   export interface Trajectory { readonly id: string }

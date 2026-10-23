@@ -73,6 +73,7 @@ export { promptPieces, renderSystemPrompt, renderPromptMessages, type PromptRend
 export { serverViewer, VIEW_TYPE, type Viewer, type ViewSite, type NativeViewTurn } from './neuralese/view.js';
 export type { LearningService, Gradient, Optimizer, OptimizerState, Trajectory } from './neuralese/learning.js';
 export { nativeAdapterRef, isNativeAdapterRef, type NativeAdapterRef } from './native/neuralese.js';
+export { nativeTensorRef, isNativeTensorRef, type NativeTensorRef, type NativeTensorRefKind } from './native/neuralese.js';
 export { COMBINATORS, createNeuraleseLibrary } from './neuralese/combinators.js';
 export { buildStandardLibrary, loadStandardLibrary } from './neuralese/node-files.js';
 export { initBodyInContext, captureCallRequest, type TextInitResult } from './neuralese/text-init.js';
