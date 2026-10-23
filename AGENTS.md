@@ -36,6 +36,15 @@ usable source data and protected evaluation data. Historical hashes and manifest
 alone do not justify retaining a current legacy entrypoint; actual frozen recovery
 and historical-reader dependencies retain their own exact sources as needed.
 
+Apply this default across the system: do not keep obsolete adapters or compatibility
+shims merely because an older API, test or recipe mentions them. Inventory current
+callers, implement their useful behavior in the native architecture, migrate those
+callers, and remove the obsolete entrypoints. Delegate concrete architectural gaps
+for implementation and independently review the integrated result. An explicit
+unsupported error is useful during migration but is not completion of missing
+functionality. Keep actual live recovery dependencies until their replacement is
+verified.
+
 The owner specifically requested a Sol subagent for this implementation and
 allowed it to delegate missing functionality. That is a task-specific exception
 to Luna-only engineering delegation; other helpers remain Luna, never generation.
