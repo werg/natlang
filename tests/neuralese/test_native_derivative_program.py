@@ -174,7 +174,7 @@ def test_heterogeneous_meta_gradient_distinguishes_original_from_updated_actors(
     name=next(key for key in target_parameters(engine.shared_model) if key.endswith('v_proj.weight'))
     base=create_adapter(engine,{'kind':'xs','rank':2,'parameter_names':[name]})
     source=engine.store.put_native_tensor_artifact(replace(base.artifact,tensors={name:torch.full_like(base.artifact.tensors[name],.04)}))
-    target,_=nonzero_adapter(engine,'tiny')
+    target,_=nonzero_adapter(engine,'xs')
     body=program(engine,source)
     body['inputs']['b']={'kind':'adapter','id':target.id};body['wrt']=['a','b']
     for objective in [body['outer'],*(node for node in body['nodes'] if node['kind']=='gradient')]:
