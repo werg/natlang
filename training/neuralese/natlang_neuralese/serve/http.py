@@ -4,7 +4,7 @@
 | --- | --- |
 | `POST /v1/chat/completions` | OpenAI-style chat completion with Neuralese parts. With `"stream": true` (as the fork), answers server-sent `chat.completion.chunk` events: text deltas until a tool call opens (`<|tool_call_start|>` or `<tool_call>`; the markup is held back), a `[{"type": "neuralese", "id": …}]` content delta per written block (with `neuralese.block`, its metadata), the parsed calls as one `tool_calls` delta, and a final chunk whose `x_natlang_message` is the complete parsed message (with `usage`, `neuralese` and, with guidance, `x_natlang_guidance`). |
 | `GET /v1/models`, `GET /health`, `GET /v1/health` | Model listing and liveness. |
-| `GET /v1/neuralese/info` | `dialects`, `width`, `dtype`, `max_block_length`, `cutoff`, `grad` (true), `grad_order` (2), `adapters` (kinds applied directly), `projections` (adapter-code decoders), `prompt_rendering` and its content identity, and `stream` (true: chat completions stream; clients stream only to servers that declare it). |
+| `GET /v1/neuralese/info` | `dialects`, `width`, `dtype`, `max_block_length`, `cutoff`, `grad` (true), `grad_order` (2), `adapters` (kinds applied directly), `prompt_rendering` and its content identity, and `stream` (true: chat completions stream; clients stream only to servers that declare it). |
 | `PUT /v1/neuralese/blocks/{id}` | Store a block (safetensors body); the ID is checked against the content. |
 | `GET /v1/neuralese/blocks/{id}` | Fetch a block (safetensors body). |
 | `GET /v1/neuralese/blocks/{id}/meta` | Block metadata as JSON. |
@@ -35,8 +35,7 @@ and pins outlive restarts; a client that still gets `neuralese-unknown-block` re
 Request fields beyond OpenAI's: `neuralese_temperature` (default 0, deterministic), `neuralese_max_length` (capped
 by the server's hard maximum), `neuralese_length` (an optional size hint: write exactly that many vectors, no stop
 decision) and `neuralese_passes` (with a hint, write the block in that many parallel passes; exact when ≥ the length), `x_natlang_adapters` (`[{"id", "scale"}]`: adapter blocks active for the whole
-request, or `{"code", "projection", "scale"}`: a Neuralese block decoded into an adapter by a served projection;
-batches may mix requests with different adapters), `neuralese_template` (template readout: the reply is forced to
+request. Projected adapter codes are retired; use positional native-state parts in the prompt), `neuralese_template` (template readout: the reply is forced to
 a call, `{"call", "arguments"?, "argument"?, "value": "write" | "decode"}`, cut from the model's own rendering of that
 call; "write" makes the argument a written block and closes the call, "decode" decodes the value and the rest), and
 `guidance` (serve/guidance.py: `true` or `{"require_call"?, "repeat"?, "syntax"?, "retries"?}`: the reply opens a
@@ -82,7 +81,7 @@ _LORA = re.compile(r"^/v1/neuralese/adapters/(nz1_[a-z2-7]+)/lora$")
 # What this server serves (spec/NEURALESE_PORT.md "Capabilities"): every runtime reports its list in
 # /v1/neuralese/info and answers a capability it lacks with 501 `neuralese-<capability>-unavailable`.
 CAPABILITIES = sorted([
-    "adapters.create", "adapters.direct", "adapters.lora-export", "adapters.projection", "chat", "chat.stream",
+    "adapters.create", "adapters.direct", "adapters.lora-export", "chat", "chat.stream",
     "decide", "embed", "encode", "grad", "grad.order2", "guidance", "guidance.check", "init-body", "optim", "parts.value-type",
     "native.text-write", "native.init-body", "render", "score", "store", "store.owners", "store.native-state", "template", "template.argument-path", "template.value-type", "view", "write"])
 NATIVE_CAPABILITIES = sorted([
@@ -190,9 +189,6 @@ def make_handler(engine: Engine):
                                         "grad": True, "grad_order": 2 if not native_enabled else 1, "stream": True,
                                         "cutoff": None if native_enabled else engine.heads.cutoff,
                                         "adapters": ["xs", "tiny"],
-                                        "projections": {} if native_enabled else
-                                            {name: {"source": p.source_dialect, "target": p.target, "identity": p.identity()}
-                                             for name, p in engine.projections.items()},
                                         **({"native_state": {"enabled": True, "format":
                                                               ('neuralese.semantic-state/1' if getattr(engine, 'semantic_channel', None)
                                                                else 'neuralese.native-state/1'),

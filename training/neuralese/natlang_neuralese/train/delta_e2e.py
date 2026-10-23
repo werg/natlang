@@ -36,7 +36,7 @@ import torch
 
 from ..model.projections import DeltaProjection
 from .decision import target_distribution
-from .projection_e2e import quality, write_prompt
+from .decision_data import quality, write_prompt
 
 BASE_TEXT = "Read the input closely, weigh the evidence for each allowed answer, and give the answer the evidence supports."
 SKILL_ID = "nz1_" + "a" * 52  # the leaf name the skill block is shown under; its rows always come from the leaves

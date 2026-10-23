@@ -52,8 +52,6 @@ def main(argv=None):
                         help="pack prompts of different lengths into one left-padded prefill (faster, not bit-identical)")
     parser.add_argument("--memory-gb", type=float, default=float(os.environ["NATLANG_CUDA_MEMORY_GB"]) if os.environ.get("NATLANG_CUDA_MEMORY_GB") else None,
                         help="cap this process's CUDA allocations (memory is shared with the rest of the machine)")
-    parser.add_argument("--projection", action="append", default=[], metavar="NAME=PATH",
-                        help="an adapter projection P (model/projections.py) served under NAME; repeatable")
     parser.add_argument("--store-dir", nargs="?", const="", default=None, metavar="DIR",
                         help="keep blocks, holds and pins on disk so they outlive restarts (serve/store.py); without DIR, "
                              "<data_nvme>/neuralese-blocks/<dialect> (NVMe)")
@@ -73,8 +71,8 @@ def main(argv=None):
         parser.error('--direct-base-snapshot requires --direct-artifact')
     if args.native_checkpoint and (args.direct_artifact or args.recurrence_checkpoint or args.runtime_qualification or
             args.lora or args.heads or args.cutoff is not None or args.max_block is not None or args.dialect or
-            args.projection or args.direct_base_snapshot):
-        parser.error('--native-checkpoint cannot be combined with legacy heads, projection, direct or recurrence inputs')
+            args.direct_base_snapshot):
+        parser.error('--native-checkpoint cannot be combined with legacy heads, direct or recurrence inputs')
     if args.deterministic_gradients:
         os.environ["NATLANG_NEURALESE_DETERMINISTIC"] = "1"
         os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
@@ -154,12 +152,6 @@ def main(argv=None):
         directory = args.store_dir or resolve("data_nvme", "neuralese-blocks", re.sub(r"[^A-Za-z0-9._-]+", "_", engine.dialect))
         engine.store = TensorStore(directory, int(args.store_resident_gb * 2**30))  # the loaders return an empty store
     engine.default_guidance = json.loads(args.guidance) if args.guidance else None
-    if args.projection:
-        from ..model.projections import AdapterProjection
-
-        for item in args.projection:
-            name, path = item.split("=", 1)
-            engine.projections[name] = AdapterProjection.load(path, map_location=args.device).to(args.device).eval()
     engine.start()
     server = serve(engine, args.host, args.port)
     from ..data.prompt_rendering import prompt_rendering_identity

@@ -32,6 +32,8 @@ export type RecordedTurn = {
 
 /** An adapter block bound for a call, with its scale (serve/grad.py, model/tiny_adapters.py). */
 export type AdapterBinding = { readonly id: string; readonly scale: number; readonly stop_gradient?:true };
+/** A stored positional KV/hybrid-state value supplied as context to a model call. */
+export type NativeStateBinding = { readonly id: string; readonly stop_gradient?: true };
 
 export interface TurnRecorder {
   record(turn: RecordedTurn): void;
@@ -48,12 +50,19 @@ export function setRecorderSource(next: () => TurnRecorder | undefined): void { 
 export function activeRecorder(): TurnRecorder | undefined { return source(); }
 
 let adapterSource: () => readonly AdapterBinding[] | undefined = () => undefined;
+let nativeStateSource: () => readonly NativeStateBinding[] | undefined = () => undefined;
 
 /** Install where the active adapters come from (the learning module's `withAdapters`). */
 export function setAdapterSource(next: () => readonly AdapterBinding[] | undefined): void { adapterSource = next; }
 
+/** Install where active stored native-state context comes from. */
+export function setNativeStateSource(next: () => readonly NativeStateBinding[] | undefined): void { nativeStateSource = next; }
+
 /** Adapters active in the current asynchronous context; a Neuralese driver sends them with every request. */
 export function activeAdapters(): readonly AdapterBinding[] { return adapterSource() ?? []; }
+
+/** Stored positional state active in the current asynchronous context. */
+export function activeNativeStates(): readonly NativeStateBinding[] { return nativeStateSource() ?? []; }
 
 export class ModelTurnRecorder implements TurnRecorder {
   readonly turns: RecordedTurn[] = [];

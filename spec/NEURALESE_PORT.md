@@ -135,7 +135,6 @@ become dashes, e.g. `neuralese-chat-stream-unavailable`).
 | `optim` | `POST /v1/neuralese/optim`. | yes | no |
 | `adapters.create` | `POST /v1/neuralese/adapters`. | yes | no |
 | `adapters.direct` | Adapter blocks applied directly (`tiny`, `xs`). | yes | no |
-| `adapters.projection` | Adapters given as a code through a served projection. | yes | no |
 | `adapters.lora-export` | `GET /v1/neuralese/adapters/{id}/lora`. | yes | no |
 | `adapters.lora-load` | `PUT /v1/neuralese/adapters/{id}/lora`: adapters apply as loaded LoRAs. | no | yes |
 
@@ -190,7 +189,6 @@ OpenAI-style chat completion. Request fields beyond OpenAI's:
 | `neuralese_template.value_type` | `"string"` (default) or `"unknown"`: the written value sits unquoted; the block is typed `Neuralese<unknown>` and its parts carry `value_type: "unknown"`. Another value is `neuralese-template`. | both (`template.value-type`) |
 | `neuralese_template.argument_path` | A list of string or integer keys addressing the value inside nested arguments; it starts at `argument`, and every key must exist in `arguments` (else `neuralese-template`). | both (`template.argument-path`) |
 | `x_natlang_adapters` | `[{"id", "scale"}]`: adapter blocks active for the whole request. | both; the fork needs a loaded LoRA per ID, else 409 `neuralese-adapter-not-loaded` |
-| `x_natlang_adapters` with `{"code", "projection", "scale"}` | A Neuralese block decoded into an adapter by a served projection (`info.projections`). Errors: `neuralese-projection`. | reference only (`adapters.projection`); the fork answers 501 `neuralese-adapters-projection-unavailable` |
 | `guidance` | `true` or `{"require_call"?, "tools"?, "repeat"?, "syntax"?, "retries"?, "run"?}` (`{}`: on, every default; absent, `null` or `false`: off): the reply opens a tool call (`require_call` defaults to `tool_choice == "required"`), call names are checked against `tools` (default: the offered tools), eval code is checked line by line for repetition and TypeScript syntax, and a rejected line is rolled back and resampled. | both; the reference may also apply a server default (`--guidance`) |
 | `seed` | Also seeds the payload noise of each written block (with the block's index). | both; the noise generators differ, so payloads at `τ > 0` differ between servers |
 | `x_natlang_forced` | Test hook: a plan of text strings and `{"neuralese": "write"}` items that replaces sampling. Errors: `forced-plan`. | both |
@@ -299,7 +297,6 @@ that a client loads first.
 | `grad` | Whether `grad` sessions are served: `true` (reference), `false` (fork). | both |
 | `grad_order` | Highest gradient order: 2 (reference), 0 (fork: none). | both |
 | `adapters` | Adapter kinds applied directly: `["xs", "tiny"]` (reference), `[]` (fork: adapters apply as LoRAs loaded with `PUT …/lora`, capability `adapters.lora-load`). | both |
-| `projections` | `{name: {"source", "target", "identity"}}`: projections that decode adapter codes (`{}` on the fork). | both |
 | `stream` | `true`: chat completions honour `"stream": true` (Streaming, above). Clients stream only to a server that declares it; absent means not streaming. | both |
 | `store` | `{"owners": true, "persistent": bool}`: owner-scoped holds, pins and collection; whether blocks outlive a restart. | both |
 | `server` | `"reference"` or `"llama.cpp"`. | both |

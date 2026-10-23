@@ -19,7 +19,7 @@ export function serves(info: Record<string, unknown>, capability: string): boole
   const lora = info.adapters === 'lora';
   if (capability === 'adapters.lora-load') return lora;
   const referenceOnly = ['grad', 'grad.order2', 'embed', 'optim', 'adapters.create', 'adapters.direct', 'adapters.lora-export',
-    'adapters.projection', 'chat.stream', 'template.value-type', 'template.argument-path', 'parts.value-type'];
+    'chat.stream', 'template.value-type', 'template.argument-path', 'parts.value-type'];
   return !(lora && referenceOnly.includes(capability));
 }
 

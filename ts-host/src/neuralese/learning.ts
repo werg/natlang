@@ -18,17 +18,19 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { writeFileSync } from 'node:fs';
 import { currentFrame } from '../runtime/context.js';
-import { isNeuraleseRef, neuraleseRef, type NeuraleseRef } from '../native/neuralese.js';
+import { isNativeStateId, isNeuraleseRef, neuraleseRef, type NeuraleseRef } from '../native/neuralese.js';
 import { constantBlock, type NeuraleseBlock, type NeuraleseBlockMeta, type NeuraleseStore } from '../native/neuralese-store.js';
 import { distributionOf, saveNz, type NzSaveExport } from '../native/nz-file.js';
 import { fetchModel } from '../model/chat-completion.js';
 import { HttpNeuraleseStore, restoreBlocks } from '../model/neuralese-server.js';
 import * as deltaOps from './deltas.js';
 import { setSystemPromptSource, systemPromptBank, type SystemPromptBank } from '../native/system-prompts.js';
-import { setAdapterSource, setRecorderSource, type AdapterBinding, type RecordedTurn, ModelTurnRecorder } from './recording.js';
+import { setAdapterSource, setNativeStateSource, setRecorderSource, type AdapterBinding, type NativeStateBinding, type RecordedTurn, ModelTurnRecorder } from './recording.js';
 import { archiveNativeTensorArtifact } from './native-tensor-client.js';
 import { createNeuraleseLibrary, type StandardLibrary } from './combinators.js';
 import type { ReplayRecordSink } from './replay-records.js';
+import { nativeGraphGradient, nativeStateOptimizerStep, type NativeGraphRow, type NativeOptimizerSpec } from './native-learning-client.js';
+import type { NativeModelIdentity, NativeTensorArtifact } from '../native/neuralese-store.js';
 
 type Json = Record<string, unknown>;
 
@@ -374,6 +376,8 @@ type AdapterUse = NeuraleseRef | { adapter: NeuraleseRef; scale?: number };
 
 const adapterScope = new AsyncLocalStorage<readonly AdapterBinding[]>();
 setAdapterSource(() => adapterScope.getStore());
+const nativeStateScope = new AsyncLocalStorage<readonly NativeStateBinding[]>();
+setNativeStateSource(() => nativeStateScope.getStore());
 
 /**
  * Run `fn` with weight adapters active: every Neuralese-server turn inside (generation and decision readouts) runs
@@ -387,6 +391,22 @@ export async function withAdapters<T>(adapters: AdapterUse | readonly AdapterUse
     return { id: ref.$neuralese.id, scale: isNeuraleseRef(item) ? 1 : item.scale ?? 1, ...(ref.$neuralese.stop_gradient ? {stop_gradient:true} : {}) };
   });
   return adapterScope.run([...(adapterScope.getStore() ?? []), ...bindings], fn);
+}
+
+/**
+ * Run `fn` with stored positional KV/hybrid state included in every model
+ * call. The state is call context; it does not change model parameters. Use
+ * `nativeGraphGradient` with a `native-state` target and
+ * `nativeStateOptimizerStep` to learn an updated state artifact.
+ */
+export async function withNativeStates<T>(states: string | readonly string[], fn: () => Promise<T> | T): Promise<T> {
+  const bindings = (Array.isArray(states) ? states : [states]).map((id): NativeStateBinding => {
+    if (typeof id !== 'string' || !isNativeStateId(id))
+      throw new LearningError('learning-native-state', 'withNativeStates takes stored native-state IDs');
+    return { id };
+  });
+  if (!bindings.length) throw new LearningError('learning-native-state', 'withNativeStates needs at least one stored native-state ID');
+  return await nativeStateScope.run(bindings, fn);
 }
 
 // System prompts -------------------------------------------------------------------------------------
@@ -575,7 +595,25 @@ export function createLearning(explicit?: LearningService, options: { library?: 
     stopGradient,
     objectives: bound,
     withAdapters,
+    withNativeStates,
     withSystemPrompts,
+    /** Native positional state learning. Updates return a new state artifact with immutable optimizer ancestry. */
+    nativeStates: {
+      gradient: async (graph: NativeGraphRow, id: string, nativeIdentity: NativeModelIdentity,
+          options: { nativeStateModes?: Record<string, 'same-base-adapter-state'>; objective?: 'graph-ce' } = {}) => {
+        const current = service('nativeStates.gradient');
+        if (!current.store) throw new LearningError('learning-native-state-store', 'native state learning requires an archived state store');
+        return nativeGraphGradient(current.endpoint, current.store, { graph, target: { kind: 'native-state', id }, nativeIdentity,
+          nativeStateModes: options.nativeStateModes, objective: options.objective, headers: current.headers });
+      },
+      optimize: async (gradient: NativeTensorArtifact, nativeIdentity: NativeModelIdentity, optimizer: NativeOptimizerSpec,
+          optimizerStateId?: string) => {
+        const current = service('nativeStates.optimize');
+        if (!current.store) throw new LearningError('learning-native-state-store', 'native state learning requires an archived state store');
+        return nativeStateOptimizerStep(current.endpoint, current.store, { gradient, nativeIdentity, optimizer,
+          optimizerStateId, headers: current.headers });
+      },
+    },
     /** Residual updates (LEARNING_CONTINUUM §5): soft values and adapters by block arithmetic, crisp files by patch. */
     deltas: {
       diff: (after: NeuraleseRef, base: NeuraleseRef) => deltaOps.diff(deltaStores(service('deltas.diff')), after, base),

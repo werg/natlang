@@ -236,9 +236,16 @@ declare module 'natlang:learning' {
   export function grad<A>(f: (a: A) => Promise<Loss>, a: A, options?: { order?: 1 | 2 }): Promise<Gradient<A>>;
   export function valueAndGrad<A>(f: (a: A) => Promise<Loss>, a: A, options?: { order?: 1 | 2 }): Promise<{ loss: Loss; grad: Gradient<A> }>;
   export function stopGradient<T>(v: T): T;
-  /** A weight adapter value: coefficients of a tiny adapter of the serving model (\`Adapter\` in natlang types). */
-  export type Adapter = Neuralese<{ $adapter: 'adapter' }>;
-  export function withAdapters<T>(adapters: Adapter | { adapter: Adapter; scale?: number } | Array<Adapter | { adapter: Adapter; scale?: number }>, fn: () => Promise<T> | T): Promise<T>;
+  export function withNativeStates<T>(states: string | readonly string[], fn: () => Promise<T> | T): Promise<T>;
+  export const nativeStates: {
+    gradient(graph: { schema: 'natlang.neuralese-native-graph/1'; split: string }, id: string,
+      nativeIdentity: { architecture: string; checkpoint_sha256: string; tokenizer_fingerprint: string; embedding_weight_sha256: string },
+      options?: { nativeStateModes?: Record<string, 'same-base-adapter-state'>; objective?: 'graph-ce' }): Promise<unknown>;
+    optimize(gradient: unknown,
+      nativeIdentity: { architecture: string; checkpoint_sha256: string; tokenizer_fingerprint: string; embedding_weight_sha256: string },
+      optimizer: { name: 'sgd' | 'adam'; learning_rate?: number; weight_decay?: number; beta1?: number; beta2?: number; eps?: number; momentum?: number },
+      optimizerStateId?: string): Promise<unknown>;
+  };
   /** Run fn with soft forms of the runtime prompt pieces (piece ID → Neuralese<SystemPrompt>); differentiable like any soft value. */
   export function withSystemPrompts<T>(prompts: Record<string, Neuralese<string>>, fn: () => Promise<T> | T): Promise<T>;
   export const adapters: {
