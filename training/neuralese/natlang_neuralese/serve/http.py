@@ -54,7 +54,6 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from .chat import RequestError, arguments_text
 from .engine import Engine, GenerationRequest
 from .guidance import Settings
-from .grad import GradSession, decide, decide_many, embed_text, encode_text, optim_step
 from .store import decode_block, encode_block, decode_native_state, encode_native_state
 
 _BLOCK = re.compile(r"^/v1/neuralese/blocks/(nz1_[a-z2-7]+)(/meta|/pin|/unpin)?$")
@@ -331,6 +330,7 @@ def make_handler(engine: Engine):
                                 from .native_derivative import execute_derivative_program
                                 return self._json(200,execute_derivative_program(engine,body['native_derivative_program'],self._owner))
                             return self._json(200, native_graph_gradient(engine, body, self._owner))
+                    from .grad import GradSession
                     with grad_lock:
                         return self._json(200, GradSession(engine).run(body))
                 if self.path == "/v1/neuralese/decide":
@@ -338,6 +338,7 @@ def make_handler(engine: Engine):
                     if getattr(engine, "native_state_enabled", False):
                         from .native_learning import decide_native
                         return self._json(200, decide_native(engine, body))
+                    from .grad import decide
                     with grad_lock:
                         return self._json(200, decide(engine, body))
                 if self.path in ("/v1/natlang/score", "/v1/neuralese/decide_many"):
@@ -345,6 +346,7 @@ def make_handler(engine: Engine):
                     if getattr(engine, "native_state_enabled", False):
                         from .native_learning import decide_many_native
                         return self._json(200, decide_many_native(engine, body))
+                    from .grad import decide_many
                     with grad_lock:
                         return self._json(200, decide_many(engine, body))
                 if self.path == "/v1/neuralese/optim":
@@ -353,6 +355,7 @@ def make_handler(engine: Engine):
                         from .native_optim import native_optimizer_step
                         with grad_lock:
                             return self._json(200, native_optimizer_step(engine, body, self._owner))
+                    from .grad import optim_step
                     with grad_lock:
                         return self._json(200, optim_step(engine, body))
                 if self.path == "/v1/neuralese/adapters":
@@ -367,6 +370,7 @@ def make_handler(engine: Engine):
                             raise RequestError('neuralese-native-adapter-invalid', str(error)) from error
                 if self.path == "/v1/neuralese/embed":
                     body = self._object()
+                    from .grad import embed_text
                     return self._json(201, embed_text(engine, body.get("text") or "", body.get("type")).meta())
                 if self.path == "/v1/neuralese/write":
                     body = self._object()
@@ -488,6 +492,7 @@ def make_handler(engine: Engine):
                     return self._json(201, {"block": block.meta(), "init": info, "gate": gate})
                 if self.path == "/v1/neuralese/encode":
                     body = self._object()
+                    from .grad import encode_text
                     with grad_lock:
                         block = encode_text(engine, body.get("text") or "", body.get("type"), body.get("context"))
                     return self._json(201, block.meta())

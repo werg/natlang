@@ -49,9 +49,7 @@ def decode_prefix_tokens(tokenize, prefix: str) -> list[int]:
 
 import torch
 
-from ..model.heads import PortHeads, sample_payload
 from ..model.lfm2_port import PortBackbone, PortCache
-from ..write import Opened, read_back
 from .batch import split_rows, step_rows
 from .chat import RequestError, build_message, placeholder, render_messages, split_escaped
 from .store import Block, TensorStore, make_block
@@ -168,6 +166,7 @@ class StepWriter:
         final, _ = self.backbone.run_layers(shallow, range(self.heads.cutoff, self.backbone.num_layers),
                                             self.opened.cache)
         mu, log_sigma = self.heads.content.distribution(sketches, self.heads.payload_states(final, self.opened.top))
+        from ..model.heads import sample_payload
         sampled = sample_payload(mu, log_sigma, temperature, generator)
         return sampled.payload, mu, log_sigma
 
@@ -1648,10 +1647,12 @@ class Engine:
             if self.heads.read_markers:
                 ids = torch.tensor([[token]], device=self.device)
                 out = self.backbone.forward_ids(ids, cache=seq.cache, cutoff=self.heads.cutoff)
+                from ..write import Opened
                 opened = Opened(cache=out["cache"], h_cut=out["h_cut"][:, -1], logits=out["logits"][:, -1])
             else:
                 if seq.cut_state is None:
                     raise RuntimeError('raw write missing causal prefix state')
+                from ..write import Opened
                 opened = Opened(cache=seq.cache, h_cut=seq.cut_state, logits=seq.logits, top=seq.top_state)
             limit = request.neuralese_max_length or self.max_block
             direct = getattr(self, 'neuralese_projection', None)
@@ -1683,6 +1684,7 @@ class Engine:
         seed = derive_seed("neuralese", request.seed if request.seed is not None else request.request_id, index)
         generator = torch.Generator().manual_seed(seed)
         payload, mu, log_sigma = writer.complete(tau, generator)
+        from ..write import read_back
         back = read_back(self.backbone, self.heads, writer.opened.cache, payload, all_logits=False,
                          final_states=getattr(self, 'token_choice_projection', None) is not None)
         if getattr(self, 'token_choice_projection', None) is not None:
