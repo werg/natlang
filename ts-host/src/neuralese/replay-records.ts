@@ -17,7 +17,9 @@ export const REPLAY_RECORD_SCHEMA = 'natlang.replay-record/1';
 /** What `evaluate` hands to a sink. */
 export type ReplaySession = { arguments: string[]; terms: readonly Json[]; producers?: readonly Json[]; order: number;
   derived?: readonly Json[]; native_turns?: readonly Json[]; native_graph_nodes?: readonly Json[];
-  native_gradient?: string; target?: Json; loss: number };
+  native_gradient?: string; native_gradients?: Record<string, string>; native_targets?: readonly Json[];
+  derivative_execution_id?: string;
+  target?: Json; loss: number };
 
 export interface ReplayRecordSink { record(session: ReplaySession): Promise<void> }
 

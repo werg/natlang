@@ -30,7 +30,8 @@ import { archiveNativeArtifactFrom } from '../native/neuralese-store.js';
 import { createNeuraleseLibrary, type StandardLibrary } from './combinators.js';
 import type { ReplayRecordSink } from './replay-records.js';
 import { nativeGraphGradient, nativeRecordedGraphGradient, nativeStateOptimizerStep, nativeAdapterCreate, nativeAdapterOptimizerStep,
-  type NativeGraphRow, type NativeOptimizerSpec, type NativeGradientTarget } from './native-learning-client.js';
+  nativeRecordedGraphGradients, nativeDerivativeProgramGradient, type NativeGraphRow, type NativeOptimizerSpec, type NativeGradientTarget,
+  type NativeRecordedGradientTarget } from './native-learning-client.js';
 import { nativeModelIdentityEqual, type NativeModelIdentity, type NativeTensorArtifact, type NativeTensorValue } from '../native/neuralese-store.js';
 
 type Json = Record<string, unknown>;
@@ -452,7 +453,10 @@ export function stopGradient<T>(v: T): T {
 function softLeaves(a: unknown): NeuraleseRef[] {
   const out: NeuraleseRef[] = [];
   const visit = (value: unknown) => {
-    if (isNeuraleseRef(value)) { out.push(value); return; }
+    if (isNeuraleseRef(value)) {
+      if (!isNativeStateId(value.$neuralese.id)) out.push(value);
+      return;
+    }
     if (Array.isArray(value)) value.forEach(visit);
     else if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) Object.values(value).forEach(visit);
   };
@@ -469,10 +473,15 @@ function mapLeaves(a: unknown, replace: (ref: NeuraleseRef) => unknown): unknown
   return a;
 }
 
-function nativeAdapterLeaves(value: unknown): NativeAdapterRef[] {
-  const out: NativeAdapterRef[] = [];
+type NativeLearningRef = NativeAdapterRef | NeuraleseRef;
+function nativeLearningLeaves(value: unknown): NativeLearningRef[] {
+  const out: NativeLearningRef[] = [];
   const visit = (item: unknown) => {
     if (isNativeAdapterRef(item)) { out.push(item); return; }
+    if (isNeuraleseRef(item) && isNativeStateId(item.$neuralese.id)) {
+      if (!stopped.has(item) && !item.$neuralese.stop_gradient) out.push(item);
+      return;
+    }
     if (Array.isArray(item)) item.forEach(visit);
     else if (item && typeof item === 'object' && Object.getPrototypeOf(item) === Object.prototype)
       Object.values(item).forEach(visit);
@@ -480,12 +489,118 @@ function nativeAdapterLeaves(value: unknown): NativeAdapterRef[] {
   visit(value); return out;
 }
 
-function mapNativeAdapterLeaves(value: unknown, replace: (ref: NativeAdapterRef) => unknown): unknown {
+function nativeLearningId(value: NativeLearningRef): string {
+  return isNativeAdapterRef(value) ? value.$nativeAdapter.id : value.$neuralese.id;
+}
+
+function recordedNativeStateModes(turns: readonly RecordedTurn[]): Record<string, 'same-base-adapter-state'> | undefined {
+  const modes: Record<string, 'same-base-adapter-state'> = {};
+  for (const turn of turns) for (const [id, mode] of Object.entries(turn.native_state_modes ?? {})) {
+    if (modes[id] && modes[id] !== mode)
+      throw new LearningError('learning-native-state-mode', `recorded turns disagree on native state mode for ${id}`);
+    modes[id] = mode;
+  }
+  return Object.keys(modes).length ? modes : undefined;
+}
+
+function mapNativeLearningLeaves(value: unknown, replace: (ref: NativeLearningRef) => unknown): unknown {
   if (isNativeAdapterRef(value)) return replace(value);
-  if (Array.isArray(value)) return value.map(item => mapNativeAdapterLeaves(item, replace));
+  if (isNeuraleseRef(value) && isNativeStateId(value.$neuralese.id)) return replace(value);
+  if (Array.isArray(value)) return value.map(item => mapNativeLearningLeaves(item, replace));
   if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype)
-    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, mapNativeAdapterLeaves(item, replace)]));
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, mapNativeLearningLeaves(item, replace)]));
   return value;
+}
+
+async function nativeLearningTargets(service: LearningService, refs: readonly NativeLearningRef[]): Promise<{
+  targets: NativeRecordedGradientTarget[]; identity: NativeModelIdentity; byId: Map<string, NativeRecordedGradientTarget>;
+}> {
+  if (!service.store?.getNativeState || !service.store.getNativeTensorArtifact)
+    throw new LearningError('learning-native-archive-unavailable', 'native gradients require named nnt1/nzs1 artifacts');
+  const remote = new HttpNeuraleseStore(service.endpoint, service.headers);
+  const unique = new Map<string, NativeLearningRef>();
+  for (const ref of refs) unique.set(nativeLearningId(ref), ref);
+  if (!unique.size) throw new LearningError('learning-native-target', 'native gradients need at least one differentiable target');
+  const targets: NativeRecordedGradientTarget[] = [];
+  let identity: NativeModelIdentity | undefined;
+  for (const [index, [id, ref]] of [...unique].entries()) {
+    let current: NativeModelIdentity;
+    let target: NativeRecordedGradientTarget;
+    if (isNativeAdapterRef(ref)) {
+      const artifact = await service.store.getNativeTensorArtifact(id) ?? await remote.getNativeTensorArtifact(id);
+      if (!artifact || artifact.metadata.kind !== 'adapter-coefficients')
+        throw new LearningError('learning-native-target', `${id} is not an archived native adapter coefficient artifact`);
+      await archiveNativeArtifactFrom(remote, service.store, id);
+      current = artifact.metadata.native_identity;
+      target = { root: `native-target-${index}`, kind: 'adapter', id, names: Object.keys(artifact.tensors).sort() };
+    } else {
+      const artifact = await service.store.getNativeState(id) ?? await remote.getNativeState(id);
+      if (!artifact) throw new LearningError('learning-native-target', `${id} is not an archived native state artifact`);
+      await archiveNativeArtifactFrom(remote, service.store, id);
+      current = artifact.metadata.adapter_binding?.base_native_identity ?? {
+        architecture: artifact.metadata.architecture, checkpoint_sha256: artifact.metadata.checkpoint_sha256,
+        tokenizer_fingerprint: artifact.metadata.tokenizer_fingerprint, embedding_weight_sha256: artifact.metadata.embedding_weight_sha256 };
+      target = { root: `native-target-${index}`, kind: 'native-state', id };
+    }
+    if (identity && !nativeModelIdentityEqual(identity, current))
+      throw new LearningError('learning-native-target', 'native gradient roots must share one exact base checkpoint identity');
+    identity = current;
+    targets.push(target);
+  }
+  return { targets, identity: identity!, byId: new Map(targets.map(target => [target.id, target])) };
+}
+
+type NativeDerivativeContext = {
+  roots: Map<string, NativeRecordedGradientTarget>;
+  rootById: Map<string, string>;
+  valueById: Map<string, string>;
+  currentByRoot: Map<string, string>;
+  gradientById: Map<string, string>;
+  next: number;
+};
+type DerivationTrace = { nodes: Derivation[]; native?: NativeDerivativeContext };
+
+function nativeDerivativeContext(targets: readonly NativeRecordedGradientTarget[]): NativeDerivativeContext {
+  const context: NativeDerivativeContext = { roots: new Map(), rootById: new Map(), valueById: new Map(),
+    currentByRoot: new Map(), gradientById: new Map(), next: 0 };
+  for (const target of targets) {
+    context.roots.set(target.root, target); context.rootById.set(target.id, target.root);
+    context.valueById.set(target.id, target.root); context.currentByRoot.set(target.root, target.root);
+  }
+  return context;
+}
+
+function registerNativeGradientDerivation(context: NativeDerivativeContext, targetInfo: {
+    targets: NativeRecordedGradientTarget[]; byId: Map<string, NativeRecordedGradientTarget> },
+    objective: { turns: readonly RecordedTurn[]; events: readonly Record<string, unknown>[]; terms: readonly Record<string, unknown>[];
+      nativeStateModes?: Record<string, 'same-base-adapter-state'> },
+    gradients: Record<string, string>): Derivation {
+  const bindings = Object.fromEntries(context.currentByRoot);
+  const nodeTargets: { name: string; value: string }[] = [];
+  const requestTargets: NativeRecordedGradientTarget[] = [];
+  for (const target of targetInfo.targets) {
+    let root = context.rootById.get(target.id);
+    if (!root) {
+      root = `native-root-${context.next++}`;
+      const descriptor = { ...target, root };
+      context.roots.set(root, descriptor); context.rootById.set(target.id, root);
+      context.valueById.set(target.id, root); context.currentByRoot.set(root, root);
+      bindings[root] = root;
+    }
+    const value = context.valueById.get(target.id);
+    const descriptor = context.roots.get(root);
+    if (!value || !descriptor) throw new LearningError('learning-native-order2', `native derivative lost exact root ${target.id}`);
+    requestTargets.push(descriptor);
+    const gradientId = gradients[target.id];
+    if (!gradientId) throw new LearningError('learning-native-order2', `native derivative lost gradient for ${target.id}`);
+    const alias = `native-gradient-${context.next++}`;
+    nodeTargets.push({ name: alias, value }); context.gradientById.set(gradientId, alias);
+  }
+  const name = `native-grad-node-${context.next++}`;
+  return { kind: 'grad', name, request: { schema: 'natlang.native-recorded-objective-request/1',
+    turns: objective.turns, events: objective.events, terms: objective.terms, targets: requestTargets,
+    ...(objective.nativeStateModes ? { native_state_modes: objective.nativeStateModes } : {}) },
+    bindings, targets: nodeTargets };
 }
 
 /** An opaque gradient: the shape of `A` with gradient entries where `A` has differentiable Neuralese values. */
@@ -523,7 +638,7 @@ async function ensureOnServer(service: LearningService, ids: readonly string[]):
  * recomputes them differentiably before the outer terms, so the outer gradient passes through the inner updates.
  */
 type Derivation = Record<string, unknown> & { kind: 'grad' | 'optim' };
-const derivations = new AsyncLocalStorage<Derivation[] | undefined>();
+const derivations = new AsyncLocalStorage<DerivationTrace | undefined>();
 
 async function evaluate<A>(service: LearningService, f: (a: A) => Promise<Loss>, a: A, order?: number):
     Promise<{ loss: Loss; grad: Gradient<A> }> {
@@ -531,47 +646,81 @@ async function evaluate<A>(service: LearningService, f: (a: A) => Promise<Loss>,
     throw new LearningError('neuralese-grad-unavailable', 'gradients of order 1 or 2');
   const leaves = softLeaves(a).filter(ref => !stopped.has(ref)&&!ref.$neuralese.stop_gradient);
   const arguments_ = [...new Set(leaves.map(ref => ref.$neuralese.id))];
-  const nativeLeaves = nativeAdapterLeaves(a);
+  const nativeLeaves = nativeLearningLeaves(a);
+  const targetInfo = nativeLeaves.length ? await nativeLearningTargets(service, nativeLeaves) : undefined;
   const rec = new Recorder();
   // An inner first-order gradient's own inner computations are constants to it: they are not recorded.
-  const derived: Derivation[] | undefined = order === 2 ? [] : undefined;
+  const derived: DerivationTrace | undefined = order === 2 ? { nodes: [],
+    ...(targetInfo ? { native: nativeDerivativeContext(targetInfo.targets) } : {}) } : undefined;
   const outer = derivations.getStore();
+  if (order === 2 && outer) throw new LearningError('learning-grad-order', 'native learning supports derivatives through order 2, not nested order-3 programs');
   const loss = await derivations.run(derived, () => recording.run(rec, () => boundService.run(service, () => f(a))));
   if (!(loss instanceof Loss)) throw new LearningError('learning-not-a-loss', 'the function passed to grad must return a Loss from objectives');
   // A loss without terms (a policy gradient whose samples tied) is zero, with no gradient anywhere.
   if (!loss.terms.length) {
     loss.value = 0;
-    const soft = mapLeaves(a, (): GradientEntry => null);
-    const native = mapNativeAdapterLeaves(soft, (): GradientEntry => null);
+    const soft = mapLeaves(a, ref => isNativeStateId(ref.$neuralese.id) ? ref : null);
+    const native = mapNativeLearningLeaves(soft, (): GradientEntry => null);
     return { loss, grad: { $gradient: native } as Gradient<A> };
   }
   if (nativeLeaves.length) {
-    if (leaves.length || new Set(nativeLeaves.map(ref => ref.$nativeAdapter.id)).size !== 1)
-      throw new LearningError('learning-native-target', 'one exact native adapter target is required per valueAndGrad call');
-    if (!service.store?.getNativeTensorArtifact)
-      throw new LearningError('learning-native-archive-unavailable', 'native adapter gradients require a named tensor archive');
-    const adapterId = nativeLeaves[0]!.$nativeAdapter.id;
-    const adapter = await service.store.getNativeTensorArtifact(adapterId);
-    if (!adapter || adapter.metadata.kind !== 'adapter-coefficients')
-      throw new LearningError('learning-native-target', 'native differentiable arguments must be archived adapter coefficient artifacts');
+    if (leaves.length)
+      throw new LearningError('learning-native-target', 'native checkpoint gradients accept native nnt1/nzs1 roots; projected nz1 values have no native checkpoint-coordinate derivative');
+    if (!targetInfo) throw new LearningError('learning-native-target', 'native derivative target inventory is missing');
     const turns = [...rec.turns, ...rec.nested];
     const nativeTurns = rec.nativeTurns();
-    const byId = new Map(nativeTurns.map(turn => [turn.native!.id, turn.native!]));
-    const exactTurns = turns.filter(turn => turn.native).map(turn => ({ ...structuredClone(turn), native: byId.get(turn.native!.id)! }));
-    const result = await nativeRecordedGraphGradient(service.endpoint, service.store, { turns: exactTurns,
-      events: structuredClone([...rec.graphNodes.values()]), terms: loss.terms,
-      target: { kind: 'adapter', id: adapter.id, names: Object.keys(adapter.tensors).sort() },
-      nativeIdentity: adapter.metadata.native_identity, headers: service.headers });
-    loss.value = Number(result.loss);
-    await service.replayRecords?.record({ arguments: [adapterId], terms: loss.terms, order: order ?? 1,
-      native_turns: exactTurns, native_graph_nodes: [...rec.graphNodes.values()], native_gradient: result.gradient.id,
-      target: { kind: 'adapter', id: adapter.id, names: Object.keys(adapter.tensors).sort() }, loss: loss.value });
-    outer?.push({ kind: 'grad', target: adapter.id, gradient: result.gradient.id,
-      native_turns: exactTurns, native_graph_nodes: [...rec.graphNodes.values()] });
-    const grad = mapNativeAdapterLeaves(a, ref => ref.$nativeAdapter.id === adapter.id ?
-      { $gradientBlock: { id: result.gradient.id, of: ref.$nativeAdapter.id, type: 'NativeAdapter' } } : null);
+    const byTurnId = new Map(nativeTurns.map(turn => [turn.native!.id, turn.native!]));
+    const exactTurns = turns.filter(turn => turn.native).map(turn => ({ ...structuredClone(turn), native: byTurnId.get(turn.native!.id)! }));
+    const events = structuredClone([...rec.graphNodes.values()]);
+    const requestTargets = targetInfo.targets.map(target => {
+      const root = derived?.native?.rootById.get(target.id) ?? target.root;
+      return { ...target, root };
+    });
+    const nativeStateModes = recordedNativeStateModes(exactTurns);
+    const objective = { turns: exactTurns, events, terms: loss.terms, ...(nativeStateModes ? { nativeStateModes } : {}) };
+    let gradientArtifacts: Record<string, NativeTensorArtifact>, derivativeExecution: string | undefined;
+    if (order === 2) {
+      const context = derived?.native;
+      if (!context) throw new LearningError('learning-native-order2', 'native derivative program roots were not declared');
+      const program = { schema: 'natlang.native-derivative-program/1' as const,
+        inputs: Object.fromEntries([...context.roots].map(([root, target]) => [root, {
+          kind: target.kind, id: target.id, ...(target.names ? { names: target.names } : {}) }])),
+        nodes: derived.nodes, outer: { request: { schema: 'natlang.native-recorded-objective-request/1',
+          turns: objective.turns, events: objective.events, terms: objective.terms, targets: requestTargets,
+          ...(nativeStateModes ? { native_state_modes: nativeStateModes } : {}) },
+          bindings: Object.fromEntries(context.currentByRoot) },
+        wrt: requestTargets.map(target => target.root),
+        arithmetic: { schema: 'natlang.native-reference-arithmetic/1' as const, query_chunk_tokens: 16 } };
+      const result = await nativeDerivativeProgramGradient(service.endpoint, service.store!, program, service.headers);
+      loss.value = Number(result.loss); gradientArtifacts = result.gradients; derivativeExecution = result.execution_id;
+    } else {
+      const result = await nativeRecordedGraphGradients(service.endpoint, service.store!, { ...objective,
+        nativeStateModes, targets: requestTargets, nativeIdentity: targetInfo.identity, headers: service.headers });
+      loss.value = Number(result.loss); gradientArtifacts = result.gradients;
+      const gradients = Object.fromEntries([...targetInfo.byId].map(([id, target]) => [id, result.gradients[target.root]!.id]));
+      if (outer?.native) outer.nodes.push(registerNativeGradientDerivation(outer.native, targetInfo,
+        objective, gradients));
+    }
+    const gradients = Object.fromEntries([...targetInfo.byId].map(([id, target]) => [id, gradientArtifacts[target.root]!.id]));
+    await service.replayRecords?.record({ arguments: Object.keys(gradients), terms: loss.terms, order: order ?? 1,
+      native_turns: exactTurns, native_graph_nodes: events, native_gradients: gradients,
+      native_targets: requestTargets, ...(derivativeExecution ? { derivative_execution_id: derivativeExecution } : {}), loss: loss.value });
+    if (outer && !outer.native) outer.nodes.push({ kind: 'grad', arguments: Object.keys(gradients), terms: loss.terms,
+      native_turns: exactTurns, native_graph_nodes: events, native_gradients: gradients });
+    const grad = mapNativeLearningLeaves(a, ref => {
+      if (isNativeAdapterRef(ref)) {
+        const artifact = gradientArtifacts[targetInfo.byId.get(ref.$nativeAdapter.id)!.root];
+        return artifact ? { $gradientBlock: { id: artifact.id, of: ref.$nativeAdapter.id, type: 'NativeAdapter' } } : null;
+      }
+      if (stopped.has(ref) || ref.$neuralese.stop_gradient) return null;
+      const id = nativeLearningId(ref), target = targetInfo.byId.get(id), artifact = target && gradientArtifacts[target.root];
+      return artifact ? { $gradientBlock: { id: artifact.id, of: id,
+        type: 'NativeState' } } : null;
+    });
     return { loss, grad: { $gradient: grad } as Gradient<A> };
   }
+  if (outer?.native && leaves.length)
+    throw new LearningError('learning-native-target', 'native derivative programs cannot mix native checkpoint roots with projected nz1 value coordinates');
   await ensureOnServer(service, arguments_);
   // Every recorded turn that wrote blocks is a producer: a term that reads one of its blocks (a soft call's result,
   // spliced into its caller's turns) replays the write from that turn with gradient, so the loss reaches the
@@ -581,13 +730,13 @@ async function evaluate<A>(service: LearningService, f: (a: A) => Promise<Loss>,
   const nativeTurns=rec.nativeTurns(),nativeGraphNodes=structuredClone([...rec.graphNodes.values()]);
   const result = await post(service, '/v1/neuralese/grad', { arguments: arguments_, terms: loss.terms,
     ...(nativeTurns.length?{native_turns:nativeTurns,native_graph_nodes:nativeGraphNodes}:{}),
-    ...(producers.length ? { producers } : {}), ...(derived ? { order: 2, derived } : {}) });
+    ...(producers.length ? { producers } : {}), ...(derived ? { order: 2, derived: derived.nodes } : {}) });
   loss.value = Number(result.loss);
   await service.replayRecords?.record({ arguments: arguments_, terms: loss.terms, producers, order: order ?? 1,
     ...(nativeTurns.length?{native_turns:nativeTurns,native_graph_nodes:nativeGraphNodes}:{}),
-    ...(derived ? { derived } : {}), loss: loss.value });
+    ...(derived ? { derived: derived.nodes } : {}), loss: loss.value });
   const gradients = (result.gradients ?? {}) as Record<string, string>;
-  outer?.push({ kind: 'grad', arguments: arguments_, terms: loss.terms, ...(producers.length ? { producers } : {}), gradients,
+  outer?.nodes.push({ kind: 'grad', arguments: arguments_, terms: loss.terms, ...(producers.length ? { producers } : {}), gradients,
     ...(nativeTurns.length?{native_turns:nativeTurns,native_graph_nodes:nativeGraphNodes}:{}) });
   const grad = mapLeaves(a, (ref): GradientEntry => stopped.has(ref) || ref.$neuralese.stop_gradient || !gradients[ref.$neuralese.id] ? null :
     { $gradientBlock: { id: gradients[ref.$neuralese.id]!, of: ref.$neuralese.id, type: ref.$neuralese.type } });
@@ -604,39 +753,80 @@ function optimizer(service: () => LearningService, name: 'sgd' | 'adam', hyper: 
   return {
     init: a => { void a; return { $optimizer: { name, hyper, state: null } }; },
     async step(current, grad) {
-      const nativeEntries = nativeAdapterLeaves(current.value);
+      const nativeEntries = nativeLearningLeaves(current.value);
       if (nativeEntries.length) {
-        const gradients: Exclude<GradientEntry, null>[] = [];
+        const gradients = new Map<string, Exclude<GradientEntry, null>>();
         const collect = (value: unknown) => {
-          if (value && typeof value === 'object' && '$gradientBlock' in value) { gradients.push(value as Exclude<GradientEntry, null>); return; }
+          if (value && typeof value === 'object' && '$gradientBlock' in value) {
+            const entry = value as Exclude<GradientEntry, null>;
+            gradients.set(entry.$gradientBlock.of, entry); return;
+          }
           if (Array.isArray(value)) value.forEach(collect);
           else if (value && typeof value === 'object') Object.values(value).forEach(collect);
         };
         collect(grad.$gradient);
-        if (nativeEntries.length !== 1 || softLeaves(current.value).length || gradients.length !== 1 ||
-            !service().store?.getNativeTensorArtifact)
-          throw new LearningError('learning-native-target', 'native adapter optimization requires one exact adapter and gradient');
+        if (softLeaves(current.value).length || !service().store?.getNativeTensorArtifact)
+          throw new LearningError('learning-native-target', 'native optimization requires native roots and a named tensor archive');
         const active = service(), store = active.store!;
-        const gradient = await store.getNativeTensorArtifact!(gradients[0]!.$gradientBlock.id);
-        if (!gradient || gradient.metadata.kind !== 'adapter-gradient')
-          throw new LearningError('learning-native-target', 'native optimizer needs an archived adapter-gradient artifact');
         const betas = hyper.betas as [number, number] | undefined;
         const spec: NativeOptimizerSpec = { name, ...(typeof hyper.lr === 'number' ? { learning_rate: hyper.lr } : {}),
           ...(typeof hyper.weightDecay === 'number' ? { weight_decay: hyper.weightDecay } : {}),
           ...(betas ? { beta1: betas[0], beta2: betas[1] } : {}) };
-        const previousState = current.opt.$optimizer.state?.native_optimizer_state_id;
-        const updated = await nativeAdapterOptimizerStep(active.endpoint, store, { gradient,
-          nativeIdentity: gradient.metadata.native_identity, optimizer: spec,
-          ...(typeof previousState === 'string' ? { optimizerStateId: previousState } : {}), headers: active.headers });
-        const oldId = nativeEntries[0]!.$nativeAdapter.id;
-        const value = mapNativeAdapterLeaves(current.value, ref => ref.$nativeAdapter.id === oldId ? nativeAdapterRef(updated.adapter.id) : ref) as typeof current.value;
-        const state = { native_optimizer_state_id: updated.optimizer_state_id, step: updated.step } as Json;
-        derivations.getStore()?.push({ kind: 'optim', optimizer: name, hyper, params: [oldId], grads: [gradient.id],
-          state: current.opt.$optimizer.state, results: { params: [updated.adapter.id], state } });
+        const histories = (current.opt.$optimizer.state?.native_optimizer_state_ids ?? {}) as Record<string, string>;
+        const updatedIds = new Map<string, string>(), nextHistories: Record<string, string> = {};
+        let latestStep = 0;
+        for (const ref of nativeEntries) {
+          const oldId = nativeLearningId(ref);
+          if (updatedIds.has(oldId)) continue;
+          const entry = gradients.get(oldId);
+          if (!entry) throw new LearningError('learning-gradient-shape', `native optimizer gradient is missing for ${oldId}`);
+          const gradient = await store.getNativeTensorArtifact!(entry.$gradientBlock.id);
+          const expectedKind = isNativeAdapterRef(ref) ? 'adapter-gradient' : 'state-gradient';
+          if (!gradient || gradient.metadata.kind !== expectedKind || gradient.metadata.source_artifact_id !== oldId)
+            throw new LearningError('learning-native-target', `native optimizer needs an archived ${expectedKind} bound to ${oldId}`);
+          const previousState = histories[oldId];
+          let newId: string, optimizerStateId: string, step: number;
+          if (isNativeAdapterRef(ref)) {
+            const updated = await nativeAdapterOptimizerStep(active.endpoint, store, { gradient,
+              nativeIdentity: gradient.metadata.native_identity, optimizer: spec,
+              ...(previousState ? { optimizerStateId: previousState } : {}), headers: active.headers });
+            newId = updated.adapter.id; optimizerStateId = updated.optimizer_state_id; step = updated.step;
+          } else {
+            const updated = await nativeStateOptimizerStep(active.endpoint, store, { gradient,
+              nativeIdentity: gradient.metadata.native_identity, optimizer: spec,
+              ...(previousState ? { optimizerStateId: previousState } : {}), headers: active.headers });
+            newId = updated.native_state_id; optimizerStateId = updated.optimizer_state_id; step = updated.step;
+          }
+          updatedIds.set(oldId, newId);
+          nextHistories[newId] = optimizerStateId;
+          latestStep = Math.max(latestStep, step);
+          const trace = derivations.getStore();
+          if (trace?.native) {
+            const value = trace.native.valueById.get(oldId), gradientName = trace.native.gradientById.get(gradient.id);
+            const root = trace.native.rootById.get(oldId);
+            if (!value || !gradientName || !root)
+              throw new LearningError('learning-native-order2', `native optimizer cannot bind update ancestry for ${oldId}`);
+            const node = `native-optim-node-${trace.native.next++}`;
+            trace.nodes.push({ kind: 'optim', name: node, value, gradient: gradientName,
+              optimizer: { name, ...(typeof hyper.lr === 'number' ? { learning_rate: hyper.lr } : {}),
+                ...(typeof hyper.weightDecay === 'number' ? { weight_decay: hyper.weightDecay } : {}),
+                ...(betas ? { beta1: betas[0], beta2: betas[1] } : {}) }, optimizer_state: previousState ?? null });
+            trace.native.valueById.set(newId, node); trace.native.rootById.set(newId, root); trace.native.currentByRoot.set(root, node);
+          } else if (trace) {
+            throw new LearningError('learning-native-order2', 'native updates inside order-2 learning need native checkpoint roots');
+          }
+        }
+        const value = mapNativeLearningLeaves(current.value, ref => {
+          const next = updatedIds.get(nativeLearningId(ref));
+          return next ? isNativeAdapterRef(ref) ? nativeAdapterRef(next) : neuraleseRef(ref.$neuralese.type, next) : ref;
+        }) as typeof current.value;
+        const state = { native_optimizer_state_ids: nextHistories, step: latestStep } as Json;
         return { value, opt: { $optimizer: { name, hyper, state } } };
       }
       const params: string[] = [], grads: string[] = [];
       const entries = softLeaves(current.value);
+      if (derivations.getStore()?.native && entries.length)
+        throw new LearningError('learning-native-target', 'native derivative programs cannot mix projected nz1 optimizer values with native checkpoint roots');
       const gradEntries: GradientEntry[] = [];
       const visit = (value: unknown) => {
         if (value && typeof value === 'object' && '$gradientBlock' in value) { gradEntries.push(value as GradientEntry); return; }
@@ -653,7 +843,7 @@ function optimizer(service: () => LearningService, name: 'sgd' | 'adam', hyper: 
       });
       const result = await post(service(), '/v1/neuralese/optim', { optimizer: name, hyper, params, grads,
         state: current.opt.$optimizer.state });
-      derivations.getStore()?.push({ kind: 'optim', optimizer: name, hyper, params, grads, state: current.opt.$optimizer.state,
+      derivations.getStore()?.nodes.push({ kind: 'optim', optimizer: name, hyper, params, grads, state: current.opt.$optimizer.state,
         results: { params: result.params, state: result.state } });
       const updated = new Map(params.map((id, index) => [id, (result.params as string[])[index]!]));
       const value = mapLeaves(current.value, ref => updated.has(ref.$neuralese.id) ?

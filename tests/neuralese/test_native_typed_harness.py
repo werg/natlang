@@ -142,14 +142,16 @@ def test_real_native_state_typed_child_archive_parent_import(tmp_path, monkeypat
             samples = iter(cycle([(60, None), (5, None), (61, None), (2, None), (2, None)]))
             monkeypatch.setattr(engine, '_native_token', lambda sequence: next(samples))
             binding = tmp_path / 'native-recorded-learning.json'
-            binding.write_text(json.dumps({'identity': identity, 'target': target}))
+            binding.write_text(json.dumps({'identity': identity, 'target': target, 'state_id': receipt['state_id']}))
             trained = subprocess.run([node, str(repo / 'ts-host/test/fixtures/native-adapter-recorded-learning.mjs'),
-                f'http://127.0.0.1:{server.server_address[1]}', str(tmp_path / 'native-recorded-learning-archive'),
+                f'http://127.0.0.1:{server.server_address[1]}', str(tmp_path / 'archive'),
                 str(binding)], cwd=repo, text=True, capture_output=True, timeout=120)
             assert trained.returncode == 0, trained.stdout + trained.stderr
             progress = json.loads(trained.stdout.splitlines()[-1])
             assert progress['producer_consumer'] is True
             assert progress['updated_loss'] < progress['initial_loss']
+            assert progress['native_state_gradient'] is True
+            assert progress['joint_gradient'] is True
         if mode not in {'handoff', 'recorded'}:
             assert receipt == {'forced': True, 'contextual': True, 'view_parts': 2}
             assert imports and all(item['mode'] == ('learned-semantic-state-deltas' if mode == 'compact' else 'exact-native-state') for item in imports)
