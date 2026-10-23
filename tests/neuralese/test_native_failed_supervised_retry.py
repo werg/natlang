@@ -27,6 +27,46 @@ def _recipe(tmp_path):
     path=tmp_path/'recipe.json';write(path,value);return path
 
 
+def _as_stale_resident_plan_failure(x):
+    config=json.loads(x['config'].read_text())
+    train=Path(config['production_recipe']).parent/'train.jsonl'
+    held=Path(config['production_recipe']).parent/'held.jsonl'
+    resident=Path(config['production_recipe']).parent/'resident-data'
+    resident.mkdir(exist_ok=True)
+    old_train=train.with_name('old-train.jsonl');old_train.write_text('{"id":"old-train"}\n')
+    old_held=held.with_name('old-held.jsonl');old_held.write_text('{"id":"old-held","split":"test"}\n')
+    config.update({'resident_data_directory':str(resident),'seed_native_graphs':binding(train),
+        'held_native_graphs':binding(held)})
+    plan={'stage_inputs':{'full':{'native_graphs':binding(old_train),
+        'held_native_graphs':binding(old_held)}}}
+    plan_path=Path(config['production_recipe']).parent/'recipe-plan.json';write(plan_path,plan)
+    from natlang_neuralese.train.native_resident import digest as resident_digest
+    write(resident/'initial.json',{'stage_id':'full','plan_sha256':resident_digest(plan),
+        'owner':{'pid':99999999}})
+    write(x['config'],config)
+    invocation={**config,'out':str(x['job']),'mandatory_sft_only':True}
+    invocation_path=x['job']/'config.json';write(invocation_path,invocation)
+    request_path=bridge.write_request(x['job']/'bridge-stale-plan',kind='round',out=x['job'],
+        config=invocation_path,state=Path(config['out'])/'state.json')
+    request=bridge.read_request(request_path);result_path=x['job']/'failed-stale-plan.result.json'
+    log_path=Path(x['failure_log']['path']).parent.parent/request['request_id']/'worker.log'
+    log_path.parent.mkdir(parents=True,exist_ok=True)
+    log_path.write_text('Traceback (most recent call last):\n'
+        '  File "/runtime/training/neuralese/natlang_neuralese/train/native_state_sft.py", line 1704, in _main\n'
+        '    resident = ResidentAdoption(args.resident_data_directory)\n'
+        '  File "/runtime/training/neuralese/natlang_neuralese/train/native_resident.py", line 1577, in __init__\n'
+        "    raise ValueError('"+retry.RESIDENT_PLAN_FAILURE+"')\n"
+        'ValueError: '+retry.RESIDENT_PLAN_FAILURE+'\n')
+    write(result_path,{'schema':bridge.RESULT_SCHEMA,'kind':'round','request_id':request['request_id'],
+        'request_sha256':bridge.sha256_file_hex_cached(request_path),'status':'failed',
+        'error':"CalledProcessError: Command ['env', 'python'] returned non-zero exit status 1.",
+        'artifacts':bridge.inventory(x['job'],exclude=[result_path])})
+    x.update({'request':request_path,'result':result_path,
+        'failure_log':{**binding(log_path),'bytes':log_path.stat().st_size},
+        'resident_plan':plan_path,'resident_plan_value':plan})
+    return x
+
+
 @pytest.fixture(params=['lfm','mellum'])
 def failed_operation(tmp_path,request):
     model=request.param
@@ -110,6 +150,58 @@ def test_exact_known_preupdate_failure_has_zero_checkpoint_authority(failed_oper
     x['request'].write_bytes(baseline_request)
 
 
+def test_exact_stale_resident_plan_failure_is_zero_credit_and_source_bound(failed_operation):
+    x=_as_stale_resident_plan_failure(failed_operation);config=json.loads(x['config'].read_text())
+    verified=retry._verify_failure(binding(x['request']),binding(x['result']),x['failure_log'],
+        config=config,cursor=x['cursor'],state=x['state'],verified_checkpoint=(x['checkpoint'],x['saved']))
+    assert verified[3]['id']=='full' and verified[1].get('checkpoint') is None
+    assert verified[6]['kind']==retry.RESIDENT_PLAN_FAILURE_KIND
+    assert verified[6]['stale_resident_plan']['planned_sources']!=verified[6]['stale_resident_plan']['active_sources']
+    request=bridge.read_request(x['request'])
+    request['parent_checkpoint']={**request['parent_checkpoint'],'sha256':'b'*64}
+    request.pop('request_id',None)
+    from natlang_neuralese.common.hashing import canonical_json_sha256_hex
+    request['request_id']=canonical_json_sha256_hex(request);write(x['request'],request)
+    result=json.loads(x['result'].read_text());result.update(request_id=request['request_id'],
+        request_sha256=bridge.sha256_file_hex_cached(x['request']));write(x['result'],result)
+    with pytest.raises(ValueError):
+        retry._verify_failure(binding(x['request']),binding(x['result']),x['failure_log'],
+            config=config,cursor=x['cursor'],state=x['state'],verified_checkpoint=(x['checkpoint'],x['saved']))
+
+
+def test_stale_resident_plan_rejects_wrong_traceback_source_and_credit_artifacts(failed_operation):
+    x=_as_stale_resident_plan_failure(failed_operation);config=json.loads(x['config'].read_text())
+    log_path=Path(x['failure_log']['path']);original=log_path.read_bytes()
+    result_path=x['result'];original_result=result_path.read_bytes()
+    try:
+        log_path.write_text('Traceback (most recent call last):\nValueError: '+retry.RESIDENT_PLAN_FAILURE+'\n')
+        with pytest.raises(ValueError,match='exact failed pre-update'):
+            retry._verify_failure(binding(x['request']),binding(result_path),{**binding(log_path),'bytes':log_path.stat().st_size},
+                config=config,cursor=x['cursor'],state=x['state'],verified_checkpoint=(x['checkpoint'],x['saved']))
+        log_path.write_bytes(original)
+        # The traceback is exact, but the resident plan no longer demonstrates
+        # a stale source binding once it is changed to the active sources.
+        plan=x['resident_plan_value'];plan['stage_inputs']['full']['native_graphs']=binding(config['seed_native_graphs']['path'])
+        plan['stage_inputs']['full']['held_native_graphs']=binding(config['held_native_graphs']['path'])
+        write(x['resident_plan'],plan)
+        from natlang_neuralese.train.native_resident import digest as resident_digest
+        initial=x['resident_plan'].parent/'resident-data'/'initial.json'
+        init=json.loads(initial.read_text());init['plan_sha256']=resident_digest(plan);write(initial,init)
+        with pytest.raises(ValueError,match='not explained by a stale'):
+            retry._verify_failure(binding(x['request']),binding(result_path),x['failure_log'],
+                config=config,cursor=x['cursor'],state=x['state'],verified_checkpoint=(x['checkpoint'],x['saved']))
+        write(x['resident_plan'],x['resident_plan_value'])
+        init['plan_sha256']=resident_digest(x['resident_plan_value']);write(initial,init)
+        forged=json.loads(original_result);forged['artifacts'].append({'path':str(x['job']/'checkpoint.pt'),
+            'sha256':'c'*64,'bytes':1});write(result_path,forged)
+        with pytest.raises(ValueError,match='exact failed pre-update'):
+            retry._verify_failure(binding(x['request']),binding(result_path),x['failure_log'],
+                config=config,cursor=x['cursor'],state=x['state'],verified_checkpoint=(x['checkpoint'],x['saved']))
+    finally:
+        log_path.write_bytes(original);write(x['resident_plan'],x['resident_plan_value'])
+        result_path.write_bytes(original_result)
+
+
 @pytest.mark.parametrize('bad_log', [
     "Traceback (most recent call last):\n  File \"native_memory.py\", line 744, in run_prepared\n"
     "  File \"native_memory.py\", line 427, in _run_one_prepared\n"
@@ -132,7 +224,7 @@ def test_failure_log_requires_exact_single_prefix_and_source_message(failed_oper
 
 
 def test_corrected_capacity_identity_requires_ffn_chunk_and_exact_runtime(tmp_path):
-    from natlang_neuralese.train.native_resident import code_inventory
+    from natlang_neuralese.train.native_resident import code_inventory, digest as resident_digest
     from natlang_neuralese.common.hashing import canonical_json_sha256_hex
     import natlang_neuralese
     package=Path(natlang_neuralese.__file__).parent
@@ -181,7 +273,7 @@ def test_preference_capacity_descriptor_is_bound_to_the_exact_future_inputs(tmp_
 
 def test_retry_installs_durable_future_plan_through_shared_resident_verifier(tmp_path):
     import natlang_neuralese
-    from natlang_neuralese.train.native_resident import code_inventory
+    from natlang_neuralese.train.native_resident import code_inventory,digest as resident_digest
     from natlang_neuralese.train.recipe import lineage_handoff,recipe_identity_sha256
     from natlang_neuralese.rl.native_raw_handoff import _recipe_plan
     package=Path(natlang_neuralese.__file__).parent
@@ -193,17 +285,32 @@ def test_retry_installs_durable_future_plan_through_shared_resident_verifier(tmp
     lineage_path=tmp_path/'lineage-proof.json';future_path=tmp_path/'future-plan.json'
     write(lineage_path,proof);write(future_path,future)
     resident_dir=recipe.parent/'resident-data'
+    resident_dir.mkdir()
     config={'production_recipe':str(recipe),'production_stage':'full',
         'resident_data_directory':str(resident_dir),
         'seed_trainer_parameters':{'resident_data_directory':str(resident_dir)},
         'seed_native_graphs':binding(tmp_path/'train.jsonl'),
         'held_native_graphs':binding(tmp_path/'held.jsonl')}
+    old_train=tmp_path/'old-train.jsonl';old_train.write_text('{"id":"prior-train"}\n')
+    old_held=tmp_path/'old-held.jsonl';old_held.write_text('{"id":"prior-held","split":"test"}\n')
+    stale_plan={'stage_inputs':{'full':{'native_graphs':binding(old_train),
+        'held_native_graphs':binding(old_held)}}}
+    target=recipe.parent/'recipe-plan.json';write(target,stale_plan)
+    write(resident_dir/'initial.json',{'stage_id':'full','plan_sha256':resident_digest(stale_plan),
+        'owner':{'pid':99999999}})
+    stale=retry._stale_resident_plan(config,'full')
+    plan_snapshot=tmp_path/'stale-plan.json';plan_snapshot.write_bytes(target.read_bytes())
+    initial_snapshot=tmp_path/'stale-initial.json';initial_snapshot.write_bytes((resident_dir/'initial.json').read_bytes())
+    stale={**stale,'snapshot':{**binding(plan_snapshot),'bytes':plan_snapshot.stat().st_size},
+        'initial_snapshot':{**binding(initial_snapshot),'bytes':initial_snapshot.stat().st_size}}
     request={'recipe':binding(recipe),'lineage_handoff':binding(lineage_path),
-        'future_plan':binding(future_path),'package':str(package),'lineage_handoff_sha256':retry._digest(proof)}
+        'future_plan':binding(future_path),'package':str(package),'lineage_handoff_sha256':retry._digest(proof),
+        'failure_kind':retry.RESIDENT_PLAN_FAILURE_KIND,'stage_id':'full','stale_resident_plan':stale}
     installed=retry._install_retry_resident_plan(request,config)
     target=recipe.parent/'recipe-plan.json'
     assert installed==binding(target)
     assert json.loads(target.read_text())==proof
+    assert binding(resident_dir/'initial.json')['sha256']==binding(initial_snapshot)['sha256']
     assert binding(tmp_path/'train.jsonl')['sha256']==proof['stage_inputs']['full']['native_graphs']['sha256']
 
 
@@ -245,7 +352,7 @@ def test_no_credit_retry_consumes_only_exact_fresh_stage_boundary(tmp_path):
 
 def test_configure_replays_exact_candidate_with_inherited_lease_and_recovers_partial_cas(
         tmp_path,monkeypatch,failed_operation):
-    x=failed_operation;root=x['root'];production=root/'production'
+    x=_as_stale_resident_plan_failure(failed_operation);root=x['root'];production=root/'production'
     config_path=x['config'];cursor_path=root/'cycle.json';state_path=production/'state.json'
     original_config=json.loads(config_path.read_text());recipe=Path(original_config['production_recipe'])
     plan=tmp_path/'plan.json'
@@ -257,6 +364,7 @@ def test_configure_replays_exact_candidate_with_inherited_lease_and_recovers_par
     package=Path(natlang_neuralese.__file__).parent
     lineage=recipe_identity_sha256(recipe)
     original_config['recipe_lineage_sha256']=lineage
+    original_config['seed_trainer_parameters']={'resident_data_directory':original_config['resident_data_directory']}
     original_cursor=json.loads(cursor_path.read_text());original_cursor['raw_retry_generation']=0
     original_state=json.loads(state_path.read_text())
     predecessor_resident=tmp_path/'predecessor-current.json';write(predecessor_resident,{'historical':'committed'})
@@ -278,6 +386,13 @@ def test_configure_replays_exact_candidate_with_inherited_lease_and_recovers_par
     failure_log={'source':source_log,'snapshot':binding(source_log_path)}
     tx_log_path=tmp_path/'retry-control'/'failure-worker.log';tx_log_path.parent.mkdir()
     tx_log_path.write_bytes(source_log_path.read_bytes());tx_log=binding(tx_log_path)
+    stale=retry._stale_resident_plan(original_config,'full')
+    stale_snapshot_path=tmp_path/'retry-control'/'stale-resident-plan.json'
+    stale_snapshot_path.write_bytes(Path(stale['path']).read_bytes())
+    initial_snapshot_path=tmp_path/'retry-control'/'stale-resident-initial.json'
+    initial_snapshot_path.write_bytes(Path(stale['initial_path']).read_bytes())
+    stale={**stale,'snapshot':{**binding(stale_snapshot_path),'bytes':stale_snapshot_path.stat().st_size}}
+    stale['initial_snapshot']={**binding(initial_snapshot_path),'bytes':initial_snapshot_path.stat().st_size}
     old_plan=_recipe_plan(recipe,'cuda');old_plan.update(code=code_inventory(package),recipe_sha256=lineage)
     future_value=_recipe_plan(recipe,'cuda');future_value['code']=code_inventory(package)
     lineage_value=lineage_handoff(old_plan,future_value,package,package,tmp_path/'lineage.json',
@@ -287,6 +402,7 @@ def test_configure_replays_exact_candidate_with_inherited_lease_and_recovers_par
     request={'schema':retry.SCHEMA,'config':binding(config_path),'plan':binding(plan),'recipe':binding(recipe),
         'future_global_plan':None,'role':'mellum','package':str(package.resolve()),'failed_request':failed_request,
         'failed_result':failed_result,'failure_log':failure_log,'corrected_request':corrected,
+        'failure_kind':retry.RESIDENT_PLAN_FAILURE_KIND,'stale_resident_plan':stale,
         'lineage_handoff':binding(lineage_path),'future_plan':binding(future_path),
         'started_stage_ids':['dpo','full'],
         'failure_log_snapshot':tx_log,'controller':controller,'owner_census':census,
@@ -310,9 +426,6 @@ def test_configure_replays_exact_candidate_with_inherited_lease_and_recovers_par
     monkeypatch.setattr(completed,'_no_owner',lambda owner:None)
     monkeypatch.setattr(resident,'owner_alive',lambda owner:False)
     monkeypatch.setattr(metadata,'save',lambda *args,**kwargs:None)
-    # Isolate lease/CAS replay here; installation is covered separately through
-    # the shared completed resident-plan verifier.
-    monkeypatch.setattr(retry,'_install_retry_resident_plan',lambda *args,**kwargs:None)
     authority=retry.verify_release(reference,declaration)
     assert authority['recipe_sha256']==lineage
     assert authority['prior_resident_current']==binding(predecessor_resident)
@@ -330,6 +443,7 @@ def test_configure_replays_exact_candidate_with_inherited_lease_and_recovers_par
         assert binding(config_path)['sha256']==candidates['config']['sha256']
         assert binding(cursor_path)['sha256']==candidates['cursor']['sha256']
         assert binding(state_path)['sha256']==candidates['state']['sha256']
+        assert json.loads((recipe.parent/'recipe-plan.json').read_text())==lineage_value
         release=retry.verify_release(reference,declaration)
         assert release['recipe_lineage_sha256']==lineage
         dependencies=retry.dependencies(reference)
