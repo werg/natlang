@@ -27,7 +27,7 @@ import torch
 
 from ..model.projections import DeltaProjection
 from ..nz import read_nz
-from .projection import relative_error
+from .metrics import relative_error
 
 SCHEMA = "natlang.delta-projection/1"
 

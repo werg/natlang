@@ -31,7 +31,7 @@ import torch
 
 from ..model.projections import DeltaProjection
 from ..nz import read_nz
-from .projection import relative_error
+from .metrics import relative_error
 
 SCHEMA = "natlang.learned-updater/1"
 UPDATER_SYSTEM = ("You update a decision skill. Read the updater instructions, the current skill and the examples with "
