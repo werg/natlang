@@ -283,10 +283,8 @@ def save(path, spec, windows, rows, receipt, held_selection):
 
 
 def _target_bearing(window):
-    # stage_data owns this existing policy; import lazily to keep preparation
-    # helpers independent during module initialization.
-    from .direct_sft import target_bearing
-    return target_bearing(window)
+    from .text_supervision import target_bearing_window
+    return target_bearing_window(window)
 
 
 def load(path, spec):

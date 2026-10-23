@@ -12,6 +12,18 @@ from array import array
 ROLE_CODES = ('other', 'system', 'user', 'tool', 'assistant_reasoning', 'assistant_reply')
 
 
+def target_bearing_window(window):
+    """Whether a prepared text window contains any declared assistant target."""
+    size = len(window['ids']) - window['prefix']
+    if 'supervised_spans' in window:
+        return bool(window['supervised_spans'])
+    if window.get('supervised_suffix_start') is not None:
+        return window['supervised_suffix_start'] < size
+    roles = window.get('roles')
+    assistant = (ROLE_CODES.index('assistant_reasoning'), ROLE_CODES.index('assistant_reply'))
+    return roles is None or any(roles[i] in assistant for i in range(window['prefix'], len(window['ids'])))
+
+
 def chat_roles(ids, *, start_id, role_ids, think_open=None, think_close=None,
                tool_response_prefixes=()):
     """Per-token chat roles, including reasoning spans and tool-response bodies."""

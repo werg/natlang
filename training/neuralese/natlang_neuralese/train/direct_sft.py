@@ -44,6 +44,7 @@ from ..common.hashing import canonical_json_sha256_hex
 from ..common.jsonio import open_jsonl_text
 from ..common.profiling import UpdateProfiler, backward_phase, region as profile_region, scope as profile_scope
 from .checkpoint_policy import CheckpointPolicy
+from .text_supervision import target_bearing_window as target_bearing
 
 SCHEMA = 'natlang.neuralese-direct/1'
 DIRECT_MEMORY_GEOMETRY_VERSION = 'direct-sft-window-v2:fp32-rmsnorm-casts'
@@ -663,20 +664,6 @@ def direct_sft_calibration_kind(fp8_training: str, fp8_recipe: str, mode: str,
 
 CONTINUATION_SCHEMA = 'natlang.neuralese-direct-data-continuation/2'
 LEGACY_CONTINUATION_SCHEMA = 'natlang.neuralese-direct-data-continuation/1'
-
-
-def target_bearing(window):
-    """A window whose span holds decision-target tokens, or assistant positions in a document without a declared
-    suffix (data audit 2026-10-11, DATA_INVENTORY_20261011.md E); context-only windows are not trained."""
-    from .text_supervision import ROLE_CODES
-    size = len(window['ids']) - window['prefix']
-    if 'supervised_spans' in window:
-        return bool(window['supervised_spans'])
-    if window.get('supervised_suffix_start') is not None:
-        return window['supervised_suffix_start'] < size
-    roles = window.get('roles')
-    assistant = (ROLE_CODES.index('assistant_reasoning'), ROLE_CODES.index('assistant_reply'))
-    return roles is None or any(roles[i] in assistant for i in range(window['prefix'], len(window['ids'])))
 
 
 def direct_sampler(targets, cohort_repeats=None):
