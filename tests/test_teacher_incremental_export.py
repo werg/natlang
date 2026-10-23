@@ -617,6 +617,44 @@ def test_guardian_exporter_persists_and_drains_every_closed_boundary_once(tmp_pa
     assert second['closed_boundaries']==first['closed_boundaries']
 
 
+def test_separate_spool_retains_old_custody_and_exports_pending_tail(tmp_path,monkeypatch):
+    from types import SimpleNamespace
+    from scripts.coreweave import teacher_incremental_export as module
+    previous={'schema':'natlang.teacher-incremental-export-publisher/1','sandbox_id':'sid',
+        'anchor_batch':0,'directory_root':'/unavailable/external/source','role':'teacher'}
+    parent=tmp_path/'previous-publisher.json';parent.write_text(json.dumps(previous))
+    raw=parent.read_bytes()
+    continuation={'schema':'natlang.teacher-spool-continuation/1',
+        'previous_publisher':{'path':str(parent),'bytes':len(raw),'sha256':module._sha(raw)},
+        'unavailable_directory':previous['directory_root'],'first_export_batch':22,
+        'reason':'USB device unavailable; preserve old custody and stage pending data internally'}
+    publisher={**previous,'directory_root':str(tmp_path/'internal'),
+        'first_export_batch':22,'spool_continuation':continuation}
+    path=tmp_path/'publisher.json';path.write_text(json.dumps(publisher))
+    refs=[{'path':f'/work/control/boundaries/batch-{batch:04d}.json',
+        'sha256':str(batch)*32,'bytes':batch}for batch in (21,22,23)]
+    active={'draining':True,'batch':24,'guardian_state':{},
+        'guardian_state_sha256':'a'*64,'closed_boundaries':refs}
+    monkeypatch.setattr(module,'_cwctl_module',lambda:SimpleNamespace(load_env_file=lambda:None))
+    monkeypatch.setattr(module,'scoped_sdk_session',lambda *_a,**_k:(object(),lambda p:b''))
+    monkeypatch.setattr(module,'discover_guardian_batch',lambda *_a:active)
+    calls=[]
+    monkeypatch.setattr(module,'export_guardian_closed_boundary',lambda p,value,**kw:
+        calls.append(value['closed_boundary'])or{'private':True,'training_admission':False})
+    first=module.run_guardian_export_service(path,poll_seconds=0,max_polls=1,allowed_spool_root=tmp_path)
+    assert calls==refs[1:]
+    assert first['deferred_closed_boundaries']=={'0021':refs[0]}
+    assert set(first['closed_boundaries'])=={'0022','0023'}
+    second=module.run_guardian_export_service(path,poll_seconds=0,max_polls=1,allowed_spool_root=tmp_path)
+    assert calls==refs[1:] and second['deferred_closed_boundaries']==first['deferred_closed_boundaries']
+    active['closed_boundaries']=[{**refs[0],'sha256':'f'*64},*refs[1:]]
+    with pytest.raises(ValueError,match='retained previous-spool boundary'):
+        module.run_guardian_export_service(path,poll_seconds=0,max_polls=1,allowed_spool_root=tmp_path)
+    parent.write_text('{}')
+    with pytest.raises(ValueError,match='previous spool publisher bytes changed'):
+        module.run_guardian_export_service(path,poll_seconds=0,max_polls=1,allowed_spool_root=tmp_path)
+
+
 @pytest.mark.parametrize('mutation', ['foreign-key', 'duplicate-finish', 'unsafe-key'])
 def test_completed_frontier_rejects_forged_or_ambiguous_identity(tmp_path, mutation):
     entries, queue, journal, context, _, finish = _fixture()
