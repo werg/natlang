@@ -1,0 +1,10 @@
+{
+  "package": "/work/native-runtime/native-shared-lfm-common-memory-supervision-optim-20261023-v1/training/neuralese/natlang_neuralese",
+  "role": "lfm",
+  "files": {
+    "data/native_sources.py": "853bdd73ebc44adfd47c1a4871defece095662a1599f0293d910c2f422f76c2b",
+    "data/native_source_tree.py": "7612a3f0b8f8532f176ee371e745e9dfc7c2d50980f8f7f6d0a4341c4cc39954",
+    "common/hashing.py": "1a678f2de7ce4d5f8d732ad8407f6fce049b6f834bf31b08c1d7f4133cf005ce"
+  },
+  "purpose": "Exact actual production predecessor reader source for strict staged-routing continuation verification; no weights or training data."
+}
