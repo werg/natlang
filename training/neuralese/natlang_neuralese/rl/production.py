@@ -901,7 +901,7 @@ def actor_runtime_configuration(repository):
     """The shared factory's exact serving entry, environment and Python closure."""
     from ..common.runtime_inventory import python_runtime_binding
     repository = Path(repository).resolve(strict=True)
-    if not (repository/'scripts/neuralese_data/serve_direct_checkpoint.py').is_file():
+    if not (repository/'scripts/neuralese_data/serve_native_checkpoint.py').is_file():
         raise ValueError('native actor runtime requires its actual serving entry point')
     return {'native_actor_python_runtime': python_runtime_binding(repository/'training/neuralese/natlang_neuralese'),
             'actor_environment': {'NATLANG_REPO': str(repository),
@@ -927,7 +927,7 @@ def bind_actor_runtime_command(command, repository):
         raise ValueError('native actor runtime cannot reinterpret a custom actor command')
     cursor+=1
     while cursor<len(actor)and actor[cursor]in('-u','-B'):cursor+=1
-    suffix='/scripts/neuralese_data/serve_direct_checkpoint.py'
+    suffix='/scripts/neuralese_data/serve_native_checkpoint.py'
     if cursor>=len(actor)or not actor[cursor].endswith(suffix):
         raise ValueError('native actor runtime cannot reinterpret a custom actor command without its direct-checkpoint entry point')
     actor[cursor]=str(repository)+suffix
@@ -1036,7 +1036,7 @@ def configure_native(args):
         'task_curriculum': DEFAULT_TASK_CURRICULUM.copy(),
         'neuralese_server': True, 'trainer_parameters': parameters,
         'production_recipe': str(args.production_recipe.resolve()), 'production_stage': args.production_stage,
-        'actor_command': [python, str(actor_repo/'scripts/neuralese_data/serve_direct_checkpoint.py'),
+        'actor_command': [python, str(actor_repo/'scripts/neuralese_data/serve_native_checkpoint.py'),
             '--native-state', '--store-dir', '{out}/actor-store',
             '--checkpoint', '{checkpoint}', '--checkpoint-sha256', '{policy_id}',
             '--base', '{base}',
@@ -1161,7 +1161,7 @@ def configure(args):
         'runtime': str(args.runtime.resolve()), 'endpoints': [endpoint], 'rows_per_round': 32,
         'group': 4, 'workers': 4, 'neuralese_server': True, 'trainer_parameters': parameters,
         'teacher_rollouts': [str(root('repo') / 'runs/rl-verified-cross-model-seed-20261015-v1/mellum-rollouts.jsonl')],
-        'actor_command': [python, repo + '/scripts/neuralese_data/serve_direct_checkpoint.py',
+        'actor_command': [python, repo + '/scripts/neuralese_data/serve_native_checkpoint.py',
             '--checkpoint', '{checkpoint}', '--checkpoint-sha256', '{policy_id}',
             '--heads', '{heads}', '--heads-sha256', '{heads_sha256}', '--base', '{base}',
             '--neuralese', '--prompt-rendering', 'full', '--sdpa-backend', 'flash', '--port', str(args.port)],
