@@ -91,20 +91,7 @@ def evaluate(args, ind: dict, packet: Path, base_system: str) -> dict:
            "outcomes": report["outcome_counts"], "groups_with_spread": report["groups_with_spread"],
            "per_row": [sum(r["reward"] == 1.0 for r in rewards if r["group"] == g) for g in range(args.rows)],
            "seconds": round(time.time() - started, 1), "dir": str(out)}
-    fit["guidance_reached_model"] = guidance_reached(out, ind["guidance"])
     return fit
-
-def guidance_reached(out: Path, guidance: str) -> bool | None:
-    """Whether the guidance text is in the recorded model contexts (it must survive prompt rendering)."""
-    if not guidance:
-        return None
-    probe = guidance.split()[:6]
-    for path in out.glob("row-*/sample-*/results.jsonl"):
-        for row in read_jsonl(path):
-            for step in row.get("trajectory") or []:
-                if " ".join(probe) in json.dumps(step.get("context") or [], ensure_ascii=False):
-                    return True
-    return False
 
 def failure_digest(fit: dict, limit: int = 6) -> str:
     """Failed rollouts of an evaluation: outcome class, failed checks, returned value, errors. Never the gold."""

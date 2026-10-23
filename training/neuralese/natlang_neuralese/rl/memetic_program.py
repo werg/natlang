@@ -57,7 +57,9 @@ def state_guidance(text: str, state_id: str) -> str:
         raise ValueError('native program guidance needs text and an exact state ID')
     # The model transport materializes this existing native-state sentinel into
     # a content part. No text approximation of the state is substituted.
-    return text + '\n\ue002' + state_id + '\ue003'
+    # Fitness must measure the native state itself. Showing the candidate text
+    # would let a textual hint explain a gain without the state helping.
+    return '\ue002' + state_id + '\ue003'
 
 
 def write_state(server: str, text: str, expected_identity: dict):
@@ -110,6 +112,18 @@ def actor_identity(server: str):
     return {key: identity[key] for key in IDENTITY}
 
 
+def author_provenance(path: Path, model: str):
+    """Require an independently prepared self-hosted teacher source receipt."""
+    value = json.loads(path.read_text())
+    if (value.get('schema') != 'natlang.memetic-author-provenance/1'
+            or value.get('model_id') != model
+            or value.get('hosting') != 'self-hosted-coreweave'
+            or any(not isinstance(value.get(key), str) or not re.fullmatch(r'[0-9a-f]{64}', value[key])
+                   for key in ('checkpoint_sha256', 'tokenizer_fingerprint', 'runtime_sha256'))):
+        raise ValueError('memetic author needs exact self-hosted teacher checkpoint/tokenizer/runtime provenance')
+    return {'path': str(path.resolve()), 'sha256': hashlib.sha256(path.read_bytes()).hexdigest(), 'receipt': value}
+
+
 def evaluate(args, out: Path, name: str, guidance: str, rows: list[dict]):
     packet = out / (name + '-packet.jsonl')
     if not packet.exists():
@@ -126,11 +140,12 @@ def evaluate(args, out: Path, name: str, guidance: str, rows: list[dict]):
     options.shards = args.shards
     individual = {'id': name, 'guidance': guidance, 'adapter': None}
     fit = runner.evaluate(options, individual, packet, runner.default_system_prompt())
-    if fit['scored'] != len(rows) * args.samples or fit['guidance_reached_model'] is not True:
-        raise ValueError('guidance evaluation lacks complete scored outcomes or model-context evidence')
+    if fit['scored'] != len(rows) * args.samples:
+        raise ValueError('guidance evaluation lacks complete scored task outcomes')
     state_id = re.search(r'nzs1_[a-z2-7]{52}', guidance)
     if not state_id or not native_import_reached(target, state_id.group(0)):
         raise ValueError('guidance state did not reach the executing model as native state')
+    fit['native_import_reached_model'] = True
     write_json_durable(fit_path, fit)
     return fit
 
@@ -261,6 +276,7 @@ def main(argv=None):
     parser.add_argument('--model-id', choices=('lfm', 'mellum'), required=True)
     parser.add_argument('--author', required=True)
     parser.add_argument('--author-model', required=True)
+    parser.add_argument('--author-provenance', type=Path, required=True)
     parser.add_argument('--generations', type=int, default=3)
     parser.add_argument('--samples', type=int, default=2)
     parser.add_argument('--shards', type=int, default=2)
@@ -273,13 +289,19 @@ def main(argv=None):
     if args.recipe_base and not args.supervised_graphs:
         parser.error('--recipe-base requires --supervised-graphs')
     dev, confirm = prepare_slices(args.development, args.confirmation, args.program_id)
+    teacher = author_provenance(args.author_provenance, args.author_model)
     identity = actor_identity(args.server)
     out = args.out.resolve(); out.mkdir(parents=True, exist_ok=True)
     inputs = {'schema': 'natlang.memetic-program-inputs/1', 'program_id': args.program_id,
         'development': hashlib.sha256(args.development.read_bytes()).hexdigest(),
         'confirmation': hashlib.sha256(args.confirmation.read_bytes()).hexdigest(),
-        'student': identity, 'author_model': args.author_model, 'seed_base': args.seed_base,
-        'samples': args.samples, 'temperature': args.temperature}
+        'student': identity, 'author': teacher, 'seed_base': args.seed_base,
+        'samples': args.samples, 'temperature': args.temperature,
+        'supervised_graphs': (hashlib.sha256(args.supervised_graphs.read_bytes()).hexdigest()
+                              if args.supervised_graphs else None),
+        'recipe_base': (hashlib.sha256(args.recipe_base.read_bytes()).hexdigest()
+                        if args.recipe_base else None),
+        'recipe_graph_path': args.recipe_graph_path}
     input_path = out / 'inputs.json'
     if input_path.exists() and json.loads(input_path.read_text()) != inputs:
         raise ValueError('resume changed program, split, student or sampling identity')

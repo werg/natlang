@@ -42,7 +42,9 @@ await runtime.run(() => review(observations, criterion));
 - `defineNatlang(source)` creates a natural-language function from `.nl` text at run time.
 
 Pass the memetic export's `natlang.memetic-program-guidance/1` object as `nativeProgramGuidance` in runtime or task
-options. `nativeProgramGuidance(binding)` also validates and projects it for direct `NativeToolAgent` use. When the exact
+options together with the matching program descriptor. Its `program_id` must equal the descriptor's ID; only that
+program's calls receive the state. `nativeProgramGuidance(binding)` also validates and projects it for direct
+`NativeToolAgent` use. When the exact
 stored state is available, the runtime binds its ID into the actual system prompt. When the current student's checkpoint
 differs, it refreshes the server identity, writes the original guidance through that student's native producer port and verifies checkpoint, tokenizer,
 embedding and architecture identity. A missing writer or identity mismatch fails the call without a text, projection or

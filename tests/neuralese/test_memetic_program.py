@@ -27,7 +27,7 @@ def test_repeated_program_slices_are_disjoint_train_only(tmp_path):
 
 def test_binding_requires_actual_native_id_and_oracle_gain(tmp_path):
     ident = 'nzs1_' + 'a' * 52
-    assert ident in memetic.state_guidance('Check the contract.', ident)
+    assert memetic.state_guidance('Check the contract.', ident) == '\ue002' + ident + '\ue003'
     with pytest.raises(ValueError):
         memetic.state_guidance('Check.', 'nz1_' + 'a' * 52)
     assert memetic.acceptance({'scored': 4, 'successes': 1}, {'scored': 4, 'successes': 2})
@@ -39,6 +39,19 @@ def test_binding_requires_actual_native_id_and_oracle_gain(tmp_path):
         {'model_response': {'raw_response': {'native_state': {'imports': [{'id': ident}]}}}}]}) + '\n')
     assert memetic.native_import_reached(tmp_path, ident)
     assert not memetic.native_import_reached(tmp_path, 'nzs1_' + 'b' * 52)
+
+
+def test_author_requires_exact_self_hosted_source_receipt(tmp_path):
+    path = tmp_path / 'teacher.json'
+    receipt = {'schema': 'natlang.memetic-author-provenance/1', 'model_id': 'Qwen/Qwen3.6-35B-A3B',
+        'hosting': 'self-hosted-coreweave', 'checkpoint_sha256': 'a' * 64,
+        'tokenizer_fingerprint': 'b' * 64, 'runtime_sha256': 'c' * 64}
+    path.write_text(json.dumps(receipt))
+    assert memetic.author_provenance(path, receipt['model_id'])['receipt'] == receipt
+    receipt['hosting'] = 'provider'
+    path.write_text(json.dumps(receipt))
+    with pytest.raises(ValueError, match='self-hosted'):
+        memetic.author_provenance(path, receipt['model_id'])
 
 
 def test_writer_rejects_wrong_student_or_missing_producer(monkeypatch):

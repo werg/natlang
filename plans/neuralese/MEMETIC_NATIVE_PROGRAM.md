@@ -23,8 +23,15 @@ PYTHONPATH=training/neuralese:. .venv-neuralese/bin/python -m natlang_neuralese.
   --recipe-graph-path /work/memetic/native-guidance-graphs.jsonl \
   --server http://STUDENT:PORT --model-id lfm \
   --author http://SELF-HOSTED-QWEN:PORT --author-model Qwen/Qwen3.6-35B-A3B \
+  --author-provenance verified-qwen36-author.json \
   --out RUN-DIR --generations 3
 ```
+
+The author receipt has schema `natlang.memetic-author-provenance/1`, the exact
+`model_id`, `hosting: "self-hosted-coreweave"`, and SHA-256 fields
+`checkpoint_sha256`, `tokenizer_fingerprint`, and `runtime_sha256`. Prepare it
+from the sandbox's verified teacher serving records. The loop binds its bytes
+and never treats a model-card name or an endpoint as checkpoint proof.
 
 Use the same command and output directory to resume with a larger generation
 count. Its input receipt binds the program, split file hashes, exact student
@@ -32,7 +39,10 @@ identity and sampling. Each proposed guide is saved before evaluation, so an
 interrupted cycle resumes the same candidate. The student writes its guide
 through `/v1/neuralese/native-states/write-text`; the returned token IDs,
 producer markers, state bytes, tokenizer and checkpoint are retained. The
-collector must record the native-state import in an actual executing model turn.
+collector must record the native-state import in every evaluated invocation.
+The candidate text is retained as provenance and for re-encoding, but the
+scored executor receives only the native state; text alone cannot explain an
+accepted gain.
 The winner's `binding.json` includes the text, state ID, artifact bytes binding,
 student identity and measured development/confirmation outcomes.
 

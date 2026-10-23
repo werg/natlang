@@ -10,7 +10,7 @@ const binding = (student, text, id) => ({ schema: 'natlang.memetic-program-guida
   student: { architecture: student.architecture, checkpoint_sha256: student.checkpoint_sha256,
     tokenizer_fingerprint: student.tokenizer_fingerprint, embedding_weight_sha256: student.embedding_weight_sha256 },
   text, native_state_id: id, native_state_artifact: { path: '/tmp/guidance.nzs', sha256: 'd'.repeat(64), bytes: 1 },
-  program_guidance: `${text}\n${id}` });
+  program_guidance: `${id}` });
 
 test('native program guidance is stored for the exact student and appears in the actual system call', async () => {
   const writes = [], requests = [];

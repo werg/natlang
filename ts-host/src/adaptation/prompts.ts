@@ -22,7 +22,7 @@ export function nativeProgramGuidance(input: string | MemeticGuidanceBinding): N
         !b.native_state_artifact || typeof b.native_state_artifact.path !== 'string' || !b.native_state_artifact.path.startsWith('/') ||
         typeof b.native_state_artifact.sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(b.native_state_artifact.sha256) ||
         !Number.isSafeInteger(b.native_state_artifact.bytes) || b.native_state_artifact.bytes < 1 ||
-        b.program_guidance !== `${b.text}\n${b.native_state_id}`)
+        b.program_guidance !== `${b.native_state_id}`)
       throw new TypeError('invalid natlang.memetic-program-guidance/1 binding');
     return Object.freeze({ kind: 'native-program-guidance', text: b.text, binding: structuredClone(b) });
   }
