@@ -22,6 +22,7 @@ from ..common.jsonio import write_json_durable
 from ..common.runtime_inventory import python_runtime_binding, task_runtime_inventory
 from ..eval.task_packet import read_jsonl
 from . import memetic_task_runner as runner
+from . import memetic_teacher_ferry as teacher_ferry
 from .task_rollouts import authored_root_row
 
 STATE_ID = re.compile(r"nzs1_[a-z2-7]{52}\Z")
@@ -140,16 +141,21 @@ def local_runtime_binding() -> dict:
 
 
 def author_provenance(path: Path, model: str, endpoint: str):
-    """Require an independently prepared self-hosted teacher source receipt."""
+    """Bind authoring to the existing self-hosted Qwen source and runtime."""
     value = json.loads(path.read_text())
+    exact_sources = list(teacher_ferry.TEACHER_SOURCE_BINDINGS)
     if (value.get('schema') != 'natlang.memetic-author-provenance/1'
-            or value.get('model_id') != model
+            or model != teacher_ferry.TEACHER_MODEL_ID
+            or value.get('model_id') != teacher_ferry.TEACHER_MODEL_ID
+            or value.get('revision') != teacher_ferry.TEACHER_REVISION
             or value.get('hosting') != 'self-hosted-coreweave'
-            or value.get('endpoint') != endpoint.rstrip('/')
-            or not isinstance(value.get('sandbox_id'), str) or not value['sandbox_id']
+            or endpoint.rstrip('/') != teacher_ferry.TEACHER_URL
+            or value.get('endpoint') != teacher_ferry.TEACHER_URL
+            or value.get('sandbox_id') != teacher_ferry.TEACHER_SANDBOX_ID
+            or value.get('source_bindings') != exact_sources
             or any(not isinstance(value.get(key), str) or not re.fullmatch(r'[0-9a-f]{64}', value[key])
                    for key in ('checkpoint_sha256', 'tokenizer_fingerprint', 'runtime_sha256', 'source_receipt_sha256'))):
-        raise ValueError('memetic author needs exact self-hosted teacher checkpoint/tokenizer/runtime provenance')
+        raise ValueError('memetic author needs the exact pinned self-hosted Qwen teacher checkpoint/tokenizer/runtime/source receipt')
     return {'path': str(path.resolve()), 'sha256': hashlib.sha256(path.read_bytes()).hexdigest(), 'receipt': value}
 
 
@@ -523,9 +529,11 @@ def main(argv=None):
         return result
     if any(value is None for value in (args.author, args.author_model, args.author_provenance)):
         parser.error('guided iteration requires --author, --author-model and --author-provenance')
+    if args.author_ferry != 'http://127.0.0.1:8766':
+        parser.error('--author-ferry must be the evaluator-local http://127.0.0.1:8766 endpoint')
     teacher = author_provenance(args.author_provenance, args.author_model, args.author)
     author_inputs = {'schema': 'natlang.memetic-author-inputs/1', 'author': teacher,
-                     'author_server': args.author, 'min_gain_fraction': args.min_gain_fraction,
+                     'author_server': args.author, 'author_ferry': args.author_ferry, 'min_gain_fraction': args.min_gain_fraction,
                      'recipe_base': (hashlib.sha256(args.recipe_base.read_bytes()).hexdigest()
                                      if args.recipe_base else None),
                      'foundation_id': args.foundation_id, 'recipe_graph_path': args.recipe_graph_path}

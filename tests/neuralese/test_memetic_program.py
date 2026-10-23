@@ -109,16 +109,20 @@ def test_binding_requires_actual_native_id_and_oracle_gain(tmp_path):
 
 
 def test_author_requires_exact_self_hosted_source_receipt(tmp_path):
+    from natlang_neuralese.rl import memetic_teacher_ferry as ferry
     path = tmp_path / 'teacher.json'
-    receipt = {'schema': 'natlang.memetic-author-provenance/1', 'model_id': 'Qwen/Qwen3.6-35B-A3B',
-        'hosting': 'self-hosted-coreweave', 'endpoint': 'http://teacher', 'sandbox_id': 'sandbox-1',
+    receipt = {'schema': 'natlang.memetic-author-provenance/1',
+        'model_id': ferry.TEACHER_MODEL_ID, 'revision': ferry.TEACHER_REVISION,
+        'hosting': 'self-hosted-coreweave', 'endpoint': ferry.TEACHER_URL,
+        'sandbox_id': ferry.TEACHER_SANDBOX_ID,
+        'source_bindings': list(ferry.TEACHER_SOURCE_BINDINGS),
         'checkpoint_sha256': 'a' * 64, 'tokenizer_fingerprint': 'b' * 64,
         'runtime_sha256': 'c' * 64, 'source_receipt_sha256': 'd' * 64}
     path.write_text(json.dumps(receipt))
     assert memetic.author_provenance(path, receipt['model_id'], receipt['endpoint'])['receipt'] == receipt
-    receipt['hosting'] = 'provider'
+    receipt['sandbox_id'] = 'unbound-teacher'
     path.write_text(json.dumps(receipt))
-    with pytest.raises(ValueError, match='self-hosted'):
+    with pytest.raises(ValueError, match='pinned self-hosted'):
         memetic.author_provenance(path, receipt['model_id'], receipt['endpoint'])
 
 
