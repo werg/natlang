@@ -1892,6 +1892,32 @@ def _completed_guardian_poll(value, started_at, started_monotonic):
             'poll_elapsed_seconds': time.monotonic() - started_monotonic}
 
 
+def _spool_continuation_start(publisher):
+    """An unavailable old spool remains historical custody, never a fake export."""
+    anchor=publisher.get('anchor_batch',0)
+    first=publisher.get('first_export_batch',anchor)
+    if type(first)is not int or first<anchor:
+        raise ValueError('first export batch must retain the original source anchor')
+    if first==anchor and not publisher.get('spool_continuation'):
+        return first
+    declaration=publisher.get('spool_continuation')or{}
+    if declaration.get('schema')!='natlang.teacher-spool-continuation/1':
+        raise ValueError('tail spool requires an explicit previous publisher binding')
+    reference=declaration.get('previous_publisher')or{}
+    raw=Path(reference['path']).read_bytes()
+    if len(raw)!=reference.get('bytes')or _sha(raw)!=reference.get('sha256'):
+        raise ValueError('previous spool publisher bytes changed')
+    previous=_json(raw,'previous spool publisher')
+    if (previous.get('directory_root')==publisher.get('directory_root')
+            or declaration.get('unavailable_directory')!=previous.get('directory_root')
+            or declaration.get('first_export_batch')!=first
+            or not declaration.get('reason')
+            or any(publisher.get(key)!=value for key,value in previous.items()
+                   if key not in {'directory_root','first_export_batch','spool_continuation'})):
+        raise ValueError('spool continuation changes source authority or loses its previous journal')
+    return first
+
+
 def run_guardian_export_service(publisher_path: Path, *, poll_seconds: float = 15,
                                 max_polls: int | None = None,
                                 allowed_spool_root: Path | None = None) -> dict:
@@ -1909,6 +1935,7 @@ def run_guardian_export_service(publisher_path: Path, *, poll_seconds: float = 1
     publisher = _json(publisher_raw, 'teacher export publisher')
     if not isinstance(publisher, dict):
         raise ValueError('teacher export publisher must be a JSON object')
+    first_export_batch=_spool_continuation_start(publisher)
     spool_root = (Path(allowed_spool_root).resolve(strict=True) if allowed_spool_root is not None
                   else _external_data_root())
     state_path = Path(publisher['directory_root']).resolve() / 'publisher-state.json'
@@ -1919,11 +1946,13 @@ def run_guardian_export_service(publisher_path: Path, *, poll_seconds: float = 1
     while max_polls is None or polls < max_polls:
         started_at, started_monotonic = time.time(), time.monotonic()
         closed_exports = {}
+        deferred_boundaries = {}
         try:
             # Preserve prior durable custody even if the first SDK discovery
             # fails after a publisher restart.
             prior = json.loads(state_path.read_text()) if state_path.exists() else {}
             closed_exports = dict(prior.get('closed_boundaries') or {})
+            deferred_boundaries = dict(prior.get('deferred_closed_boundaries') or {})
             if any(not str(key).isdigit() or not isinstance(value, dict)
                    or not isinstance(value.get('sha256'), str)
                    for key, value in closed_exports.items()):
@@ -1941,6 +1970,11 @@ def run_guardian_export_service(publisher_path: Path, *, poll_seconds: float = 1
                     if not match:
                         raise ValueError('closed-boundary backlog contains an unexpected path')
                     batch_key = match.group(1)
+                    if int(batch_key)<first_export_batch:
+                        if batch_key in deferred_boundaries and deferred_boundaries[batch_key]!=reference:
+                            raise ValueError('guardian rewrote a retained previous-spool boundary')
+                        deferred_boundaries[batch_key]=reference
+                        continue
                     if active_batch is not None and int(batch_key) >= active_batch:
                         continue
                     previous = closed_exports.get(batch_key)
@@ -1952,6 +1986,7 @@ def run_guardian_export_service(publisher_path: Path, *, poll_seconds: float = 1
                         {'closed_boundary': reference, 'guardian_state': guardian_state},
                         sandbox=sandbox, read_file=reader, spool_root=spool_root)
                     closed_exports[batch_key] = {'sha256': reference['sha256'], 'result': closed}
+                    deferred_boundaries.pop(batch_key,None)
                     exported.append(closed)
                 return exported
 
@@ -2003,6 +2038,8 @@ def run_guardian_export_service(publisher_path: Path, *, poll_seconds: float = 1
                 'closed_boundaries': closed_exports,
                 'training_admission': False, 'exposure': False}
             last = _completed_guardian_poll(last, started_at, started_monotonic)
+            last['deferred_closed_boundaries']=deferred_boundaries
+            last['spool_continuation']=publisher.get('spool_continuation')
             _write(state_path, (json.dumps(last, sort_keys=True, indent=2) + '\n').encode())
             raise
         except Exception as error:
@@ -2011,6 +2048,8 @@ def run_guardian_export_service(publisher_path: Path, *, poll_seconds: float = 1
                 'transport_error': f'{type(error).__name__}: {error}',
                 'closed_boundaries': closed_exports,
                 'training_admission': False, 'exposure': False}
+        last['deferred_closed_boundaries']=deferred_boundaries
+        last['spool_continuation']=publisher.get('spool_continuation')
         last = _completed_guardian_poll(last, started_at, started_monotonic)
         _write(state_path, (json.dumps(last, sort_keys=True, indent=2) + '\n').encode())
         polls += 1
