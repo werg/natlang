@@ -10,28 +10,29 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
+from natlang_neuralese.common import paths as machine_paths
 from typing import Any
 
 
 LEGACY_OBSERVATION = {
-    "path": "/mnt/external/natlang-development-data/teacher198-current-admission-20261019/teacher-runtime-alias-legacy-default-source-closure-compatibility-0aad212b5-v1.json",
+    "path": str(machine_paths.resolve('data_hdd', 'natlang-development-data/teacher198-current-admission-20261019/teacher-runtime-alias-legacy-default-source-closure-compatibility-0aad212b5-v1.json')),
     "sha256": "7a3fa38e0c0251469caa5b9322ee4f8d09b12a0301188982b815023ee4c14cbe",
     "bytes": 1437,
 }
 LEGACY_AUTHORITY = {
-    "path": "/mnt/external/natlang-development-data/teacher198-current-admission-20261019/teacher-runtime-alias-legacy-0aad212b5-immutable-helper-authority/authority.json",
+    "path": str(machine_paths.resolve('data_hdd', 'natlang-development-data/teacher198-current-admission-20261019/teacher-runtime-alias-legacy-0aad212b5-immutable-helper-authority/authority.json')),
     "sha256": "fbf5ba315825fd333e5ee27b6051f94eef20c16aab70b51a8179ba177cd1660d",
     "bytes": 2568,
 }
 LEGACY_API_RELATIVE = "scripts/coreweave/teacher_tranche_admission.py"
 SUCCESSOR_COMMIT = "8c3358fac0355d462652f1b3352970ff2f5ca0f9"
 SOURCE_CLOSURE_RECEIPT = {
-    "path": "/home/werg/data/dgxops/acquired-connected-source-protection-20261017-d13-d14-d32-v3/closure-receipt-full-20261020-content-facade-helper-v1.json",
+    "path": str(machine_paths.resolve('data_nvme', 'dgxops/acquired-connected-source-protection-20261017-d13-d14-d32-v3/closure-receipt-full-20261020-content-facade-helper-v1.json')),
     "sha256": "f1b9be730845c0c498d9084f051949e5523e6f2a38fcfaf0bc632a6aca3d45c9",
     "bytes": 14025086,
 }
 SOURCE_CLOSURE_TRANSITION = {
-    "path": "/home/werg/data/dgxops/acquired-connected-source-protection-20261017-d13-d14-d32-v3/closure-code-transition-content-facade-helper-v1.json",
+    "path": str(machine_paths.resolve('data_nvme', 'dgxops/acquired-connected-source-protection-20261017-d13-d14-d32-v3/closure-code-transition-content-facade-helper-v1.json')),
     "sha256": "a597bdfe4b2eb717091cf9e8ca7bb35b754d5dde76b3856015669a5cb28c2b57",
     "bytes": 9071,
 }

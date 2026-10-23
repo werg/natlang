@@ -3,13 +3,14 @@ import importlib.util
 import json
 import shutil
 from pathlib import Path
+from natlang_neuralese.common import paths as machine_paths
 
 import pytest
 
 from scripts.coreweave import teacher_helper_continuation as custody
 
 
-STAGED_API = Path("/home/werg/data/dgxops/teacher-zero-guided-control-closure-8c3358fa-20261022/scripts/coreweave/teacher_tranche_admission.py")
+STAGED_API = Path(str(machine_paths.resolve('data_nvme', 'dgxops/teacher-zero-guided-control-closure-8c3358fa-20261022/scripts/coreweave/teacher_tranche_admission.py')))
 AUTHORITY_PATH = Path(custody.LEGACY_AUTHORITY["path"])
 OLD = json.loads(Path(custody.LEGACY_OBSERVATION["path"]).read_bytes())
 
@@ -89,7 +90,7 @@ def _successor_fixture(tmp_path, *, bad_accounting=False):
 
 
 def test_exact_historical_helper_receipt_remains_verifiable():
-    root = Path("/home/werg/natlang")
+    root = Path(str(machine_paths.resolve('repo')))
     execution = {"helper_continuation": custody.LEGACY_OBSERVATION,
                  "converter": _builder(root)}
     assert custody.verify_helper_continuation(

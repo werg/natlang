@@ -9,15 +9,16 @@ import json
 import re
 import shutil
 from pathlib import Path
+from natlang_neuralese.common import paths as machine_paths
 from typing import Any
 
 from scripts.coreweave import teacher_helper_continuation as custody
 
 
-ROOT = Path("/home/werg/natlang")
-DGXOPS = Path("/home/werg/data/dgxops")
-SOURCE_DGXOPS = Path("/home/werg/data/dgxops")
-API_SOURCE = Path("/home/werg/data/dgxops/teacher-zero-guided-control-closure-8c3358fa-20261022/scripts/coreweave/teacher_tranche_admission.py")
+ROOT = Path(str(machine_paths.resolve('repo')))
+DGXOPS = Path(str(machine_paths.resolve('data_nvme', 'dgxops')))
+SOURCE_DGXOPS = Path(str(machine_paths.resolve('data_nvme', 'dgxops')))
+API_SOURCE = Path(str(machine_paths.resolve('data_nvme', 'dgxops/teacher-zero-guided-control-closure-8c3358fa-20261022/scripts/coreweave/teacher_tranche_admission.py')))
 API_SOURCE_BINDING = {"path": str(API_SOURCE), "sha256": "33e4c92850f8fe05eeaffef958e33cba1d04235ec9c260fb2937d5a9ebc96ae1", "bytes": 61201}
 INPUTS = {
     "selected-convert": {"path": DGXOPS / "teacher-zero-guided-control-closure-8c3358fa-20261022/scripts/coreweave/teacher_convert_operator.py", "sha256": "3c4cc6b5ddc5b22539a43ab644a05c9042610990c00094e5c905b00efef15c2b", "bytes": 9373, "kind": "converter", "tree": "selected/scripts/coreweave"},
@@ -211,7 +212,7 @@ def _copy_exact(reference: dict[str, Any], destination: Path) -> bytes:
 def stage(destination: Path, review_report: Path) -> dict[str, Any]:
     destination = destination.resolve()
     if not destination.is_relative_to(DGXOPS) or destination.exists():
-        raise ValueError("stage destination must be a new versioned directory under /home/werg/data/dgxops")
+        raise ValueError('stage destination must be a new versioned directory under the configured operational data directory')
     review_input_ref = file_binding(review_report)
     review_raw = review_report.read_bytes()
     if file_binding(review_report) != review_input_ref:
