@@ -81,6 +81,10 @@ class NativePreferenceObjective:
                 expected=[{'node':label+'/'+action['node'],'position':action['position'],
                     'token_id':action['token_id'],'reference_logp':float(action['reference_logp']),
                     'kind':action['kind']} for action in actions]
+                if any(type(action.get('reference_logp')) not in (int,float)
+                        or not math.isfinite(action['reference_logp']) or action['reference_logp']>1e-6
+                        for action in actions):
+                    raise ValueError('DPO reference action scores must be finite log probabilities')
                 expected.sort(key=lambda action:(action['node'],action['position']))
                 if suffixes[label]!=expected:
                     raise ValueError('DPO reference score actions differ from their exact paired graph occurrences')

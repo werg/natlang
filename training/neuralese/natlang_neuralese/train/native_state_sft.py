@@ -574,6 +574,19 @@ def append_only_rows(previous, current, *, label):
     return set(current) - set(previous)
 
 
+def verify_failure_repair_objective_continuation(previous_identity,previous_options,
+        current_objective,stage_id):
+    """Bind row-prefix continuity only when resuming this same DPO stage."""
+    if getattr(current_objective,'mode',None)!='failure_repair_dpo':return False
+    same=(previous_identity.get('objective_kind')==current_objective.kind
+        and previous_options.get('stage_id')==stage_id)
+    if same:
+        prior=previous_options.get('failure_repair_objective_row_bindings')
+        if prior is None:raise ValueError('continued DPO stage lacks exact prior objective row custody')
+        append_only_rows(prior,current_objective.row_bindings(),label='failure-repair DPO objective')
+    return same
+
+
 def scheduled_indices(examples, *, seed, epoch, prior_ids=None):
     """Stable epoch order; on append, preserve the old permutation as an exact prefix."""
     order = sorted(range(len(examples)), key=lambda i: hashlib.sha256(
@@ -1431,17 +1444,12 @@ def _main(argv=None, *, requested_refresh):
         if mandatory_objective:
             checkpoint_options['_objective_required_visits']=dict((resume.get('options') or {}).get('_objective_required_visits') or {})
             checkpoint_options['offline_objective_revisions']=list((resume.get('options') or {}).get('offline_objective_revisions') or [])
-        if getattr(objective,'mode',None)=='failure_repair_dpo':
-            prior=(resume.get('options') or {}).get('failure_repair_objective_row_bindings')
-            if prior is None:
-                if parent_continuation:
-                    raise ValueError('DPO continuation lacks exact prior objective row custody')
-            else:
-                append_only_rows(prior,objective.row_bindings(),label='failure-repair DPO objective')
         checkpoint_options['source_predecessors'] = continuation_predecessors(resume,
             {role: getattr(args, role) for role in ('continued_native_graphs', 'continued_held_native_graphs')},
             stage_id=args.stage_id or 'native-graph-ce')
         previous = _resume_identity_for_comparison(resume.get('identity'))
+        verify_failure_repair_objective_continuation(previous,resume.get('options') or {},
+            objective,args.stage_id or args.out.name)
         stable = ('schema', 'optimizer', 'seed', 'rank', 'fp8', 'objective',
                   'cotangent_accumulator_backend')
         if previous.get('cotangent_accumulator_backend') != args.cotangent_accumulator_backend:

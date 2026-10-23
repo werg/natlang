@@ -8,15 +8,15 @@ import torch
 from torch import nn
 
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex
-from natlang_neuralese.data.native_failure_repair import _merge_graphs, PAIR_SCHEMA, admit_jsonl
+from natlang_neuralese.data.native_failure_repair import _merge_graphs, _write_admitted_rows, PAIR_SCHEMA
 from natlang_neuralese.data.native_graph_schema import SCHEMA, parse_graph
 from natlang_neuralese.rl.native_replay import graph_identity
 from natlang_neuralese.train.native_preference import NativePreferenceObjective
 from natlang_neuralese.train.native_state_sft import packed_graph_loss
 
 
-def record():
-    original={'task_sha256':'a'*64,'world_sha256':'b'*64,'oracle_sha256':'c'*64,
+def record(task_sha='a'*64):
+    original={'task_sha256':task_sha,'world_sha256':'b'*64,'oracle_sha256':'c'*64,
               'source_groups':['task-1'], 'prompt_sha256':'d'*64}
     alternatives={}
     for label, token in [('failed',10),('repaired',11)]:
@@ -36,7 +36,9 @@ def record():
         actor={'checkpoint_sha256':'e'*64,'runtime_sha256':'f'*64,'actor_id':'student'}
         capture={'schema':'natlang.native-failure-execution-capture/1',
             'task_sha256':original['task_sha256'],'world_sha256':original['world_sha256'],
-            'prompt_sha256':original['prompt_sha256'],'actions':actions,'actor':actor}
+            'prompt_sha256':original['prompt_sha256'],'actions':[
+                {key:value[key] for key in ('node','position','token_id','kind')} for value in actions],
+            'actor':actor}
         capture_sha=canonical_json_sha256_hex(capture)
         replay={'schema':'natlang.native-graph-replay-receipt/1',
             'graph_sha256':canonical_json_sha256_hex(graph),'execution_capture_sha256':capture_sha,
@@ -50,10 +52,20 @@ def record():
             'complete_graph':True,'occurrence_bindings_verified':True,
             'actor':actor,
             'reference_score':ref,'actions':actions}
-    protection={'schema':'natlang.failure-repair-source-protection/1','split':'train',
-        'protected':False,'source_groups':['task-1'],'held_source_groups':[]}
+    oracle_evidence={}
+    for label in ('failed','repaired'):
+        evidence={'outcome':'semantic_mismatch' if label=='failed' else 'task_success',
+            'task_sha256':original['task_sha256'],'world_sha256':original['world_sha256'],
+            'oracle_sha256':original['oracle_sha256'],'source_groups':original['source_groups'],
+            'packet_sha256':'4'*64,'result_sha256':('5' if label=='failed' else '6')*64,
+            'finish_sha256':'7'*64}
+        receipt={'schema':'natlang.task-oracle-evaluation/1',**evidence,
+            'task_id':'task-1','evaluator_sha256':'8'*64}
+        evidence['evaluation_receipt']=receipt
+        evidence['evaluation_receipt_sha256']=canonical_json_sha256_hex(receipt)
+        oracle_evidence[label]=evidence
     return {'schema':PAIR_SCHEMA,'split':'train','protected':False,'original_task':original,
-            'source_protection':protection,'source_protection_sha256':canonical_json_sha256_hex(protection),
+            'oracle_evidence':oracle_evidence,
             'alternatives':alternatives}
 
 
@@ -105,29 +117,22 @@ def test_admission_retains_complete_internal_graph_and_reference_dpo_updates_pro
     assert model.embedding.weight.grad is not None and model.embedding.weight.grad.norm()>0
 
 
-@pytest.mark.parametrize('mutation', ['hint','held','oracle','world','prompt','missing_graph'])
+@pytest.mark.parametrize('mutation', ['hint','held','oracle','world','prompt','missing_graph','source_protected'])
 def test_admission_rejects_hint_leakage_or_protected_or_mismatched_capture(mutation):
     pair=record()
     if mutation=='hint':pair['alternatives']['repaired']['hint_in_student_prompt']=True
     elif mutation=='held':pair['split']='test'
-    elif mutation=='oracle':pair['alternatives']['failed']['oracle_sha256']='9'*64
+    elif mutation=='oracle':pair['oracle_evidence']['failed']['outcome']='task_success'
     elif mutation=='world':pair['alternatives']['repaired']['world_sha256']='8'*64
     elif mutation=='prompt':pair['alternatives']['failed']['prompt_view']='hinted'
     else:pair['alternatives']['failed'].pop('graph')
-    with pytest.raises(ValueError):_merge_graphs(pair,'tok')
+    with pytest.raises(ValueError):_merge_graphs(pair,'tok',protected_groups={'task-1'} if mutation=='source_protected' else set())
 
 
 def test_reference_custody_and_source_dynamic_append(tmp_path):
-    first=record();second=copy.deepcopy(first);second['original_task']['task_sha256']='7'*64
-    for alt in second['alternatives'].values():
-        alt['task_sha256']='7'*64;alt['execution_receipt']['task_sha256']='7'*64
-        alt['execution_capture_sha256']=canonical_json_sha256_hex(alt['execution_receipt'])
-        alt['graph_replay_receipt']['execution_capture_sha256']=alt['execution_capture_sha256']
-        alt['graph_replay_sha256']=canonical_json_sha256_hex(alt['graph_replay_receipt'])
-    source=tmp_path/'pairs.jsonl';source.write_text(json.dumps(first)+'\n')
-    one=admit_jsonl(source,tmp_path/'first',tokenizer_fingerprint='tok')
-    source.write_text(source.read_text()+json.dumps(second)+'\n')
-    two=admit_jsonl(source,tmp_path/'second',tokenizer_fingerprint='tok')
+    first=record();second=record('7'*64)
+    one=_write_admitted_rows([first],tmp_path/'first',tokenizer_fingerprint='tok',protected_groups=set())
+    two=_write_admitted_rows([first,second],tmp_path/'second',tokenizer_fingerprint='tok',protected_groups=set())
     spec=json.loads((tmp_path/'first'/'repair-objective.json').read_text())
     appended=json.loads((tmp_path/'second'/'repair-objective.json').read_text())
     from natlang_neuralese.train.native_state_sft import append_only_rows
@@ -141,6 +146,37 @@ def test_reference_custody_and_source_dynamic_append(tmp_path):
     forged=record();forged['alternatives']['failed']['reference_score']['checkpoint_sha256']='z'*64
     with pytest.raises(ValueError,match='fixed reference score receipt'):
         _merge_graphs(forged,'tok')
+
+
+def test_recipe_stage_addition_and_sft_to_dpo_continuation(tmp_path):
+    held=tmp_path/'held.jsonl';held.write_text('{}\n')
+    parent=tmp_path/'parent.pt';parent.write_bytes(b'parent checkpoint')
+    out=tmp_path/'admission'
+    result=_write_admitted_rows([record()],out,tokenizer_fingerprint='tok',protected_groups=set(),
+        stage_inputs={'held_native_graphs':held,'continue_from':parent,'stage_id':'failure-repair-dpo',
+            'requires':['native-offline-preference'],'beta':.1})
+    addition=json.loads((out/'recipe-stage-addition.json').read_text())
+    assert result['recipe_stage_addition'].endswith('recipe-stage-addition.json')
+    assert addition['stage']['kind']=='native_offline_preference'
+    assert addition['stage']['inputs'].keys()=={'native_graphs','objective_spec','held_native_graphs','continue_from'}
+    assert addition['continuation']['weights_optimizer_rng_exposure']=='preserved'
+    from natlang_neuralese.train.native_state_sft import verify_failure_repair_objective_continuation
+    graph,row=_merge_graphs(record(),'tok')
+    spec={'schema':'natlang.native-failure-repair-dpo-objective/1','kind':'native-failure-repair-dpo',
+        'normalization':'token-mean-v1','beta':.1,'rows':{graph['id']:row}}
+    objective=NativePreferenceObjective.__new__(NativePreferenceObjective)
+    objective.mode='failure_repair_dpo';objective.kind='native-failure-repair-dpo';objective._spec=spec
+    # A normal SFT parent has no DPO row bindings; the first DPO stage starts cleanly.
+    assert verify_failure_repair_objective_continuation({'objective_kind':'native-sft'},
+        {'stage_id':'sft'},objective,'failure-repair-dpo') is False
+    objective.row_bindings=lambda:{graph['id']:canonical_json_sha256_hex(row)}
+    current_binding=canonical_json_sha256_hex(row)
+    assert verify_failure_repair_objective_continuation({'objective_kind':'native-failure-repair-dpo'},
+        {'stage_id':'failure-repair-dpo','failure_repair_objective_row_bindings':{graph['id']:current_binding}},
+        objective,'failure-repair-dpo') is True
+    with pytest.raises(ValueError,match='lacks exact prior'):
+        verify_failure_repair_objective_continuation({'objective_kind':'native-failure-repair-dpo'},
+            {'stage_id':'failure-repair-dpo'},objective,'failure-repair-dpo')
 
 
 def test_objective_loader_rechecks_reference_receipt_custody(tmp_path):

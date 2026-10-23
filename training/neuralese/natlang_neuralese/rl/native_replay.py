@@ -29,6 +29,7 @@ class NativeReplay:
     semantic_dependencies: tuple = ()
     written_sources: tuple = ()
     protocol_failures: dict | None = None
+    input_actions: tuple[dict, ...] = ()
 
 
 def _tokens(ids):
@@ -213,7 +214,7 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
         from ..serve.native_protocol import validate_failure,validate_failure_draw
         failure=validate_failure(capture,prompt_length)
         samples, writes = _input_stream(capture, prompt_length)
-        events, actual_writes, opened = [], [], None
+        events, input_actions, actual_writes, opened = [], [], [], None
         for index, sample in enumerate(samples):
             token = _tokens([sample.get('token_id')])[0]
             if (sample.get('index') != index or (not sample['forced'] and (
@@ -262,6 +263,10 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
                 events.append({'local_query': prompt_length + index - 1, 'token_id': token,
                     'behavior_logp': sample['logp'], 'temperature': float(temperature),
                     'allowed_token_ids': allowed, 'banned_token_ids': banned, 'turn': name, 'sample': sample['source_sample']})
+            input_actions.append({'local_query':prompt_length+index-1,'token_id':token,
+                'turn':name,'kind':'forced' if sample['forced'] else 'sampled',
+                'source_sample':sample.get('source_sample'),'input_index':index,
+                'input_role':sample['input_role'],'fed':sample.get('fed',True)})
             own.append(token); mask.append(sample['input_role'] == 'produce')
         if opened is not None and failure is None:
             raise ValueError('native RL capture ended inside a producer payload')
@@ -319,7 +324,7 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
                 occurrence=item['node']
             writers.setdefault(block_id, []).append((name, *span, occurrence))
         prepared[name] = {'protocol_failure':failure,'turn': turn, 'own': tuple(own), 'mask': mask, 'reads': reads, 'read_stops': read_stops, 'read_sources': read_sources, 'read_semantics':read_semantics,
-                          'events': events, 'spans': spans, 'actor_identity':actor_identity,'adapter_binding':binding}
+                          'events': events,'input_actions':input_actions, 'spans': spans, 'actor_identity':actor_identity,'adapter_binding':binding}
     if not prepared:
         raise ValueError('native RL graph has no captured turns')
     externals, nodes, ordered, external_receipts, external_invocations = {}, [], [], {}, {}
@@ -429,10 +434,13 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
     plan = compile_graph(nodes, external_sizes={name:len(block.token_ids) for name,block in externals.items() if name in used})
     actions = tuple({**event, 'query': offset + event['local_query']}
         for offset, item in zip(plan.offsets, ordered) for event in item['events'])
+    input_actions=tuple({**event,'query':offset+event['local_query']}
+        for offset,item in zip(plan.offsets,ordered) for event in item['input_actions'])
     written_sources=tuple({'state_id':ident,'invocation':name,'start':start,'stop':stop,'node':occurrence}
         for ident,values in writers.items() for name,start,stop,occurrence in values)
     return NativeReplay(plan, actions, externals, dict(identity), adapter_binding if invocation_actors is None else None, external_receipts, invocation_actors, external_invocations,tuple(semantic_dependencies),written_sources,
-        {name:value['protocol_failure'] for name,value in prepared.items() if value['protocol_failure']})
+        {name:value['protocol_failure'] for name,value in prepared.items() if value['protocol_failure']},
+        input_actions)
 
 
 def replay_logps(model, replay, *, checkpoint_layers=True, chunk_tokens=128,semantic_channel=None):
