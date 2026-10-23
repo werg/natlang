@@ -67,7 +67,7 @@ if deterministic_requested():
 
 from ..model.heads import PayloadSample, payload_kl, payload_log_prob
 from ..model.lfm2_port import PortCache
-from .chat import RequestError, opens_thinking, render_with_empty_thought
+from .chat import RequestError
 from .store import Block, make_block
 
 
@@ -120,39 +120,8 @@ class GradSession:
 
     def _target_items(self, messages, tools, target) -> tuple[list, list]:
         """(prompt items, target items) with the target teacher-forced after the generation prompt."""
-        engine = self.engine
-        prompt = engine.render_request(messages, tools)
-
-        thinking = opens_thinking(engine._template([{"role": "user", "content": "x"}], None))
-
-        def full_template(msgs, tls):
-            render = lambda m: engine.tokenizer.apply_chat_template(m, tools=tls or None, tokenize=False,
-                                                                     add_generation_prompt=False)
-            return render_with_empty_thought(render, msgs) if thinking else render(msgs)
-
-        full = engine.render_request(list(messages) + [target], tools, template=full_template)
-        before = self._items(prompt.segments, prompt.blocks, prompt.escape_nonce,prompt.block_stop_gradients,prompt.block_source_occurrences)
-        after = self._items(full.segments, full.blocks, full.escape_nonce,full.block_stop_gradients,full.block_source_occurrences)
-        # The prompt is scored exactly as inference rendered it; the template may render earlier turns differently
-        # once another assistant turn follows (it drops past reasoning), so the target is cut from the full rendering
-        # after its own generation prefix rather than by matching the whole prompt.
-        im_start = engine.tokenizer.convert_tokens_to_ids("<|im_start|>")
-        starts = [i for i, item in enumerate(before) if item == ("tok", im_start)]
-        if not starts:
-            raise RequestError("neuralese-grad-target", "the rendered prompt has no generation prefix")
-        prefix = before[starts[-1]:]
-        found = [i for i in range(len(after) - len(prefix), -1, -1) if after[i:i + len(prefix)] == prefix]
-        if found:
-            rest = after[found[0] + len(prefix):]
-        else:
-            rest = self._split_boundary(prefix, after)
-            if rest is None:
-                raise RequestError("neuralese-grad-target", "the target's rendering has no assistant prefix")
-        im_end = engine.tokenizer.convert_tokens_to_ids("<|im_end|>")
-        ends = [i for i, item in enumerate(rest) if item == ("tok", im_end)]
-        if ends:
-            rest = rest[:ends[-1] + 1]
-        return before, rest
+        from .targets import target_items
+        return target_items(self.engine, messages, tools, target)
 
     def _split_boundary(self, prefix: list, after: list) -> list | None:
         """The target after the generation prefix when tokenization merged the prefix's last token with the reply's

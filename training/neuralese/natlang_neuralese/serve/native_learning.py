@@ -11,7 +11,7 @@ import torch
 
 from .chat import RequestError
 from .engine import GenerationRequest, Sequence
-from .grad import GradSession
+from .targets import target_items
 
 
 def _native_plan(engine, items):
@@ -37,13 +37,12 @@ def _native_plan(engine, items):
 def _decision_render(engine, messages, tools, options):
     if not isinstance(options, list) or not options:
         raise RequestError("neuralese-decision", "a decision needs at least one option")
-    session = GradSession(engine)
     prompt = None
     continuations = []
     for option in options:
         if not isinstance(option, str):
             raise RequestError("neuralese-decision", "options are reply texts")
-        before, rest = session._target_items(messages, tools, {"role": "assistant", "content": option})
+        before, rest = target_items(engine, messages, tools, {"role": "assistant", "content": option})
         if prompt is not None and before != prompt:
             raise RequestError("neuralese-decision", "options rendered different prompts")
         if any(kind != "tok" for kind, _ in rest):

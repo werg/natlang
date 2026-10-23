@@ -231,8 +231,8 @@ def test_native_checkpoint_chat_produces_captures_and_consumes_exact_stored_stat
         assert roles.produce_open not in literal_record.block.token_ids.tolist()
         assert literal_record.block.text == 'keep <|neuralese_produce|> literal'
 
-        from natlang_neuralese.serve.grad import GradSession
-        monkeypatch.setattr(GradSession, '_target_items', lambda _self, _messages, _tools, target:
+        from natlang_neuralese.serve import native_learning
+        monkeypatch.setattr(native_learning, 'target_items', lambda _engine, _messages, _tools, target:
             ([('tok', 4)], [('tok', int(target['content'][1:]))]))
         decision_body = {'messages': [{'role': 'user', 'content': 'choose'}],
                          'options': ['t5', 't6']}

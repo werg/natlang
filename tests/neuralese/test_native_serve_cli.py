@@ -29,6 +29,7 @@ def test_native_http_import_does_not_load_projected_gradient_or_writer_modules()
     package_root = Path(__file__).resolve().parents[2] / "training" / "neuralese"
     code = (
         "import sys; from natlang_neuralese.serve.http import make_handler; "
+        "from natlang_neuralese.serve import native_learning, native_recorded_objective; "
         "retired = {'natlang_neuralese.serve.grad', 'natlang_neuralese.write', "
         "'natlang_neuralese.model.heads', 'natlang_neuralese.model.neuralese_projection'}; "
         "loaded = sorted(retired & sys.modules.keys()); "
