@@ -8,18 +8,19 @@ registered-content dedup before normal registry publication.
 from __future__ import annotations
 import argparse, json, os, subprocess, sys, time, traceback
 from pathlib import Path
+from natlang_neuralese.common.paths import resolve
 from scripts.coreweave.teacher_tranche_admission import Tranche, file_binding, read_bound
 
-ROOT=Path('/home/werg/natlang')
+ROOT=resolve('repo')
 CODE_ROOT=Path(__file__).resolve().parents[2]
-SPOOL=Path('/home/werg/data/natlang-internal-spool/teacher-qwen36-continuation-20261023')
-ORIGINAL_SETTINGS=Path('/home/werg/data/dgxops/qwen36-ready-native-admission-20261022/source-admission-settings.json')
-PUBLISHER_CONFIG=Path('/home/werg/data/dgxops/qwen36-internal-spool-continuation-root-20261023/publisher.json')
-DEPLOYMENT=Path('/home/werg/data/dgxops/qwen36-internal-spool-continuation-root-20261023/deployment.json')
+SPOOL=resolve('data_nvme','natlang-internal-spool','teacher-qwen36-continuation-20261023')
+ORIGINAL_SETTINGS=resolve('data_nvme','dgxops','qwen36-ready-native-admission-20261022','source-admission-settings.json')
+PUBLISHER_CONFIG=resolve('data_nvme','dgxops','qwen36-internal-spool-continuation-root-20261023','publisher.json')
+DEPLOYMENT=resolve('data_nvme','dgxops','qwen36-internal-spool-continuation-root-20261023','deployment.json')
 TOKENIZERS=SPOOL/'assets/tokenizers/tokenizer-relocation.json'
-PROTECTION=Path('/home/werg/data/dgxops/acquired-connected-source-protection-20261016-v2/protection-manifest.json')
+PROTECTION=resolve('data_nvme','dgxops','acquired-connected-source-protection-20261016-v2','protection-manifest.json')
 RELOCATIONS=SPOOL/'assets/qwen36-predecessor-relocations.json'
-OPERATOR_ROOT=Path('/home/werg/natlang-teacher-drain-export-20261022')
+OPERATOR_ROOT=resolve('data_nvme','natlang-teacher-drain-export-20261022')
 ORIGINAL_SETTINGS_SHA='7572d88ad494c03448c27081abeba95c1bb2430859a846ca17fdccf7154e838b'
 PUBLISHER_SHA='121a590664c484325ad4bf34087e25cb9614f74b78ffb892d4c7785c817d9308'
 DEPLOYMENT_SHA='6772cabd89be7b6d5cbdcc27e5be49c52ea3a2a900f8e82beeed2500fedffe8a'

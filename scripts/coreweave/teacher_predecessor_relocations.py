@@ -7,6 +7,7 @@ import hashlib
 import json
 from pathlib import Path
 
+from natlang_neuralese.common.paths import resolve
 from scripts.coreweave.teacher_tranche_admission import file_binding, read_bound
 
 
@@ -75,7 +76,7 @@ def build(root: Path, candidate_roots: list[Path], *, namespace: str) -> dict:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument('--repository', type=Path, default=Path('/home/werg/natlang'))
+    parser.add_argument('--repository', type=Path, default=resolve('repo'))
     parser.add_argument('--candidate-root', action='append', type=Path, required=True)
     parser.add_argument('--namespace', required=True)
     parser.add_argument('--output', type=Path, required=True)

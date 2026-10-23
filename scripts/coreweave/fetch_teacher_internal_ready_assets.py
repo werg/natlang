@@ -2,11 +2,12 @@
 from __future__ import annotations
 import argparse, hashlib, json, sys
 from pathlib import Path
+from natlang_neuralese.common.paths import resolve
 from scripts.coreweave.teacher_tranche_admission import file_binding, read_bound
 
 SANDBOX='78530f71-08fc-4f57-ace9-7fbad64aeeb8'
-READY_PATH=Path('/home/werg/data/dgxops/teacher-computed-result202-future-sequence-v1-20261020/ready-packet-sequence.json')
-SPOOL=Path('/home/werg/data/natlang-internal-spool/teacher-qwen36-continuation-20261023')
+READY_PATH=resolve('data_nvme','dgxops','teacher-computed-result202-future-sequence-v1-20261020','ready-packet-sequence.json')
+SPOOL=resolve('data_nvme','natlang-internal-spool','teacher-qwen36-continuation-20261023')
 SCAN_SHA='80dc44d7a2d39dac55b075f3f57d03ba9f83b0edd3726fd00e45f161f86f0482'
 SCAN_CODE='fb21932f0e670c0e8574ddaeb51364e3e84302d1f20e1419fc8e621f81d7b6d2'
 
@@ -32,7 +33,7 @@ def fetch(batch:int,target:str)->dict:
             for item in prior['files']:
                 if file_binding(item['local_ref']['path'])!=item['local_ref']: raise ValueError('cached remote packet asset changed')
             return {'cached':True,'batch':batch,'ordinal':ordinal,'remote_assets':file_binding(cached)}
-    sys.path.insert(0,'/home/werg/natlang/scripts/coreweave')
+    sys.path.insert(0,str(resolve('repo','scripts','coreweave')))
     import cwctl
     cwctl.load_env_file()
     sandbox=cwctl.read_sandbox(SANDBOX,patience=180)
