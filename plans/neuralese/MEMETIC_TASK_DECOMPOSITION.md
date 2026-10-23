@@ -1,7 +1,8 @@
 # Memetic optimiser on natlang task success: decomposition
 
-Status: the smallest runnable version (2026-10-13), M3 milestone of LEARNING_CONTINUUM §7 / DECISIONS #38.
-Driver: `training/neuralese/natlang_neuralese/rl/memetic_tasks.py`.
+Status: retired historical decomposition (2026-10-23). Its flat soft-skill and
+weight-adapter entrypoints were removed. The native repeated-invocation program
+path and current command are in [MEMETIC_NATIVE_PROGRAM.md](MEMETIC_NATIVE_PROGRAM.md).
 
 ## Goal
 
