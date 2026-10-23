@@ -145,8 +145,9 @@ def author_provenance(path: Path, model: str, endpoint: str):
     value = json.loads(path.read_text())
     exact_sources = list(teacher_ferry.TEACHER_SOURCE_BINDINGS)
     if (value.get('schema') != 'natlang.memetic-author-provenance/1'
-            or model != teacher_ferry.TEACHER_MODEL_ID
+            or model != teacher_ferry.TEACHER_SERVE_ALIAS
             or value.get('model_id') != teacher_ferry.TEACHER_MODEL_ID
+            or value.get('serve_alias') != teacher_ferry.TEACHER_SERVE_ALIAS
             or value.get('revision') != teacher_ferry.TEACHER_REVISION
             or value.get('hosting') != 'self-hosted-coreweave'
             or endpoint.rstrip('/') != teacher_ferry.TEACHER_URL

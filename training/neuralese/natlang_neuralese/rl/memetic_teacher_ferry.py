@@ -31,17 +31,24 @@ REQUEST_SCHEMA = 'natlang.memetic-teacher-request/1'
 RECEIPT_SCHEMA = 'natlang.memetic-teacher-response/1'
 ID_RE = re.compile(r'mtf1_[a-f0-9]{64}\Z')
 TEACHER_SANDBOX_ID = '78530f71-08fc-4f57-ace9-7fbad64aeeb8'
-EVALUATOR_SANDBOX_ID = '393f9b75-2666-456c-a850-1b46a8b7d147'
+EVALUATOR_IDS = {
+    'lfm': '393f9b75-2666-456c-a850-1b46a8b7d147',
+    'mellum': 'ee341c7b-a425-4b4b-ad7e-f3cf7cbc2369',
+}
 TEACHER_MODEL_ID = 'nvidia/Qwen3.6-35B-A3B-NVFP4'
+TEACHER_SERVE_ALIAS = 'qwen3.6-35b-a3b'
 TEACHER_REVISION = '1355db6a052410cfd62085d94b58866fd0f2c3c5'
 TEACHER_URL = 'http://127.0.0.1:8003'
 TEACHER_ROOT = Path('/work/generation/qwen36-35b-teacher-20261022/memetic-teacher-ferry')
 EVALUATOR_ROOT = Path('/work/native-production/control/memetic-teacher-ferry')
 KEY_PATH = Path('/run/secrets/natlang-memetic-teacher-ferry')
+DEPLOYMENTS_PATH = Path(__file__).with_name('memetic_teacher_ferry_deployments.json')
 TEACHER_DB = TEACHER_ROOT / 'requests.sqlite3'
 EVALUATOR_DB = EVALUATOR_ROOT / 'requests.sqlite3'
 MAX_REQUEST_BYTES = 1024 * 1024
 MAX_RESPONSE_BYTES = 16 * 1024 * 1024
+MAX_TRANSFER_BYTES = 24 * 1024 * 1024
+SDK_CHUNK_BYTES = 24 * 1024
 MAX_COMPLETION_TOKENS = 8192
 
 TEACHER_SOURCE_BINDINGS = (
@@ -51,23 +58,77 @@ TEACHER_SOURCE_BINDINGS = (
      'sha256': 'e70a4fd76f2c176e78db366d6113f13df53da1c8f8e3db555b6fedbbf89ab01b', 'bytes': 788},
     {'path': '/work/generation/qwen36-35b-teacher-20261022/download-verified.json',
      'sha256': 'efb3bac317a8bb536e3c1e8d774a0808fc2af580553afc6a42d89b4b1a24e66d', 'bytes': 2609},
+    {'path': '/work/generation/qwen36-35b-teacher-20261022/tool-serving-check-v3.json',
+     'sha256': 'dd9f6bad17528aabaeeb5b1c32ec7ee38676878f8e5d9f6f6ae3abf00bde1a11', 'bytes': 1329},
+    {'path': '/work/generation/qwen36-35b-teacher-20261022/server-launch-tools-v2.json',
+     'sha256': '3826dff420cc4be12218bc7ecb4c00b1c72b607d98da68aa92dbb648cabdf75e', 'bytes': 1243},
 )
-EVALUATOR_NATIVE_IDENTITY = {
-    'checkpoint_sha256': '7b79178c1d5275cc48c17f89d582f241e3912f4e84378c5f074085e09c219430',
-    'tokenizer_fingerprint': 'be949ec48f44e17b2b17e1131aeb1dab4262175ba20f9783ecd8e59c27a58105',
-    'embedding_weight_sha256': '1f152af978babafb49db5790fabbc4e7b6cbdadb508e7be167637c5494ed6b44',
-    'architecture': 'lfm2',
-}
+def load_deployments(path: Path = DEPLOYMENTS_PATH):
+    value = json.loads(Path(path).read_bytes())
+    if (not isinstance(value, dict) or set(value) != {'schema', 'teacher', 'evaluators'}
+            or value.get('schema') != 'natlang.memetic-teacher-ferry-deployments/1'
+            or not isinstance(value['evaluators'], dict) or set(value['evaluators']) != set(EVALUATOR_IDS)):
+        raise ValueError('teacher ferry deployment manifest has an unsupported schema or evaluator role set')
+    teacher = value['teacher']
+    if teacher != {'sandbox_id': TEACHER_SANDBOX_ID, 'model_id': TEACHER_MODEL_ID,
+                   'serve_alias': TEACHER_SERVE_ALIAS, 'revision': TEACHER_REVISION,
+                   'source_bindings': list(TEACHER_SOURCE_BINDINGS)}:
+        raise ValueError('teacher ferry deployment manifest changed the exact authorized teacher binding')
+    for role, profile in value['evaluators'].items():
+        if not isinstance(profile, dict) or set(profile) != {'sandbox_id', 'native_identity'}:
+            raise ValueError('evaluator deployment profile has unexpected fields')
+        if profile['sandbox_id'] != EVALUATOR_IDS[role]:
+            raise ValueError('evaluator sandbox ID is outside the exact role allowlist')
+        identity = profile['native_identity']
+        if identity is not None and (not isinstance(identity, dict)
+                or set(identity) != {'checkpoint_sha256', 'tokenizer_fingerprint', 'embedding_weight_sha256', 'architecture'}
+                or any(not isinstance(identity.get(key), str) or not re.fullmatch(r'[0-9a-f]{64}', identity[key])
+                       for key in ('checkpoint_sha256', 'tokenizer_fingerprint', 'embedding_weight_sha256'))
+                or identity.get('architecture') not in (('lfm2',) if role == 'lfm' else ('mellum',))):
+            raise ValueError('evaluator native identity must bind one complete current model actor')
+    return value
+
+
+def evaluator_profile(role: str = 'lfm', deployments=None):
+    if role not in EVALUATOR_IDS:
+        raise ValueError('evaluator role must be one of the allowlisted student lines')
+    value = deployments if deployments is not None else load_deployments()
+    profile = value['evaluators'][role]
+    if profile['native_identity'] is None:
+        raise ValueError(f'{role} evaluator deployment is not yet bound to a current native checkpoint')
+    return {'role': role, **profile}
+
+
+_DEFAULT_PROFILE = evaluator_profile('lfm')
+EVALUATOR_SANDBOX_ID = _DEFAULT_PROFILE['sandbox_id']
+EVALUATOR_NATIVE_IDENTITY = _DEFAULT_PROFILE['native_identity']
+
+
+def deployment_file_bytes() -> bytes:
+    return DEPLOYMENTS_PATH.read_bytes()
 
 
 def canonical_bytes(value) -> bytes:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':')).encode()
 
 
-def request_id(model: str, body: bytes) -> str:
-    if model != TEACHER_MODEL_ID or not isinstance(body, bytes):
+def request_id(model: str, body: bytes, evaluator_sandbox_id: str = EVALUATOR_SANDBOX_ID,
+               evaluator_identity: dict = EVALUATOR_NATIVE_IDENTITY) -> str:
+    if model != TEACHER_SERVE_ALIAS or not isinstance(body, bytes):
         raise ValueError('teacher request ID requires the exact authorised model and raw request bytes')
-    return 'mtf1_' + hashlib.sha256(b'natlang.memetic-teacher-call/1\0' + model.encode() + b'\0' + body).hexdigest()
+    profile = evaluator_profile_for(evaluator_sandbox_id, evaluator_identity)
+    binding = canonical_bytes({'evaluator_sandbox_id': evaluator_sandbox_id,
+                               'evaluator_identity': profile['native_identity']})
+    return 'mtf1_' + hashlib.sha256(b'natlang.memetic-teacher-call/2\0' + binding + b'\0' + model.encode() + b'\0' + body).hexdigest()
+
+
+def evaluator_profile_for(sandbox_id: str, identity: dict, deployments=None):
+    manifest = deployments if deployments is not None else load_deployments()
+    for role in ('lfm', 'mellum'):
+        profile = manifest['evaluators'][role]
+        if profile['sandbox_id'] == sandbox_id and profile['native_identity'] == identity and identity is not None:
+            return {'role': role, **profile}
+    raise ValueError('evaluator sandbox/checkpoint pair is not provisioned in the exact deployment manifest')
 
 
 def validate_chat_body(body: bytes) -> dict:
@@ -80,7 +141,7 @@ def validate_chat_body(body: bytes) -> dict:
     if not isinstance(value, dict) or set(value) - {'model', 'messages', 'max_tokens', 'temperature',
                                                    'chat_template_kwargs'}:
         raise ValueError('author request contains unsupported chat-completions fields')
-    if value.get('model') != TEACHER_MODEL_ID:
+    if value.get('model') != TEACHER_SERVE_ALIAS:
         raise ValueError('author request model is outside the exact teacher allowlist')
     messages = value.get('messages')
     if (not isinstance(messages, list) or len(messages) != 1 or not isinstance(messages[0], dict)
@@ -108,6 +169,7 @@ def _connect(path: Path):
         request_sha256 TEXT NOT NULL,
         request_bytes BLOB NOT NULL,
         evaluator_identity TEXT NOT NULL,
+        evaluator_sandbox_id TEXT NOT NULL DEFAULT '',
         state TEXT NOT NULL,
         response_sha256 TEXT,
         response_bytes BLOB,
@@ -117,6 +179,9 @@ def _connect(path: Path):
         created_at REAL NOT NULL,
         updated_at REAL NOT NULL
     )''')
+    columns = {row[1] for row in connection.execute('PRAGMA table_info(requests)')}
+    if 'evaluator_sandbox_id' not in columns:
+        connection.execute("ALTER TABLE requests ADD COLUMN evaluator_sandbox_id TEXT NOT NULL DEFAULT ''")
     return connection
 
 
@@ -124,14 +189,14 @@ class EvaluatorQueue:
     """Durable evaluator-side request queue; result acceptance requires a teacher HMAC."""
 
     def __init__(self, path: Path, key: bytes, evaluator_identity: dict | None = None,
-                 identity_provider: Callable[[], dict] | None = None):
+                 identity_provider: Callable[[], dict] | None = None, evaluator_sandbox_id=EVALUATOR_SANDBOX_ID):
         if len(key) < 32:
             raise ValueError('teacher ferry HMAC key must be at least 256 bits')
         self.path, self.key = Path(path), key
-        self.evaluator_identity = evaluator_identity or dict(EVALUATOR_NATIVE_IDENTITY)
+        self.evaluator_sandbox_id = evaluator_sandbox_id
+        profile = evaluator_profile_for(evaluator_sandbox_id, evaluator_identity or EVALUATOR_NATIVE_IDENTITY)
+        self.evaluator_identity = evaluator_identity or profile['native_identity']
         self.identity_provider = identity_provider
-        if self.evaluator_identity != EVALUATOR_NATIVE_IDENTITY:
-            raise ValueError('evaluator identity differs from the authorized live native checkpoint')
         self._initialize()
 
     def _initialize(self):
@@ -141,25 +206,25 @@ class EvaluatorQueue:
 
     def enqueue(self, raw: bytes, claimed_id: str) -> dict:
         value = validate_chat_body(raw)
-        expected = request_id(value['model'], raw)
+        expected = request_id(value['model'], raw, self.evaluator_sandbox_id, self.evaluator_identity)
         if claimed_id != expected or not ID_RE.fullmatch(claimed_id):
             raise ValueError('Idempotency-Key does not bind these exact request bytes')
         actual_identity = self.identity_provider() if self.identity_provider else self.evaluator_identity
-        if actual_identity != EVALUATOR_NATIVE_IDENTITY or actual_identity != self.evaluator_identity:
+        if actual_identity != self.evaluator_identity:
             raise ValueError('active evaluator identity changed from the pinned native checkpoint')
         digest = hashlib.sha256(raw).hexdigest()
         identity_raw = canonical_bytes(actual_identity).decode()
         now = time.time()
         with _connect(self.path) as db:
             db.execute('BEGIN IMMEDIATE')
-            row = db.execute('SELECT request_sha256,request_bytes,evaluator_identity,state,response_sha256 '
+            row = db.execute('SELECT request_sha256,request_bytes,evaluator_identity,state,response_sha256,evaluator_sandbox_id '
                              'FROM requests WHERE request_id=?', (claimed_id,)).fetchone()
             if row is None:
-                db.execute('INSERT INTO requests(request_id,request_sha256,request_bytes,evaluator_identity,state,created_at,updated_at) '
-                           'VALUES(?,?,?,?,?,?,?)', (claimed_id, digest, raw, identity_raw, 'queued', now, now))
+                db.execute('INSERT INTO requests(request_id,request_sha256,request_bytes,evaluator_identity,evaluator_sandbox_id,state,created_at,updated_at) '
+                           'VALUES(?,?,?,?,?,?,?,?)', (claimed_id, digest, raw, identity_raw, self.evaluator_sandbox_id, 'queued', now, now))
                 state = 'queued'
             else:
-                if row[0] != digest or bytes(row[1]) != raw or row[2] != identity_raw:
+                if row[0] != digest or bytes(row[1]) != raw or row[2] != identity_raw or row[5] != self.evaluator_sandbox_id:
                     raise ValueError('durable request ID was rebound to different bytes or evaluator identity')
                 state = row[3]
             db.execute('COMMIT')
@@ -167,14 +232,22 @@ class EvaluatorQueue:
 
     def next(self) -> dict | None:
         with _connect(self.path) as db:
-            row = db.execute("SELECT request_id,request_sha256,request_bytes,evaluator_identity,state FROM requests "
+            row = db.execute("SELECT request_id,request_sha256,request_bytes,evaluator_identity,state,evaluator_sandbox_id FROM requests "
                              "WHERE state='queued' ORDER BY created_at,request_id LIMIT 1").fetchone()
         if row is None:
             return None
         return {'schema': REQUEST_SCHEMA, 'request_id': row[0], 'request_sha256': row[1],
                 'request_bytes_b64': base64.b64encode(bytes(row[2])).decode(),
-                'evaluator_sandbox_id': EVALUATOR_SANDBOX_ID,
+                'evaluator_sandbox_id': row[5],
                 'evaluator_identity': json.loads(row[3])}
+
+    def next_manifest(self) -> dict | None:
+        envelope = self.next()
+        if envelope is None:
+            return None
+        raw = canonical_bytes(envelope)
+        manifest = write_chunked(EVALUATOR_ROOT / 'requests', envelope['request_id'], raw)
+        return manifest
 
     def complete(self, request_id_value: str, response: bytes, receipt: dict) -> dict:
         if not ID_RE.fullmatch(request_id_value):
@@ -182,17 +255,19 @@ class EvaluatorQueue:
         validate_teacher_receipt(request_id_value, response, receipt, self.key)
         response_sha = hashlib.sha256(response).hexdigest()
         current_identity = self.identity_provider() if self.identity_provider else self.evaluator_identity
-        if current_identity != self.evaluator_identity or current_identity != EVALUATOR_NATIVE_IDENTITY:
+        if current_identity != self.evaluator_identity:
             raise ValueError('active evaluator identity changed before teacher result delivery')
         with _connect(self.path) as db:
             db.execute('BEGIN IMMEDIATE')
-            row = db.execute('SELECT request_sha256,state,response_sha256,response_bytes,evaluator_identity FROM requests WHERE request_id=?',
+            row = db.execute('SELECT request_sha256,state,response_sha256,response_bytes,evaluator_identity,evaluator_sandbox_id FROM requests WHERE request_id=?',
                              (request_id_value,)).fetchone()
             if row is None:
                 raise ValueError('teacher result has no exact durable evaluator request')
             if receipt['request_sha256'] != row[0]:
                 raise ValueError('teacher result belongs to different request bytes')
-            if row[4] != canonical_bytes(current_identity).decode():
+            if (row[4] != canonical_bytes(current_identity).decode()
+                    or row[5] != self.evaluator_sandbox_id
+                    or receipt.get('evaluator_sandbox_id') != self.evaluator_sandbox_id):
                 raise ValueError('teacher result belongs to a different evaluator checkpoint binding')
             if row[1] == 'complete':
                 if row[2] != response_sha or bytes(row[3]) != response:
@@ -256,7 +331,8 @@ def sign_receipt(receipt: dict, key: bytes) -> dict:
 
 def validate_teacher_receipt(request_id_value: str, response: bytes, receipt: dict, key: bytes):
     allowed = {'schema', 'request_id', 'request_sha256', 'status', 'response_status',
-               'response_sha256', 'response_bytes', 'teacher', 'evaluator_identity', 'created_at', 'error', 'hmac_sha256'}
+               'response_sha256', 'response_bytes', 'teacher', 'evaluator_sandbox_id',
+               'evaluator_identity', 'created_at', 'error', 'hmac_sha256'}
     if not isinstance(receipt, dict) or set(receipt) - allowed:
         raise ValueError('teacher response receipt has unsupported fields')
     signature = receipt.get('hmac_sha256')
@@ -270,22 +346,41 @@ def validate_teacher_receipt(request_id_value: str, response: bytes, receipt: di
         raise ValueError('teacher response receipt lacks exact request bytes hash')
     if len(response) != receipt.get('response_bytes') or hashlib.sha256(response).hexdigest() != receipt.get('response_sha256'):
         raise ValueError('teacher response bytes differ from signed exact byte count/hash')
-    if receipt.get('evaluator_identity') != EVALUATOR_NATIVE_IDENTITY:
-        raise ValueError('teacher response is not bound to the authorized native evaluator checkpoint')
+    try:
+        evaluator_profile_for(receipt.get('evaluator_sandbox_id'), receipt.get('evaluator_identity'))
+    except ValueError as error:
+        raise ValueError('teacher response is not bound to an allowlisted native evaluator checkpoint') from error
     teacher = receipt.get('teacher')
     if (not isinstance(teacher, dict) or teacher.get('sandbox_id') != TEACHER_SANDBOX_ID
-            or teacher.get('model_id') != TEACHER_MODEL_ID or teacher.get('revision') != TEACHER_REVISION
+            or teacher.get('model_id') != TEACHER_MODEL_ID or teacher.get('serve_alias') != TEACHER_SERVE_ALIAS
+            or teacher.get('revision') != TEACHER_REVISION
             or teacher.get('source_bindings') != list(TEACHER_SOURCE_BINDINGS)):
         raise ValueError('teacher response provenance is outside the exact authorized source binding')
-    engine = teacher.get('active_engine')
-    if receipt['status'] != 'failed' and (not isinstance(engine, dict) or engine.get('model_id') != TEACHER_MODEL_ID
-            or not isinstance(engine.get('processes'), list) or not engine['processes']
-            or any(type(item.get('pid')) is not int or item['pid'] < 1
-                   or type(item.get('start_ticks')) is not int or item['start_ticks'] < 1
-                   or not re.fullmatch(r'[0-9a-f]{64}', item.get('cmdline_sha256', ''))
-                   for item in engine['processes'] if isinstance(item, dict))
-            or any(not isinstance(item, dict) for item in engine['processes'])):
-        raise ValueError('teacher response is not bound to an observed active engine PID/checkpoint')
+    if receipt['status'] != 'failed':
+        contract = teacher.get('download_contract')
+        if (not isinstance(contract, dict)
+                or contract.get('repo') != TEACHER_MODEL_ID
+                or contract.get('model_path') != '/work/generation/qwen36-35b-teacher-20261022/model'
+                or contract.get('revision') != TEACHER_REVISION or contract.get('passed') is not True
+                or not re.fullmatch(r'[0-9a-f]{64}', contract.get('members_sha256', ''))):
+            raise ValueError('teacher receipt lacks its observed repository/revision/path/members contract')
+        engine = teacher.get('active_engine')
+        launch = teacher.get('launch_identity')
+        if (not isinstance(engine, dict) or engine.get('model_id') != TEACHER_SERVE_ALIAS
+                or engine.get('source_model_id') != TEACHER_MODEL_ID or engine.get('revision') != TEACHER_REVISION
+                or not isinstance(launch, dict) or launch.get('model') != TEACHER_MODEL_ID
+                or launch.get('revision') != TEACHER_REVISION
+                or type(launch.get('pid')) is not int or launch['pid'] < 1
+                or type(launch.get('start_ticks')) is not int or launch['start_ticks'] < 1
+                or not isinstance(launch.get('boot_id'), str)
+                or not isinstance(engine.get('processes'), list) or not engine['processes']
+                or any(type(item.get('pid')) is not int or item['pid'] < 1
+                       or type(item.get('start_ticks')) is not int or item['start_ticks'] < 1
+                       or not re.fullmatch(r'[0-9a-f]{64}', item.get('cmdline_sha256', ''))
+                       for item in engine['processes'] if isinstance(item, dict))
+                or any(not isinstance(item, dict) for item in engine['processes'])):
+            raise ValueError('teacher response is not bound to an observed active engine PID/checkpoint')
+        _validate_launch_process(launch, engine['processes'], launch.get('boot_id') if isinstance(launch, dict) else '')
     if receipt['status'] == 'complete' and (receipt.get('response_status') != 200 or not _valid_chat_response(response)):
         raise ValueError('teacher response receipt claims success for a non-chat response')
     if receipt['status'] in ('failed', 'indeterminate') and response:
@@ -342,7 +437,7 @@ class _EvaluatorHandler(http.server.BaseHTTPRequestHandler):
             claimed = self.headers.get('Idempotency-Key')
             if not claimed:
                 parsed = validate_chat_body(raw)
-                claimed = request_id(parsed['model'], raw)
+                claimed = request_id(parsed['model'], raw, self.queue.evaluator_sandbox_id, self.queue.evaluator_identity)
             row = self.queue.enqueue(raw, claimed)
             deadline = time.monotonic() + 900
             while time.monotonic() < deadline:
@@ -367,7 +462,7 @@ class _EvaluatorHandler(http.server.BaseHTTPRequestHandler):
             self._reply(400, canonical_bytes({'error': {'code': 'memetic-author-request', 'detail': str(error)}}))
 
 
-def evaluator_native_identity():
+def evaluator_native_identity(student='lfm'):
     request = urllib.request.Request('http://127.0.0.1:8765/v1/neuralese/info', method='GET')
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     with opener.open(request, timeout=20) as response:
@@ -376,19 +471,22 @@ def evaluator_native_identity():
     if not (info.get('native_state') or {}).get('enabled'):
         raise ValueError('native evaluator state is not enabled')
     identity = info.get('native_identity')
-    if identity != EVALUATOR_NATIVE_IDENTITY:
+    profile = evaluator_profile(student)
+    if identity != profile['native_identity']:
         raise ValueError('active evaluator checkpoint/tokenizer/embedding identity differs from the pinned native actor')
     return identity
 
 
 def evaluator_server(path: Path = EVALUATOR_DB, key_path: Path = KEY_PATH,
-                     identity: dict | None = None, host='127.0.0.1', port=8766):
+                     identity: dict | None = None, host='127.0.0.1', port=8766, student='lfm'):
     if host != '127.0.0.1':
         raise ValueError('memetic teacher ferry is loopback-only')
-    actual = evaluator_native_identity()
+    profile = evaluator_profile(student)
+    actual = evaluator_native_identity(student)
     if identity is not None and identity != actual:
         raise ValueError('configured evaluator identity differs from active native evaluator')
-    queue = EvaluatorQueue(path, load_key(key_path), actual, identity_provider=evaluator_native_identity)
+    queue = EvaluatorQueue(path, load_key(key_path), actual,
+        identity_provider=lambda: evaluator_native_identity(student), evaluator_sandbox_id=profile['sandbox_id'])
     server = http.server.ThreadingHTTPServer((host, port), _EvaluatorHandler)
     server.daemon_threads = True
     server.queue = queue
@@ -463,6 +561,44 @@ def _http_json(method: str, path: str, body: bytes | None = None, timeout=30):
         return error.code, raw
 
 
+def _download_contract(root=Path('/')) -> dict:
+    path = root / TEACHER_SOURCE_BINDINGS[2]['path'].lstrip('/')
+    download = json.loads(path.read_bytes())
+    if (not isinstance(download, dict) or set(download) != {'at', 'members', 'model', 'passed', 'repo', 'revision'}
+            or download.get('model') != '/work/generation/qwen36-35b-teacher-20261022/model'
+            or download.get('repo') != TEACHER_MODEL_ID or download.get('revision') != TEACHER_REVISION
+            or download.get('passed') is not True
+            or not isinstance(download.get('members'), (list, dict)) or not download['members']):
+        raise ValueError('teacher download receipt differs from its exact observed repository/path/revision/members contract')
+    return {'repo': download['repo'], 'model_path': download['model'],
+            'revision': download['revision'], 'passed': download['passed'],
+            'members_sha256': hashlib.sha256(canonical_bytes(download['members'])).hexdigest()}
+
+
+def _launch_contract(root=Path('/')) -> dict:
+    path = root / TEACHER_SOURCE_BINDINGS[4]['path'].lstrip('/')
+    launch = json.loads(path.read_bytes())
+    expected_keys = {'at', 'argv', 'model', 'revision', 'policy', 'pid', 'start_ticks',
+                     'boot_id', 'tool_call_parser', 'previous_owners_exited'}
+    if (not isinstance(launch, dict) or set(launch) != expected_keys
+            or launch.get('model') != TEACHER_MODEL_ID or launch.get('revision') != TEACHER_REVISION
+            or not isinstance(launch.get('argv'), list) or not launch['argv']
+            or type(launch.get('pid')) is not int or launch['pid'] < 1
+            or type(launch.get('start_ticks')) is not int or launch['start_ticks'] < 1
+            or not isinstance(launch.get('boot_id'), str)
+            or not re.fullmatch(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', launch['boot_id'])
+            or type(launch.get('previous_owners_exited')) is not bool):
+        raise ValueError('teacher launch receipt differs from the exact model/revision/process identity contract')
+    return {key: launch[key] for key in ('pid', 'start_ticks', 'boot_id', 'model', 'revision')}
+
+
+def _validate_launch_process(launch: dict, processes: list[dict], current_boot_id: str):
+    if (not isinstance(launch, dict) or launch.get('boot_id') != current_boot_id
+            or not any(item.get('pid') == launch.get('pid') and item.get('start_ticks') == launch.get('start_ticks')
+                       for item in processes if isinstance(item, dict))):
+        raise ValueError('active Qwen listener PID/start ticks do not match the pinned launch receipt')
+
+
 def verify_teacher_source_files(root=Path('/')) -> list[dict]:
     verified = []
     for binding in TEACHER_SOURCE_BINDINGS:
@@ -471,27 +607,30 @@ def verify_teacher_source_files(root=Path('/')) -> list[dict]:
         if len(raw) != binding['bytes'] or hashlib.sha256(raw).hexdigest() != binding['sha256']:
             raise ValueError('teacher actor/runtime/source receipt differs from exact pinned provenance: ' + binding['path'])
         verified.append(dict(binding))
-    download = json.loads((root / TEACHER_SOURCE_BINDINGS[2]['path'].lstrip('/')).read_bytes())
-    if (download.get('model') != TEACHER_MODEL_ID or download.get('revision') != TEACHER_REVISION
-            or download.get('quantization') != 'NVFP4'):
-        raise ValueError('teacher checkpoint receipt names a different model, revision or quantization')
+    _download_contract(root)
     return verified
 
 
 def teacher_identity_snapshot(source_bindings=None, *, http_json=_http_json,
                               process_reader=active_engine_processes) -> dict:
     sources = source_bindings if source_bindings is not None else verify_teacher_source_files()
+    download_contract = _download_contract()
     status, raw = http_json('GET', '/v1/models', timeout=30)
     if status != 200:
         raise RuntimeError('pinned teacher models endpoint is not healthy')
     value = json.loads(raw)
     rows = value.get('data') if isinstance(value, dict) else None
-    if not isinstance(rows, list) or not any(isinstance(item, dict) and item.get('id') == TEACHER_MODEL_ID for item in rows):
-        raise ValueError('active teacher API does not expose the pinned Qwen NVFP4 model ID')
+    if not isinstance(rows, list) or not any(isinstance(item, dict) and item.get('id') == TEACHER_SERVE_ALIAS for item in rows):
+        raise ValueError('active teacher API does not expose the pinned Qwen serving alias')
     processes = process_reader()
-    return {'sandbox_id': TEACHER_SANDBOX_ID, 'model_id': TEACHER_MODEL_ID, 'revision': TEACHER_REVISION,
-            'source_bindings': list(sources),
-            'active_engine': {'model_id': TEACHER_MODEL_ID, 'processes': processes}}
+    launch_identity = _launch_contract()
+    _validate_launch_process(launch_identity, processes, _boot_id())
+    return {'sandbox_id': TEACHER_SANDBOX_ID, 'model_id': TEACHER_MODEL_ID,
+            'serve_alias': TEACHER_SERVE_ALIAS, 'revision': TEACHER_REVISION,
+            'source_bindings': list(sources), 'download_contract': download_contract,
+            'launch_identity': launch_identity,
+            'active_engine': {'model_id': TEACHER_SERVE_ALIAS, 'source_model_id': TEACHER_MODEL_ID,
+                              'revision': TEACHER_REVISION, 'processes': processes}}
 
 
 def _boot_id(proc_root=Path('/proc')) -> str:
@@ -525,29 +664,29 @@ class TeacherJobStore:
         if (not isinstance(envelope, dict) or set(envelope) != {'schema', 'request_id','request_sha256',
                 'request_bytes_b64','evaluator_sandbox_id','evaluator_identity'}
                 or envelope.get('schema') != REQUEST_SCHEMA
-                or envelope.get('evaluator_sandbox_id') != EVALUATOR_SANDBOX_ID
-                or envelope.get('evaluator_identity') != EVALUATOR_NATIVE_IDENTITY):
+                or envelope.get('evaluator_sandbox_id') not in EVALUATOR_IDS.values()):
             raise ValueError('teacher enqueue is outside the exact evaluator and checkpoint binding')
+        profile = evaluator_profile_for(envelope['evaluator_sandbox_id'], envelope['evaluator_identity'])
         ident = envelope['request_id']
         try:
             raw = base64.b64decode(envelope['request_bytes_b64'], validate=True)
         except (ValueError, TypeError) as error:
             raise ValueError('teacher request bytes are not exact base64') from error
         value = validate_chat_body(raw)
-        if request_id(value['model'], raw) != ident or hashlib.sha256(raw).hexdigest() != envelope['request_sha256']:
+        if request_id(value['model'], raw, envelope['evaluator_sandbox_id'], profile['native_identity']) != ident or hashlib.sha256(raw).hexdigest() != envelope['request_sha256']:
             raise ValueError('teacher request ID/hash does not match the exact raw chat request')
         now = time.time()
         with _connect(self.path) as db:
             db.execute('BEGIN IMMEDIATE')
-            row = db.execute('SELECT request_sha256,request_bytes,evaluator_identity,state FROM requests WHERE request_id=?',
+            row = db.execute('SELECT request_sha256,request_bytes,evaluator_identity,state,evaluator_sandbox_id FROM requests WHERE request_id=?',
                              (ident,)).fetchone()
             identity_raw = canonical_bytes(envelope['evaluator_identity']).decode()
             if row is None:
-                db.execute('INSERT INTO requests(request_id,request_sha256,request_bytes,evaluator_identity,state,created_at,updated_at) '
-                           'VALUES(?,?,?,?,?,?,?)', (ident, envelope['request_sha256'], raw, identity_raw, 'queued', now, now))
+                db.execute('INSERT INTO requests(request_id,request_sha256,request_bytes,evaluator_identity,evaluator_sandbox_id,state,created_at,updated_at) '
+                           'VALUES(?,?,?,?,?,?,?,?)', (ident, envelope['request_sha256'], raw, identity_raw, envelope['evaluator_sandbox_id'], 'queued', now, now))
                 state = 'queued'
             else:
-                if row[0] != envelope['request_sha256'] or bytes(row[1]) != raw or row[2] != identity_raw:
+                if row[0] != envelope['request_sha256'] or bytes(row[1]) != raw or row[2] != identity_raw or row[4] != envelope['evaluator_sandbox_id']:
                     raise ValueError('teacher request ID was rebound to different bytes or evaluator checkpoint')
                 state = row[3]
             db.execute('COMMIT')
@@ -559,7 +698,7 @@ class TeacherJobStore:
         now = time.time()
         with _connect(self.path) as db:
             db.execute('BEGIN IMMEDIATE')
-            row = db.execute('SELECT request_sha256,request_bytes,evaluator_identity,state,receipt_json,response_bytes '
+            row = db.execute('SELECT request_sha256,request_bytes,evaluator_identity,state,receipt_json,response_bytes,evaluator_sandbox_id '
                              'FROM requests WHERE request_id=?', (ident,)).fetchone()
             if row is None:
                 raise ValueError('teacher worker has no durable request record')
@@ -572,7 +711,7 @@ class TeacherJobStore:
                 if _owned_process_alive(prior_owner):
                     db.execute('COMMIT')
                     return 'running', None, None
-                receipt = self._receipt(ident, row[0], 'indeterminate', prior.get('teacher'), json.loads(row[2]),
+                receipt = self._receipt(ident, row[0], 'indeterminate', prior.get('teacher'), row[6], json.loads(row[2]),
                     response=b'', error={'type': 'IndeterminateSubmission',
                         'detail': 'worker ended after the durable submit marker; generation was not replayed'})
                 db.execute('UPDATE requests SET state=?,response_sha256=?,response_bytes=?,response_status=?,receipt_json=?,updated_at=? '
@@ -586,10 +725,19 @@ class TeacherJobStore:
             if (not isinstance(teacher, dict)
                     or teacher.get('sandbox_id') != TEACHER_SANDBOX_ID
                     or teacher.get('model_id') != TEACHER_MODEL_ID
+            or teacher.get('serve_alias') != TEACHER_SERVE_ALIAS
                     or teacher.get('revision') != TEACHER_REVISION
+                    or not isinstance(teacher.get('launch_identity'), dict)
+                    or not isinstance(teacher.get('download_contract'), dict)
+                    or teacher['download_contract'].get('repo') != TEACHER_MODEL_ID
+                    or teacher['download_contract'].get('model_path') != '/work/generation/qwen36-35b-teacher-20261022/model'
+                    or teacher['download_contract'].get('revision') != TEACHER_REVISION
+                    or teacher['download_contract'].get('passed') is not True
+                    or not isinstance(teacher['download_contract'].get('members_sha256'), str)
+                    or not isinstance(teacher.get('source_bindings'), list)
                     or teacher.get('source_bindings') != list(TEACHER_SOURCE_BINDINGS)
                     or not isinstance(processes, list) or not processes):
-                receipt = self._receipt(ident, row[0], 'failed', None, json.loads(row[2]),
+                receipt = self._receipt(ident, row[0], 'failed', None, row[6], json.loads(row[2]),
                     response=b'', error={'type': 'TeacherBindingMismatch',
                         'detail': 'active engine/source identity does not match authorized teacher receipts',
                         'observed_teacher': teacher})
@@ -598,33 +746,44 @@ class TeacherJobStore:
                             canonical_bytes(receipt).decode(), now, ident))
                 db.execute('COMMIT')
                 return 'failed', None, receipt
+            try:
+                _validate_launch_process(teacher['launch_identity'], processes, _boot_id())
+            except ValueError as error:
+                receipt = self._receipt(ident, row[0], 'failed', None, row[6], json.loads(row[2]),
+                    response=b'', error={'type': 'TeacherBindingMismatch', 'detail': str(error)})
+                db.execute('UPDATE requests SET state=?,response_sha256=?,response_bytes=?,response_status=?,receipt_json=?,updated_at=? WHERE request_id=?',
+                    ('failed', hashlib.sha256(b'').hexdigest(), b'', 502, canonical_bytes(receipt).decode(), now, ident))
+                db.execute('COMMIT')
+                return 'failed', None, receipt
             worker_owner = {**owner, 'boot_id': _boot_id()}
-            submission = {'worker_owner': worker_owner, 'teacher': teacher}
+            evaluator_profile_for(row[6], json.loads(row[2]))
+            submission = {'worker_owner': worker_owner, 'teacher': teacher, 'evaluator_sandbox_id': row[6]}
             db.execute('UPDATE requests SET state=?,receipt_json=?,updated_at=? WHERE request_id=?',
                        ('submitted', canonical_bytes(submission).decode(), now, ident))
             db.execute('COMMIT')
         return 'submitted', bytes(row[1]), teacher
 
-    def _receipt(self, ident: str, request_sha: str, status: str, teacher: dict | None, evaluator_identity: dict, *,
+    def _receipt(self, ident: str, request_sha: str, status: str, teacher: dict | None, evaluator_sandbox_id: str, evaluator_identity: dict, *,
                  response: bytes, response_status: int | None = None, error: dict | None = None) -> dict:
         return sign_receipt({'schema': RECEIPT_SCHEMA, 'request_id': ident, 'request_sha256': request_sha,
             'status': status, 'response_status': response_status,
             'response_sha256': hashlib.sha256(response).hexdigest(), 'response_bytes': len(response),
             'teacher': teacher or {'sandbox_id': TEACHER_SANDBOX_ID, 'model_id': TEACHER_MODEL_ID,
-                'revision': TEACHER_REVISION, 'source_bindings': list(TEACHER_SOURCE_BINDINGS)},
-            'evaluator_identity': evaluator_identity, 'created_at': time.time(), **({'error': error} if error else {})}, self.key)
+                'serve_alias': TEACHER_SERVE_ALIAS, 'revision': TEACHER_REVISION,
+                'source_bindings': list(TEACHER_SOURCE_BINDINGS)},
+            'evaluator_sandbox_id': evaluator_sandbox_id, 'evaluator_identity': evaluator_identity, 'created_at': time.time(), **({'error': error} if error else {})}, self.key)
 
     def finish(self, ident: str, response: bytes, response_status: int, before: dict, after: dict) -> dict:
         with _connect(self.path) as db:
-            row = db.execute('SELECT request_sha256,state,receipt_json,evaluator_identity FROM requests WHERE request_id=?', (ident,)).fetchone()
+            row = db.execute('SELECT request_sha256,state,receipt_json,evaluator_identity,evaluator_sandbox_id FROM requests WHERE request_id=?', (ident,)).fetchone()
         if row is None or row[1] != 'submitted':
             raise ValueError('teacher worker cannot finish an unsubmitted request')
         if before != after:
             return self.finish_indeterminate(ident, before, 'active teacher process/checkpoint binding changed during completion')
         if (response_status != 200 or len(response) > MAX_RESPONSE_BYTES or not _valid_chat_response(response)
-                or json.loads(response).get('model') != TEACHER_MODEL_ID):
+                or json.loads(response).get('model') != TEACHER_SERVE_ALIAS):
             return self.finish_failed(ident, before, 'teacher returned a nonconforming chat-completions response')
-        receipt = self._receipt(ident, row[0], 'complete', before, json.loads(row[3]), response=response, response_status=200)
+        receipt = self._receipt(ident, row[0], 'complete', before, row[4], json.loads(row[3]), response=response, response_status=200)
         with _connect(self.path) as db:
             db.execute('BEGIN IMMEDIATE')
             current = db.execute('SELECT state,request_sha256 FROM requests WHERE request_id=?', (ident,)).fetchone()
@@ -644,10 +803,10 @@ class TeacherJobStore:
 
     def _finish_without_response(self, ident: str, status: str, teacher: dict | None, error: dict) -> dict:
         with _connect(self.path) as db:
-            row = db.execute('SELECT request_sha256,state,evaluator_identity FROM requests WHERE request_id=?', (ident,)).fetchone()
+            row = db.execute('SELECT request_sha256,state,evaluator_identity,evaluator_sandbox_id FROM requests WHERE request_id=?', (ident,)).fetchone()
         if row is None or row[1] != 'submitted':
             raise ValueError('teacher worker cannot settle a request that was not submitted')
-        receipt = self._receipt(ident, row[0], status, teacher, json.loads(row[2]), response=b'', response_status=None, error=error)
+        receipt = self._receipt(ident, row[0], status, teacher, row[3], json.loads(row[2]), response=b'', response_status=None, error=error)
         with _connect(self.path) as db:
             db.execute('BEGIN IMMEDIATE')
             current = db.execute('SELECT state,request_sha256 FROM requests WHERE request_id=?', (ident,)).fetchone()
@@ -703,6 +862,48 @@ def teacher_run(ident: str, store: TeacherJobStore, *, http_json=_http_json,
             return store.status(ident)
         except Exception:
             raise
+
+
+def _chunk_directory(root: Path, ident: str) -> Path:
+    if not ID_RE.fullmatch(ident):
+        raise ValueError('invalid chunked ferry request ID')
+    return Path(root) / 'sdk-chunks' / ident
+
+
+def write_chunked(root: Path, ident: str, raw: bytes) -> dict:
+    if not isinstance(raw, bytes) or len(raw) > MAX_TRANSFER_BYTES:
+        raise ValueError('SDK ferry payload exceeds its hard transfer bound')
+    directory = _chunk_directory(root, ident)
+    count = max(1, (len(raw) + SDK_CHUNK_BYTES - 1) // SDK_CHUNK_BYTES)
+    if count > (MAX_TRANSFER_BYTES + SDK_CHUNK_BYTES - 1) // SDK_CHUNK_BYTES:
+        raise ValueError('SDK ferry chunk count exceeds bound')
+    directory.mkdir(parents=True, exist_ok=True)
+    for index in range(count):
+        part = raw[index * SDK_CHUNK_BYTES:(index + 1) * SDK_CHUNK_BYTES]
+        chunk_path = directory / f'{index:06d}.bin'
+        if not chunk_path.is_file() or chunk_path.read_bytes() != part:
+            _durable_write(chunk_path, part)
+    return {'request_id': ident, 'total_bytes': len(raw), 'chunk_count': count,
+            'sha256': hashlib.sha256(raw).hexdigest()}
+
+
+def read_chunked(root: Path, ident: str, total_bytes: int, chunk_count: int, digest: str) -> bytes:
+    if (not ID_RE.fullmatch(ident) or type(total_bytes) is not int or not 0 <= total_bytes <= MAX_TRANSFER_BYTES
+            or type(chunk_count) is not int or chunk_count != max(1, (total_bytes + SDK_CHUNK_BYTES - 1) // SDK_CHUNK_BYTES)
+            or not isinstance(digest, str) or not re.fullmatch(r'[0-9a-f]{64}', digest)):
+        raise ValueError('SDK ferry chunk manifest is outside the exact bounded format')
+    directory = _chunk_directory(root, ident)
+    parts = []
+    for index in range(chunk_count):
+        part = (directory / f'{index:06d}.bin').read_bytes()
+        expected = SDK_CHUNK_BYTES if index < chunk_count - 1 else total_bytes - SDK_CHUNK_BYTES * (chunk_count - 1)
+        if len(part) != expected:
+            raise ValueError('SDK ferry chunk byte count differs from the exact manifest')
+        parts.append(part)
+    raw = b''.join(parts)
+    if len(raw) != total_bytes or hashlib.sha256(raw).hexdigest() != digest:
+        raise ValueError('SDK ferry assembled bytes differ from the complete payload hash')
+    return raw
 
 
 def _durable_write(path: Path, raw: bytes):
@@ -770,8 +971,10 @@ def _launch_teacher_worker(ident: str):
         return {**state, 'worker': owner}
 
 
-def _evaluator_queue(key_path=KEY_PATH):
-    return EvaluatorQueue(EVALUATOR_DB, load_key(key_path), EVALUATOR_NATIVE_IDENTITY)
+def _evaluator_queue(key_path=KEY_PATH, student='lfm'):
+    profile = evaluator_profile(student)
+    return EvaluatorQueue(EVALUATOR_DB, load_key(key_path), profile['native_identity'],
+        identity_provider=lambda: evaluator_native_identity(student), evaluator_sandbox_id=profile['sandbox_id'])
 
 
 def _teacher_store(key_path=KEY_PATH):
@@ -782,8 +985,10 @@ def _publish_teacher_terminal(ident: str, value: dict):
     if (value.get('state') in ('complete','failed','indeterminate')
             and isinstance(value.get('receipt'), dict)
             and value['receipt'].get('schema') == RECEIPT_SCHEMA):
-        _durable_write(_teacher_result_path(ident), canonical_bytes({'request_id': ident,
-            'response_b64': value.get('response_b64') or '', 'receipt': value['receipt']}))
+        raw = canonical_bytes({'request_id': ident,
+            'response_b64': value.get('response_b64') or '', 'receipt': value['receipt']})
+        return write_chunked(TEACHER_ROOT / 'results', ident, raw)
+    return None
 
 
 def _reconcile_teacher(ident: str, store: TeacherJobStore):
@@ -825,7 +1030,7 @@ def cli(argv=None):
     if args.operation == 'evaluator-serve':
         server = evaluator_server(key_path=args.key_file, host=args.host, port=args.port)
         print(json.dumps({'host': args.host, 'port': args.port, 'database': str(EVALUATOR_DB),
-                          'identity': EVALUATOR_NATIVE_IDENTITY}), flush=True)
+                          'identity': profile['native_identity']}), flush=True)
         try:
             server.serve_forever(poll_interval=.25)
         finally:

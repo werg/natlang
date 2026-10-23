@@ -14,16 +14,21 @@ KEY = b'k' * 32
 
 
 def body():
-    return json.dumps({'model': ferry.TEACHER_MODEL_ID,
+    return json.dumps({'model': ferry.TEACHER_SERVE_ALIAS,
         'messages': [{'role': 'user', 'content': 'Write brief natural-language program guidance.'}],
         'max_tokens': 1200, 'temperature': .7,
         'chat_template_kwargs': {'enable_thinking': False}}, separators=(',', ':')).encode()
 
 
 def teacher_identity():
-    return {'sandbox_id': ferry.TEACHER_SANDBOX_ID, 'model_id': ferry.TEACHER_MODEL_ID,
+    return {'sandbox_id': ferry.TEACHER_SANDBOX_ID, 'model_id': ferry.TEACHER_MODEL_ID, 'serve_alias': ferry.TEACHER_SERVE_ALIAS,
         'revision': ferry.TEACHER_REVISION, 'source_bindings': list(ferry.TEACHER_SOURCE_BINDINGS),
-        'active_engine': {'model_id': ferry.TEACHER_MODEL_ID,
+        'launch_identity': {'pid': 123, 'start_ticks': 456, 'boot_id': ferry._boot_id(),
+            'model': ferry.TEACHER_MODEL_ID, 'revision': ferry.TEACHER_REVISION},
+        'download_contract': {'repo': ferry.TEACHER_MODEL_ID,
+            'model_path': '/work/generation/qwen36-35b-teacher-20261022/model',
+            'revision': ferry.TEACHER_REVISION, 'passed': True, 'members_sha256': 'b' * 64},
+        'active_engine': {'model_id': ferry.TEACHER_SERVE_ALIAS, 'source_model_id': ferry.TEACHER_MODEL_ID, 'revision': ferry.TEACHER_REVISION,
             'processes': [{'pid': 123, 'start_ticks': 456, 'cmdline_sha256': 'a' * 64}]}}
 
 
@@ -42,10 +47,14 @@ class FakeSandbox:
         self.role, self.evaluator_queue, self.teacher_store = role, evaluator_queue, teacher_store
         self.response, self.forge, self.timeout_after_enqueue = response, forge, timeout_after_enqueue
         self.generated = 0
+        self.max_write = 0
         self.files = {}
         self._timed_out = False
 
     def write_file(self, path, raw):
+        self.max_write = max(self.max_write, len(raw))
+        if len(raw) > ferry.SDK_CHUNK_BYTES:
+            raise AssertionError('fake SDK rejects an over-24-KiB write_file call')
         self.files[path] = bytes(raw)
         destination = Path(path); destination.parent.mkdir(parents=True, exist_ok=True); destination.write_bytes(raw)
         return FakeFuture(True)
@@ -53,42 +62,60 @@ class FakeSandbox:
     def read_file(self, path):
         if path.endswith('.py'):
             return FakeFuture(Path(ferry.__file__).read_bytes())
-        return FakeFuture(self.files[path])
+        if path.endswith('.json') and 'deployments' in path:
+            return FakeFuture(ferry.deployment_file_bytes())
+        return FakeFuture(Path(path).read_bytes())
 
     def exec(self, argv, timeout_seconds=60):
         operation = argv[2]
         try:
             if self.role == 'eval' and operation == 'evaluator-next':
-                value = self.evaluator_queue.next()
+                value = self.evaluator_queue.next_manifest()
+            elif self.role == 'eval' and operation == 'evaluator-result-assemble':
+                ident = argv[3]; total, count, digest = int(argv[5]), int(argv[7]), argv[9]
+                raw = ferry.read_chunked(ferry.EVALUATOR_ROOT / 'inbox', ident, total, count, digest)
+                ferry._durable_write(ferry._evaluator_result_path(ident), raw)
+                value = {'request_id': ident, 'assembled_sha256': digest}
             elif self.role == 'eval' and operation == 'evaluator-deliver':
                 ident = argv[3]
-                remote = ferry.EVALUATOR_ROOT / 'inbox' / (ident + '.json')
-                payload = json.loads(remote.read_bytes())
+                payload = json.loads(ferry._evaluator_result_path(ident).read_bytes())
                 response_raw = base64.b64decode(payload['response_b64'], validate=True)
                 value = self.evaluator_queue.complete(ident, response_raw, payload['receipt'])
-            elif self.role == 'teacher' and operation == 'teacher-enqueue':
-                ident = argv[3]
-                envelope = json.loads((ferry.TEACHER_ROOT / 'inbox' / (ident + '.json')).read_bytes())
-                value = self.teacher_store.enqueue(envelope)
-                if value['state'] == 'queued':
+            elif self.role == 'teacher' and operation == 'teacher-assemble':
+                ident = argv[3]; total, count, digest = int(argv[5]), int(argv[7]), argv[9]
+                raw = ferry.read_chunked(ferry.TEACHER_ROOT / 'inbox', ident, total, count, digest)
+                envelope = json.loads(raw)
+                result = self.teacher_store.enqueue(envelope)
+                if result['state'] == 'queued':
                     self.generated += 1
                     identity = teacher_identity()
                     state, request_bytes, before = self.teacher_store.claim(ident,
-                        {'pid': 1, 'start_ticks': 2, 'boot_id': 'fake'})
+                        {'pid': __import__('os').getpid(), 'start_ticks': ferry._proc_start_ticks(__import__('os').getpid()), 'boot_id': ferry._boot_id()})
                     assert state == 'submitted' and request_bytes
-                    receipt = self.teacher_store.finish(ident, self.response, 200, before, identity)
-                    value = self.teacher_store.status(ident)
+                    self.teacher_store.finish(ident, self.response, 200, before, identity)
+                    result = self.teacher_store.status(ident)
                 if self.timeout_after_enqueue and not self._timed_out:
                     self._timed_out = True
-                    raise TimeoutError('SDK timed out after remote operation committed')
+                    raise TimeoutError('SDK timed out after durable teacher result committed')
+                value = {'request_id': ident, 'request_sha256': result['request_sha256'], 'state': result['state']}
             elif self.role == 'teacher' and operation == 'teacher-status':
-                value = self.teacher_store.status(argv[3])
-                if self.forge and value and value.get('receipt'):
-                    value['receipt'] = dict(value['receipt'], hmac_sha256='0' * 64)
+                ident = argv[3]; result = self.teacher_store.status(ident)
+                if result is None:
+                    value = {'request_id': ident, 'state': 'missing'}
+                    return FakeFuture(Result(json.dumps(value, separators=(',', ':'))))
+                manifest = None
+                if result['state'] in ('complete', 'failed', 'indeterminate'):
+                    envelope = {'request_id': ident, 'response_b64': result.get('response_b64') or '',
+                                'receipt': result['receipt']}
+                    if self.forge:
+                        envelope['receipt'] = dict(envelope['receipt'], hmac_sha256='0' * 64)
+                    manifest = ferry.write_chunked(ferry.TEACHER_ROOT / 'results', ident,
+                                                   ferry.canonical_bytes(envelope))
+                value = {'request_id': ident, 'request_sha256': result['request_sha256'],
+                         'state': result['state'], 'receipt': result.get('receipt'),
+                         'result_manifest': manifest}
             else:
                 raise AssertionError((self.role, argv))
-            if value and isinstance(value, dict) and self.forge and self.role == 'teacher' and operation == 'teacher-enqueue':
-                value['receipt'] = dict(value['receipt'], hmac_sha256='0' * 64)
             return FakeFuture(Result(json.dumps(value, separators=(',', ':')) if value is not None else 'null'))
         except TimeoutError:
             raise
@@ -96,35 +123,38 @@ class FakeSandbox:
             return FakeFuture(Result('', str(error), 1))
 
 
-def setup(monkeypatch, tmp_path, *, forge=False, timeout=False):
+def setup(monkeypatch, tmp_path, *, forge=False, timeout=False, prompt_size=40, response_size=40):
     monkeypatch.setattr(ferry, 'TEACHER_ROOT', tmp_path / 'teacher')
     monkeypatch.setattr(ferry, 'EVALUATOR_ROOT', tmp_path / 'evaluator')
     monkeypatch.setattr(ferry, 'TEACHER_DB', tmp_path / 'teacher' / 'requests.sqlite3')
     monkeypatch.setattr(ferry, 'EVALUATOR_DB', tmp_path / 'evaluator' / 'requests.sqlite3')
-    ident = ferry.request_id(ferry.TEACHER_MODEL_ID, body())
-    queue = ferry.EvaluatorQueue(ferry.EVALUATOR_DB, KEY)
-    queue.enqueue(body(), ident)
+    raw = body()
+    if prompt_size != 40:
+        request = json.loads(raw); request['messages'][0]['content'] = 'x' * prompt_size
+        raw = json.dumps(request, separators=(',', ':')).encode()
+    profile = ferry.evaluator_profile('lfm')
+    ident = ferry.request_id(ferry.TEACHER_SERVE_ALIAS, raw, profile['sandbox_id'], profile['native_identity'])
+    queue = ferry.EvaluatorQueue(ferry.EVALUATOR_DB, KEY, profile['native_identity'], evaluator_sandbox_id=profile['sandbox_id'])
+    queue.enqueue(raw, ident)
     store = ferry.TeacherJobStore(ferry.TEACHER_DB, KEY, identity_provider=teacher_identity)
-    raw_response = json.dumps({'id': 'chatcmpl-local', 'model': ferry.TEACHER_MODEL_ID,
-        'choices': [{'message': {'role': 'assistant', 'content': '<guidance>Use concise steps.</guidance>'}}]},
+    response = json.dumps({'id': 'chatcmpl-local', 'model': ferry.TEACHER_SERVE_ALIAS,
+        'choices': [{'message': {'role': 'assistant', 'content': 'x' * response_size}}]},
         separators=(',', ':')).encode()
-    # Teach the host fake worker the same shared key without exposing it to host code.
-    teacher = FakeSandbox('teacher', queue, store, raw_response, forge=forge,
-                          timeout_after_enqueue=timeout)
-    evaluator = FakeSandbox('eval', queue, store, raw_response)
-    monkeypatch.setattr(sdk_ferry, 'PROTOCOL_REMOTE', {
-        ferry.TEACHER_SANDBOX_ID: '/fake/teacher.py', ferry.EVALUATOR_SANDBOX_ID: '/fake/evaluator.py'})
+    teacher = FakeSandbox('teacher', queue, store, response, forge=forge, timeout_after_enqueue=timeout)
+    evaluator = FakeSandbox('eval', queue, store, response)
+    monkeypatch.setattr(sdk_ferry, 'PROTOCOL_REMOTE', {'teacher': '/fake/teacher.py', 'evaluator': '/fake/evaluator.py'})
     return ident, queue, store, evaluator, teacher
 
 
 def test_sdk_restart_reuses_durable_request_without_second_generation(monkeypatch, tmp_path):
-    ident, queue, store, evaluator, teacher = setup(monkeypatch, tmp_path, timeout=True)
+    ident, queue, store, evaluator, teacher = setup(monkeypatch, tmp_path, timeout=True, prompt_size=300_000, response_size=400_000)
     with pytest.raises(TimeoutError):
         sdk_ferry.ferry_once(evaluator, teacher)
     assert store.status(ident)['state'] == 'complete'
     result = sdk_ferry.ferry_once(evaluator, teacher)
     assert result == {'request_id': ident, 'state': 'complete'}
     assert teacher.generated == 1
+    assert evaluator.max_write <= ferry.SDK_CHUNK_BYTES and teacher.max_write <= ferry.SDK_CHUNK_BYTES
     assert queue.result(ident)['state'] == 'complete'
     assert hashlib.sha256(queue.result(ident)['response']).hexdigest() == store.status(ident)['response_sha256']
 
@@ -140,7 +170,7 @@ def test_sdk_ferry_refuses_forged_signed_response(monkeypatch, tmp_path):
 def test_request_ids_bind_exact_body_and_reject_rebinding(tmp_path):
     queue = ferry.EvaluatorQueue(tmp_path / 'evaluator.sqlite3', KEY)
     raw = body()
-    ident = ferry.request_id(ferry.TEACHER_MODEL_ID, raw)
+    ident = ferry.request_id(ferry.TEACHER_SERVE_ALIAS, raw)
     queue.enqueue(raw, ident)
     changed = raw.replace(b'brief', b'short')
     with pytest.raises(ValueError, match='Idempotency-Key'):
@@ -150,7 +180,7 @@ def test_request_ids_bind_exact_body_and_reject_rebinding(tmp_path):
 def test_teacher_transport_timeout_is_terminal_and_never_reposts(tmp_path):
     store = ferry.TeacherJobStore(tmp_path / 'teacher.sqlite3', KEY, identity_provider=teacher_identity)
     raw = body()
-    ident = ferry.request_id(ferry.TEACHER_MODEL_ID, raw)
+    ident = ferry.request_id(ferry.TEACHER_SERVE_ALIAS, raw)
     envelope = {'schema': ferry.REQUEST_SCHEMA, 'request_id': ident,
         'request_sha256': hashlib.sha256(raw).hexdigest(),
         'request_bytes_b64': base64.b64encode(raw).decode(),
@@ -168,3 +198,53 @@ def test_teacher_transport_timeout_is_terminal_and_never_reposts(tmp_path):
     assert len(calls) == 1
     assert terminal['receipt']['status'] == 'indeterminate'
     assert terminal['receipt']['response_bytes'] == 0
+
+
+def test_sdk_chunks_reassemble_only_complete_hash_bound_payload(tmp_path):
+    raw = bytes(range(251)) * 1700
+    ident = ferry.request_id(ferry.TEACHER_SERVE_ALIAS, body())
+    manifest = ferry.write_chunked(tmp_path, ident, raw)
+    assert manifest['total_bytes'] > 155 * 1024
+    assert manifest['chunk_count'] > 1
+    assert ferry.read_chunked(tmp_path, ident, manifest['total_bytes'], manifest['chunk_count'], manifest['sha256']) == raw
+    chunk = ferry._chunk_directory(tmp_path, ident) / '000000.bin'
+    chunk.write_bytes(b'forged')
+    with pytest.raises(ValueError, match='byte count'):
+        ferry.read_chunked(tmp_path, ident, manifest['total_bytes'], manifest['chunk_count'], manifest['sha256'])
+
+
+def test_deployment_manifest_pins_roles_and_leaves_mellum_unbound():
+    assert ferry.evaluator_profile('lfm')['sandbox_id'] == '393f9b75-2666-456c-a850-1b46a8b7d147'
+    assert ferry.EVALUATOR_IDS['mellum'] == 'ee341c7b-a425-4b4b-ad7e-f3cf7cbc2369'
+    with pytest.raises(ValueError, match='not yet bound'):
+        ferry.evaluator_profile('mellum')
+
+
+def test_download_contract_matches_observed_keys_and_serving_alias_is_separate(tmp_path, monkeypatch):
+    download_path = tmp_path / ferry.TEACHER_SOURCE_BINDINGS[2]['path'].lstrip('/')
+    download_path.parent.mkdir(parents=True)
+    source = {'at': 'redacted', 'members': ['opaque member binding'],
+        'model': '/work/generation/qwen36-35b-teacher-20261022/model', 'passed': True,
+        'repo': ferry.TEACHER_MODEL_ID, 'revision': ferry.TEACHER_REVISION}
+    download_path.write_text(json.dumps(source))
+    contract = ferry._download_contract(tmp_path)
+    assert contract['repo'] == ferry.TEACHER_MODEL_ID
+    assert contract['model_path'] == source['model']
+    assert contract['passed'] is True
+    assert contract['members_sha256'] == hashlib.sha256(ferry.canonical_bytes(source['members'])).hexdigest()
+    source['passed'] = False
+    download_path.write_text(json.dumps(source))
+    with pytest.raises(ValueError, match='download receipt differs'):
+        ferry._download_contract(tmp_path)
+
+    monkeypatch.setattr(ferry, '_download_contract', lambda: contract)
+    models = {'data': [{'id': ferry.TEACHER_SERVE_ALIAS}]}
+    launch = {'pid': 123, 'start_ticks': 456, 'boot_id': '12345678-1234-1234-1234-123456789abc',
+        'model': ferry.TEACHER_MODEL_ID, 'revision': ferry.TEACHER_REVISION}
+    monkeypatch.setattr(ferry, '_launch_contract', lambda: launch)
+    monkeypatch.setattr(ferry, '_boot_id', lambda: launch['boot_id'])
+    snapshot = ferry.teacher_identity_snapshot(source_bindings=list(ferry.TEACHER_SOURCE_BINDINGS),
+        http_json=lambda method, path, **kwargs: (200, json.dumps(models).encode()),
+        process_reader=lambda: teacher_identity()['active_engine']['processes'])
+    assert snapshot['model_id'] == ferry.TEACHER_MODEL_ID
+    assert snapshot['active_engine']['model_id'] == ferry.TEACHER_SERVE_ALIAS
