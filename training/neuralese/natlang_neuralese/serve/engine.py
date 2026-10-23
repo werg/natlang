@@ -601,8 +601,9 @@ class Engine:
 
     def _native_exact(self, block):
         architecture = self.model_config.get("architecture") or self.backbone.config.model_type
-        layer_kinds = tuple("attention" if self.backbone.is_attention(index) else "finite_convolution"
-                             for index in range(self.backbone.num_layers))
+        layer_kinds = tuple("attention" if self.backbone.is_attention(index) else
+                            "gated_delta" if self.backbone.layer_types[index] == 'linear_attention' else
+                            "finite_convolution" for index in range(self.backbone.num_layers))
         try:
             block.require_native(checkpoint_sha256=self.execution_native_identity["checkpoint_sha256"],
                                  tokenizer_fingerprint=self.model_config["tokenizer_fingerprint"],

@@ -227,8 +227,8 @@ def evaluate(args):
     lineage_lora_count = len(lineage_lora)
     lineage_identity = lineage_header.get("identity") or {}
     lineage_rank = (lineage_identity.get("options") or {}).get("rank")
-    lineage_layers = sorted({int(name.split("model.layers.", 1)[1].split(".", 1)[0])
-                             for name in lineage_lora if "model.layers." in name})
+    from ..train.adapters import _layer_index
+    lineage_layers = sorted({_layer_index(name) for name in lineage_lora if ".layers." in name})
     if lineage_schema != "natlang.neuralese_recurrence_checkpoint/1" or lineage_lora_count == 0:
         raise ValueError("lineage checkpoint has no embedded LoRA state for shared load_engine restoration")
     if not isinstance(lineage_rank, int) or not lineage_layers:

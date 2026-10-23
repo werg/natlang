@@ -76,7 +76,7 @@ def compare_checkpoint_weights(lineage_path: Path, candidate_path: Path, base_sn
         for name, trained_value in trainables.items():
             if ".lora_A." in name or ".lora_B." in name:
                 continue
-            if name.startswith("model.layers.") is False:
+            if not name.startswith(("model.layers.", "model.language_model.layers.")):
                 omitted.append({"name": name, "reason": "outside transformer-layer training scope"})
                 continue
             base_key = name.replace(".base_layer.weight", ".weight")

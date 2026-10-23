@@ -13,6 +13,8 @@ from typing import Any
 
 import torch
 
+from .native_gated_delta import PAYLOAD_FIELDS
+
 SCHEMA = 'neuralese.native-state/1'
 FLOAT_DTYPES = (torch.float16, torch.bfloat16, torch.float32, torch.float64)
 
@@ -85,6 +87,14 @@ class NativeStateBlock:
                 if set(layer) != {'kind', 'gated_inputs'}:
                     raise ValueError('finite convolution contains exactly kind and gated_inputs')
                 self._float_tensor(f'layer {index} gated_inputs', layer['gated_inputs'], count, 2)
+            elif kind == 'gated_delta':
+                expected = {'kind', *PAYLOAD_FIELDS}
+                if set(layer) != expected:
+                    raise ValueError('gated delta state contains exactly kind and projected token-local inputs')
+                for name in PAYLOAD_FIELDS:
+                    self._float_tensor(f'layer {index} {name}', layer[name], count, 2)
+                if layer['b'].shape != layer['a'].shape:
+                    raise ValueError('gated delta beta and decay projections must have identical shapes')
             else:
                 raise ValueError(f'unsupported native shared layer state: {kind!r}')
         return self
@@ -137,7 +147,8 @@ class NativeStateBlock:
         layers = []
         expected = {'token_ids', 'positions', 'embeddings'}
         for index, kind in enumerate(kinds):
-            names = ('raw_k', 'v') if kind == 'attention' else ('gated_inputs',) if kind == 'finite_convolution' else ()
+            names = (('raw_k', 'v') if kind == 'attention' else ('gated_inputs',) if kind == 'finite_convolution'
+                     else PAYLOAD_FIELDS if kind == 'gated_delta' else ())
             if not names:
                 raise ValueError(f'unsupported native shared layer state: {kind!r}')
             keys = {name: f'layers.{index}.{name}' for name in names}

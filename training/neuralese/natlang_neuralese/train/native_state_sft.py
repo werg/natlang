@@ -941,7 +941,8 @@ def build_parser():
     parser.add_argument('--native-shared-execution',choices=('source-v1','stable-v1'))
     parser.add_argument('--history-reasoning-policy', choices=('keep',), default=None,
         help='explicitly render earlier assistant reasoning in complete training and serving histories')
-    parser.add_argument('--native-ordinary-precision', choices=('fp32-norms-v1',))
+    from ..model.native_parameter_precision import ORDINARY_PRECISION_PROFILES
+    parser.add_argument('--native-ordinary-precision', choices=ORDINARY_PRECISION_PROFILES)
     parser.add_argument('--native-optimizer-migration',choices=(NATIVE_OPTIMIZER_MIGRATION,),default=None,
         help='explicit new AdamW history for formerly misrouted ordinary parameters; preserves original Muon buffers and all unaffected state')
     parser.add_argument('--learning-rate', type=float, default=3e-6)
@@ -1153,9 +1154,14 @@ def _main(argv=None, *, requested_refresh):
         config['native_norm_execution'] = args.native_norm_execution
     norm_upgrade = None
     if args.native_ordinary_precision is not None:
-        from ..model.native_parameter_precision import upgrade_norm_precision
-        norm_upgrade = upgrade_norm_precision(model, config, args.native_ordinary_precision)
-        checkpoint_options['ordinary_precision_upgrade'] = norm_upgrade
+        from ..model.native_parameter_precision import (
+            PROFILE as NORM_PROFILE, QWEN35_DELTA_PROFILE, upgrade_norm_precision)
+        qwen_inherited_norm_alias = (getattr(model.port, 'architecture', None) == 'qwen3_5'
+            and config.get('native_ordinary_precision') == QWEN35_DELTA_PROFILE
+            and args.native_ordinary_precision == NORM_PROFILE)
+        if not qwen_inherited_norm_alias:
+            norm_upgrade = upgrade_norm_precision(model, config, args.native_ordinary_precision)
+            checkpoint_options['ordinary_precision_upgrade'] = norm_upgrade
     token_upgrade = None
     if args.learn_reasoning_boundaries:
         from ..model.native_model import upgrade_reasoning_tokens

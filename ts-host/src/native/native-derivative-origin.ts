@@ -28,7 +28,7 @@ export async function verifyNativeDerivativeGradientOrigin(store:Pick<NeuraleseS
       throw new RangeError('native derivative evaluation has invalid exact root values');
     const state=value.kind==='native-state'?await store.getNativeState?.(value.value_id):undefined;
     const tensor=value.kind!=='native-state'?await store.getNativeTensorArtifact?.(value.value_id):undefined;
-    const available=state?Object.keys(state.tensors).filter(name=>/^layers\.[0-9]+\.(?:raw_k|v|gated_inputs)$/.test(name)):
+    const available=state?Object.keys(state.tensors).filter(name=>/^layers\.[0-9]+\.(?:raw_k|v|gated_inputs|mixed_qkv|z|b|a)$/.test(name)):
       tensor&&tensor.metadata.kind===(value.kind==='adapter'?'adapter-coefficients':'parameter-set')&&
       nativeCanonicalJson(tensor.metadata.native_identity)===nativeCanonicalJson(artifact.metadata.native_identity)?Object.keys(tensor.tensors):[];
     if(!value.names.length||value.names.some(name=>!available.includes(name)))throw new RangeError('native derivative evaluation lacks exact bound root names/artifacts');

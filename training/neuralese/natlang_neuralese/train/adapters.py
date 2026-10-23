@@ -23,6 +23,17 @@ MLP_TARGETS = ("w1", "w2", "w3")
 
 def lora_target_names(backbone: PortBackbone, layers: list[int]) -> list[str]:
     names = []
+    if getattr(backbone, 'architecture', None) == 'qwen3_5':
+        prefix = 'model.language_model.layers'
+        for i in layers:
+            root = f'{prefix}.{i}'
+            if backbone.is_attention(i):
+                names += [f'{root}.self_attn.{target}' for target in ('q_proj', 'k_proj', 'v_proj', 'o_proj')]
+            else:
+                names += [f'{root}.linear_attn.{target}' for target in
+                          ('in_proj_qkv', 'in_proj_z', 'in_proj_b', 'in_proj_a', 'out_proj')]
+            names += [f'{root}.mlp.{target}' for target in ('gate_proj', 'up_proj', 'down_proj')]
+        return names
     for i in layers:
         if backbone.is_attention(i):
             names += [f"model.layers.{i}.self_attn.{t}" for t in ATTENTION_TARGETS]
@@ -155,7 +166,7 @@ def inject_lora(backbone: PortBackbone, layers: list[int], rank: int = 16, alpha
         if "lora_" not in name:
             continue
         param.requires_grad_(True)
-        layer = int(name.split("model.layers.")[1].split(".")[0])
+        layer = _layer_index(name)
         if layer in layers:
             grouped.setdefault(layer, []).append(param)
     # Everything that is not a port module or an adapter stays frozen.
@@ -196,10 +207,10 @@ def restore_lora_checkpoint(backbone: PortBackbone, checkpoint: dict, *, alpha: 
         if _ternary(backbone):
             raise ValueError("Maple LoRA checkpoints must declare their adapter layer set")
         import re
-        matches = [re.fullmatch(r"model\.layers\.(\d+)\..+\.lora_[AB]\.neuralese\.weight", name)
+        matches = [re.search(r"\.layers\.(\d+)\..+\.lora_[AB]\.neuralese\.weight$", name)
                    for name in saved]
         if any(match is None for match in matches):
-            raise ValueError("legacy LoRA tensor names do not match the supported LFM adapter schema")
+            raise ValueError("legacy LoRA tensor names do not identify decoder layers")
         layers = sorted({int(match.group(1)) for match in matches})
     elif (not isinstance(layers, (list, tuple)) or not layers or
           any(not isinstance(layer, int) or isinstance(layer, bool) or layer < 0 for layer in layers) or
@@ -233,8 +244,18 @@ def restore_lora_checkpoint(backbone: PortBackbone, checkpoint: dict, *, alpha: 
 def adapter_layers(backbone: PortBackbone) -> list[int]:
     if _ternary(backbone):
         return sorted(_maple_adapters(backbone))
-    return sorted({int(n.split("model.layers.")[1].split(".")[0]) for n, _ in backbone.hf.named_parameters()
-                   if "lora_" in n})
+    return sorted({_layer_index(name) for name, _ in backbone.hf.named_parameters() if 'lora_' in name})
+
+
+def _layer_index(name):
+    marker = '.layers.'
+    if marker not in name:
+        raise ValueError('LoRA parameter is outside the decoder layer namespace: ' + name)
+    suffix = name.split(marker, 1)[1]
+    try:
+        return int(suffix.split('.', 1)[0])
+    except ValueError as exc:
+        raise ValueError('LoRA parameter has a malformed decoder layer name: ' + name) from exc
 
 
 @contextmanager

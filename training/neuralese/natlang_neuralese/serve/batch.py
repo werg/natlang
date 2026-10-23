@@ -14,7 +14,7 @@ from __future__ import annotations
 import torch
 import torch.nn.functional as F
 
-from ..model.lfm2_port import AttentionState, ConvState, PortBackbone, PortCache, append_kv
+from ..model.lfm2_port import AttentionState, ConvState, DeltaState, PortBackbone, PortCache, append_kv
 
 
 def step_rows(backbone: PortBackbone, h: torch.Tensor, caches: list[PortCache], layers: range
@@ -106,6 +106,9 @@ def split_rows(cache: PortCache, pad: torch.Tensor) -> list[PortCache]:
                 states.append(AttentionState(state.k[b:b + 1, :, p:].clone(), state.v[b:b + 1, :, p:].clone()))
             elif isinstance(state, ConvState):
                 states.append(ConvState(state.window[b:b + 1].clone()))
+            elif isinstance(state, DeltaState):
+                states.append(DeltaState(state.conv[b:b + 1].clone(),
+                                         state.recurrent[b:b + 1].clone()))
             else:
                 states.append(state)
         rows.append(PortCache(tuple(states), tuple(length - p for length in cache.lengths)))

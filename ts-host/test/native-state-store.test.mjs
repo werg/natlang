@@ -59,6 +59,27 @@ test('native-state identity and safetensors wire match Python', () => {
   assert.throws(() => decodeNativeState(wire), /content ID mismatch/);
 });
 
+test('gated delta state preserves token-local projected inputs across the portable wire', () => {
+  const float32 = (...values) => {
+    const data = new Uint8Array(values.length * 4), view = new DataView(data.buffer);
+    values.forEach((value, index) => view.setFloat32(index * 4, value, true));
+    return { dtype: 'F32', shape: [2, values.length / 2], data };
+  };
+  const meta = { ...metadata, layer_kinds: ['gated_delta'] };
+  const payload = { token_ids: tensors.token_ids, positions: tensors.positions, embeddings: tensors.embeddings,
+    'layers.0.mixed_qkv': float32(1, 2, 3, 4, 5, 6),
+    'layers.0.z': float32(1, 2, 3, 4),
+    'layers.0.b': float32(0.2, 0.3),
+    'layers.0.a': float32(-0.1, -0.2) };
+  const wire = encodeNativeState({ metadata: meta, tensors: payload });
+  const decoded = decodeNativeState(wire);
+  assert.deepEqual(decoded.metadata.layer_kinds, ['gated_delta']);
+  assert.deepEqual([...encodeNativeState({ metadata: decoded.metadata, tensors: decoded.tensors })], [...wire]);
+  const bad = structuredClone({ metadata: meta, tensors: payload });
+  bad.tensors['layers.0.a'] = float32(0.1, 0.2, 0.3, 0.4);
+  assert.throws(() => encodeNativeState(bad), /gated delta gates/);
+});
+
 test('native-state contract rejects invalid identity, tensor inventory, positions, and non-finite state', () => {
   const clone = () => structuredClone({ metadata, tensors });
   let artifact = clone(); artifact.metadata.checkpoint_sha256 = 'bad';

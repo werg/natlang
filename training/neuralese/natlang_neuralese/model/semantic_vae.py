@@ -13,6 +13,7 @@ from torch import nn
 import torch.nn.functional as F
 
 from .state_block import NativeStateBlock
+from .native_gated_delta import PAYLOAD_FIELDS
 from ..common.hashing import sha256_hex
 
 
@@ -26,7 +27,9 @@ class StateLayout:
         block.validate()
         fields = tuple((f'{index}.{name}', tuple(layer[name].shape[1:]))
             for index, layer in enumerate(block.layers)
-            for name in (('raw_k', 'v') if layer['kind'] == 'attention' else ('gated_inputs',)))
+            for name in (('raw_k', 'v') if layer['kind'] == 'attention' else
+                         ('gated_inputs',) if layer['kind'] == 'finite_convolution' else
+                         PAYLOAD_FIELDS))
         return cls(block.embeddings.shape[1], fields)
 
     @property

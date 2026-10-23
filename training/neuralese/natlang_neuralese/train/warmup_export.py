@@ -35,6 +35,13 @@ def export_source(*, checkpoint_step, heads_step, checkpoint_sha256=None, checkp
             'heads_step_known': heads_step >= 0, 'heads_current': heads_step == checkpoint_step}
 
 
+def _adapter_layer_indices(names):
+    """Recover layer IDs from either flat or nested text-backbone names."""
+    from .adapters import _layer_index
+
+    return sorted({_layer_index(name) for name in names})
+
+
 def heads_export_status(*, checkpoint_step, heads_step, export_error=None, emergency=False):
     """The record beside a run (``heads-export-status.json``): does heads.pt trail checkpoint.pt?"""
     source = export_source(checkpoint_step=checkpoint_step, heads_step=heads_step)
@@ -160,7 +167,7 @@ def export_from_checkpoint(checkpoint_path, template_export, *, heads_step=None,
     trainables = {n.removeprefix('backbone.'): v for n, v in state['student_parameters'].items()
                   if n.startswith('backbone.')}
     lora = {n: v.detach().cpu() for n, v in trainables.items() if 'lora_' in n}
-    layers = sorted({int(n.split('model.layers.')[1].split('.')[0]) for n in lora})
+    layers = _adapter_layer_indices(lora)
     report_path = template['warmup'].get('report_path')
     initial = {k: v for k, v in template.items()
                if k not in {'heads', 'neuralese_input_map', 'control_rows', 'port_config', 'backbone_trainables',

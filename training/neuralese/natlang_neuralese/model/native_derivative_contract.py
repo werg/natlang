@@ -6,6 +6,11 @@ import json
 import math
 import re
 
+from .native_gated_delta import PAYLOAD_FIELDS
+
+
+_HISTORY_FIELD_PATTERN = '|'.join(('raw_k', 'v', 'gated_inputs', *(re.escape(name) for name in PAYLOAD_FIELDS)))
+
 PROGRAM='natlang.native-derivative-program/1'
 EXECUTION='natlang.native-derivative-execution/1'
 DERIVATION='natlang.native-state-derivation/1'
@@ -86,7 +91,7 @@ def validate_derivation(value):
                 or any(value[key] is not None and not native_id(value[key],'nnt1_') for key in ('program_id','optimizer_state_parent_id'))
                 or type(value['step']) is not int or value['step']<1
                 or not isinstance(value['updated_tensor_names'],list) or not value['updated_tensor_names']
-                or any(not isinstance(key,str) or not re.fullmatch(r'layers\.[0-9]+\.(raw_k|v|gated_inputs)',key)
+                or any(not isinstance(key,str) or not re.fullmatch(r'layers\.[0-9]+\.(' + _HISTORY_FIELD_PATTERN + ')',key)
                        for key in value['updated_tensor_names'])
                 or value['updated_tensor_names']!=sorted(set(value['updated_tensor_names']))):
             raise ValueError('native optimized state has invalid exact origin, update or history bindings')

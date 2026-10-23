@@ -18,7 +18,8 @@ from .native_gradient_partitions import active_gradient_partitions, reduce_param
 
 
 _COTANGENT_SCOPE = contextvars.ContextVar('natlang_bf16_parameter_cotangent_scope', default=None)
-_RMS_NORM_TYPES = {'RMSNorm', 'Lfm2RMSNorm', 'Qwen2RMSNorm', 'Qwen3RMSNorm'}
+_RMS_NORM_TYPES = {'RMSNorm', 'Lfm2RMSNorm', 'Qwen2RMSNorm', 'Qwen3RMSNorm',
+                   'Qwen3_5RMSNorm', 'Qwen3_5RMSNormGated'}
 _COTANGENT_TRANSFER_CHUNK_BYTES = 16 * 1024 * 1024
 
 
@@ -61,14 +62,26 @@ def _conv1d_carrier_forward(scope, module, original_forward):
 
 
 def _rms_norm_carrier_forward(scope, module, original_forward):
-    def forward(x):
+    def forward(x, *args):
         if _reference_scope_active(scope):
-            return _reference_module_forward(scope, module, original_forward, x)
+            return _reference_module_forward(scope, module, original_forward, x, *args)
         anchors = scope.anchors_for_weight(module.weight)
         eps = next((getattr(module, name) for name in ('variance_epsilon', 'eps', 'epsilon')
                     if hasattr(module, name)), None)
         if eps is None:
             raise RuntimeError(f'RMSNorm carrier cannot identify epsilon for {type(module).__qualname__}')
+        if type(module).__name__ == 'Qwen3_5RMSNormGated':
+            if len(args) != 1:
+                raise RuntimeError('Qwen3.5 gated RMSNorm requires its matching gate tensor')
+            return _TorchStoredGatedRMSNorm.apply(x, module.weight, args[0], float(eps),
+                                                   module, original_forward, *anchors)
+        if type(module).__name__ == 'Qwen3_5RMSNorm':
+            if args:
+                raise RuntimeError('Qwen3.5 RMSNorm does not accept extra inputs')
+            return _TorchStoredQwen35RMSNorm.apply(x, module.weight, float(eps),
+                                                   module, original_forward, *anchors)
+        if args:
+            raise RuntimeError('ordinary RMSNorm carrier does not accept extra inputs')
         return _TorchStoredRMSNorm.apply(x, module.weight, float(eps), module, original_forward, *anchors)
     return forward
 
@@ -307,6 +320,12 @@ class ParameterCotangentScope:
             elif type(module).__name__ in _RMS_NORM_TYPES and isinstance(weight, torch.Tensor):
                 if weight.dtype in (torch.float16, torch.bfloat16) and id(weight) not in seen:
                     selected.append((name + '.weight', weight)); seen.add(id(weight))
+            elif type(module).__name__ == 'Qwen3_5GatedDeltaNet':
+                for suffix in ('A_log', 'dt_bias'):
+                    parameter = getattr(module, suffix, None)
+                    if (isinstance(parameter, torch.Tensor) and parameter.dtype in (torch.float16, torch.bfloat16)
+                            and id(parameter) not in seen):
+                        selected.append((name + '.' + suffix, parameter)); seen.add(id(parameter))
         for name, parameter in model.named_parameters(remove_duplicate=False):
             if ((name in ('experts.gate_up', 'experts.down') or
                  name.endswith(('.experts.gate_up', '.experts.down'))) and parameter.ndim == 3
@@ -1014,6 +1033,85 @@ class _WidenedParameterCotangent(torch.autograd.Function):
         return None, gradient.new_ones((), dtype=torch.float32), None
 
 
+def _stored_norm_gain_gradient(x, products, partitions, parameter, anchors, scope):
+    if partitions is None:
+        dw = products.sum(dim=tuple(range(products.ndim - 1)))
+    else:
+        if x.ndim < 3 or x.shape[0] != 1:
+            raise RuntimeError('RMSNorm cotangent lost its graph token/head axes')
+        dw = reduce_parameter_rows(partitions, x.shape[1],
+            lambda section: products[:, section].sum(dim=tuple(range(products.ndim - 1))),
+            add=(lambda value: _scope_add(parameter, value, anchors, scope)) if anchors else None)
+    anchor_grads = (None,) * len(anchors)
+    if anchors:
+        if partitions is None:
+            _scope_add(parameter, dw, anchors, scope)
+        dw = None
+        anchor_grads = tuple(products.new_ones((), dtype=torch.float32) for _ in anchors)
+    else:
+        dw = dw.to(parameter.dtype)
+    return dw, anchor_grads
+
+
+class _TorchStoredQwen35RMSNorm(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, x, weight, eps, module, original_forward, *anchors):
+        ctx.partitions = active_gradient_partitions()
+        ctx.save_for_backward(x, weight)
+        ctx.eps, ctx.anchors = float(eps), anchors
+        ctx.parameter, ctx.scope = weight, active_cotangent_scope() if anchors else None
+        ctx.original_forward = original_forward
+        return original_forward(x)
+
+    @staticmethod
+    def backward(ctx, gradient):
+        x, weight = ctx.saved_tensors
+        create_graph = torch.is_grad_enabled()
+        with torch.enable_grad():
+            x_arg = x if x.requires_grad else x.detach().requires_grad_(True)
+            normalized = x_arg.float() * torch.rsqrt(x_arg.float().square().mean(-1, keepdim=True) + ctx.eps)
+            output = (normalized * (1.0 + weight.float())).type_as(x_arg)
+            dx, = torch.autograd.grad(output, (x_arg,), gradient, create_graph=create_graph)
+        xf = x.float()
+        normalized = xf * torch.rsqrt(xf.square().mean(-1, keepdim=True) + ctx.eps)
+        products = gradient.float() * normalized
+        dw, anchor_grads = _stored_norm_gain_gradient(x, products, ctx.partitions,
+            ctx.parameter, ctx.anchors, ctx.scope)
+        return dx, dw, None, None, None, *anchor_grads
+
+
+class _TorchStoredGatedRMSNorm(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, x, weight, gate, eps, module, original_forward, *anchors):
+        ctx.partitions = active_gradient_partitions()
+        ctx.save_for_backward(x, weight, gate)
+        ctx.eps, ctx.anchors = float(eps), anchors
+        ctx.parameter, ctx.scope = weight, active_cotangent_scope() if anchors else None
+        ctx.original_forward = original_forward
+        return original_forward(x, gate)
+
+    @staticmethod
+    def backward(ctx, gradient):
+        import torch.nn.functional as F
+        x, weight, gate = ctx.saved_tensors
+        create_graph = torch.is_grad_enabled()
+        with torch.enable_grad():
+            x_arg = x if x.requires_grad else x.detach().requires_grad_(True)
+            gate_arg = gate if gate.requires_grad else gate.detach().requires_grad_(True)
+            normalized = (x_arg.float() * torch.rsqrt(
+                x_arg.float().square().mean(-1, keepdim=True) + ctx.eps)).to(x_arg.dtype)
+            output = normalized * weight * F.silu(gate_arg.float())
+            output = output.to(x_arg.dtype)
+            dx, dgate = torch.autograd.grad(output, (x_arg, gate_arg), gradient,
+                                             create_graph=create_graph, allow_unused=True)
+        xf = x.float()
+        normalized = (xf * torch.rsqrt(xf.square().mean(-1, keepdim=True) + ctx.eps)).to(x.dtype)
+        products = gradient.float() * normalized.float() * F.silu(gate.float())
+        dw, anchor_grads = _stored_norm_gain_gradient(x, products, ctx.partitions,
+            ctx.parameter, ctx.anchors, ctx.scope)
+        return dx, dw, dgate, None, None, None, *anchor_grads
+
+
 class _TorchStoredRMSNorm(torch.autograd.Function):
     @staticmethod
     def forward(ctx, x, weight, eps, module, original_forward, *anchors):
@@ -1032,25 +1130,10 @@ class _TorchStoredRMSNorm(torch.autograd.Function):
         inverse = torch.rsqrt(xf.square().mean(dim=-1, keepdim=True) + ctx.eps)
         normalized = (xf * inverse).to(x.dtype)
         products = gradient.float() * normalized.float()
-        if ctx.partitions is None:
-            dw = products.sum(dim=tuple(range(gradient.ndim - 1)))
-        else:
-            if x.ndim < 3 or x.shape[0] != 1:
-                raise RuntimeError('graph RMSNorm cotangent lost its token axis')
-            dw = reduce_parameter_rows(ctx.partitions, x.shape[1],
-                lambda section: products[:, section].sum(dim=tuple(range(products.ndim - 1))),
-                add=(lambda value: _scope_add(ctx.parameter, value, ctx.anchors, ctx.scope))
-                    if ctx.anchors else None)
+        dw, anchor_grads = _stored_norm_gain_gradient(x, products, ctx.partitions,
+            ctx.parameter, ctx.anchors, ctx.scope)
         dy = (gradient * weight).to(x.dtype).float()
         dx = (dy - xf * inverse.square() * (dy * xf).mean(dim=-1, keepdim=True)) * inverse
-        anchor_grads = (None,) * len(ctx.anchors)
-        if ctx.anchors:
-            if ctx.partitions is None:
-                _scope_add(ctx.parameter, dw, ctx.anchors, ctx.scope)
-            dw = None
-            anchor_grads = tuple(gradient.new_ones((), dtype=torch.float32) for _ in ctx.anchors)
-        else:
-            dw = dw.to(weight.dtype)
         return dx.to(x.dtype), dw, None, None, None, *anchor_grads
 
 
