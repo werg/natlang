@@ -18,6 +18,7 @@ import argparse
 import copy
 import hashlib
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -77,6 +78,168 @@ def rollout_turns(result: dict[str, Any] | None) -> list[dict[str, Any]]:
                                  "request_sha256": step.get("request_sha256"),
                                  "raw_response_sha256": step.get("raw_response_sha256")}})
     return turns
+
+
+def _budget_terminated_prefix(entry: dict[str, Any], task: dict[str, Any], finish: dict[str, Any] | None
+                              ) -> dict[str, Any] | None:
+    """Recover only a completely captured, exact model-request-budget prefix.
+
+    The collector has no result row for this terminal path. It does, however,
+    durably append the interrupted runtime snapshot and action frames to the
+    latest partial-evidence sidecar before writing the bound terminal error.
+    An incomplete or ambiguous capture is deliberately not a training sample.
+    """
+    if not isinstance(finish, dict) or finish.get("resource_limit_reason") != "model_request_budget":
+        return None
+    if task.get("split") != "train":
+        return None
+    accounting = finish.get("output_accounting")
+    if not isinstance(accounting, dict):
+        return None
+    job_index = entry.get("index")
+    program_id = task.get("id")
+    states = accounting.get("job_states")
+    state = next((row for row in states or [] if isinstance(row, dict) and row.get("index") == job_index), None)
+    if (not isinstance(state, dict) or state.get("program_id") != program_id or
+            state.get("state") != "failed" or state.get("resource_limit_reason") != "model_request_budget"):
+        return None
+    jobs = Path(entry["jobs"])
+    error_path = jobs / f"{int(job_index):06d}.error.json"
+    digest = state.get("digest")
+    if not isinstance(digest, str) or len(digest) != 64 or not all(c in "0123456789abcdef" for c in digest):
+        return None
+    partial_path = jobs / f"{int(job_index):06d}-{digest[:16]}.partial.json"
+    try:
+        error_bytes = error_path.read_bytes()
+        error = json.loads(error_bytes)
+        partial = json.loads(partial_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        return None
+    source_sha = accounting.get("source_sha256")
+    terminal_error = state.get("terminal_error") or {}
+    if (terminal_error.get("sha256") != hashlib.sha256(error_bytes).hexdigest() or
+            Path(str(terminal_error.get("path", ""))).name != error_path.name or
+            terminal_error.get("error") != str(error.get("error", "")) or
+            error.get("index") != job_index or error.get("program_id") != program_id or
+            error.get("code") != "NATLANG_MODEL_REQUEST_BUDGET" or
+            error.get("source_sha256") != source_sha or error.get("program_ir_sha256") != state.get("digest") or
+            (state.get("terminal_error") or {}).get("program_ir_sha256") != state.get("digest") or
+            partial.get("version") != "natlang.teacher_partial.native/1" or partial.get("program_id") != program_id or
+            (partial.get("provenance") or {}).get("program_ir_sha256") != state.get("digest") or
+            not isinstance(partial.get("execution_attempt_id"), str)):
+        return None
+
+    snapshots = partial.get("evidence_snapshots")
+    if not isinstance(snapshots, list) or not snapshots:
+        return None
+    request_attempt_ids = partial.get("request_attempt_ids")
+    if (not isinstance(request_attempt_ids, list) or not request_attempt_ids or
+            not all(isinstance(value, str) and value for value in request_attempt_ids)):
+        return None
+    manifest = snapshots[-1]
+    if (not isinstance(manifest, dict) or manifest.get("schema") != "natlang.teacher_partial_evidence/1" or
+            manifest.get("status") != "execution_interrupted" or
+            manifest.get("attempt_id") != request_attempt_ids[-1] or
+            not isinstance(manifest.get("path"), str) or Path(manifest["path"]).name != manifest["path"]):
+        return None
+    evidence_path = jobs / manifest["path"]
+    try:
+        if evidence_path.is_symlink() or not evidence_path.is_file() or evidence_path.stat().st_size > 512 * 1024 * 1024:
+            return None
+        evidence_bytes = evidence_path.read_bytes()
+    except OSError:
+        return None
+    if (len(evidence_bytes) != manifest.get("bytes") or
+            hashlib.sha256(evidence_bytes).hexdigest() != manifest.get("sha256")):
+        return None
+    try:
+        records = [json.loads(line) for line in evidence_bytes.splitlines() if line]
+    except (ValueError, TypeError):
+        return None
+    if (len(records) != manifest.get("records") or
+            any(row.get("version") != "natlang.teacher_partial_evidence_record/1" or
+                row.get("attempt_id") != manifest.get("attempt_id") or row.get("sequence") != index
+                for index, row in enumerate(records))):
+        return None
+    payloads = [row.get("payload") for row in records]
+    snapshots = [row for row in payloads if isinstance(row, dict) and row.get("kind") == "execution_snapshot"]
+    if len(snapshots) != 1:
+        return None
+    snapshot = snapshots[0]
+    if (snapshot.get("schema") != "natlang.partial_execution_snapshot/1" or snapshot.get("status") != "interrupted" or
+            snapshot.get("execution_attempt_id") != partial["execution_attempt_id"] or
+            not isinstance(snapshot.get("logical_run_id"), str) or not snapshot["logical_run_id"] or
+            snapshot.get("run_id") != f"{snapshot['logical_run_id']}/execution-{partial['execution_attempt_id']}" or
+            snapshot.get("pending_children") is not False or
+            not isinstance(snapshot.get("failure_reason"), str) or
+            not re.fullmatch(r"whole-case model request budget exceeded \([1-9][0-9]*\)",
+                             snapshot["failure_reason"])):
+        return None
+    if sum(row.get("kind") == "execution_snapshot" for row in payloads if isinstance(row, dict)) != 1:
+        return None
+    action_frames = [row for row in payloads if isinstance(row, dict) and row.get("kind") == "teacher_action_frame" and
+                     row.get("source") in {"live_provider", "journal_replay", "handoff_replay"}]
+    frames = [row.get("response_frame") for row in action_frames]
+    if (not frames or any(not isinstance(frame, dict) or frame.get("phase") != "action" or
+                          not isinstance(frame.get("invocation_id"), str) or
+                          not isinstance(frame.get("context"), list) or
+                          not isinstance(frame.get("model_response"), dict) or
+                          "raw_calls" not in frame["model_response"] for frame in frames)):
+        return None
+    saved_turns = partial.get("turns")
+    if not isinstance(saved_turns, list):
+        return None
+    saved_indexes = []
+    for evidence_row, frame in zip(action_frames, frames):
+        index = evidence_row.get("saved_turn_index")
+        if (type(index) is not int or index < 0 or index >= len(saved_turns) or
+                index in saved_indexes or not isinstance(evidence_row.get("request_sha256"), str) or
+                not re.fullmatch(r"[0-9a-f]{64}", evidence_row["request_sha256"])):
+            return None
+        saved_indexes.append(index)
+        saved = saved_turns[index]
+        response = saved.get("response") if isinstance(saved, dict) else None
+        model_response = frame.get("model_response")
+        if (not isinstance(response, dict) or saved.get("request_sha256") != evidence_row.get("request_sha256") or
+                saved.get("invocation_id") != evidence_row.get("invocation_id") or
+                response.get("calls") != model_response.get("calls") or
+                response.get("raw_calls") != model_response.get("raw_calls") or
+                not isinstance(model_response.get("raw_calls"), list) or
+                response.get("text", "") != model_response.get("text", "")):
+            return None
+    if any(row.get("kind") == "record_omitted" for row in payloads if isinstance(row, dict)):
+        return None
+
+    trace_rows = [row for row in payloads if isinstance(row, dict) and row.get("kind") == "trace_event"]
+    invocation_rows = [row for row in payloads if isinstance(row, dict) and row.get("kind") == "invocation_snapshot"]
+    if (sum(row.get("trace_role") == "root" for row in trace_rows) != snapshot.get("root_event_count") or
+            len(invocation_rows) != snapshot.get("invocation_count")):
+        return None
+    call_ids = [row.get("call_id") for row in invocation_rows]
+    if (any(not isinstance(call_id, str) or not call_id for call_id in call_ids) or len(call_ids) != len(set(call_ids)) or
+            any((row.get("trace_role") == "root" and row.get("invocation_id") != snapshot.get("run_id")) or
+                (row.get("trace_role") == "child" and row.get("invocation_id") not in call_ids) or
+                row.get("trace_role") not in {"root", "child"} for row in trace_rows)):
+        return None
+    for invocation in invocation_rows:
+        events = [row for row in trace_rows if row.get("trace_role") == "child" and
+                  row.get("invocation_id") == invocation.get("call_id")]
+        if len(events) != invocation.get("event_count"):
+            return None
+    graph = [row["event"] for row in trace_rows if isinstance(row.get("event"), dict) and
+             isinstance(row["event"].get("node"), str) and isinstance(row["event"].get("inputs"), list)]
+    trajectory = {"trajectory": frames}
+    turns = rollout_turns(trajectory)
+    if not turns:
+        return None
+    try:
+        from .episode_graph import validate_rollout_graph
+        validate_rollout_graph({"turns": turns, "execution_graph": graph})
+    except (TypeError, ValueError):
+        return None
+    return {"turns": turns, "execution_graph": graph,
+            "evidence": {"path": str(evidence_path), "sha256": manifest["sha256"],
+                         "attempt_id": manifest["attempt_id"], "failure_reason": snapshot["failure_reason"]}}
 
 
 def build_queue(packet: Path, rows: int, group: int, out: Path, *, temperature: float, case_seconds: int,
@@ -171,20 +334,31 @@ def score(run_dir: Path, emit: Path | None = None, round_: int = 0) -> dict[str,
                     raise ValueError(f"student-root rollout {entry['key']} replayed an authored root")
         outcome = classify_case(result, finishes.get(entry["key"]))
         reward = reward_of(outcome, finishes.get(entry["key"]))
+        budget_prefix = _budget_terminated_prefix(entry, packet[entry["index"]], finishes.get(entry["key"])) \
+            if result is None and outcome == "budget_exhaustion" and \
+            (finishes.get(entry["key"]) or {}).get("resource_limit_reason") == "model_request_budget" else None
         task = packet[entry["index"]]
         detail = ((result or {}).get("outcome") or {}).get("detail") if result else None
         if emit is not None:
+            training_reward = reward
+            if result is None and reward is not None and budget_prefix is None:
+                # Preserve the task-level failure score in this report, but never
+                # offer an empty or unverified partial as a native policy sample.
+                training_reward = None
             emitted.append({"schema": "natlang.rollout/1", "round": round_, "task_id": task["id"],
                             "family": task.get("family"), "group": entry["group"], "sample": entry["sample"],
                             "seed": entry["seed"], "split": task.get("split"),
                             "policy": {"temperature": entry.get("temperature"),
                                 "checkpoint_sha256": preparation.get("policy_checkpoint_sha256"),
                                 "endpoint": entry.get("rl_endpoint")},
-                            "turns": rollout_turns(result),
-                            "execution_graph": copy.deepcopy(((result or {}).get("outcome") or {}).get("execution_graph") or []),
+                            "turns": budget_prefix["turns"] if budget_prefix else rollout_turns(result),
+                            "execution_graph": budget_prefix["execution_graph"] if budget_prefix else
+                                copy.deepcopy(((result or {}).get("outcome") or {}).get("execution_graph") or []),
                             "outcome": outcome,
-                            "reward": None if reward is None else {"quality": reward},
-                            "unscored": outcome if reward is None else None})
+                            "reward": None if training_reward is None else {"quality": training_reward},
+                            "unscored": ("budget_prefix_capture_unavailable" if result is None and reward is not None and
+                                         budget_prefix is None else outcome if reward is None else None),
+                            **({"budget_termination_evidence": budget_prefix["evidence"]} if budget_prefix else {})})
         rollouts.append({"task_id": task["id"], "family": task.get("family"), "group": entry["group"],
                          "sample": entry["sample"], "seed": entry["seed"], "outcome": outcome,
                          "reward": reward, "detail": detail if isinstance(detail, str) else None,

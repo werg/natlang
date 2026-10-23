@@ -29,6 +29,14 @@ artefact; 2026-10-12, §8.3). One function, `rl.task_rollouts.reward_of`, so the
 the held-task eval can never disagree. Partial credit and the resource term (successful rollouts only) are later
 additions, each measured before adoption.
 
+A terminal `model_request_budget` is a model-caused zero, but it has no completed result row. Train from its saved
+prefix only when the exact terminal error and source identity bind the latest interrupted evidence snapshot, there
+are no pending child invocations, and the recorded action frames and graph events pass the same whole-episode
+occurrence/capture checks as a completed rollout. The replay includes every captured sampled or forced policy turn
+and every in-episode producer dependency. If any evidence is missing, stale, ambiguous, or incomplete, keep the task
+failure in the score report but emit it as unscored for training. Host wall-clock timeouts, cancellation and
+infrastructure failures remain unscored and never borrow an older partial episode.
+
 **Task source.** Only train-split task rows (`split == "train"`; first source:
 `runs/decision-rich-train-20261005-v2/cases.jsonl`, 72 rows, paired with the protected held 48). The preparer
 refuses any other split. The protected held 48 (`runs/decision-rich-heldout-20261005-v1`) is evaluation only. Rows
