@@ -53,3 +53,36 @@ def test_retry_cannot_authorize_unrelated_history(tmp_path,monkeypatch,broken):
 def test_direct_ancestry_does_not_invoke_retry_verifier(tmp_path,monkeypatch):
     args=setup(tmp_path,monkeypatch);args[0]['history']=[{'recipe':args[1]['recipe']}]
     assert runtime._resident_recipe_ancestry(*args[:5]);assert not args[-1]
+
+
+def test_authenticated_current_adoption_keeps_new_resident_namespace_and_plan(tmp_path):
+    from natlang_neuralese.common.jsonio import write_json_durable
+    old=tmp_path/'old'/'recipe.json';old.parent.mkdir();write_json_durable(old,{'recipe':'drained'})
+    new=tmp_path/'current'/'recipe.json';new.parent.mkdir();write_json_durable(new,{'recipe':'retry-adopted'})
+    directory=new.parent/'resident-data';directory.mkdir()
+    current_file=directory/'current.json';write_json_durable(current_file,{'resident':'current'})
+    recipe_ref=binding(new);current_ref=binding(current_file)
+    config={
+        'production_recipe':str(new),
+        'resident_data_directory':str(directory),
+        'trainer_parameters':{'seed_native_graphs':'current-train.jsonl'},
+        'seed_trainer_parameters':{'seed_native_graphs':'current-train.jsonl'},
+    }
+    adopted={'payload':{
+        'recipe':{'file_sha256':recipe_ref['sha256']},
+        'plan':{'recipe_sha256':'lineage-current','train_members':1_476_227,'held_members':25_968},
+    }}
+    selected=runtime._current_adopted_resident_directory(config,current_ref,adopted,'lineage-current')
+    assert selected==directory.resolve()
+    assert config['trainer_parameters']['seed_native_graphs']=='current-train.jsonl'
+    assert config['seed_trainer_parameters']['seed_native_graphs']=='current-train.jsonl'
+    # A real old drain directory may remain valid ancestry, but cannot replace
+    # the active recipe's resident namespace on runtime reapplication.
+    assert selected!=old.parent/'resident-data'
+    for field,value in (
+        ('resident_data_directory',str(old.parent/'resident-data')),
+        ('production_recipe',str(old)),
+    ):
+        changed={**config,field:value}
+        with pytest.raises(ValueError,match='authenticated resident namespace'):
+            runtime._current_adopted_resident_directory(changed,current_ref,adopted,'lineage-current')
