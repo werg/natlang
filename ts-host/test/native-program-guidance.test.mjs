@@ -146,7 +146,7 @@ test('native task binding requires its exact program descriptor', () => {
     program: { id: 'different-program' } })), /belongs to a different program/);
 });
 
-test('legacy text guidance is inserted into the composed system prompt once', async () => {
+test('plain authored text guidance is inserted into the composed system prompt once', async () => {
   const requests = [];
   const driver = async request => {
     requests.push(request);

@@ -611,7 +611,8 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     neuralese: task.runtime.options.neuralese,
     programGuidance: eligibleGuidance && (task.nativeProgramGuidance || view.binding || view.guidance()) ?
       task.nativeProgramGuidance?.binding?.program_id === owner ? task.nativeProgramGuidance :
-      task.runtime.options.neuralese?.nativeStateConsumer ? view.nativeGuidance() : view.guidance() : undefined,
+      (task.runtime.options.neuralese?.nativeStateConsumer || task.runtime.options.neuralese?.nativeStateConsumerForCall) ?
+        view.nativeGuidance() : view.guidance() : undefined,
     maxTurns: model.maxTurns, maxTokens: model.maxTokens, turnTokens: model.turnTokens, temperature: model.temperature,
     maxSeconds: model.maxSeconds, contextTokens: model.contextTokens,
     maxFailureRepairs: model.maxFailureRepairs, review: model.review, decisionReadout: model.decisionReadout,

@@ -12,16 +12,9 @@ import json
 from collections import defaultdict
 from pathlib import Path
 
-from ..common.jsonio import write_bytes_durable, write_json_durable
+from ..common.hashing import canonical_json_sha256_hex
+from ..common.jsonio import canonical_json_bytes, write_bytes_durable, write_json_durable
 from . import memetic_program
-
-
-def canonical(value) -> bytes:
-    return json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(',', ':')).encode()
-
-
-def digest(value) -> str:
-    return hashlib.sha256(canonical(value)).hexdigest()
 
 
 def program_identity(row: dict) -> tuple[str, dict]:
@@ -41,7 +34,7 @@ def program_identity(row: dict) -> tuple[str, dict]:
     for key in ('service_scopes', 'service_contracts'):
         if key in semantics:
             program[key] = semantics[key]
-    return 'natlang-program-sha256:' + digest(program), program
+    return 'natlang-program-sha256:' + canonical_json_sha256_hex(program), program
 
 
 def world_bindings(row: dict) -> list[str]:
@@ -51,15 +44,17 @@ def world_bindings(row: dict) -> list[str]:
     evidence = curriculum.get('evidence') or {}
     for field in ('world', 'retrieved', 'background'):
         for item in evidence.get(field) or []:
-            bindings.add('evidence:' + digest(item))
+            bindings.add('evidence:' + canonical_json_sha256_hex(item))
     services = (row.get('semantics') or {}).get('services')
     if services:
-        bindings.add('service-world:' + digest(services))
+        bindings.add('service-world:' + canonical_json_sha256_hex(services))
+    inputs = (row.get('semantics') or {}).get('inputs')
+    if inputs not in (None, {}, []):
+        bindings.add('inputs:' + canonical_json_sha256_hex(inputs))
     if not bindings:
-        inputs = (row.get('semantics') or {}).get('inputs')
         if inputs is None:
             raise ValueError('invocation has no source or world binding for a safe split')
-        bindings.add('inputs:' + digest(inputs))
+        bindings.add('inputs:' + canonical_json_sha256_hex(inputs))
     return sorted(bindings)
 
 
@@ -129,7 +124,8 @@ def select(source: Path, out: Path, *, min_each: int = 2) -> dict:
         row['program_id'] = program_id
         row['memetic_source'] = {'schema': 'natlang.memetic-source/1', 'source_path': str(source.resolve()),
                                  'source_sha256': source_sha, 'row_index': index,
-                                 'row_sha256': digest(original), 'program_sha256': digest(program),
+                                 'row_sha256': canonical_json_sha256_hex(original),
+                                 'program_sha256': canonical_json_sha256_hex(program),
                                  'world_bindings': world_bindings(original)}
         rows.append(row)
     components = _components(rows)
@@ -153,7 +149,7 @@ def select(source: Path, out: Path, *, min_each: int = 2) -> dict:
             directory = out / ('program-' + program_id.rsplit(':', 1)[1][:16]); directory.mkdir(exist_ok=True)
             for name, part in parts.items():
                 path = directory / (name + '.jsonl')
-                write_bytes_durable(path, b''.join(canonical(row) + b'\n' for row in part))
+                write_bytes_durable(path, b''.join(canonical_json_bytes(row) + b'\n' for row in part))
                 entry[name] = {'path': str(path), 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
         else:
             entry['pending'] = 'fewer than two independent train invocations in a split'
@@ -235,7 +231,7 @@ def main(argv=None):
             print(json.dumps({'manifest': str(args.out / 'batch.json'), 'status': 'no_qualified_guidance',
                               'results': results}))
             return
-        if len({canonical(binding['student']) for binding in bindings}) != 1:
+        if len({canonical_json_bytes(binding['student']) for binding in bindings}) != 1:
             raise ValueError('batch guidance graphs come from different student checkpoints')
         graph_bytes = b''.join(Path(binding['native_training_graphs']['path']).read_bytes()
                                for binding in bindings)
