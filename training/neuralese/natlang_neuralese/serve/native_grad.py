@@ -31,7 +31,7 @@ def _leaf_block(block):
     leaves = {}
     for index, layer in enumerate(block.layers):
         copied = dict(layer)
-        for name in ('raw_k', 'v', 'gated_inputs'):
+        for name in ('raw_k', 'v', 'gated_inputs', 'mixed_qkv', 'z', 'b', 'a'):
             if name in copied:
                 value = copied[name].detach().clone().requires_grad_(True)
                 copied[name] = value

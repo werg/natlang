@@ -135,6 +135,16 @@ class ConvState:
 
 
 @dataclass(frozen=True)
+class DeltaState:
+    """Consumer-local causal-convolution tail and Gated DeltaNet recurrent state."""
+    conv: torch.Tensor
+    recurrent: torch.Tensor
+
+    def fields(self):
+        return self.conv, self.recurrent
+
+
+@dataclass(frozen=True)
 class PortCache:
     """Per-layer state plus the number of positions each layer has processed.
 
@@ -143,7 +153,7 @@ class PortCache:
     update builds new tensors, so keeping a reference to a cache is a snapshot.
     """
 
-    states: tuple[AttentionState | ConvState | None, ...]
+    states: tuple[AttentionState | ConvState | DeltaState | None, ...]
     lengths: tuple[int, ...]
     # [B] number of left-padding positions per row (batched prefixes of different lengths),
     # or None. Padded keys are masked for every later position, and rotary positions are
@@ -174,6 +184,8 @@ class PortCache:
                 return None
             if isinstance(state, AttentionState):
                 return state.select(rows)
+            if isinstance(state, DeltaState):
+                return DeltaState(state.conv[rows], state.recurrent[rows])
             return ConvState(state.window[rows])
         pad = None if self.pad is None else self.pad[rows]
         offsets = None if self.pad_offsets is None else (self.pad_offsets[rows] if isinstance(rows, slice)
@@ -200,6 +212,8 @@ class PortCache:
             if isinstance(state, AttentionState):
                 return AttentionState(repeat(state.tail_k), repeat(state.tail_v),
                                       prefix_k=repeat(state.prefix_k), prefix_v=repeat(state.prefix_v))
+            if isinstance(state, DeltaState):
+                return DeltaState(repeat(state.conv), repeat(state.recurrent))
             return ConvState(repeat(state.window))
         offsets = (None if self.pad_offsets is None
                    else tuple(offset for offset in self.pad_offsets for _ in range(repeats)))

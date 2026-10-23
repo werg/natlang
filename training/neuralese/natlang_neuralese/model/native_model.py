@@ -165,6 +165,9 @@ def load_native_model(base, *, rank=8, device='cpu', dtype=torch.bfloat16, inven
     if inventory is not None and actual != inventory:
         raise ValueError('native checkpoint base inventory differs from the pinned model inputs')
     architecture = json.loads((base / 'config.json').read_text())['model_type']
+    if architecture == 'qwen3_5' and native_ordinary_precision in (None, 'fp32-norms-v1'):
+        from .native_parameter_precision import QWEN35_DELTA_PROFILE
+        native_ordinary_precision = QWEN35_DELTA_PROFILE
     if history_reasoning_policy not in (None, 'keep'):
         raise ValueError('native history_reasoning_policy must be omitted or explicitly keep')
     if architecture in {'mellum', 'maple'}:
@@ -180,7 +183,7 @@ def load_native_model(base, *, rank=8, device='cpu', dtype=torch.bfloat16, inven
         if backbone_state is None:
             hf, tokenizer = load_backbone(str(base), dtype=dtype, device=device)
         port_type = PortBackbone
-    elif architecture in {'qwen3', 'qwen2'}:
+    elif architecture in {'qwen3', 'qwen2', 'qwen3_5'}:
         from .hf_port import load_qwen_backbone, QwenPortBackbone
         if backbone_state is None:
             hf, tokenizer = load_qwen_backbone(str(base), dtype=dtype, device=device)
@@ -241,12 +244,14 @@ def model_state(model):
 
 
 def restore_model_state(model, state):
-    if getattr(model, 'native_ordinary_precision', None) is not None:
-        from .native_parameter_precision import norm_parameters
-        for name, (_, parameter) in norm_parameters(model).items():
+    profile = getattr(model, 'native_ordinary_precision', None)
+    if profile is not None:
+        from .native_parameter_precision import ordinary_precision_parameters
+        for name, (_, parameter) in ordinary_precision_parameters(model, profile).items():
             value = state['backbone_state'].get(name)
             if value is None or value.dtype != torch.float32 or value.shape != parameter.shape:
-                raise ValueError('native checkpoint norm tensors violate declared FP32 profile: ' + name)
+                raise ValueError('native checkpoint norm tensors violate declared FP32 profile (ordinary precision): '
+                                 + name)
     model.port.hf.load_state_dict(state['backbone_state'], strict=True)
     from .shared_state import restore_channel_checkpoint
     restore_channel_checkpoint(model, state['interface_state'])

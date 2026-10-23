@@ -1,9 +1,10 @@
-"""Port backbones for Qwen3-family decoders (Qwen3-0.6B; Maple reuses the attention path, maple-qat §5).
+"""Port backbones for Qwen3-family decoders (Qwen3 and Maple use attention; Qwen3.5 uses hybrid attention/DeltaNet).
 
 Same interface as the LFM2 ``PortBackbone`` (embed, logits, run_layers over a layer range with a ``PortCache``,
-forward_embeds with a cutoff), so the S3 trainer, heads and server run unchanged. Differences from LFM2: every layer
-is attention (optionally sliding-window), the output head may be untied (then the two Neuralese markers get their
-own trainable output rows), and the markers are unused vocabulary rows shared by Maple and Qwen3 (same IDs).
+forward_embeds with a cutoff), so the shared trainer, heads and server use the same mechanisms. Qwen3 and Maple use
+attention layers; Qwen3.5 dispatches each configured full/sliding-attention or linear-attention layer. The output
+head may be untied (then the two Neuralese markers get their own trainable output rows), and the Qwen marker IDs
+remain unused vocabulary rows shared by Maple and Qwen3.
 """
 
 from __future__ import annotations
@@ -12,7 +13,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from .lfm2_port import AttentionState, ControlTokens, PortBackbone, PortCache, _left_pad_mask, append_kv
+from .lfm2_port import AttentionState, DeltaState, ControlTokens, PortBackbone, PortCache, _left_pad_mask, append_kv
 from .layer_staging import staged_layers
 from ..common.profiling import scope as profile_scope
 
@@ -48,9 +49,11 @@ def family_controls(model, tokenizer=None) -> ControlTokens:
 
 
 def load_qwen_backbone(path: str, dtype=torch.bfloat16, device="cpu"):
-    from transformers import AutoModelForCausalLM, AutoTokenizer
+    from transformers import AutoConfig, AutoModelForCausalLM, AutoModelForImageTextToText, AutoTokenizer
 
-    model = AutoModelForCausalLM.from_pretrained(path, dtype=dtype, device_map="cpu")
+    config = AutoConfig.from_pretrained(path, trust_remote_code=False)
+    model_class = AutoModelForImageTextToText if config.model_type == 'qwen3_5' else AutoModelForCausalLM
+    model = model_class.from_pretrained(path, config=config, dtype=dtype, device_map="cpu", trust_remote_code=False)
     tokenizer = AutoTokenizer.from_pretrained(path)
     model.to(device).eval()
     for parameter in model.parameters():
@@ -59,7 +62,7 @@ def load_qwen_backbone(path: str, dtype=torch.bfloat16, device="cpu"):
 
 
 class QwenPortBackbone(PortBackbone):
-    """A frozen Qwen3 causal LM run layer range by layer range, plus the trainable marker rows."""
+    """A frozen Qwen-family text decoder run layer range by layer range, plus trainable marker rows."""
 
     attention_checkpoint_prefixes = False
 
@@ -74,7 +77,16 @@ class QwenPortBackbone(PortBackbone):
         self.ffn_chunk_tokens = 0
         self.conv_kernel = None
         self.hf = hf_model
-        self.config = hf_model.config
+        self.architecture = getattr(hf_model.config, 'model_type', '')
+        text_model = getattr(getattr(hf_model, 'model', None), 'language_model', None) or hf_model.model
+        source_config = text_model.config
+        # Preserve the checkpoint's public architecture identity while port
+        # geometry comes from the nested language model.
+        self.config = source_config
+        if self.architecture == 'qwen3_5':
+            import copy
+            self.config = copy.copy(source_config)
+            self.config.model_type = 'qwen3_5'
         self.controls = controls or qwen_controls()
         self.num_layers = self.config.num_hidden_layers
         self.layer_types = list(getattr(self.config, "layer_types", None) or ["full_attention"] * self.num_layers)
@@ -96,8 +108,13 @@ class QwenPortBackbone(PortBackbone):
         return rows.to(device=table.device, dtype=table.dtype)
 
     @property
+    def text(self):
+        """Resolve the nested text stack without registering a second module alias."""
+        return getattr(getattr(self.hf, 'model', None), 'language_model', None) or self.hf.model
+
+    @property
     def embedding_weight(self) -> torch.Tensor:
-        return self.hf.model.embed_tokens.weight
+        return self.text.embed_tokens.weight
 
     @property
     def output_weight(self) -> torch.Tensor:
@@ -105,14 +122,18 @@ class QwenPortBackbone(PortBackbone):
 
     @property
     def final_norm_weight(self) -> torch.Tensor:
-        return self.hf.model.norm.weight
+        return self.text.norm.weight
 
     @property
     def norm_eps(self) -> float:
         return float(self.config.rms_norm_eps)
 
+    @property
+    def layers(self):
+        return self.text.layers
+
     def is_attention(self, layer: int) -> bool:
-        return True
+        return self.layer_types[layer] in ('full_attention', 'sliding_attention')
 
     def window(self, layer: int) -> int | None:
         if self.layer_types[layer] == "sliding_attention":
@@ -120,14 +141,26 @@ class QwenPortBackbone(PortBackbone):
         return None
 
     def final_norm(self, h: torch.Tensor) -> torch.Tensor:
-        return self.hf.model.norm(h)
+        return self.text.norm(h)
 
     def _rope(self, h, positions):
-        return self.hf.model.rotary_emb(h, position_ids=positions)
+        if self.architecture == 'qwen3_5':
+            return self.text.rotary_emb(h, positions[None].expand(3, -1, -1))
+        return self.text.rotary_emb(h, position_ids=positions)
 
     def _apply_rope(self, layer: int, q, k, cos, sin):
-        from transformers.models.qwen3.modeling_qwen3 import apply_rotary_pos_emb
+        if self.architecture == 'qwen3_5':
+            cos, sin = cos.unsqueeze(1), sin.unsqueeze(1)
+            rotary_dim = cos.shape[-1]
+            def rotate_half(value):
+                half = value.shape[-1] // 2
+                return torch.cat((-value[..., half:], value[..., :half]), dim=-1)
+            def apply_partial(value):
+                rotary, remainder = value[..., :rotary_dim], value[..., rotary_dim:]
+                return torch.cat((rotary * cos + rotate_half(rotary) * sin, remainder), dim=-1)
+            return apply_partial(q), apply_partial(k)
 
+        from transformers.models.qwen3.modeling_qwen3 import apply_rotary_pos_emb
         return apply_rotary_pos_emb(q, k, cos, sin)
 
     def logits(self, h_final: torch.Tensor) -> torch.Tensor:
@@ -165,6 +198,31 @@ class QwenPortBackbone(PortBackbone):
         cos, sin = self._rope(h, positions)
         for i in layers:
             layer = self.layers[i]
+            if self.layer_types[i] == 'linear_attention':
+                from .native_gated_delta import PAYLOAD_FIELDS, project_inputs, replay
+                module = layer.linear_attn
+                x = layer.input_layernorm(h)
+                valid = torch.ones((batch, steps), device=h.device, dtype=torch.bool)
+                if pad is not None:
+                    physical = torch.arange(start, start + steps, device=h.device)
+                    valid = valid & (physical[None, :] >= pad[:, None])
+                if padding is not None:
+                    if padding.shape != valid.shape:
+                        raise ValueError('right-padding mask must match the current input span')
+                    valid = valid & padding.to(device=h.device, dtype=torch.bool)
+                x = (x * valid[:, :, None].to(x.dtype)).to(x.dtype)
+                projected = project_inputs(module, x, lambda linear, value: linear(value))
+                payload = dict(zip(PAYLOAD_FIELDS, projected))
+                previous = states[i]
+                out, conv_state, recurrent_state = replay(
+                    module, payload,
+                    conv_prefix=previous.conv if isinstance(previous, DeltaState) else None,
+                    recurrent_state=previous.recurrent if isinstance(previous, DeltaState) else None)
+                states[i] = DeltaState(conv_state, recurrent_state)
+                h = h + out
+                h = self._feed_forward(layer, h)
+                lengths[i] = start + steps
+                continue
             attn = layer.self_attn
             hd = attn.head_dim
             attention_scope = profile_scope("attention")
@@ -179,7 +237,13 @@ class QwenPortBackbone(PortBackbone):
                     k = qk_norm_rope(k, attn.k_norm.gain(), *tables, attn.k_proj.out_features // hd, attn.k_norm.eps)
                 v = attn.v_proj(x).view(batch, steps, -1, hd).transpose(1, 2)
             else:
-                q = attn.q_norm(attn.q_proj(x).view(batch, steps, -1, hd)).transpose(1, 2)
+                q_projection = attn.q_proj(x)
+                gate = None
+                if self.architecture == 'qwen3_5':
+                    q_projection = q_projection.view(batch, steps, -1, hd * 2)
+                    q_projection, gate = torch.chunk(q_projection, 2, dim=-1)
+                    gate = gate.reshape(batch, steps, -1)
+                q = attn.q_norm(q_projection.view(batch, steps, -1, hd)).transpose(1, 2)
                 k = attn.k_norm(attn.k_proj(x).view(batch, steps, -1, hd)).transpose(1, 2)
                 v = attn.v_proj(x).view(batch, steps, -1, hd).transpose(1, 2)
                 q, k = self._apply_rope(i, q, k, cos, sin)
@@ -208,7 +272,11 @@ class QwenPortBackbone(PortBackbone):
                 out = self._attend_fast(attn, q, state.k, state.v, steps, prev is None, padding, pad, pad_offsets)
             sdpa_scope.__exit__(None, None, None)
             states[i] = state
-            h = h + attn.o_proj(out.transpose(1, 2).reshape(batch, steps, -1))
+            out = out.transpose(1, 2).reshape(batch, steps, -1)
+            if gate is not None:
+                # Qwen3.5 gates the attention result before its output projection.
+                out = out * torch.sigmoid(gate)
+            h = h + attn.o_proj(out)
             attention_scope.__exit__(None, None, None)
             with profile_scope("moe"):
                 h = self._feed_forward(layer, h)
@@ -218,6 +286,8 @@ class QwenPortBackbone(PortBackbone):
 
     def _fused_rope_tables(self, layer: int, attn, x, cos, sin):
         """(cos, sin) of this layer when its q/k norm and rotary can run as one fused kernel, else None."""
+        if self.architecture == 'qwen3_5':
+            return None
         return None
 
     def _feed_forward(self, layer, h):
@@ -251,7 +321,8 @@ class QwenPortBackbone(PortBackbone):
             def run_one(value, pos, padding_arg, left_pad_arg, pad_arg, *tensors, index=i, start=start, size=size):
                 states, lengths = [None] * size, [0] * size
                 if tensors:
-                    states[index] = AttentionState.from_fields(tensors)
+                    states[index] = (DeltaState(*tensors) if self.layer_types[index] == 'linear_attention'
+                                     else AttentionState.from_fields(tensors))
                 lengths[index] = start
                 single = PortCache(tuple(states), tuple(lengths), pad_arg, pad_offsets)
                 output, updated = self.run_layers(value, range(index, index + 1), single, positions=pos,
@@ -263,7 +334,8 @@ class QwenPortBackbone(PortBackbone):
             h, *updated = checkpoint(run_one, h, positions, padding, left_pad, cache.pad, *fields,
                                      use_reentrant=False, preserve_rng_state=self.checkpoint_preserve_rng)
             states, lengths = list(cache.states), list(cache.lengths)
-            states[i] = AttentionState.from_fields(updated)
+            states[i] = (DeltaState(*updated) if self.layer_types[i] == 'linear_attention'
+                         else AttentionState.from_fields(updated))
             lengths[i] = start + h.shape[1]
             cache = PortCache(tuple(states), tuple(lengths), pad, pad_offsets)
         return h, cache

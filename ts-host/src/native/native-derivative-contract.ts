@@ -68,7 +68,7 @@ export function validateNativeStateDerivation(value:NativeStateDerivation|undefi
     value.schema!==DERIVATION||value.kind!=='optimizer'||!STATE.test(value.parent_state_id)||!TENSOR.test(value.gradient_id)||!TENSOR.test(value.update_artifact_id)||
     value.program_id!==null&&!TENSOR.test(value.program_id)||value.optimizer_state_parent_id!==null&&!TENSOR.test(value.optimizer_state_parent_id)||
     !Number.isSafeInteger(value.step)||value.step<1||!sortedUnique(value.origin_state_ids,STATE)||!value.origin_state_ids.length||
-    !sortedUnique(value.updated_tensor_names,/^layers\.[0-9]+\.(?:raw_k|v|gated_inputs)$/)||!value.updated_tensor_names.length)
+  !sortedUnique(value.updated_tensor_names,/^layers\.[0-9]+\.(?:raw_k|v|gated_inputs|mixed_qkv|z|b|a)$/)||!value.updated_tensor_names.length)
     throw new RangeError('native optimized state needs its exact origin/update/history contract');
   validateNativeOptimizerBinding(value.optimizer);
   const arithmetic=value.arithmetic;

@@ -11,6 +11,12 @@ def resolve_backbone_policy(backbone, policy='auto'):
     return policy
 
 
+def decoder_layer_parameter_prefix(backbone):
+    """HF parameter namespace for the text decoder's trainable layers."""
+    return ('model.language_model.layers.' if getattr(backbone, 'architecture', None) == 'qwen3_5'
+            else 'model.layers.')
+
+
 def configure_backbone_training(backbone, policy='full', *, rank=16):
     """Freeze the port and enable one declared backbone policy.
 
@@ -80,7 +86,8 @@ def latent_backbone_parameters(backbone):
         # ``...q_proj.parametrizations.weight.original``; it is the same latent and must stay selected.
         from .quantization import plain_parameter_name
         named=[(plain_parameter_name(name),parameter) for name,parameter in backbone.hf.named_parameters()
-               if name.startswith('model.layers.') and plain_parameter_name(name).endswith(prefixes)]
+               if name.startswith(decoder_layer_parameter_prefix(backbone))
+               and plain_parameter_name(name).endswith(prefixes)]
     for _,parameter in named:
         parameter.requires_grad_(True)
     return named
@@ -103,7 +110,7 @@ def full_backbone_parameter_names(backbone):
     if getattr(backbone, 'ternary', False):
         raise ValueError('ternary backbone has no native full-weight policy')
     return {name for name, _ in backbone.hf.named_parameters()
-            if name.startswith('model.layers.')}
+            if name.startswith(decoder_layer_parameter_prefix(backbone))}
 
 
 def backbone_trainable_state(named):

@@ -14,6 +14,12 @@ import torch.nn.functional as F
 
 
 from .native_graph_plan import ImportSpan, Invocation, GraphPlan, compile_graph
+from .native_gated_delta import PAYLOAD_FIELDS, payload_widths
+
+
+def _is_gated_delta(port, layer_index):
+    layer_types = getattr(port, 'layer_types', ())
+    return layer_index < len(layer_types) and layer_types[layer_index] == 'linear_attention'
 
 
 class LowRankTokenEmbedding(nn.Module):
@@ -62,10 +68,16 @@ def _layer_inputs(port, layer, h, attention):
     hd = attn.head_dim
     norm_q = getattr(attn, 'q_norm', None) or attn.q_layernorm
     norm_k = getattr(attn, 'k_norm', None) or attn.k_layernorm
-    q = norm_q(_linear(attn.q_proj, x).view(batch, steps, -1, hd)).transpose(1, 2)
+    q_projection = _linear(attn.q_proj, x)
+    gate = None
+    if getattr(port, 'architecture', None) == 'qwen3_5':
+        q_projection = q_projection.view(batch, steps, -1, hd * 2)
+        q_projection, gate = torch.chunk(q_projection, 2, dim=-1)
+        gate = gate.reshape(batch, steps, -1)
+    q = norm_q(q_projection.view(batch, steps, -1, hd)).transpose(1, 2)
     k = norm_k(_linear(attn.k_proj, x).view(batch, steps, -1, hd)).transpose(1, 2)
     v = _linear(attn.v_proj, x).view(batch, steps, -1, hd).transpose(1, 2)
-    return q, k.float(), v.float()
+    return (q, k.float(), v.float(), gate) if gate is not None else (q, k.float(), v.float())
 
 
 def _finish(port, layer, h, out, attention):
@@ -74,6 +86,14 @@ def _finish(port, layer, h, out, attention):
         h = h + _linear(projection, out.transpose(1, 2).reshape(h.shape[0], h.shape[1], -1))
     else:
         h = h + _linear(layer.conv.out_proj, out)
+    if hasattr(port, '_feed_forward'):
+        return port._feed_forward(layer, h)
+    from .lfm2_port import feed_forward_residual
+    return feed_forward_residual(layer, h, getattr(port, 'ffn_chunk_tokens', 0))
+
+
+def _finish_delta(port, layer, h, out):
+    h = h + out
     if hasattr(port, '_feed_forward'):
         return port._feed_forward(layer, h)
     from .lfm2_port import feed_forward_residual
@@ -89,10 +109,10 @@ def _actor_layer_inputs(bank,groups,port,layer,h,attention):
         from .native_gradient_partitions import gradient_partitions
         with gradient_partitions(subset):
             values=bank.execute(name,lambda:_layer_inputs(port,layer,h.index_select(1,rows),attention))
-        dim=2 if attention else 1
+        dims = [2 if attention and value.ndim == 4 else 1 for value in values]
         if merged is None:
-            merged=[value.new_zeros((*value.shape[:dim],h.shape[1],*value.shape[dim+1:])) for value in values]
-        merged=[target.index_copy(dim,rows,value) for target,value in zip(merged,values)]
+            merged=[value.new_zeros((*value.shape[:dim],h.shape[1],*value.shape[dim+1:])) for value,dim in zip(values,dims)]
+        merged=[target.index_copy(dim,rows,value) for target,value,dim in zip(merged,values,dims)]
     return tuple(merged)
 
 
@@ -112,6 +132,58 @@ def _actor_finish(bank,groups,port,layer,h,out,attention,*,layer_index=None):
                 invocation_namespace=parent.invocation_namespace+(layer_index,))
         with gradient_partitions(subset):
             value=bank.execute(name,lambda:_finish(port,layer,h.index_select(1,rows),out.index_select(2 if attention else 1,rows),attention))
+        result=result.index_copy(1,rows,value)
+    return result
+
+
+def _actor_delta_inputs(bank,groups,port,layer,h):
+    from .native_gated_delta import project_inputs
+    if bank is None:
+        return project_inputs(layer.linear_attn, layer.input_layernorm(h), _linear)
+    from .native_gradient_partitions import gradient_partitions
+    merged=None
+    for name,rows,subset,_invocation_index in groups:
+        with gradient_partitions(subset):
+            value=bank.execute(name,lambda:project_inputs(layer.linear_attn,
+                layer.input_layernorm(h.index_select(1,rows)),_linear))
+        if merged is None:
+            merged=[part.new_zeros((part.shape[0],h.shape[1],part.shape[-1])) for part in value]
+        merged=[target.index_copy(1,rows,part) for target,part in zip(merged,value)]
+    return tuple(merged)
+
+
+def _actor_delta_replay(bank, name, invocation_index, sequence_length, output_length, layer_index, callback):
+    from .native_gradient_partitions import (GradientPartitions, active_gradient_partitions,
+                                              gradient_partitions)
+    parent = active_gradient_partitions()
+    namespace = (() if parent is None or parent.invocation_namespace is None
+                 else parent.invocation_namespace) + (layer_index,)
+    subset = GradientPartitions((sequence_length,), invocation_index=invocation_index,
+                                invocation_namespace=namespace)
+    output_subset = GradientPartitions((output_length,), invocation_index=invocation_index,
+                                       invocation_namespace=namespace)
+    with gradient_partitions(subset):
+        execute = lambda: callback(output_subset)
+        return execute() if bank is None else bank.execute(name, execute)
+
+
+def _actor_finish_delta(bank,groups,port,layer,h,out,*,layer_index=None):
+    from .native_gradient_partitions import GradientPartitions, active_gradient_partitions, gradient_partitions
+    parent=active_gradient_partitions()
+    if bank is None:
+        if parent is not None and parent.invocation_namespace is not None and layer_index is not None:
+            with gradient_partitions(GradientPartitions(parent.lengths,
+                    invocation_namespace=parent.invocation_namespace+(layer_index,))):
+                return _finish_delta(port,layer,h,out)
+        return _finish_delta(port,layer,h,out)
+    result=torch.zeros_like(h)
+    for name,rows,subset,invocation_index in groups:
+        if parent is not None and parent.invocation_namespace is not None and layer_index is not None:
+            subset=GradientPartitions((rows.numel(),), invocation_index=invocation_index,
+                invocation_namespace=parent.invocation_namespace+(layer_index,))
+        with gradient_partitions(subset):
+            value=bank.execute(name,lambda:_finish_delta(port,layer,
+                h.index_select(1,rows),out.index_select(1,rows)))
         result=result.index_copy(1,rows,value)
     return result
 
@@ -205,8 +277,13 @@ def _forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None 
             if node.token_ids)
     if plan.token_count == 0:
         state = tuple(tuple(torch.cat([item[i][j] for item in external], dim=2 if port.is_attention(i) else 1)
-                            for j in range(2 if port.is_attention(i) else 1)) for i in range(port.num_layers))
+                            for j in range(2 if port.is_attention(i) else
+                                           4 if _is_gated_delta(port, i) else 1))
+                      for i in range(port.num_layers))
         return {'h_final': h, 'states': state if retain_states else (), 'plan': plan,
+                'layer_kinds': tuple('attention' if port.is_attention(i) else
+                    'gated_delta' if _is_gated_delta(port, i) else 'finite_convolution'
+                    for i in range(port.num_layers)),
                 **({'invocation_actors':actor_bank.receipt()} if actor_bank is not None else {})}
     state = []
     masks = {}
@@ -215,6 +292,7 @@ def _forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None 
     checkpointed = bool(getattr(port, 'checkpoint_layers', False)) and torch.is_grad_enabled()
     for i, layer in enumerate(port.layers):
         attention = port.is_attention(i)
+        gated_delta = _is_gated_delta(port, i)
         window = port.window(i) if attention and hasattr(port, 'window') else None
         if attention and window not in masks:
             from ..common.native_higher_order import active_reference_arithmetic
@@ -224,7 +302,7 @@ def _forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None 
             masks[window] = (None if active_reference_arithmetic() is not None else
                 graph_block_mask(plan, device, window) if h.is_cuda else plan.attention_mask(device, window))
         convolution_index = None
-        if not attention:
+        if not attention and not gated_delta:
             width = layer.conv.conv.weight.shape[-1]
             if width not in convolution_indices:
                 convolution_indices[width] = _convolution_index(plan, width, range(plan.token_count), device)
@@ -236,9 +314,45 @@ def _forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None 
 
         def run_layer(value, *imported, index=i, attention=attention, window=window, convolution_index=convolution_index, attention_workspace=attention_workspace):
             layer = port.layers[index]
+            if _is_gated_delta(port, index):
+                from .native_gated_delta import project_inputs, replay
+                module = layer.linear_attn
+                inputs = _actor_delta_inputs(actor_bank,actor_groups,port,layer,value)
+                payload = dict(zip(PAYLOAD_FIELDS, inputs))
+                captured = tuple(payload[name] for name in PAYLOAD_FIELDS)
+                external_fields = tuple(imported[j::4] for j in range(4)) if imported else ((), (), (), ())
+                full = tuple(torch.cat((tensor, *extra), dim=1) for tensor, extra in zip(captured, external_fields))
+                outputs = value.new_zeros(value.shape)
+                for invocation_index, (node, offset, sequence) in enumerate(
+                        zip(plan.invocations, plan.offsets, plan.sequences)):
+                    rows = torch.tensor(sequence, device=value.device, dtype=torch.long)
+                    ordered = {name: tensor.index_select(1, rows)[0]
+                               for name, tensor in zip(PAYLOAD_FIELDS, full)}
+                    if plan.slot_stops:
+                        first = plan.slot_offsets[invocation_index]
+                        flags = torch.tensor(plan.slot_stops[first:first + len(sequence)],
+                                             device=value.device, dtype=torch.bool)
+                        ordered = {name: torch.where(flags[:, None], tensor.detach(), tensor)
+                                   for name, tensor in ordered.items()}
+                    positions = {physical: position for position, physical in enumerate(sequence)
+                                 if offset <= physical < offset + len(node.token_ids)}
+                    if len(positions) != len(node.token_ids):
+                        raise ValueError('gated delta logical sequence omits an owned token')
+                    owned_rows = torch.arange(offset, offset + len(node.token_ids), device=value.device)
+                    owned_positions = torch.tensor([positions[int(row)] for row in owned_rows], device=value.device)
+                    result, _, _ = _actor_delta_replay(actor_bank, node.name, invocation_index,
+                        len(sequence), len(node.token_ids), index, lambda output_partitions: replay(module, ordered,
+                            linear=lambda linear, part: _linear(linear, part),
+                            output_positions=owned_positions,
+                            output_gradient_partitions=output_partitions))
+                    outputs = outputs.index_copy(1, owned_rows, result)
+                updated = _actor_finish_delta(actor_bank,actor_groups,port,layer,value,outputs,
+                                              layer_index=index)
+                return (updated, *captured) if retain_states else (updated,)
             values = _actor_layer_inputs(actor_bank,actor_groups,port,layer,value,attention)
             if attention:
-                q, k, v = values
+                q, k, v, *gate_values = values
+                gate = gate_values[0] if gate_values else None
                 if imported:
                     k = torch.cat([k, *imported[0::2]], dim=2)
                     v = torch.cat([v, *imported[1::2]], dim=2)
@@ -255,6 +369,9 @@ def _forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None 
                 out = graph_attention(q, kr, value_slots, plan, window,
                                       layer.self_attn.scaling, prepared_mask=masks[window], prepared_workspace=attention_workspace,
                                       precision=getattr(port, 'native_attention_precision', 'ieee'))
+                if gate is not None:
+                    flat = out.transpose(1, 2).reshape(h.shape[0], h.shape[1], -1) * torch.sigmoid(gate)
+                    out = flat.view(h.shape[0], h.shape[1], -1, layer.self_attn.head_dim).transpose(1, 2)
             else:
                 gated, c = values
                 if imported:
@@ -287,6 +404,9 @@ def _forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None 
         if retain_states:
             state.append(updated[1:])
     return {'h_final': h, 'states': tuple(state), 'plan': plan,
+            'layer_kinds': tuple('attention' if port.is_attention(i) else
+                'gated_delta' if _is_gated_delta(port, i) else 'finite_convolution'
+                for i in range(port.num_layers)),
             **({'invocation_actors':actor_bank.receipt()} if actor_bank is not None else {})}
 
 
@@ -307,7 +427,7 @@ def forward_reference(port, plan: GraphPlan, adapter=None, *, embeddings=None, e
     external = _external_layers(port, plan, external_blocks, external_identity)
     layer_cache = [[] for _ in port.layers]
     outputs = []
-    for node, offset, logical in zip(plan.invocations, plan.offsets, plan.sequences):
+    for invocation_index, (node, offset, logical) in enumerate(zip(plan.invocations, plan.offsets, plan.sequences)):
         count = len(node.token_ids)
         if count == 0:
             continue
@@ -319,11 +439,41 @@ def forward_reference(port, plan: GraphPlan, adapter=None, *, embeddings=None, e
             h = adapter(h, plan.tensor(plan.producing[offset:offset+count], device, torch.bool)[None])
         for i, layer in enumerate(port.layers):
             attention = port.is_attention(i)
-            values = (actor_bank.execute(node.name,lambda:_layer_inputs(port,layer,h,attention))
-                      if actor_bank is not None else _layer_inputs(port,layer,h,attention))
+            gated_delta = _is_gated_delta(port, i)
+            values = (() if gated_delta else
+                actor_bank.execute(node.name,lambda:_layer_inputs(port,layer,h,attention))
+                if actor_bank is not None else _layer_inputs(port,layer,h,attention))
             cache = layer_cache[i]
-            if attention:
-                q, k, v = values
+            if gated_delta:
+                from .native_gated_delta import project_inputs, replay
+                module = layer.linear_attn
+                projected = lambda: project_inputs(module, layer.input_layernorm(h), _linear)
+                fields = tuple(actor_bank.execute(node.name, projected) if actor_bank is not None else projected())
+                source_fields = tuple(torch.cat([entry[field] for entry in cache] + [fields[field]] +
+                    [item[i][field] for item in external], dim=1) for field in range(4))
+                cache.append(fields)
+                indices = plan.tensor(remap(logical), device)
+                payload = {name: tensor.index_select(1, indices)[0]
+                           for name, tensor in zip(PAYLOAD_FIELDS, source_fields)}
+                if plan.slot_stops:
+                    first = plan.slot_offsets[invocation_index]
+                    flags = torch.tensor(plan.slot_stops[first:first + len(logical)],
+                                         device=device, dtype=torch.bool)
+                    payload = {name: torch.where(flags[:, None], tensor.detach(), tensor)
+                               for name, tensor in payload.items()}
+                own_positions = [position for position, row in enumerate(logical)
+                                 if offset <= row < offset + count]
+                out, _, _ = _actor_delta_replay(actor_bank, node.name, invocation_index,
+                    len(logical), count, i, lambda output_partitions: replay(module, payload,
+                        linear=lambda linear, part: _linear(linear, part),
+                        output_positions=own_positions,
+                        output_gradient_partitions=output_partitions))
+                h = (actor_bank.execute(node.name,lambda:_finish_delta(port,layer,h,out))
+                     if actor_bank is not None else _finish_delta(port,layer,h,out))
+
+            elif attention:
+                q, k, v, *gate_values = values
+                gate = gate_values[0] if gate_values else None
                 source_k = torch.cat([entry[0] for entry in cache] + [k] + [item[i][0] for item in external], dim=2)
                 source_v = torch.cat([entry[1] for entry in cache] + [v] + [item[i][1] for item in external], dim=2)
                 cache.append((k, v))
@@ -344,6 +494,9 @@ def forward_reference(port, plan: GraphPlan, adapter=None, *, embeddings=None, e
                     kr, value_slots = kr.float(), value_slots.float()
                 out = graph_attention(qr, kr, value_slots, layout, window, layer.self_attn.scaling,
                                       precision=getattr(port, 'native_attention_precision', 'ieee'))
+                if gate is not None:
+                    flat = out.transpose(1, 2).reshape(1, count, -1) * torch.sigmoid(gate)
+                    out = flat.view(1, count, -1, layer.self_attn.head_dim).transpose(1, 2)
 
             else:
                 gated, c = values
@@ -367,15 +520,19 @@ def forward_reference(port, plan: GraphPlan, adapter=None, *, embeddings=None, e
                     # reduction from the layer-major graph's finite histories.
                     parts.append(_finite_convolution(kernel, data.transpose(1, 2)[:, None], c[:, local:local+1]))
                 out = torch.cat(parts, dim=1)
-            h = (actor_bank.execute(node.name,lambda:_finish(port,layer,h,out,attention))
-                 if actor_bank is not None else _finish(port,layer,h,out,attention))
+            if not gated_delta:
+                h = (actor_bank.execute(node.name,lambda:_finish(port,layer,h,out,attention))
+                     if actor_bank is not None else _finish(port,layer,h,out,attention))
         outputs.append(h)
-    states = tuple(tuple(torch.cat([entry[field] for entry in cache], dim=2 if len(cache[0]) == 2 else 1)
-                         for field in range(len(cache[0]))) for cache in layer_cache)
+    states = tuple(tuple(torch.cat([entry[field] for entry in cache], dim=2 if port.is_attention(i) else 1)
+                         for field in range(len(cache[0]))) for i, cache in enumerate(layer_cache))
     if external:
-        states = tuple(tuple(torch.cat([field, *[item[i][j] for item in external]], dim=2 if len(values) == 2 else 1)
+        states = tuple(tuple(torch.cat([field, *[item[i][j] for item in external]], dim=2 if port.is_attention(i) else 1)
                              for j, field in enumerate(values)) for i, values in enumerate(states))
     return {'h_final': torch.cat(outputs, dim=1), 'states': states, 'plan': plan,
+            'layer_kinds': tuple('attention' if port.is_attention(i) else
+                'gated_delta' if _is_gated_delta(port, i) else 'finite_convolution'
+                for i in range(port.num_layers)),
             **({'invocation_actors':actor_bank.receipt()} if actor_bank is not None else {})}
 
 
@@ -660,9 +817,12 @@ def _capture_logical(result, index, start, stop):
     rows = plan.tensor(sources, device)
     layers = []
     for values in result['states']:
-        if len(values) == 2:
+        if result['layer_kinds'][len(layers)] == 'attention':
             layers.append({'kind': 'attention', 'raw_k': values[0][0, :, rows].transpose(0, 1),
                            'v': values[1][0, :, rows].transpose(0, 1)})
+        elif result['layer_kinds'][len(layers)] == 'gated_delta':
+            layers.append({'kind': 'gated_delta', **{name: values[field][0, rows]
+                for field, name in enumerate(PAYLOAD_FIELDS)}})
         else:
             layers.append({'kind': 'finite_convolution', 'gated_inputs': values[0][0, rows]})
     return {'positions': torch.arange(start, stop, device=device), 'layers': tuple(layers),
@@ -729,7 +889,14 @@ def provision_role_tokens(port, tokenizer):
             embedding.weight[:old_input.weight.shape[0]].copy_(old_input.weight)
             embedding.weight[old_input.weight.shape[0]:].copy_(old_input.weight.float().mean(0))
         embedding.weight.requires_grad_(old_input.weight.requires_grad)
-        port.hf.model.embed_tokens = embedding
+        text_model = getattr(port, 'text', None)
+        if text_model is None:
+            embedding_name = next((name for name, module in port.hf.named_modules() if module is old_input), None)
+            if embedding_name is not None and '.' in embedding_name:
+                text_model = port.hf.get_submodule(embedding_name.rpartition('.')[0])
+            else:
+                text_model = port.hf.model
+        text_model.embed_tokens = embedding
         if tied:
             old_output.weight = embedding.weight
             if hasattr(old_output, 'out_features'):
@@ -744,7 +911,8 @@ def provision_role_tokens(port, tokenizer):
                 head.weight[old_output.weight.shape[0]:].copy_(old_output.weight.float().mean(0))
             head.weight.requires_grad_(old_output.weight.requires_grad)
             port.hf.lm_head = head
-        for configuration in (port.config, port.hf.config, getattr(port.hf.model, 'config', None)):
+        for configuration in (port.config, getattr(text_model, 'config', None),
+                              port.hf.config, getattr(port.hf.model, 'config', None)):
             if configuration is not None:
                 configuration.vocab_size = target
     return RoleTokens(*ids)
@@ -757,7 +925,7 @@ def native_step(model, ids, cache=None, *, producing=False):
     for an exact reference. Cached keys are already rotated at consumer-local
     positions; block capture stores the raw keys separately in the result.
     """
-    from .lfm2_port import PortCache, ConvState, append_kv
+    from .lfm2_port import PortCache, ConvState, DeltaState, append_kv
     port = model.port
     if ids.ndim != 2 or ids.shape[0] != 1:
         raise ValueError('native_step requires one token sequence')
@@ -776,6 +944,11 @@ def native_step(model, ids, cache=None, *, producing=False):
                 attn = layer.self_attn
                 shape = (0, attn.k_proj.out_features // attn.head_dim, attn.head_dim)
                 layers.append({'kind': 'attention', 'raw_k': raw.new_empty(shape, dtype=torch.float32), 'v': raw.new_empty(shape, dtype=torch.float32)})
+            elif _is_gated_delta(port, index):
+                module = layer.linear_attn
+                widths = payload_widths(module)
+                layers.append({'kind': 'gated_delta',
+                    **{name: raw.new_empty((0, width)) for name, width in widths.items()}})
             else:
                 from .shared_execution import convolution_state_dtype
                 layers.append({'kind': 'finite_convolution',
@@ -791,11 +964,27 @@ def native_step(model, ids, cache=None, *, producing=False):
     rotary_tables = {}
     layout = AttentionLayout(tuple(range(start, start+ids.shape[1])), start+ids.shape[1])
     for i, layer in enumerate(port.layers):
+        if _is_gated_delta(port, i):
+            from .native_gated_delta import project_inputs, replay
+            module = layer.linear_attn
+            projected = project_inputs(module, layer.input_layernorm(h), lambda linear, value: linear(value))
+            payload = {name: value[0] for name, value in zip(PAYLOAD_FIELDS, projected)}
+            captures.append({'kind': 'gated_delta', **payload})
+            previous = cache.states[i]
+            out, conv_state, recurrent_state = replay(
+                module, payload,
+                conv_prefix=previous.conv if isinstance(previous, DeltaState) else None,
+                recurrent_state=previous.recurrent if isinstance(previous, DeltaState) else None)
+            states.append(DeltaState(conv_state, recurrent_state))
+            h = h + out
+            h = model.port._feed_forward(layer, h)
+            continue
         attention = port.is_attention(i)
         values = _layer_inputs(port, layer, h, attention)
         previous = cache.states[i]
         if attention:
-            q, k, v = values
+            q, k, v, *gate_values = values
+            gate = gate_values[0] if gate_values else None
             captures.append({'kind': 'attention', 'raw_k': k[0].transpose(0, 1), 'v': v[0].transpose(0, 1)})
             rotary_key = (q.device, q.dtype)
             if rotary_key not in rotary_tables:
@@ -812,6 +1001,9 @@ def native_step(model, ids, cache=None, *, producing=False):
             out = graph_attention(q, state.k, state.v, layout, window, layer.self_attn.scaling,
                                   prepared_mask=masks[window],
                                   precision=getattr(port, 'native_attention_precision', 'ieee'))
+            if gate is not None:
+                flat = out.transpose(1, 2).reshape(ids.shape[0], ids.shape[1], -1) * torch.sigmoid(gate)
+                out = flat.view(ids.shape[0], ids.shape[1], -1, layer.self_attn.head_dim).transpose(1, 2)
 
         else:
             gated, c = values
@@ -851,13 +1043,18 @@ def validate_native_state_layout(port, block):
             attn = port.layers[index].self_attn
             if payload['kind'] != 'attention' or payload['raw_k'].shape[1:] != (attn.k_proj.out_features // attn.head_dim, attn.head_dim):
                 raise ValueError('native state attention head layout disagrees with the consumer')
+        elif _is_gated_delta(port, index):
+            module = port.layers[index].linear_attn
+            expected = payload_widths(module)
+            if payload['kind'] != 'gated_delta' or any(payload[name].shape[1] != width for name, width in expected.items()):
+                raise ValueError('native state gated delta payload layout disagrees with the consumer')
         elif payload['kind'] != 'finite_convolution' or payload['gated_inputs'].shape[1] != port.layers[index].conv.conv.weight.shape[0]:
             raise ValueError('native state convolution channels disagree with the consumer')
 
 
 def splice_block(model, cache, block, *, checkpoint_sha256, tokenizer_fingerprint, embedding_weight_sha256, stop_gradient=False):
     """Append a verified native block with consumer-local positional encoding."""
-    from .lfm2_port import PortCache, ConvState, append_kv
+    from .lfm2_port import PortCache, ConvState, DeltaState, append_kv
     block.validate()
     if type(stop_gradient) is not bool:
         raise ValueError('native state stop_gradient must be boolean')
@@ -895,6 +1092,17 @@ def splice_block(model, cache, block, *, checkpoint_sha256, tokenizer_fingerprin
             if _fp32_kv_cotangents(port, raw_k):
                 rotated_k, v = rotated_k.float(), v.float()
             state = append_kv(previous, rotated_k, v, static=not torch.is_grad_enabled())
+        elif _is_gated_delta(port, i):
+            from .native_gated_delta import replay
+            module = port.layers[i].linear_attn
+            values = {name: payload[name].to(device=positions.device, dtype=port.embedding_weight.dtype)
+                      for name in PAYLOAD_FIELDS}
+            previous = cache.states[i]
+            _, conv_state, recurrent_state = replay(
+                module, values,
+                conv_prefix=previous.conv if isinstance(previous, DeltaState) else None,
+                recurrent_state=previous.recurrent if isinstance(previous, DeltaState) else None)
+            state = DeltaState(conv_state, recurrent_state)
         else:
             if payload['kind'] != 'finite_convolution':
                 raise ValueError('native state attention/convolution layout disagrees with the consumer')
@@ -928,7 +1136,9 @@ def concatenate_captures(chunks):
     for i, first in enumerate(chunks[0]['layers']):
         if any(chunk['layers'][i]['kind'] != first['kind'] for chunk in chunks):
             raise ValueError('native capture chunks have different layer kinds')
-        keys = ('raw_k', 'v') if first['kind'] == 'attention' else ('gated_inputs',)
+        keys = (('raw_k', 'v') if first['kind'] == 'attention' else
+                ('gated_inputs',) if first['kind'] == 'finite_convolution' else
+                PAYLOAD_FIELDS)
         layers.append({'kind': first['kind'], **{key: torch.cat([chunk['layers'][i][key] for chunk in chunks]) for key in keys}})
     result['layers'] = tuple(layers)
     return result
@@ -947,7 +1157,9 @@ def _external_layers(port, plan, external_blocks, external_identity):
     if blocks and not per_input_identity and (not isinstance(external_identity, dict) or set(external_identity) != identity_fields):
         raise ValueError('external identities must provide one exact four-field identity or exact per-input identities')
     result = []
-    kinds = tuple('attention' if port.is_attention(i) else 'finite_convolution' for i in range(port.num_layers))
+    kinds = tuple('attention' if port.is_attention(i) else
+                  'gated_delta' if _is_gated_delta(port, i) else 'finite_convolution'
+                  for i in range(port.num_layers))
     for name, count in zip(plan.external_names, plan.external_sizes):
         block = blocks[name]
         identity = external_identity[name] if per_input_identity else external_identity
@@ -970,6 +1182,13 @@ def _external_layers(port, plan, external_blocks, external_identity):
                 if payload['raw_k'].shape[1:] != (heads, attn.head_dim):
                     raise ValueError('external state attention head layout disagrees with the target decoder')
                 layers.append(tuple(payload[key].to(device=port.embedding_weight.device, dtype=torch.float32).transpose(0, 1)[None] for key in ('raw_k', 'v')))
+            elif _is_gated_delta(port, i):
+                module = port.layers[i].linear_attn
+                dims = payload_widths(module)
+                if payload['kind'] != 'gated_delta' or any(payload[name].shape[1] != size for name, size in dims.items()):
+                    raise ValueError('external state gated delta layout disagrees with the target decoder')
+                layers.append(tuple(payload[name].to(device=port.embedding_weight.device,
+                    dtype=port.embedding_weight.dtype)[None] for name in PAYLOAD_FIELDS))
             else:
                 if payload['kind'] != 'finite_convolution':
                     raise ValueError('external state layer kind disagrees with the decoder')

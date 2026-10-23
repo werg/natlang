@@ -487,6 +487,14 @@ function validateNativeState(metadata: NativeStateMetadata, tensors: Record<stri
       const name = `${prefix}gated_inputs`, shape = count(name, 2), tensor = tensors[name]!;
       if (shape[0] !== tokenShape[0]) throw new RangeError(`invalid native-state convolution layer ${index}`);
       expected.add(name); finite(name, tensor);
+    } else if (kind === 'gated_delta') {
+      const names = ['mixed_qkv', 'z', 'b', 'a'];
+      const shapes = names.map(name => {
+        const tensorName = `${prefix}${name}`, shape = count(tensorName, 2), tensor = tensors[tensorName]!;
+        if (shape[0] !== tokenShape[0]) throw new RangeError(`invalid native-state gated delta layer ${index}`);
+        expected.add(tensorName); finite(tensorName, tensor); return shape;
+      });
+      if (shapes[2]![1] !== shapes[3]![1]) throw new RangeError(`invalid native-state gated delta gates ${index}`);
     } else throw new RangeError(`unsupported native-state layer kind ${String(kind)}`);
   }
   if (Object.keys(tensors).length !== expected.size || Object.keys(tensors).some(name => !expected.has(name)))

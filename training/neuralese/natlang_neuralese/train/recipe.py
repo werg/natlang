@@ -222,7 +222,9 @@ def validate_stage_parameters(kind, parameters):
                 raise ValueError('unsupported native shared execution profile')
         if 'history_reasoning_policy' in parameters and parameters['history_reasoning_policy'] != 'keep':
             raise ValueError('history_reasoning_policy currently supports the explicit keep profile only')
-        if 'native_ordinary_precision' in parameters and parameters['native_ordinary_precision'] != 'fp32-norms-v1':
+        from ..model.native_parameter_precision import ORDINARY_PRECISION_PROFILES
+        if ('native_ordinary_precision' in parameters
+                and parameters['native_ordinary_precision'] not in ORDINARY_PRECISION_PROFILES):
             raise ValueError('unsupported native ordinary precision profile')
         if 'native_attention_precision' in parameters:
             from ..model.native_precision import NATIVE_ATTENTION_PRECISIONS
@@ -1474,11 +1476,12 @@ def direct_windowing_handoffs(old_recipe, new_recipe, out):
             continue
         before, after = parameters(old_recipe, old), parameters(new_recipe, stage)
         if kind in {'native_state_sft','native_state_rl','native_offline_preference'} and before.get('native_ordinary_precision') != after.get('native_ordinary_precision'):
+            from ..model.native_parameter_precision import ORDINARY_PRECISION_PROFILES
             if (before.get('native_ordinary_precision') is not None
-                    or after.get('native_ordinary_precision') != 'fp32-norms-v1'
+                    or after.get('native_ordinary_precision') not in ORDINARY_PRECISION_PROFILES
                     or not after.get('memory_qualification')
                     or after.get('memory_qualification') == before.get('memory_qualification')):
-                raise ValueError('handoff refused: norm storage upgrade requires its explicit FP32 profile and fresh restored-model memory qualification')
+                raise ValueError('handoff refused: norm storage upgrade requires its explicit FP32 ordinary-precision profile and fresh restored-model memory qualification')
         old_cotangent_backend = before.get('cotangent_accumulator_backend') or 'cpu_file'
         new_cotangent_backend = after.get('cotangent_accumulator_backend') or old_cotangent_backend
         if kind in {'native_state_sft','native_state_rl','native_offline_preference'} and old_cotangent_backend != new_cotangent_backend:

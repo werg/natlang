@@ -4,7 +4,10 @@ from __future__ import annotations
 import torch
 
 PROFILE = 'fp32-norms-v1'
-_NORMS = {'RMSNorm', 'Lfm2RMSNorm', 'Qwen2RMSNorm', 'Qwen3RMSNorm'}
+QWEN35_DELTA_PROFILE = 'fp32-norms-qwen35-delta-controls-v1'
+ORDINARY_PRECISION_PROFILES = (PROFILE, QWEN35_DELTA_PROFILE)
+_NORMS = {'RMSNorm', 'Lfm2RMSNorm', 'Qwen2RMSNorm', 'Qwen3RMSNorm',
+          'Qwen3_5RMSNorm', 'Qwen3_5RMSNormGated'}
 NORM_EXECUTIONS = ('source-v1', 'stable-v1')
 
 
@@ -60,7 +63,8 @@ def norm_parameters(model):
     """Exact per-layer norm inventory, excluding the frozen final readout norm."""
     found = {}
     for name, module in model.port.hf.named_modules():
-        if not name.startswith('model.layers.') or type(module).__name__ not in _NORMS:
+        if (not (name.startswith('model.layers.') or name.startswith('model.language_model.layers.'))
+                or type(module).__name__ not in _NORMS):
             continue
         weight = getattr(module, 'weight', None)
         if not isinstance(weight, torch.nn.Parameter) or weight.ndim != 1:
@@ -71,12 +75,57 @@ def norm_parameters(model):
     return found
 
 
+def qwen35_delta_control_parameters(model):
+    """FP32 masters for the low-dimensional recurrent dynamics controls."""
+    if getattr(model.port, 'architecture', None) != 'qwen3_5':
+        return {}
+    found = {}
+    for name, module in model.port.hf.named_modules():
+        if type(module).__name__ != 'Qwen3_5GatedDeltaNet':
+            continue
+        for suffix in ('A_log', 'dt_bias'):
+            parameter = getattr(module, suffix, None)
+            if not isinstance(parameter, torch.nn.Parameter) or parameter.ndim != 1:
+                raise ValueError('Qwen3.5 ordinary precision profile requires one-dimensional DeltaNet controls: '
+                                 + name + '.' + suffix)
+            found[name + '.' + suffix] = (module, parameter)
+    if not found:
+        raise ValueError('Qwen3.5 ordinary precision profile found no DeltaNet controls')
+    return found
+
+
+def ordinary_precision_parameters(model, profile):
+    values = norm_parameters(model)
+    if profile == QWEN35_DELTA_PROFILE:
+        values.update(qwen35_delta_control_parameters(model))
+    return values
+
+
+def ordinary_precision_state_dtypes(state, profile):
+    """Precision inventory for metadata-only checkpoint identity validation."""
+    selected = []
+    for name, value in state.items():
+        if not (name.startswith('model.layers.') or name.startswith('model.language_model.layers.')):
+            continue
+        ordinary_norm = name.endswith('norm.weight') and value.ndim == 1
+        delta_control = (profile == QWEN35_DELTA_PROFILE
+            and name.endswith(('.linear_attn.A_log', '.linear_attn.dt_bias')) and value.ndim == 1)
+        if ordinary_norm or delta_control:
+            selected.append(value.dtype)
+    return tuple(selected)
+
+
 def configure_norm_precision(model, profile):
-    """Apply an explicitly declared profile without allocating replacement Parameters."""
-    if profile != PROFILE:
+    """Apply an explicitly declared ordinary-parameter profile without replacing Parameters."""
+    if profile not in ORDINARY_PRECISION_PROFILES:
         raise ValueError('unsupported native ordinary precision profile: ' + str(profile))
     promoted = {}
-    for name, (module, parameter) in norm_parameters(model).items():
+    if profile == QWEN35_DELTA_PROFILE and getattr(model.port, 'architecture', None) != 'qwen3_5':
+        raise ValueError('Qwen3.5 DeltaNet precision profile requires a Qwen3.5 text backbone')
+    if profile == PROFILE and getattr(model.port, 'architecture', None) == 'qwen3_5':
+        raise ValueError('Qwen3.5 requires the FP32 DeltaNet controls precision profile')
+    norms = norm_parameters(model)
+    for name, (module, parameter) in ordinary_precision_parameters(model, profile).items():
         if parameter.dtype not in (torch.float32, torch.bfloat16, torch.float16):
             raise ValueError('native norm profile cannot promote gain dtype: ' + name)
         if parameter.dtype != torch.float32:
@@ -84,7 +133,7 @@ def configure_norm_precision(model, profile):
             with torch.no_grad():
                 parameter.data = parameter.detach().float()
                 torch.autograd.graph.increment_version(parameter)
-        if type(module).__name__ != 'RMSNorm' and not getattr(module, '_native_norm_output_cast', False):
+        if name in norms and type(module).__name__ != 'RMSNorm' and not getattr(module, '_native_norm_output_cast', False):
             module.register_forward_hook(_activation_dtype)
             module._native_norm_output_cast = True
     model.native_ordinary_precision = profile
@@ -111,8 +160,13 @@ def validate_norm_precision(model, config):
         raise ValueError('native norm storage differs from declared profile')
     if profile is not None:
         if hasattr(model.port, 'hf'):
-            dtypes = [p.dtype for _,p in norm_parameters(model).values()]
+            try:
+                values = ordinary_precision_parameters(model, profile)
+            except ValueError as exc:
+                raise ValueError('native ordinary precision profile cannot be validated') from exc
+            dtypes = [p.dtype for _,p in values.values()]
         else:
-            dtypes = getattr(model, '_native_norm_parameter_dtypes', ())
-        if profile != PROFILE or not dtypes or any(dtype != torch.float32 for dtype in dtypes):
+            dtypes = getattr(model, '_native_ordinary_parameter_dtypes',
+                             getattr(model, '_native_norm_parameter_dtypes', ()))
+        if profile not in ORDINARY_PRECISION_PROFILES or not dtypes or any(dtype != torch.float32 for dtype in dtypes):
             raise ValueError('native norm storage violates declared FP32 profile')
