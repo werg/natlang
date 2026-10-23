@@ -280,7 +280,7 @@ def _run_member(run_dir, task_id, sample):
     if (result.get('task',{}).get('program_ir')!=task or finish is None
             or result.get('outcome',{}).get('status') not in ('done','failed','quiesced')):
         raise ValueError('collector result, terminal journal and exact task packet disagree')
-    binding_path,expected_identity,runtime_sha=_collector_actor_binding(run_dir,preparation)
+    binding_path,expected_identity,runtime_sha,collector_runtime_sha=_collector_actor_binding(run_dir,preparation)
     for step in result.get('trajectory') or []:
         capture=((step.get('model_response') or {}).get('rl_sampling') or {})
         policy=capture.get('policy')
@@ -305,7 +305,7 @@ def _run_member(run_dir, task_id, sample):
         'result_sha256':sha256_file_hex_cached(result_path),'result_path':str(result_path),
         'finish_sha256':canonical_json_sha256_hex(finish),
         'collection_binding_sha256':sha256_file_hex_cached(binding_path),
-        'actor_runtime_sha256':runtime_sha}
+        'actor_runtime_sha256':runtime_sha,'collector_runtime_inventory_sha256':collector_runtime_sha}
     evaluator=Path(__file__).resolve().parents[1]/'eval/task_packet.py'
     evidence['evaluation_receipt']={'schema':'natlang.task-oracle-evaluation/1',
         **{key:evidence[key] for key in ('outcome','task_sha256','world_sha256','oracle_sha256',
@@ -322,6 +322,7 @@ def _collector_actor_binding(run_dir,preparation):
     path=Path(run_dir)/'collection-binding.json';value=json.loads(path.read_text())
     expected=value.get('expected_native_actor') or {};identity=expected.get('native_identity') or {}
     runtime=expected.get('python_runtime') or {};digest=runtime.get('sha256')
+    collector_runtime=value.get('runtime')
     if (value.get('schema')!='natlang.rl-collection-binding/1'
             or value.get('policy_id')!=preparation.get('policy_checkpoint_sha256')
             or identity.get('checkpoint_sha256')!=preparation.get('policy_checkpoint_sha256')
@@ -329,11 +330,14 @@ def _collector_actor_binding(run_dir,preparation):
             or type(runtime.get('files')) is not int or runtime['files']<1
             or not isinstance(digest,str) or len(digest)!=64
             or any(char not in '0123456789abcdef' for char in digest)
-            or not isinstance(value.get('runtime'),dict) or not value['runtime']):
+            or not isinstance(value.get('collector_sha256'),str) or len(value['collector_sha256'])!=64
+            or any(char not in '0123456789abcdef' for char in value['collector_sha256'])
+            or not isinstance(collector_runtime,dict) or not collector_runtime
+            or any(not isinstance(name,str) or not name.endswith('.js') or name.startswith('/') or '..' in Path(name).parts
+                or not isinstance(digest,str) or len(digest)!=64 or any(char not in '0123456789abcdef' for char in digest)
+                for name,digest in collector_runtime.items())):
         raise ValueError('collector binding lacks its exact native actor/runtime receipt')
-    if runtime['files']!=len(value['runtime']):
-        raise ValueError('collector runtime inventory count differs from its native actor receipt')
-    return path,identity,digest
+    return path,identity,digest,canonical_json_sha256_hex(collector_runtime)
 
 
 def _replay_rollout(rollout, *, identity, roles, fetch_block):

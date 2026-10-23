@@ -225,17 +225,30 @@ def test_objective_loader_rechecks_reference_receipt_custody(tmp_path):
         NativePreferenceObjective(path)
 
 
-def test_actual_collector_binding_supplies_native_checkpoint_and_runtime(tmp_path):
+def test_actual_collector_binding_keeps_python_and_typescript_runtime_inventories_distinct(tmp_path):
     path=tmp_path/'collection-binding.json'
     checkpoint='1'*64;identity={'architecture':'lfm2','checkpoint_sha256':checkpoint,
         'embedding_weight_sha256':'2'*64,'tokenizer_fingerprint':'3'*64}
-    runtime={'schema':'natlang.python-runtime/1','files':1,'sha256':'4'*64}
+    runtime={'schema':'natlang.python-runtime/1','files':337,'sha256':'4'*64}
     path.write_text(json.dumps({'schema':'natlang.rl-collection-binding/1','policy_id':checkpoint,
         'expected_native_actor':{'native_identity':identity,'python_runtime':runtime},
-        'runtime':{'serve/engine.py':'5'*64}}))
-    got_path,got_identity,got_runtime=_collector_actor_binding(tmp_path,{'policy_checkpoint_sha256':checkpoint})
+        'collector_sha256':'6'*64,'runtime':{'dist/runtime.js':'5'*64}}))
+    got_path,got_identity,got_runtime,collector_runtime=_collector_actor_binding(tmp_path,{'policy_checkpoint_sha256':checkpoint})
     assert got_path==path and got_identity==identity and got_runtime==runtime['sha256']
+    assert collector_runtime==canonical_json_sha256_hex({'dist/runtime.js':'5'*64})
     value=json.loads(path.read_text());value['expected_native_actor']['native_identity']['checkpoint_sha256']='6'*64
+    path.write_text(json.dumps(value))
+    with pytest.raises(ValueError,match='collector binding'):
+        _collector_actor_binding(tmp_path,{'policy_checkpoint_sha256':checkpoint})
+
+
+def test_actual_collector_binding_rejects_malformed_runtime_inventories(tmp_path):
+    path=tmp_path/'collection-binding.json';checkpoint='1'*64
+    value={'schema':'natlang.rl-collection-binding/1','policy_id':checkpoint,
+        'expected_native_actor':{'native_identity':{'architecture':'lfm2','checkpoint_sha256':checkpoint,
+            'embedding_weight_sha256':'2'*64,'tokenizer_fingerprint':'3'*64},
+            'python_runtime':{'schema':'natlang.python-runtime/1','files':337,'sha256':'4'*64}},
+        'collector_sha256':'5'*64,'runtime':{'../escape.js':'6'*64}}
     path.write_text(json.dumps(value))
     with pytest.raises(ValueError,match='collector binding'):
         _collector_actor_binding(tmp_path,{'policy_checkpoint_sha256':checkpoint})
