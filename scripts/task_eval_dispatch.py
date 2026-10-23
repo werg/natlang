@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
-"""Dispatch the asynchronous in-run task evaluations (eval/task_cadence.py ``task_eval.async``; coordinator
-2026-10-13): each request a trainer leaves in ``<stage>/task-eval/async/step-N/`` becomes its own resumable ledger unit
-(medium priority) that restores the step's weights-only snapshot, runs the held subset and appends its row to the
-stage's task-eval.jsonl. The trainer runs in a container without the host's systemd, so launching is this host-side
-dispatcher's job.
+"""Dispatch checkpoint-addressed native task evaluations.
+
+The native async service publishes each admitted export as a request under
+``<stage>/task-eval/async/``. This host-side dispatcher turns requests into
+resumable ledger units that restore the exact native checkpoint, run the held
+subset, and append its row to the stage's task-eval.jsonl. Learners run in a
+container without the host's systemd, so launching is this dispatcher's job.
 
   .venv-neuralese/bin/python scripts/task_eval_dispatch.py --once         # one pass over the request queue
   .venv-neuralese/bin/python scripts/task_eval_dispatch.py --every 120    # keep dispatching (a small ledger service)
 
-Requests are found through the pointers the trainer writes to ``<data_nvme>/task-eval-queue`` (eval/task_cadence.py
-``request_queue``), never by walking runs/ (minutes on the DGX).
+Requests are found through pointers written to ``<data_nvme>/task-eval-queue``
+(``eval/task_cadence.request_queue``), never by walking runs/ (minutes on the DGX).
 
 Crisp plumbing (process launch, retry count). Optional --native-export-state ingestion uses the existing verified
 private CoreWeave LFM periodic export and owner-host ferry to seal a native request on this machine. New exports

@@ -607,8 +607,7 @@ ASYNC_SCHEMA = 'natlang.in-run-task-eval-request/1'
 
 
 def request_queue() -> Path:
-    """Pointers to every pending asynchronous request on this machine (``<data_nvme>/task-eval-queue``), so the
-    dispatcher never walks the runs tree (minutes on the DGX)."""
+    """Pointers to pending native async task evaluations, so the dispatcher never walks the runs tree."""
     from ..common.paths import root as logical_root
     return logical_root('data_nvme') / 'task-eval-queue'
 
