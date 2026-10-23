@@ -1320,19 +1320,25 @@ def _main(argv=None, *, requested_refresh):
         spec_sha256 = sha256_file_hex_cached(args.objective_spec)
         objective_binding = {'path': str(args.objective_spec.resolve()), 'sha256': spec_sha256}
         spec = json.loads(args.objective_spec.read_text())
-        if spec.get('schema')=='natlang.native-offline-pairwise-objective/1' and spec.get('kind')=='native-offline-pairwise':
+        if ((spec.get('schema')=='natlang.native-offline-pairwise-objective/1' and spec.get('kind')=='native-offline-pairwise')
+                or (spec.get('schema')=='natlang.native-failure-repair-dpo-objective/1'
+                    and spec.get('kind')=='native-failure-repair-dpo')):
             from .native_preference import NativePreferenceObjective
             objective=NativePreferenceObjective(args.objective_spec,beta=args.preference_beta,margin=args.preference_margin)
-            objective_binding.update(kind=objective.kind,beta=objective.beta,margin=objective.margin)
+            objective_binding.update(objective.binding())
         else:
             if spec.get('schema') != 'natlang.native-policy-objective/1' or spec.get('kind') != 'native-policy':
-                raise ValueError('native objective spec must declare an implemented native policy or offline pairwise objective')
+                raise ValueError('native objective spec must declare an implemented native policy or offline preference objective')
             from ..rl.native_replay import NativePolicyObjective
             objective = NativePolicyObjective(args.objective_spec)
             if parent_continuation:
                 actual = native_identity(model, config, checkpoint_sha256=sha256_file_hex_cached(args.continue_from))
                 if objective.identity != actual:
                     raise ValueError('native policy objective differs from the actual loaded actor embedding/checkpoint identity')
+    if getattr(objective,'mode',None)=='failure_repair_dpo':
+        if set(objective.rows)!=set(source_row_bindings):
+            raise ValueError('DPO objective rows must bind every and only admitted whole-graph training pair')
+        checkpoint_options['failure_repair_objective_row_bindings']=objective.row_bindings()
     mandatory_objective=bool(getattr(objective,'mandatory_progress',False))
     policy_operation=objective is not None and not mandatory_objective
     held_objective=objective if mandatory_objective else None
@@ -1425,6 +1431,13 @@ def _main(argv=None, *, requested_refresh):
         if mandatory_objective:
             checkpoint_options['_objective_required_visits']=dict((resume.get('options') or {}).get('_objective_required_visits') or {})
             checkpoint_options['offline_objective_revisions']=list((resume.get('options') or {}).get('offline_objective_revisions') or [])
+        if getattr(objective,'mode',None)=='failure_repair_dpo':
+            prior=(resume.get('options') or {}).get('failure_repair_objective_row_bindings')
+            if prior is None:
+                if parent_continuation:
+                    raise ValueError('DPO continuation lacks exact prior objective row custody')
+            else:
+                append_only_rows(prior,objective.row_bindings(),label='failure-repair DPO objective')
         checkpoint_options['source_predecessors'] = continuation_predecessors(resume,
             {role: getattr(args, role) for role in ('continued_native_graphs', 'continued_held_native_graphs')},
             stage_id=args.stage_id or 'native-graph-ce')
