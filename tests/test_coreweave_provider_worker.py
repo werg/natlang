@@ -404,8 +404,13 @@ def test_metadata_environment_precedes_dependency_import_and_cpu_loader(tmp_path
         else read_text(path,*a,**kw))
     monkeypatch.delenv('PROVIDER_CACHE_TEST',raising=False)
     code=client.dependency_code('worker').replace(root,str(tmp_path))
-    try:exec(code,{})
-    finally:os.environ.pop('PROVIDER_CACHE_TEST',None)
+    # This body runs in a remote interpreter in production. Execute it in a
+    # separate interpreter here too: its declared env/sys.path must not leak
+    # into the rest of this pytest process.
+    environment=dict(os.environ)
+    result=subprocess.run([sys.executable,'-I','-c',code],capture_output=True,text=True)
+    assert result.returncode==0,result.stderr
+    assert dict(os.environ)==environment
 
 
 @pytest.mark.parametrize('large',[False,True])

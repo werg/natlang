@@ -90,7 +90,7 @@ def _successor_fixture(tmp_path, *, bad_accounting=False):
 
 
 def test_exact_historical_helper_receipt_remains_verifiable():
-    root = Path(str(machine_paths.resolve('repo')))
+    root = Path(__file__).resolve().parents[1]
     execution = {"helper_continuation": custody.LEGACY_OBSERVATION,
                  "converter": _builder(root)}
     assert custody.verify_helper_continuation(
