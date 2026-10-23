@@ -529,6 +529,11 @@ def make_handler(engine: Engine):
                 rl_capture=bool(body.get('x_natlang_rl_capture', False) or body.get('x_natlang_native_recording', False)),
                 native_recording=bool(body.get('x_natlang_native_recording', False)),
                 native_state_modes=body.get('x_natlang_native_state_modes'),
+                # Resolve this exact binding in Engine._native_run. Passing
+                # even an empty list is meaningful: HTTP has already applied
+                # the declared policy/defaults and must not inherit local
+                # native_default_adapters a second time.
+                adapters=body.get('x_natlang_adapters'),
                 guidance=Settings.of(body.get("guidance", getattr(engine, "default_guidance", None)), body.get("tools"),
                                      body.get("tool_choice")))
             if body.get("stream"):

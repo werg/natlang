@@ -257,7 +257,7 @@ declare module 'natlang:learning' {
   export function withSystemPrompts<T>(prompts: Record<string, Neuralese<string>>, fn: () => Promise<T> | T): Promise<T>;
   export const nativeAdapters: {
     create(nativeIdentity: { architecture: string; checkpoint_sha256: string; tokenizer_fingerprint: string; embedding_weight_sha256: string },
-      options: { parameterNames: string[]; kind?: 'xs' | 'tiny'; rank?: number; u?: number; seed?: number }): Promise<NativeAdapter>;
+      options: { parameterNames: string[]; kind?: 'xs'; rank?: number; seed?: number }): Promise<NativeAdapter>;
     ref(id: string): NativeAdapter;
   };
   export function trajectory(run: Promise<unknown> | (() => Promise<unknown>)): Promise<Trajectory>;

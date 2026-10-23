@@ -777,8 +777,8 @@ export function createLearning(explicit?: LearningService, options: { library?: 
     },
     /** Explicit constructors and optimizer updates for exact-base named native coefficient artifacts. */
     nativeAdapters: {
-      create: async (nativeIdentity: NativeModelIdentity, options: { parameterNames: string[]; kind?: 'xs' | 'tiny';
-          rank?: number; u?: number; seed?: number }) => {
+      create: async (nativeIdentity: NativeModelIdentity, options: { parameterNames: string[]; kind?: 'xs';
+          rank?: number; seed?: number }) => {
         const active = service('nativeAdapters.create');
         if (!active.store) throw new LearningError('learning-native-state-store', 'native adapter creation requires an archived tensor store');
         const artifact = await nativeAdapterCreate(active.endpoint, active.store, { nativeIdentity, ...options, headers: active.headers });
@@ -859,7 +859,12 @@ export function createLearning(explicit?: LearningService, options: { library?: 
     async trajectory<T>(run: Promise<T> | (() => Promise<T>)): Promise<Trajectory> {
       const rec = recorder('trajectory');
       await settle(run);
-      return { id: `trajectory-${++trajectories}`, turns: rec.claim() };
+      const claimed = rec.claim();
+      // Preserve exact native execution-graph bindings alongside sampling
+      // captures. Objectives consume this trajectory after the recorder closes.
+      const native = new Map(rec.nativeTurns().map(turn => [turn.native!.id, turn]));
+      return { id: `trajectory-${++trajectories}`, turns: claimed.map(turn =>
+        turn.native ? native.get(turn.native.id) ?? turn : turn) };
     },
     optimizers: {
       sgd: (options: { lr: number; momentum?: number; weightDecay?: number }) => optimizer(() => service('optimizers.sgd'), 'sgd', options),
