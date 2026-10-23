@@ -50,8 +50,8 @@ assert.ok(loaded.nativeTensors.size>=3,'coefficients, exact bases, optimizer con
 await portable.collect(new Set([adapter.id,state]));
 assert.ok(await portable.has(adapter.metadata.source_artifact_id));
 // Drop remote data, reopen the durable archive and restore from the portable file.
-await driver.blocks.collect(new Set());
-assert.equal(await driver.blocks.has(adapter.id),false);
+await driver.artifacts.collect(new Set());
+assert.equal(await driver.artifacts.has(adapter.id),false);
 assert.deepEqual(await restoreNativeTensorArtifacts(endpoint,portable,[adapter.id,state]),[]);
 const reopened=await FileNeuraleseStore.open(archive,{residentBytes:0});
 const again=neuraleseServerModelTurn({endpoint,model:'native-fixture',store:reopened});

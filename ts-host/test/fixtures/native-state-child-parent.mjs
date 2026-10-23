@@ -37,8 +37,8 @@ assert.ok(write?.native_identity, 'native producer is recorded through the share
 assert.equal(child.lam.return.$neuralese.source_occurrence,write.node,'typed references retain this exact producer occurrence');
 const reopened = await FileNeuraleseStore.open(archive, { residentBytes: 0 });
 assert.equal((await reopened.getNativeState(id)).id, id);
-assert.deepEqual(await server.blocks.collect(new Set()), [id]);
-assert.equal(await server.blocks.hasNativeState(id), false, 'parent must restore exact native state from its persistent archive');
+assert.deepEqual(await server.artifacts.collect(new Set()), [id]);
+assert.equal(await server.artifacts.hasNativeState(id), false, 'parent must restore exact native state from its persistent archive');
 const parent = open({ type: '(memo: Neuralese<string>) => string', instructions: 'Consume the child memo.',
   args: { memo: child.lam.return } }, { neuralese }).session;
 await new NativeToolAgent(driver, { maxTurns: 2, neuralese }).run(parent);
