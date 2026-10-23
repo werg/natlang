@@ -250,33 +250,15 @@ def test_training_exposure_survives_noop_resume_and_uncommitted_log_tail(tmp_pat
         'target_tokens': 6, 'supervised_tokens': 8}
 
 
-def test_configure_retains_declared_task_quality_cadence(tmp_path, monkeypatch):
-    from types import SimpleNamespace
-    from natlang_neuralese.train import checkpoint_policy, direct_sft, recipe
-    parent = tmp_path / 'checkpoint.pt'; parent.write_bytes(b'full')
-    declared = tmp_path / 'recipe.json'; declared.write_text('{}')
-    state = {'schema': direct_sft.SCHEMA, 'optimizer': {}, 'neuralese_projection': {},
-             'identity': {'options': {'optimizer': 'muon', 'text_data': 'registered-train'}}}
-    monkeypatch.setattr(checkpoint_policy.CheckpointPolicy, 'load', lambda path: state)
-    parameters = {'task_eval': {'cases': 'registered-held-tasks'}, 'task_eval_every': 250,
-                  'checkpoint_every': 100, 'checkpoint_layers': True}
-    monkeypatch.setattr(recipe, 'resolve_recipe_data', lambda path: {'stages': [
-        {'id': 'mixed', 'kind': 'neuralese_direct', 'parameters': parameters}]})
-    args = SimpleNamespace(checkpoint=parent, production_recipe=declared, production_stage='mixed',
-        config=tmp_path / 'config.json', model='lfm', port=8097, **{key: tmp_path / key
-        for key in ('heads', 'base', 'cases', 'held_text_data', 'runtime', 'out')})
-    production.configure(args)
-    saved = json.loads(args.config.read_text())
-    assert saved['trainer_parameters']['task_eval_every'] == 250
-    assert saved['trainer_parameters']['task_eval'] == parameters['task_eval']
-    assert saved['trainer_parameters']['checkpoint_layers'] is True
-    assert saved['production_stage'] == 'mixed'
-    actor, learner = saved['actor_command'], saved['learner_command']
-    assert actor[actor.index('--prompt-rendering') + 1] == 'full'
-    assert learner[learner.index('--rl-prompt-rendering') + 1] == 'full'
-    state['optimizer'] = None
-    with pytest.raises(ValueError, match='optimizer state'):
-        production.configure(args)
+@pytest.mark.parametrize('legacy_flag', ['--heads', '--held-text-data', '--native-state'])
+def test_rl_production_configure_rejects_retired_projected_selector(tmp_path, legacy_flag):
+    with pytest.raises(SystemExit) as error:
+        production.main(['configure', '--model', 'lfm', '--checkpoint', str(tmp_path/'c'),
+            '--base', str(tmp_path/'b'), '--cases', str(tmp_path/'cases'), '--runtime', str(tmp_path/'r'),
+            '--out', str(tmp_path/'out'), '--config', str(tmp_path/'config'),
+            '--production-recipe', str(tmp_path/'recipe'), '--production-stage', 'native',
+            legacy_flag, str(tmp_path/'legacy')])
+    assert error.value.code == 2
 
 
 @pytest.mark.parametrize('legacy_empty_snapshot', [False, True])

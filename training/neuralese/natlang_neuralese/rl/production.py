@@ -528,6 +528,8 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
     config_path = Path(config_path)
     from ..train.recipe import resolve_recipe_data
     initial = resolve_recipe_data(config_path)
+    if initial.get('native_state') is not True:
+        raise ValueError('RL production requires a native shared-state actor and graph learner configuration')
     control = RunControl(stop) if stop is not None else None
     out = Path(initial['out']).resolve()
     out.mkdir(parents=True, exist_ok=True)
@@ -549,6 +551,8 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
                 write_json_durable(state_path, state)
                 return state
             config = resolve_recipe_data(config_path)
+            if config.get('native_state') is not True:
+                raise ValueError('RL production hot reload cannot switch away from the native shared-state actor')
             if state.get('pending_semantic_source'):
                 if defer_native_refresh:return state
                 from .native_semantic_route import publish_pending
@@ -723,47 +727,19 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
                 write_json_durable(state_path, state)
                 raise RuntimeError('RL collector infrastructure failed; repair and retry retained round with fresh attempt')
             from .native_semantic_route import has_semantic_inputs
-            semantic_batch=bool(config.get('native_state') and has_semantic_inputs(rows))
-            if report.get('scored') == report.get('successes') and not config.get('native_state'):
-                state.update(round=state['round'] + 1, offset=(selection[-1]['row'] + 1) % len(cases),
-                             phase='collect', collection_attempt=0)
-                write_json_durable(state_path, state)
-                completed += 1
-                continue  # Legacy relative-only path; native successes use positive whole-episode RFT below.
+            semantic_batch=bool(has_semantic_inputs(rows))
             rft_stages = ['all']
             if report['groups_with_spread']:
                 mode = 'grpo'
             else:
-                if config.get('native_state'):
-                    if any((row.get('reward') or {}).get('quality') == 1 for row in rows):
-                        mode = 'rft'
-                    elif config.get('seed_command'):
-                        mode = 'seed'
-                    else:
-                        raise RuntimeError('native RL flat failures require the declared verified whole-graph seed source')
+                if any((row.get('reward') or {}).get('quality') == 1 for row in rows):
+                    mode = 'rft'
+                elif config.get('seed_command'):
+                    mode = 'seed'
                 else:
-                    # Reuse existing verified successful teachers when the student
-                    # has no spread; never convert infrastructure failures to zero.
-                    from .stage import select_rft_documents
-                    seeds = [r for path in config.get('teacher_rollouts', []) for r in read_jsonl(path)]
-                    if any(r.get('split') != 'train' for r in seeds):
-                        raise ValueError('production RFT seeds must explicitly bind a train split')
-                    merged = rows + seeds
-                    docs, _ = select_rft_documents(merged, max_success_rate=.99, held_fraction=0. if config.get('held_text_data') else .125)
-                    if any(d['split'] == 'train' for d in docs) and (config.get('held_text_data') or any(d['split'] == 'test' for d in docs)):
-                        mode = 'rft'
-                        from .stage import document_has_values
-                        kinds = {document_has_values(doc) for doc in docs if doc['split'] == 'train'}
-                        rft_stages = (['text', 'value'] if len(kinds) > 1 else ['value' if True in kinds else 'text'])
-                        rft_file = round_dir / 'rft-rollouts.jsonl'
-                        rft_file.write_text(''.join(json.dumps(r) + '\n' for r in merged))
-                        values['rollouts'] = str(rft_file)
-                    elif config.get('seed_command'):
-                        mode = 'seed'
-                    else:
-                        state.update(phase='needs_verified_seed_data', reason='no usable policy-gradient spread or RFT successes')
-                        write_json_durable(state_path, state)
-                        raise RuntimeError('RL needs verified successful seed trajectories; continue declared SFT seed stage')
+                    state.update(phase='needs_verified_seed_data', reason='no usable policy-gradient spread or RFT successes')
+                    write_json_durable(state_path, state)
+                    raise RuntimeError('native RL needs a verified whole-graph seed source when no sampled success is available')
             if state.get('active_update_round') == str(round_dir):
                 mode = state['update_mode']
                 values['rollouts'] = state['update_rollouts']
@@ -835,7 +811,7 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
                 data_path = stage_out / 'rl-objective.json'
                 if mode == 'grpo' and data_path.exists():
                     trained_ids.update(d['task_id'] for d in json.loads(data_path.read_text())['documents'] if d['split'] == 'train')
-                if mode == 'rft' or (config.get('native_state') and mode == 'grpo'):
+                if mode in {'rft', 'grpo'}:
                     receipt = json.loads((stage_out / 'rl-data-receipt.json').read_text())
                     trained_ids.update(d['task_id'] for d in receipt['tasks_selected'] if d['split'] == 'train')
                 accounted = set(state.get('accounted_stages', []))
@@ -856,7 +832,7 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
                               continue_monitor_reference=str(stage_out / 'monitor-reference.pt'))
             if pending:
                 continue
-            if config.get('native_state') and config.get('semantic_adapter') and not (config.get('coefficient_policy') and mode!='seed'):
+            if config.get('semantic_adapter') and not (config.get('coefficient_policy') and mode!='seed'):
                 state.update(phase='awaiting_semantic_refresh', pending_native_checkpoint=str(checkpoint),
                              pending_native_round_dir=str(round_dir))
                 write_json_durable(state_path, state)
@@ -901,7 +877,7 @@ def actor_runtime_configuration(repository):
     """The shared factory's exact serving entry, environment and Python closure."""
     from ..common.runtime_inventory import python_runtime_binding
     repository = Path(repository).resolve(strict=True)
-    if not (repository/'scripts/neuralese_data/serve_direct_checkpoint.py').is_file():
+    if not (repository/'scripts/neuralese_data/serve_native_checkpoint.py').is_file():
         raise ValueError('native actor runtime requires its actual serving entry point')
     return {'native_actor_python_runtime': python_runtime_binding(repository/'training/neuralese/natlang_neuralese'),
             'actor_environment': {'NATLANG_REPO': str(repository),
@@ -912,7 +888,7 @@ def bind_actor_runtime_command(command, repository):
     """Retarget the declared native Python entry while preserving actor args.
 
     A runtime handoff changes an executable code root, not just environment
-    metadata. Only the known direct-checkpoint entry point is relocatable here;
+    metadata. Only the known native-checkpoint entry point is relocatable here;
     custom provider commands keep their own owner and must be rebound explicitly.
     """
     import re
@@ -927,9 +903,9 @@ def bind_actor_runtime_command(command, repository):
         raise ValueError('native actor runtime cannot reinterpret a custom actor command')
     cursor+=1
     while cursor<len(actor)and actor[cursor]in('-u','-B'):cursor+=1
-    suffix='/scripts/neuralese_data/serve_direct_checkpoint.py'
+    suffix='/scripts/neuralese_data/serve_native_checkpoint.py'
     if cursor>=len(actor)or not actor[cursor].endswith(suffix):
-        raise ValueError('native actor runtime cannot reinterpret a custom actor command without its direct-checkpoint entry point')
+        raise ValueError('native actor runtime cannot reinterpret a custom actor command without its native-checkpoint entry point')
     actor[cursor]=str(repository)+suffix
     environment=actor_runtime_configuration(repository)['actor_environment']
     for index,value in enumerate(actor):
@@ -1036,8 +1012,8 @@ def configure_native(args):
         'task_curriculum': DEFAULT_TASK_CURRICULUM.copy(),
         'neuralese_server': True, 'trainer_parameters': parameters,
         'production_recipe': str(args.production_recipe.resolve()), 'production_stage': args.production_stage,
-        'actor_command': [python, str(actor_repo/'scripts/neuralese_data/serve_direct_checkpoint.py'),
-            '--native-state', '--store-dir', '{out}/actor-store',
+        'actor_command': [python, str(actor_repo/'scripts/neuralese_data/serve_native_checkpoint.py'),
+            '--store-dir', '{out}/actor-store',
             '--checkpoint', '{checkpoint}', '--checkpoint-sha256', '{policy_id}',
             '--base', '{base}',
             *(['--native-participant', '{native_participant}',
@@ -1110,81 +1086,8 @@ def configure_native(args):
 
 
 def configure(args):
-    if getattr(args, 'native_state', False):
-        return configure_native(args)
-    if args.heads is None or args.held_text_data is None:
-        raise ValueError('legacy projected configuration requires --heads; new production uses --native-state')
-    """Inherit actual production trainer options, never invent a new optimizer."""
-    from ..train.checkpoint_policy import CheckpointPolicy
-    from ..common.hashing import sha256_file_hex
-    from ..train.direct_sft import SCHEMA, OPERATIONAL
-    state = CheckpointPolicy.load(args.checkpoint)
-    if state.get('schema') != SCHEMA:
-        raise ValueError('RL requires a direct_sft/mixed checkpoint; standalone trajectories needs explicit conversion')
-    from ..train.checkpoint_offload import require_optimizer
-    from ..train.recipe import resolve_recipe_data, effective_stage_parameters
-    require_optimizer(state, args.checkpoint)
-    if state.get('optimizer') is None:
-        raise ValueError('RL continuation requires the full optimizer state')
-    recipe = resolve_recipe_data(args.production_recipe)
-    stages = [stage for stage in recipe['stages'] if stage['id'] == args.production_stage]
-    if len(stages) != 1 or stages[0]['kind'] != 'neuralese_direct':
-        raise ValueError('production stage must name an existing neuralese_direct stage')
-    declared = effective_stage_parameters(stages[0], [], recipe)
-    options = (state.get('identity') or {}).get('options') or {}
-    if options.get('family'):
-        raise ValueError('RL family-member KD unsupported: declare a full-model continuation first')
-    if state.get('neuralese_projection') is None:
-        raise ValueError('value RL requires the declared direct mixed stage first (existing e2e_mix addition)')
-    removed = OPERATIONAL | {'heads', 'out', 'records', 'pieces', 'text_data', 'continued_text_data',
-        'steps', 'epochs', 'e2e_mix', 'rl_objective', 'objective_continuation', 'family', 'recovery_selection'}
-    parameters = {key: value for key, value in options.items() if key not in removed and value is not None}
-    # Identity excludes operational settings: inherit quality/runtime controls from the actual recipe.
-    excluded = (removed - OPERATIONAL) | {'base', 'out', 'steps', 'continue_from', 'continue_identity', 'continue_monitor_reference',
-        'stop_at', 'plan_only', 'plan_out', 'handoff', 'fresh_monitor_reference'}
-    parameters.update({key: value for key, value in declared.items()
-                       if key in OPERATIONAL and key not in excluded and value is not None})
-    if not parameters.get('task_eval') or not parameters.get('task_eval_every'):
-        raise ValueError('production recipe must declare real task_eval and task_eval_every')
-    parameters.update(epochs=1, window_execution='sequential', batch=1, sdpa_backend='flash',
-                      save_state=True, base=str(args.base.resolve()))
-    repo = str(root('repo'))
-    python = sys.executable
-    endpoint = f'http://127.0.0.1:{args.port}'
-    config = {'schema': 'natlang.rl-production-config/1', 'id': 'rl-' + args.model,
-        'production_recipe': str(args.production_recipe.resolve()),
-        'production_recipe_sha256': sha256_file_hex(args.production_recipe),
-        'production_stage': args.production_stage,
-        'model': args.model, 'out': str(args.out.resolve()), 'checkpoint': str(args.checkpoint.resolve()),
-        'heads': str(args.heads.resolve()), 'base': str(args.base.resolve()),
-        'cases': str(args.cases.resolve()), 'held_text_data': str(args.held_text_data.resolve()),
-        'runtime': str(args.runtime.resolve()), 'endpoints': [endpoint], 'rows_per_round': 32,
-        'group': 4, 'workers': 4, 'neuralese_server': True, 'trainer_parameters': parameters,
-        'teacher_rollouts': [str(root('repo') / 'runs/rl-verified-cross-model-seed-20261015-v1/mellum-rollouts.jsonl')],
-        'actor_command': [python, repo + '/scripts/neuralese_data/serve_direct_checkpoint.py',
-            '--checkpoint', '{checkpoint}', '--checkpoint-sha256', '{policy_id}',
-            '--heads', '{heads}', '--heads-sha256', '{heads_sha256}', '--base', '{base}',
-            '--neuralese', '--prompt-rendering', 'full', '--sdpa-backend', 'flash', '--port', str(args.port)],
-        'learner_command': [python, '-m', 'natlang_neuralese.rl.stage', '--rollouts', '{rollouts}',
-            '--rl-tokenizer', '{base}', '--rl-mode', '{mode}', '--rft-document-kind', '{rft_document_kind}',
-            '--rl-policy-id', '{policy_id}', '--rl-prompt-rendering', 'full',
-            '--rl-block-bundle', '{block_bundle}', '--rl-held-text-data', '{held_text_data}',
-            '--heads', '{heads}', '--continue-from', '{checkpoint}', '--continue-identity', '{continue_identity}',
-            '--continue-monitor-reference', '{continue_monitor_reference}', '--out', '{learner_out}', '{trainer_args}']}
-    source_args = []
-    for key in ('text_data', 'records', 'pieces'):
-        if options.get(key):
-            source_args += ['--' + key.replace('_', '-'), str(options[key])]
-    if source_args:
-        config['seed_command'] = [python, '-m', 'natlang_neuralese.train.direct_sft', *source_args,
-            '--heads', '{heads}', '--continue-from', '{checkpoint}', '--continue-identity', '{continue_identity}',
-            '--continue-monitor-reference', '{continue_monitor_reference}', '--out', '{learner_out}',
-            '--fresh-monitor-reference', '{trainer_args}']
-        if options.get('e2e_mix'):
-            config['seed_command'] += ['--e2e-mix', json.dumps(options['e2e_mix'])]
-    state = None
-    write_json_durable(args.config, config)
-    print(json.dumps({'config': str(args.config), 'model': args.model, 'launched': False}))
+    """Build the native-state-only shared production controller configuration."""
+    return configure_native(args)
 
 
 def main(argv=None):
@@ -1203,13 +1106,10 @@ def main(argv=None):
     c.add_argument('--workers', type=int, default=4)
     c.add_argument('--runtime', type=Path)
     c.add_argument('--coefficient-policy',type=Path)
-    g = sub.add_parser('configure', help='bind shared local/CoreWeave loop to an exact mixed production checkpoint')
+    g = sub.add_parser('configure', help='bind shared learner loop to an exact native production checkpoint')
     g.add_argument('--model', choices=['lfm', 'mellum'], required=True)
     for key in ('checkpoint', 'base', 'cases', 'runtime', 'out', 'config'):
         g.add_argument('--' + key, type=Path, required=True)
-    g.add_argument('--held-text-data', type=Path)
-    g.add_argument('--heads', type=Path)
-    g.add_argument('--native-state', action='store_true')
     g.add_argument('--actor-runtime', type=Path, help='existing immutable native actor repository; does not change the learner runtime')
     g.add_argument('--native-participant')
     g.add_argument('--coefficient-policy',type=Path)

@@ -747,12 +747,12 @@ def test_runtime_configuration_requires_exact_future_global_and_rebinds_factory_
     target_path=tmp_path/'future-global.json';write(target_path,target)
     from natlang_neuralese.rl import production,native_bootstrap_metadata
     actor_root=Path(package).parents[2]
-    actor_entry=actor_root/'scripts/neuralese_data/serve_direct_checkpoint.py'
+    actor_entry=actor_root/'scripts/neuralese_data/serve_native_checkpoint.py'
     actor_entry.parent.mkdir(parents=True,exist_ok=True);actor_entry.write_text('# selected actor runtime')
     actor_environment={'NATLANG_REPO':str(actor_root),
         'PYTHONPATH':str(actor_root/'training/neuralese')+':'+str(actor_root)}
     actor_command=['env','NATLANG_REPO='+str(actor_root),'PYTHONPATH='+actor_environment['PYTHONPATH'],
-        'python',str(actor_entry),'--native-state','--preserved-arg','yes']
+        'python',str(actor_entry),'--port','8123']
     monkeypatch.setattr(production,'actor_runtime_configuration',lambda repository:{'actor_command':actor_command.copy(),
         'actor_environment':actor_environment,'native_actor_python_runtime':{'exact':'new-runtime'}})
     monkeypatch.setattr(native_bootstrap_metadata,'save',lambda *a:None)

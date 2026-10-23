@@ -195,8 +195,8 @@ def test_actual_managed_actor_policy_cli_and_durable_restart(tmp_path,family):
     fixture=tmp_path/'runtime-fixture.json'
     fixture.write_text(json.dumps({'runtime':expected,'handle':actor.id,'current':changed.id,
                                   'defaults':[{'id':changed.id,'scale':1}]}))
-    command=[sys.executable,str(Path(__file__).resolve().parents[2]/'scripts/neuralese_data/serve_direct_checkpoint.py'),
-        '--native-state','--checkpoint',engine.native_checkpoint,
+    command=[sys.executable,str(Path(__file__).resolve().parents[2]/'scripts/neuralese_data/serve_native_checkpoint.py'),
+        '--checkpoint',engine.native_checkpoint,
         '--checkpoint-sha256',sha256_file_hex_cached(engine.native_checkpoint),
         '--coefficient-policy',str(policy),'--coefficient-policy-sha256',sha256_file_hex_cached(policy),
         '--device',str(engine.device),'--port','0','--store-dir',str(tmp_path/'durable-store')]

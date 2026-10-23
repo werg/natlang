@@ -181,7 +181,7 @@ broad-suite validation; none was duplicated here.
 ## Full-graph RL actor deployment
 
 The existing `rl.production.configure_native` actor already executes
-`serve_direct_checkpoint.py --native-state` → `load_native_engine` → the shared
+`serve_native_checkpoint.py` → `load_native_engine` → the shared
 `native_step`, adapter, attention and routed/linear kernels above. Both raw-state
 and shared-semantic modes use this path. The learner remains the shared native
 trainer/objective; the inference-only guards leave its gradients and replay
