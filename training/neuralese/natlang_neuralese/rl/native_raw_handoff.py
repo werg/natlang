@@ -763,47 +763,11 @@ def _external_recipe_plans(record, old_plan, recipes):
 
 
 def _package_recipe_plans(package, code, recipes, device):
-    """Replay exact historical reader code in an isolated CPU import context.
-
-    Reader dependencies are part of the original metadata plan. Changing their
-    implementation is legitimate future work, never an excuse to reinterpret
-    an earned historical plan with today's implementation.
-    """
-    import os
-    import subprocess
-    import sys
-    from ..train.native_resident import code_inventory
-    package = Path(package).resolve(strict=True)
-    if code_inventory(package) != code:
-        raise ValueError('historical recipe runtime differs from declared code')
-    root = package.resolve().parents[2]
-    program = '''import sys,json
-from pathlib import Path
-package=Path(sys.argv[1]);sys.path[:0]=[str(package.parent),str(package.parents[2])]
-from natlang_neuralese.rl.native_raw_handoff import _recipe_plan
-from natlang_neuralese.train.native_readiness import _bound
-request=json.load(sys.stdin)
-print(json.dumps([_recipe_plan(_bound(ref),request['device'])for ref in request['recipes']]))
-'''
-    references=[{'path':ref['path'],'sha256':ref.get('file_sha256',ref['sha256']),
+    from ..common.native_metadata_replay import package_metadata_replay
+    recipes=[{'path':ref['path'],'sha256':ref.get('file_sha256',ref['sha256']),
         **({'bytes':ref['bytes']}if'bytes'in ref else{})}for ref in recipes]
-    def check_recipes():
-        for ref in references:
-            path=_bound(ref)
-            if 'bytes'in ref and path.stat().st_size!=ref['bytes']:
-                raise ValueError('historical recipe byte count changed')
-    check_recipes()
-    request = {'device': device, 'recipes': references}
-    result = subprocess.run([sys.executable, '-c', program, str(package)],
-        input=json.dumps(request), capture_output=True, text=True,
-        env={**os.environ, 'CUDA_VISIBLE_DEVICES': '', 'NATLANG_REPO': str(root),
-             'PYTHONPATH': str(package.parent)+':'+str(root)})
-    if result.returncode:
-        raise ValueError('historical recipe reconstruction failed: '+result.stderr[-2000:])
-    if code_inventory(package) != code:
-        raise ValueError('historical recipe runtime changed during reconstruction')
-    check_recipes()
-    plans = json.loads(result.stdout)
+    plans = package_metadata_replay(package, code, 'recipe-plans',
+        {'device': device, 'recipes': recipes}, recipes)
     if (not isinstance(plans, list) or len(plans) != len(recipes)
             or any(not isinstance(plan,dict)or plan.get('schema')!='natlang.neuralese-recipe-plan/1'
                    or plan.get('device')!=device for plan in plans)):
