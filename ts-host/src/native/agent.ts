@@ -1,5 +1,6 @@
 import { nativeProtocolFailure, nativeProtocolFeedback } from './native-protocol.js';
 import { programGuidance } from '../adaptation/prompts.js';
+import type { NativeProgramGuidance } from '../adaptation/prompts.js';
 import { formatType } from './types.js';
 import type { Type, TypeEnv } from './types.js';
 import { MISSING, Reject, coerce, isLive, liveId, liveLabel, problems } from './values.js';
@@ -20,7 +21,7 @@ const scopeValueChars = (session: NativeSession) => Math.max(SCOPE_VALUE_CHARS, 
 import { listingViewInstructions, viewNote } from './prompt.js';
 import { untrustedBlock, type UntrustedRegistry } from './untrusted.js';
 import { writtenReturnResult } from './pseudo-call.js';
-import { decodeTurnValue, encodeMessages, isContentParts, isNeuraleseRef, neuraleseSentinel, neuraleseRefSentinel, NeuraleseUnsupportedError, supportsNeuralese,
+import { decodeTurnValue, encodeMessages, isContentParts, isNeuraleseRef, neuraleseSentinel, neuraleseRefSentinel, nativeStateSentinel, NeuraleseUnsupportedError, supportsNeuralese,
   nativeStateSentinelIds, runtimeTextToParts, type NeuraleseRuntimeOptions } from './neuralese.js';
 import { resolveNeuralesePreviews } from './neuralese-preview.js';
 import { blockInput, graphNode, invocationNodeId } from './graph.js';
@@ -431,7 +432,7 @@ export class NativeToolAgent {
   readonly reviews: Record<string, unknown>[] = [];
   constructor(readonly driver: NativeModelDriver,
     readonly options: { maxTurns?: number; maxTokens?: number; turnTokens?: number;
-      temperature?: number; maxSeconds?: number; promptRendering?: PromptRendering; systemPrompt?: string | (() => string); programGuidance?: string;
+      temperature?: number; maxSeconds?: number; promptRendering?: PromptRendering; systemPrompt?: string | (() => string); programGuidance?: string | NativeProgramGuidance;
       review?: NativeReviewOptions;
       maxFailureRepairs?: number;
       /** The readout's system prompt (default DECISION_SYSTEM_PROMPT; the kernel adds iteration addenda). */
@@ -1026,7 +1027,7 @@ export class NativeToolAgent {
    * Answer a finite-typed call by scoring each allowed value as the reply to its opening (native/decision.ts).
    * Returns false when the readout does not apply, so the tool loop runs; a string is a failure, as from run.
    */
-  private async decisionReadout(session: NativeSession, opening: Record<string, unknown>[]): Promise<false | string | void> {
+  private async decisionReadout(session: NativeSession, opening: Record<string, unknown>[], guidance: string): Promise<false | string | void> {
     const lam = session.lam;
     const wanted = lam.readout === 'decision' || this.options.decisionReadout === 'finite-returns';
     if (!wanted || lam.type.kind !== 'lambda' || lam.subtype !== 'function' || lam.projectTransaction) return false;
@@ -1039,7 +1040,7 @@ export class NativeToolAgent {
       return false;
     }
     const replies = values.map(value => JSON.stringify(value));
-    const system = (this.options.decisionSystemPrompt?.() ?? DECISION_SYSTEM_PROMPT) + programGuidance(this.options.programGuidance ?? '');
+    const system = (this.options.decisionSystemPrompt?.() ?? DECISION_SYSTEM_PROMPT) + guidance;
     const messages = [{ role: 'system', content: system }, ...opening.slice(1), { role: 'user', content: decisionPrompt(replies) }];
     const encoded = encodeMessages(this.softened(renderPromptMessages(messages, this.options.promptRendering)));
     if (encoded.blocks && !supportsNeuralese(this.driver))
@@ -1074,6 +1075,37 @@ export class NativeToolAgent {
     if (!session.finish()) return 'decision readout chose a value the declared type rejects';
   }
 
+  /** Encode stored policy against this runtime's exact native reader before any model call. */
+  private async runtimeProgramGuidance(): Promise<string> {
+    const guidance = this.options.programGuidance;
+    if (!guidance) return '';
+    if (typeof guidance === 'string') return programGuidance(guidance);
+    if (guidance.kind !== 'native-program-guidance') throw new TypeError('unknown program guidance binding');
+    const neuralese = this.options.neuralese;
+    const consumer = neuralese?.nativeStateConsumerForCall ? await neuralese.nativeStateConsumerForCall() : neuralese?.nativeStateConsumer;
+    if (!neuralese || !consumer || !neuralese.port || !supportsNeuralese(this.driver))
+      throw new NeuraleseUnsupportedError('native program guidance requires the exact native reader, a native write port, and a Neuralese-capable driver');
+    const binding = guidance.binding;
+    const matches = (state: Record<string, unknown>, identity: Record<string, unknown>) =>
+      state.architecture === identity.architecture && state.checkpoint_sha256 === identity.checkpoint_sha256 &&
+      state.tokenizer_fingerprint === identity.tokenizer_fingerprint && state.embedding_weight_sha256 === identity.embedding_weight_sha256;
+    if (binding && matches(consumer, binding.student)) {
+      const stored = await neuralese.store.getNativeState?.(binding.native_state_id);
+      if (stored) {
+        if (stored.metadata.schema !== 'neuralese.native-state/1' || stored.metadata.text !== guidance.text ||
+            !matches(stored.metadata, binding.student))
+          throw new NeuraleseUnsupportedError('memetic guidance artifact does not match its declared student or text');
+        return '\n\n<natlang_program_guidance>\n' + nativeStateSentinel(binding.native_state_id) + '\n</natlang_program_guidance>\n';
+      }
+    }
+    const block = await neuralese.port.write(guidance.text);
+    const state = block.native_state;
+    const exact = state && state.schema === 'neuralese.native-state/1' && state.text === guidance.text &&
+      matches(state, consumer);
+    if (!exact) throw new NeuraleseUnsupportedError('native program guidance writer did not produce state for the exact current student checkpoint');
+    return '\n\n<natlang_program_guidance>\n' + nativeStateSentinel(block.id) + '\n</natlang_program_guidance>\n';
+  }
+
   async run(session: NativeSession): Promise<string | void> {
     // Blocks of `.nz` files loaded without a store (compiled imports, companion folders) join this runtime's store.
     if (this.options.neuralese?.store) await adoptImportedBlocks(this.options.neuralese.store);
@@ -1082,6 +1114,7 @@ export class NativeToolAgent {
     session.pages.budget = shownCharsFor(budget);
     // Fixed for the whole call, so the server can reuse its prompt cache across turns.
     let adaptedSystem: string | undefined;
+    const nativeGuidance = await this.runtimeProgramGuidance();
     const systemPrompt = () => {
       if (adaptedSystem !== undefined) return adaptedSystem;
       const base = typeof this.options.systemPrompt === 'function' ? this.options.systemPrompt() : this.options.systemPrompt ?? TOOLS_PROMPT;
@@ -1090,7 +1123,7 @@ export class NativeToolAgent {
       (Object.keys(session.lam.codebase).length ? FUNCTION_TOOLS_PROMPT : '') +
       (session.lam.projectTransaction ? directoryReducerPrompt(this.options.fileTools, allowAdHoc,
         session.lam.projectTransaction.folder.access !== 'read') : '') +
-      programGuidance(this.options.programGuidance ?? '');
+      programGuidance(typeof this.options.programGuidance === 'string' ? this.options.programGuidance : '') + nativeGuidance;
       if (this.options.programGuidance !== undefined) adaptedSystem = composed;
       return composed;
     };
@@ -1121,7 +1154,7 @@ export class NativeToolAgent {
       return failures.length ? { code: failures[0]!.code, message: failures.map(failure => failure.message).join(' ') } : undefined;
     };
     const messages = openingMessages();
-    const decided = await this.decisionReadout(session, messages);
+    const decided = await this.decisionReadout(session, messages, nativeGuidance);
     if (decided !== false) return decided;
     const openingLength = messages.length;
     // Prompt tokens per character of request, calibrated from the server's reported prompt size.

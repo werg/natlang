@@ -609,7 +609,9 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
   const agent = model ? new NativeToolAgent(model.driver, {
     systemPrompt: () => task.systemPrompt() + (addendum ? `\n\n${addendum}` : ''),
     neuralese: task.runtime.options.neuralese,
-    programGuidance: eligibleGuidance && (view.binding || view.guidance()) ? view.guidance() : undefined,
+    programGuidance: eligibleGuidance && (task.nativeProgramGuidance || view.binding || view.guidance()) ?
+      task.nativeProgramGuidance?.binding?.program_id === owner ? task.nativeProgramGuidance :
+      task.runtime.options.neuralese?.nativeStateConsumer ? view.nativeGuidance() : view.guidance() : undefined,
     maxTurns: model.maxTurns, maxTokens: model.maxTokens, turnTokens: model.turnTokens, temperature: model.temperature,
     maxSeconds: model.maxSeconds, contextTokens: model.contextTokens,
     maxFailureRepairs: model.maxFailureRepairs, review: model.review, decisionReadout: model.decisionReadout,

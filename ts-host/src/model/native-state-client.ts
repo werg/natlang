@@ -44,7 +44,9 @@ export async function nativeStateRuntimeOptions(options: NativeClientOptions, se
   const nativeStateConsumer = nativeStateConsumerFromInfo(info);
   if (!nativeStateConsumer)
     return failure('neuralese-native-state-unavailable', 'the server must declare native identity and consumption modes');
-  return { store: options.store, dialect, nativeStateConsumer, ...(port ? { port } : {}) };
+  return { store: options.store, dialect, nativeStateConsumer,
+    nativeStateConsumerForCall: async () => nativeStateConsumerFromInfo(await neuraleseServerInfo(options.endpoint, { headers: options.headers })),
+    ...(port ? { port } : {}) };
 }
 
 const failure = (code: string, detail: string): never => { throw Object.assign(new Error(`${code}: ${detail}`), { code }); };

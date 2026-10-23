@@ -228,6 +228,8 @@ export function nativeStateConsumerFromInfo(info: Record<string, unknown>): Nati
 export type NeuraleseRuntimeOptions = {
   store: NeuraleseStore;
   nativeStateConsumer?: NativeStateConsumer;
+  /** Refresh a server-backed reader identity before binding state to a model prompt. */
+  nativeStateConsumerForCall?: () => Promise<NativeStateConsumer | undefined>;
   /** Writes blocks for literals a model returns as marker text (the stand-in port, or a writer in-process). */
   port?: NeuralesePort;
   /**
