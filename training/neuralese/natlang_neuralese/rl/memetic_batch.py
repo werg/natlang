@@ -171,6 +171,8 @@ def main(argv=None):
                         help='collect and bind unguided development/confirmation fitness without an author')
     parser.add_argument('--server')
     parser.add_argument('--model-id', choices=('lfm', 'mellum'))
+    parser.add_argument('--runtime-continuation-from', type=Path,
+                        help='exact prior frozen evaluator runtime root for checked input-only continuation')
     parser.add_argument('--author')
     parser.add_argument('--author-ferry', help='evaluator-local SDK ferry endpoint (loopback:8766)')
     parser.add_argument('--author-model')
@@ -218,6 +220,8 @@ def main(argv=None):
         else:
             arguments.extend(['--author', args.author, '--author-ferry', args.author_ferry, '--author-model', args.author_model,
                               '--author-provenance', str(args.author_provenance)])
+        if args.runtime_continuation_from:
+            arguments.extend(['--runtime-continuation-from', str(args.runtime_continuation_from)])
         if args.recipe_base:
             arguments.extend(['--recipe-base', str(args.recipe_base)])
         if args.recipe_graph_root:
