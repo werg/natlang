@@ -36,9 +36,6 @@ import type { ModelStreamProgress, ModelTurn, ModelTurnRequest } from '../contra
 import { closeProviderSession, ProviderActionCycleTimeoutError, ProviderRequestTimeoutError,
   withProviderActionCycle, withProviderRequestDeadline } from './provider-deadline.js';
 import type { CollectionLivenessSnapshot } from './collection-liveness.js';
-import { createTextNeuraleseEmulation, TEXT_NEURALESE_EMULATION_PROMPT,
-  TEXT_NEURALESE_DIALECT, TEXT_NEURALESE_EMULATION_VERSION, TEXT_NEURALESE_PROMPT_REVISION,
-  TEXT_NEURALESE_WIDTH } from '../model/text-neuralese-emulation.js';
 import { registerTrace, releaseTrace, traceFor } from '../native/graph.js';
 import { NATIVE_TOOL_SCHEMA } from '../native/tool-surface.js';
 import { hostCaptures, type CaptureSource } from '../exact-capture/host-capture.js';
@@ -105,8 +102,6 @@ export type ProvenanceOptions = { modelId: string; rootSeed: number; systemPromp
   fileTools?: FileToolSurface;
   /** Who answered: a model being taught (student), a teacher, or a case's scripted reference solution. */
   collectionRole?: 'student' | 'teacher' | 'reference';
-  /** Explicit text-marker Neuralese protocol emulation for providers that only accept text. */
-  textNeuraleseEmulation?: boolean;
   /** A separately identified model for rubric-backed `judged` oracles. */
   judgeModel?: { modelId: string; endpoint?: string; provider?: string; piOptions?: Record<string, unknown> } };
 export type CollectorConfig = ProvenanceOptions & { jobs: string; output: string; workers: number;
@@ -145,8 +140,8 @@ function canonical(value: unknown): string {
 export const sha256 = (value: string | Uint8Array): string => createHash('sha256').update(value).digest('hex');
 export const recordDigest = (record: ProgramRecord): string => sha256(canonical(record));
 
-export function effectiveSystemPrompt(options: Pick<ProvenanceOptions, 'systemPrompt' | 'textNeuraleseEmulation'>): string {
-  return options.textNeuraleseEmulation ? options.systemPrompt + TEXT_NEURALESE_EMULATION_PROMPT : options.systemPrompt;
+export function effectiveSystemPrompt(options: Pick<ProvenanceOptions, 'systemPrompt'>): string {
+  return options.systemPrompt;
 }
 
 export function validateFocusedRecord(record: ProgramRecord): void {
@@ -206,11 +201,6 @@ export function expectedProvenance(record: ProgramRecord, options: ProvenanceOpt
     tool_surface_sha256: options.toolSurfaceSha256, seed_policy: { mode: 'derived', root: options.rootSeed },
     system_prompt_sha256: sha256(effectiveSystemPrompt(options)), context_tokens: options.contextTokens,
     ...(options.promptRendering ? { prompt_rendering: options.promptRendering } : {}),
-    ...(options.textNeuraleseEmulation ? { text_neuralese_transport: { mode: TEXT_NEURALESE_EMULATION_VERSION,
-      prompt_revision: TEXT_NEURALESE_PROMPT_REVISION,
-      dialect: TEXT_NEURALESE_DIALECT, width: TEXT_NEURALESE_WIDTH,
-      vector_semantics: 'deterministic hash stand-in; non-learned', qualification_certificate: false,
-      training_admission: false } } : {}),
     transport: options.provider ? 'pi-provider' : 'openai-compatible',
     neuralese_server: options.neuraleseServer ?? false,
     ...(options.chatRequestControls ? { chat_request_controls: options.chatRequestControls } : {}),
@@ -313,7 +303,7 @@ async function reusableRows(paths: string[]): Promise<Map<string, Array<{ row: T
 }
 /** Truncation notes from before cutoff.ts: read_page page markers, CUT OFF previews, comment cut-offs, char counts. */
 const RETIRED_CUT_OFFS = /shown; read_page\(|CUT OFF: only the beginning|\/\* cut off:|more \(read to see\)|\(\d+ chars\)|more fields \(read to see\)/;
-const REUSE_KEYS = ['program_ir_sha256', 'model', 'collection_role', 'seeded_handoff_version', 'execution_policy_version', 'data_quality_version', 'file_content_comparison_version', 'answer_comparison_version', 'counter_loop_policy_version', 'runtime_contract_version', 'trajectory_link_version', 'judge', 'text_neuralese_transport', 'neuralese_server'];
+const REUSE_KEYS = ['program_ir_sha256', 'model', 'collection_role', 'seeded_handoff_version', 'execution_policy_version', 'data_quality_version', 'file_content_comparison_version', 'answer_comparison_version', 'counter_loop_policy_version', 'runtime_contract_version', 'trajectory_link_version', 'judge', 'neuralese_server'];
 /** Turns before the limit at which the model is first told how many are left (native/agent.ts). */
 const TURN_NOTICE = 4;
 function reusedRow(found: { row: TeacherRow; path: string }, expected: Record<string, unknown>,
@@ -876,10 +866,8 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     if (config.apiKeyEnv && !process.env[config.apiKeyEnv])
       throw new Error(`teacher API key environment variable ${config.apiKeyEnv} is unset`);
   }
-  if (config.neuraleseServer && (!config.endpoint || config.provider || config.textNeuraleseEmulation))
-    throw new Error('real Neuralese collection requires an endpoint and excludes text emulation/Pi');
-  if (config.textNeuraleseEmulation && (config.collectionRole ?? 'teacher') !== 'teacher')
-    throw new Error('text Neuralese emulation is available only for explicit teacher collection');
+  if (config.neuraleseServer && (!config.endpoint || config.provider))
+    throw new Error('native Neuralese collection requires an endpoint and excludes Pi');
   if (config.judgeModel && (!config.judgeModel.modelId ||
       Number(!!config.judgeModel.endpoint) + Number(!!config.judgeModel.provider) !== 1))
     throw new Error('judge model needs an ID and exactly one endpoint or Pi provider');
@@ -912,8 +900,6 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     // A handoff (teacher/handoff.ts) replays another model's turns, call by call, up to the turn handed over.
     const handoff = item.record.handoff as Handoff | undefined;
     const placeOf = callMatcher(handoff?.openings ?? []);
-    const textNeuralese = config.textNeuraleseEmulation ? createTextNeuraleseEmulation() : undefined;
-    const textNeuraleseLibrary = await textNeuralese?.standardLibraryReady;
     const nativeStore = config.neuraleseServer ? new MemoryNeuraleseStore() : undefined;
     const replayRemote = nativeStore ? new HttpNeuraleseStore(config.endpoint!,
       config.apiKeyEnv ? { authorization: 'Bearer ' + process.env[config.apiKeyEnv] } : undefined) : undefined;
@@ -929,7 +915,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
       await nativeStateRuntimeOptions({ endpoint: config.endpoint!, store: nativeStore,
         headers: config.apiKeyEnv ? { authorization: 'Bearer ' + process.env[config.apiKeyEnv] } : undefined,
         info: nativeInfo! as import('../model/neuralese-info.js').NeuraleseServerInfo }, { write: 'available' }) : undefined;
-    const valueRuntime = nativeStore ? nativeValueRuntime ?? { store: nativeStore, dialect: nativeInfo!.dialects![0]! } : textNeuralese?.runtime;
+    const valueRuntime = nativeStore ? nativeValueRuntime ?? { store: nativeStore, dialect: nativeInfo!.dialects![0]! } : undefined;
     const session = config.provider ? createManagedModelSession(controlledProviderProfile(config.provider,
       config.modelId, config.piOptions, config.providerRequestControls)) : undefined;
     const judgeConfig = config.judgeModel;
@@ -1020,7 +1006,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
       chatCompletionsUrl: config.chatCompletionsUrl,
       ...(config.apiKeyEnv ? { apiKey: process.env[config.apiKeyEnv] } : {}),
       request: config.request, onRequestStart: recordHttpTransportStart });
-    const send = textNeuralese ? textNeuralese.wrap(rawSend as (request: ModelTurnRequest) => Promise<ModelTurn>) : rawSend;
+    const send = rawSend;
     let evidenceHandle: Awaited<ReturnType<typeof open>> | undefined;
     try {
     const interrupted = (actionSignal?: AbortSignal) => actionSignal?.reason instanceof Error ? actionSignal.reason :
@@ -1333,7 +1319,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
         onPartialExecution: async snapshot => appendEvidence(partialExecutionRecords({ ...snapshot,
           logical_run_id: runId, execution_attempt_id: partial.execution_attempt_id }), 'execution_interrupted'),
         ...(valueRuntime ? { neuralese: valueRuntime } : {}),
-        ...(textNeuraleseLibrary ? { neuraleseService: textNeuraleseLibrary } : {}), ...(judge ? { judge } : {}) }); }
+        ...(judge ? { judge } : {}) }); }
     catch (error) { throw fatalCollectionError ?? fatalProviderDeadline ?? error; }
     throwIfCollectionFatal();
     const trajectoryReview = observedTrajectoryContract(item.record, executionRunId, run);

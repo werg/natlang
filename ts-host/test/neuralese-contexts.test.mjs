@@ -5,8 +5,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { buildProject, Context, ContextError, createNatlangRuntime, defineNatlang, live, loadNatlang, nodeSourceFiles,
-  nzExports, save, softFunction, loadNz, encodeNz, decodeNz, NzFileError, declareDistribution, distributionOf } from '../dist/index.js';
-import { MemoryNeuraleseStore, StandInNeuralesePort, hashingEmbedder } from '../dist/native/neuralese-store.js';
+  nzExports, save, softFunction, loadNz, encodeNz, decodeNz, NzFileError } from '../dist/index.js';
+import { MemoryNeuraleseStore, nativeStateBlockMeta, encodeNativeState } from '../dist/native/neuralese-store.js';
+import { nativeStateFixture } from './fixtures/native-state.mjs';
 import { neuraleseRef } from '../dist/native/neuralese.js';
 import { inline } from '../dist/runtime/lowered.js';
 import { callableMeta } from '../dist/runtime/callable.js';
@@ -14,9 +15,15 @@ import { callableMeta } from '../dist/runtime/callable.js';
 const runtimeModule = { url: new URL('../dist/index.js', import.meta.url).href, path: fileURLToPath(new URL('../dist/index.js', import.meta.url)),
   types: fileURLToPath(new URL('../dist/index.d.ts', import.meta.url)), specifiers: ['@natlang/node'] };
 
-const standIn = (width = 8) => {
+const nativeStatePort = () => {
   const store = new MemoryNeuraleseStore();
-  return { store, port: new StandInNeuralesePort(store, hashingEmbedder(width), width, 'nd:natlang@1') };
+  const port = { dialect: 'native-state/fixture', async write(text, options = {}) {
+    const fixture = nativeStateFixture();
+    const artifact = await store.putNativeState({ ...fixture, metadata: { ...fixture.metadata, text } });
+    return { ...nativeStateBlockMeta(artifact), ...(options.type ? { type: options.type } : {}),
+      ...(options.producer ? { producer: options.producer } : {}), ...(options.truncated ? { truncated: true } : {}) };
+  } };
+  return { store, port };
 };
 const neuraleseDriver = fn => Object.assign(fn, { neuralese: true });
 /** Every Neuralese part and all text a request carried. */
@@ -51,12 +58,12 @@ async function rubricFile(store, port) {
   const bytes = await save({ rubric: { type: 'Neuralese<Rubric>', value: neuraleseRef('Neuralese<Rubric>', rubric.id) },
     triage, limits: { type: '{ maxItems: number, note: Neuralese<string> }',
       value: { maxItems: 20, note: neuraleseRef('Neuralese<string>', rubric.id) } } },
-  { store, dialect: 'nd:natlang@1', types: 'type Rubric = { criteria: string[] };' });
+  { store, dialect: port.dialect, types: 'type Rubric = { criteria: string[] };' });
   return { bytes, rubric, body };
 }
 
-test('.nz files round-trip typed exports, soft functions with snapshot captures, and distributional blocks', async () => {
-  const { store, port } = standIn();
+test('native archives round-trip typed exports, soft functions, and snapshot captures', async () => {
+  const { store, port } = nativeStatePort();
   const { bytes, rubric, body } = await rubricFile(store, port);
   assert.deepEqual([...bytes.subarray(0, 8)].slice(4), [0, 0, 0, 0], 'safetensors header length is a little-endian u64');
   const fresh = new MemoryNeuraleseStore();
@@ -67,32 +74,20 @@ test('.nz files round-trip typed exports, soft functions with snapshot captures,
   assert.equal(loaded.exports.triage.body, body.id);
   assert.equal(loaded.exports.triage.captures.rubric.$neuralese.id, rubric.id);
   assert.equal(loaded.exports.limits.maxItems, 20);
-  assert.ok(await fresh.has(rubric.id) && await fresh.has(body.id), 'loading puts blocks into the store');
+  assert.ok(await fresh.hasNativeState(rubric.id) && await fresh.hasNativeState(body.id), 'loading restores native states');
   // Equal content gives equal bytes.
   const again = await rubricFile(store, port);
   assert.deepEqual(again.bytes, bytes);
-  // A Gaussian block keeps its log-scale tensor through save and load.
-  const logScale = await port.write('small scale');
-  const mean = await port.write('mean vectors');
-  const meanMeta = await store.meta(mean.id), scaleMeta = await store.meta(logScale.id);
-  assert.equal(meanMeta.length, 2); assert.equal(scaleMeta.length, 2);
-  declareDistribution(mean.id, logScale.id);
-  const gaussian = await save({ belief: neuraleseRef('Neuralese<string>', mean.id) }, { store, dialect: 'nd:natlang@1' });
-  const header = decodeNz(gaussian).header;
-  assert.equal(header.exports.belief.value.$neuralese.distribution, 'gaussian-diag');
-  assert.equal(header.exports.belief.value.$neuralese.logScale, logScale.id);
-  await loadNz(gaussian);
-  assert.equal(distributionOf(mean.id).logScale, logScale.id);
 });
 
-test('loading checks types, dialects, block integrity and reference cycles (nz-load-and-typecheck, nz-block-integrity)', async () => {
-  const { store, port } = standIn();
-  const block = await port.write('note text');
-  const data = (await store.get(block.id)).data;
-  const header = exports => ({ format: 'natlang.neuralese-file/1', dialect: 'nd:natlang@1', exports,
-    blocks: { [block.id]: { dialect: 'nd:natlang@1', length: block.length, width: block.width, dtype: 'F32' } } });
-  const encode = exports => encodeNz(header(exports), new Map([[block.id, data]]));
-  const note = { $neuralese: { type: 'Neuralese<string>', id: block.id } };
+test('native archive loading checks types, dialects, artifact integrity and reference cycles', async () => {
+  const { store, port } = nativeStatePort();
+  const artifact = await store.putNativeState(nativeStateFixture());
+  const note = { $neuralese: { type: 'Neuralese<string>', id: artifact.id } };
+  const valid = await save({ note: { type: 'Neuralese<string>', value: note } }, { store, dialect: port.dialect });
+  const decoded = decodeNz(valid);
+  const data = new Map([[artifact.id, encodeNativeState(artifact)]]);
+  const encode = exports => encodeNz({ ...decoded.header, exports }, data);
   await assert.rejects(() => loadNz(encode({ limits: { type: '{ maxItems: number, note: Neuralese<string> }',
     value: { maxItems: 'twenty', note } } })), error => error instanceof NzFileError && error.code === 'neuralese-file-type' &&
     /export limits/.test(error.message));
@@ -108,11 +103,11 @@ test('loading checks types, dialects, block integrity and reference cycles (nz-l
 });
 
 test('a soft function with live captures cannot be saved; a snapshot capture keeps its value (nz-live-capture-save, fn-snapshot-capture)', async () => {
-  const { store, port } = standIn();
+  const { store, port } = nativeStatePort();
   const body = await port.write('increment the counter');
   let count = 0;
   const counting = softFunction({ type: '() => number', body: body.id, captures: { count: live(() => count, value => { count = value; }) } });
-  await assert.rejects(() => save({ counting }, { store, dialect: 'nd:natlang@1' }), error => error.code === 'neuralese-live-capture-save');
+  await assert.rejects(() => save({ counting }, { store, dialect: port.dialect }), error => error.code === 'neuralese-live-capture-save');
   let x = 1;
   const seen = [];
   const snap = softFunction({ type: '() => number', body: body.id, captures: { x } });
@@ -125,7 +120,7 @@ test('a soft function with live captures cannot be saved; a snapshot capture kee
 });
 
 test('live(x) captures are read per call and written back (fn-live-capture)', async () => {
-  const { store, port } = standIn();
+  const { store, port } = nativeStatePort();
   const body = await port.write('increment n');
   let n = 0;
   const bump = softFunction({ type: '() => string', body: body.id, captures: { n: live(() => n, value => { n = value; }) } });
@@ -140,14 +135,14 @@ test('live(x) captures are read per call and written back (fn-live-capture)', as
 });
 
 test('a stored soft function shows its body and snapshot captures as blocks (nz-capture-resolution)', async () => {
-  const { store, port } = standIn();
+  const { store, port } = nativeStatePort();
   const { bytes, rubric, body } = await rubricFile(store, port);
   const { triage } = nzExports(await loadNz(bytes, { store }));
   const requests = [];
   const driver = neuraleseDriver(({ messages }) => { requests.push(messages); return { calls: [['return_result', { status: 'success', value: 'billing' }]] }; });
   const runtime = createNatlangRuntime({ model: driver, neuralese: { store, port } });
   assert.equal(await runtime.run(() => triage('I was charged twice')), 'billing');
-  const ids = requestParts(requests[0]).filter(part => part.type === 'neuralese').map(part => part.id);
+  const ids = requestParts(requests[0]).filter(part => part.type === 'native_state').map(part => part.id);
   assert.ok(ids.includes(body.id), 'the soft body is a block');
   assert.ok(ids.includes(rubric.id), 'the captured rubric is a block');
   assert.ok(requestParts(requests[0]).some(part => part.type === 'text' && /\brubric\b/.test(part.text)));
@@ -209,7 +204,7 @@ test('rebinding checks the context interface; adding data is free; executable no
   const extra = defineNatlang('---\nreturns: string\n---\nSay hi.\n', { name: 'extra' });
   assert.throws(() => right.with({ extra }), error => error.code === 'context-new-executable');
   // ctx-add-data and ctx-union: data entries and a picked library skill reach the call's scope.
-  const { store, port } = standIn();
+  const { store, port } = nativeStatePort();
   const memo = await port.write('the customer prefers email');
   const library = await Context.fromFolder(join(root, 'library'), files);
   const program = Context.ofCallable(foo).union(library.pick('skills/sql'))
@@ -229,7 +224,7 @@ test('rebinding checks the context interface; adding data is free; executable no
   assert.doesNotMatch(opening, /Use explicit join keys|join on customer_id/, 'instructions wait until the model reads them');
   assert.match(JSON.stringify(seen[1].at(-1)), /Use explicit join keys.*- notes\.md/);
   assert.match(JSON.stringify(seen[2].at(-1)), /join on customer_id/);
-  assert.ok(requestParts(seen[0]).some(part => part.type === 'neuralese' && part.id === memo.id));
+  assert.ok(requestParts(seen[0]).some(part => part.type === 'native_state' && part.id === memo.id));
 });
 
 test('an edited executable node must keep its signature (ctx-edit-executable)', async () => {
@@ -244,7 +239,7 @@ test('an edited executable node must keep its signature (ctx-edit-executable)', 
 });
 
 test('.nz files in a folder are context data, and a project imports them with generated declarations (nz-import-declarations)', async () => {
-  const { store, port } = standIn();
+  const { store, port } = nativeStatePort();
   const { bytes } = await rubricFile(store, port);
   const root = folder({
     'data/support.nz': bytes,
@@ -272,5 +267,5 @@ test('.nz files in a folder are context data, and a project imports them with ge
   const app = await import(pathToFileURL(join(outDir, 'app.js')).href);
   assert.equal(app.items, 20);
   assert.equal(typeof app.call, 'function');
-  assert.match(app.kept.$neuralese.id, /^nz1_/);
+  assert.match(app.kept.$neuralese.id, /^nzs1_/);
 });

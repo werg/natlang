@@ -77,8 +77,8 @@ export { COMBINATORS, createNeuraleseLibrary } from './neuralese/combinators.js'
 export { buildStandardLibrary, loadStandardLibrary } from './neuralese/node-files.js';
 export { initBodyInContext, captureCallRequest, type TextInitResult } from './neuralese/text-init.js';
 export { FileNeuraleseStore, type FileNeuraleseStoreOptions } from './neuralese/node-block-store.js';
-export { MemoryNeuraleseStore, neuraleseContentId } from './native/neuralese-store.js';
-export type { NeuraleseStore, NeuraleseBlock, NeuraleseBlockMeta, NeuraleseBlockInput, NeuraleseDtype } from './native/neuralese-store.js';
+export { MemoryNeuraleseStore } from './native/neuralese-store.js';
+export type { NeuraleseStore, NeuraleseBlockMeta } from './native/neuralese-store.js';
 export type { StandardLibrary, CombinatorName } from './neuralese/combinators.js';
 export { registerBuiltinModule } from './runtime/modules.js';
 export { replayRecordSink, REPLAY_RECORD_SCHEMA } from './neuralese/replay-records.js';

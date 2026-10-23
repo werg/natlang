@@ -76,7 +76,7 @@ export async function runBench(options) {
     const runtime = createNatlangRuntime({ calls: false, ...(options.runtime ?? {}), model: countingDriver(options.createDriver ? options.createDriver(mode) : options.driver, meter),
       trace: trace => traces.push(trace),
       ...(options.neuralese ? { neuralese: options.neuralese } : {}),
-      ...(mode === 'fused' ? { fusion: { mode: 'on', edges, certificate, weights: settings.weights, ...(options.emulation ? { emulation: options.emulation } : {}) } } : {}) });
+      ...(mode === 'fused' ? { fusion: { mode: 'on', edges, certificate, weights: settings.weights } } : {}) });
     const results = [];
     for (const item of options.cases) {
       const before = { ...meter };
@@ -98,8 +98,7 @@ export async function runBench(options) {
       ...(mode === 'fused' ? { fusion: {
         fusedEdges: events.filter(event => event.kind === 'fusion_edge' && event.status === 'fused').length,
         consumed: events.filter(event => event.kind === 'fusion_edge' && event.status === 'consumed').length,
-        fallbacks: events.filter(event => event.kind === 'fusion_fallback').map(event => event.reason),
-        emulation: events.some(event => event.emulation === true) } } : {}) };
+        fallbacks: events.filter(event => event.kind === 'fusion_fallback').map(event => event.reason) } } : {}) };
   }
   if (outputs.text && outputs.fused) {
     const same = outputs.text.filter((item, index) => !item.error && !outputs.fused[index].error && canonical(item.value) === canonical(outputs.fused[index].value)).length;
@@ -113,7 +112,7 @@ export async function runBench(options) {
       engaged, agreement: c.agreement !== null && c.agreement >= gate.minAgreement,
       tokens: c.tokenRatio !== null && c.tokenRatio <= gate.maxTokenRatio, latency: c.latencyRatio !== null && c.latencyRatio <= gate.maxLatencyRatio,
       fallbacks: fused.fusion.fallbacks.length <= gate.maxFallbacks, unconsumed: fused.fusion.fusedEdges - fused.fusion.consumed <= gate.maxUnconsumed,
-      emulation: !fused.fusion.emulation };
+      };
     report.gate.pass = Object.values(report.gate.result).every(Boolean);
   }
   return report;
@@ -142,13 +141,11 @@ async function main() {
   if (!flags.has('--dry-run')) {
     const endpoint = values.get('--neuralese-endpoint');
     if (!endpoint) throw new Error('--neuralese-endpoint is required: the text baseline and the fused run use the same Neuralese-capable server');
-    const info = await (await lib.fetchModel(`${endpoint.replace(/\/$/, '')}/v1/neuralese/info`)).json();
-    const dialect = values.get('--dialect') ?? info.dialects?.[0] ?? info.dialect;
-    const width = Number(values.get('--width') ?? info.width);
-    const { MemoryNeuraleseStore } = lib, { StandInNeuralesePort, hashingEmbedder } = await import(new URL('../dist/native/neuralese-store.js', import.meta.url).href);
+    const { MemoryNeuraleseStore } = lib;
     const store = new MemoryNeuraleseStore();
+    const info = await lib.neuraleseServerInfo(endpoint);
+    neuralese = await lib.nativeStateRuntimeOptions({ endpoint, store, info }, { write: 'required' });
     driver = (await import(new URL('../dist/model/index.js', import.meta.url).href)).neuraleseServerModelTurn({ endpoint, model: values.get('--model'), store, headers: {} });
-    neuralese = { store, port: new StandInNeuralesePort(store, hashingEmbedder(width), width, dialect) };
   }
   const report = await runBench({ app: values.get('--app'), entry: values.get('--entry'), cases, driver, neuralese,
     planner: values.get('--planner'), certificate: values.get('--certificate'), weights: values.get('--weights'),

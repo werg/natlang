@@ -50,12 +50,12 @@ test('corrupted native artifact bytes are removed and reported', async () => {
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
-test('persistent stores reject flat block writes instead of retaining a projected archive', async () => {
+test('persistent native archive exposes only native artifact operations', async () => {
   const dir = await directory();
   try {
     const store = await FileNeuraleseStore.open(dir);
-    await assert.rejects(() => store.put({ dialect: 'legacy', length: 1, width: 1, dtype: 'f32', data: new Uint8Array(4) }),
-      /neuralese-projected-api-retired/);
+    assert.equal('put' in store, false);
+    assert.equal('get' in store, false);
     assert.deepEqual(await readdir(dir), []);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });

@@ -19,9 +19,9 @@ import { verifyNativeStateDerivation } from '../native/native-state-derivation.j
  */
 import { mkdir, open, readFile, readdir, rename, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { nativeArtifactDependencyClosure, neuraleseContentId, decodeNativeState, encodeNativeState, nativeStateBlockMeta,
+import { nativeArtifactDependencyClosure, decodeNativeState, encodeNativeState, nativeStateBlockMeta,
   decodeNativeTensorArtifact, encodeNativeTensorArtifact, nativeTensorArtifactBlockMeta,
-  type NativeStateArtifact, type NativeTensorArtifact, type NeuraleseBlock, type NeuraleseBlockInput,
+  type NativeStateArtifact, type NativeTensorArtifact,
   type NeuraleseBlockMeta, type NeuraleseStore } from '../native/neuralese-store.js';
 import { NzFileError } from '../native/nz-file.js';
 
@@ -138,16 +138,6 @@ export class FileNeuraleseStore implements NeuraleseStore {
       this.noted.delete(id);
       return meta;
     } catch { return undefined; }
-  }
-
-  async put(block: NeuraleseBlockInput): Promise<NeuraleseBlockMeta> {
-    const id = neuraleseContentId(block);
-    throw new Error(`neuralese-projected-api-retired: file archives store only native state or named tensor artifacts, not ${id}`);
-  }
-
-  async get(id: string): Promise<NeuraleseBlock | undefined> {
-    if (id.startsWith('nz1_')) throw new Error(`neuralese-projected-api-retired: file archives have no flat block reader for ${id}`);
-    return undefined;
   }
 
   async putNativeState(input: Omit<NativeStateArtifact, 'id'>): Promise<NativeStateArtifact> {

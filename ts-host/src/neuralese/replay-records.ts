@@ -52,8 +52,6 @@ export function replayRecordSink(options: { path: string; endpoint: string; head
         ...(session.native_gradient ? { native_gradient: session.native_gradient } : {}), ...(session.target ? { target: session.target } : {}), loss: session.loss,
         recorded_at: new Date().toISOString() };
       const text = JSON.stringify(record);
-      if (/nz1_[a-z2-7]{20,}/.test(text))
-        throw new Error('neuralese-projected-api-retired: replay records cannot capture flat nz1 values');
       const remote = new HttpNeuraleseStore(base, options.headers), archive = new MemoryNeuraleseStore();
       const roots = new Set(text.match(ARTIFACT_ID) ?? []);
       for (const id of roots) await archiveNativeArtifactFrom(remote, archive, id);

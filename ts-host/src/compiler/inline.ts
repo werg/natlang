@@ -93,7 +93,7 @@ const IDENTIFIER_TOKEN = /(?<![A-Za-z0-9_$])[A-Za-z_$][A-Za-z0-9_$]*(?![A-Za-z0-
 const BACKTICK_MENTION = /\\`([A-Za-z_$][A-Za-z0-9_$]*)\\`/g;
 const IDENTIFIER_NAME = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 
-/** The block ID when a template is exactly one model-written Neuralese body, `${__neuralese.body("nz1_…")}`. */
+/** The native state ID when a template is exactly one model-written body, `${__neuralese.body("nzs1_…")}`. */
 export function softBodyOf(template: ts.TemplateLiteral): string | undefined {
   if (!ts.isTemplateExpression(template) || template.templateSpans.length !== 1 || template.head.text !== '' ||
       template.templateSpans[0]!.literal.text !== '') return;

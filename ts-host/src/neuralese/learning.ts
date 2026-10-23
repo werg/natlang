@@ -19,10 +19,10 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { currentFrame } from '../runtime/context.js';
 import { isNativeStateId, isNativeAdapterRef, isNeuraleseRef, nativeAdapterRef, neuraleseRef, type NativeAdapterRef, type NeuraleseRef } from '../native/neuralese.js';
-import { type NeuraleseBlockMeta, type NeuraleseStore } from '../native/neuralese-store.js';
-import { distributionOf, loadNz, saveNz, type NzSaveExport } from '../native/nz-file.js';
+import { type NeuraleseStore } from '../native/neuralese-store.js';
+import { loadNz, saveNz, type NzSaveExport } from '../native/nz-file.js';
 import { HttpNeuraleseStore } from '../model/neuralese-server.js';
-import * as deltaOps from './deltas.js';
+import * as filePatches from '../native/file-patches.js';
 import { setSystemPromptSource, systemPromptBank, type SystemPromptBank } from '../native/system-prompts.js';
 import { setNativeAdapterSource, setNativeStateSource, setRecorderSource, type NativeAdapterBinding, type NativeStateBinding, type RecordedTurn, ModelTurnRecorder } from '../native/model-recording.js';
 import { archiveNativeArtifactFrom, importNativeArtifactBundle } from '../native/neuralese-store.js';
@@ -38,7 +38,7 @@ type Json = Record<string, unknown>;
 const SERVICE = Symbol('natlang.learning-service');
 export type LearningService = {
   readonly [SERVICE]: true;
-  /** The Neuralese server that holds the blocks and runs gradient sessions. */
+  /** The native checkpoint server that owns the recorded actor graph and runs its derivatives. */
   readonly endpoint: string;
   readonly headers?: Record<string, string>;
   /** The runtime's store, for uploading arguments the server lacks and for `save`. */
@@ -280,21 +280,6 @@ export const objectives = {
   async logLikelihood(trajectory: Trajectory, weight = 1): Promise<Loss> {
     return new Loss(trajectory.turns.map(turn => ({ kind: 'logLikelihood', messages: turn.messages, tools: turn.tools,
       target: turn.reply, weight, likelihood_law: 'model-conditional', ...adapted(turn) })));
-  },
-  /** KL of Gaussian blocks to N(0, I): written blocks use their recorded mean and scale. */
-  async klPrior(blocks: NeuraleseRef | NeuraleseRef[]): Promise<Loss> {
-    const service = activeService('objectives.klPrior');
-    const remote = new HttpNeuraleseStore(service.endpoint, service.headers);
-    const entries = [];
-    for (const ref of Array.isArray(blocks) ? blocks : [blocks]) {
-      const id = ref.$neuralese.id;
-      const producer = ((await remote.meta(id)) as (NeuraleseBlockMeta & { producer?: Json }) | undefined)?.producer;
-      const distribution = distributionOf(id);
-      if (producer?.mean) entries.push({ mean: producer.mean, log_sigma: producer.log_sigma ?? null });
-      else if (distribution) entries.push({ mean: distribution.mean, log_sigma: distribution.logScale });
-      else entries.push({ mean: id, log_sigma: null });
-    }
-    return new Loss([{ kind: 'klPrior', blocks: entries }]);
   },
   /**
    * A law of the combinators as a consistency loss (S0 §4.2), measured through `read`: the right side is evaluated
@@ -929,7 +914,7 @@ export function createLearning(explicit?: LearningService, options: { library?: 
           throw new LearningError('learning-native-delta', 'coefficient composition accepts only exact nnt1 artifacts');
         return nativeAdapterArithmetic(service('deltas.compose'), items, 'compose');
       },
-      diffFiles: deltaOps.diffFiles, applyPatch: deltaOps.applyPatch, composePatches: deltaOps.composePatches,
+      diffFiles: filePatches.diffFiles, applyPatch: filePatches.applyPatch, composePatches: filePatches.composePatches,
       /**
        * Interference of deltas trained separately from one base: each delta's gain alone, the gain of their sum, and
        * Σ gains alone − gain of the sum (positive: the updates get in each other's way). `measure` is a loss (lower
@@ -1021,8 +1006,6 @@ export function createLearning(explicit?: LearningService, options: { library?: 
       const visit = async (value: unknown): Promise<void> => {
         if (isNeuraleseRef(value) || isNativeAdapterRef(value)) {
           const id = isNativeAdapterRef(value) ? value.$nativeAdapter.id : value.$neuralese.id;
-          if (!id.startsWith('nzs1_') && !id.startsWith('nnt1_'))
-            throw new LearningError('neuralese-projected-api-retired', `${id} is a flat nz1 value; save only native state or named tensor artifacts`);
           await archiveNativeArtifactFrom(remote, active.store!, id);
         } else if (Array.isArray(value)) await Promise.all(value.map(visit));
         else if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype)
@@ -1037,10 +1020,6 @@ export function createLearning(explicit?: LearningService, options: { library?: 
       const active = service('load');
       if (!active.store) throw new LearningError('neuralese-native-archive-unavailable', 'load requires a runtime artifact store');
       const loaded = await loadNz(new Uint8Array(readFileSync(path)));
-      if (loaded.blocks.size)
-        throw new LearningError('neuralese-projected-api-retired', 'this bundle contains flat nz1 values; convert them to native states before loading');
-      if ((loaded.nativeStates.size || loaded.nativeTensors.size) && (!active.store.putNativeState || !active.store.putNativeTensorArtifact))
-        throw new LearningError('neuralese-native-archive-unavailable', 'native bundle import needs a state and tensor capable archive');
       await importNativeArtifactBundle(active.store, loaded.nativeStates, loaded.nativeTensors);
       return { path, header: loaded.header, exports: loaded.exports, types: loaded.types };
     },

@@ -8,7 +8,7 @@ test('completed collector trace export tags root and child events without mergin
     { kind: 'iteration_step', seq: 1, node: 'root-run#1', inputs: [] }];
   const children = [
     { callId: 'root-run/1', events: [{ kind: 'invocation', seq: 0, call_id: 'root-run/1' },
-      { kind: 'block_write', seq: 3, call_id: 'root-run/1', block: 'nz1_example' }] },
+      { kind: 'native_state_write', seq: 3, call_id: 'root-run/1', state_id: 'nzs1_example' }] },
     { callId: 'root-run/2', events: [{ kind: 'invocation', seq: 0, call_id: 'root-run/2', invocation_id: 'event-owned-id' }] },
   ];
 
@@ -18,7 +18,7 @@ test('completed collector trace export tags root and child events without mergin
     ['root', 'root-run', 0], ['root', 'root-run', 1],
     ['child', 'root-run/1', 0], ['child', 'root-run/1', 3], ['child', 'root-run/2', 0],
   ]);
-  assert.deepEqual(output[3], { kind: 'block_write', seq: 3, call_id: 'root-run/1', block: 'nz1_example',
+  assert.deepEqual(output[3], { kind: 'native_state_write', seq: 3, call_id: 'root-run/1', state_id: 'nzs1_example',
     trace_role: 'child', trace_invocation_id: 'root-run/1' });
   assert.equal(output[4].invocation_id, 'event-owned-id');
   assert.equal(output[4].trace_invocation_id, 'root-run/2');

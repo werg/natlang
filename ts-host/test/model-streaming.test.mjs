@@ -1,6 +1,6 @@
 /**
  * Model output as a stream (plans/STREAMING.md §1.1–1.2): a turn's deltas come from the one place streamed chunks are
- * assembled, in order; the assembled turn equals the turn of the same reply sent whole; a Neuralese server's written
+ * assembled, in order; the assembled turn equals the turn of the same reply sent whole; a native server's written
  * block arrives as one delta; the Neuralese driver streams only when the server declares it in `/v1/neuralese/info`.
  */
 import assert from 'node:assert/strict';
@@ -12,7 +12,7 @@ import { neuraleseServerModelTurn } from '../dist/model/neuralese-server.js';
 import { nativeStateSentinel } from '../dist/native/neuralese.js';
 import { MemoryNeuraleseStore, encodeNativeState, decodeNativeState, nativeStateContentId } from '../dist/native/neuralese-store.js';
 
-const BLOCK = 'nz1_' + 'a'.repeat(52);
+const BLOCK = 'nzs1_' + 'a'.repeat(52);
 const tools = [{ type: 'function', function: { name: 'eval', parameters: { type: 'object',
   properties: { code: { type: 'string' } }, required: ['code'] } } }];
 const request = () => ({ messages: [{ role: 'user', content: 'Write seven.' }], tools, seed: 3, max_tokens: null });
@@ -32,19 +32,19 @@ const plain = {
     usage: { prompt_tokens: 12, completion_tokens: 5 } },
 };
 
-/** A Neuralese reply as the reference server streams it (serve/http.py `_stream`) and as its whole body. */
+/** A native-state reply as the reference server streams it (serve/http.py `_stream`) and as its whole body. */
 const blockMeta = { id: BLOCK, dialect: 'nd:test@1', length: 2, width: 4, dtype: 'f32', type: 'Neuralese<string>' };
-const neuraleseMessage = { role: 'assistant', content: [{ type: 'text', text: 'Note: ' }, { type: 'neuralese', id: BLOCK },
+const neuraleseMessage = { role: 'assistant', content: [{ type: 'text', text: 'Note: ' }, { type: 'native_state', id: BLOCK },
   { type: 'text', text: ' done.' }] };
 const neuraleseReply = {
   chunks: [chunk({ role: 'assistant' }), chunk({ content: 'Note: ' }),
-    chunk({ content: [{ type: 'neuralese', id: BLOCK }] }, null, { neuralese: { block: blockMeta } }),
+    chunk({ content: [{ type: 'native_state', id: BLOCK }] }, null, { native_state: { block: blockMeta } }),
     chunk({ content: ' done.' }),
     chunk({}, 'stop', { x_natlang_message: neuraleseMessage, usage: { prompt_tokens: 9, completion_tokens: 4 },
-      neuralese: { dialect: 'nd:test@1', blocks: [blockMeta] } })],
+      native_state: { dialect: 'nd:test@1', blocks: [blockMeta] } })],
   whole: { id: 'c1', object: 'chat.completion', created: 1, model: 'm',
     choices: [{ index: 0, finish_reason: 'stop', message: neuraleseMessage }],
-    usage: { prompt_tokens: 9, completion_tokens: 4 }, neuralese: { dialect: 'nd:test@1', blocks: [blockMeta] } },
+    usage: { prompt_tokens: 9, completion_tokens: 4 }, native_state: { dialect: 'nd:test@1', blocks: [blockMeta] } },
 };
 
 /** A local server: chat completions answer `reply` streamed when the request asks for it; `info` is the Neuralese info. */
@@ -122,7 +122,7 @@ test('a malformed call that is sent again first voids the earlier attempt\'s del
   } finally { await model.close(); }
 });
 
-test('a Neuralese server that declares streaming streams: a written block is one delta, and the final message decides', async () => {
+test('a native-state server that declares streaming streams: a written state is one delta, and the final message decides', async () => {
   const model = await server(neuraleseReply, { dialects: ['nd:test@1'], stream: true });
   const whole = await server(neuraleseReply, { dialects: ['nd:test@1'] });
   try {
@@ -131,11 +131,11 @@ test('a Neuralese server that declares streaming streams: a written block is one
       { onDelta: delta => deltas.push(delta) });
     assert.equal(model.bodies[0].stream, true);
     assert.deepEqual(deltas, [{ type: 'text', text: 'Note: ' },
-      { type: 'neuralese', part: { type: 'neuralese', id: BLOCK }, block: blockMeta }, { type: 'text', text: ' done.' }]);
+      { type: 'native_state', part: { type: 'native_state', id: BLOCK }, block: blockMeta }, { type: 'text', text: ' done.' }]);
     const unstreamed = await neuraleseServerModelTurn({ endpoint: whole.endpoint, model: 'm' })(request());
     assert.equal(whole.bodies[0].stream, undefined);
     assert.deepEqual(content(streamed), content(unstreamed));
-    assert.deepEqual(streamed.raw_response.neuralese, neuraleseReply.whole.neuralese);
+    assert.deepEqual(streamed.raw_response.native_state, neuraleseReply.whole.native_state);
     assert.deepEqual(streamed.raw_response.choices[0].message.content, neuraleseMessage.content);
     assert.deepEqual(unstreamed.raw_response.choices[0].message.content, neuraleseMessage.content);
   } finally { await model.close(); await whole.close(); }
@@ -240,7 +240,7 @@ test('native server transport restores input artifacts and archives producer art
   } finally { await new Promise(resolve => instance.close(resolve)); }
 });
 
-test('a Neuralese server that does not declare streaming gets whole requests', async () => {
+test('a native-state server that does not declare streaming gets whole requests', async () => {
   for (const info of [{ dialects: ['nd:test@1'] }, { dialects: ['nd:test@1'], stream: false }]) {
     const model = await server(neuraleseReply, info);
     try {

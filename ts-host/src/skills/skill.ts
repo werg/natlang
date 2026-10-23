@@ -5,8 +5,8 @@
  * `description`, followed by markdown instructions, plus optional supporting files (references, examples, scripts,
  * assets). Natlang reads such folders unchanged and adds an optional `natlang` block (scope injection, typed exports,
  * requirements, tests, provenance). The block may be written as a top-level `natlang:` key or, for validators that only
- * accept the standard keys, as `metadata.natlang` (an object or a YAML/JSON string). A soft skill keeps the same fields
- * in the metadata of a `.nz` file instead of YAML frontmatter.
+ * accept the standard keys, as `metadata.natlang` (an object or a YAML/JSON string). Native state references appear
+ * directly in typed metadata values; `.nz` archives carry artifact custody, not skill manifests.
  */
 import YAML from 'yaml';
 import { isNeuraleseRef, neuraleseRef, type NeuraleseRef } from '../native/neuralese.js';
@@ -18,9 +18,8 @@ export const SKILL_FILE = 'SKILL.md';
 /** Keys of the standard skill frontmatter; anything else is kept but reported. */
 export const STANDARD_KEYS = new Set(['name', 'description', 'summary', 'license', 'allowed-tools', 'metadata', 'compatibility', 'natlang']);
 
-/** Where a scope binding's value comes from: a literal, a JSON file in the skill (with an optional JSON pointer), or a
- * `.nz` export (`file.nz#export`). Exactly one source is given. */
-export type ScopeSource = { type: string; value?: unknown; file?: string; pointer?: string; nz?: string; description?: string };
+/** A scope binding comes from a literal value or a JSON file in the skill (with an optional JSON pointer). */
+export type ScopeSource = { type: string; value?: unknown; file?: string; pointer?: string; description?: string };
 export type SkillTest = { name: string; input?: unknown; expected?: unknown; check?: string };
 export type NatlangSkillMeta = {
   scope: Record<string, ScopeSource>;
@@ -38,10 +37,10 @@ export type Skill = {
   readonly name: string;
   readonly description: SkillDescription;
   readonly summary?: SkillDescription;
-  readonly format: 'markdown' | 'nz';
-  /** Folder (markdown skill) or file (`.nz` skill), relative to the context root. */
+  readonly format: 'markdown';
+  /** Skill folder, relative to the context root. */
   readonly root: string;
-  /** Markdown instructions after the frontmatter; for a `.nz` skill, the name of its Neuralese body export. */
+  /** Markdown instructions after the frontmatter. */
   readonly body: string;
   readonly frontmatter: Readonly<Record<string, unknown>>;
   readonly natlang: NatlangSkillMeta;
@@ -99,20 +98,18 @@ export function readNatlangMeta(frontmatter: Record<string, unknown>, path: stri
     else for (const [name, source] of Object.entries(raw.scope)) {
       const where = `natlang.scope.${name}`;
       if (!IDENT.test(name)) { error('skill-scope-name', `${where}: "${name}" is not an identifier`); continue; }
-      if (!plain(source)) { error('skill-scope-shape', `${where}: expected { type, value | file | nz }`); continue; }
+      if (!plain(source)) { error('skill-scope-shape', `${where}: expected { type, value | file }`); continue; }
       if (!parses(where, source.type)) continue;
-      const given = ['value', 'file', 'nz'].filter(key => source[key] !== undefined);
-      if (given.length !== 1) { error('skill-scope-source', `${where}: give exactly one of value, file or nz`); continue; }
-      const target = typeof source.file === 'string' ? source.file : typeof source.nz === 'string' ? source.nz.split('#')[0]! : undefined;
+      const given = ['value', 'file'].filter(key => source[key] !== undefined);
+      if (given.length !== 1) { error('skill-scope-source', `${where}: give exactly one of value or file`); continue; }
+      const target = typeof source.file === 'string' ? source.file : undefined;
       if (given[0] !== 'value') {
         if (typeof target !== 'string' || !safeRelative(target)) { error('skill-scope-path', `${where}: path must be relative and inside the skill`); continue; }
         if (files !== undefined && !files.includes(target)) { error('skill-scope-missing-file', `${where}: ${target} is not a file of this skill`); continue; }
-        if (given[0] === 'nz' && !/^[^#]+\.nz#[A-Za-z_$][A-Za-z0-9_$]*$/.test(String(source.nz)))
-          { error('skill-scope-nz', `${where}: nz must be "file.nz#export"`); continue; }
       }
       meta.scope[name] = { type: source.type, ...(source.value !== undefined ? { value: source.value } : {}),
         ...(typeof source.file === 'string' ? { file: source.file } : {}), ...(typeof source.pointer === 'string' ? { pointer: source.pointer } : {}),
-        ...(typeof source.nz === 'string' ? { nz: source.nz } : {}), ...(typeof source.description === 'string' ? { description: source.description } : {}) };
+        ...(typeof source.description === 'string' ? { description: source.description } : {}) };
     }
   }
   if (raw.exports !== undefined) {
@@ -167,7 +164,7 @@ export function readSkillDescription(value: unknown, field: 'description' | 'sum
   return undefined;
 }
 
-/** Validate the standard fields shared by markdown and `.nz` skills. */
+/** Validate standard skill frontmatter fields. */
 export function readStandardFields(frontmatter: Record<string, unknown>, path: string, expectedName: string | undefined,
   diagnostics: SkillDiagnostic[], extraKeys: readonly string[] = []): { name: string; description: SkillDescription; summary?: SkillDescription } {
   const error = (code: string, message: string) => diagnostics.push({ path, code, message, severity: 'error' });
@@ -212,35 +209,4 @@ export function parseMarkdownSkill(root: string, files: Readonly<Record<string, 
   if (diagnostics.filter(d => d.severity === 'error').length > before) return undefined;
   return { name, description, ...(summary !== undefined ? { summary } : {}), format: 'markdown', root, body: parsed.body, frontmatter: parsed.data, natlang,
     files: supporting, revision: skillRevision(files) };
-}
-
-/**
- * Hook for `.nz` skills: the `.nz` reader (S4) supplies the safetensors metadata of a file. The skill fields live under
- * the metadata key `skill` (the same fields as SKILL.md frontmatter, plus `body`: the name of the Neuralese export that
- * holds the instructions).
- */
-export type NzSkillHook = { readMetadata(path: string, bytes: Uint8Array): Promise<Record<string, unknown>> };
-
-export const unsupportedNzSkills: NzSkillHook = {
-  async readMetadata(path) { throw new Error(`reading .nz skill metadata is not available yet (${path})`); },
-};
-
-export async function parseNzSkill(path: string, bytes: Uint8Array, hook: NzSkillHook, siblings: readonly string[] = [],
-  diagnostics: SkillDiagnostic[] = []): Promise<Skill | undefined> {
-  let metadata: Record<string, unknown>;
-  try { metadata = await hook.readMetadata(path, bytes); }
-  catch (cause) { diagnostics.push({ path, code: 'nz-skill-unsupported', message: (cause as Error).message, severity: 'error' }); return undefined; }
-  const fields = metadata.skill;
-  if (!plain(fields)) { diagnostics.push({ path, code: 'nz-skill-metadata', message: 'the .nz metadata has no "skill" mapping', severity: 'error' }); return undefined; }
-  const before = diagnostics.filter(d => d.severity === 'error').length;
-  const base = path.split('/').pop()!.replace(/\.nz$/, '');
-  const folder = path.split('/').slice(-2, -1)[0];
-  const expected = path.endsWith(`/${base}.nz`) && folder && folder !== 'skills' ? folder : base;
-  const { name, description, summary } = readStandardFields(fields, path, expected, diagnostics, ['body']);
-  const natlang = readNatlangMeta(fields, path, siblings, diagnostics);
-  const body = typeof fields.body === 'string' ? fields.body : '';
-  if (!body) diagnostics.push({ path, code: 'nz-skill-body', message: 'skill.body must name the Neuralese export holding the instructions', severity: 'error' });
-  if (diagnostics.filter(d => d.severity === 'error').length > before) return undefined;
-  return { name, description, ...(summary !== undefined ? { summary } : {}), format: 'nz', root: path, body, frontmatter: fields, natlang, files: [...siblings].sort(),
-    revision: skillRevision({ [path]: bytes }) };
 }

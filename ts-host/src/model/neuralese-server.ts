@@ -1,12 +1,12 @@
 /**
- * Transport to a Neuralese-capable model server (spec/NEURALESE_PORT.md, "Wire protocol"; S4 §3–4).
+ * Transport to a native-state-capable model server (spec/NEURALESE_PORT.md, "Wire protocol"; S4 §3–4).
  *
  * The reference server is `python -m natlang_neuralese.serve` (training/neuralese). Requests are ordinary chat
  * completions whose message content and tool-call arguments carry native positional state references. The server
  * returns exact native-state artifacts and import receipts; projected value blocks are not a transport format.
  *
  * Replies stream when the server declares `stream: true` in `/v1/neuralese/info` (plans/STREAMING.md §1.2): text and
- * each written block arrive as the turn's deltas (`ModelTurnOptions.onDelta`), and the final `x_natlang_message` is the
+ * each written native state arrives as the turn's deltas (`ModelTurnOptions.onDelta`), and the final `x_natlang_message` is the
  * reply. A server that does not declare it (the llama.cpp fork until it serves SSE) gets whole requests.
  *
  * The driver keeps native state and named tensor custody in step across the runtime archive and model server.
@@ -29,7 +29,7 @@ import { isContentParts, nativeStateSentinel, nativeStateSentinelIds,
 import { nativeStateConsumerFromInfo } from '../native/neuralese.js';
 import { decodeNativeState, encodeNativeState, nativeStateContentId, nativeStateBlockMeta,
   decodeNativeTensorArtifact, encodeNativeTensorArtifact, nativeTensorArtifactContentId, nativeTensorArtifactDependencies, nativeStateArtifactDependencies, archiveNativeArtifactFrom, archiveNativeTensorFrom,
-  nativeTensorArtifactBlockMeta, neuraleseContentId, nativeModelIdentityEqual, type NeuraleseBlock, type NeuraleseBlockMeta, type NeuraleseBlockInput,
+  nativeTensorArtifactBlockMeta, nativeModelIdentityEqual, type NeuraleseBlockMeta,
   type NativeStateArtifact, type NativeTensorArtifact, type NeuraleseStore } from '../native/neuralese-store.js';
 
 type Json = Record<string, unknown>;
@@ -77,9 +77,8 @@ export async function restoreNativeArtifacts(remote: NeuraleseStore, archive: Ne
       }
       return;
     }
-    // nz1 projected blocks are local historical data only. They cannot be
-    // uploaded to the native server or interpreted as positional state.
-    missing.push(id);
+    throw Object.assign(new TypeError(`native artifact restore requires an nzs1 state or nnt1 tensor ID, got ${JSON.stringify(id)}`),
+      { code: 'neuralese-native-artifact-id' });
   };
   for (const id of new Set(ids)) await restore(id);
   return missing;
@@ -118,13 +117,6 @@ export class HttpNeuraleseStore implements NeuraleseStore {
   }
   private async request(path: string, init: RequestInit = {}): Promise<Response> {
     return fetchModel(this.base + path, { ...init, headers: { ...this.headers, ...(init.headers as Record<string, string> ?? {}) } });
-  }
-  async put(block: NeuraleseBlockInput): Promise<NeuraleseBlockMeta> {
-    throw new Error(`neuralese-projected-api-retired: cannot upload flat block ${neuraleseContentId(block)}; write native state through native.text-write`);
-  }
-  async get(id: string): Promise<NeuraleseBlock | undefined> {
-    if (id.startsWith('nz1_')) throw new Error(`neuralese-projected-api-retired: flat block ${id} is local historical data, not a server artifact`);
-    throw new Error(`neuralese-native-archive-api: use getNativeState or getNativeTensorArtifact for ${id}`);
   }
   async putNativeState(artifact: Omit<NativeStateArtifact, 'id'>): Promise<NativeStateArtifact> {
     const id = nativeStateContentId(artifact.metadata, artifact.tensors);
@@ -219,7 +211,7 @@ export type NeuraleseServerOptions = Omit<HttpChatOptions, 'stream'> & Pick<Chat
 
 function malformedNativePartList(value: unknown): boolean {
   return Array.isArray(value) && value.length > 0 && value.every(part => part && typeof part === 'object' &&
-    ['text', 'neuralese', 'native_state'].includes(part.type)) &&
+    ['text', 'native_state'].includes(part.type)) &&
     value.some(part => part.type === 'native_state' && !isNativeStateId(part.id));
 }
 
@@ -234,7 +226,6 @@ export function requestNativeStateIds(messages: readonly unknown[]): string[] {
     if (malformedNativePartList(value)) return;
     if (Array.isArray(value) && value.length && value.every(part => part && typeof part === 'object' &&
         (part.type === 'text' && typeof part.text === 'string' ||
-         part.type === 'neuralese' && typeof part.id === 'string' ||
          part.type === 'native_state' && isNativeStateId(part.id)))) {
       for (const part of value as RuntimeContentPart[]) if (part.type === 'native_state') ids.add(part.id);
       return;
@@ -252,21 +243,25 @@ export function requestNativeStateIds(messages: readonly unknown[]): string[] {
 }
 
 function materializeNativeStateSentinels(value: unknown, key?: string): unknown {
+  if (Array.isArray(value)) {
+    if (value.some(part => part && typeof part === 'object' && (part as Json).type === 'neuralese'))
+      throw new TypeError('native chat content does not accept flat vector blocks');
+    if (value.some(part => part && typeof part === 'object' && (part as Json).type === 'native_state' &&
+        !isNativeStateId((part as Json).id)))
+      throw new TypeError('native chat content requires an archived nzs1 state ID');
+  }
   if (key === 'arguments' && typeof value === 'string') {
     try { return JSON.stringify(materializeNativeStateSentinels(JSON.parse(value))); }
     catch { return value; } // preserve malformed input for the server's existing argument error path
   }
   if (malformedNativePartList(value)) return value;
   if (typeof value === 'string') {
-    if (/nz1_[a-z2-7]+/.test(value)) throw new Error('neuralese-projected-api-retired: request contains a flat nz1 sentinel');
     return nativeStateSentinelIds(value).length ? runtimeTextToParts(value) : value;
   }
   if (Array.isArray(value) && value.length && value.every(part => part && typeof part === 'object' &&
       (part.type === 'text' && typeof part.text === 'string' ||
-        part.type === 'neuralese' && typeof part.id === 'string' ||
        part.type === 'native_state' && isNativeStateId(part.id))))
     return value.flatMap(part => {
-      if (part.type === 'neuralese') throw new Error(`neuralese-projected-api-retired: request contains flat block ${part.id}`);
       return part.type === 'text' ? runtimeTextToParts(part.text) : [part];
     });
   if (Array.isArray(value)) return value.map(item => materializeNativeStateSentinels(item));
@@ -274,7 +269,6 @@ function materializeNativeStateSentinels(value: unknown, key?: string): unknown 
     const part = value as { type?: unknown; id?: unknown;stop_gradient?:unknown;source_occurrence?:unknown };
     if (part.type === 'native_state' && part.source_occurrence !== undefined && (typeof part.source_occurrence!=='string'||!part.source_occurrence)) throw new TypeError('native source occurrence must be a nonempty actual writer reference');
     if (part.type === 'native_state' && part.stop_gradient !== undefined && part.stop_gradient !== true) throw new TypeError('native state constant-use metadata must be true or absent');
-    if (part.type === 'neuralese') throw new Error(`neuralese-projected-api-retired: request contains flat block ${String(part.id)}`);
     if (part.type === 'native_state' && isNativeStateId(part.id)) return [{ type: 'native_state', id: part.id,
       ...(part.stop_gradient===true?{stop_gradient:true}:{}),...(typeof part.source_occurrence==='string'?{source_occurrence:part.source_occurrence}:{}) }];
     return Object.fromEntries(Object.entries(value).map(([name, item]) =>

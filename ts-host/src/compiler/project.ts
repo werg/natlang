@@ -269,7 +269,6 @@ declare module 'natlang:learning' {
     policyGradient(samples: { trajectory: Trajectory; reward: number }[], options?: { baseline?: 'mean' | number }): Promise<Loss>;
     conditionedDistill(student: Promise<unknown> | (() => Promise<unknown>), teacher: Promise<unknown> | (() => Promise<unknown>), options?: { privileged?: unknown; rule?: 'logLoss' | 'brier' | 'rps' }): Promise<Loss>;
     logLikelihood(trajectory: Trajectory, weight?: number): Promise<Loss>;
-    klPrior(blocks: Neuralese<unknown> | Neuralese<unknown>[]): Promise<Loss>;
     sum(...losses: Loss[]): Promise<Loss>;
     scale(loss: Loss, weight: number): Promise<Loss>;
   };

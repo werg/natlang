@@ -12,13 +12,13 @@ test('native missing-artifact errors are recognized without accepting the remove
   assert.ok(!isUnknownNativeArtifactError(new Error('HTTP 500: internal')));
 });
 
-test('restoreNativeArtifacts copies an exact state from archive and reports missing native dependencies', async () => {
+test('restoreNativeArtifacts copies an exact state and rejects IDs outside the native artifact domains', async () => {
   const archive = new MemoryNeuraleseStore(), remote = new MemoryNeuraleseStore();
   const state = await archive.putNativeState(nativeStateFixture());
   assert.deepEqual(await restoreNativeArtifacts(remote, archive, [state.id]), []);
   assert.deepEqual(await remote.getNativeState(state.id), state);
   assert.deepEqual(await restoreNativeArtifacts(remote, archive, ['nzs1_' + 'a'.repeat(52)]), ['nzs1_' + 'a'.repeat(52)]);
-  assert.deepEqual(await restoreNativeArtifacts(remote, archive, ['nz1_' + 'b'.repeat(52)]), ['nz1_' + 'b'.repeat(52)]);
+  await assert.rejects(restoreNativeArtifacts(remote, archive, ['nz1_' + 'b'.repeat(52)]), /native artifact restore requires an nzs1 state or nnt1 tensor ID/);
 });
 
 test('withRestoredNativeArtifacts reuploads after a serving restart and retries once', async () => {

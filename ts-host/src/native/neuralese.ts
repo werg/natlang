@@ -1,18 +1,16 @@
 /**
  * Neuralese literals and references in the runtime (S0 §3, S4 §2.3, §3).
  *
- * A soft value has exactly two renderings:
+ * A native state value has an opaque reference outside the model and native state parts on the wire:
  *
- * - **Reference form**, everywhere outside the model: `{ $neuralese: { type, id } }`, an ordinary data value naming a
- *   stored block.
- * - **Model form**, at the token level: `<|neuralese|>` vectors `<|/neuralese|>`. Transports carry it as content parts
- *   `{ type: "neuralese", id }` in message content and in tool-call arguments.
+ * - **Reference form**, everywhere outside the model: `{ $neuralese: { type, id } }`, naming an archived `nzs1` state.
+ * - **Transport form**: `native_state` content parts bind exact archived state artifacts at recorded positions.
  *
  * Between the two, the runtime's own conversation text marks a block with a private-use sentinel around its ID. The
  * agent's text handling (cut-offs, compaction, transcript) needs no special case for it; transports turn sentinels into
  * parts, and eval compilation turns them into `__neuralese("id")`, which the checker types from context.
  */
-import { constantBlock, type NeuraleseBlockMeta, type NeuralesePort, type NeuraleseStore } from './neuralese-store.js';
+import { type NeuraleseBlockMeta, type NeuralesePort, type NeuraleseStore } from './neuralese-store.js';
 import type { DialectBinding, Type, TypeEnv } from './types.js';
 
 export const NEURALESE_OPEN = '<|neuralese|>';
@@ -30,14 +28,10 @@ export function nativeAdapterRef(id: string): NativeAdapterRef {
   return Object.freeze({ $nativeAdapter: Object.freeze({ id }) });
 }
 export type NeuraleseTextPart = { type: 'text'; text: string };
-export type NeuraleseContentPart = { type: 'neuralese'; id: string };
 export type NativeStateContentPart = { type: 'native_state'; id: string; stop_gradient?: true; source_occurrence?:string };
-export type ContentPart = NeuraleseTextPart | NeuraleseContentPart | NativeStateContentPart;
+export type ContentPart = NeuraleseTextPart | NativeStateContentPart;
 export type RuntimeContentPart = ContentPart;
 
-const ID = /^nz1_[a-z2-7]{20,}$/;
-const SENTINEL_OPEN = '', SENTINEL_CLOSE = '';
-const SENTINEL = /(nz1_[a-z2-7]+)/g;
 const NATIVE_SENTINEL_OPEN = '', NATIVE_SENTINEL_CLOSE = '';
 const NATIVE_STATE_ID = /^nzs1_[a-z2-7]{52}$/;
 const NATIVE_TENSOR_ID = /^nnt1_[a-z2-7]{52}$/;
@@ -61,17 +55,17 @@ export function nativeStateSentinelIds(text: string): string[] {
 }
 
 export function runtimePartsToText(parts: readonly RuntimeContentPart[]): string {
-  return parts.map(part => part.type === 'text' ? part.text :
-    part.type === 'neuralese' ? neuraleseSentinel(part.id) : nativeStateSentinel(part.id,part.stop_gradient,part.source_occurrence)).join('');
+  return parts.map(part => part.type === 'text' ? part.text : nativeStateSentinel(part.id,part.stop_gradient,part.source_occurrence)).join('');
 }
 
 export function runtimeTextToParts(text: string): RuntimeContentPart[] {
   const parts: RuntimeContentPart[] = [];
-  const markers = [...text.matchAll(/(nz1_[a-z2-7]+)|(nzs1_[a-z2-7]{52})(!)?(?:@([^]+))?/g)];
+  const markers = [...text.matchAll(/(nzs1_[a-z2-7]{52})(!)?(?:@([^]+))?/g)];
   let last = 0;
   for (const match of markers) {
     if (match.index! > last) parts.push({ type: 'text', text: text.slice(last, match.index) });
-    parts.push(match[1] ? { type: 'neuralese', id: match[1] } : { type: 'native_state', id: match[2]!,...(match[3]?{stop_gradient:true}:{}),...(match[4]?{source_occurrence:decodeURIComponent(match[4])}:{}) });
+    parts.push({ type: 'native_state', id: match[1]!, ...(match[2] ? { stop_gradient: true } : {}),
+      ...(match[3] ? { source_occurrence: decodeURIComponent(match[3]) } : {}) });
     last = match.index! + match[0].length;
   }
   if (last < text.length || !parts.length) parts.push({ type: 'text', text: text.slice(last) });
@@ -90,7 +84,7 @@ export function nativeStateTextToParts(text: string): RuntimeContentPart[] {
   return parts;
 }
 
-export function isNeuraleseId(value: unknown): value is string { return typeof value === 'string' && (ID.test(value) || NATIVE_STATE_ID.test(value) || NATIVE_TENSOR_ID.test(value)); }
+export function isNeuraleseId(value: unknown): value is string { return isNativeStateId(value); }
 
 export function neuraleseRef(type: string, id: string, stopGradient = false, sourceOccurrence?:string): NeuraleseRef {
   if (!isNeuraleseId(id)) throw new TypeError(`not a Neuralese block ID: ${JSON.stringify(id)}`);
@@ -113,8 +107,7 @@ export function isNeuraleseRef(value: unknown): value is NeuraleseRef {
 /** The conversation-text marker for a block. */
 export function neuraleseSentinel(id: string, stopGradient = false, sourceOccurrence?:string): string {
   if (isNativeTensorArtifactId(id)) throw new Error('neuralese-native-tensor-as-state: bind coefficient artifacts with withNativeAdapters; named tensor artifacts cannot be consumed as communication state');
-  if (!isNeuraleseId(id)) throw new TypeError(`not a Neuralese block ID: ${JSON.stringify(id)}`);
-  return isNativeStateId(id) ? nativeStateSentinel(id,stopGradient,sourceOccurrence) : `${SENTINEL_OPEN}${id}${SENTINEL_CLOSE}`;
+  return nativeStateSentinel(id, stopGradient, sourceOccurrence);
 }
 
 /** Per-use derivative metadata survives conversation plumbing, never model tokens. */
@@ -128,21 +121,21 @@ export function soleSentinel(text: string): string | undefined {
 }
 
 export function soleSentinelUse(text:string):{id:string;stop_gradient?:true;source_occurrence?:string}|undefined {
-  const match=/^(?:(nz1_[a-z2-7]+)|(nzs1_[a-z2-7]{52})(!)?(?:@([^]+))?)$/.exec(text);
-  return match?{id:match[1]??match[2]!,...(match[3]?{stop_gradient:true}:{}),...(match[4]?{source_occurrence:decodeURIComponent(match[4])}:{})}:undefined;
+  const match=/^(nzs1_[a-z2-7]{52})(!)?(?:@([^]+))?$/.exec(text);
+  return match ? { id: match[1]!, ...(match[2] ? { stop_gradient: true } : {}),
+    ...(match[3] ? { source_occurrence: decodeURIComponent(match[3]) } : {}) } : undefined;
 }
 
-export const hasNeuraleseSentinel = (text: string): boolean => text.includes(SENTINEL_OPEN) || text.includes(NATIVE_SENTINEL_OPEN);
+export const hasNeuraleseSentinel = (text: string): boolean => text.includes(NATIVE_SENTINEL_OPEN);
 
 /** Block IDs a text refers to. */
-export function sentinelIds(text: string): string[] { return [...text.matchAll(/(nz1_[a-z2-7]+)|(nzs1_[a-z2-7]{52})(!)?(?:@([^]+))?/g)].map(match => match[1] ?? match[2]!); }
+export function sentinelIds(text: string): string[] { return nativeStateSentinelIds(text); }
 
 /** Conversation text to content parts: text runs and Neuralese blocks. */
 export function textToParts(text: string): ContentPart[] { return runtimeTextToParts(text); }
 
 export const isContentParts = (value: unknown): value is ContentPart[] => Array.isArray(value) && value.length > 0 &&
   value.every(part => part && typeof part === 'object' && ((part.type === 'text' && typeof part.text === 'string') ||
-    (part.type === 'neuralese' && isNeuraleseId(part.id)) ||
     (part.type === 'native_state' && isNativeStateId(part.id) && (part.stop_gradient===undefined||part.stop_gradient===true)&&
       (part.source_occurrence===undefined||typeof part.source_occurrence==='string'&&!!part.source_occurrence))));
 
@@ -153,26 +146,26 @@ export function partsToText(parts: readonly ContentPart[]): string {
 
 /**
  * Eval source with its literals as calls the checker types from their context (see compiler/neuralese.ts). A template
- * that is exactly one block is a soft function body, ``nl.with({ … })`${__neuralese.body("nz1_…")}` ``.
+ * that is exactly one block is a soft function body, ``nl.with({ … })`${__neuralese.body("nzs1_…")}` ``.
  */
 export function nativeLiteralArguments(id:string,constant=false,source?:string):string {
   return JSON.stringify(id)+(source?`, ${constant?'true':'undefined'}, ${JSON.stringify(source)}`:constant?', true':'');
 }
 
 export function sourceWithLiteralCalls(code: string): string {
-  const pattern = /(nz1_[a-z2-7]+)|(nzs1_[a-z2-7]{52})(!)?(?:@([^]+))?/g;
+  const pattern = /(nzs1_[a-z2-7]{52})(!)?(?:@([^]+))?/g;
   const body = new RegExp('`(?:' + pattern.source + ')`', 'g');
-  const args=(legacy:string,native:string,stop:string|undefined,source:string|undefined)=>
-    nativeLiteralArguments(legacy??native,!!stop,source?decodeURIComponent(source):undefined);
-  return code.replace(body, (_, legacy: string, native: string,stop:string|undefined,source:string|undefined) =>
-    `\`\${__neuralese.body(${args(legacy,native,stop,source)})}\``)
-    .replace(pattern, (_, legacy: string, native: string,stop:string|undefined,source:string|undefined) => `__neuralese(${args(legacy,native,stop,source)})`);
+  const args=(native:string,stop:string|undefined,source:string|undefined)=>
+    nativeLiteralArguments(native,!!stop,source?decodeURIComponent(source):undefined);
+  return code.replace(body, (_, native: string, stop: string | undefined, source: string | undefined) =>
+    `\`\${__neuralese.body(${args(native,stop,source)})}\``)
+    .replace(pattern, (_, native: string, stop: string | undefined, source: string | undefined) => `__neuralese(${args(native,stop,source)})`);
 }
 
 /**
  * Store each block a model wrote as marker text (`<|neuralese|>…<|/neuralese|>`) through `port`, and return the text
- * with sentinels in their place. Backends that write real blocks return parts instead; this is the stand-in path, where
- * the text inside the markers is what the stand-in port embeds. An unclosed literal is written as truncated.
+ * with native-state sentinels in their place. Backends that write native states return parts instead. An unclosed
+ * literal is written as truncated by the configured native-state port.
  */
 export async function writeLiterals(text: string, port: NeuralesePort | undefined,
   producer: Record<string, unknown> = {}): Promise<{ text: string; parts: ContentPart[]; blocks: NeuraleseBlockMeta[] }> {
@@ -190,9 +183,11 @@ export async function writeLiterals(text: string, port: NeuralesePort | undefine
     const close = body.indexOf(NEURALESE_CLOSE);
     const inner = close < 0 ? body : body.slice(0, close);
     const block = await port.write(inner, { producer, truncated: close < 0 });
+    if (!isNativeStateId(block.id))
+      throw new NeuraleseUnsupportedError('the configured write port must return an archived nzs1 native state');
     blocks.push(block);
     out += neuraleseSentinel(block.id);
-    parts.push({ type: isNativeStateId(block.id) ? 'native_state' : 'neuralese', id: block.id });
+    parts.push({ type: 'native_state', id: block.id });
     if (close < 0) break;
     rest = body.slice(close + NEURALESE_CLOSE.length);
   }
@@ -239,7 +234,7 @@ export type NeuraleseRuntimeOptions = {
   nativeStateConsumer?: NativeStateConsumer;
   /** Refresh a server-backed reader identity before binding state to a model prompt. */
   nativeStateConsumerForCall?: () => Promise<NativeStateConsumer | undefined>;
-  /** Writes blocks for literals a model returns as marker text (the stand-in port, or a writer in-process). */
+  /** Writes native state spans for literal text a model returns in a declared typed result. */
   port?: NeuralesePort;
   /**
    * The dialect the runtime's model reads and writes, which `DefaultDialect` stands for. Defaults to the port's; set it
@@ -276,7 +271,7 @@ export function readerDialect(options: NeuraleseRuntimeOptions | undefined): str
 export function dialectBinding(options: NeuraleseRuntimeOptions | undefined): DialectBinding | undefined {
   if (!options) return undefined;
   const dialect = readerDialect(options), store = options.store;
-  return { dialect, blockDialect: id => store.peek?.(id)?.dialect ?? constantBlock(id)?.meta.dialect,
+  return { dialect, blockDialect: id => store.peek?.(id)?.dialect,
     nativeDefaultCompatible: (id, source, target) => {
       const consumer = options.nativeStateConsumer;
       if (!isNativeStateId(id) || !consumer || !/^(native|semantic)-state\//.test(source)) return false;
@@ -324,8 +319,8 @@ export function encodeMessages(messages: readonly unknown[]): { messages: unknow
 }
 
 /**
- * A model turn with its Neuralese content in conversation-text form: part arrays (from a Neuralese backend) and
- * marker text (from the stand-in path) in the reply text and in every string of the call arguments become sentinels.
+ * A model turn with its native state in conversation-text form: part arrays from the native backend and source
+ * markers in the reply text or call arguments become opaque runtime sentinels.
  */
 type TurnValueExpectation = { type: Type; env: TypeEnv };
 
@@ -409,8 +404,7 @@ export async function decodeTurnValue(value: unknown, port: NeuralesePort | unde
             `native state ${part.id} has no authenticated stored text for the declared ordinary result`);
           text.push(stored);
         } else {
-          // Legacy projected blocks do not carry authenticated source text.
-          return value.map(item => ({ ...item }));
+          throw new NeuraleseUnsupportedError('native-state text conversion received an unsupported content part');
         }
       }
       return text.join('');

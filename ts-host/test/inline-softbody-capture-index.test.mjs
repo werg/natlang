@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { createNativeStateFixturePort } from './fixtures/native-state-port.mjs';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -9,7 +10,7 @@ import { convertTrajectory } from '../dist/compiler/neuralese-conversion.js';
 import { buildInlineInstructionIndex } from '../dist/compiler/inline-instruction-index.js';
 import { sourceWithLiteralCalls } from '../dist/native/neuralese.js';
 import { desugarNlCalls } from '../dist/compiler/nl-call.js';
-import { MemoryNeuraleseStore, StandInNeuralesePort, hashingEmbedder } from '../dist/native/neuralese-store.js';
+import { MemoryNeuraleseStore } from '../dist/native/neuralese-store.js';
 import { executeProgram, expectedProvenance, programRow, programRunId, trajectoryTurn, defaultToolSurfaceHash } from '../dist/teacher/collector.js';
 import { materializeNativeRows } from '../dist/teacher/native-materializer.js';
 import { inline } from '../dist/runtime/lowered.js';
@@ -19,7 +20,7 @@ import { curriculumCase } from '../scripts/inline-curriculum/lib.mjs';
 import { TOOLS_PROMPT } from '../dist/native/prompt.js';
 
 const sha = value => createHash('sha256').update(value).digest('hex');
-const block = 'nz1_abcdefghijklmnopqrstuv';
+const block = 'nzs1_abcdefghijklmnopqrstuvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv';
 const body = 'Return the supplied policySnapshot exactly as written.';
 const policy = 'Only use details stated in the note.';
 
@@ -54,7 +55,7 @@ function fixture({ childPolicy = policy, capture = {}, codeOverride, shadowed = 
       parent_invocation_id: 'parent', inline_instruction_site: { site, validation: { valid: true, reasons: [] } } },
     outcome: { accepted: true }, training_admission: { approved: true }, decision: { index: 1, training_approved: true,
       assistant: { calls: [] } }, messages: [{ role: 'user', content: [
-      { type: 'text', text: `Instructions:\n` }, { type: 'neuralese', id: block },
+      { type: 'text', text: `Instructions:\n` }, { type: 'native_state', id: block },
       { type: 'text', text: `\n\nIn eval you can use inputs.\nconst policy: string = ${JSON.stringify(childPolicy)};` },
     ] }, { role: 'assistant', tool_calls: [{ id: 'scope_0', function: { name: 'eval', arguments:
         JSON.stringify({ code: `const policy: string = ${JSON.stringify(childPolicy)};` }) } }] }] };
@@ -114,7 +115,7 @@ test('quoted or unrelated scope text cannot substitute for parent input or child
 
 test('actual runtime collection preserves a captured soft body through materialization', async () => {
   const store = new MemoryNeuraleseStore();
-  const port = new StandInNeuralesePort(store, hashingEmbedder(8), 8, 'nd:natlang@1');
+  const port = createNativeStateFixturePort(store, 'native-state/fixture');
   const rawCode = `const policySnapshot: string = policy; const checker: Neuralese<(note: string) => Promise<string>> = nl.with({ policySnapshot })\`<|neuralese|>${body}<|/neuralese|>\`; const actualPolicy = await checker(note); return actualPolicy === policy;`;
   const program = curriculumCase({ family: 'inline_softbody_capture_runtime_test', shape: 'explicit-snapshot',
     splitGroup: 'inline_softbody_capture_runtime_test:explicit-snapshot', split: 'train', slice: 'single', domain: 'other',
@@ -194,7 +195,7 @@ test('actual runtime collection preserves a captured soft body through materiali
 
   const duplicateBody = structuredClone(child);
   duplicateBody.messages.find(message => message.role === 'user').content.splice(2, 0,
-    { type: 'neuralese', id: index.reads[0].body_block_id });
+    { type: 'native_state', id: index.reads[0].body_block_id });
   const rejectedDuplicate = convertTrajectory(duplicateBody, { inlineInstructions: index }).record;
   assert.equal(rejectedDuplicate.neuralese_conversion.sites['inline-instruction'].exact['soft-body-opening-mismatch'], 1);
   assert.ok(!rejectedDuplicate.messages.find(message => message.role === 'user').content.some(part => part.type === 'read'));
@@ -203,7 +204,7 @@ test('actual runtime collection preserves a captured soft body through materiali
   const firstUser = misplacedBody.messages.find(message => message.role === 'user');
   firstUser.content[1].id = 'different-block';
   misplacedBody.messages.push({ role: 'user', content: [
-    { type: 'text', text: 'Instructions:\n' }, { type: 'neuralese', id: index.reads[0].body_block_id },
+    { type: 'text', text: 'Instructions:\n' }, { type: 'native_state', id: index.reads[0].body_block_id },
     { type: 'text', text: '\n\nIn eval you can use inputs.' },
   ] });
   const rejectedLaterOpening = convertTrajectory(misplacedBody, { inlineInstructions: index }).record;

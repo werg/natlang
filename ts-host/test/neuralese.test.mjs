@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { createNativeStateFixturePort } from './fixtures/native-state-port.mjs';
+import { nativeStateFixture } from './fixtures/native-state.mjs';
 import { parseType, formatType, fitsType, TypeEnv, TypeSyntaxError } from '../dist/native/types.js';
 import { coerce, Reject } from '../dist/native/values.js';
-import { MemoryNeuraleseStore, StandInNeuralesePort, hashingEmbedder, neuraleseContentId } from '../dist/native/neuralese-store.js';
+import { MemoryNeuraleseStore } from '../dist/native/neuralese-store.js';
 import { hexDigest } from '../dist/native/hash.js';
 import { decodeTurnValue, encodeMessages, isNeuraleseRef, neuraleseRef, neuraleseSentinel, partsToText,
   sourceWithLiteralCalls, textToParts, writeLiterals } from '../dist/native/neuralese.js';
@@ -20,7 +22,7 @@ import { session as open } from './support/natlang.mjs';
 
 const standIn = (width = 8) => {
   const store = new MemoryNeuraleseStore();
-  return { store, port: new StandInNeuralesePort(store, hashingEmbedder(width), width) };
+  return { store, port: createNativeStateFixturePort(store) };
 };
 
 test('Neuralese<T> parses, formats and fits by element and dialect', () => {
@@ -104,9 +106,9 @@ test('two-generic nl.with schemas compile through eval and module paths without 
   assert.match(module, /priorNotes/);
 });
 
-test('reference values check against Neuralese types without touching the payload', () => {
+test('native state references check against Neuralese types without touching the payload', () => {
   const env = new TypeEnv({ Plan: parseType('{ steps: string[] }') });
-  const id = neuraleseContentId({ dialect: 'd', length: 0, width: 4, dtype: 'f32', data: new Uint8Array() });
+  const id = 'nzs1_' + 'a'.repeat(52);
   const ref = neuraleseRef('Neuralese<Plan>', id);
   assert.equal(coerce(ref, parseType('Neuralese<Plan>'), env), ref);
   assert.throws(() => coerce(ref, parseType('Neuralese<string>'), env), Reject);
@@ -117,22 +119,23 @@ test('reference values check against Neuralese types without touching the payloa
   assert.deepEqual(fromMarker.$neuralese, { type: 'Neuralese<Plan>', id });
 });
 
-test('the store is content addressed, deduplicates, pins and collects; the stand-in port embeds the written text', async () => {
-  const { store, port } = standIn(4);
+test('the native archive store deduplicates state, pins and collects its exact artifact', async () => {
+  const { store, port } = standIn();
   const a = await port.write('remember the plan');
   const b = await port.write('remember the plan');
-  assert.match(a.id, /^nz1_[a-z2-7]{52}$/);
+  assert.match(a.id, /^nzs1_[a-z2-7]{52}$/);
   assert.equal(a.id, b.id);
-  assert.deepEqual([a.length, a.width, a.dtype, a.dialect], [3, 4, 'f32', 'nd:standin@0']);
-  const block = await store.get(a.id);
-  assert.equal(block.data.length, 3 * 4 * 4);
+  const artifact = await store.getNativeState(a.id);
+  assert.equal(artifact.metadata.text, 'remember the plan');
+  assert.deepEqual(artifact.tensors.embeddings.shape, [2, 2]);
   const other = await port.write('something else');
   await store.pin(other.id);
   assert.deepEqual(await store.collect(new Set()), [a.id]);
   assert.ok(await store.has(other.id));
   await store.unpin(other.id);
   assert.deepEqual(await store.collect(new Set()), [other.id]);
-  await assert.rejects(() => store.put({ dialect: 'd', length: 2, width: 4, dtype: 'f32', data: new Uint8Array(3) }), /bytes/);
+  await assert.rejects(() => store.putNativeState({ ...nativeStateFixture(), tensors: {
+    ...nativeStateFixture().tensors, embeddings: { dtype: 'F32', shape: [2, 2], data: new Uint8Array(3) } } }), /tensor/);
 });
 
 test('literals move between marker text, conversation text, content parts and compiled source', async () => {
@@ -142,7 +145,7 @@ test('literals move between marker text, conversation text, content parts and co
   const id = written.blocks[0].id;
   assert.equal(written.text, `const p: Neuralese<Plan> = ${neuraleseSentinel(id)}; return p;`);
   const parts = textToParts(written.text);
-  assert.deepEqual(parts.map(part => part.type), ['text', 'neuralese', 'text']);
+  assert.deepEqual(parts.map(part => part.type), ['text', 'native_state', 'text']);
   assert.equal(partsToText(parts), written.text);
   assert.equal(sourceWithLiteralCalls(written.text), `const p: Neuralese<Plan> = __neuralese(${JSON.stringify(id)}); return p;`);
   const unclosed = await writeLiterals('x = <|neuralese|>never closed', port);
@@ -153,8 +156,8 @@ test('literals move between marker text, conversation text, content parts and co
     tool_calls: [{ id: '1', type: 'function', function: { name: 'eval', arguments: JSON.stringify({ code: written.text }) } }] }]);
   assert.equal(blocks, 1);
   assert.equal(messages[0].content, 'plain');
-  assert.deepEqual(messages[1].tool_calls[0].function.arguments.map(part => part.type), ['text', 'neuralese', 'text']);
-  const decoded = await decodeTurnValue([['eval', { code: [{ type: 'text', text: 'const q: Neuralese<Plan> = ' }, { type: 'neuralese', id }] }]],
+  assert.deepEqual(messages[1].tool_calls[0].function.arguments.map(part => part.type), ['text', 'native_state', 'text']);
+  const decoded = await decodeTurnValue([['eval', { code: [{ type: 'text', text: 'const q: Neuralese<Plan> = ' }, { type: 'native_state', id }] }]],
     port, {});
   assert.equal(decoded[0][1].code, `const q: Neuralese<Plan> = ${neuraleseSentinel(id)}`);
 });
@@ -284,22 +287,22 @@ test('typed readout in an inline Array.map callback is awaited with native spars
     analyze: text => analyzeEvalSnippet(text, scope) });
   assert.equal(compiled.ok, true, JSON.stringify(compiled.diagnostics));
   const events = [];
-  const values = [neuraleseRef('Neuralese<string>', 'nz1_aaaaaaaaaaaaaaaaaaaa'), ,
-    neuraleseRef('Neuralese<string>', 'nz1_bbbbbbbbbbbbbbbbbbbb')];
+  const values = [neuraleseRef('Neuralese<string>', 'nzs1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'), ,
+    neuraleseRef('Neuralese<string>', 'nzs1_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb')];
   Object.defineProperty(values, 'map', { configurable: true, get() { events.push('map-get'); return Array.prototype.map; } });
   const run = new Function('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
     `const __natlang_guard = (id, fn, args) => __live.guard(id, fn, args); ${compiled.program}; return __natlang_scope;`)(value => value, value => value, async value => value,
     output => output.result, { mapNeuraleseReadout, guard: (_id, fn, args) => fn(...(args ?? [])), readNeuralese: async value => {
       events.push('read:' + value.$neuralese.id);
-      return value.$neuralese.id === 'nz1_aaaaaaaaaaaaaaaaaaaa' ? 'first' : 'second';
+      return value.$neuralese.id === 'nzs1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' ? 'first' : 'second';
     } });
   const mapped = await run({ values, events, context: { suffix: '!' } }, {}, {});
   assert.equal(mapped.length, 3);
   assert.equal(0 in mapped, true);
   assert.equal(1 in mapped, false, 'Array.map holes remain holes after the readout promises settle');
   assert.deepEqual([mapped[0], mapped[2]], ['first!', 'second!']);
-  assert.deepEqual(events, ['receiver', 'map-get', 'thisArg', 'callback:0:3', 'read:nz1_aaaaaaaaaaaaaaaaaaaa',
-    'callback:2:3', 'read:nz1_bbbbbbbbbbbbbbbbbbbb'],
+  assert.deepEqual(events, ['receiver', 'map-get', 'thisArg', 'callback:0:3', 'read:nzs1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    'callback:2:3', 'read:nzs1_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'],
     'receiver, one method lookup and thisArg evaluation precede native ordered callback invocation');
 
   const nestedSource = 'return Object.fromEntries(items.map((item, index) => [item.key, String(values[index])]));';
@@ -314,10 +317,10 @@ test('typed readout in an inline Array.map callback is awaited with native spars
     `const __natlang_guard = (id, fn, args) => __live.guard(id, fn, args); ${nestedCompiled.program}; return __natlang_scope;`)(
     value => value, value => value, async value => value, output => output.result,
     { mapNeuraleseReadout, guard: (_id, fn) => fn(), readNeuralese: async value => value.$neuralese.id ===
-      'nz1_aaaaaaaaaaaaaaaaaaaa' ? 'A' : 'B' });
+      'nzs1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' ? 'A' : 'B' });
   assert.deepEqual(await nestedRun({ items: [{ key: 'q1' }, { key: 'q2' }], values: [
-    neuraleseRef('Neuralese<string>', 'nz1_aaaaaaaaaaaaaaaaaaaa'),
-    neuraleseRef('Neuralese<string>', 'nz1_bbbbbbbbbbbbbbbbbbbb')],
+    neuraleseRef('Neuralese<string>', 'nzs1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'),
+    neuraleseRef('Neuralese<string>', 'nzs1_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb')],
   }, {}, {}), { q1: 'A', q2: 'B' }, 'the enclosing native operation sees resolved entries after one map call');
 
   const unchanged = compileScopeSnippet('return values.map(value => value.toUpperCase());', {
@@ -326,13 +329,13 @@ test('typed readout in an inline Array.map callback is awaited with native spars
   assert.equal(unchanged.ok, true, JSON.stringify(unchanged.diagnostics));
   assert.doesNotMatch(unchanged.program, /mapNeuraleseReadout/);
 
-  const overridden = [neuraleseRef('Neuralese<string>', 'nz1_cccccccccccccccccccc')];
+  const overridden = [neuraleseRef('Neuralese<string>', 'nzs1_cccccccccccccccccccccccccccccccccccccccccccccccccccc')];
   Object.defineProperty(overridden, 'map', { value: () => ['custom'] });
   const error = await run({ values: overridden, events: [], context: { suffix: '!' } }, {}, {}).catch(item => item);
   assert.match(error.message, /native map method and ordinary Array species/,
     'an overridden method is reported instead of being bypassed or receiving an unawaited callback');
 
-  const customSpecies = [neuraleseRef('Neuralese<string>', 'nz1_dddddddddddddddddddd')];
+  const customSpecies = [neuraleseRef('Neuralese<string>', 'nzs1_dddddddddddddddddddddddddddddddddddddddddddddddddddd')];
   Object.defineProperty(customSpecies, 'constructor', { value: { [Symbol.species]: class extends Array {} } });
   const speciesError = await run({ values: customSpecies, events: [], context: { suffix: '!' } }, {}, {}).catch(item => item);
   assert.match(speciesError.message, /native map method and ordinary Array species/,
@@ -344,9 +347,9 @@ test('typed readout in an inline Array.map callback is awaited with native spars
     }`, types: {}, exports: {}, imports: [], codebase: {} }, {});
   const moduleFns = new Function('exports', '__natlang', `${module}; return exports;`)({}, {
     guard: (_id, fn) => fn(), mapNeuraleseReadout, readNeuralese: async value => value.$neuralese.id ===
-      'nz1_aaaaaaaaaaaaaaaaaaaa' ? 'module' : 'other',
+      'nzs1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' ? 'module' : 'other',
   });
-  assert.deepEqual(await moduleFns.mapText([neuraleseRef('Neuralese<string>', 'nz1_aaaaaaaaaaaaaaaaaaaa')], '?'), ['module?']);
+  assert.deepEqual(await moduleFns.mapText([neuraleseRef('Neuralese<string>', 'nzs1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')], '?'), ['module?']);
 });
 
 test('computed member and object keys read soft values at the key position', async () => {
@@ -375,7 +378,7 @@ test('computed member and object keys read soft values at the key position', asy
       output => output.result, live);
     return fn(values, {}, {});
   };
-  const softKey = neuraleseRef('Neuralese<string>', 'nz1_ssssssssssssssssssss');
+  const softKey = neuraleseRef('Neuralese<string>', 'nzs1_ssssssssssssssssssssssssssssssssssssssssssssssssssss');
   const scopeEvents = [];
   const proxy = new Proxy({ alpha: 'found' }, { get(target, property, receiver) {
     scopeEvents.push(`lookup:${typeof property === 'symbol' ? 'symbol' : String(property)}`);
@@ -433,7 +436,7 @@ test('computed member and object keys read soft values at the key position', asy
     },
   });
   const moduleEvents = [];
-  const moduleSoftKey = neuraleseRef('Neuralese<string>', 'nz1_tttttttttttttttttttt');
+  const moduleSoftKey = neuraleseRef('Neuralese<string>', 'nzs1_tttttttttttttttttttttttttttttttttttttttttttttttttttt');
   const moduleRecord = new Proxy({ alpha: 'module found' }, { get(target, property, receiver) {
     moduleEvents.push(`lookup:${typeof property === 'symbol' ? 'symbol' : String(property)}`);
     return Reflect.get(target, property, receiver);
@@ -480,15 +483,15 @@ test('explicit Number and Boolean read only scalar Neuralese alternatives after 
     if (!isNeuraleseRef(value)) return value;
     events.push(`read:${value.$neuralese.id}`);
     if (failReads) throw new Error('scalar read failed');
-    return value.$neuralese.id === 'nz1_nnnnnnnnnnnnnnnnnnnn' ? 17 : 'false';
+    return value.$neuralese.id === 'nzs1_nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn' ? 17 : 'false';
   };
   const run = new Function('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
     `${compiled.program}; return __natlang_scope;`)(value => value, value => value, async value => value,
     output => output.result, { readNeuraleseIfReference });
-  const softResult = await run({ numberValue: neuraleseRef('Neuralese<number>', 'nz1_nnnnnnnnnnnnnnnnnnnn'),
-    textValue: neuraleseRef('Neuralese<string>', 'nz1_tttttttttttttttttttt'), events }, {}, {});
+  const softResult = await run({ numberValue: neuraleseRef('Neuralese<number>', 'nzs1_nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn'),
+    textValue: neuraleseRef('Neuralese<string>', 'nzs1_tttttttttttttttttttttttttttttttttttttttttttttttttttt'), events }, {}, {});
   assert.equal(softResult, 117, 'Boolean uses native truthiness of the exact read text');
-  assert.deepEqual(events, ['number', 'extra', 'read:nz1_nnnnnnnnnnnnnnnnnnnn', 'boolean', 'read:nz1_tttttttttttttttttttt']);
+  assert.deepEqual(events, ['number', 'extra', 'read:nzs1_nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn', 'boolean', 'read:nzs1_tttttttttttttttttttttttttttttttttttttttttttttttttttt']);
 
   events.length = 0;
   const crispResult = await run({ numberValue: 3, textValue: '', events }, {}, {});
@@ -497,9 +500,9 @@ test('explicit Number and Boolean read only scalar Neuralese alternatives after 
 
   events.length = 0;
   failReads = true;
-  await assert.rejects(() => run({ numberValue: neuraleseRef('Neuralese<number>', 'nz1_nnnnnnnnnnnnnnnnnnnn'),
+  await assert.rejects(() => run({ numberValue: neuraleseRef('Neuralese<number>', 'nzs1_nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn'),
     textValue: 'unused', events }, {}, {}), /scalar read failed/);
-  assert.deepEqual(events, ['number', 'extra', 'read:nz1_nnnnnnnnnnnnnnnnnnnn'],
+  assert.deepEqual(events, ['number', 'extra', 'read:nzs1_nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn'],
     'a failed trained read propagates after native argument evaluation and before later expressions');
   failReads = false;
 
@@ -510,10 +513,10 @@ test('explicit Number and Boolean read only scalar Neuralese alternatives after 
   const exports = {};
   const moduleFns = new Function('exports', '__natlang', `${module}; return exports;`)(exports, {
     guard: (_id, fn) => fn(), readNeuraleseIfReference: async value =>
-      isNeuraleseRef(value) ? (value.$neuralese.id === 'nz1_nnnnnnnnnnnnnnnnnnnn' ? 17 : 'false') : value,
+      isNeuraleseRef(value) ? (value.$neuralese.id === 'nzs1_nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn' ? 17 : 'false') : value,
   });
-  assert.equal(await moduleFns.convert(neuraleseRef('Neuralese<number>', 'nz1_nnnnnnnnnnnnnnnnnnnn'),
-    neuraleseRef('Neuralese<string>', 'nz1_tttttttttttttttttttt')), 117);
+  assert.equal(await moduleFns.convert(neuraleseRef('Neuralese<number>', 'nzs1_nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn'),
+    neuraleseRef('Neuralese<string>', 'nzs1_tttttttttttttttttttttttttttttttttttttttttttttttttttt')), 117);
 
   const opaque = analyzeEvalSnippet('Number(value);', { ...scope,
     inputs: [{ name: 'value', type: 'Neuralese<{ amount: number }>' }], returns: 'number' });
@@ -548,11 +551,11 @@ test('boolean Neuralese is read only at actual asynchronous control-flow guards'
       if (!isNeuraleseRef(value)) return value;
       events.push('read'); return flagValue;
     } });
-  assert.equal(await run({ flag: neuraleseRef('Neuralese<boolean>', 'nz1_bbbbbbbbbbbbbbbbbbbb'), events }, {}, {}), 0);
+  assert.equal(await run({ flag: neuraleseRef('Neuralese<boolean>', 'nzs1_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'), events }, {}, {}), 0);
   assert.deepEqual(events, ['read'], 'a false soft left operand short-circuits before the right side');
   events.length = 0;
   flagValue = true;
-  assert.equal(await run({ flag: neuraleseRef('Neuralese<boolean>', 'nz1_bbbbbbbbbbbbbbbbbbbb'), events }, {}, {}), 1);
+  assert.equal(await run({ flag: neuraleseRef('Neuralese<boolean>', 'nzs1_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'), events }, {}, {}), 1);
   assert.deepEqual(events, ['read', 'rhs', 'body']);
 
   const escaped = analyzeEvalSnippet('const value = flag && true; return 1;', scope);
@@ -595,24 +598,24 @@ test('boolean Neuralese is read only at actual asynchronous control-flow guards'
       moduleEvents.push(`read:${value.$neuralese.id}`); return !value.$neuralese.id.endsWith('c');
     },
   });
-  assert.equal(await moduleFns.andGuard(neuraleseRef('Neuralese<boolean>', 'nz1_cccccccccccccccccccc'),
-    neuraleseRef('Neuralese<boolean>', 'nz1_dddddddddddddddddddd'), moduleEvents), 0);
-  assert.deepEqual(moduleEvents, ['read:nz1_cccccccccccccccccccc'], 'false short-circuit skips the right soft operand');
+  assert.equal(await moduleFns.andGuard(neuraleseRef('Neuralese<boolean>', 'nzs1_cccccccccccccccccccccccccccccccccccccccccccccccccccc'),
+    neuraleseRef('Neuralese<boolean>', 'nzs1_dddddddddddddddddddddddddddddddddddddddddddddddddddd'), moduleEvents), 0);
+  assert.deepEqual(moduleEvents, ['read:nzs1_cccccccccccccccccccccccccccccccccccccccccccccccccccc'], 'false short-circuit skips the right soft operand');
   moduleEvents.length = 0;
-  assert.equal(await moduleFns.andGuard(true, neuraleseRef('Neuralese<boolean>', 'nz1_dddddddddddddddddddd'), moduleEvents), 1);
-  assert.deepEqual(moduleEvents, ['rhs', 'read:nz1_dddddddddddddddddddd', 'body']);
+  assert.equal(await moduleFns.andGuard(true, neuraleseRef('Neuralese<boolean>', 'nzs1_dddddddddddddddddddddddddddddddddddddddddddddddddddd'), moduleEvents), 1);
+  assert.deepEqual(moduleEvents, ['rhs', 'read:nzs1_dddddddddddddddddddddddddddddddddddddddddddddddddddd', 'body']);
   moduleEvents.length = 0;
-  assert.equal(await moduleFns.choose(neuraleseRef('Neuralese<boolean>', 'nz1_dddddddddddddddddddd'), moduleEvents), 1);
-  assert.deepEqual(moduleEvents, ['read:nz1_dddddddddddddddddddd', 'yes']);
+  assert.equal(await moduleFns.choose(neuraleseRef('Neuralese<boolean>', 'nzs1_dddddddddddddddddddddddddddddddddddddddddddddddddddd'), moduleEvents), 1);
+  assert.deepEqual(moduleEvents, ['read:nzs1_dddddddddddddddddddddddddddddddddddddddddddddddddddd', 'yes']);
   moduleEvents.length = 0;
   assert.equal(await moduleFns.choose(false, moduleEvents), 0);
   assert.deepEqual(moduleEvents, ['no'], 'crisp union arms keep native truthiness without a read');
   moduleEvents.length = 0;
-  assert.equal(await moduleFns.nestedGuard(neuraleseRef('Neuralese<boolean>', 'nz1_dddddddddddddddddddd'),
-    neuraleseRef('Neuralese<boolean>', 'nz1_cccccccccccccccccccc'),
-    neuraleseRef('Neuralese<boolean>', 'nz1_eeeeeeeeeeeeeeeeeeee'), moduleEvents), 1);
-  assert.deepEqual(moduleEvents, ['read:nz1_dddddddddddddddddddd', 'middle', 'read:nz1_cccccccccccccccccccc',
-    'third', 'read:nz1_eeeeeeeeeeeeeeeeeeee', 'nestedBody']);
+  assert.equal(await moduleFns.nestedGuard(neuraleseRef('Neuralese<boolean>', 'nzs1_dddddddddddddddddddddddddddddddddddddddddddddddddddd'),
+    neuraleseRef('Neuralese<boolean>', 'nzs1_cccccccccccccccccccccccccccccccccccccccccccccccccccc'),
+    neuraleseRef('Neuralese<boolean>', 'nzs1_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'), moduleEvents), 1);
+  assert.deepEqual(moduleEvents, ['read:nzs1_dddddddddddddddddddddddddddddddddddddddddddddddddddd', 'middle', 'read:nzs1_cccccccccccccccccccccccccccccccccccccccccccccccccccc',
+    'third', 'read:nzs1_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', 'nestedBody']);
 });
 
 test('discarded unary negation in a guard comma expression reads only soft booleans', async () => {
@@ -642,8 +645,8 @@ test('discarded unary negation in a guard comma expression reads only soft boole
       events.push('read');
       return false;
     } });
-  assert.equal(await run({ flag: neuraleseRef('Neuralese<boolean>', 'nz1_bbbbbbbbbbbbbbbbbbbb'),
-    text: neuraleseRef('Neuralese<string>', 'nz1_tttttttttttttttttttt'), events }, {}, {}), 4);
+  assert.equal(await run({ flag: neuraleseRef('Neuralese<boolean>', 'nzs1_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'),
+    text: neuraleseRef('Neuralese<string>', 'nzs1_tttttttttttttttttttttttttttttttttttttttttttttttttttt'), events }, {}, {}), 4);
   assert.deepEqual(events, ['before', 'read', 'after', 'body']);
   assert.equal(reads, 1, 'the discarded ! operand is read once at its native evaluation point');
 
@@ -721,9 +724,9 @@ test('string conversions read typed Neuralese values with native method ordering
     output => output.result, { arrayToStringNeuralese, readNeuralese: async ref => {
       scopeArrayStringEvents.push(`read:${ref.$neuralese.id}`); return 'scope soft';
     } });
-  assert.equal(await runArrayStringScope({ values: [neuraleseRef('Neuralese<string>', 'nz1_qqqqqqqqqqqqqqqqqqqq'), 'crisp'] }, {}, {}),
+  assert.equal(await runArrayStringScope({ values: [neuraleseRef('Neuralese<string>', 'nzs1_qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq'), 'crisp'] }, {}, {}),
     'scope soft,crisp');
-  assert.deepEqual(scopeArrayStringEvents, ['read:nz1_qqqqqqqqqqqqqqqqqqqq']);
+  assert.deepEqual(scopeArrayStringEvents, ['read:nzs1_qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq']);
   const spreadCompiled = compileScopeSnippet(`return ''.concat(...values);`, { inputBindings: ['values'], neuralese: true,
     analyze: source => analyzeText(source) });
   assert.equal(spreadCompiled.ok, true, JSON.stringify(spreadCompiled.diagnostics));
@@ -749,7 +752,7 @@ test('string conversions read typed Neuralese values with native method ordering
       scopeJsonReads++;
       return value.$neuralese.type === 'Neuralese<number>' ? 17 : 'scope payload';
     } });
-  assert.equal(await runJsonScope({ value: neuraleseRef('Neuralese<string>', 'nz1_qqqqqqqqqqqqqqqqqqqq') }, {}, {}), '"scope payload"');
+  assert.equal(await runJsonScope({ value: neuraleseRef('Neuralese<string>', 'nzs1_qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq') }, {}, {}), '"scope payload"');
   assert.equal(await runJsonScope({ value: 'crisp scope value' }, {}, {}), '"crisp scope value"');
   assert.equal(scopeJsonReads, 1);
   const runJsonScopeSource = async (source, value) => {
@@ -761,7 +764,7 @@ test('string conversions read typed Neuralese values with native method ordering
       output => output.result, { readNeuraleseIfReference: async item => isNeuraleseRef(item) ? 'scope payload' : item });
     return scope({ value }, {}, {});
   };
-  const scopeSoftValue = neuraleseRef('Neuralese<string>', 'nz1_rrrrrrrrrrrrrrrrrrrr');
+  const scopeSoftValue = neuraleseRef('Neuralese<string>', 'nzs1_rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr');
   assert.equal(await runJsonScopeSource('const serialized = JSON.stringify(value); return typeof serialized;', scopeSoftValue), 'string');
   assert.equal(await runJsonScopeSource(`return 'json=' + JSON.stringify(value);`, scopeSoftValue), 'json="scope payload"');
   assert.equal(await runJsonScopeSource('return JSON.stringify({ nested: JSON.stringify(value) });', scopeSoftValue),
@@ -786,9 +789,9 @@ test('string conversions read typed Neuralese values with native method ordering
       return '{"answer":"recovered text"}';
     } });
   const eventsLog = [];
-  assert.equal(await assertedTextScopeFn({ ev: neuraleseRef('Neuralese<string>', 'nz1_aaaaaaaaaaaaaaaaaaaa'), events: eventsLog }, {}, {}),
+  assert.equal(await assertedTextScopeFn({ ev: neuraleseRef('Neuralese<string>', 'nzs1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'), events: eventsLog }, {}, {}),
     'recovered text');
-  assert.deepEqual(eventsLog, ['argument', 'read:nz1_aaaaaaaaaaaaaaaaaaaa'],
+  assert.deepEqual(eventsLog, ['argument', 'read:nzs1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'],
     'the asserted operand is evaluated once before its typed readout');
 
   const module = compileModule({ kind: 'module', id: 'module-join', name: 'joiner', source: 'joiner.ts', revision: 'r1',
@@ -809,7 +812,7 @@ test('string conversions read typed Neuralese values with native method ordering
     guard: (_id, fn) => fn(), concatNeuralese, joinNeuralese, arrayToStringNeuralese,
     readNeuralese: async ref => { moduleJoinEvents.push(`read:${ref.$neuralese.id}`); return 'module soft'; },
   });
-  const arrayTextRef = neuraleseRef('Neuralese<string>', 'nz1_eeeeeeeeeeeeeeeeeeee');
+  const arrayTextRef = neuraleseRef('Neuralese<string>', 'nzs1_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee');
   assert.equal(await moduleStringFns.arrayString([arrayTextRef, 'ordinary']), 'module soft,ordinary');
   assert.equal(await moduleStringFns.arrayString(['crisp', 'only']), 'crisp,only');
   moduleJoinEvents.length = 0;
@@ -822,7 +825,7 @@ test('string conversions read typed Neuralese values with native method ordering
   } });
   assert.equal(await moduleStringFns.arrayStringOrder(orderedArray, moduleJoinEvents, []), 'module soft,ordinary');
   assert.deepEqual(moduleJoinEvents, ['receiver', 'method', 'argument', 'join', 'length', 'item:0',
-    'read:nz1_eeeeeeeeeeeeeeeeeeee', 'item:1']);
+    'read:nzs1_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', 'item:1']);
   const customToStringEvents = [];
   const customToStringValues = new Proxy([arrayTextRef], { get(target, property, receiver) {
     if (property === 'toString') {
@@ -852,11 +855,11 @@ test('string conversions read typed Neuralese values with native method ordering
   });
   const showAllSoft = unionStringModuleExports.showAllSoft;
   const showMixed = unionStringModuleExports.showMixed;
-  assert.equal(await showAllSoft(neuraleseRef('Neuralese<string>', 'nz1_kkkkkkkkkkkkkkkkkkkk')),
-    'value=read:nz1_kkkkkkkkkkkkkkkkkkkk');
+  assert.equal(await showAllSoft(neuraleseRef('Neuralese<string>', 'nzs1_kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk')),
+    'value=read:nzs1_kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk');
   assert.equal(await showMixed('ordinary'), 'value=ordinary');
-  assert.equal(await showMixed(neuraleseRef('Neuralese<string>', 'nz1_llllllllllllllllllll')),
-    'value=read:nz1_llllllllllllllllllll');
+  assert.equal(await showMixed(neuraleseRef('Neuralese<string>', 'nzs1_llllllllllllllllllllllllllllllllllllllllllllllllllll')),
+    'value=read:nzs1_llllllllllllllllllllllllllllllllllllllllllllllllllll');
 
   const jsonModule = compileModule({ kind: 'module', id: 'json-soft-union', name: 'jsonSoftUnion', source: 'jsonSoftUnion.ts', revision: 'r1',
     text: `export async function show(value: Neuralese<string> | Neuralese<number> | string) {
@@ -880,19 +883,19 @@ test('string conversions read typed Neuralese values with native method ordering
       return { answer: 'soft payload' };
     },
   });
-  assert.equal(await jsonFns.show(neuraleseRef('Neuralese<string>', 'nz1_mmmmmmmmmmmmmmmmmmmm')), '{"answer":"soft payload"}');
-  assert.equal(await jsonFns.show(neuraleseRef('Neuralese<number>', 'nz1_nnnnnnnnnnnnnnnnnnnn')), '17');
+  assert.equal(await jsonFns.show(neuraleseRef('Neuralese<string>', 'nzs1_mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm')), '{"answer":"soft payload"}');
+  assert.equal(await jsonFns.show(neuraleseRef('Neuralese<number>', 'nzs1_nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn')), '17');
   assert.equal(await jsonFns.show('crisp'), '"crisp"');
   jsonEvents.length = 0;
   orderedEvents.length = 0;
-  assert.equal(await jsonFns.ordered(neuraleseRef('Neuralese<string>', 'nz1_oooooooooooooooooooo'), orderedEvents),
+  assert.equal(await jsonFns.ordered(neuraleseRef('Neuralese<string>', 'nzs1_oooooooooooooooooooooooooooooooooooooooooooooooooooo'), orderedEvents),
     '{"answer":"soft payload"}');
   assert.deepEqual(orderedEvents, ['value', 'replacer-argument', 'space', 'read:Neuralese<string>', 'replacer:', 'replacer:answer']);
   assert.deepEqual(jsonEvents, ['read:Neuralese<string>']);
   const failedJson = new Function('exports', '__natlang', `${jsonModule}; return exports.show;`)({}, {
     guard: (_id, fn) => fn(), readNeuraleseIfReference: async () => { throw new Error('typed JSON read failed'); },
   });
-  await assert.rejects(() => failedJson(neuraleseRef('Neuralese<string>', 'nz1_pppppppppppppppppppp')),
+  await assert.rejects(() => failedJson(neuraleseRef('Neuralese<string>', 'nzs1_pppppppppppppppppppppppppppppppppppppppppppppppppppp')),
     /typed JSON read failed/);
 
   const orderedModule = compileModule({ kind: 'module', id: 'concat-order', name: 'ordered', source: 'ordered.ts', revision: 'r1',
@@ -905,11 +908,11 @@ test('string conversions read typed Neuralese values with native method ordering
     readNeuralese: async ref => { events.push(`read:${ref.$neuralese.id}`); return 'value'; },
   });
   const events = [];
-  const result = await show(neuraleseRef('Neuralese<number>', 'nz1_cccccccccccccccccccc'), events, () => {
+  const result = await show(neuraleseRef('Neuralese<number>', 'nzs1_cccccccccccccccccccccccccccccccccccccccccccccccccccc'), events, () => {
     events.push('receiver'); return '';
   }, async () => 'later-value');
   assert.equal(result, 'valuelater-valuevalue');
-  assert.deepEqual(events, ['receiver', 'later-argument', 'read:nz1_cccccccccccccccccccc', 'read:nz1_cccccccccccccccccccc']);
+  assert.deepEqual(events, ['receiver', 'later-argument', 'read:nzs1_cccccccccccccccccccccccccccccccccccccccccccccccccccc', 'read:nzs1_cccccccccccccccccccccccccccccccccccccccccccccccccccc']);
 
   const unionJoinModule = compileModule({ kind: 'module', id: 'union-join', name: 'unionJoin', source: 'unionJoin.ts', revision: 'r1',
     text: `export async function show(values: Neuralese<string>[] | string[]) { return values.join('|'); }
@@ -923,28 +926,28 @@ test('string conversions read typed Neuralese values with native method ordering
   const unionJoinFns = new Function('exports', '__natlang', `${unionJoinModule}; return exports;`)(unionJoinExports, {
     guard: (_id, fn) => fn(), joinNeuralese,
     readNeuralese: async ref => { events.push(`union-read:${ref.$neuralese.id}`);
-      return ref.$neuralese.id === 'nz1_llllllllllllllllllll' ? ' / ' : 'read value'; },
+      return ref.$neuralese.id === 'nzs1_llllllllllllllllllllllllllllllllllllllllllllllllllll' ? ' / ' : 'read value'; },
   });
   const showUnionJoin = unionJoinFns.show;
   const unionJoinAnswer = await showUnionJoin([
-    neuraleseRef('Neuralese<string>', 'nz1_jjjjjjjjjjjjjjjjjjjj'), 'ordinary',
+    neuraleseRef('Neuralese<string>', 'nzs1_jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj'), 'ordinary',
   ]);
   assert.equal(unionJoinAnswer, 'read value|ordinary');
-  assert.deepEqual(events.slice(-1), ['union-read:nz1_jjjjjjjjjjjjjjjjjjjj']);
-  const softDelimiter = neuraleseRef('Neuralese<string>', 'nz1_llllllllllllllllllll');
+  assert.deepEqual(events.slice(-1), ['union-read:nzs1_jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj']);
+  const softDelimiter = neuraleseRef('Neuralese<string>', 'nzs1_llllllllllllllllllllllllllllllllllllllllllllllllllll');
   const joinedWithSoftDelimiter = await unionJoinFns.separator([
-    neuraleseRef('Neuralese<string>', 'nz1_mmmmmmmmmmmmmmmmmmmm'),
-    neuraleseRef('Neuralese<string>', 'nz1_nnnnnnnnnnnnnnnnnnnn'),
+    neuraleseRef('Neuralese<string>', 'nzs1_mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm'),
+    neuraleseRef('Neuralese<string>', 'nzs1_nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn'),
   ], softDelimiter);
   assert.equal(joinedWithSoftDelimiter, 'read value / read value');
   assert.deepEqual(events.slice(-3), [
-    'union-read:nz1_llllllllllllllllllll',
-    'union-read:nz1_mmmmmmmmmmmmmmmmmmmm',
-    'union-read:nz1_nnnnnnnnnnnnnnnnnnnn',
+    'union-read:nzs1_llllllllllllllllllllllllllllllllllllllllllllllllllll',
+    'union-read:nzs1_mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm',
+    'union-read:nzs1_nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn',
   ]);
   assert.equal(await unionJoinFns.separator(['plain', 'strings'], '|'), 'plain|strings');
   const customJoinEvents = [];
-  const customJoinValues = [neuraleseRef('Neuralese<string>', 'nz1_kkkllllllllllllllllll')];
+  const customJoinValues = [neuraleseRef('Neuralese<string>', 'nzs1_kkklllllllllllllllllllllllllllllllllllllllllllllllll')];
   let customJoinProxy;
   customJoinValues.join = function (...args) {
     customJoinEvents.push(`custom:${this === customJoinProxy}:${args.join('|')}`);
@@ -957,8 +960,8 @@ test('string conversions read typed Neuralese values with native method ordering
   assert.equal(await unionJoinFns.custom(customJoinProxy, ['first', 'second'], customJoinEvents), 'custom join');
   assert.deepEqual(customJoinEvents, ['receiver', 'method', 'spread', 'custom:true:first|second']);
   const customSoftSeparatorEvents = [];
-  const customSoftSeparatorValues = [neuraleseRef('Neuralese<string>', 'nz1_oooooooooooooooooooo')];
-  const customSoftSeparator = neuraleseRef('Neuralese<string>', 'nz1_pppppppppppppppppppp');
+  const customSoftSeparatorValues = [neuraleseRef('Neuralese<string>', 'nzs1_oooooooooooooooooooooooooooooooooooooooooooooooooooo')];
+  const customSoftSeparator = neuraleseRef('Neuralese<string>', 'nzs1_pppppppppppppppppppppppppppppppppppppppppppppppppppp');
   customSoftSeparatorValues.join = function (delimiter) {
     customSoftSeparatorEvents.push(`custom:${this === customSoftSeparatorValues}:${delimiter === customSoftSeparator}`);
     return 'custom soft separator';
@@ -977,46 +980,46 @@ test('string conversions read typed Neuralese values with native method ordering
   });
   events.length = 0;
   const spreadAnswer = await showSpread([
-    neuraleseRef('Neuralese<string>', 'nz1_hhhhhhhhhhhhhhhhhhhh'), 'middle',
-    neuraleseRef('Neuralese<string>', 'nz1_iiiiiiiiiiiiiiiiiiii'),
+    neuraleseRef('Neuralese<string>', 'nzs1_hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh'), 'middle',
+    neuraleseRef('Neuralese<string>', 'nzs1_iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii'),
   ], events, () => { events.push('receiver'); return 'start'; });
   assert.equal(spreadAnswer, 'startsoftmiddlesoftend');
-  assert.deepEqual(events, ['receiver', 'spread', 'tail', 'read:nz1_hhhhhhhhhhhhhhhhhhhh', 'read:nz1_iiiiiiiiiiiiiiiiiiii']);
+  assert.deepEqual(events, ['receiver', 'spread', 'tail', 'read:nzs1_hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh', 'read:nzs1_iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii']);
 
   const spreadOrder = [];
-  const spreadValues = ['before', neuraleseRef('Neuralese<number>', 'nz1_gggggggggggggggggggg'), null,
+  const spreadValues = ['before', neuraleseRef('Neuralese<number>', 'nzs1_gggggggggggggggggggggggggggggggggggggggggggggggggggg'), null,
     { toString() { spreadOrder.push('ordinary-coercion'); return 'after'; } }];
   const spreadResult = await concatNeuralese('', ''.concat, [...spreadValues], async ref => {
     spreadOrder.push(`typed-read:${ref.$neuralese.id}`); return 7;
   });
   assert.equal(spreadResult, 'before7nullafter');
-  assert.deepEqual(spreadOrder, ['typed-read:nz1_gggggggggggggggggggg', 'ordinary-coercion']);
+  assert.deepEqual(spreadOrder, ['typed-read:nzs1_gggggggggggggggggggggggggggggggggggggggggggggggggggg', 'ordinary-coercion']);
 
   const order = [];
-  const items = ['label', 2, neuraleseRef('Neuralese<string>', 'nz1_aaaaaaaaaaaaaaaaaaaa'), , null,
-    neuraleseRef('Neuralese<string>', 'nz1_bbbbbbbbbbbbbbbbbbbb'), neuraleseRef('Neuralese<null>', 'nz1_dddddddddddddddddddd')];
+  const items = ['label', 2, neuraleseRef('Neuralese<string>', 'nzs1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'), , null,
+    neuraleseRef('Neuralese<string>', 'nzs1_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'), neuraleseRef('Neuralese<null>', 'nzs1_dddddddddddddddddddddddddddddddddddddddddddddddddddd')];
   const joined = (await joinNeuralese(items, Array.prototype.join, [':'], async ref => {
     order.push(ref.$neuralese.id);
     if (ref.$neuralese.type === 'Neuralese<null>') return null;
     return ref.$neuralese.id.includes('aaaa') ? 'first' : 'last';
   })).value;
   assert.equal(joined, 'label:2:first:::last:');
-  assert.deepEqual(order, ['nz1_aaaaaaaaaaaaaaaaaaaa', 'nz1_bbbbbbbbbbbbbbbbbbbb', 'nz1_dddddddddddddddddddd']);
+  assert.deepEqual(order, ['nzs1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'nzs1_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', 'nzs1_dddddddddddddddddddddddddddddddddddddddddddddddddddd']);
   const separatorOrder = [];
-  const separatorItems = new Proxy([neuraleseRef('Neuralese<string>', 'nz1_cccccccccccccccccccc'), 'plain'], {
+  const separatorItems = new Proxy([neuraleseRef('Neuralese<string>', 'nzs1_cccccccccccccccccccccccccccccccccccccccccccccccccccc'), 'plain'], {
     get(target, property, receiver) {
       if (property === 'length') separatorOrder.push('length');
       if (property === '0' || property === '1') separatorOrder.push(`item:${property}`);
       return Reflect.get(target, property, receiver);
     },
   });
-  const softSeparator = neuraleseRef('Neuralese<string>', 'nz1_dddddddddddddddddddd');
+  const softSeparator = neuraleseRef('Neuralese<string>', 'nzs1_dddddddddddddddddddddddddddddddddddddddddddddddddddd');
   const softSeparated = await joinNeuralese(separatorItems, Array.prototype.join, [softSeparator], async ref => {
     separatorOrder.push(`read:${ref.$neuralese.id}`);
     return ref.$neuralese.id === softSeparator.$neuralese.id ? ' / ' : 'resolved';
   });
   assert.equal(softSeparated.value, 'resolved / plain');
-  assert.deepEqual(separatorOrder, ['length', 'read:nz1_dddddddddddddddddddd', 'item:0', 'read:nz1_cccccccccccccccccccc', 'item:1']);
+  assert.deepEqual(separatorOrder, ['length', 'read:nzs1_dddddddddddddddddddddddddddddddddddddddddddddddddddd', 'item:0', 'read:nzs1_cccccccccccccccccccccccccccccccccccccccccccccccccccc', 'item:1']);
   const crispSeparator = await joinNeuralese(['a', 'b'], Array.prototype.join, ['|'], async () => {
     assert.fail('crisp separators do not need typed readout');
   });
@@ -1045,8 +1048,8 @@ test('string conversions read typed Neuralese values with native method ordering
   ]) {
     const lengthEvents = [];
     const lengthProxy = new Proxy([
-      neuraleseRef('Neuralese<string>', 'nz1_llllllllllllllllllll'),
-      neuraleseRef('Neuralese<string>', 'nz1_mmmmmmmmmmmmmmmmmmmm'),
+      neuraleseRef('Neuralese<string>', 'nzs1_llllllllllllllllllllllllllllllllllllllllllllllllllll'),
+      neuraleseRef('Neuralese<string>', 'nzs1_mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm'),
     ], {
       get(target, property, receiver) {
         if (property === 'length') { lengthEvents.push('length'); return reportedLength; }
@@ -1082,7 +1085,7 @@ test('string conversions read typed Neuralese values with native method ordering
 
   const coercionOrder = [];
   const customJoined = (await joinNeuralese([{ toString() { coercionOrder.push('object-before'); return 'before'; } },
-    neuraleseRef('Neuralese<number>', 'nz1_eeeeeeeeeeeeeeeeeeee'),
+    neuraleseRef('Neuralese<number>', 'nzs1_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'),
     { toString() { coercionOrder.push('object-after'); return 'after'; } }], Array.prototype.join, ['|'], async () => {
     coercionOrder.push('typed-read'); return 7;
   })).value;
@@ -1090,10 +1093,10 @@ test('string conversions read typed Neuralese values with native method ordering
   assert.deepEqual(coercionOrder, ['object-before', 'typed-read', 'object-after']);
   const nestedCycle = [];
   nestedCycle.push(nestedCycle);
-  assert.equal((await joinNeuralese([neuraleseRef('Neuralese<string>', 'nz1_ffffffffffffffffffff'), ['nested', 'array'], nestedCycle],
+  assert.equal((await joinNeuralese([neuraleseRef('Neuralese<string>', 'nzs1_ffffffffffffffffffffffffffffffffffffffffffffffffffff'), ['nested', 'array'], nestedCycle],
     Array.prototype.join, ['|'], async () => 'soft')).value, 'soft|nested,array|');
   const customEvents = [];
-  const customArray = [neuraleseRef('Neuralese<string>', 'nz1_gggggggggggggggggggg')];
+  const customArray = [neuraleseRef('Neuralese<string>', 'nzs1_gggggggggggggggggggggggggggggggggggggggggggggggggggg')];
   const customMethod = function (...args) {
     customEvents.push(`call:${this === customArray}:${args.join('|')}`);
     return Promise.resolve('custom result');
@@ -1181,7 +1184,7 @@ test('receiver-only String methods read declared soft strings before native look
         if (!isNeuraleseRef(value)) return value;
         observed.push('read'); return '  Soft Text  ';
       }, readNeuralese: async value => value });
-    assert.equal(await normalScope({ text: neuraleseRef('Neuralese<string>', 'nz1_wwwwwwwwwwwwwwwwwwww'),
+    assert.equal(await normalScope({ text: neuraleseRef('Neuralese<string>', 'nzs1_wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww'),
       events: normalEvents }, {}, {}), 1);
     assert.deepEqual(normalEvents, ['Soft Text']);
     assert.deepEqual(normalTrace, ['read']);
@@ -1193,13 +1196,13 @@ test('receiver-only String methods read declared soft strings before native look
 
     const softEvents = [], softTrace = [];
     observed = softTrace;
-    assert.equal(await runScope({ text: neuraleseRef('Neuralese<string>', 'nz1_tttttttttttttttttttt'), events: softEvents }, {}, {}), 1);
+    assert.equal(await runScope({ text: neuraleseRef('Neuralese<string>', 'nzs1_tttttttttttttttttttttttttttttttttttttttttttttttttttt'), events: softEvents }, {}, {}), 1);
     assert.deepEqual(softEvents, [sentinel]);
     assert.deepEqual(softTrace, ['read', 'lookup', 'call:  soft text  ']);
 
     const moduleEvents = [], moduleTrace = [];
     observed = moduleTrace;
-    const moduleRefs = moduleFunctions.apply(neuraleseRef('Neuralese<string>', 'nz1_uuuuuuuuuuuuuuuuuuuu'), moduleEvents);
+    const moduleRefs = moduleFunctions.apply(neuraleseRef('Neuralese<string>', 'nzs1_uuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuu'), moduleEvents);
     assert.equal(await moduleRefs, 1);
     assert.deepEqual(moduleEvents, [sentinel]);
     assert.deepEqual(moduleTrace, ['read', 'lookup', 'call:  soft text  ']);
@@ -1223,7 +1226,7 @@ test('receiver-only String methods read declared soft strings before native look
       output => output.result, { readNeuraleseIfReference: async () => {
         observed.push('read'); throw new Error('string receiver read failed');
       }, readNeuralese: async value => value });
-    await assert.rejects(() => failedScope({ text: neuraleseRef('Neuralese<string>', 'nz1_vvvvvvvvvvvvvvvvvvvv'),
+    await assert.rejects(() => failedScope({ text: neuraleseRef('Neuralese<string>', 'nzs1_vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv'),
       events: failedEvents }, {}, {}), /string receiver read failed/);
     assert.deepEqual(failedEvents, []);
     assert.deepEqual(failedTrace, ['read'], 'a failed receiver read stops before native method lookup');
@@ -1263,7 +1266,7 @@ test('argument-taking String receivers preserve typed readout and native call or
       trace.push('lookup');
       return function (...args) { trace.push(`call:${String(this)}:${args.join('|')}`); return sentinel; };
     } });
-    assert.equal(await scopeFn({ text: neuraleseRef('Neuralese<string>', 'nz1_xxxxxxxxxxxxxxxxxxxx'), events, trace }, {}, {}), 2);
+    assert.equal(await scopeFn({ text: neuraleseRef('Neuralese<string>', 'nzs1_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'), events, trace }, {}, {}), 2);
     assert.deepEqual(trace, ['read', 'lookup', 'arg', 'call:Soft text:Soft']);
     assert.deepEqual(events, ['arg', sentinel]);
   } finally {
@@ -1281,13 +1284,13 @@ test('argument-taking String receivers preserve typed readout and native call or
   const moduleFns = new Function('exports', '__natlang', `${module}; return exports;`)(exports, {
     guard: (_id, fn) => fn(), readNeuraleseIfReference: async value => isNeuraleseRef(value) ? 'Soft text' : value,
   });
-  assert.deepEqual(await moduleFns.apply(neuraleseRef('Neuralese<string>', 'nz1_yyyyyyyyyyyyyyyyyyyy'), 'Soft'),
+  assert.deepEqual(await moduleFns.apply(neuraleseRef('Neuralese<string>', 'nzs1_yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy'), 'Soft'),
     [true, true, false, 0, 0, 'Soft', 'Soft']);
 });
 
 test('Array#toString preserves native and custom join dispatch while reading only direct soft elements', async () => {
   const inherited = Object.create(Array.prototype);
-  inherited[1] = neuraleseRef('Neuralese<string>', 'nz1_rrrrrrrrrrrrrrrrrrrr');
+  inherited[1] = neuraleseRef('Neuralese<string>', 'nzs1_rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr');
   const events = [];
   const receiver = new Proxy(Object.setPrototypeOf(['first', , 'last'], inherited), {
     get(target, property, receiver) {
@@ -1302,11 +1305,11 @@ test('Array#toString preserves native and custom join dispatch while reading onl
   });
   assert.equal(output.value, 'first,inherited-soft,last');
   assert.deepEqual(events, ['join', 'length', 'item:0', 'item:1',
-    'read:nz1_rrrrrrrrrrrrrrrrrrrr', 'item:2']);
+    'read:nzs1_rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr', 'item:2']);
 
   const thenable = Promise.resolve('custom join output');
   const customJoinEvents = [];
-  const customJoinArray = [neuraleseRef('Neuralese<string>', 'nz1_ssssssssssssssssssss')];
+  const customJoinArray = [neuraleseRef('Neuralese<string>', 'nzs1_ssssssssssssssssssssssssssssssssssssssssssssssssssss')];
   Object.defineProperty(customJoinArray, 'join', { get() {
     customJoinEvents.push('join-get');
     return function (...args) {
@@ -1320,19 +1323,19 @@ test('Array#toString preserves native and custom join dispatch while reading onl
   assert.equal(customJoinResult.value, thenable, 'a custom join thenable is not assimilated by the helper');
   assert.deepEqual(customJoinEvents, ['join-get', 'join-call:true:0']);
 
-  const nonCallableJoin = [neuraleseRef('Neuralese<string>', 'nz1_tttttttttttttttttttt')];
+  const nonCallableJoin = [neuraleseRef('Neuralese<string>', 'nzs1_tttttttttttttttttttttttttttttttttttttttttttttttttttt')];
   nonCallableJoin.join = 3;
   assert.equal((await arrayToStringNeuralese(nonCallableJoin, Array.prototype.toString, [], async () => {
     assert.fail('fallback object tag does not read array elements');
   })).value, '[object Array]');
 
   const nestedReads = [];
-  const nestedSoft = neuraleseRef('Neuralese<string>', 'nz1_vvvvvvvvvvvvvvvvvvvv');
+  const nestedSoft = neuraleseRef('Neuralese<string>', 'nzs1_vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv');
   const nestedOutput = await arrayToStringNeuralese([[nestedSoft], nestedSoft], Array.prototype.toString, [], async ref => {
     nestedReads.push(ref.$neuralese.id); return 'direct soft';
   });
   assert.equal(nestedOutput.value, '[object Object],direct soft');
-  assert.deepEqual(nestedReads, ['nz1_vvvvvvvvvvvvvvvvvvvv'], 'nested arrays retain native opaque stringification');
+  assert.deepEqual(nestedReads, ['nzs1_vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv'], 'nested arrays retain native opaque stringification');
 
   const getterErrorEvents = [];
   const throwingJoinGetter = [1];
@@ -1344,7 +1347,7 @@ test('Array#toString preserves native and custom join dispatch while reading onl
   assert.deepEqual(getterErrorEvents, ['join-get']);
 
   const customToStringPromise = Promise.resolve('custom toString');
-  const customToStringReceiver = [neuraleseRef('Neuralese<string>', 'nz1_uuuuuuuuuuuuuuuuuuuu')];
+  const customToStringReceiver = [neuraleseRef('Neuralese<string>', 'nzs1_uuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuu')];
   const customToString = function (value) {
     assert.equal(this, customToStringReceiver);
     assert.equal(value, 'argument');
@@ -1381,7 +1384,7 @@ test('the default Error constructor reads a typed message after evaluating its a
         if (!isNeuraleseRef(value)) return value;
         events.push('read'); return 'resolved message';
       } });
-    const message = await run({ text: neuraleseRef('Neuralese<string>', 'nz1_aaaaaaaaaaaaaaaaaaaa'), events }, {}, {});
+    const message = await run({ text: neuraleseRef('Neuralese<string>', 'nzs1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'), events }, {}, {});
     assert.equal(message, 'resolved message');
     assert.deepEqual(events, ['message', 'options', 'read']);
     events.length = 0;
@@ -1401,7 +1404,7 @@ test('the default Error constructor reads a typed message after evaluating its a
     },
   });
   const events = [];
-  assert.equal(await moduleFns.show(neuraleseRef('Neuralese<string>', 'nz1_bbbbbbbbbbbbbbbbbbbb'), events), 'module message');
+  assert.equal(await moduleFns.show(neuraleseRef('Neuralese<string>', 'nzs1_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'), events), 'module message');
   assert.deepEqual(events, ['message', 'options']);
 });
 
@@ -1428,7 +1431,7 @@ test('standard String text arguments read soft values after the native call argu
       if (!isNeuraleseRef(value)) return value;
       events.push('read'); return 'ello';
     } });
-  assert.equal(await run({ label: 'hello', query: neuraleseRef('Neuralese<string>', 'nz1_cccccccccccccccccccc'), events }, {}, {}), 'true');
+  assert.equal(await run({ label: 'hello', query: neuraleseRef('Neuralese<string>', 'nzs1_cccccccccccccccccccccccccccccccccccccccccccccccccccc'), events }, {}, {}), 'true');
   assert.deepEqual(events, ['receiver', 'query', 'position', 'read']);
   events.length = 0;
   assert.equal(await run({ label: 'hello', query: 'ello', events }, {}, {}), 'true');
@@ -1448,10 +1451,10 @@ test('standard String text arguments read soft values after the native call argu
       moduleEvents.push('read'); return value.$neuralese.id.endsWith('d') ? 'ello' : '*';
     },
   });
-  assert.equal(await moduleFns.search('hello', neuraleseRef('Neuralese<string>', 'nz1_dddddddddddddddddddd'), moduleEvents), true);
+  assert.equal(await moduleFns.search('hello', neuraleseRef('Neuralese<string>', 'nzs1_dddddddddddddddddddddddddddddddddddddddddddddddddddd'), moduleEvents), true);
   assert.deepEqual(moduleEvents, ['receiver', 'query', 'position', 'read']);
   moduleEvents.length = 0;
-  assert.equal(await moduleFns.pad(neuraleseRef('Neuralese<string>', 'nz1_eeeeeeeeeeeeeeeeeeee'), moduleEvents), '**x');
+  assert.equal(await moduleFns.pad(neuraleseRef('Neuralese<string>', 'nzs1_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'), moduleEvents), '**x');
   assert.deepEqual(moduleEvents, ['length', 'padding', 'read']);
 });
 
@@ -1488,7 +1491,7 @@ test('soft string replace reads the receiver before native method lookup and str
         return Reflect.apply(original.value, this, args);
       };
     } });
-    const softResult = await run({ priorNotes: neuraleseRef('Neuralese<string>', 'nz1_rrrrrrrrrrrrrrrrrrrr'), events }, {}, {});
+    const softResult = await run({ priorNotes: neuraleseRef('Neuralese<string>', 'nzs1_rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr'), events }, {}, {});
     assert.equal(softResult, 'new old');
     assert.deepEqual(events, ['receiver', 'read', 'lookup', 'search', 'replacement', 'invoke']);
 
@@ -1499,7 +1502,7 @@ test('soft string replace reads the receiver before native method lookup and str
 
     events.length = 0;
     failRead = true;
-    await assert.rejects(() => run({ priorNotes: neuraleseRef('Neuralese<string>', 'nz1_rrrrrrrrrrrrrrrrrrrr'), events }, {}, {}),
+    await assert.rejects(() => run({ priorNotes: neuraleseRef('Neuralese<string>', 'nzs1_rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr'), events }, {}, {}),
       /replace read failed/);
     assert.deepEqual(events, ['receiver', 'read'], 'a failed read occurs before native lookup or argument evaluation');
     failRead = false;
@@ -1508,7 +1511,7 @@ test('soft string replace reads the receiver before native method lookup and str
     Object.defineProperty(String.prototype, 'replace', { configurable: true, get() {
       events.push('lookup'); throw new Error('replace getter failed');
     } });
-    await assert.rejects(() => run({ priorNotes: neuraleseRef('Neuralese<string>', 'nz1_rrrrrrrrrrrrrrrrrrrr'), events }, {}, {}),
+    await assert.rejects(() => run({ priorNotes: neuraleseRef('Neuralese<string>', 'nzs1_rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr'), events }, {}, {}),
       /replace getter failed/);
     assert.deepEqual(events, ['receiver', 'read', 'lookup'], 'a throwing prototype getter prevents argument evaluation');
 
@@ -1516,7 +1519,7 @@ test('soft string replace reads the receiver before native method lookup and str
     Object.defineProperty(String.prototype, 'replace', { configurable: true, get() {
       events.push('lookup'); return 17;
     } });
-    await assert.rejects(() => run({ priorNotes: neuraleseRef('Neuralese<string>', 'nz1_rrrrrrrrrrrrrrrrrrrr'), events }, {}, {}), TypeError);
+    await assert.rejects(() => run({ priorNotes: neuraleseRef('Neuralese<string>', 'nzs1_rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr'), events }, {}, {}), TypeError);
     assert.deepEqual(events, ['receiver', 'read', 'lookup', 'search', 'replacement'],
       'native non-callable method failure occurs after arguments evaluate');
 
@@ -1524,7 +1527,7 @@ test('soft string replace reads the receiver before native method lookup and str
     Object.defineProperty(String.prototype, 'replace', { configurable: true, get() {
       events.push('lookup'); return function () { events.push('invoke'); throw new Error('replace method failed'); };
     } });
-    await assert.rejects(() => run({ priorNotes: neuraleseRef('Neuralese<string>', 'nz1_rrrrrrrrrrrrrrrrrrrr'), events }, {}, {}),
+    await assert.rejects(() => run({ priorNotes: neuraleseRef('Neuralese<string>', 'nzs1_rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr'), events }, {}, {}),
       /replace method failed/);
     assert.deepEqual(events, ['receiver', 'read', 'lookup', 'search', 'replacement', 'invoke']);
   } finally {
@@ -1542,7 +1545,7 @@ test('soft string replace reads the receiver before native method lookup and str
     `${pureCompiled.program}; return __natlang_scope;`)(value => value, value => value, async value => value,
     output => output.result, { readNeuralese: async () => 'old notes',
       invokeWithReceiver: (method, receiver, args) => Reflect.apply(method, receiver, args) });
-  assert.equal(await pureRun({ priorNotes: neuraleseRef('Neuralese<string>', 'nz1_rrrrrrrrrrrrrrrrrrrr') }, {}, {}), 'new notes');
+  assert.equal(await pureRun({ priorNotes: neuraleseRef('Neuralese<string>', 'nzs1_rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr') }, {}, {}), 'new notes');
 
   const module = compileModule({ kind: 'module', id: 'soft-string-replace', name: 'replaceNotes', source: 'replaceNotes.ts', revision: 'r1',
     text: `export async function replaceNotes(priorNotes: Neuralese<string> | string) {
@@ -1552,7 +1555,7 @@ test('soft string replace reads the receiver before native method lookup and str
     guard: (_id, fn) => fn(), readNeuraleseIfReference: async value => isNeuraleseRef(value) ? 'old notes' : value,
     invokeWithReceiver: (method, receiver, args) => Reflect.apply(method, receiver, args),
   });
-  assert.equal(await moduleFns.replaceNotes(neuraleseRef('Neuralese<string>', 'nz1_rrrrrrrrrrrrrrrrrrrr')), 'new notes');
+  assert.equal(await moduleFns.replaceNotes(neuraleseRef('Neuralese<string>', 'nzs1_rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr')), 'new notes');
 
   const sync = analyzeEvalSnippet('function syncReplace(priorNotes: Neuralese<string>) { return priorNotes.replace("old", "new"); }',
     { ...scope, returns: 'string' });
@@ -1589,14 +1592,14 @@ test('project module lowering uses the same typed async readout path', () => {
 });
 
 test('implicit readout without a task standard library raises a coded capability error', async () => {
-  const ref = neuraleseRef('Neuralese<string>', `nz1_${'a'.repeat(52)}`);
+  const ref = neuraleseRef('Neuralese<string>', `nzs1_${'a'.repeat(52)}`);
   await assert.rejects(() => readNeuraleseForCurrentTask(ref), error =>
     error.code === 'neuralese-readout-unavailable' && error.capability === 'typed-readout' &&
     /services\.neuralese is missing or has no read body/.test(error.message));
 });
 
 test('a model-written literal takes its type from context, and an untyped one is rejected', () => {
-  const id = `nz1_${'a'.repeat(52)}`;
+  const id = `nzs1_${'a'.repeat(52)}`;
   const typed = analyzeEvalSnippet(`const next: Neuralese<Plan> = __neuralese(${JSON.stringify(id)}); return next;`, SCOPE);
   assert.deepEqual(typed.diagnostics, []);
   assert.deepEqual(typed.neuralese.map(literal => [literal.id, literal.type]), [[id, 'Neuralese<Plan>']]);
@@ -1618,7 +1621,7 @@ test('a call writes a soft result through the port and the runtime keeps only a 
   assert.ok(isNeuraleseRef(session.lam.return), JSON.stringify(session.lam.return));
   assert.equal(session.lam.return.$neuralese.type, 'Neuralese<string>');
   const meta = await store.meta(session.lam.return.$neuralese.id);
-  assert.equal(meta.length, 4);
+  assert.equal(meta.length, 2);
 });
 
 test('eval can read code and built-in documentation through the same authorized lookup as read_code tool', async () => {
@@ -1821,7 +1824,7 @@ test('soft inputs are shown as blocks, and a backend without Neuralese support f
   assert.equal(session.lam.return, 'email');
   const parts = seen[0].flatMap(message => [message.content, ...(message.tool_calls ?? []).map(call => call.function.arguments)])
     .filter(Array.isArray).flat();
-  assert.ok(parts.some(part => part.type === 'neuralese' && part.id === block.id), 'the opening carries the block as a part');
+  assert.ok(parts.some(part => part.type === 'native_state' && part.id === block.id), 'the opening carries the block as a part');
   assert.ok(!JSON.stringify(seen[0]).includes(''), 'no internal marker reaches the backend');
   const plain = open(body).session;
   await assert.rejects(() => new NativeToolAgent(() => ({ calls: [] }), { maxTurns: 2 }).run(plain), /neuralese-unsupported-backend/);

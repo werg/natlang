@@ -77,8 +77,8 @@ export async function cachedModelFile(file: ModelFileRef, options: { storage?: M
 /**
  * Start a Neuralese model from its manifest in a Web Worker: the build this browser runs best
  * (`chooseNeuraleseBuild`), model and heads from the OPFS cache. `moduleBase` is the directory (ending in `/`) that
- * holds the `neuralese-wasm*.mjs` builds. `store` is the block archive; by default the OPFS block store in `storage`
- * (an in-memory store without OPFS), so blocks survive a page reload or an engine restart and are restored from it.
+ * holds the `neuralese-wasm*.mjs` builds. `store` is the native artifact archive; by default the OPFS archive in `storage`
+ * (an in-memory store without OPFS), so native states survive a page reload or an engine restart and are restored from it.
  */
 export async function startNeuraleseModel(manifest: NeuraleseModelManifest, options: NeuraleseWasmOptions & { worker: Worker;
   moduleBase: string | URL; endpoint?: string; storage?: ModelFileStorage | null; fetcher?: typeof fetch; store?: NeuraleseStore;

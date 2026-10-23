@@ -1,18 +1,19 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { createNativeStateFixturePort } from './fixtures/native-state-port.mjs';
 import { builtin, createNatlangRuntime, createNeuraleseLibrary, invokeAt } from '../dist/index.js';
 import { builtinDefinition } from '../dist/runtime/index.js';
 import { VIEW_PROMPT } from '../dist/builtin/index.js';
-import { MemoryNeuraleseStore, StandInNeuralesePort, hashingEmbedder } from '../dist/native/neuralese-store.js';
+import { MemoryNeuraleseStore } from '../dist/native/neuralese-store.js';
 import { isNeuraleseRef, neuraleseRef } from '../dist/native/neuralese.js';
 
 // One summarizer family (plans/neuralese/DECISIONS.md 2026-10-09): the builtin view(value, instructions?) with a
 // representation-generic result, and the query operator ask(block, question) = read(map(block, question)).
 
-const DIALECT = 'nd:natlang@1';
+const DIALECT = 'native-state/fixture';
 const standIn = () => {
   const store = new MemoryNeuraleseStore();
-  const port = new StandInNeuralesePort(store, hashingEmbedder(8), 8, DIALECT);
+  const port = createNativeStateFixturePort(store, DIALECT);
   // What each block was written from, so a scripted model can answer from it (the stand-in carries no meaning).
   const texts = new Map();
   const write = port.write.bind(port);
@@ -75,7 +76,7 @@ test('ask(block, question) is read(map(block, question)): answering from the blo
   const turns = [];
   const driver = Object.assign(async request => {
     const shown = text(request.messages);
-    const blocks = [...shown.matchAll(/nz1_[a-z2-7]+/g)].map(match => match[0])
+    const blocks = [...shown.matchAll(/nzs1_[a-z2-7]+/g)].map(match => match[0])
       .filter(id => texts.has(id) && !Object.values(bodies).includes(id));
     const block = blocks.at(-1);
     const body = Object.entries(bodies).find(([, id]) => shown.includes(id))?.[0];

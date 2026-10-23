@@ -14,7 +14,7 @@ import { verifyNativeStateDerivation } from '../native/native-state-derivation.j
  * file is replaced only when its write closes); an artifact another tab wrote is found on a lookup miss. Pins are this
  * store object's own, and `collect` deletes files for the whole origin: collect only with every runtime's references.
  */
-import { nativeArtifactDependencyClosure, importNativeArtifactBundle, decodeNativeTensorArtifact, encodeNativeTensorArtifact, nativeTensorArtifactBlockMeta, type NativeTensorArtifact, MemoryNeuraleseStore, neuraleseContentId, decodeNativeState, encodeNativeState, nativeStateBlockMeta, type NativeStateArtifact, type NeuraleseBlock, type NeuraleseBlockInput, type NeuraleseBlockMeta,
+import { nativeArtifactDependencyClosure, importNativeArtifactBundle, decodeNativeTensorArtifact, encodeNativeTensorArtifact, nativeTensorArtifactBlockMeta, type NativeTensorArtifact, MemoryNeuraleseStore, decodeNativeState, encodeNativeState, nativeStateBlockMeta, type NativeStateArtifact, type NeuraleseBlockMeta,
   type NeuraleseStore } from '../native/neuralese-store.js';
 import { decodeNz, encodeNz, NZ_FORMAT, NzFileError, type NzHeader } from '../native/nz-file.js';
 
@@ -144,16 +144,6 @@ export class OpfsNeuraleseStore implements NeuraleseStore {
     } catch { return undefined; }
   }
 
-  async put(block: NeuraleseBlockInput): Promise<NeuraleseBlockMeta> {
-    const id = neuraleseContentId(block);
-    throw new Error(`neuralese-projected-api-retired: OPFS stores only native state or named tensor artifacts, not ${id}`);
-  }
-
-  async get(id: string): Promise<NeuraleseBlock | undefined> {
-    if (id.startsWith('nz1_')) throw new Error(`neuralese-projected-api-retired: OPFS has no flat block reader for ${id}`);
-    return undefined;
-  }
-
   private async writeNativeArtifact<T extends {id:string}>(artifact:T,wire:Uint8Array,meta:NeuraleseBlockMeta,
       read:()=>Promise<T|undefined>):Promise<T>{
     return this.serialized(artifact.id,async()=>{
@@ -237,10 +227,9 @@ export class OpfsNeuraleseStore implements NeuraleseStore {
   /** Payload bytes currently held in memory. */
   get residentInUse(): number { return this.residentSize; }
 
-  /** Put every block of a `.nz` file (checked against its ID by the decoder). Returns the block IDs, in file order. */
+  /** Import the full native-artifact dependency closure from an archive. */
   async importNz(bytes: Uint8Array): Promise<string[]> {
-    const { blocks, nativeStates, nativeTensors } = decodeNz(bytes);
-    if (blocks.size) throw new Error('neuralese-projected-api-retired: OPFS cannot import flat nz1 values; convert them to native artifacts first');
+    const { nativeStates, nativeTensors } = decodeNz(bytes);
     await importNativeArtifactBundle(this,nativeStates,nativeTensors);
     return [...nativeStates.keys(),...nativeTensors.keys()];
   }
@@ -268,11 +257,11 @@ export class OpfsNeuraleseStore implements NeuraleseStore {
         nativeDialect ??= nativeStateBlockMeta(artifact).dialect;
         continue;
       }
-      throw new Error(`neuralese-projected-api-retired: cannot export flat block ${id} from the native archive`);
+      throw new NzFileError('neuralese-unknown-block', `cannot export unknown native artifact ${id}`);
     }
     const dialect = options.dialect ?? nativeDialect;
     if (!dialect) throw new NzFileError('neuralese-file-format', 'an empty .nz export needs a dialect');
-    return encodeNz({ format: NZ_FORMAT, dialect, exports: options.exports ?? {}, blocks: {},
+    return encodeNz({ format: NZ_FORMAT, dialect, exports: options.exports ?? {},
       ...(Object.keys(nativeHeaders).length ? { native_states: nativeHeaders } : {}),
       ...(Object.keys(namedHeaders).length ? {native_tensors:namedHeaders}:{}),
       ...(options.provenance ? { provenance: options.provenance } : {}) }, data);

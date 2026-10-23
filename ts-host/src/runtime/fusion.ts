@@ -11,8 +11,7 @@
  * `fusion_fallback` with the reason; `shadow` serves text and measures the fused producer beside it (`fusion_shadow`).
  *
  * Trace events (on the orchestrator's call): `fusion_edge` (status `fused` | `consumed` | `fallback`), `fusion_fallback`,
- * `fusion_shadow`. A run on the text emulation (model/text-neuralese-emulation.ts) stands in for a qualified channel
- * only where the host says so with `emulation`; every event then carries `emulation: true`.
+ * `fusion_shadow`.
  */
 import { traceFor } from '../native/graph.js';
 import { markFusedBlock, setCurrentTaskResolver } from '../native/fusion-blocks.js';
@@ -62,25 +61,18 @@ export type FusionOptions = {
   certificate?: FusionCertificate;
   /** Digest of the weights the active profile serves; the certificate must name the same. */
   weights?: string;
-  /** The runtime's Neuralese channel is the text emulation with this dialect; it stands in for a certificate. */
-  emulation?: { dialect: string };
   /** Decode a fused block back to a value, for shadow comparison (default: the typed `read`). */
   readback?: (ref: NeuraleseRef) => Promise<unknown>;
   /** Whether two values agree (default: equal JSON). */
   agree?: (text: unknown, fused: unknown) => boolean;
 };
 
-export type FusionStatus = { ok: true; emulation: boolean } | { ok: false; reason: string };
+export type FusionStatus = { ok: true } | { ok: false; reason: string };
 
 /** Whether fusion may engage for a call on `model`: the backend carries Neuralese and the certificate matches. */
 export function fusionStatus(options: FusionOptions, neuralese: NeuraleseRuntimeOptions | undefined,
     model: { id?: string; driver: unknown } | undefined): FusionStatus {
   if (!neuralese?.store || !neuralese.port) return { ok: false, reason: 'the runtime has no Neuralese store and write port (backend lacks Neuralese capability)' };
-  if (options.emulation) {
-    if (neuralese.port.dialect !== options.emulation.dialect)
-      return { ok: false, reason: `the emulation is declared for ${options.emulation.dialect}, the port writes ${neuralese.port.dialect}` };
-    return { ok: true, emulation: true };
-  }
   if (!model || !supportsNeuralese(model.driver)) return { ok: false, reason: 'the model backend does not carry Neuralese content (neuralese-unsupported-backend)' };
   const certificate = options.certificate;
   if (!certificate) return { ok: false, reason: `no runtime-qualification certificate for model ${model.id ?? 'unknown'}` };
@@ -94,7 +86,7 @@ export function fusionStatus(options: FusionOptions, neuralese: NeuraleseRuntime
     return { ok: false, reason: 'the certificate names different weights than the profile serves' };
   if (certificate.dialect !== neuralese.port.dialect)
     return { ok: false, reason: `the certificate is for dialect ${certificate.dialect}, the port writes ${neuralese.port.dialect}` };
-  return { ok: true, emulation: false };
+  return { ok: true };
 }
 
 const sameSource = (a: string, b: string): boolean => a === b || a.endsWith(`/${b}`) || b.endsWith(`/${a}`);
@@ -163,7 +155,6 @@ export function engageFusion<D extends FusedDefinition & { source?: string; name
   const state = (edge: FusionEdgeSpec): EdgeState => states.get(edge.id) ?? (states.set(edge.id, { fallbackReported: false, fused: 0, consumed: 0, shadows: 0 }), states.get(edge.id)!);
   const model = frame.task.model((definition as { model?: string }).model);
   const status = fusionStatus(options, frame.task.runtime.options.neuralese, model);
-  const mark = status.ok && status.emulation ? { emulation: true } : {};
   let result: D = definition;
 
   // The consumer receives a block a fused producer wrote: retype the parameter. A text value (the producer fell back or
@@ -177,7 +168,7 @@ export function engageFusion<D extends FusedDefinition & { source?: string; name
     edgeState.consumed++;
     UNCONSUMED.get(frame.task)?.delete(value.$neuralese.id);
     emit(frame, 'fusion_edge', { edge: edge.id, status: 'consumed', producer: edge.producer.source, consumer: edge.consumer.source,
-      param: edge.consumer.param, block: value.$neuralese.id, ...mark });
+      param: edge.consumer.param, block: value.$neuralese.id });
   }
 
   const edge = asProducer[0];
@@ -193,7 +184,7 @@ export function engageFusion<D extends FusedDefinition & { source?: string; name
   }
   if (options.mode === 'on') {
     state(edge).fused++;
-    emit(frame, 'fusion_edge', { edge: edge.id, status: 'fused', producer: edge.producer.source, consumer: edge.consumer.source, type: edge.type, ...mark });
+    emit(frame, 'fusion_edge', { edge: edge.id, status: 'fused', producer: edge.producer.source, consumer: edge.consumer.source, type: edge.type });
     result = { ...result, returns: soft(definition.returns) };
     return { definition: result, produced: value => {
       if (isNeuraleseRef(value)) {
@@ -221,7 +212,7 @@ export function engageFusion<D extends FusedDefinition & { source?: string; name
       } else if (!error) error = 'the shadow producer did not return a Neuralese block';
       emit(frame, 'fusion_shadow', { edge: edge.id, producer: edge.producer.source, consumer: edge.consumer.source, agree,
         ...(error ? { error } : {}), ...(fused && isNeuraleseRef(fused) ? { block: fused.$neuralese.id } : {}),
-        shadow_ms: Date.now() - started, scope: 'producer', ...mark });
+        shadow_ms: Date.now() - started, scope: 'producer' });
     })();
     call.catch(() => {});
     frame.task.track(call, frame.parentCallId);

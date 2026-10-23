@@ -6,7 +6,7 @@ import { decodeNz } from '../dist/native/nz-file.js';
 import { fakeOpfs } from './fixtures/fake-opfs.mjs';
 import { nativeStateFixture } from './fixtures/native-state.mjs';
 
-test('OPFS stores exact native state across a reopen and ignores historical flat IDs', async () => {
+test('OPFS stores exact native state across a reopen and exposes only native artifact operations', async () => {
   const { root, storage } = fakeOpfs();
   const source = await OpfsNeuraleseStore.open({ storage });
   const artifact = await source.putNativeState(nativeStateFixture());
@@ -16,12 +16,8 @@ test('OPFS stores exact native state across a reopen and ignores historical flat
   assert.deepEqual(reopened.ids(), [artifact.id]);
   assert.ok(root.directories.get('natlang-native-artifacts').files.has(artifact.id));
 
-  const oldId = 'nz1_' + 'b'.repeat(52);
-  root.directories.get('natlang-native-artifacts').files.set(oldId, new Uint8Array(12));
-  const third = await OpfsNeuraleseStore.open({ storage });
-  assert.deepEqual(third.ids(), [artifact.id]);
-  assert.deepEqual(third.unreadable, []);
-  await assert.rejects(() => third.get(oldId), /neuralese-projected-api-retired/);
+  assert.equal('put' in reopened, false);
+  assert.equal('get' in reopened, false);
 });
 
 test('typed native artifacts round-trip through the browser .nz archive', async () => {
@@ -29,8 +25,7 @@ test('typed native artifacts round-trip through the browser .nz archive', async 
   const source = await OpfsNeuraleseStore.open({ storage, directory: 'source' });
   const artifact = await source.putNativeState(nativeStateFixture());
   const bytes = await source.exportNz([artifact.id]);
-  const { blocks, nativeStates, nativeTensors } = decodeNz(bytes);
-  assert.deepEqual([...blocks.keys()], []);
+  const { nativeStates, nativeTensors } = decodeNz(bytes);
   assert.deepEqual([...nativeStates.keys()], [artifact.id]);
   assert.deepEqual([...nativeTensors.keys()], []);
   const target = await OpfsNeuraleseStore.open({ storage, directory: 'target' });

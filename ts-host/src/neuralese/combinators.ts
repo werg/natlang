@@ -143,8 +143,7 @@ export async function buildStandardLibrary(options: { endpoint: string; headers?
 export async function loadStandardLibrary(bytes: Uint8Array, store?: NeuraleseStore): Promise<StandardLibrary> {
   if (typeof bytes === 'string')
     throw new TypeError('loadStandardLibrary takes the .nz file\'s bytes here; read the file first (fetch(url).then(r => r.arrayBuffer())), or use @natlang/node, which also takes a path');
-  const { header, blocks, nativeStates, nativeTensors } = decodeNz(bytes);
-  if (blocks.size) throw new Error('neuralese-projected-api-retired: this standard library contains flat nz1 values; convert them to native states before loading');
+  const { header, nativeStates, nativeTensors } = decodeNz(bytes);
   if (store && nativeStates.size && !store.putNativeState) throw new Error('neuralese-native-archive-unavailable: native standard library needs a native-capable archive');
   if (store) for (const { id: _, ...artifact } of nativeStates.values()) await store.putNativeState!(artifact);
   if (store && nativeTensors.size && !store.putNativeTensorArtifact) throw new Error('neuralese-native-archive-unavailable: native library needs a named tensor archive');
@@ -244,9 +243,9 @@ export function createNeuraleseLibrary(library: StandardLibrary) {
 export class NeuraleseReadoutCapabilityError extends Error {
   readonly code = 'neuralese-readout-unavailable';
   readonly capability = 'typed-readout';
-  constructor(detail = 'the task has no configured Neuralese standard library with a read body available in its block store') {
+  constructor(detail = 'the task has no configured Neuralese standard library with a read body available in its native archive') {
     super(`Converting a Neuralese value to text needs typed readout: ${detail}. ` +
-      'Configure services.neuralese and its block store, or pass the Neuralese value to code that can handle it softly.');
+      'Configure services.neuralese and its native archive, or pass the Neuralese value to code that can handle it softly.');
     this.name = 'NeuraleseReadoutCapabilityError';
   }
 }
@@ -262,7 +261,7 @@ export async function readNeuraleseForCurrentTask(value: unknown): Promise<unkno
   if (!library?.bodies?.read) throw new NeuraleseReadoutCapabilityError('services.neuralese is missing or has no read body');
   const store = task?.runtime.options.neuralese?.store;
   if (!store || !await store.has(library.bodies.read))
-    throw new NeuraleseReadoutCapabilityError(`read body ${library.bodies.read} is unavailable in the task block store`);
+    throw new NeuraleseReadoutCapabilityError(`read body ${library.bodies.read} is unavailable in the task native archive`);
   // The read body reads its library's dialect only. As at coercion (native/values.ts), a block whose dialect the
   // task's store cannot tell without I/O is not checked here.
   const written = store.peek?.(value.$neuralese.id)?.dialect;

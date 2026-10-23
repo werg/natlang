@@ -61,7 +61,7 @@ export { startBrowserNeuralese, NeuraleseWasmService, chooseNeuraleseBuild } fro
 export { cachedModelFile, startNeuraleseModel, type ModelFileRef, type NeuraleseModelManifest } from './model-files.js';
 export type { NeuraleseWasmOptions, NeuraleseWasmModule, NeuraleseWasmFactory, StartedNeuralese } from './neuralese-wasm.js';
 export { neuraleseServerModelTurn, HttpNeuraleseStore, restoreNativeArtifacts, withRestoredNativeArtifacts, OWNER_HEADER } from '../model/neuralese-server.js';
-export { MemoryNeuraleseStore, neuraleseContentId } from '../native/neuralese-store.js';
+export { MemoryNeuraleseStore } from '../native/neuralese-store.js';
 export { OpfsNeuraleseStore, openBrowserNeuraleseStore, opfsAvailable, type OpfsNeuraleseStoreOptions, type OpfsStorage,
   type OpfsDirectoryHandle } from './neuralese-opfs-store.js';
 export type { NeuraleseServerOptions } from '../model/neuralese-server.js';
@@ -73,7 +73,7 @@ export { serverViewer, VIEW_TYPE, type Viewer, type ViewSite, type NativeViewTur
 export { COMBINATORS, buildStandardLibrary, loadStandardLibrary, createNeuraleseLibrary } from '../neuralese/combinators.js';
 export type { StandardLibrary, CombinatorName } from '../neuralese/combinators.js';
 export { registerBuiltinModule, ModuleUnavailableError } from '../runtime/modules.js';
-export type { NeuraleseStore, NeuraleseBlock, NeuraleseBlockMeta, NeuraleseBlockInput, NeuraleseDtype } from '../native/neuralese-store.js';
+export type { NeuraleseStore, NeuraleseBlockMeta } from '../native/neuralese-store.js';
 export type { BrowserGpuCapability } from './gpu.js';
 export { newPlaygroundProject, assertPlaygroundProject, editPlaygroundProject, validatePlaygroundProject,
   validProjectPath, runPlaygroundProject, projectEntry, projectSignature, traceFrame, admitPlaygroundRun } from '../app/playground.js';

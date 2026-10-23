@@ -13,7 +13,7 @@ import { deriveSeed } from './trace.js';
 import { AUTOMATIC_NOTE, COMPACTION_NOTICE, directoryReducerPrompt, scopedFileToolNames, FUNCTION_TOOLS_PROMPT, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN,
   LAST_TURN_NOTICE, TOOLS_PROMPT, promptAtNlDepthLimit, type FileToolSurface } from './prompt.js';
 import { canGenerateNl } from '../runtime/context.js';
-import { adoptImportedBlocks } from './nz-file.js';
+import { adoptImportedNativeArtifacts } from './nz-file.js';
 import { FileHandle, FolderHandle, fileListingText, type Folder } from './scoped-fs.js';
 import { SHOWN_CHARS, SCOPE_VALUE_CHARS, shownCharsFor, note as cutNote } from './cutoff.js';
 
@@ -39,7 +39,6 @@ import { writtenReturnResult } from './pseudo-call.js';
 import { decodeTurnValue, encodeMessages, isContentParts, isNativeAdapterRef, isNeuraleseRef, neuraleseSentinel, neuraleseRefSentinel, nativeStateSentinel, NeuraleseUnsupportedError, supportsNeuralese,
   nativeStateSentinelIds, runtimeTextToParts, type NeuraleseRuntimeOptions } from './neuralese.js';
 import type { NativeStateArtifact, NeuraleseStore } from './neuralese-store.js';
-import { resolveNeuralesePreviews } from './neuralese-preview.js';
 import { blockInput, graphNode, invocationNodeId } from './graph.js';
 import { failureFeedback, type RefinementChecker, type RefinementFailure, type RefinementJudge } from './refinement.js';
 import { containsRefinement } from './types.js';
@@ -571,13 +570,12 @@ export class NativeToolAgent {
     const carries = (value: unknown): boolean => typeof value === 'string' ?
       value.includes('<|neuralese|>') || nativeStateSentinelIds(value).length > 0 :
       Array.isArray(value) ? value.some(carries) : !!value && typeof value === 'object' &&
-        (['neuralese', 'native_state'].includes(String((value as { type?: unknown }).type)) ||
+        (String((value as { type?: unknown }).type) === 'native_state' ||
           Object.values(value).some(carries));
-    const serverBlocks = (response.raw_response?.neuralese as { blocks?: NeuraleseBlockMeta[] } | undefined)?.blocks ?? [];
     const nativeBlocks = (response.raw_response?.native_state as { blocks?: Record<string, unknown>[] } | undefined)?.blocks ?? [];
     const rawChoices = response.raw_response?.choices as Array<{ message?: { content?: unknown } }> | undefined;
     const content = rawChoices?.[0]?.message?.content;
-    if (!carries(response.text) && !carries(response.calls) && !carries(content) && !serverBlocks.length && !nativeBlocks.length) return response;
+    if (!carries(response.text) && !carries(response.calls) && !carries(content) && !nativeBlocks.length) return response;
     const returnType = session.lam.type.kind === 'lambda' ? formatType(session.lam.type.returns) : undefined;
     const producer = { call_id: session.runtime.currentCallId ?? null, turn,
       ...(returnType ? { result_type: returnType } : {}) };
@@ -609,7 +607,7 @@ export class NativeToolAgent {
       }
       return value;
     };
-    const written: NeuraleseBlockMeta[] = [...serverBlocks];
+    const written: NeuraleseBlockMeta[] = [];
     const decodeCall = async ([name, args]: [string, Record<string, unknown>], assistantCompletion = false): Promise<[string, Record<string, unknown>]> => {
       const decodedArgs: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(args)) {
@@ -635,22 +633,15 @@ export class NativeToolAgent {
       decoded.text = '';
       decoded.calls = [await decodeCall(['return_result', { status: 'success', value: content }], true)];
     }
-    // Each block the turn wrote is a node. Stop decisions and distribution parameters come from a writer that reports
-    // them (a Neuralese server); the stand-in writer has none.
+    // Each native state the turn wrote is a node. Stop decisions come from the server's recorded writer metadata.
     const reportedArtifacts = new Set<string>();
     for (const block of written) {
       const reported = (block.producer ?? {}) as Record<string, unknown>;
-      // The text port reports actual writes, including two occurrences of the
-      // same payload within one turn. A server artifact list may repeat a stored
-      // artifact; retain its existing once-per-artifact recording semantics.
-      if (reported.kind !== 'text-marker-emulation') {
-        if (reportedArtifacts.has(block.id)) continue;
-        reportedArtifacts.add(block.id);
-      }
+      if (reportedArtifacts.has(block.id)) continue;
+      reportedArtifacts.add(block.id);
       graphNode(session.runtime.trace, 'block_write', { call_id: producer.call_id, turn: turnNode ?? '', block: block.id,
         length: block.length, truncated: !!block.truncated, stops: Array.isArray(reported.stops) ? reported.stops : [],
-        ...Object.fromEntries(['position', 'temperature', 'seed', 'mean', 'scale', 'distribution',
-          'emulation_version', 'learned_vectors', 'text_body_sha256', 'result_type', 'marker_context']
+        ...Object.fromEntries(['position', 'temperature', 'seed']
           .filter(key => reported[key] !== undefined)
           .map(key => [key, reported[key]])) }, turnNode ? [{ node: turnNode, port: 'turn' }] : []);
     }
@@ -669,21 +660,16 @@ export class NativeToolAgent {
     const scopedReads = response.raw_response?.__natlang_native_read_occurrences;
     const preparedMessageOffset = Array.isArray(scopedReads) ? 1 : 0;
     const reads: { node: string; port: string; block: string }[] = [];
-    const seen = new Set<string>();
-    type Use={block:string;native:boolean;stop?:true;source?:string};
+    type Use={block:string;stop?:true;source?:string};
     const findRefs = (value: unknown): Use[] => {
       if (typeof value === 'string') {
         return runtimeTextToParts(value).flatMap<Use>(part=>part.type==='text'?[]:
-          part.type==='native_state'?[{block:part.id,native:true,...(part.stop_gradient?{stop:true as const}:{}),...(part.source_occurrence?{source:part.source_occurrence}:{})}]:
-          seen.has(part.id)?[]:(seen.add(part.id),[{block:part.id,native:false}]));
+          [{block:part.id,...(part.stop_gradient?{stop:true as const}:{}),...(part.source_occurrence?{source:part.source_occurrence}:{})}]);
       } else if (Array.isArray(value)) return value.flatMap(findRefs);
       else if (value && typeof value === 'object') {
         const record = value as { type?: unknown; id?: unknown;stop_gradient?:unknown;source_occurrence?:unknown };
         if (record.type === 'native_state' && typeof record.id === 'string') {
-          return [{block:record.id,native:true,...(record.stop_gradient===true?{stop:true}:{}),...(typeof record.source_occurrence==='string'?{source:record.source_occurrence}:{})}];
-        } else if (record.type === 'neuralese' && typeof record.id === 'string') {
-          if(seen.has(record.id))return [];
-          seen.add(record.id);return [{block:record.id,native:false}];
+          return [{block:record.id,...(record.stop_gradient===true?{stop:true}:{}),...(typeof record.source_occurrence==='string'?{source:record.source_occurrence}:{})}];
         }
         return Object.values(record).flatMap(findRefs);
       }
@@ -696,7 +682,7 @@ export class NativeToolAgent {
       const argumentRefs = (value: unknown): Use[] => {
         if (Array.isArray(value)) {
           const parts = value.length > 0 && value.every(part => part && typeof part === 'object' &&
-            ['text','neuralese','native_state'].includes((part as {type:string}).type));
+            ['text','native_state'].includes((part as {type:string}).type));
           return parts ? findRefs(value) : value.flatMap(argumentRefs);
         }
         if (value && typeof value === 'object') return Object.values(value).flatMap(argumentRefs);
@@ -711,17 +697,17 @@ export class NativeToolAgent {
       });
       for (const [part, uses] of [...contentUses, ...argumentUses].entries()) {
         for (const use of uses) {
-          const block=use.block,isNative=use.native;
-          const artifact = isNative ? await this.options.neuralese?.store.getNativeState?.(block) : undefined;
-          if (isNative && !artifact) throw new Error(`native-state consumer artifact ${block} is unavailable for provenance`);
+          const block=use.block;
+          const artifact = await this.options.neuralese?.store.getNativeState?.(block);
+          if (!artifact) throw new Error(`native-state consumer artifact ${block} is unavailable for provenance`);
           const node = graphNode(trace, 'block_read', { call_id: callId, turn: turnId, block,
             ...(use.stop?{stop_gradient:true}:{}),
-            ...(isNative ? { format: 'native-state', native_identity: {
-              architecture: artifact!.metadata.architecture, checkpoint_sha256: artifact!.metadata.checkpoint_sha256,
-              tokenizer_fingerprint: artifact!.metadata.tokenizer_fingerprint,
-              embedding_weight_sha256: artifact!.metadata.embedding_weight_sha256 } } : {}),
+            format: 'native-state', native_identity: {
+              architecture: artifact.metadata.architecture, checkpoint_sha256: artifact.metadata.checkpoint_sha256,
+              tokenizer_fingerprint: artifact.metadata.tokenizer_fingerprint,
+              embedding_weight_sha256: artifact.metadata.embedding_weight_sha256 },
             positions: [index + preparedMessageOffset, part] }, [blockInput(block, 'block',
-              use.source ?? (isNative ? activeRecorder()?.nativeStateWriter?.(block) : undefined))]);
+              use.source ?? activeRecorder()?.nativeStateWriter?.(block))]);
           if (node) reads.push({ node, port: 'read', block });
         }
       }
@@ -1199,7 +1185,7 @@ export class NativeToolAgent {
         (this.options.neuralese?.nativeStateConsumer || this.options.neuralese?.nativeStateConsumerForCall))
       throw new NeuraleseUnsupportedError('authored text guidance cannot replace available native program guidance');
     // Blocks of `.nz` files loaded without a store (compiled imports, companion folders) join this runtime's store.
-    if (this.options.neuralese?.store) await adoptImportedBlocks(this.options.neuralese.store);
+    if (this.options.neuralese?.store) await adoptImportedNativeArtifacts(this.options.neuralese.store);
     // The context budget sizes compaction and, from the start (the opening's reads included), the tool-output page.
     const budget = this.options.contextTokens === undefined ? await defaultContextBudget(this.driver) : this.options.contextTokens;
     session.pages.budget = shownCharsFor(budget);
@@ -1579,22 +1565,6 @@ export class NativeToolAgent {
       for (const [index, [name, args]] of calls.entries()) {
         if (timedOut()) return 'episode wall-clock budget exhausted';
         let appliedArgs = args;
-        const expected = session.lam.type.kind === 'lambda' ? session.lam.type.returns : undefined;
-        if (name === 'return_result' && args.status !== 'blocked' && args.status !== 'failed' &&
-            Object.hasOwn(args, 'value') && expected && this.options.neuralese?.store) {
-          const captures: unknown[] = [];
-          for (const cell of Object.values(session.lam.captures ?? {})) {
-            try { captures.push(cell.get()); } catch { /* inaccessible live captures are not authorization */ }
-          }
-          const visible = [...Object.values(session.lam.args), ...Object.values(session.lam.let), ...captures];
-          const normalized = await resolveNeuralesePreviews(args.value, expected, session.env, visible,
-            this.options.neuralese.store);
-          if (normalized.resolutions.length) {
-            appliedArgs = { ...args, value: normalized.value };
-            session.runtime.trace.emit('neuralese_preview_resolution', { schema: 'natlang.neuralese-preview-resolution/1',
-              call_id: session.runtime.options.runId, resolutions: normalized.resolutions });
-          }
-        }
         if (name === 'return_result' && this.options.refinement && (appliedArgs.status ?? 'success') === 'success') {
           const failures = await this.refinementGate(session, appliedArgs);
           if (failures) {
