@@ -1,8 +1,8 @@
 """Exact recorded occurrences lowered through the shared native graph compiler.
 
-This is an internal mechanism, not the public GradSession dispatcher. Host
-graph bindings are independently reconstructed from supplied execution events;
-matching block text or an equal content ID never selects a writer occurrence.
+Host graph bindings are independently reconstructed from supplied execution
+events; matching block text or an equal content ID never selects a writer
+occurrence.
 """
 from __future__ import annotations
 

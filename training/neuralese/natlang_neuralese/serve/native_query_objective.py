@@ -1,8 +1,4 @@
-"""Hash-bound inline objectives over ONE authenticated native graph forward.
-
-This is the exact internal lowering target for recorded learning, not an
-assertion that an arbitrary public GradSession has already been translated.
-"""
+"""Hash-bound inline objectives over one authenticated native graph forward."""
 from __future__ import annotations
 import copy
 import math

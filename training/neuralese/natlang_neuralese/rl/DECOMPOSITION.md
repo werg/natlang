@@ -29,75 +29,34 @@ LFM and Mellum; only backbone loading, chat templates and resource sizes differ.
 5. Reject unknown or unreplayable behavior; recollect or send independently
    verified successes to RFT rather than inventing missing probabilities.
 
-## Crisp mechanisms and reuse
+## Native whole-episode execution
 
-Owner clarification (2026-10-16): Neuralese use is optional for reward and policy
-updates. A one-node ordinary execution can be a complete episode. Where the
-execution contains a communication graph, retain its entire captured model-turn
-inventory, sampled/forced writes and exact consumer occurrences. Reject a
-missing internal producer rather than loading its archived state as a detached
-constant. Explicit inputs originating outside this episode remain inputs.
-This is exact graph-coverage verification, separate from task selection policy.
-`episode_graph` authenticates the complete model-turn and captured state-event
-inventories. Explicit outside origins stay outside even when an equal content
-ID also has a local writer. Missing native graph events or unsupported decoded
-state lowering are rejected before policy admission; archive bytes cannot
-substitute for an omitted producer. Admitted objective rows retain the full
-turn-name inventory and verify it against the learner graph.
+The shared native path serves both LFM and Mellum. Task reward and policy
+updates do not require Neuralese: an ordinary one-node turn remains eligible.
+When an episode contains Neuralese, capture and replay retain every model turn,
+sampled or forced producer, consumer occurrence, and downstream outcome. A
+missing internal producer is rejected; an external state input stays explicit.
 
-- Native replacement: `native_replay` verifies actual sampled and forced input
-  coordinates, resolves exact writer occurrences, and compiles the complete
-  episode into one flattened invocation graph. State is the deterministic
-  output of sampled producer tokens, with no separate stochastic latent action.
-  Consumer gradients flow through the aliased producer states in that graph.
-- The native objective uses the shared native trainer's supplied forward output,
-  shared clipped-token arithmetic and shared optimizer/checkpoint lifecycle.
-  It never starts a second backbone forward, recursively replays writers, or
-  instantiates the old projection/GradSession path. Sampling capture /2 records
-  actual forced template inputs separately from policy actions, including
-  forced-only producers. Only actual sampled tokens receive behavior logps.
-- Native actor attestation binds checkpoint, expanded tokenizer, embedding path
-  and architecture. Native and legacy interfaces are explicit alternatives;
-  availability of archived native bytes alone does not qualify an RL learner.
-- The remaining mechanisms below describe the legacy diagnostic path while
-  native stage/recipe/collector integration is completed and independently
-  reviewed; they are not a fallback implementation of native state.
-- `task_rollouts`: exact train-split enforcement, collector queues and the shared
-  `classify_case` reward. These are host boundaries and exact verifiers.
-- `grpo`: group statistics, clipped importance weights and existing HTTP gradient
-  replay/optimizer. Arithmetic and transport are crisp; no duplicate reward.
-- `stage`: existing whole-trajectory RFT uses the shared direct trainer, optimizer,
-  continuation checkpoints, task evaluation and data cache.
-- RL production coordinator: explicit collect/score/update/persist transitions,
-  bounded parallel subprocesses and atomic state are durability/plumbing. The
-  work-selection policy above remains explicit, separately configurable.
-- Full-policy objective: differentiable replay reuses `GradSession` and shared
-  training infrastructure rather than a per-backbone trainer or copied harness.
+`episode_graph` checks whole-episode event coverage. `native_occurrences` binds
+each captured state use to its exact writer or external origin. `native_replay`
+verifies sampled token coordinates and compiles the episode into one shared
+positional graph. Producer state and consumer imports execute in that graph, so
+losses on later turns backpropagate through the actual producer state. Declared
+stop-gradient imports remain explicit.
 
-No new prompt or runtime error is introduced by replay fixes. Research and
-sampling interventions are not production qualification or measured model lift.
+`shared_state` executes attention KV, finite convolution history, and LFM
+gated-delta inputs at their logical consumer positions. Native state storage
+retains named tensors and exact model/tokenizer provenance. In-episode state is
+not replaced with a detached archive copy. External state gradients use named
+state leaves when requested; in-episode producer and consumer dependencies
+remain in the same autograd graph.
 
-## Exact sampling and value graph replay
-
-- Optional server `x_natlang_rl_capture` records the already sampled prompt plan,
-  emitted items, stopping token and token probabilities. It changes no sampling
-  choice. Collector metadata retains it without adding model-facing text.
-- `sampling` verifies the captured token coordinates and scores those tokens,
-  including the actual stopping token. Guided rollback requires its full mask
-  law; the initial production contract uses unconstrained temperature-1 samples
-  and rejects guided/masked captures rather than guessing their probabilities.
-- `graph_replay` persists exact safetensors block bytes and transitive producer
-  metadata. Content IDs, SHA-256 and policy identity are exact host verifiers.
-  Writer replay uses recorded values in the forward and a differentiable writer
-  in the backward. Deterministic payloads have no invented sampling density.
-- Full-policy replay opts into model-weight dependencies in `GradSession`;
-  argument-only replay keeps its existing semantics by default.
-
-Raw replay import compatibility: the existing four-field import denotes a live
-producer-to-consumer gradient edge. Exact replay plumbing omits the optional
-`stop_gradient` keyword for that default, allowing qualified older native ports
-to execute the same graph. A source-declared true stop remains explicit and is
-never removed for compatibility; an unsupported port rejects it.
+The native policy objective uses the shared trainer's forward output,
+clipped-token arithmetic, optimizer, and checkpoint lifecycle. Actor bindings
+are attached to actual graph invocations and their receipts preserve exact
+checkpoint and adapter identities. Sampling capture records forced template
+inputs separately from sampled actions; only sampled tokens receive behavior
+log probabilities. Reject captures whose sampling law cannot be reconstructed.
 
 ## In-process owned trainer launch
 

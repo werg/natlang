@@ -1,8 +1,7 @@
-"""Finite native derivative DAG execution over the shared graph and optimizer.
+"""Finite native derivative DAG over the shared graph and optimizer.
 
-Internal until public GradSession translation/archive contracts are qualified.
-No communication graph is recursively replayed: each objective is one shared
-masked graph evaluation; explicitly declared optimizer nodes change its inputs.
+Each objective evaluates one complete masked graph; explicitly declared
+optimizer nodes change typed native inputs without recursively replaying it.
 """
 from __future__ import annotations
 from dataclasses import dataclass
