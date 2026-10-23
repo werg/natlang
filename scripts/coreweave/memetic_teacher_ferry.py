@@ -262,6 +262,8 @@ def main(argv=None):
     if not 0.1 <= args.interval <= 60:
         parser.error('--interval must be between 0.1 and 60 seconds')
     profile = protocol.evaluator_profile(args.student)
+    cwctl.load_env_file()
+    cwctl.require_key()
     evaluator = cwctl.read_sandbox(profile['sandbox_id'], patience=60)
     teacher = cwctl.read_sandbox(protocol.TEACHER_SANDBOX_ID, patience=60)
     run(evaluator, teacher, args.student, args.interval, args.once)

@@ -395,3 +395,34 @@ def test_download_contract_matches_observed_keys_and_serving_alias_is_separate(t
         process_reader=lambda: teacher_identity()['active_engine']['processes'])
     assert snapshot['model_id'] == ferry.TEACHER_MODEL_ID
     assert snapshot['active_engine']['model_id'] == ferry.TEACHER_SERVE_ALIAS
+
+
+def test_launch_contract_parses_actual_retained_decimal_start_ticks(tmp_path):
+    ref=ferry.TEACHER_SOURCE_BINDINGS[4]
+    path=tmp_path/ref['path'].lstrip('/');path.parent.mkdir(parents=True)
+    launch={'at':0,'argv':['python','-m','vllm.entrypoints.openai.api_server'],
+        'model':ferry.TEACHER_MODEL_ID,'revision':ferry.TEACHER_REVISION,'policy':'selected',
+        'pid':3786392,'start_ticks':'13705080','boot_id':'6b9f17ce-9809-432f-a7cc-51ffac393cf2',
+        'tool_call_parser':'qwen3_coder','previous_owners_exited':True}
+    path.write_text(json.dumps(launch))
+    value=ferry._launch_contract(tmp_path)
+    assert value['start_ticks']==13705080
+    ferry._validate_launch_process(value,[{'pid':3786392,'start_ticks':13705080}],launch['boot_id'])
+    for bad in [13705080,'0','01','-1','13705080.0']:
+        path.write_text(json.dumps({**launch,'start_ticks':bad}))
+        with pytest.raises(ValueError,match='launch receipt'):
+            ferry._launch_contract(tmp_path)
+
+
+def test_host_entry_resolves_credentials_before_opening_allowlisted_sandboxes(monkeypatch):
+    events=[]
+    monkeypatch.setattr(sdk_ferry.cwctl,'load_env_file',lambda:events.append('credentials'))
+    monkeypatch.setattr(sdk_ferry.cwctl,'require_key',lambda:events.append('required'))
+    def sandbox(ident,**kwargs):
+        assert events[:2]==['credentials','required']
+        return ident
+    monkeypatch.setattr(sdk_ferry.cwctl,'read_sandbox',sandbox)
+    monkeypatch.setattr(sdk_ferry,'run',lambda evaluator,teacher,student,interval,once:
+        events.append((evaluator,teacher,student,once)))
+    sdk_ferry.main(['--student','lfm','--once'])
+    assert events[-1]==(ferry.EVALUATOR_IDS['lfm'],ferry.TEACHER_SANDBOX_ID,'lfm',True)

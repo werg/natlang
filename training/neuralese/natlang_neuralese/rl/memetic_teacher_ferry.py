@@ -584,12 +584,16 @@ def _launch_contract(root=Path('/')) -> dict:
             or launch.get('model') != TEACHER_MODEL_ID or launch.get('revision') != TEACHER_REVISION
             or not isinstance(launch.get('argv'), list) or not launch['argv']
             or type(launch.get('pid')) is not int or launch['pid'] < 1
-            or type(launch.get('start_ticks')) is not int or launch['start_ticks'] < 1
+            or not isinstance(launch.get('start_ticks'), str)
+            or not re.fullmatch(r'[1-9][0-9]*', launch['start_ticks'])
             or not isinstance(launch.get('boot_id'), str)
             or not re.fullmatch(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', launch['boot_id'])
             or type(launch.get('previous_owners_exited')) is not bool):
         raise ValueError('teacher launch receipt differs from the exact model/revision/process identity contract')
-    return {key: launch[key] for key in ('pid', 'start_ticks', 'boot_id', 'model', 'revision')}
+    # The retained launch receipt records kernel ticks as decimal text. Keep
+    # its exact file binding, and compare the lossless integer with /proc.
+    return {key: (int(launch[key]) if key == 'start_ticks' else launch[key])
+            for key in ('pid', 'start_ticks', 'boot_id', 'model', 'revision')}
 
 
 def _validate_launch_process(launch: dict, processes: list[dict], current_boot_id: str):
