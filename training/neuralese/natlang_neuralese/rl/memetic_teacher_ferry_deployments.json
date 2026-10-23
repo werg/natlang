@@ -1,0 +1,31 @@
+{
+  "schema": "natlang.memetic-teacher-ferry-deployments/1",
+  "teacher": {
+    "sandbox_id": "78530f71-08fc-4f57-ace9-7fbad64aeeb8",
+    "model_id": "nvidia/Qwen3.6-35B-A3B-NVFP4",
+    "serve_alias": "qwen3.6-35b-a3b",
+    "revision": "1355db6a052410cfd62085d94b58866fd0f2c3c5",
+    "source_bindings": [
+      {"path": "/work/generation/qwen36-35b-teacher-20261022/actor-source-tools-v2.json", "sha256": "61a8ca58845063dcd6a25156d0e99bddd5022d8d351b5bd6f062b8f0c1fd2c9a", "bytes": 989},
+      {"path": "/work/generation/qwen36-35b-teacher-20261022/teacher-execution-identity-tools-v2.json", "sha256": "e70a4fd76f2c176e78db366d6113f13df53da1c8f8e3db555b6fedbbf89ab01b", "bytes": 788},
+      {"path": "/work/generation/qwen36-35b-teacher-20261022/download-verified.json", "sha256": "efb3bac317a8bb536e3c1e8d774a0808fc2af580553afc6a42d89b4b1a24e66d", "bytes": 2609},
+      {"path": "/work/generation/qwen36-35b-teacher-20261022/tool-serving-check-v3.json", "sha256": "dd9f6bad17528aabaeeb5b1c32ec7ee38676878f8e5d9f6f6ae3abf00bde1a11", "bytes": 1329},
+      {"path": "/work/generation/qwen36-35b-teacher-20261022/server-launch-tools-v2.json", "sha256": "3826dff420cc4be12218bc7ecb4c00b1c72b607d98da68aa92dbb648cabdf75e", "bytes": 1243}
+    ]
+  },
+  "evaluators": {
+    "lfm": {
+      "sandbox_id": "393f9b75-2666-456c-a850-1b46a8b7d147",
+      "native_identity": {
+        "checkpoint_sha256": "7b79178c1d5275cc48c17f89d582f241e3912f4e84378c5f074085e09c219430",
+        "tokenizer_fingerprint": "be949ec48f44e17b2b17e1131aeb1dab4262175ba20f9783ecd8e59c27a58105",
+        "embedding_weight_sha256": "1f152af978babafb49db5790fabbc4e7b6cbdadb508e7be167637c5494ed6b44",
+        "architecture": "lfm2"
+      }
+    },
+    "mellum": {
+      "sandbox_id": "ee341c7b-a425-4b4b-ad7e-f3cf7cbc2369",
+      "native_identity": null
+    }
+  }
+}
