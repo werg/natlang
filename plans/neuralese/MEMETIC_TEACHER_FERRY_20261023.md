@@ -30,10 +30,10 @@ python3 scripts/coreweave/memetic_teacher_ferry.py --student lfm --interval 2
 ```
 
 For an evaluator-side service, copy the exact
-`training/neuralese/natlang_neuralese/rl/memetic_teacher_ferry.py` bytes to
+`training/neuralese/natlang_neuralese/common/memetic_teacher_ferry.py` bytes to
 `/work/native-production/control/memetic-teacher-ferry.py` on the evaluator and
 to `/work/generation/qwen36-35b-teacher-20261022/memetic-teacher-ferry.py` on
-the teacher. Also copy `training/neuralese/natlang_neuralese/rl/memetic_teacher_ferry_deployments.json`
+the teacher. Also copy `training/neuralese/natlang_neuralese/common/memetic_teacher_ferry_deployments.json`
 byte-for-byte beside both deployed modules under the same filename. It pins the
 teacher and role allowlist, contains the exact LFM native checkpoint identity,
 and leaves the Mellum identity null until an operator binds its current actor.
