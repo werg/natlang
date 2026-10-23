@@ -74,7 +74,7 @@ def native_record_evidence(candidates,receipts,tokenizer,overrides):
     from natlang_neuralese.common.hashing import canonical_json_sha256_hex as digest
     from natlang_neuralese.serve.chat import bind_history_reasoning
     from natlang_neuralese.data.text_corpus import authenticated_crisp_context_messages,target_with_teacher_reasoning,native_gold_packet
-    from natlang_neuralese.train.trajectories import crisp_messages,handover_notes
+    from natlang_neuralese.data.trajectory_text import crisp_messages,handover_notes
     from natlang_neuralese.data.native_graph_conversion import unambiguous_chat_input_guard
     requested=[item for item in candidates if item.get('custody')=='native']
     for receipt_path in receipts:

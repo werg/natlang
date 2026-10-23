@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "training/neuralese"))
 
 from natlang_neuralese.data.text_corpus import _hydrate_tool_argument_blocks
-from natlang_neuralese.train.trajectories import render
+from natlang_neuralese.data.trajectory_text import render
 
 
 def test_tool_argument_neuralese_body_is_json_escaped_and_rejoined_exactly():

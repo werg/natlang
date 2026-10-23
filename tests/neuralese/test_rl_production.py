@@ -26,6 +26,20 @@ def test_native_actor_replica_attestation_binds_actual_embedding_path():
         production.validate_actor_receipts({'b': different}, policy_id='1' * 64, neuralese_server=True)
 
 
+def test_actor_receipts_reject_retired_aliases_and_keep_ordinary_text_eligibility():
+    text = {'checkpoint_sha256': '1' * 64}
+    assert production.validate_actor_receipts({'text': text}, policy_id='1' * 64,
+                                               neuralese_server=False) == {'text': text}
+    with pytest.raises(ValueError, match='retired Neuralese communication alias'):
+        production.validate_actor_receipts({'old': {**text, 'neuralese': True}}, policy_id='1' * 64,
+                                            neuralese_server=True)
+    with pytest.raises(ValueError, match='unsupported communication mode'):
+        production.validate_actor_receipts({'old': {**text, 'communication': 'legacy-projected'}},
+                                            policy_id='1' * 64, neuralese_server=False)
+    with pytest.raises(ValueError, match='did not restore'):
+        production.validate_actor_receipts({'missing': text}, policy_id='1' * 64, neuralese_server=True)
+
+
 def test_collect_never_reuses_unbound_completed_results(tmp_path, monkeypatch):
     source = tmp_path / 'cases.jsonl'
     source.write_text(json.dumps({'id': 'train', 'split': 'train'}) + '\n')
@@ -45,7 +59,7 @@ def test_command_arguments_preserve_literal_json(monkeypatch):
 
 
 @pytest.mark.parametrize('publish_fails_once', [False, True])
-@pytest.mark.parametrize('native_boundary',[False,True])
+@pytest.mark.parametrize('native_boundary',[True])
 def test_all_fail_groups_continue_seed_stage_without_claiming_rl_training_exposure(tmp_path, monkeypatch, publish_fails_once,native_boundary):
     source = tmp_path / 'cases.jsonl'
     source.write_text(''.join(json.dumps({'id': f't{i}', 'split': 'train'}) + '\n' for i in range(4)))
@@ -129,13 +143,16 @@ def test_task_selection_keeps_solved_mixed_and_failed_rows():
 
 
 def test_infrastructure_failure_never_runs_seeding_and_retries_fresh_attempt(tmp_path, monkeypatch):
+    from natlang_neuralese.rl import native_raw_policy
+    monkeypatch.setattr(native_raw_policy, 'prepare_raw_policy', lambda *a, **kw: {'tokenizer': 'bound'})
     source = tmp_path / 'cases.jsonl'
     source.write_text(json.dumps({'id': 'task', 'split': 'train'}) + '\n')
     checkpoint = tmp_path / 'parent.pt'; checkpoint.write_bytes(b'full state')
     out = tmp_path / 'production'
     config = tmp_path / 'config.json'
     config.write_text(json.dumps({'out': str(out), 'checkpoint': str(checkpoint), 'cases': str(source),
-        'endpoints': ['unused'], 'seed_command': ['seed'], 'learner_command': ['learn'], 'after_update': ['publish']}))
+        'endpoints': ['unused'], 'seed_command': ['seed'], 'learner_command': ['learn'], 'after_update': ['publish'],
+        'native_state': True, 'base': 'unused'}))
     attempts = []
     def broken(**kwargs):
         attempts.append(kwargs['out'].name)
@@ -153,93 +170,17 @@ def test_infrastructure_failure_never_runs_seeding_and_retries_fresh_attempt(tmp
 
 
 def test_incomplete_score_cannot_skip_actor_identity_verification(tmp_path, monkeypatch):
-    from natlang_neuralese.rl.grpo import Server
+    from natlang_neuralese.rl.actor_client import NativeActorClient
     source = tmp_path / 'cases.jsonl'
     source.write_text(json.dumps({'id': 'task', 'split': 'train'}) + '\n')
     out = tmp_path / 'round'
     monkeypatch.setattr(production, 'root', lambda name: Path(__file__).resolve().parents[2])
-    monkeypatch.setattr(Server, 'get_bytes', lambda *args: b'{"rl_policy_binding":{"checkpoint_sha256":"wrong"}}')
+    monkeypatch.setattr(NativeActorClient, 'get_bytes', lambda *args: b'{"rl_policy_binding":{"checkpoint_sha256":"wrong"}}')
     with pytest.raises(ValueError, match='immutable checkpoint'):
         production.collect(cases=source, out=out, endpoints=['http://unused'], policy_id='p', rows=1)
     (out / 'score.json').write_text('{"scored":4}')
     with pytest.raises(ValueError, match='immutable checkpoint'):
         production.collect(cases=source, out=out, endpoints=['http://unused'], policy_id='p', rows=1)
-
-
-def test_mixed_and_solved_group_selection_is_frozen_across_publish_restart(tmp_path, monkeypatch):
-    source = tmp_path / 'cases.jsonl'
-    source.write_text(''.join(json.dumps({'id': name, 'split': 'train'}) + '\n' for name in ['mixed', 'solved']))
-    parent = tmp_path / 'parent.pt'; parent.write_bytes(b'parent')
-    config = tmp_path / 'config.json'
-    out = tmp_path / 'out'
-    config.write_text(json.dumps({'out': str(out), 'checkpoint': str(parent), 'cases': str(source),
-        'endpoints': ['unused'], 'rows_per_round': 2, 'learner_command': ['learn'], 'after_update': ['publish']}))
-    selections, calls = [], []
-    def collect(**kwargs):
-        selections.append(Path(kwargs['cases']).read_bytes())
-        (kwargs['out'] / 'rollouts.jsonl').write_text('')
-        return {'scored': 4, 'successes': 3, 'groups_with_spread': 1, 'groups': [
-            {'task_id': 'mixed', 'scored': 2, 'mean': .5}, {'task_id': 'solved', 'scored': 2, 'mean': 1.}]}
-    def command(argv, values):
-        calls.append(argv[0])
-        if argv[0] == 'learn':
-            stage = Path(values['learner_out']); stage.mkdir()
-            (stage / 'checkpoint.pt').write_bytes(b'new-full-state')
-            (stage / 'report.json').write_text(json.dumps({'completed': True, 'this_run': {'target_tokens': 10}}))
-        elif calls.count('publish') == 1:
-            raise RuntimeError('publication')
-    monkeypatch.setattr(production, 'collect', collect)
-    monkeypatch.setattr(production, 'run_command', command)
-    with pytest.raises(RuntimeError, match='publication'):
-        production.run(config, rounds=1)
-    production.run(config, rounds=1)
-    assert selections[0] == selections[1] and b'solved' in selections[1]
-    assert calls == ['learn', 'publish', 'publish']
-    state = json.loads((out / 'state.json').read_text())
-    assert state['trained_target_tokens'] == 10 and state['group_stats'] == []
-
-
-def test_rft_text_and_value_full_stages_continue_exact_state_and_resume_partial_value(tmp_path, monkeypatch):
-    from natlang_neuralese.rl import stage
-    source = tmp_path / 'cases.jsonl'; source.write_text('{"id":"task","split":"train"}\n')
-    parent = tmp_path / 'parent.pt'; parent.write_bytes(b'parent')
-    config = tmp_path / 'config.json'; out = tmp_path / 'out'
-    config.write_text(json.dumps({'out': str(out), 'checkpoint': str(parent), 'cases': str(source),
-        'endpoints': ['unused'], 'held_text_data': 'registered-held', 'learner_command': ['learn'], 'after_update': ['publish']}))
-    block = 'nz1_' + 'a' * 52
-    docs = [{'split': 'train', 'task_id': 'text-task', 'target': {'content': 'teacher text'}},
-            {'split': 'train', 'task_id': 'value-task', 'target': {'content': [{'type': 'neuralese', 'id': block}]}}]
-    monkeypatch.setattr(stage, 'select_rft_documents', lambda *args, **kwargs: (docs, {}))
-    def collect(**kwargs):
-        (kwargs['out'] / 'rollouts.jsonl').write_text('')
-        return {'scored': 2, 'successes': 0, 'groups_with_spread': 0}
-    monkeypatch.setattr(production, 'collect', collect)
-    calls = []
-    def command(argv, values):
-        if argv[0] == 'publish':
-            calls.append(('publish', values['checkpoint'])); return
-        kind = values['rft_document_kind']
-        calls.append((kind, values['checkpoint']))
-        directory = Path(values['learner_out']); directory.mkdir(exist_ok=True)
-        (directory / 'checkpoint.pt').write_bytes(kind.encode())
-        (directory / 'identity-check.json').write_text('{}')
-        (directory / 'monitor-reference.pt').write_bytes(b'monitor')
-        value_attempt = sum(call[0] == 'value' for call in calls)
-        partial = kind == 'value' and value_attempt == 1
-        step = value_attempt if kind == 'value' else 1
-        (directory / 'report.json').write_text(json.dumps({'completed': not partial, 'step': step}))
-        with (directory / 'train.jsonl').open('a') as log:
-            log.write(json.dumps({'step': step, 'target_tokens': 3, 'supervised_tokens': 4}) + '\n')
-        (directory / 'rl-data-receipt.json').write_text(json.dumps({'tasks_selected': [
-            {'split': 'train', 'task_id': kind + '-task'}]}))
-    monkeypatch.setattr(production, 'run_command', command)
-    result = production.run(config, rounds=1)
-    first = out / 'round-000000/learner-text/checkpoint.pt'
-    last = out / 'round-000000/learner-value/checkpoint.pt'
-    assert calls == [('text', str(parent)), ('value', str(first)), ('value', str(first)), ('publish', str(last))]
-    assert result['trained_target_tokens'] == 9  # partial value update was retained, not lost or counted twice
-    assert result['trained_task_ids'] == ['text-task', 'value-task']
-    assert result['checkpoint'] == str(last)
 
 
 def test_training_exposure_survives_noop_resume_and_uncommitted_log_tail(tmp_path):
@@ -250,73 +191,22 @@ def test_training_exposure_survives_noop_resume_and_uncommitted_log_tail(tmp_pat
         'target_tokens': 6, 'supervised_tokens': 8}
 
 
-def test_configure_retains_declared_task_quality_cadence(tmp_path, monkeypatch):
-    from types import SimpleNamespace
-    from natlang_neuralese.train import checkpoint_policy, direct_sft, recipe
-    parent = tmp_path / 'checkpoint.pt'; parent.write_bytes(b'full')
-    declared = tmp_path / 'recipe.json'; declared.write_text('{}')
-    state = {'schema': direct_sft.SCHEMA, 'optimizer': {}, 'neuralese_projection': {},
-             'identity': {'options': {'optimizer': 'muon', 'text_data': 'registered-train'}}}
-    monkeypatch.setattr(checkpoint_policy.CheckpointPolicy, 'load', lambda path: state)
-    parameters = {'task_eval': {'cases': 'registered-held-tasks'}, 'task_eval_every': 250,
-                  'checkpoint_every': 100, 'checkpoint_layers': True}
-    monkeypatch.setattr(recipe, 'resolve_recipe_data', lambda path: {'stages': [
-        {'id': 'mixed', 'kind': 'neuralese_direct', 'parameters': parameters}]})
-    args = SimpleNamespace(checkpoint=parent, production_recipe=declared, production_stage='mixed',
-        config=tmp_path / 'config.json', model='lfm', port=8097, **{key: tmp_path / key
-        for key in ('heads', 'base', 'cases', 'held_text_data', 'runtime', 'out')})
-    production.configure(args)
-    saved = json.loads(args.config.read_text())
-    assert saved['trainer_parameters']['task_eval_every'] == 250
-    assert saved['trainer_parameters']['task_eval'] == parameters['task_eval']
-    assert saved['trainer_parameters']['checkpoint_layers'] is True
-    assert saved['production_stage'] == 'mixed'
-    actor, learner = saved['actor_command'], saved['learner_command']
-    assert actor[actor.index('--prompt-rendering') + 1] == 'full'
-    assert learner[learner.index('--rl-prompt-rendering') + 1] == 'full'
-    state['optimizer'] = None
-    with pytest.raises(ValueError, match='optimizer state'):
-        production.configure(args)
-
-
-@pytest.mark.parametrize('legacy_empty_snapshot', [False, True])
-def test_solved_tasks_revisit_and_admit_new_task_on_resume(tmp_path, monkeypatch, legacy_empty_snapshot):
-    source = tmp_path / 'cases.jsonl'
-    source.write_text(json.dumps({'id': 'solved', 'split': 'train'}) + '\n')
-    parent = tmp_path / 'checkpoint.pt'; parent.write_bytes(b'parent')
-    out = tmp_path / 'out'
-    config = tmp_path / 'config.json'
-    config.write_text(json.dumps({'out': str(out), 'checkpoint': str(parent), 'cases': str(source),
-        'endpoints': ['unused'], 'after_update': ['publish']}))
-    collected = []
-    def collect(**kwargs):
-        tasks = [json.loads(line)['id'] for line in Path(kwargs['cases']).read_text().splitlines()]
-        collected.extend(tasks)
-        task=tasks[-1]
-        (kwargs['out'] / 'rollouts.jsonl').write_text('')
-        return {'scored': 2, 'successes': 2, 'groups': [
-            {'task_id': task, 'scored': 2, 'mean': 1.}]}
-    monkeypatch.setattr(production, 'collect', collect)
-    production.run(config, rounds=1)
-    assert production.run(config, rounds=1)['phase'] == 'collect'
-    snapshot = out / 'round-000002-selection.json'
-    assert not snapshot.exists()
-    if legacy_empty_snapshot:
-        snapshot.write_text(json.dumps({'selection': [], 'cases': []}))
-    with source.open('a') as stream:
-        stream.write(json.dumps({'id': 'new', 'split': 'train'}) + '\n')
-    result=production.run(config, rounds=1)
-    assert collected == ['solved', 'solved', 'solved', 'new']
-    assert set(result['task_curriculum_history'])=={'solved','new'}
-    assert result['task_curriculum_history']['solved']['observed_round']==1
-    assert result['task_curriculum_history']['new']['observed_round']==2
+@pytest.mark.parametrize('legacy_flag', ['--heads', '--held-text-data', '--native-state'])
+def test_rl_production_configure_rejects_retired_projected_selector(tmp_path, legacy_flag):
+    with pytest.raises(SystemExit) as error:
+        production.main(['configure', '--model', 'lfm', '--checkpoint', str(tmp_path/'c'),
+            '--base', str(tmp_path/'b'), '--cases', str(tmp_path/'cases'), '--runtime', str(tmp_path/'r'),
+            '--out', str(tmp_path/'out'), '--config', str(tmp_path/'config'),
+            '--production-recipe', str(tmp_path/'recipe'), '--production-stage', 'native',
+            legacy_flag, str(tmp_path/'legacy')])
+    assert error.value.code == 2
 
 
 def test_empty_source_waits_without_freezing_selection(tmp_path):
     source = tmp_path / 'cases.jsonl'; source.write_text('')
     config = tmp_path / 'config.json'; out = tmp_path / 'out'
     config.write_text(json.dumps({'out': str(out), 'checkpoint': 'unused', 'cases': str(source),
-        'endpoints': ['unused'], 'after_update': ['publish']}))
+        'endpoints': ['unused'], 'after_update': ['publish'], 'native_state': True}))
     assert production.run(config, rounds=1)['phase'] == 'await_new_train_tasks'
     assert not list(out.glob('*selection.json'))
 
@@ -324,7 +214,7 @@ def test_empty_source_waits_without_freezing_selection(tmp_path):
 
 @pytest.mark.parametrize('hook_error',[False,True])
 def test_managed_ready_hook_uses_same_live_actor_before_collection(tmp_path,monkeypatch,hook_error):
-    from natlang_neuralese.rl import grpo
+    from natlang_neuralese.rl import actor_client
     events=[]
     from os import environ
     actor_env={'NATLANG_REPO':'/frozen/actor','PYTHONPATH':'/frozen/actor/training/neuralese'}
@@ -342,7 +232,8 @@ def test_managed_ready_hook_uses_same_live_actor_before_collection(tmp_path,monk
         def __init__(self,*a,**kw):pass
         def get_bytes(self,path):events.append('ready');return json.dumps({'rl_policy_binding':{'checkpoint_sha256':'exact-current'}}).encode()
     monkeypatch.setattr(production.subprocess,'Popen',Process)
-    monkeypatch.setattr(grpo,'Server',Server)
+    from natlang_neuralese.rl import actor_client
+    monkeypatch.setattr(actor_client,'NativeActorClient',Server)
     def command(argv,values):
         assert argv==['held-only'] and values['policy_id']=='exact-current'
         events.append('held')

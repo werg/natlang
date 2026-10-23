@@ -4,10 +4,10 @@
 Two modes, one contract (agreed DGX/Pop 2026-10-10):
 
 - ``text``: text rows (natlang.native_gold_chat renderings, one document per row) concatenated with ``text_cohort``
-  set to the cohort name; every row of every cohort must carry the same ``tokenizer_sha256``. Consumer:
-  train.text_warmup ``--text-data`` with ``--cohort-weights``.
+  set to the cohort name; every row of every cohort must carry the same ``tokenizer_sha256``. Consumer: native text
+  graph conversion and training.
 - ``records``: native records concatenated with ``cohort`` set to the cohort name, and the cohorts' pieces merged
-  (one name, one text). Consumer: train.trajectories ``--records``/``--pieces`` with ``--cohort-weights``.
+  (one name, one text). Consumer: native graph conversion and training.
 
 A cohort is ``NAME=corpus:<registered id>`` (training/neuralese_corpora.json, its immutable manifest under
 training/corpus-manifests/ pins every byte; the entry must have ``training_admission: true``) or, for inputs that are

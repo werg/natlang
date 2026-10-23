@@ -1,43 +1,14 @@
-"""Line parity: the Mellum (DGX) and LFM (Pop) lines run each Neuralese stage with the same data and settings.
-
-Owner, 2026-10-11: one recipe, data and code for both lines; only declared differences, each either fit-only
-(memory/hardware/time) or backbone-inherent, with its reason (plans/neuralese/LINE_PARITY.md). This is an exact
-checker, crisp by design: it resolves the effective configuration of each line's declared recipe for a stage and
-compares it with the stage's shared base, failing on any difference that ``training/neuralese/line-parity.json``
-does not list. It reads only recipe JSON and the corpus registry (no data files), so it runs in check-main --quick.
-
-Effective configuration, flattened to dotted keys:
-- ``parameters.*``: the stage's resolved parameters (recipe defaults merged with the stage's own);
-- ``inputs.<role>``: each data input's sha256 (identity, not location);
-- ``quantization.*``: the quantization component, if any (without its description);
-- ``backbone.*``: the base-model source of a fresh lineage (without its description);
-- ``family.*``: the nested-family component of a stage that trains it (maple/family.py), without its description;
-- ``derived.supervision``: the amount of supervision of a neuralese_direct stage, which must stay equal across lines:
-  its ``epochs`` over the target-bearing windows of its (twin) data (the update count is derived from the data and
-  each line's fit-only packing), or for a legacy steps-budgeted stage steps x target_tokens x batch.
-- every other top-level member of a multi-stage recipe (``runtime.*``, ``outputs.*``, ``lineage.*``,
-  ``objective_continuation.*``, ``identity_qualification`` ...), so no leaf setting escapes the comparison;
-  ``description`` leaves are prose and are skipped;
-- A recipe of several stages (phases of one lineage, all of one kind) prefixes every key with ``stages.<id>.``;
-  declared differences and lineage keys name the unprefixed key and apply to every stage (a ``line_specific`` entry
-  may also name a prefixed key to hold for one stage only).
-
-Two recipes per line and stage are checked: ``recipe`` (the line's next fresh launch) and ``active`` (the leaf recipe
-of the lineage that runs now, e.g. a chain of handoff recipes; owner 2026-10-13: a key Pop added to its running LFM
-chain only went unnoticed because only the next-launch recipes were compared). Every difference from the shared base
-is a lineage key, an ``allowed_differences`` entry (fit-only or backbone-inherent, with its reason) or a dated
-``line_specific`` entry (reason, ``date``, ``expires``); an expired or no-longer-needed entry fails too.
-"""
+"""Exact Mellum/LFM parity checks for the current native production recipes."""
 from __future__ import annotations
 
 import datetime
 import json
-import re
 from pathlib import Path
 
 PARITY_SCHEMA = 'natlang.neuralese-line-parity/1'
 KINDS = ('fit-only', 'backbone-inherent')
 LINES = ('mellum', 'lfm')
+STAGE_KIND = 'native_state_sft'
 
 
 def _repo():
@@ -50,37 +21,15 @@ def parity_path(repo=None):
 
 def load_parity(repo=None):
     parity = json.loads(parity_path(repo).read_text())
-    if parity.get('schema') != PARITY_SCHEMA or not isinstance(parity.get('stages'), dict):
-        raise ValueError('line-parity.json needs schema ' + PARITY_SCHEMA + ' and stages')
+    if (parity.get('schema') != PARITY_SCHEMA or set(parity.get('stages', {})) != {STAGE_KIND}
+            or not isinstance(parity['stages'][STAGE_KIND].get('lines'), dict)):
+        raise ValueError('line-parity.json must declare the single current native_state_sft stage')
     for entry in parity.get('allowed_differences', []):
-        if (set(entry) - {'stage', 'lines', 'key', 'kind', 'reason', 'check'} or entry.get('kind') not in KINDS
-                or entry.get('stage') not in parity['stages'] or not entry.get('reason')
-                or not set(entry.get('lines') or ()) or set(entry['lines']) - set(LINES)):
-            raise ValueError('an allowed difference is {stage, lines, key, kind (fit-only|backbone-inherent), '
-                             'reason, check?}: ' + json.dumps(entry))
-    for entry in parity.get('line_specific', []):
-        keys = entry.get('keys', [entry.get('key')])
-        if (set(entry) - {'stage', 'lines', 'key', 'keys', 'reason', 'date', 'expires', 'recipe'}
-                or ('key' in entry) == ('keys' in entry) or not keys or not all(isinstance(k, str) and k for k in keys)
-                or entry.get('stage') not in parity['stages'] or not entry.get('reason')
-                or not set(entry.get('lines') or ()) or set(entry['lines']) - set(LINES)
-                or not _iso_date(entry.get('date')) or not _iso_date(entry.get('expires'))):
-            raise ValueError('a line_specific entry is {stage, lines, key|keys, reason, date (YYYY-MM-DD), expires '
-                             '(YYYY-MM-DD), recipe?}: ' + json.dumps(entry))
+        if (entry.get('stage') != STAGE_KIND or entry.get('kind') not in KINDS or not entry.get('reason')
+                or not set(entry.get('lines') or ()) <= set(LINES) or not entry.get('lines')
+                or not isinstance(entry.get('key'), str) or not entry['key']):
+            raise ValueError('native allowed difference requires stage, lines, key, kind and reason')
     return parity
-
-
-def _iso_date(value):
-    try:
-        return datetime.date.fromisoformat(value) if isinstance(value, str) else None
-    except ValueError:
-        return None
-
-
-def _prose_free(value):
-    if isinstance(value, dict):
-        return {k: _prose_free(v) for k, v in value.items() if k != 'description'}
-    return value
 
 
 def _flatten(prefix, value, out):
@@ -95,266 +44,112 @@ def _recipe_file(recipe_id, repo):
     directory = Path(repo) / 'training' / 'neuralese' / 'recipes'
     found = [p for p in sorted(directory.glob('*.json')) if json.loads(p.read_text()).get('id') == recipe_id]
     if len(found) != 1:
-        raise ValueError('line parity names an unknown recipe: ' + recipe_id)
+        raise ValueError('line parity names an unknown native recipe: ' + recipe_id)
     return found[0]
 
 
-def _stage_view(kind, parameters, inputs, quantization=None, family=None):
-    out = {}
-    if parameters:  # a stage whose only parameters are lineage keys declares none in the base
-        _flatten('parameters', parameters, out)
-    for role, binding in inputs.items():
-        out['inputs.' + role] = binding.get('sha256', binding.get('artifact'))
-    if quantization:
-        _flatten('quantization', {k: v for k, v in quantization.items() if k != 'description'}, out)
-    if family:
-        _flatten('family', {k: v for k, v in family.items() if k != 'description'}, out)
-    if kind == 'neuralese_direct':
-        out['derived.supervision'] = (f"{parameters['epochs']} epochs" if 'epochs' in parameters else
-                                      f"{parameters.get('steps', 0) * parameters.get('target_tokens', 0) * parameters.get('batch', 1)} positions")
-    return out
-
-
-STAGE_PREFIX = re.compile(r'^stages\.[^.]+\.')
+def _stage_view(recipe):
+    from .recipe import NATIVE_TRAINING_KINDS
+    stages = [s for s in recipe.get('stages', []) if s.get('admitted') is not False]
+    if not stages or any(s.get('kind') != STAGE_KIND or s.get('kind') not in NATIVE_TRAINING_KINDS for s in stages):
+        raise ValueError('line parity accepts current native SFT stages only')
+    catalog = recipe.get('input_bindings', {})
+    flat = {}
+    for stage in stages:
+        parameters = {**recipe.get('stage_parameter_defaults', {}).get(stage['kind'], {}),
+                     **stage.get('parameters', {})}
+        _flatten('parameters', parameters, flat)
+        for role, name in stage.get('inputs', {}).items():
+            binding = catalog.get(name, {})
+            flat['inputs.' + role] = binding.get('sha256', binding.get('artifact'))
+    for key, value in recipe.items():
+        if key not in {'schema', 'id', 'description', 'extends', 'overrides', 'stages',
+                       'input_bindings', 'stage_parameter_defaults'}:
+            _flatten(key, value, flat)
+    return STAGE_KIND, flat
 
 
 def effective_config(spec, repo=None):
-    """``spec`` is {"recipe": id} (a multi-stage or a direct-stage recipe) or {"config": {kind, inputs, parameters}};
-    returns (kind, flat configuration)."""
-    from .recipe import DIRECT_STAGE_SCHEMA, resolve_recipe_data
+    """Resolve a native recipe ID and return its exact flattened shared settings."""
+    from .recipe import resolve_recipe_data
     repo = Path(repo or _repo())
-    if 'config' in spec:
-        config = spec['config']
-        return config['kind'], _stage_view(config['kind'], config.get('parameters', {}), config.get('inputs', {}))
-    recipe = resolve_recipe_data(_recipe_file(spec['recipe'], repo))
-    return recipe_config(recipe)
+    if 'recipe' not in spec:
+        raise ValueError('line parity requires a declared native recipe ID')
+    return _stage_view(resolve_recipe_data(_recipe_file(spec['recipe'], repo)))
 
 
-def recipe_config(recipe):
-    from .recipe import DIRECT_STAGE_SCHEMA
-    if recipe.get('schema') == DIRECT_STAGE_SCHEMA:
-        kind = recipe['stage']['kind']
-        return kind, _stage_view(kind, recipe.get('parameters', {}), recipe.get('inputs', {}))
-    from .recipe import DIRECT_E2E_KINDS
-    stages = [s for s in recipe['stages'] if s.get('admitted', True) is not False]
-    kinds = {s['kind'] for s in stages}
-    if not stages or (len(kinds) != 1 and not kinds <= DIRECT_E2E_KINDS):
-        raise ValueError('line parity compares recipes whose stages share one kind (or an end-to-end lineage): ' +
-                         recipe['id'])
-    kind = '+'.join(sorted(kinds))
-    catalog = recipe.get('input_bindings', {})
-    views = {}
-    for stage in stages:
-        parameters = {**recipe.get('stage_parameter_defaults', {}).get(stage['kind'], {}), **stage.get('parameters', {})}
-        # A line recipe may leave a lineage binding (e.g. the end-to-end stage's direct export) to the launch recipe
-        # that extends it; lineage keys are not compared.
-        inputs = {role: catalog.get(name, {}) for role, name in stage.get('inputs', {}).items()}
-        family = recipe.get('family')
-        views[stage['id']] = _stage_view(stage['kind'], parameters, inputs, recipe.get('quantization'),
-                                         family if family and stage['id'] in family.get('stages', []) else None)
-    if recipe.get('backbone'):  # the base-model source of a fresh lineage (owner 2026-10-12)
-        for view in views.values():
-            _flatten('backbone', {k: v for k, v in recipe['backbone'].items() if k != 'description'}, view)
-    flat = (next(iter(views.values())) if len(views) == 1 else
-            {f'stages.{sid}.{key}': value for sid, view in views.items() for key, value in view.items()})
-    for key in ('e2e_acceptance',):  # the same acceptance on both lines
-        if key in recipe:
-            _flatten(key, {k: v for k, v in recipe[key].items() if k != 'description'}, flat)
-    for key, value in recipe.items():  # every other leaf setting (runtime, outputs, lineage, continuations, ...)
-        if key not in VIEWED_TOP_LEVEL:
-            _flatten(key, _prose_free(value), flat)
-    return kind, flat
-
-
-# Top-level members of a multi-stage recipe that the stage views above already cover (or that name the recipe).
-VIEWED_TOP_LEVEL = frozenset({'schema', 'id', 'description', 'extends', 'overrides', 'parity', 'stages',
-                              'stage_parameter_defaults', 'input_bindings', 'quantization', 'family', 'backbone',
-                              'e2e_acceptance'})
-
-
-def _twin_registered(base_sha, line_sha, repo):
+def _native_source_twin(base_sha, line_sha, repo):
+    """Confirm tokenizer-specific graph files share the admitted full-turn source and split contract."""
     registry = json.loads((Path(repo) / 'training' / 'neuralese_corpora.json').read_text())
-    for corpus in registry.get('corpora', registry if isinstance(registry, list) else []):
-        twin = corpus.get('tokenizer_twin_of') if isinstance(corpus, dict) else None
-        if twin and twin.get('sha256') == base_sha and twin.get('twin_sha256') == line_sha:
-            return True
-        # A union's renders (build_native_turn_union.py): within one rendering, each tokenizer's file is a twin of
-        # the others (aligned by document id, same splits and source groups).
-        renders = corpus.get('renders') if isinstance(corpus, dict) else None
-        for rendering in (renders.values() if isinstance(renders, dict) else ()):
-            hashes = {item.get('sha256') for item in rendering.values() if isinstance(item, dict)}
-            if base_sha in hashes and line_sha in hashes:
-                return True
-    return False
+    corpora = registry.get('corpora', registry if isinstance(registry, list) else [])
+    def digests(value):
+        if isinstance(value, dict):
+            if isinstance(value.get('sha256'), str):
+                yield value['sha256']
+            for child in value.values():
+                yield from digests(child)
+        elif isinstance(value, list):
+            for child in value:
+                yield from digests(child)
+    return any(isinstance(corpus, dict)
+        and corpus.get('source_class') == 'static-role-aware-native-state-graph-conversion-of-admitted-full-turn-corpus'
+        and corpus.get('derived_from')
+        and 'Exact source train/test inheritance' in corpus.get('split', '')
+        and base_sha in set(digests(corpus.get('renders')))
+        and line_sha in set(digests(corpus.get('renders')))
+        for corpus in corpora)
 
 
-def _matches(pattern, key):
-    return key == pattern or key.startswith(pattern + '.')
+def _allowed(parity, line, key):
+    return next((entry for entry in parity.get('allowed_differences', [])
+                 if line in entry['lines'] and (key == entry['key'] or key.startswith(entry['key'] + '.'))), None)
 
 
-def _allowed(parity, stage, line, key):
-    key = STAGE_PREFIX.sub('', key)
-    for entry in parity.get('allowed_differences', []):
-        if entry['stage'] == stage and line in entry['lines'] and _matches(entry['key'], key):
-            return entry
-    return None
-
-
-def _line_specific(parity, stage, line, key, recipe_id):
-    """A dated line_specific entry covering ``key`` (prefixed ``stages.<id>.`` or not) for ``line``'s recipe."""
-    for entry in parity.get('line_specific', []):
-        if (entry['stage'] != stage or line not in entry['lines']
-                or entry.get('recipe') not in (None, recipe_id)):
-            continue
-        if any(_matches(pattern, key) or _matches(pattern, STAGE_PREFIX.sub('', key))
-               for pattern in entry.get('keys', [entry.get('key')])):
-            return entry
-    return None
-
-
-def _lineage(parity, stage, key):
-    key = STAGE_PREFIX.sub('', key)
-    return any(_matches(k, key) for k in parity.get('lineage_keys', {}).get(stage, []))
-
-
-def _value(flat, key):
-    if key in flat:
-        return flat[key]
-    return '<present>' if any(k.startswith(key + '.') for k in flat) else '<absent>'
-
-
-def _show(value):
-    text = json.dumps(value)
-    return text if len(text) <= 120 else text[:117] + '...'
-
-
-def difference_message(key, line, value, base_value, other=None):
-    """The one-sentence failure: both lines' values when the other line is known, else this line's and the base's."""
-    lines = {line: value, **({other[0]: other[1]} if other else {})}
-    shown = ', '.join(f'{name}={_show(lines[name])}' for name in LINES if name in lines)
-    return (f'{key} differs between lines ({shown}; shared base={_show(base_value)}); move it to the shared recipe '
-            f'or declare it in line-parity backbone_inherent with a reason (training/neuralese/line-parity.json '
-            f'allowed_differences, or a dated line_specific entry with an expiry)')
-
-
-def compare(parity, stage, line, kind, config, repo=None, recipe_id=None, other=None):
-    """Errors (one sentence each) for ``line``'s configuration of ``stage`` against the shared base. ``other`` is the
-    other line's flat configuration (line, config), used only to show both values in the message."""
+def compare(parity, line, config, *, repo=None, other=None):
+    """Compare one line against the shared native base, rejecting unexplained differences."""
     repo = Path(repo or _repo())
-    base_kind, base = effective_config(parity['stages'][stage]['base'], repo)
+    base_id = parity['stages'][STAGE_KIND]['base']['recipe']
+    _, base = effective_config({'recipe': base_id}, repo)
     errors, used = [], set()
-    if kind != base_kind:
-        return [f'{stage}/{line}: stage kind {kind} differs from the shared base\'s {base_kind}'], set()
-    # A phase present on one side only is one difference (stages.<id>), not one per setting of that phase.
-    phases = lambda flat: {m.group(0)[:-1] for m in map(STAGE_PREFIX.match, flat) if m}
-    lone = phases(base) ^ phases(config)
-    base, config = ({**{k: v for k, v in flat.items() if not any(k.startswith(p + '.') for p in lone)},
-                     **{p: '<present>' for p in lone & phases(flat)}} for flat in (base, config))
-    undeclared = {}  # (unprefixed key, values) -> keys; a recipe-wide default that differs is one sentence
     for key in sorted(set(base) | set(config)):
-        if base.get(key, '<absent>') == config.get(key, '<absent>') or _lineage(parity, stage, key):
+        before, actual = base.get(key, '<absent>'), config.get(key, '<absent>')
+        if before == actual:
             continue
-        entry = _allowed(parity, stage, line, key)
+        entry = _allowed(parity, line, key)
         if entry is None:
-            specific = _line_specific(parity, stage, line, key, recipe_id)
-            if specific is not None:
-                used.add(id(specific))
-                continue
-            values = (config.get(key, '<absent>'), base.get(key, '<absent>'), _value(other[1], key) if other else None)
-            undeclared.setdefault((STAGE_PREFIX.sub('', key), json.dumps(values[:2])), []).append((key, values))
+            paired = f"; Mellum={other.get(key, '<absent>')}; LFM={config.get(key, '<absent>')}" if other else ''
+            errors.append(f'{key} differs from the shared native recipe{paired}; declare a justified native line difference')
             continue
         used.add(id(entry))
-        if entry.get('check') == 'tokenizer_twin' and not _twin_registered(base.get(key), config.get(key), repo):
-            specific = _line_specific(parity, stage, line, key, recipe_id)
-            if specific is not None:
-                used.add(id(specific))
-                continue
-            errors.append(f'{stage}/{line}: {key} must be a registered tokenizer twin (tokenizer_twin_of) of the '
-                          f'shared base\'s input {base.get(key)}')
-    for (bare, _), found in undeclared.items():
-        key, (value, base_value, other_value) = next((f for f in found if f[1][2] != '<absent>'), found[0])
-        key = key if len(found) == 1 else 'stages.*.' + bare
-        errors.append(f'{stage}: ' + difference_message(key, line, value, base_value,
-                                                        (other[0], other_value) if other else None))
+        if entry.get('check') == 'native_source_twin' and not _native_source_twin(before, actual, repo):
+            errors.append(f'{key} must retain the shared admitted source membership and exact train/held split')
     return errors, used
 
 
 def check(repo=None, today=None):
-    """All parity errors for the declared lines (next-launch and active recipes) and every direct-stage recipe that
-    declares a parity line."""
-    from .recipe import DIRECT_STAGE_SCHEMA
+    """Check both declared current production recipes against the shared native SFT base."""
     repo = Path(repo or _repo())
     parity = load_parity(repo)
-    today = today or datetime.date.today()
+    lines = parity['stages'][STAGE_KIND]['lines']
+    if set(lines) != set(LINES):
+        return ['native_state_sft must declare both Mellum and LFM']
+    configs = {}
+    for line in LINES:
+        spec = lines[line]
+        if not isinstance(spec.get('recipe'), str) or not spec['recipe']:
+            return [f'native_state_sft/{line}: declare the current recipe']
+        kind, config = effective_config({'recipe': spec['recipe']}, repo)
+        if kind != STAGE_KIND:
+            return [f"{line}: expected native stage {STAGE_KIND}, got {kind}"]
+        configs[line] = config
     errors, used, checked = [], set(), set()
-    for stage, declaration in parity['stages'].items():
-        specs = declaration.get('lines', {})
-        for line in specs:
-            if line not in LINES:
-                errors.append(f'{stage}: unknown line {line}')
-        for role in ('recipe', 'active'):
-            # role recipe: each line's next fresh launch; role active: the leaf recipe of the lineage running now
-            # (defaults to the next-launch recipe, then already checked). Both lines' values appear in a message.
-            ids = {}
-            for line, spec in specs.items():
-                if line not in LINES:
-                    continue
-                if not spec.get('recipe'):
-                    if role == 'recipe' and not spec.get('pending'):
-                        errors.append(f'{stage}/{line}: declare the line\'s recipe or why it is pending')
-                    continue
-                ids[line] = spec.get(role) or spec['recipe']
-            configs = {line: effective_config({'recipe': rid}, repo) for line, rid in ids.items()}
-            for line, rid in ids.items():
-                if role == 'active' and rid == specs[line]['recipe']:
-                    continue
-                kind, config = configs[line]
-                other = next(((name, value[1]) for name, value in configs.items() if name != line), None)
-                found, seen = compare(parity, stage, line, kind, config, repo, rid, other)
-                errors += [f'{rid}: ' + e for e in found] if role == 'active' else found
-                used |= seen
-                checked.add((stage, line))
-    for path in sorted((repo / 'training' / 'neuralese' / 'recipes').glob('*.json')):
-        recipe = json.loads(path.read_text())
-        declared = recipe.get('parity')
-        if recipe.get('schema') != DIRECT_STAGE_SCHEMA or not isinstance(declared, dict):
-            continue
-        if declared.get('stage') not in parity['stages'] or declared.get('line') not in LINES:
-            errors.append(f'{path.name}: parity must name a stage of line-parity.json and a line (mellum|lfm)')
-            continue
-        kind, config = recipe_config(recipe)
-        found, seen = compare(parity, declared['stage'], declared['line'], kind, config, repo, recipe.get('id'))
-        errors += [path.name + ': ' + e for e in found]
-        used |= seen
-        checked.add((declared['stage'], declared['line']))
+    for line in LINES:
+        found, seen = compare(parity, line, configs[line], repo=repo,
+                              other=configs['mellum' if line == 'lfm' else 'lfm'])
+        errors.extend(f"{lines[line]['recipe']}: {error}" for error in found)
+        used.update(seen)
+        checked.add(line)
     for entry in parity.get('allowed_differences', []):
-        if id(entry) not in used and any((entry['stage'], line) in checked for line in entry['lines']):
-            errors.append(f'{entry["stage"]}: declared difference {entry["key"]} ({", ".join(entry["lines"])}) no '
-                          f'longer differs; remove it from line-parity.json')
-    for entry in parity.get('line_specific', []):
-        keys = ', '.join(entry.get('keys', [entry.get('key')]))
-        if _iso_date(entry['expires']) < today:
-            errors.append(f'{entry["stage"]}: line_specific {keys} ({", ".join(entry["lines"])}) expired on '
-                          f'{entry["expires"]}; move it to the shared recipe, declare it backbone-inherent, or renew '
-                          f'it with a new reason and expiry')
-        elif id(entry) not in used and any((entry['stage'], line) in checked for line in entry['lines']):
-            errors.append(f'{entry["stage"]}: line_specific {keys} ({", ".join(entry["lines"])}) no longer differs; '
-                          f'remove it from line-parity.json')
+        if id(entry) not in used and any(line in checked for line in entry['lines']):
+            errors.append(f"{entry['key']} no longer differs; remove the obsolete native line exception")
     return errors
-
-
-def check_declared_stage(recipe, repo=None):
-    """For the direct-stage runner: refuse a fresh launch whose parity declaration does not hold (one sentence)."""
-    declared = recipe.get('parity')
-    if declared == 'diagnostic':
-        return
-    if not isinstance(declared, dict):
-        raise ValueError('declare "parity": {"line": "mellum"|"lfm", "stage": "direct"|"e2e"} (or "diagnostic" for '
-                         'a diagnostic run) so the launch is checked against the shared base (LINE_PARITY.md)')
-    parity = load_parity(repo)
-    if declared.get('stage') not in parity['stages'] or declared.get('line') not in LINES:
-        raise ValueError('parity must name a stage of line-parity.json and a line (mellum|lfm)')
-    kind, config = recipe_config(recipe)
-    errors, _ = compare(parity, declared['stage'], declared['line'], kind, config, repo)
-    if errors:
-        raise ValueError(errors[0])

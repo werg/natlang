@@ -11,7 +11,7 @@ def prepare_positive_reuse(rollouts, *, selected_episode_ids, prior_objective,
                            identity, roles, fetch_block, block_bundle=None):
     from ..common.hashing import canonical_json_sha256_hex as digest
     from .native_replay import prepare_objective
-    from .grpo import group_advantages
+    from .rollout_math import group_advantages
 
     selected = list(selected_episode_ids)
     if not selected or len(set(selected)) != len(selected):

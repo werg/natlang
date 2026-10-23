@@ -24,7 +24,7 @@ def test_native_actor_cli_restores_actual_checkpoint_and_exposes_exact_policy(tm
     root = Path(__file__).resolve().parents[2]
     argv = [sys.executable, str(root/'scripts/neuralese_data/serve_native_checkpoint.py'),
             '--checkpoint', str(checkpoint), '--checkpoint-sha256', digest,
-            '--native-state', '--device', 'cpu', '--port', '0',
+            '--device', 'cpu', '--port', '0',
             '--store-dir', str(tmp_path/'actor-store')]
     written = None
     raw = None
@@ -36,7 +36,7 @@ def test_native_actor_cli_restores_actual_checkpoint_and_exposes_exact_policy(tm
                 line = process.stdout.readline()
                 assert line, (tmp_path/'actor-stderr.log').read_text()
                 ready = json.loads(line)
-                assert ready['native_state'] is True and ready['heads_sha256'] is None
+                assert ready['native_state'] is True
                 endpoint = ready['listening']
                 with urllib.request.urlopen(endpoint+'/v1/neuralese/info', timeout=30) as response:
                     info = json.load(response)

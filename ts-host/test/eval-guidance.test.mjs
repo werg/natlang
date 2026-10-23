@@ -46,9 +46,6 @@ test('read_code shows the authentic built-in Neuralese type declaration', async 
   assert.match(declaration, /read-only provenance metadata, not a method/);
   assert.equal(declaration, BUILT_IN_DOCS.Neuralese);
 
-  const prompt = (await import('../dist/model/text-neuralese-emulation.js')).TEXT_NEURALESE_EMULATION_PROMPT;
-  assert.match(prompt, /Use read_code\("Neuralese"\) to inspect its declaration/);
-  assert.doesNotMatch(prompt, /do not redefine it or use read_code\("Neuralese"\)/);
 });
 
 test('read_code explains textReadSource as metadata and points to typed readout', async () => {

@@ -24,8 +24,9 @@ from natlang_neuralese.train.native_resident import code_inventory
 
 PREFIX = 'training/neuralese/natlang_neuralese/'
 RENDERING_ASSETS = tuple('training/prompt-pieces/' + name for name in (
-    'pieces.json', 'rendering-contract-fixtures.json', 'rendering-identity-equivalence.json'))
+    'pieces.json', 'rendering-contract-fixtures.json'))
 COMMITS = ('e97599138', 'f63c8b05b', '8b4e3bf42', 'fd4b71cbf', 'cb46b28de', 'd1ef19931', '810e496c1', '5fd55d0c7')
+NATIVE_ACTOR_COMMIT = '62187e585'
 ALLOWED = {'model/shared_state.py', 'model/native_adapters.py', 'maple/fused_moe.py',
            'common/runtime_inventory.py', 'rl/production.py', 'rl/native_raw_rounds.py',
            'rl/native_rounds.py', 'serve/__init__.py'}
@@ -161,10 +162,10 @@ def compose(base_construction, base_sha256, source, out, closures, publisher_loa
                    if inventory.get(name) != record['inventory'].get(name)}
         if changes != ALLOWED:
             raise ValueError('composition changed unexpected or missing modules: '+repr(changes))
-        entry = 'scripts/neuralese_data/serve_direct_checkpoint.py'
+        entry = 'scripts/neuralese_data/serve_native_checkpoint.py'
         destination = pending/entry
         destination.parent.mkdir(parents=True)
-        write_bytes_durable(destination, git('show', 'd1ef19931:'+entry))
+        write_bytes_durable(destination, git('show', NATIVE_ACTOR_COMMIT+':'+entry))
         coordinator_scripts = ('scripts/run_bonsai_queue.py',
             'scripts/coreweave/teacher_engine_guard.py',
             'scripts/coreweave/teacher_generation_guardian.py',

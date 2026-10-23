@@ -1,9 +1,4 @@
-"""Public objective terms lowered to one shared graph, without executing it.
-
-This internal compiler does not advertise or dispatch the unfinished public
-GradSession derivative/optimizer protocol. It uses the production renderer,
-actual captured source occurrences, native actor identities and query loss.
-"""
+"""Lower exact high-level native turns into one differentiable actor graph."""
 from __future__ import annotations
 
 import copy
@@ -11,8 +6,8 @@ import copy
 from ..common.hashing import canonical_json_sha256_hex
 from ..model.native_graph_plan import Invocation, compile_graph, invocation_dict
 from ..rl.native_replay import _input_stream
-from .grad import GradSession
 from .native_recorded_graph import compile_recorded_graph
+from .targets import target_items
 
 
 def _capture(turn):
@@ -81,7 +76,7 @@ def lower_recorded_objective(engine,turns,events,terms,*,owner=None):
         return sum(len(segment['token_ids']) for segment in _capture(turn)['prompt'] if segment['kind']=='tokens')
     def target_branch(turn,target):
         if not isinstance(target,dict):raise ValueError('native CE/distillation requires its target assistant message')
-        _,rest=GradSession(engine)._target_items(turn['messages'],turn.get('tools'),target)
+        _,rest=target_items(engine,turn['messages'],turn.get('tools'),target)
         source=by_name[compiled.invocations[turn['native']['id']][0]]
         length=prompt_length(turn)
         tokens=list(source.token_ids[:length]);flags=[False]*length
@@ -192,3 +187,19 @@ def lower_recorded_objective(engine,turns,events,terms,*,owner=None):
             'graph_sha256':canonical_json_sha256_hex(graph),'terms':pending},
         'native_state_modes':{key:value for turn in turns for key,value in (turn.get('native_state_modes') or {}).items()
             if key in {binding['id'] for binding in graph['external_states'].values()}}}
+
+
+def lower_recorded_objective_request(engine,request,*,owner=None):
+    """Lower one versioned recorded objective while retaining its exact target roots."""
+    from ..model.native_derivative_contract import validate_recorded_objective_request
+    validate_recorded_objective_request(request)
+    lowered=lower_recorded_objective(engine,request['turns'],request['events'],request['terms'],owner=owner)
+    if lowered['native_identity']!=_recorded_identity(engine):
+        raise ValueError('native recorded objective changed its exact live model identity')
+    lowered['recorded_objective_request']=copy.deepcopy(request)
+    return lowered
+
+
+def _recorded_identity(engine):
+    from .native_grad import _identity
+    return _identity(engine)

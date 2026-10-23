@@ -31,6 +31,8 @@ def _binding(path):
 def bind_policy(engine,path):
     policy=restore_policy(engine,path)
     engine.native_coefficient_policy_runtime=runtime_binding(policy,path)
+    engine.native_default_adapters=[{'id':policy['handles'][entry['id']]['current_id'],
+        'scale':float.fromhex(entry['scale_hex'])} for entry in policy['defaults']]
     engine.rl_policy_binding={**engine.rl_policy_binding,'coefficient_policy_sha256':actor_policy_sha256(policy),
                               'coefficient_policy':engine.native_coefficient_policy_runtime}
     return policy

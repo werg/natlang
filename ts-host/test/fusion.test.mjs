@@ -10,8 +10,6 @@ import { buildProject, createNatlangRuntime, loadNatlang, nodeSourceFiles } from
 import { openCallStore } from '../dist/calls/store.js';
 import { fusionFacts, observedFromStore, formatFusionReport, crispPlan, verifyPlan, repairedPlan, nlPlan, nlPlannerFrom, planFusion, fusedEdges, fusionStatus, fusionReport,
   parseFusionSettings } from '../dist/fusion/index.js';
-import { createTextNeuraleseEmulation, TEXT_NEURALESE_DIALECT } from '../dist/model/text-neuralese-emulation.js';
-import { MemoryNeuraleseStore, StandInNeuralesePort, hashingEmbedder } from '../dist/native/neuralese-store.js';
 
 const sha = text => createHash('sha256').update(text).digest('hex');
 function folder(files) {
@@ -171,21 +169,18 @@ const ORCH = {
 };
 const fusionEvents = traces => traces.flatMap(trace => trace.events.filter(event => event.kind.startsWith('fusion')).map(event => ({ ...event, call: trace.name })));
 
-async function runOrch({ fusion, emulate, source = 'int main(){}' }) {
+async function runOrch({ fusion, source = 'int main(){}' }) {
   const root = folder(ORCH);
   const facts = fusionFacts(root, nodeSourceFiles(root));
   const plan = crispPlan(facts);
   const edges = fusedEdges(facts, plan);
   const log = [], traces = [];
-  const emulation = emulate ? createTextNeuraleseEmulation() : undefined;
   const script = scriptedModel(log);
-  const model = emulation ? emulation.wrap(Object.assign(script, {})) : script;
-  const runtime = createNatlangRuntime({ model, trace: trace => traces.push(trace), calls: false,
-    ...(emulation ? { neuralese: emulation.runtime } : {}),
-    ...(fusion ? { fusion: { edges, ...fusion(emulation) } } : {}) });
+  const runtime = createNatlangRuntime({ model: script, trace: trace => traces.push(trace), calls: false,
+    ...(fusion ? { fusion: { edges, ...fusion() } } : {}) });
   const orch = loadNatlang(join(root, 'orch.nl'), root);
   const value = await runtime.run(() => orch(source));
-  return { value, log, traces, edges, emulation, runtime, facts };
+  return { value, log, traces, edges, runtime, facts };
 }
 
 test('fusion off (the default) changes nothing and traces nothing', async () => {
@@ -197,62 +192,6 @@ test('fusion off (the default) changes nothing and traces nothing', async () => 
   assert.equal(fusionEvents(off.traces).length, 0);
   assert.equal(plain.log.length, off.log.length);
   assert.equal(plain.edges.length, 1);
-});
-
-test('on, under the text emulation: the producer returns a block, the consumer reads it, traces mark the emulation', async () => {
-  const run = await runOrch({ emulate: true, fusion: emulation => ({ mode: 'on', emulation: { dialect: TEXT_NEURALESE_DIALECT } }) });
-  assert.equal(run.value, 'checked:TREE-1', 'the analyzer read the producer\'s block');
-  const events = fusionEvents(run.traces);
-  const fused = events.find(event => event.kind === 'fusion_edge' && event.status === 'fused');
-  const consumed = events.find(event => event.kind === 'fusion_edge' && event.status === 'consumed');
-  assert.ok(fused && consumed, JSON.stringify(events));
-  assert.equal(fused.emulation, true);
-  assert.equal(fused.call, 'orch');
-  assert.match(consumed.block, /^nz1_/);
-  assert.equal(consumed.param, 'syntax');
-  const analyze = run.log.find(entry => entry.which === 'STAGE-ANALYZE');
-  assert.match(analyze.text, /Neuralese text block id=nz1_/, 'the analyzer was shown a block, not the text');
-});
-
-test('on without a certificate or a Neuralese backend falls back to text and says why', async () => {
-  const noCertificate = await runOrch({ emulate: false, fusion: () => ({ mode: 'on' }) });
-  assert.equal(noCertificate.value, 'checked:TREE-1');
-  const fallback = fusionEvents(noCertificate.traces).find(event => event.kind === 'fusion_fallback');
-  assert.match(fallback.reason, /no Neuralese store and write port/);
-  // A store and port but a driver that cannot carry Neuralese, and no certificate.
-  const store = new MemoryNeuraleseStore();
-  const port = new StandInNeuralesePort(store, hashingEmbedder(8), 8, 'nd:natlang@1');
-  const status = options => fusionStatus({ mode: 'on', edges: [], ...options }, { store, port }, { id: 'm', driver: Object.assign(() => ({}), { neuralese: true }) });
-  assert.match(status({}).reason, /no runtime-qualification certificate/);
-  const certificate = { schema: 'natlang.fusion-certificate/1', model: { id: 'm', weights_sha256: 'abc' }, dialect: 'nd:natlang@1',
-    runtime_qualification: { status: 'passed', scope: ['transport', 'gradient-replay', 'typed-function-execution'], report_sha256: 'r',
-      self_feedback: { channel_equivalence: 'passed', generation_quality: 'passed' } } };
-  assert.match(status({ certificate }).reason, /different weights/, 'the profile must name the weights');
-  assert.match(status({ certificate, weights: 'other' }).reason, /different weights/);
-  assert.match(status({ certificate: { ...certificate, dialect: 'nd:natlang@2' }, weights: 'abc' }).reason, /dialect/);
-  assert.match(status({ certificate: { ...certificate, runtime_qualification: { ...certificate.runtime_qualification, self_feedback: undefined } }, weights: 'abc' }).reason, /self-feedback/);
-  assert.deepEqual(status({ certificate, weights: 'abc' }), { ok: true, emulation: false });
-  const plainDriver = fusionStatus({ mode: 'on', edges: [], certificate, weights: 'abc' }, { store, port }, { id: 'm', driver: () => ({}) });
-  assert.match(plainDriver.reason, /does not carry Neuralese/);
-});
-
-test('shadow serves text and records the fused producer\'s agreement', async () => {
-  const readback = ref => async () => undefined;
-  const agreeing = await runOrch({ emulate: true, fusion: emulation => ({ mode: 'shadow', emulation: { dialect: TEXT_NEURALESE_DIALECT },
-    readback: async ref => {
-      const block = await emulation.store.get(ref.$neuralese.id);
-      return block.meta.producer.text_body_sha256 === sha('TREE-1') ? 'TREE-1' : undefined;
-    } }) });
-  assert.equal(agreeing.value, 'checked:TREE-1');
-  assert.ok(!agreeing.log.some(entry => entry.which === 'STAGE-ANALYZE' && /Neuralese text block/.test(entry.text)), 'text is served');
-  const shadow = fusionEvents(agreeing.traces).find(event => event.kind === 'fusion_shadow');
-  assert.ok(shadow, 'a fusion_shadow event');
-  assert.equal(shadow.agree, true);
-  assert.equal(shadow.emulation, true);
-  const disagreeing = await runOrch({ emulate: true, fusion: emulation => ({ mode: 'shadow', emulation: { dialect: TEXT_NEURALESE_DIALECT },
-    readback: async () => 'something else' }) });
-  assert.equal(fusionEvents(disagreeing.traces).find(event => event.kind === 'fusion_shadow').agree, false);
-  void readback;
 });
 
 test('the CLI helpers: fusion settings validate and default to off with the crisp planner', () => {
@@ -278,30 +217,6 @@ test('natlang check reports the plan in text and in --json, and a natlang.json f
   const text = spawnSync(process.execPath, [bin, 'check', root], { encoding: 'utf8' });
   assert.match(text.stdout, /fusion: 1 candidate hand-off in 1 scope, 1 fusible/);
   assert.match(text.stdout, /fuse\s+parse -> analyze/);
-});
-
-test('the benchmark harness runs a chain as text and fused and applies the gate; an emulated run never passes it', async () => {
-  const { runBench, DEFAULT_GATE } = await import('../scripts/fusion-bench.mjs');
-  const root = folder(ORCH);
-  const emulation = createTextNeuraleseEmulation();
-  const createDriver = () => {
-    const script = scriptedModel([]);
-    return emulation.wrap(async request => ({ ...(await script(request)), prompt_tokens: 100, completion_tokens: 10 }));
-  };
-  const report = await runBench({ app: root, entry: 'orch.nl', cases: [{ id: 'c1', args: ['int main(){}'], expected: 'checked:TREE-1' }],
-    createDriver, neuralese: emulation.runtime, emulation: { dialect: TEXT_NEURALESE_DIALECT } });
-  assert.equal(report.modes.text.accuracy, 1);
-  assert.equal(report.modes.fused.accuracy, 1);
-  assert.equal(report.comparison.agreement, 1);
-  assert.equal(report.comparison.engaged, true);
-  assert.ok(report.modes.fused.tokens.total > 0 && report.modes.text.tokens.total > 0);
-  assert.equal(report.modes.fused.fusion.emulation, true);
-  assert.equal(report.gate.result.emulation, false);
-  assert.equal(report.gate.pass, false, 'a text emulation cannot enable fusion');
-  assert.equal(DEFAULT_GATE.minAgreement, 0.98);
-  const dry = await runBench({ app: root, entry: 'orch.nl', cases: [], dryRun: true });
-  assert.equal(dry.dryRun, true);
-  assert.equal(dry.edges.length, 1);
 });
 
 // --- Observed readers ---------------------------------------------------------------------------------------------
@@ -497,42 +412,4 @@ export const checked = await analyze(tree);
   for (const edge of byScope.nested.concat(byScope.bound)) assert.match(edge.sites.producer, /^src\/host\.ts@\d+$/);
   assert.equal(fusedEdges(facts, plan).filter(edge => edge.sites).length, 2);
   assert.equal(fusionReport(facts, plan, parseFusionSettings(undefined)).edges.filter(edge => edge.engaged).length, 2);
-});
-
-test('TypeScript orchestrators: with fusion on under the emulation the planned hand-offs pass a block, the others stay text; off changes nothing', async () => {
-  const root = folder(TS_APP);
-  const result = buildProject({ project: root, runtimeModule: RUNTIME_MODULE });
-  assert.equal(result.ok, true, JSON.stringify(result.diagnostics));
-  const host = join(root, 'dist/host.js');
-  const code = readFileSync(host, 'utf8');
-  // nested: parse, analyze; bound: parse, analyze; reads: parse, analyze; twice: parse, both analyzes.
-  assert.equal((code.match(/__natlang\.fuseSite\(/g) ?? []).length, 9, code);
-  assert.ok(!/unrelated[^\n]*fuseSite/.test(code), 'a call with no producer is left alone');
-  const facts = fusionFacts(root, nodeSourceFiles(root));
-  const edges = fusedEdges(facts, crispPlan(facts));
-  const module = await import(pathToFileURL(host).href);
-
-  const run = async (name, fusion) => {
-    const log = [];
-    const emulation = createTextNeuraleseEmulation();
-    const runtime = createNatlangRuntime({ model: emulation.wrap(scriptedModel(log)), calls: false, neuralese: emulation.runtime,
-      ...(fusion ? { fusion: { edges, ...fusion } } : {}) });
-    const value = await runtime.run(() => module[name]('int main(){}'));
-    return { value, log, analyze: log.filter(entry => entry.which === 'STAGE-ANALYZE') };
-  };
-  const on = { mode: 'on', emulation: { dialect: TEXT_NEURALESE_DIALECT } };
-  for (const name of ['nested', 'bound']) {
-    const fused = await run(name, on);
-    assert.equal(fused.value, 'checked:TREE-1', name);
-    assert.match(fused.analyze[0].text, /Neuralese text block id=nz1_/, `${name}: the analyzer was shown a block`);
-  }
-  for (const name of ['reads', 'twice']) {
-    const kept = await run(name, on);
-    assert.ok(kept.analyze.length && kept.analyze.every(entry => !/Neuralese text block/.test(entry.text)), `${name}: text`);
-  }
-  const off = await run('nested', undefined);
-  assert.equal(off.value, 'checked:TREE-1');
-  assert.ok(!/Neuralese text block/.test(off.analyze[0].text), 'fusion off: text');
-  const explicitOff = await run('nested', { mode: 'off' });
-  assert.ok(!/Neuralese text block/.test(explicitOff.analyze[0].text));
 });

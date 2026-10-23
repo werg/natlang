@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from ..eval.task_packet import classify_case, read_jsonl
-from .grpo import group_advantages
+from .rollout_math import group_advantages
 from ..common.task_roots import student_root_row, authored_root_row
 
 UNSCORED_OUTCOMES = {"infrastructure_error", "unresolved"}

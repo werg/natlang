@@ -151,6 +151,7 @@ def test_bare_native_factory_keeps_actual_recipe_and_omits_shared_artifact_requi
     monkeypatch.setattr(recipe,'resolve_stage_inputs',lambda *a:{'foundation_native_graphs':{'path':str(tmp_path/'foundation')}})
     args=SimpleNamespace(model='lfm',checkpoint=checkpoint,base=base,semantic_adapter=None,native_participant=None,
         semantic_refresh_config=None,production_stage='native_full',port=8097,
+        actor_runtime=Path(__file__).resolve().parents[2],
         **{key:tmp_path/key for key in ('seed_native_graphs','held_native_graphs','production_recipe','out','config','cases','runtime')})
     from natlang_neuralese.train.checkpoint_policy import CheckpointPolicy
     saved=CheckpointPolicy.load(checkpoint)

@@ -37,7 +37,7 @@ export { ONCE_EFFECTS } from './native/effects.js';
 export { natlangVitePlugin } from './vite-plugin.js';
 export type { Type as NatlangType } from './native/types.js';
 export type { ModelTurn, ModelTurnRequest, ModelTurnDelta, ModelTurnOptions, ModelContentPart } from './contracts.js';
-export { neuraleseServerModelTurn, HttpNeuraleseStore, withRestoredBlocks, OWNER_HEADER } from './model/neuralese-server.js';
+export { neuraleseServerModelTurn, HttpNeuraleseStore, restoreNativeArtifacts, withRestoredNativeArtifacts, OWNER_HEADER } from './model/neuralese-server.js';
 export type { NeuraleseServerOptions } from './model/neuralese-server.js';
 export { neuraleseServerInfo, checkNeuraleseReader, type NeuraleseServerInfo } from './model/neuralese-info.js';
 export { supportsNeuralese, NeuraleseUnsupportedError, textToParts, hasNeuraleseSentinel, nativeStateConsumerFromInfo,
@@ -66,18 +66,20 @@ export { directorySkillSource } from './skills/node.js';
 export type { FolderProposal } from './native/scoped-fs.js';
 
 export * from './improvement/index.js';
-export { learningService, isLearningService, createLearning, objectives, stopGradient, withAdapters, withSystemPrompts, ADAPTER_TYPE as ADAPTER_TYPE_NAME, Loss, LearningError, LAW_NAMES, type LawName } from './neuralese/learning.js';
-export { nativeGraphGradient, nativeOptimizerStep, nativeStateOptimizerStep, nativeAdapterCreate, nativeAdapterOptimizerStep, type NativeGraphRow, type NativeGradientTarget,
+export { learningService, isLearningService, createLearning, objectives, stopGradient, withNativeAdapters, withNativeStates, withSystemPrompts, Loss, LearningError, LAW_NAMES, type LawName } from './neuralese/learning.js';
+export { nativeGraphGradient, nativeRecordedGraphGradient, nativeOptimizerStep, nativeStateOptimizerStep, nativeAdapterCreate, nativeAdapterOptimizerStep, type NativeGraphRow, type NativeGradientTarget,
   type NativePolicyObjectiveBinding, type NativeOptimizerSpec } from './neuralese/native-learning-client.js';
 export { promptPieces, renderSystemPrompt, renderPromptMessages, type PromptRendering, systemPromptBank, softenText, softenMessages, findPieces, SYSTEM_PROMPT_TYPE, type PromptPiece, type SystemPromptBank } from './native/system-prompts.js';
 export { serverViewer, VIEW_TYPE, type Viewer, type ViewSite, type NativeViewTurn } from './neuralese/view.js';
 export type { LearningService, Gradient, Optimizer, OptimizerState, Trajectory } from './neuralese/learning.js';
+export { nativeAdapterRef, isNativeAdapterRef, type NativeAdapterRef } from './native/neuralese.js';
+export { nativeTensorRef, isNativeTensorRef, type NativeTensorRef, type NativeTensorRefKind } from './native/neuralese.js';
 export { COMBINATORS, createNeuraleseLibrary } from './neuralese/combinators.js';
 export { buildStandardLibrary, loadStandardLibrary } from './neuralese/node-files.js';
-export { initBodyInContext, captureCallRequest, TextInitGateError, type TextInitResult, type TextInitGate } from './neuralese/text-init.js';
+export { initBodyInContext, captureCallRequest, type TextInitResult } from './neuralese/text-init.js';
 export { FileNeuraleseStore, type FileNeuraleseStoreOptions } from './neuralese/node-block-store.js';
-export { MemoryNeuraleseStore, neuraleseContentId } from './native/neuralese-store.js';
-export type { NeuraleseStore, NeuraleseBlock, NeuraleseBlockMeta, NeuraleseBlockInput, NeuraleseDtype } from './native/neuralese-store.js';
+export { MemoryNeuraleseStore } from './native/neuralese-store.js';
+export type { NeuraleseStore, NeuraleseBlockMeta, NativeStateArtifact, NativeStateMetadata, NativeStateTensor, NativeTensorArtifact, NativeTensorArtifactMetadata, NativeTensorValue } from './native/neuralese-store.js';
 export type { StandardLibrary, CombinatorName } from './neuralese/combinators.js';
 export { registerBuiltinModule } from './runtime/modules.js';
 export { replayRecordSink, REPLAY_RECORD_SCHEMA } from './neuralese/replay-records.js';

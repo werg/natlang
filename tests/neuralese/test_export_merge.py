@@ -1,11 +1,11 @@
-"""Export merges LoRA adapters (a phase-F port adapter) into plain weights: inference servers load base weights."""
+"""Ordinary Hugging Face export merges PEFT LoRA deltas into plain model weights."""
 
 import pytest
 import torch
 
 peft = pytest.importorskip("peft")
 
-from natlang_neuralese.export.gguf import merged_state_dict
+from natlang_neuralese.common.hf_export import merged_peft_state_dict
 
 
 class Tiny(torch.nn.Module):
@@ -21,7 +21,7 @@ class Tiny(torch.nn.Module):
 def test_merged_state_dict_matches_the_adapted_model_and_has_plain_names():
     torch.manual_seed(0)
     model = Tiny()
-    assert merged_state_dict(model) is None
+    assert merged_peft_state_dict(model) is None
     config = peft.LoraConfig(r=2, lora_alpha=4, target_modules=["proj"], lora_dropout=0.0)
     peft.inject_adapter_in_model(config, model, adapter_name="neuralese")
     for name, param in model.named_parameters():
@@ -29,7 +29,7 @@ def test_merged_state_dict_matches_the_adapted_model_and_has_plain_names():
             torch.nn.init.normal_(param)
     x = torch.randn(5, 6)
     adapted = model(x)
-    state = merged_state_dict(model)
+    state = merged_peft_state_dict(model)
     assert sorted(state) == sorted(Tiny().state_dict())
     plain = Tiny()
     plain.load_state_dict(state)

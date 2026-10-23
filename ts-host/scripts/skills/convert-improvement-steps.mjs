@@ -42,8 +42,9 @@ function fromSoftSkillDecision(rows, file, hash) {
     };
     for (const arm of ['generic', 'tuned', 'specific']) {
       if (!row.scores[arm]) continue;
-      // The text-initialised starting block was never recorded, so these conversions are legacy whatever the arm.
-      const id = arm === 'generic' ? generic?.block ?? null : null;
+      // These historical runs used projected block IDs, which cannot identify native checkpoint state.
+      // Preserve the run record with an explicit null artifact binding instead of relabeling nz1 as native.
+      const id = null;
       const legacy = true;
       keep(improvementStep({
         episode: { id: `soft-skill-decision:${row.family}`, family: row.family },

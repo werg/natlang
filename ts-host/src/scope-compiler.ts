@@ -745,7 +745,7 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   const planCoordinates = new Map<InlineLambdaPlan, { start: number; end: number }>();
   // nl written as code is analyzed: besides the template sites, uses of nl as a value are reported with the form that
   // works. A mention in a file name ("x.nl") is not code.
-  // Model-written Neuralese literals (`__neuralese("nz1_…")`) are typed by the analysis, and a scope holding soft values
+  // Model-written native-state literals (`__neuralese("nzs1_…")`) are typed by the analysis, and a scope holding soft values
   // is always analyzed so their opacity is checked.
   const literalCalls = /(?<![.\w$])__neuralese\(/.test(analysisSource);
   let literals: NeuraleseLiteral[] = [];

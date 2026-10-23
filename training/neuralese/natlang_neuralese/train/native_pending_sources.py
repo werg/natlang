@@ -17,6 +17,8 @@ SCHEMA='natlang.native-pending-sources/1'
 def bound(reference,parent):
     path=Path(reference['path'])
     if not path.is_absolute():path=Path(parent)/path
+    from ..data.native_source_tree import _staged_path
+    path=_staged_path(parent, path)
     path=path.resolve(strict=True)
     if sha256_file_hex_cached(path)!=reference.get('sha256'):
         raise ValueError('pending native source artifact differs from its immutable binding')

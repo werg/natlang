@@ -11,7 +11,7 @@ from torch.nn import functional as F
 from torch.utils.checkpoint import checkpoint
 
 from ..maple.model import eager_rms_norm
-from .heads import RMSNorm
+from .norms import RMSNorm
 
 
 class CausalFeedbackProjection(nn.Module):

@@ -13,7 +13,7 @@ from natlang_neuralese.serve.engine import GenerationRequest, Sequence
 def test_explicit_adapter_state_cached_graph_and_source_contract(tmp_path,family):
     engine=engine_fixture(tmp_path,family,service_template=True)
     source,_=nonzero_adapter(engine)
-    target,_=nonzero_adapter(engine,'tiny')
+    target,_=nonzero_adapter(engine, 'xs', seed=1)
     record=engine.native_write_text('t5 t6',adapters=[source.id])
     ident=record['id']; block=engine.store.get_native_state(ident).block
     modes={ident:'same-base-adapter-state'}
@@ -61,7 +61,7 @@ def test_adapter_state_receipt_forgery_and_per_input_identity_inventory(tmp_path
     import copy
     from natlang_neuralese.model.native_adapters import validate_adapter_state_receipt, execution_binding, SCHEMA
     engine=engine_fixture(tmp_path,family,service_template=True)
-    source,_=nonzero_adapter(engine);target,_=nonzero_adapter(engine,'tiny')
+    source,_=nonzero_adapter(engine);target,_=nonzero_adapter(engine, 'xs', seed=1)
     ident=engine.native_write_text('t5 t6',adapters=[source.id])['id']
     block=engine.store.get_native_state(ident).block
     def execute():
@@ -87,7 +87,7 @@ def test_adapter_state_receipt_forgery_and_per_input_identity_inventory(tmp_path
 def test_gradient_contract_retains_both_actor_dependencies(tmp_path):
     from natlang_neuralese.model.native_artifact import NativeTensorArtifact,native_tensor_dependencies
     engine=engine_fixture(tmp_path,'lfm',service_template=True)
-    source,name=nonzero_adapter(engine);target,_=nonzero_adapter(engine,'tiny')
+    source,name=nonzero_adapter(engine);target,_=nonzero_adapter(engine, 'xs', seed=1)
     ident=engine.native_write_text('t5',adapters=[source.id])['id']
     block=engine.store.get_native_state(ident).block
     contract=run_native(engine,lambda:adapter_state_input_receipt(engine,block,ident,target_position_start=1),[target.id])
@@ -102,7 +102,7 @@ def test_gradient_contract_retains_both_actor_dependencies(tmp_path):
 def test_explicit_mode_contextual_capture_and_score_service_retains_both_actors(tmp_path,family):
     from test_native_adapted_rl import post_service
     engine=engine_fixture(tmp_path,family,service_template=True)
-    source,_=nonzero_adapter(engine);target,_=nonzero_adapter(engine,'tiny')
+    source,_=nonzero_adapter(engine);target,_=nonzero_adapter(engine, 'xs', seed=1)
     source_id=engine.native_write_text('t5 t6',adapters=[source.id])['id']
     placeholder=engine.native_write_text('t4')['id']
     modes={source_id:'same-base-adapter-state'}
@@ -135,7 +135,7 @@ def test_actual_typed_contextual_adapter_state_client_and_archive(tmp_path,famil
     from pathlib import Path
     from natlang_neuralese.serve.http import serve
     engine=engine_fixture(tmp_path,family,service_template=True)
-    source,_=nonzero_adapter(engine);target,_=nonzero_adapter(engine,'tiny')
+    source,_=nonzero_adapter(engine);target,_=nonzero_adapter(engine, 'xs', seed=1)
     source_id=engine.native_write_text('t5 t6',adapters=[source.id])['id']
     placeholder=engine.native_write_text('t4')['id']
     body={'messages':[{'role':'user','content':[{'type':'text','text':'t4 '},

@@ -1,7 +1,6 @@
 """Shared scoring and exact checkpoint retention for protected authored task packets."""
 from __future__ import annotations
 
-import argparse
 import fcntl
 import hashlib
 import json
@@ -310,69 +309,3 @@ def retain_best_checkpoint(checkpoint: str | Path, evaluation: dict[str, Any],
         temp.replace(receipt_path)
         return {"promoted": True, "task_successes": successes, "checkpoint_sha256": digest,
                 "path": str(best_path)}
-
-
-def export_checkpoint(args: argparse.Namespace) -> dict[str, Any]:
-    """Build the strict LFM direct-serving artifact from a full training checkpoint."""
-    from ..train.direct_export import (LFM2_ADAPTER, _file_inventory,
-                                       export_direct_checkpoint, lfm_snapshot_source)
-
-    snapshot = Path(args.base_snapshot).resolve(strict=True)
-    launch_path = Path(args.launch_receipt).resolve(strict=True)
-    # The launcher appends exit status and log hashes to its receipt when a run
-    # stops. Bind the export to a private byte-for-byte snapshot instead of
-    # that mutable path, or an otherwise valid export becomes unrestorable.
-    launch_bytes = launch_path.read_bytes()
-    launch = json.loads(launch_bytes)
-    frozen_launch = Path(args.output).with_name(Path(args.output).name + ".launch-receipt.json")
-    hub_cache = Path(launch["hf_hub_cache"]).resolve(strict=True)
-    model_id, revision = lfm_snapshot_source(snapshot, hub_cache)
-    weights = sorted((name, digest) for name, digest in _file_inventory(snapshot).items()
-                     if name.endswith(".safetensors"))
-    if not weights:
-        raise ValueError("base snapshot has no safetensors weights")
-    frozen_launch.parent.mkdir(parents=True, exist_ok=True)
-    with frozen_launch.open("xb") as stream:
-        stream.write(launch_bytes)
-        stream.flush()
-        os.fsync(stream.fileno())
-    proof = {
-        "backbone_adapter": LFM2_ADAPTER,
-        "model_id": model_id,
-        "revision": revision,
-        "snapshot_path": str(snapshot),
-        "hf_hub_cache": str(hub_cache),
-        "model_safetensors_sha256": weights[0][1],
-        "launch_receipt_path": str(frozen_launch.resolve()),
-        "launch_receipt_sha256": sha256_file_hex(frozen_launch),
-        "runtime_image": launch["runtime_image"],
-    }
-    checkpoint_sha = sha256_file_hex(args.checkpoint)
-    artifact = export_direct_checkpoint(
-        args.checkpoint, args.output, base_snapshot=snapshot, base_source_proof=proof,
-        backbone_adapter=LFM2_ADAPTER,
-        serving_prompt_rendering=args.serving_prompt_rendering,
-    )
-    if sha256_file_hex(args.checkpoint) != checkpoint_sha:
-        raise ValueError("source checkpoint changed during strict export")
-    return artifact
-
-
-def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    sub = parser.add_subparsers(dest="command", required=True)
-    exporter = sub.add_parser("export", help="strictly export a direct-SFT checkpoint for task evaluation")
-    exporter.add_argument("--checkpoint", type=Path, required=True)
-    exporter.add_argument("--output", type=Path, required=True)
-    exporter.add_argument("--base-snapshot", type=Path, required=True)
-    exporter.add_argument("--launch-receipt", type=Path, required=True)
-    exporter.add_argument("--serving-prompt-rendering", choices=("full", "program-header"), default=None,
-                          help="serving policy; default full (owner 2026-10-13: served and evaluated with the full "
-                               "system prompt even when trained without it); program-header only when explicit")
-    args = parser.parse_args(argv)
-    if args.command == "export":
-        print(json.dumps(export_checkpoint(args), indent=2, ensure_ascii=False))
-
-
-if __name__ == "__main__":
-    main()

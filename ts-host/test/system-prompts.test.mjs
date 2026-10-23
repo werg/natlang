@@ -1,14 +1,15 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { createNativeStateFixturePort } from './fixtures/native-state-port.mjs';
 import { createNatlangRuntime, defineNatlang, findPieces, promptPieces, softenText, systemPromptBank } from '../dist/index.js';
-import { MemoryNeuraleseStore, StandInNeuralesePort, hashingEmbedder } from '../dist/native/neuralese-store.js';
+import { MemoryNeuraleseStore } from '../dist/native/neuralese-store.js';
 import { neuraleseRef } from '../dist/native/neuralese.js';
 import { TOOLS_PROMPT, promptAtNlDepthLimit } from '../dist/native/prompt.js';
 import { BUILT_IN_DOCS } from '../dist/native/runtime.js';
 
 const standIn = () => {
   const store = new MemoryNeuraleseStore();
-  return { store, port: new StandInNeuralesePort(store, hashingEmbedder(8), 8, 'nd:natlang@1') };
+  return { store, port: createNativeStateFixturePort(store, 'native-state/fixture') };
 };
 const neuraleseDriver = fn => Object.assign(fn, { neuralese: true });
 const parts = content => Array.isArray(content) ? content : [{ type: 'text', text: String(content ?? '') }];
@@ -48,7 +49,7 @@ test('a Neuralese driver gets the banked system prompt as a block; a crisp drive
   const driver = neuraleseDriver(({ messages }) => { soft.push(messages); return { calls: [['return_result', { status: 'success', value: 'yes' }]] }; });
   assert.equal(await createNatlangRuntime({ model: driver, neuralese: { store, port, systemPrompts: bank } }).run(() => answer('down')), 'yes');
   const system = parts(soft[0][0].content);
-  assert.ok(system.some(part => part.type === 'neuralese' && part.id === block.id), 'the system prompt is the block');
+  assert.ok(system.some(part => part.type === 'native_state' && part.id === block.id), 'the system prompt is the block');
   assert.ok(!system.some(part => part.type === 'text' && part.text.includes('You are running one call')));
 
   const crisp = [];
@@ -66,7 +67,7 @@ test('withSystemPrompts scopes soft pieces over the runtime bank, nested scopes 
   const seen = [];
   const driver = neuraleseDriver(({ messages }) => { seen.push(parts(messages[0].content)); return { calls: [['return_result', { status: 'success', value: 'yes' }]] }; });
   const runtime = createNatlangRuntime({ model: driver, neuralese: { store, port, systemPrompts: systemPromptBank({ interpreter: ref(base) }) } });
-  const ids = () => seen.at(-1).filter(part => part.type === 'neuralese').map(part => part.id);
+  const ids = () => seen.at(-1).filter(part => part.type === 'native_state').map(part => part.id);
   await runtime.run(() => answer('a'));
   assert.deepEqual(ids(), [base.id]);
   await withSystemPrompts({ interpreter: ref(scoped) }, () => runtime.run(() => answer('b')));
@@ -95,7 +96,7 @@ test('a large argument is listed as its view; the variable keeps the value; smal
     'the view is written for the receiving call');
   const listing = seen[0].find(message => message.role === 'tool');
   const listed = parts(listing.content);
-  assert.ok(listed.some(part => part.type === 'neuralese' && part.id === viewBlock.id), 'the listing shows the view block');
+  assert.ok(listed.some(part => part.type === 'native_state' && part.id === viewBlock.id), 'the listing shows the view block');
   const text = listed.filter(part => part.type === 'text').map(part => part.text).join('');
   assert.match(text, /view of the value; packet holds all of it/);
   assert.match(text, /note: string = "short"/);

@@ -297,13 +297,16 @@ class EvaluatorQueue:
 
     def result(self, request_id_value: str):
         with _connect(self.path) as db:
-            row = db.execute('SELECT state,response_bytes,response_status,error_json FROM requests WHERE request_id=?',
+            row = db.execute('SELECT request_sha256,state,response_sha256,response_bytes,response_status,receipt_json,error_json FROM requests WHERE request_id=?',
                              (request_id_value,)).fetchone()
         if row is None:
             return None
-        state, payload, status, error = row
-        return {'state': state, 'response': bytes(payload) if payload is not None else None,
-                'response_status': status, 'error': json.loads(error) if error else None}
+        request_sha, state, response_sha, payload, status, receipt, error = row
+        return {'request_id': request_id_value, 'request_sha256': request_sha, 'state': state,
+                'response_sha256': response_sha,
+                'response': bytes(payload) if payload is not None else None,
+                'response_status': status, 'receipt': json.loads(receipt) if receipt else None,
+                'error': json.loads(error) if error else None}
 
 
 def _valid_chat_response(raw: bytes) -> bool:
@@ -409,13 +412,29 @@ class _EvaluatorHandler(http.server.BaseHTTPRequestHandler):
         # Prompts, responses, IDs and signatures stay out of process logs.
         return
 
-    def _reply(self, status: int, raw: bytes, content_type='application/json'):
+    def _reply(self, status: int, raw: bytes, content_type='application/json', headers=None):
         self.send_response(status)
         self.send_header('Content-Type', content_type)
         self.send_header('Content-Length', str(len(raw)))
         self.send_header('Cache-Control', 'no-store')
+        for name, value in (headers or {}).items():
+            self.send_header(name, value)
         self.end_headers()
         self.wfile.write(raw)
+
+    @staticmethod
+    def _custody_headers(result: dict) -> dict:
+        receipt = result.get('receipt')
+        if not isinstance(receipt, dict):
+            raise ValueError('durable teacher result lacks its signed ferry receipt')
+        raw_receipt = canonical_bytes(receipt)
+        return {
+            'X-Natlang-Memetic-Request-Id': result['request_id'],
+            'X-Natlang-Memetic-Request-Sha256': result['request_sha256'],
+            'X-Natlang-Memetic-Response-Sha256': receipt['response_sha256'],
+            'X-Natlang-Memetic-Ferry-Receipt-Sha256': hashlib.sha256(raw_receipt).hexdigest(),
+            'X-Natlang-Memetic-Ferry-Receipt': base64.urlsafe_b64encode(raw_receipt).decode('ascii').rstrip('='),
+        }
 
     def do_GET(self):
         if self.path == '/health':
@@ -443,17 +462,18 @@ class _EvaluatorHandler(http.server.BaseHTTPRequestHandler):
             while time.monotonic() < deadline:
                 result = self.queue.result(row['request_id'])
                 if result and result['state'] == 'complete':
-                    self._reply(result['response_status'], result['response'], 'application/json')
+                    self._reply(result['response_status'], result['response'], 'application/json',
+                                self._custody_headers(result))
                     return
                 if result and result['state'] == 'indeterminate':
                     raw_error = canonical_bytes({'error': {'code': 'memetic-author-indeterminate',
                         'request_id': row['request_id'], 'detail': 'teacher submission outcome is indeterminate; this request was not replayed'}})
-                    self._reply(502, raw_error)
+                    self._reply(502, raw_error, headers=self._custody_headers(result))
                     return
                 if result and result['state'] == 'failed':
                     raw_error = canonical_bytes({'error': {'code': 'memetic-author-failed',
                         'request_id': row['request_id'], 'detail': 'teacher request was rejected before submission; see the bound ferry receipt'}})
-                    self._reply(502, raw_error)
+                    self._reply(502, raw_error, headers=self._custody_headers(result))
                     return
                 time.sleep(.25)
             self._reply(504, canonical_bytes({'error': {'code': 'memetic-author-pending',

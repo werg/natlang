@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'training' / 'neuralese'))
 from natlang_neuralese.common.hashing import sha256_file_hex  # noqa: E402
 from natlang_neuralese.common.paths import resolve_str  # noqa: E402
-from natlang_neuralese.train.trajectories import authenticated_recurrence_context_view  # noqa: E402
+from natlang_neuralese.data.trajectory_text import authenticated_recurrence_context_view  # noqa: E402
 R = str(ROOT) + '/'
 ID = 'neuralese-e2e-union-cohort-20261012-v1'
 OUT = resolve_str('data_nvme', 'natlang-corpora', ID)

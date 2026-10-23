@@ -174,24 +174,60 @@ def validate_finite_program(program,*,bound=False):
         if (not isinstance(bindings,dict) or any(key not in inputs or not isinstance(item,str) or item not in values
                 or values[item]!=kinds[key] for key,item in bindings.items())):
             raise ValueError('native derivative bindings must select available values for exact declared roots')
-        if (not isinstance(request,dict) or request.get('schema')!='natlang.native-gradient-request/1'
-                or any(key in request for key in ('target','order','derived','create_graph'))
-                or not isinstance(request.get('graph'),dict)):
-            raise ValueError('native derivative objectives need a complete shared native graph request without a separate target')
-        if isinstance(request.get('objective'),dict) and request['objective'].get('kind')!='native-query':
-            raise ValueError('native derivative registered-policy objectives require portable bound objective assets')
-        query_readout_dependencies(request.get('objective'))
+        if not isinstance(request,dict):raise ValueError('native derivative objectives need a typed native request')
+        if request.get('schema')=='natlang.native-gradient-request/1':
+            if (any(key in request for key in ('target','order','derived','create_graph'))
+                    or not isinstance(request.get('graph'),dict)):
+                raise ValueError('native derivative objectives need a complete shared native graph request without a separate target')
+            if isinstance(request.get('objective'),dict) and request['objective'].get('kind')!='native-query':
+                raise ValueError('native derivative registered-policy objectives require portable bound objective assets')
+            query_readout_dependencies(request.get('objective'))
+        elif request.get('schema')=='natlang.native-recorded-objective-request/1':
+            validate_recorded_objective_request(request)
+            for target in request['targets']:
+                root=target['root']
+                if root not in inputs or kinds[root]!=target['kind']:
+                    raise ValueError('recorded objective targets must bind exact typed derivative program roots')
+                if target.get('id')!=inputs[root].get('id'):
+                    raise ValueError('recorded objective target ID differs from its declared exact root')
+                bound=bindings.get(root,root)
+                if bound not in values or values[bound]!=kinds[root]:
+                    raise ValueError('recorded objective target root differs from its actual derivative binding')
+        else:raise ValueError('native derivative objectives need a shared graph or recorded-objective request')
     for node in nodes:
         if (not isinstance(node,dict) or not isinstance(node.get('name'),str) or not node['name']
                 or node['name'] in all_names):raise ValueError('native derivative nodes require unique ordered names')
         name=node['name'];kind=node.get('kind')
         if kind=='gradient':
-            if set(node)!={'kind','name','value','request','bindings'} or node['value'] not in values:
-                raise ValueError('native derivative gradient references an unavailable earlier value')
+            if set(node)=={'kind','name','value','request','bindings'}:
+                targets=[{'name':name,'value':node['value']}]
+            elif set(node)=={'kind','name','request','bindings','targets'}:
+                targets=node['targets']
+                if not isinstance(targets,list) or not targets:
+                    raise ValueError('native derivative gradient node needs named differentiable targets')
+            else:raise ValueError('native derivative gradient node has an unsupported exact field set')
+            if any(not isinstance(item,dict) or set(item)!={'name','value'} or
+                   not isinstance(item['name'],str) or not item['name'] or item['value'] not in values
+                   for item in targets):
+                raise ValueError('native derivative gradient references unavailable values or invalid aliases')
             objective({key:node[key] for key in ('request','bindings')})
-            if not any(node['bindings'].get(key,key)==node['value'] for key in inputs):
-                raise ValueError('native derivative gradient value must be bound in the actual objective')
-            gradients[name]=node['value']
+            request=node['request']
+            if request['schema']=='natlang.native-recorded-objective-request/1':
+                root_targets={item['root']:item for item in request['targets']}
+                target_roots={}
+                for alias in targets:
+                    matches=[root for root in root_targets if node['bindings'].get(root,root)==alias['value']]
+                    if len(matches)!=1:raise ValueError('recorded gradient aliases must map explicitly to objective roots')
+                    target_roots[matches[0]]=alias
+                if set(target_roots)!=set(root_targets):
+                    raise ValueError('recorded gradient targets must uniquely cover their exact root bindings')
+                if len(target_roots)!=len(targets):raise ValueError('recorded gradient aliases must be unique per objective root')
+            elif len(targets)!=1 or not any(node['bindings'].get(key,key)==targets[0]['value'] for key in inputs):
+                raise ValueError('native gradient value must be bound in the actual objective')
+            for item in targets:
+                if item['name'] in all_names or item['name'] in gradients:
+                    raise ValueError('native derivative gradient aliases must be globally unique')
+                gradients[item['name']]=item['value']
         elif kind=='optimizer':
             if (set(node)!={'kind','name','value','gradient','optimizer','optimizer_state'}
                     or node['value'] not in values or gradients.get(node['gradient'])!=node['value']):
@@ -206,6 +242,10 @@ def validate_finite_program(program,*,bound=False):
         else:raise ValueError('native derivative node kind must be gradient or optimizer')
         all_names.add(name)
     objective(program['outer'])
+    outer_request=program['outer']['request']
+    if outer_request['schema']=='natlang.native-recorded-objective-request/1':
+        if {item['root'] for item in outer_request['targets']}!=set(wrt) or any(key not in program['outer']['bindings'] for key in wrt):
+            raise ValueError('recorded outer objective targets must exactly map every declared differentiation root')
 
 
 def validate_program_artifact(provenance):
@@ -324,10 +364,16 @@ def verify_derivative_gradient_origin(store,artifact):
         if not value['names'] or not set(value['names'])<=available.keys():
             raise ValueError('native derivative evaluation root names differ from its exact artifact')
     if target['stage']=='inner':
-        node=next((node for node in parsed['nodes'] if node['name']==provenance.get('node')),None)
-        if node is None or node['kind']!='gradient' or node['value']!=target['variable']:
+        node_name=provenance.get('gradient_node',provenance.get('node'))
+        node=next((node for node in parsed['nodes'] if node['name']==node_name),None)
+        declared=([{'name':node.get('name'),'value':node.get('value')}] if node and 'value' in node else
+            node.get('targets',[]) if node else [])
+        selected=next((item for item in declared if item.get('name')==provenance.get('node')),None)
+        if node is None or node['kind']!='gradient' or selected is None or selected.get('value')!=target['variable'] or selected.get('value') not in parsed['inputs'] and selected.get('value') not in {
+                step.get('name') for step in parsed['nodes'] if step.get('kind')=='optimizer'}:
             raise ValueError('native derivative gradient changed its declared inner objective')
-        owners=[key for key in parsed['inputs'] if node['bindings'].get(key,key)==target['variable']]
+        variable=selected['value']
+        owners=[key for key in parsed['inputs'] if node['bindings'].get(key,key)==variable]
         if not owners or any(inputs[key]['value_id']!=target['value_id'] or inputs[key]['names']!=target['names'] for key in owners):
             raise ValueError('native derivative inner gradient belongs to another exact evaluated value')
     else:
@@ -365,21 +411,44 @@ def verify_derivative_gradient_origin(store,artifact):
                 if current.provenance.get('derivative_program_id')!=program.id or current.provenance.get('node')!=variable:
                     raise ValueError('native derivative objective changed its declared parameter update')
     import copy
-    expected_graph=copy.deepcopy(request['graph'])
-    replacements={root['id']:inputs[name]['value_id'] for name,root in parsed['inputs'].items() if root['kind']=='native-state'}
-    for value in (expected_graph.get('external_states') or {}).values():value['id']=replacements.get(value['id'],value['id'])
     from ..common.hashing import canonical_json_sha256_hex
     text=provenance.get('graph_json')
-    if (not isinstance(text,str) or hashlib.sha256(text.encode()).hexdigest()!=provenance.get('graph_sha256') or
-            json.loads(text)!=expected_graph or canonical_json_sha256_hex(expected_graph)!=provenance.get('graph_sha256')):
+    if not isinstance(text,str) or hashlib.sha256(text.encode()).hexdigest()!=provenance.get('graph_sha256'):
         raise ValueError('native derivative gradient changed its declared objective graph')
-    expected_objective=copy.deepcopy(request.get('objective'))
+    evaluated_graph=json.loads(text)
+    if request.get('schema')=='natlang.native-recorded-objective-request/1':
+        recorded_text=provenance.get('recorded_objective_request_json')
+        try:recorded=json.loads(recorded_text) if isinstance(recorded_text,str) else None
+        except (ValueError,TypeError):recorded=None
+        if (recorded!=request or hashlib.sha256(recorded_text.encode()).hexdigest()!=provenance.get('recorded_objective_request_sha256')
+                or evaluated_graph.get('recorded_objective_sha256')!=canonical_json_sha256_hex({
+                    'turns':recorded['turns'],'events':recorded['events'],'terms':recorded['terms']})):
+            raise ValueError('native derivative gradient changed its exact recorded objective origin')
+        for item in recorded['targets']:
+            root=parsed['inputs'].get(item['root'])
+            if root is None or root['id']!=item['id'] or root['kind']!=item['kind']:
+                raise ValueError('recorded objective target differs from its exact derivative root')
+    else:
+        expected_graph=copy.deepcopy(request['graph'])
+        replacements={root['id']:inputs[name]['value_id'] for name,root in parsed['inputs'].items() if root['kind']=='native-state'}
+        for value in (expected_graph.get('external_states') or {}).values():value['id']=replacements.get(value['id'],value['id'])
+        if json.loads(text)!=expected_graph or canonical_json_sha256_hex(expected_graph)!=provenance.get('graph_sha256'):
+            raise ValueError('native derivative gradient changed its declared objective graph')
+    expected_objective=copy.deepcopy(request.get('objective')) if isinstance(request,dict) else None
     if isinstance(expected_objective,dict) and expected_objective.get('kind')=='native-query':
         expected_objective['graph_sha256']=provenance['graph_sha256']
         text=provenance.get('query_objective_json')
         if (not isinstance(text,str) or hashlib.sha256(text.encode()).hexdigest()!=provenance.get('query_objective_sha256') or
                 json.loads(text)!=expected_objective):
             raise ValueError('native derivative gradient changed its declared query objective')
+    elif isinstance(request,dict) and request.get('schema')=='natlang.native-recorded-objective-request/1':
+        query_text=provenance.get('query_objective_json')
+        try:query=json.loads(query_text) if isinstance(query_text,str) else None
+        except (ValueError,TypeError):query=None
+        if (not isinstance(query,dict) or query.get('schema')!='natlang.native-query-objective/1'
+                or query.get('kind')!='native-query' or query.get('graph_sha256')!=provenance.get('graph_sha256')
+                or hashlib.sha256(query_text.encode()).hexdigest()!=provenance.get('query_objective_sha256')):
+            raise ValueError('recorded derivative objective lacks its exact lowered native query')
     elif provenance.get('query_objective_json') is not None:
         raise ValueError('native derivative gradient introduced an undeclared query objective')
     for entries in [actor['uniform_adapters'],*(actor['invocation_adapters'] or {}).values()]:
@@ -399,6 +468,17 @@ def program_dependencies(program):
     result={target['id'] for target in program['inputs'].values() if target.get('id') is not None}
     requests=[*(node['request'] for node in program['nodes'] if node['kind']=='gradient'),program['outer']['request']]
     for request in requests:
+        if request.get('schema')=='natlang.native-recorded-objective-request/1':
+            validate_recorded_objective_request(request)
+            def collect(value):
+                if isinstance(value,str):
+                    if native_id(value):result.add(value)
+                elif isinstance(value,dict):
+                    for item in value.values():collect(item)
+                elif isinstance(value,list):
+                    for item in value:collect(item)
+            collect(request)
+            continue
         for entries in [request.get('adapters') or [],*(request.get('invocation_adapters') or {}).values()]:
             result.update(entry if isinstance(entry,str) else entry['id'] for entry in entries)
         result.update(value['id'] for value in (request['graph'].get('external_states') or {}).values())
@@ -421,3 +501,32 @@ def query_readout_dependencies(spec):
             if not native_id(ident,'nnt1_'):raise ValueError('native query readout needs its exact native tensor artifact ID')
             result.add(ident)
     return sorted(result)
+
+
+def validate_recorded_objective_request(request):
+    """Validate the immutable envelope emitted by the TS recorded collector."""
+    if (not isinstance(request,dict) or request.get('schema')!='natlang.native-recorded-objective-request/1'
+            or set(request)-{'schema','turns','events','terms','targets','native_state_modes'}
+            or not all(key in request for key in ('turns','events','terms','targets'))):
+        raise ValueError('native recorded objective needs its exact versioned turns/events/terms/targets envelope')
+    if (not isinstance(request['turns'],list) or not request['turns'] or
+            not isinstance(request['events'],list) or not isinstance(request['terms'],list) or not request['terms'] or
+            not isinstance(request['targets'],list) or not request['targets']):
+        raise ValueError('native recorded objective needs nonempty actual turns, terms and target roots')
+    roots=set()
+    for target in request['targets']:
+        if (not isinstance(target,dict) or set(target)-{'root','kind','id','names'} or
+                not isinstance(target.get('root'),str) or not target['root'] or target['root'] in roots):
+            raise ValueError('native recorded objective target roots must be unique exact declarations')
+        roots.add(target['root']);kind=target.get('kind');ident=target.get('id')
+        if kind not in ('adapter','native-state') or not native_id(ident,'nzs1_' if kind=='native-state' else 'nnt1_'):
+            raise ValueError('native recorded objective target must bind an exact adapter or archived state ID')
+        names=target.get('names')
+        if names is not None and (not isinstance(names,list) or not names or any(not isinstance(name,str) or not name for name in names)
+                or len(set(names))!=len(names)):
+            raise ValueError('native recorded objective target names must be explicit and unique')
+    modes=request.get('native_state_modes')
+    if modes is not None and (not isinstance(modes,dict) or any(not isinstance(key,str) or value!='same-base-adapter-state'
+            for key,value in modes.items())):
+        raise ValueError('native recorded objective state modes need exact archived-state declarations')
+    return roots

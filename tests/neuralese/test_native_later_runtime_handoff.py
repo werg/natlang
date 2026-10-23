@@ -342,6 +342,9 @@ def test_actual_later_resident_adoption_does_not_replace_runtime_authority(later
     adopted=resident.current(directory)
     cursor=json.loads((x['root']/'cycle.json').read_text());cursor['resident_current']=resident.binding(directory/'current.json');write(x['root']/'cycle.json',cursor)
     config['production_recipe']=str(path)
+    adopted_inputs=adopted['payload']['plan']['stage_inputs']['sft']
+    config['seed_native_graphs']=adopted_inputs['native_graphs']['path']
+    config['held_native_graphs']=adopted_inputs['held_native_graphs']['path']
     from natlang_neuralese.rl.native_supervised import bind_recipe_lineage
     bind_recipe_lineage(config,adopted['payload']['plan']['recipe_sha256']);write(x['config'],config)
     before=(x['root']/'cycle.json').read_bytes()

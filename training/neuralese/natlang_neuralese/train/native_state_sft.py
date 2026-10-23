@@ -1582,7 +1582,7 @@ def _main(argv=None, *, requested_refresh):
         # Construct the real native serving engine over the same live model,
         # avoiding a second full-width model allocation during evaluation.
         serving_identity = native_identity(model, config, checkpoint_sha256='0' * 64)
-        engine = Engine(model.port, None, tokenizer, TensorStore(),
+        engine = Engine(model.port, tokenizer, TensorStore(),
             f"native-state/{config['architecture']}", model_name=f"native-{config['architecture']}",
             device=args.device, prompt_rendering=task_spec.get('prompt_rendering', 'full'),
             shared_model=model, role_tokens=roles, model_config=config,

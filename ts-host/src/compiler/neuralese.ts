@@ -4,7 +4,7 @@
  * `Neuralese<T, D>` is declared in the intrinsics as a branded type (`NeuraleseValue`). The TypeScript checker rejects
  * most misuse by itself; these checks add the natlang rules TypeScript allows: soft values in conditions, template
  * interpolation, arithmetic and comparison, serialisation, spreading and iteration. They also type the literals the
- * runtime substitutes for model-written blocks (`__neuralese("nz1_…")`) from their contextual type, and reject type
+ * runtime substitutes for model-written native states (`__neuralese("nzs1_…")`) from their contextual type, and reject type
  * aliases that reach themselves through a function type.
  */
 import ts from 'typescript';

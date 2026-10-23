@@ -9,7 +9,7 @@
  *
  * The runtime decides where these strings go; this module only produces them.
  */
-import { neuraleseRef, neuraleseRefSentinel, type NeuraleseRef } from '../native/neuralese.js';
+import { neuraleseRefSentinel, type NeuraleseRef } from '../native/neuralese.js';
 import { formatType, parseType, TypeEnv, type Type } from '../native/types.js';
 import { coerce, Reject, type Value } from '../native/values.js';
 import { readSkillFile, type SkillSet } from './registry.js';
@@ -35,15 +35,14 @@ export function renderSkillListing(set: SkillSet, diagnostics: readonly SkillDia
 }
 
 export type SkillDocument =
-  | { kind: 'text'; skill: string; path: string; text: string }
-  | { kind: 'neuralese'; skill: string; path: string; export: string; note: string };
+  { kind: 'text'; skill: string; path: string; text: string };
 
 /** Whether a `read_code` target names a skill (so the runtime can route it here). */
 export const isSkillTarget = (target: string): boolean => target.startsWith(SKILL_READ_PREFIX);
 
 /**
  * Resolve `skills.<name>` (instructions plus a list of the skill's files) or `skills.<name>/<path>` (one supporting
- * file). A `.nz` skill's instructions are a Neuralese export: the caller renders it as a literal through the read port.
+ * file).
  */
 export async function readSkillDocument(set: SkillSet, target: string): Promise<SkillDocument> {
   if (!isSkillTarget(target)) throw new Error(`not a skill target: ${target}`);
@@ -56,15 +55,10 @@ export async function readSkillDocument(set: SkillSet, target: string): Promise<
     const file = rest.slice(slash + 1);
     return { kind: 'text', skill: name, path: `${skill.root}/${file}`, text: await readSkillFile(set, name, file) };
   }
-  if (skill.format === 'nz') return { kind: 'neuralese', skill: name, path: skill.root, export: skill.body,
-    note: `Instructions of skill "${name}" (soft):` };
   const files = skill.files.length ? `\n\nFiles of this skill (read with read_code("skills.${name}/<path>")):\n` +
     skill.files.map(file => `- ${file}: read_code("skills.${name}/${file}")`).join('\n') : '';
   return { kind: 'text', skill: name, path: `${skill.root}/SKILL.md`, text: skill.body.trimEnd() + files };
 }
-
-/** Resolves a `.nz` scope source (`file.nz#export`) to a stored block ID; supplied by the `.nz` reader (S4). */
-export type NzExportResolver = (skill: Skill, file: string, exportName: string) => Promise<string>;
 
 export type ScopeBinding = {
   name: string;
@@ -92,7 +86,7 @@ function pointerGet(value: unknown, pointer: string): unknown {
  * Compute the scope bindings that bound skills inject. Values are type-checked against their declared types; a name
  * declared by two skills, or a binding that fails to load or check, is reported and left out.
  */
-export async function scopeBindings(set: SkillSet, options: { env?: TypeEnv; nz?: NzExportResolver; reserved?: readonly string[] } = {}):
+export async function scopeBindings(set: SkillSet, options: { env?: TypeEnv; reserved?: readonly string[] } = {}):
   Promise<{ bindings: ScopeBinding[]; diagnostics: SkillDiagnostic[] }> {
   const env = options.env ?? new TypeEnv();
   const diagnostics: SkillDiagnostic[] = [];
@@ -108,17 +102,10 @@ export async function scopeBindings(set: SkillSet, options: { env?: TypeEnv; nz?
     try { type = parseType(source.type); } catch (cause) { report('skill-type', (cause as Error).message); continue; }
     try {
       let value: Value | NeuraleseRef;
-      if (source.nz !== undefined) {
-        if (type.kind !== 'neuralese') { report('skill-scope-nz-type', `a .nz source needs a Neuralese type, not ${source.type}`); continue; }
-        if (!options.nz) { report('nz-skill-unsupported', `cannot load ${source.nz}: .nz reading is not available yet`); continue; }
-        const [file, exportName] = source.nz.split('#') as [string, string];
-        value = neuraleseRef(formatType(type), await options.nz(skill, file, exportName));
-      } else {
-        const raw = source.file !== undefined
-          ? pointerGet(JSON.parse(await readSkillFile(set, skill.name, source.file)), source.pointer ?? '')
-          : source.value;
-        value = coerce(raw, type, env, name);
-      }
+      const raw = source.file !== undefined
+        ? pointerGet(JSON.parse(await readSkillFile(set, skill.name, source.file)), source.pointer ?? '')
+        : source.value;
+      value = coerce(raw, type, env, name);
       owner.set(name, skill.name);
       bindings.push({ name, type, typeText: formatType(type), value, skill: skill.name,
         ...(source.description ? { description: source.description } : {}) });

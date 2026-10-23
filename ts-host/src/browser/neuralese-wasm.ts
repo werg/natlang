@@ -2,7 +2,7 @@
  * The Neuralese service as WebAssembly: the llama.cpp fork's server engine (tools/neuralese/neuralese-service.cpp,
  * built by tools/neuralese/wasm/build.sh) running in the browser or in Node, answering the same protocol as the
  * reference and fork servers. The runtime reaches it through an in-process endpoint, so `neuraleseServerModelTurn`,
- * `HttpNeuraleseStore`, decision readout, encode, write and view work unchanged.
+ * `HttpNeuraleseStore`, decision readout, native state writing and view work unchanged.
  *
  * In a browser the module runs in a Web Worker (computation is synchronous; model files are mounted from Blobs with
  * WORKERFS, without copying them into memory twice): `startBrowserNeuralese`. In Node it runs in process with the
@@ -143,17 +143,17 @@ export async function chooseNeuraleseBuild(scope: { navigator?: any; crossOrigin
 export type NeuraleseDevice = { name: string; description: string; gpu: boolean };
 export type StartedNeuralese = { endpoint: string; dialect: string; cutoff: number; devices?: NeuraleseDevice[]; gpu_layers?: number;
   /**
-   * The runtime's block archive for this service (`neuraleseServerModelTurn({ store })`, `createNatlangRuntime({
-   * neuralese: { store } })`): blocks the engine lacks (after a page reload or an engine restart) are restored from it.
+   * The runtime's native artifact archive for this service (`neuraleseServerModelTurn({ store })`, `createNatlangRuntime({
+   * neuralese: { store } })`): native states and tensor artifacts the engine lacks (after a page reload or an engine restart) are restored from it.
    */
   store: NeuraleseStore;
   close(): Promise<void> };
 
 /**
  * Browser: start the service in a Web Worker (`worker`, running `neuralese-worker`) and serve `endpoint`. `store` is
- * the block archive (default: OPFS when the browser offers it, `openBrowserNeuraleseStore`). The in-page service has a
- * single owner, this page's runtime: its block store is not shared, so requests need no `owner` (x-natlang-owner) and
- * the store's blocks are the only ones restore has to bring back.
+ * the native artifact archive (default: OPFS when the browser offers it, `openBrowserNeuraleseStore`). The in-page service has a
+ * single owner, this page's runtime: its archive is not shared, so requests need no `owner` (x-natlang-owner) and
+ * the store's artifacts are the only ones restore has to bring back.
  */
 export async function startBrowserNeuralese(options: NeuraleseWasmOptions & { worker: Worker; moduleUrl: string; model: Blob; heads: Blob;
   endpoint?: string; store?: NeuraleseStore }): Promise<StartedNeuralese> {

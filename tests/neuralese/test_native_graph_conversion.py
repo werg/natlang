@@ -382,17 +382,19 @@ def test_actual_compiler_reader_and_writer_names_close_through_python_pair_build
         env={**os.environ, 'NODE_NO_WARNINGS': '1'})
     output = json.loads(completed.stdout)
     edge, writer, reader = output['edge'], output['producer'], output['reader']
-    write_name = json.loads(writer['target']['tool_calls'][0]['function']['arguments'])['value']['$write']['name']
+    native_writer = [item for item in writer['native_source_conversion']['occurrences']
+                     if item['role'] == 'producer']
+    assert len(native_writer) == 1
+    write_name = native_writer[0]['reference']
     assert write_name == direct_result_event_name(edge['block_id'], fixture['proof']['source']['trajectory_id'],
         edge['writer_call_id'], edge['writer_node'])
     body = writer_payload(writer, write_name, edge['body_sha256'])
     occurrence = source_occurrences(writer, reader, write_name, body, edge['body_sha256'])
     assert occurrence['reader_json_pointers']
-    assert occurrence['writer_json_pointer'].endswith('/$write')
-    read_parts = [part for message in reader['messages'] if isinstance(message.get('content'), list)
-                  for part in message['content'] if part.get('type') == 'read']
-    assert len(read_parts) == 1
-    assert read_parts[0]['name'] == write_name
+    assert occurrence['writer_json_pointer'] == '/' + '/'.join(native_writer[0]['path'])
+    assert occurrence['writer_occurrence_id'] == native_writer[0]['id']
+    assert all(part.get('type') != 'read' for message in reader['messages']
+               for part in (message.get('content') if isinstance(message.get('content'), list) else []))
     writer_text = f'prefix{ROLE_MARKERS[0]}{body}{ROLE_MARKERS[1]}suffix'
     reader_text = f'context{ROLE_MARKERS[2]}{body}{ROLE_MARKERS[3]}answer'
     writer_encoding = tokenizer(writer_text, return_offsets_mapping=True)
@@ -463,17 +465,26 @@ def test_e2e_pair_occurrence_binds_structural_write_and_exact_read_not_text_sear
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     payload = 'same body appears more than once'
-    writer = {'target': {'tool_calls': [{'function': {'arguments':
-        '{"result":{"$write":{"name":"r","source":"same body appears more than once"}}}'}}]}}
+    body_sha = module.sha256_bytes(payload.encode())
+    writer = {'native_source_conversion': {'occurrences': [{
+        'id': 'nso_' + '1' * 64, 'role': 'producer', 'reference': 'r', 'body': payload,
+        'body_sha256': body_sha, 'path': ['target', 'result']}]}}
     reader = {'messages': [{'role': 'tool', 'content': [
-        {'type': 'read', 'name': 'r', 'source': payload},
-        {'type': 'text', 'text': payload}]}]}
+        {'type': 'text', 'text': payload}, {'type': 'text', 'text': payload}]}],
+        'native_source_conversion': {'occurrences': [{
+            'id': 'nso_' + '2' * 64, 'role': 'consumer', 'reference': 'r', 'body': payload,
+            'body_sha256': body_sha, 'path': ['messages', '0', 'content', '0']}]}}
     occurrence = module.source_occurrences(writer, reader, 'r', payload,
-        module.sha256_bytes(payload.encode()))
-    assert occurrence['writer_json_pointer'].endswith('/$write')
+        body_sha)
+    assert occurrence['writer_json_pointer'] == '/target/result'
     assert occurrence['reader_json_pointers'] == ['/messages/0/content/0']
-    duplicate_reader = {'messages': [{'type': 'read', 'name': 'r', 'source': payload},
-                                     {'type': 'read', 'name': 'r', 'source': payload}]}
+    duplicate_reader = {'messages': [{'type': 'text', 'text': payload},
+                                     {'type': 'text', 'text': payload}],
+        'native_source_conversion': {'occurrences': [
+            {'id': 'nso_' + '3' * 64, 'role': 'consumer', 'reference': 'r', 'body': payload,
+             'body_sha256': body_sha, 'path': ['messages', '0']},
+            {'id': 'nso_' + '4' * 64, 'role': 'consumer', 'reference': 'r', 'body': payload,
+             'body_sha256': body_sha, 'path': ['messages', '1']}]}}
     repeated = module.source_occurrences(writer, duplicate_reader, 'r', payload,
         module.sha256_bytes(payload.encode()))
     assert repeated['reader_json_pointers'] == ['/messages/0', '/messages/1']
@@ -565,6 +576,11 @@ def test_assistant_text_return_survives_e2e_pair_render_and_native_graph_parse()
     }
     from natlang_neuralese.train.write_sites import direct_result_event_name
     import copy
+    writer['native_source_conversion'] = {'occurrences': [{'id': 'nso_' + 'd' * 64,
+        'role': 'producer', 'reference': 'pending-native-name', 'body': body,
+        'body_sha256': body_sha, 'source_kind': 'assistant-text-return',
+        'path': ['source_target', 'assistant_text_result', 'body_source']}],
+        'source_target': copy.deepcopy(writer['target'])}
     writer_two = copy.deepcopy(writer)
     writer_two['id'] = 'writer-text-result-two'
     writer_two['source_ref']['invocation_id'] = 'writer-call-two'
@@ -573,9 +589,12 @@ def test_assistant_text_return_survives_e2e_pair_render_and_native_graph_parse()
         'writer_node': 'writer-call-two#write'})
     writer_two['target']['assistant_text_result'].update({
         'writer_call_id': 'writer-call-two', 'writer_node': 'writer-call-two#write'})
+    writer_two['native_source_conversion']['source_target'] = copy.deepcopy(writer_two['target'])
     name = direct_result_event_name(block, 'trajectory-1', 'writer-call', 'writer-call#write')
     name_two = direct_result_event_name(block, 'trajectory-1', 'writer-call-two', 'writer-call-two#write')
     assert name != name_two
+    writer['native_source_conversion']['occurrences'][0]['reference'] = name
+    writer_two['native_source_conversion']['occurrences'][0].update(id='nso_' + 'f' * 64, reference=name_two)
 
     reader = {
         'id': 'reader-after-text-result', 'split': 'train', 'source_groups': ['public-source'],
@@ -584,24 +603,50 @@ def test_assistant_text_return_survives_e2e_pair_render_and_native_graph_parse()
         'training_admission': {'approved': True},
         'decision': {'training_approved': True, 'failed_action': False},
         'messages': [{'role': 'user', 'content': 'Use this value: '},
-                     {'role': 'assistant', 'content': [{'type': 'read', 'name': name, 'source': body}]}],
+                     {'role': 'assistant', 'content': [{'type': 'text', 'text': body}]}],
         'target': {'role': 'assistant', 'content': 'The value is useful.'},
+        'native_source_conversion': {'occurrences': [{'id': 'nso_' + 'e' * 64,
+            'role': 'consumer', 'reference': name, 'body': body, 'body_sha256': body_sha,
+            'path': ['messages', '1', 'content', '0']}]},
     }
     reader_two = copy.deepcopy(reader)
     reader_two['id'] = 'reader-after-text-result-two'
     reader_two['source_ref']['invocation_id'] = 'reader-call-two'
-    reader_two['messages'][1]['content'][0]['name'] = name_two
+    reader_two['native_source_conversion']['occurrences'][0].update(id='nso_' + '1' * 64, reference=name_two)
     with pytest.raises(ValueError, match='communication occurrence is ambiguous'):
         builder.source_occurrences(writer, reader_two, name, body, body_sha)
     tok = E2ETokenizer()
     all_records = [writer, writer_two, reader, reader_two]
+    def bind_native_source(record):
+        canonical = lambda value: json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=False)
+        original = copy.deepcopy(record)
+        original.pop('native_source_conversion', None)
+        meta = record['native_source_conversion']
+        meta.update(schema='natlang.native-source-conversion/1', row_id=record['id'],
+            source_record_sha256=hashlib.sha256(canonical(original).encode()).hexdigest(),
+            source_messages=copy.deepcopy(record['messages']),
+            source_messages_sha256=hashlib.sha256(canonical(record['messages']).encode()).hexdigest(),
+            source_target=copy.deepcopy(record['target']), source_target_present=True,
+            source_target_sha256=hashlib.sha256(canonical(record['target']).encode()).hexdigest(),
+            native_target_sha256=hashlib.sha256(canonical(record['target']).encode()).hexdigest(),
+            source_neuralese_conversion_present=False, source_neuralese_conversion=None,
+            trajectory_id='trajectory-1', invocation_id=record['source_ref']['invocation_id'],
+            source_trajectory_row_sha256=row_sha, source_ref=copy.deepcopy(record['source_ref']),
+            source_provenance={}, training_admission=record['training_admission'],
+            split=record['split'], source_groups=record['source_groups'],
+            views=[], unresolved_references=[])
+        for occurrence in meta['occurrences']:
+            occurrence.update(schema='natlang.native-source-occurrence/1', trajectory_id='trajectory-1',
+                              invocation_id=record['source_ref']['invocation_id'])
+    for item in all_records:
+        bind_native_source(item)
     for selected_writer, selected_reader, event_name in (
             (writer, reader, name), (writer_two, reader_two, name_two)):
         edge = {'write_name': event_name, 'body_sha256': body_sha, 'trajectory': 'trajectory-1',
                 'writer_record_id': selected_writer['id'], 'reader_record_id': selected_reader['id'],
                 'split': 'train'}
         occurrence = builder.source_occurrences(selected_writer, selected_reader, event_name, body, body_sha)
-        assert occurrence['writer_json_pointer'] == '/target/assistant_text_result'
+        assert occurrence['writer_json_pointer'] == '/source_target/assistant_text_result/body_source'
         writer_row, reader_row = builder.normalized_pair_rows(
             selected_writer, selected_reader, {}, tokenizer=tok, payload=body, occurrence=occurrence,
             role_markers=ROLE_MARKERS, tokenizer_sha256='b' * 64, source_records=all_records)
@@ -623,7 +668,7 @@ def test_assistant_text_return_survives_e2e_pair_render_and_native_graph_parse()
         assert not selected_writer['target'].get('tool_calls')
 
     forged = copy.deepcopy(writer)
-    forged['target']['assistant_text_result']['body_start'] += 1
+    forged['native_source_conversion']['source_target']['assistant_text_result']['body_start'] += 1
     with pytest.raises(ValueError, match='invalid assistant-text-result writer sidecar'):
         builder.source_occurrences(forged, reader, name, body, body_sha)
 
@@ -825,21 +870,28 @@ def test_pair_worker_commit_removes_only_reported_edges_from_chain_frontier():
     assert frontier == {}
 
 
-def test_e2e_pair_candidates_include_only_exact_typed_block_identity():
+def test_e2e_pair_candidates_require_exact_native_occurrence_identity():
     import importlib.util
     from pathlib import Path
     import pytest
     script=Path(__file__).parents[2]/'scripts/neuralese_data/build_native_semantic_pairs_e2e.py'
     spec=importlib.util.spec_from_file_location('typed_pair_occurrences',script)
     module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
-    body='one exact writer body';block='nz1_'+'a'*52;name='soft-state:'+block
-    writer={'target':{'$write':{'name':name,'source':body}}}
-    reader={'messages':[{'role':'user','content':[{'type':'neuralese','id':block}]},
-        {'role':'assistant','tool_calls':[{'function':{'arguments':[{'type':'neuralese','id':block}]}}]}]}
-    occurrence=module.source_occurrences(writer,reader,name,body,module.sha256_bytes(body.encode()))
+    body='one exact writer body';name='source-event'
+    body_sha=module.sha256_bytes(body.encode())
+    writer={'native_source_conversion':{'occurrences':[{'id':'nso_'+'a'*64,'role':'producer',
+        'reference':name,'body':body,'body_sha256':body_sha,'path':['target','result']}]}}
+    reader={'messages':[{'role':'user','content':[{'type':'text','text':body}]},
+        {'role':'assistant','tool_calls':[{'function':{'arguments':[{'type':'text','text':body}]}}]}],
+        'native_source_conversion':{'occurrences':[
+            {'id':'nso_'+'b'*64,'role':'consumer','reference':name,'body':body,
+             'body_sha256':body_sha,'path':['messages','0','content','0']},
+            {'id':'nso_'+'c'*64,'role':'consumer','reference':name,'body':body,
+             'body_sha256':body_sha,'path':['messages','1','tool_calls','0','function','arguments','0']}]}}
+    occurrence=module.source_occurrences(writer,reader,name,body,body_sha)
     assert occurrence['reader_json_pointers']==['/messages/0/content/0','/messages/1/tool_calls/0/function/arguments/0']
-    reader['messages'][0]['content'][0]['id']='nz1_'+'b'*52
-    reader['messages'][1]['tool_calls'][0]['function']['arguments'][0]['id']='nz1_'+'b'*52
+    reader['native_source_conversion']['occurrences'][0]['reference']='another-source-event'
+    reader['native_source_conversion']['occurrences'][1]['reference']='another-source-event'
     with pytest.raises(ValueError,match='reads=0'):
         module.source_occurrences(writer,reader,name,body,module.sha256_bytes(body.encode()))
 

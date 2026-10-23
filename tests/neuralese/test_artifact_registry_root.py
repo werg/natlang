@@ -28,10 +28,11 @@ def test_a_package_copy_reads_the_repo_root_registry(tmp_path):
     assert module.startswith(str(frozen)) and root == str(repo) and ids == ['probe-teacher-1']
 
 
-def test_the_default_repo_root_holds_the_registry_the_recipes_name():
+def test_the_default_repo_root_holds_the_current_artifact_registry():
     from natlang_neuralese import artifacts
     from natlang_neuralese.common.paths import root
     assert artifacts.REPO == root('repo')
     if (root('repo') / artifacts.REGISTRY).exists():
-        ids = {item['id'] for item in artifacts.load_registry()['artifacts']}
-        assert 'learned-updater-v0-lfm2.5-350m-20261009' in ids
+        registry = artifacts.load_registry()
+        assert registry['schema'] == artifacts.SCHEMA
+        assert isinstance(registry['artifacts'], list)

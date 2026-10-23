@@ -341,7 +341,7 @@ function checkedSoftBodyMapping(site: Dict, origin: Dict): boolean {
       parentEnd <= parentTemplate || checkedEnd <= checkedStart) return false;
   // The raw call text is checked against its exact paired authored marker by materialization. Here we confirm the
   // compiler's deterministic lowering and that the two attested template slices are the corresponding literals.
-  return /^nz1_[a-z2-7]{20,}$/.test(bodyId) && !!written && !!checkedHash &&
+  return /^nzs1_[a-z2-7]{52}$/.test(bodyId) && !!written && !!checkedHash &&
     site.raw_body_source_sha256 === (typeof site.raw_body_source === 'string' ? hexDigest(site.raw_body_source) : undefined);
 }
 function validTemplateSource(code: string, span: { start: number; end: number }, cooked: string): boolean {
@@ -538,7 +538,7 @@ function rowText(row: Row): string {
     else if (Array.isArray(content)) for (const part of content) {
       const record = asDict(part);
       if (record?.type === 'text' && typeof record.text === 'string') values.push(record.text);
-      else if (record?.type === 'neuralese' && typeof record.id === 'string') values.push(`${record.id}`);
+      else if (record?.type === 'native_state' && typeof record.id === 'string') values.push(`${record.id}`);
     }
     for (const call of Array.isArray(item.tool_calls) ? item.tool_calls : []) {
       const args = asDict(asDict(call)?.function)?.arguments;
@@ -612,7 +612,7 @@ function bodyInChildInstructions(row: Row, id: string): boolean {
   const content = opening.content;
   const parts = Array.isArray(content) ? content.map(part => {
     const value = asDict(part);
-    return value?.type === 'neuralese' && typeof value.id === 'string' ? `${value.id}` :
+    return value?.type === 'native_state' && typeof value.id === 'string' ? `${value.id}` :
       value?.type === 'text' && typeof value.text === 'string' ? value.text : '';
   }).join('') : typeof content === 'string' ? content : '';
   const marker = parts.indexOf('Instructions:\n');

@@ -81,13 +81,16 @@ def test_real_native_state_typed_child_archive_parent_import(tmp_path, monkeypat
     if mode=='recorded':
         tokenizer.chat_template=("{% for message in messages %}<|im_start|>{{ message['role'] }} "
             "{% if message['role'] == 'assistant' and message.get('reasoning_content')"+last_only+" %}"
-            "{{ message['reasoning_content'] }} {% endif %}{{ message['content'] }}<|im_end|>{% endfor %}"
+            "{{ message['reasoning_content'] }} {% endif %}{{ message['content'] }}"
+            "{% for tool in message.get('tool_calls', []) %}"
+            "{{ tool['function']['name'] }}({{ tool['function']['arguments'] | tojson }})"
+            "{% endfor %}<|im_end|>{% endfor %}"
             "{% if add_generation_prompt %}<|im_start|>assistant {% endif %}")
     config = {'architecture': port.config.model_type, 'tokenizer_fingerprint': tokenizer_fingerprint(tokenizer)}
     weights = tmp_path / 'weights.pt'
     torch.save(model_state(model), weights)
     identity = native_identity(model, config, checkpoint_sha256=sha256_file_hex(weights))
-    engine = Engine(port, None, tokenizer, TensorStore(), f"native-state/{config['architecture']}",
+    engine = Engine(port, tokenizer, TensorStore(), f"native-state/{config['architecture']}",
         shared_model=model, role_tokens=RoleTokens(*model.marker_ids), model_config=config,
         checkpoint_sha256=identity['checkpoint_sha256'], embedding_weight_sha256=identity['embedding_weight_sha256'],device=device)
     engine.native_identity = identity
@@ -136,6 +139,27 @@ def test_real_native_state_typed_child_archive_parent_import(tmp_path, monkeypat
         process = subprocess.run(command, cwd=repo, text=True, capture_output=True, timeout=60)
         assert process.returncode == 0, process.stdout + process.stderr
         receipt = json.loads(process.stdout.splitlines()[-1])
+        if mode == 'recorded':
+            from itertools import cycle
+            target = next(name for name in model.named_parameters() if name[0].endswith('q_proj.weight'))[0]
+            samples = iter(cycle([(60, None), (5, None), (61, None), (2, None), (2, None)]))
+            monkeypatch.setattr(engine, '_native_token', lambda sequence: next(samples))
+            binding = tmp_path / 'native-recorded-learning.json'
+            binding.write_text(json.dumps({'identity': identity, 'target': target, 'state_id': receipt['state_id']}))
+            trained = subprocess.run([node, str(repo / 'ts-host/test/fixtures/native-adapter-recorded-learning.mjs'),
+                f'http://127.0.0.1:{server.server_address[1]}', str(tmp_path / 'archive'),
+                str(binding)], cwd=repo, text=True, capture_output=True, timeout=120)
+            assert trained.returncode == 0, trained.stdout + trained.stderr
+            progress = json.loads(trained.stdout.splitlines()[-1])
+            assert progress['producer_consumer'] is True
+            assert progress['updated_loss'] < progress['initial_loss']
+            assert progress['native_state_gradient'] is True
+            assert progress['joint_gradient'] is True
+            assert progress['multi_target_scope'] is True
+            assert progress['higher_order'] is True
+            assert progress['scoped_state_writer'] is True
+            assert progress['mixed_import_positions'] is True
+            assert progress['repeated_scope_imports'] is True
         if mode not in {'handoff', 'recorded'}:
             assert receipt == {'forced': True, 'contextual': True, 'view_parts': 2}
             assert imports and all(item['mode'] == ('learned-semantic-state-deltas' if mode == 'compact' else 'exact-native-state') for item in imports)
@@ -225,7 +249,8 @@ def test_real_native_state_typed_child_archive_parent_import(tmp_path, monkeypat
                     {'kind':'selfDistill',**side(student),'target':student['reply'],
                         'native_turn_id':student['native']['id'],'teacher_native_turn_id':teacher['native']['id'],
                         'teacher_messages':teacher['messages'],
-                        **({'teacher_adapters':teacher['adapters']} if 'adapters' in teacher else {})},
+                            **({'teacher_adapters':teacher['adapters']} if 'adapters' in teacher else {}),
+                            **({'teacher_native_state_modes':teacher['native_state_modes']} if 'native_state_modes' in teacher else {})},
                     {'kind':'logLikelihood',**side(teacher),'target':teacher['reply'],
                         'native_turn_id':teacher['native']['id'],'likelihood_law':'model-conditional','weight':.2},
                     {'kind':'decision',**side(decisions[0]),'native_turn_id':decisions[0]['native']['id'],
@@ -253,6 +278,38 @@ def test_real_native_state_typed_child_archive_parent_import(tmp_path, monkeypat
                 assert torch.isfinite(torch.tensor(gradient['loss']))
                 artifact=engine.store.get_native_tensor_artifact(gradient['gradient']['id']).artifact
                 assert artifact.tensors['adapter.up.weight'].norm()>0
+                # The same authenticated external decision capture also runs
+                # through the real native higher-order program. The two SGD
+                # updates are differentiated through their recorded graph loss.
+                from natlang_neuralese.model.native_derivative_contract import PROGRAM
+                from natlang_neuralese.model.native_state_derivation import state_values
+                from natlang_neuralese.serve.native_derivative import execute_derivative_program
+                decision=decisions[0]
+                decision_term={'kind':'decision',**side(decision),'native_turn_id':decision['native']['id'],
+                    'options':decision['decision']['options'],'rule':'logLoss','target':{'probabilities':[1.,0.]}}
+                state_name=next(iter(state_values(engine.store.get_native_state(receipt['state_id']).block)))
+                envelope={'schema':'natlang.native-recorded-objective-request/1','turns':only_decisions,
+                    'events':decision_events,'terms':[decision_term],
+                    'targets':[{'root':'state','kind':'native-state','id':receipt['state_id'],'names':[state_name]}]}
+                optimizer={'name':'sgd','learning_rate':.001,'momentum':0.,'eps':1e-8}
+                derivative={'schema':PROGRAM,
+                    'arithmetic':{'schema':'natlang.native-reference-arithmetic/1','query_chunk_tokens':2},
+                    'inputs':{'state':{'kind':'native-state','id':receipt['state_id'],'names':[state_name]}},
+                    'nodes':[
+                        {'kind':'gradient','name':'g0','request':envelope,'bindings':{},
+                         'targets':[{'name':'state-grad-0','value':'state'}]},
+                        {'kind':'optimizer','name':'state-1','value':'state','gradient':'state-grad-0',
+                         'optimizer':optimizer,'optimizer_state':None},
+                        {'kind':'gradient','name':'g1','request':envelope,'bindings':{'state':'state-1'},
+                         'targets':[{'name':'state-grad-1','value':'state-1'}]},
+                        {'kind':'optimizer','name':'state-2','value':'state-1','gradient':'state-grad-1',
+                         'optimizer':optimizer,'optimizer_state':'state-1'}],
+                    'outer':{'request':envelope,'bindings':{'state':'state-2'}},'wrt':['state']}
+                hyper=execute_derivative_program(engine,derivative)
+                hyper_gradient=engine.store.get_native_tensor_artifact(hyper['gradients']['state']['id']).artifact
+                assert hyper_gradient.source_artifact_id==receipt['state_id']
+                assert torch.isfinite(hyper_gradient.tensors[state_name]).all()
+                assert engine.store.get_native_tensor_artifact(hyper['optimizer_states']['state-2']).artifact.provenance['step']==2
                 bad=copy.deepcopy(terms)
                 bad[2]['likelihood_law']='sampled-policy'
                 with pytest.raises(ValueError,match='positive-temperature'):

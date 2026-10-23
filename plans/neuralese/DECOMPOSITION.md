@@ -58,33 +58,15 @@ Direct SFT still uses one global weighted objective and one optimizer update for
 | Accumulate gradients across windows | Ordinary autograd `backward()` per window, shared gradient buffers | Each window graph is freed before the next forward; the optimizer remains unarmed until the complete packed update is ready. |
 | Clip gradients and update MuonSR/LionSR/AdamW | Existing optimizer path, once after accumulation | Optimizer state, update count, global clipping, and packed batch semantics remain one update. |
 
-## Experimental FP8 training backend — 2026-10-12
+## Native precision backends
 
-The experimental backend is an opt-in implementation detail of the existing
-`neuralese_direct` trainer. Normal recipes remain BF16. Transformer Engine
-handles eligible dense LFM linear operations under an explicitly declared FP8
-recipe; BF16 parameters remain the master weights and the existing MuonSR,
-LionSR, and AdamW path owns all updates. This experiment is not a production
-precision policy and does not change the serving artifact.
-
-| Part | Form | Reason |
-| --- | --- | --- |
-| Select eligible LFM dense layers and validate their shapes/runtime | Crisp exact adapter in shared training code | TE availability, module paths, dimensions, and SM/Torch/CUDA compatibility are exact facts. |
-| Run supported dense GEMMs in FP8 | Existing shared trainer with TE autocast and an explicit recipe | This changes numerical execution while preserving the shared SFT objective and optimizer. |
-| Keep BF16 master parameters, optimizer state, and non-eligible operators | Existing shared model and optimizer | Attention softmax, norms, convolutions, embeddings/readout, and Neuralese projections do not silently change precision. |
-| Save FP8 scaling state and activation/cache accounting | Direct checkpoint and training receipts | Exact resume requires scale history; memory reports must distinguish FP8 caches from BF16 parameters and saved tensors. |
-| Compare mixed short/long updates, evaluation, memory, and speed | Dedicated paired diagnostic over the shared direct recipe | This measures an experimental backend; it neither changes production defaults nor qualifies a model. |
-
-`natlang_neuralese.eval.fp8_training_comparison` prepares two pairs from
-declared `neuralese_direct` templates and is prepare-only unless `--run` is
-passed. It requires the short and long templates to share exact source inputs,
-lineage evidence, and non-context training options. Its summary separates the
-first three cold updates from warmed median update time, checks that each pair
-used the same source windows, and retains GPU clock/power/memory samples,
-initial/final held evaluations, gradient summaries, and saved-tensor inventories.
-This inventory and the configured `save_original_input=False` are evidence to
-inspect; no FP8 activation-memory reduction or quality/speed result is assumed
-before a scheduled CUDA run.
+The current native stage declares precision and supported backend settings in
+`native_state_sft` or `native_state_rl`. The trainer validates hardware and
+model geometry, preserves BF16 master parameters and optimizer state, and binds
+any FP8 expert scaling state to its checkpoint. Backend transitions require an
+explicit restored-model qualification and exact recipe handoff. The retired
+direct-SFT comparison coordinator is not a current training or qualification
+entrypoint.
 
 ## Declared direct-stage resume and completion — 2026-10-11
 

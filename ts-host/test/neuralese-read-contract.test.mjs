@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { createNativeStateFixturePort } from './fixtures/native-state-port.mjs';
 import { NEURALESE_TYPE_DOCUMENTATION } from '../dist/compiler/intrinsics.js';
 import { BUILT_IN_DOCS } from '../dist/native/runtime.js';
 import { neuraleseRef } from '../dist/native/neuralese.js';
-import { MemoryNeuraleseStore, StandInNeuralesePort, hashingEmbedder } from '../dist/native/neuralese-store.js';
+import { MemoryNeuraleseStore } from '../dist/native/neuralese-store.js';
 import { session as open } from './support/natlang.mjs';
 
 test('Neuralese read guidance separates the callable read operation from body metadata', () => {
@@ -17,7 +18,7 @@ test('Neuralese read guidance separates the callable read operation from body me
 });
 
 test('eval neuralese.read compatibility entry delegates to the configured typed readout', async () => {
-  const readBody = 'nz1_bbbbbbbbbbbbbbbbbbbb';
+  const readBody = 'nzs1_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
   let written = 0, read = 0;
   const { session } = open({ type: '() => string', instructions: 'Return the text read from the child.' }, {
     services: { neuralese: { dialect: 'test', width: 4, bodies: { read: readBody } } },
@@ -25,7 +26,7 @@ test('eval neuralese.read compatibility entry delegates to the configured typed 
     agent: child => {
       if (child.lam.type.returns.kind === 'neuralese') {
         written++;
-        child.lam.return = neuraleseRef('Neuralese<string>', 'nz1_aaaaaaaaaaaaaaaaaaaa');
+        child.lam.return = neuraleseRef('Neuralese<string>', 'nzs1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
       } else {
         read++;
         child.lam.return = 'answer text';
@@ -57,7 +58,7 @@ test('eval neuralese.read compatibility entry delegates to the configured typed 
 
 test('a computed crisp child string can be returned directly as Neuralese<string>', async () => {
   const store = new MemoryNeuraleseStore();
-  const port = new StandInNeuralesePort(store, hashingEmbedder(4), 4);
+  const port = createNativeStateFixturePort(store);
   const writes = [], write = port.write.bind(port);
   port.write = async (text, options) => { writes.push({ text, options }); return write(text, options); };
   const { session } = open({ type: '() => Neuralese<string>', instructions: 'Return the note.' }, {
@@ -75,7 +76,7 @@ test('a computed crisp child string can be returned directly as Neuralese<string
 });
 
 test('eval read(value) returns typed string, number and object payloads and rejects non-Neuralese values', async () => {
-  const readBody = 'nz1_bbbbbbbbbbbbbbbbbbbb';
+  const readBody = 'nzs1_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
   let written = 0, read = 0;
   const answers = ['ordinary text', 17, { status: 'ready', count: 3 }];
   const { session } = open({ type: '() => unknown', instructions: 'Return the typed values read from the children.' }, {
@@ -85,7 +86,7 @@ test('eval read(value) returns typed string, number and object payloads and reje
       if (child.lam.type.returns.kind === 'neuralese') {
         written++;
         const types = ['Neuralese<string>', 'Neuralese<number>', 'Neuralese<{ status: string; count: number }>'];
-        child.lam.return = neuraleseRef(types[written - 1], `nz1_${String.fromCharCode(96 + written).repeat(20)}`);
+        child.lam.return = neuraleseRef(types[written - 1], `nzs1_${String.fromCharCode(96 + written).repeat(52)}`);
       } else {
         child.lam.return = answers[read++];
       }

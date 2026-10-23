@@ -1,12 +1,4 @@
-"""Durable Neuralese RL block graphs using the existing wire format and replay.
-
-The bundle contains exact content-addressed block bytes, including producer
-metadata, not text approximations. Consumer scores keep recorded values and
-backpropagate through the existing producer rewrite. Deterministic payloads
-have no invented sampling density. This path is a pathwise surrogate on value
-communication, with policy gradients on sampled text, not a claim that discrete
-writer choices have acquired a new stochastic policy.
-"""
+"""Durable native-state RL graphs with exact producer/import occurrence bindings."""
 from __future__ import annotations
 
 import hashlib
@@ -17,7 +9,9 @@ from ..common.jsonio import write_bytes_durable, write_json_durable
 
 
 def block_ids(value):
-    if isinstance(value, str) and re.fullmatch(r'(?:nz1|nzs1|nnt1)_[a-z2-7]{52}', value):
+    if isinstance(value, str) and re.fullmatch(r'nz1_[a-z2-7]{52}', value):
+        raise ValueError('native RL archive cannot retain a projected artifact reference')
+    elif isinstance(value, str) and re.fullmatch(r'(?:nzs1|nnt1)_[a-z2-7]{52}', value):
         yield value
     elif isinstance(value, str) and value.lstrip().startswith(('{', '[')):
         # Tool-call arguments remain JSON text in stored assistant messages.
@@ -46,7 +40,9 @@ def verified_bundle_path(manifest_path, block_id, *, policy_id, manifest=None):
     entry = manifest['blocks'].get(block_id)
     if entry is None:
         return None
-    path = (manifest_path.parent / entry['path']).resolve(strict=True)
+    path = manifest_path.parent / entry['path']
+    from ..data.native_source_tree import _staged_path
+    path = _staged_path(manifest_path, path).resolve(strict=True)
     if (path.parent != manifest_path.parent.resolve() or path.stat().st_size != entry['bytes']
             or sha256_file_hex_cached(path) != entry['sha256']):
         raise ValueError('RL archived block path/size/hash changed')
@@ -67,6 +63,11 @@ class NativeBundleStore:
         self.manifest=copy.deepcopy(json.loads(self.path.read_text()) if manifest is None else manifest)
         if self.manifest.get('schema')!='natlang.rl-block-bundle/1' or self.manifest.get('policy_id')!=policy_id:
             raise ValueError('native archive belongs to a different exact actor policy')
+        for ident, entry in self.manifest.get('blocks', {}).items():
+            expected = 'native-state' if isinstance(ident, str) and ident.startswith('nzs1_') else (
+                'native-tensor' if isinstance(ident, str) and ident.startswith('nnt1_') else None)
+            if expected is None or not isinstance(entry, dict) or entry.get('format') != expected:
+                raise ValueError('native RL archive contains a non-native artifact entry')
         self._records=contextvars.ContextVar('native_bundle_records',default=None)
 
     def _record(self,ident):
@@ -114,7 +115,7 @@ class NativeBundleStore:
 
 def save_bundle(rollouts, out, *, policy_id, fetch, manifest_fields=None):
     """Fetch recursively referenced blocks with Server.get_bytes or a local store."""
-    from ..serve.store import decode_block, decode_native_state
+    from ..serve.store import decode_native_state
     from ..model.native_artifact import decode_native_tensor_artifact, native_tensor_dependencies
     from ..model.state_block import native_state_dependencies
     if manifest_fields is not None and (not isinstance(manifest_fields, dict)
@@ -131,32 +132,28 @@ def save_bundle(rollouts, out, *, policy_id, fetch, manifest_fields=None):
         raw = fetch(block_id)
         native = block_id.startswith('nzs1_')
         tensor = block_id.startswith('nnt1_')
+        if not (native or tensor):
+            raise ValueError('native RL archive accepts only native state or named tensor artifacts')
         if tensor:
             block, actual = decode_native_tensor_artifact(raw)
-        elif native:
-            block, actual = decode_native_state(raw)
         else:
-            block = decode_block(raw)
-            actual = block.id
+            block, actual = decode_native_state(raw)
         if actual != block_id:
             raise ValueError('RL block fetch returned a different content ID')
         destination = out / (block_id + '.nzb')
         write_bytes_durable(destination, raw)
         entries[block_id] = {'path': destination.name, 'sha256': hashlib.sha256(raw).hexdigest(),
                              'bytes': len(raw),
-                             'format': 'native-tensor' if tensor else 'native-state' if native else 'legacy-projected'}
+                             'format': 'native-tensor' if tensor else 'native-state'}
         if tensor:
             entries[block_id]['native_identity'] = block.native_identity
             pending.update(set(native_tensor_dependencies(block)) - entries.keys())
         else:
-            entries[block_id].update(length=len(block.token_ids) if native else block.length,
-                                    width=block.embeddings.shape[1] if native else block.width)
+            entries[block_id].update(length=len(block.token_ids), width=block.embeddings.shape[1])
         if native:
             entries[block_id]['native_identity'] = {name: getattr(block, name) for name in (
                 'checkpoint_sha256', 'tokenizer_fingerprint', 'embedding_weight_sha256', 'architecture')}
             pending.update(set(native_state_dependencies(block))-entries.keys())
-        elif not tensor:
-            pending.update(set(block_ids(block.producer)) - entries.keys())
     manifest = {'schema': 'natlang.rl-block-bundle/1', 'policy_id': policy_id, 'blocks': entries}
     manifest.update(manifest_fields or {})
     destination = out / 'manifest.json'
@@ -170,7 +167,7 @@ def save_bundle(rollouts, out, *, policy_id, fetch, manifest_fields=None):
 
 
 def restore_bundle(engine, manifest_path, *, policy_id):
-    from ..serve.store import decode_block, decode_native_state
+    from ..serve.store import decode_native_state
     from ..model.native_artifact import decode_native_tensor_artifact, native_tensor_dependencies
     from ..model.state_block import native_state_dependencies
     manifest_path = Path(manifest_path)
@@ -211,10 +208,7 @@ def restore_bundle(engine, manifest_path, *, policy_id):
                 raise ValueError('native RL state bundle is missing required state/adapter derivation dependencies')
             native[block_id]=dependencies
         else:
-            block = decode_block(raw)
-            if block.id != block_id or block.width != engine.width:
-                raise ValueError('RL block bundle identity/width differs from learner')
-            engine.store.put(block)
+            raise ValueError('native RL bundle contains a non-native artifact ID')
     reader=NativeBundleStore(manifest_path,policy_id=policy_id,manifest=manifest)
     while native:
         ready=[ident for ident,dependencies in native.items() if not any(key in native for key in dependencies)]
@@ -250,70 +244,3 @@ def producer_turns(rollout):
             'graph_turn': turn_id, 'written_nodes': writes, 'read_bindings': reads,
             **({'sampling': turn['sampling']} if turn.get('sampling') else {})})
     return result
-
-
-def replay_scores(session, turn, producers=()):
-    """Text policy likelihoods with recorded-value, differentiable producer replay."""
-    session.model_gradients = True
-    indexed = session._index_producers(list(producers))
-    term = {'messages': turn['messages'], 'tools': turn.get('tools'), 'target': turn['target']}
-    prompt, target = session._target_items(term['messages'], term['tools'], term['target'])
-    leaves, memo = {}, {}
-    for block_id in session._term_blocks(term):
-        if block_id in indexed:
-            value = session._rewritten(block_id, {}, indexed, memo)
-            if value is not None:
-                leaves[block_id] = value
-    return session._score(prompt, target, leaves, write_terms=False)['token_logp']
-
-
-def captured_producer_leaves(session, capture, producers, *, read_bindings=None):
-    """Bind writer contexts and read edges to their exact captured coordinates."""
-    from .sampling import capture_items
-    session.model_gradients = True
-    candidates, occurrences = {}, {}
-    copies = [dict(producer) for producer in producers]
-    for producer in copies:
-        if not producer.get('sampling'):
-            raise ValueError('value-channel RL needs exact producer token captures')
-        prompt, reply, _ = capture_items(producer['sampling'], require_samples=False)
-        for at, (kind, value) in enumerate(reply):
-            if kind == 'block':
-                entry = (producer, prompt, reply, at)
-                candidates.setdefault(value, []).append(entry)
-                node = producer.get('written_nodes', {}).get(value)
-                if node:
-                    occurrences[node] = entry
-    def bind(bindings):
-        result = {}
-        for block_id, choices in candidates.items():
-            if block_id in bindings:
-                node = bindings[block_id]
-                if node not in occurrences:
-                    raise ValueError('RL graph references an uncaptured writer occurrence: ' + node)
-                entry = occurrences[node]
-                if entry[2][entry[3]] != ('block', block_id):
-                    raise ValueError('RL graph writer occurrence has a different block')
-                result[block_id] = entry
-            elif len(choices) == 1:
-                result[block_id] = choices[0]
-            elif len({json.dumps(choice[0]['sampling'], sort_keys=True) for choice in choices}) == 1:
-                result[block_id] = choices[0]
-            else:
-                # No silent first-writer wins on content-addressed identical values.
-                result[block_id] = None
-        return result
-    for producer in copies:
-        producer['_producer_dependencies'] = bind(producer.get('read_bindings', {}))
-    indexed = bind(read_bindings or {})
-    prompt, target, _ = capture_items(capture)
-    memo = {}
-    leaves = {}
-    for kind, block_id in prompt + target:
-        if kind == 'block' and block_id in indexed:
-            if indexed[block_id] is None:
-                raise ValueError('ambiguous RL writer occurrence requires execution graph binding')
-            value = session._rewritten(block_id, {}, indexed, memo)
-            if value is not None:
-                leaves[block_id] = value
-    return leaves

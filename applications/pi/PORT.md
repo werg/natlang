@@ -197,14 +197,12 @@ interface, and calls the selected implementation at each policy point:
 
 **`ai`** is appendix 5, A.11: `model`, `available`, `turn(model, messages, options, live?)`, `poll`, `cancel`,
 `failure`, `estimateTokens`, `validateArguments` and `newSessionId`. With `live`, `turn` publishes the throttled
-partials into `pi.live` itself. `estimateTokens` counts a Neuralese block at its length, read from the runtime's
-Neuralese store; `blockMeta(messages)` (called by `harness/context`) fetches metadata the store lacks from the agent
-model's server once and keeps it there, and a block still unknown fails the estimate, naming it. For a model whose
-reader is a Neuralese dialect, `turn` forces the stored view calls in the messages (`host/views.ts`; DECISIONS.md
-2026-10-09, "representation chosen by use"): a text part with a `stored` reference (types.ts `StoredCallRef`) is sent as
-the call's block and the recall note, written once per call and dialect by the agent model's server, memoized in the
-conversation's `pi.view.forced` documents and pinned under the conversation's owner (its provider session ID). A
-generation's request also collects the owner's blocks when the context's head moved. A view that cannot be written
+partials into `pi.live` itself. `estimateTokens` counts native state at its token length, read from the runtime's native
+artifact archive; `nativeStateMeta(messages)` (called by `harness/context`) fetches missing state metadata from the agent
+server and keeps it in the runtime index, and an unknown state fails the estimate by ID. For a native-state reader,
+`turn` forces stored view calls in the messages (`host/views.ts`): a text part with a `stored` reference is sent as the
+view's native state and recall note, memoized in the conversation's `pi.view.forced` document and pinned under the
+conversation owner. A generation request collects the owner's native states when the context head moves. A view that cannot be written
 fails the turn (`neuralese-view-unavailable`, which `failure` calls retryable, or `neuralese-view-failed`); the request
 is not sent with the text instead.
 

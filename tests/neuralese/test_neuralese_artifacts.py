@@ -139,3 +139,9 @@ def test_a_declared_local_replica_is_used_only_when_its_bytes_match(tmp_path, mo
     (replica / "bank.nz").write_bytes(b"other bytes")  # a stale copy falls back to the registered bytes
     path, fallback = artifacts.resolve("bank-test-v1", repo=repo)
     assert path != replica / "bank.nz" and fallback == sha
+
+
+def test_projected_artifact_kind_is_retired():
+    registry = artifacts.empty_registry()
+    with pytest.raises(artifacts.ArtifactError, match="artifact kind"):
+        artifacts.validate_entry(item("projection-test-v1", kind="projection"), registry)
