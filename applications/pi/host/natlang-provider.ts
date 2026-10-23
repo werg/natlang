@@ -195,8 +195,7 @@ function replyContent(text: string): (AssistantMessage['content'][number] | Nati
   if (!hasNeuraleseSentinel(text)) return text ? [{ type: 'text', text }] : [];
   return textToParts(text).flatMap((part): (AssistantMessage['content'][number] | NativeStateContent)[] => {
     if (part.type === 'native_state') return [{ type: 'native_state', id: part.id }];
-    if (part.type === 'text') return part.text ? [{ type: 'text', text: part.text }] : [];
-    throw new Error(`neuralese-projected-api-retired: model response contains flat block ${part.id}`);
+    return part.text ? [{ type: 'text', text: part.text }] : [];
   });
 }
 
@@ -317,7 +316,6 @@ function streamedTurn(output: AssistantMessage, store?: NeuraleseStore) {
       if (delta.type === 'text') return piece('text', delta.text);
       if (delta.type === 'reasoning') return piece('thinking', delta.text);
       if (delta.type === 'reset') return clear();
-      if (delta.type === 'neuralese') throw new Error(`neuralese-projected-api-retired: streamed flat block ${delta.part.id}`);
       if (delta.type === 'native_state') {
         // The block's metadata, when the server sends it, is recorded at once: the part stays a pure reference, and
         // its length (context positions) is read from the store.

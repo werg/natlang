@@ -1,87 +1,115 @@
 /**
- * Neuralese columns for the natural-language database: block storage and similarity indexing (see NEURALESE.md).
- *
- * A neuralese value is an immutable block of vectors in one dialect (the model channel that wrote it), named by its
- * content ID. A table column of type `neuralese` holds IDs; the blocks live in blocks/<dialect>/<id>.safetensors.
- * An index serves one dialect and width: each block is pooled to one normalized vector (the mean of its rows) and
- * filed under its nearest centroid (IVF); a search probes the closest lists and ranks by cosine similarity.
+ * Native state and named tensor archive for NLDB, plus semantic indexing over native-state token embeddings.
+ * Database rows retain content-addressed `nzs1` IDs; tensor artifacts use the same folder archive and are available
+ * through the complete NeuraleseStore contract, but are not treated as semantic vectors.
  */
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { neuraleseContentId, type NeuraleseBlock, type NeuraleseBlockInput, type NeuraleseBlockMeta, type NeuraleseStore } from '@natlang/node';
+import { mkdir } from 'node:fs/promises';
+import { join } from 'node:path';
+import { FileNeuraleseStore, type NeuraleseBlockMeta, type NeuraleseStore,
+  type NativeStateArtifact, type NativeTensorArtifact } from '@natlang/node';
 
-const SAFE_DTYPE = { f32: 'F32', f16: 'F16', bf16: 'BF16' } as const;
-const dialectDirectory = (dialect: string) => encodeURIComponent(dialect);
+type NativeFolder = FileNeuraleseStore;
 
-/** One block as a safetensors file: the natlang metadata in the header, the payload as tensor `payload`. */
-export function encodeBlock(block: NeuraleseBlock): Uint8Array {
-  const header = JSON.stringify({ __metadata__: { 'natlang.block': JSON.stringify(block.meta) },
-    payload: { dtype: SAFE_DTYPE[block.meta.dtype], shape: [block.meta.length, block.meta.width], data_offsets: [0, block.data.length] } });
-  const padded = new TextEncoder().encode(header.padEnd(Math.ceil(header.length / 8) * 8, ' '));
-  const out = new Uint8Array(8 + padded.length + block.data.length);
-  new DataView(out.buffer).setBigUint64(0, BigInt(padded.length), true);
-  out.set(padded, 8);
-  out.set(block.data, 8 + padded.length);
-  return out;
-}
-
-export function decodeBlock(bytes: Uint8Array): NeuraleseBlock {
-  const size = Number(new DataView(bytes.buffer, bytes.byteOffset).getBigUint64(0, true));
-  const header = JSON.parse(new TextDecoder().decode(bytes.subarray(8, 8 + size))) as { __metadata__: Record<string, string>, payload: { data_offsets: [number, number] } };
-  const meta = JSON.parse(header.__metadata__['natlang.block']!) as NeuraleseBlockMeta;
-  const [start, end] = header.payload.data_offsets;
-  return { meta, data: bytes.slice(8 + size + start, 8 + size + end) };
-}
-
-/** Blocks stored as files under a database folder; content-addressed, so storing the same block twice is a no-op. */
+/** The NLDB-owned `blocks/` folder is a persistent native artifact archive. */
 export class FolderBlockStore implements NeuraleseStore {
-  private readonly pins = new Map<string, number>();
-  constructor(readonly root: string) {}
-  private path(meta: Pick<NeuraleseBlockMeta, 'id' | 'dialect'>) { return join(this.root, 'blocks', dialectDirectory(meta.dialect), `${meta.id}.safetensors`); }
-  private find(id: string): string | undefined {
-    const base = join(this.root, 'blocks');
-    if (!existsSync(base)) return undefined;
-    for (const dialect of readdirSync(base)) { const path = join(base, dialect, `${id}.safetensors`); if (existsSync(path)) return path; }
-    return undefined;
+  private readonly archive: Promise<NativeFolder>;
+  private readonly metadata = new Map<string, NeuraleseBlockMeta>();
+
+  constructor(readonly root: string) {
+    this.archive = (async () => {
+      await mkdir(root, { recursive: true });
+      const store = await FileNeuraleseStore.open(join(root, 'blocks'));
+      for (const id of store.ids()) {
+        const meta = await store.meta(id);
+        if (meta) this.metadata.set(id, meta);
+      }
+      return store;
+    })();
   }
-  async put(block: NeuraleseBlockInput): Promise<NeuraleseBlockMeta> {
-    const meta: NeuraleseBlockMeta = { id: neuraleseContentId(block), dialect: block.dialect, length: block.length, width: block.width,
-      dtype: block.dtype, ...(block.type ? { type: block.type } : {}), ...(block.producer ? { producer: block.producer } : {}) };
-    const path = this.path(meta);
-    if (!existsSync(path)) {
-      mkdirSync(dirname(path), { recursive: true });
-      writeFileSync(`${path}.tmp`, encodeBlock({ meta, data: block.data }));
-      renameSync(`${path}.tmp`, path);
-    }
+
+  static async open(root: string): Promise<FolderBlockStore> {
+    const store = new FolderBlockStore(root);
+    await store.archive;
+    return store;
+  }
+
+  private async opened(): Promise<NativeFolder> { return this.archive; }
+  async meta(id: string): Promise<NeuraleseBlockMeta | undefined> {
+    const meta = await (await this.opened()).meta(id);
+    if (meta) this.metadata.set(id, meta); else this.metadata.delete(id);
     return meta;
   }
-  async get(id: string): Promise<NeuraleseBlock | undefined> { const path = this.find(id); return path ? decodeBlock(new Uint8Array(readFileSync(path))) : undefined; }
-  async meta(id: string): Promise<NeuraleseBlockMeta | undefined> { return (await this.get(id))?.meta; }
-  async has(id: string): Promise<boolean> { return this.find(id) !== undefined; }
-  async pin(id: string): Promise<void> { this.pins.set(id, (this.pins.get(id) ?? 0) + 1); }
-  async unpin(id: string): Promise<void> { const n = (this.pins.get(id) ?? 0) - 1; if (n > 0) this.pins.set(id, n); else this.pins.delete(id); }
-  /** Blocks no row refers to and nobody pinned are removed; rows are the references. */
+  async has(id: string): Promise<boolean> {
+    const present = await (await this.opened()).has(id);
+    if (!present) this.metadata.delete(id);
+    return present;
+  }
+  peek(id: string): NeuraleseBlockMeta | undefined {
+    const meta = this.metadata.get(id);
+    return meta && structuredClone(meta);
+  }
+  note(meta: NeuraleseBlockMeta): void {
+    if (!this.metadata.has(meta.id)) this.metadata.set(meta.id, structuredClone(meta));
+    void this.archive.then(store => store.note(meta)).catch(() => undefined);
+  }
+  async pin(id: string): Promise<void> { await (await this.opened()).pin(id); }
+  async unpin(id: string): Promise<void> { await (await this.opened()).unpin(id); }
   async collect(referenced: ReadonlySet<string>): Promise<string[]> {
-    const removed: string[] = [];
-    const base = join(this.root, 'blocks');
-    if (!existsSync(base)) return removed;
-    const { rmSync } = await import('node:fs');
-    for (const dialect of readdirSync(base)) for (const file of readdirSync(join(base, dialect))) {
-      const id = file.replace(/\.safetensors$/, '');
-      if (!referenced.has(id) && !this.pins.has(id)) { rmSync(join(base, dialect, file)); removed.push(id); }
-    }
+    const removed = await (await this.opened()).collect(referenced);
+    for (const id of removed) this.metadata.delete(id);
     return removed;
+  }
+  async putNativeState(input: Omit<NativeStateArtifact, 'id'>): Promise<NativeStateArtifact> {
+    const artifact = await (await this.opened()).putNativeState(input);
+    this.metadata.set(artifact.id, (await this.meta(artifact.id))!);
+    return artifact;
+  }
+  async getNativeState(id: string): Promise<NativeStateArtifact | undefined> {
+    const artifact = await (await this.opened()).getNativeState(id);
+    if (!artifact) this.metadata.delete(id);
+    return artifact;
+  }
+  async hasNativeState(id: string): Promise<boolean> { return (await this.opened()).hasNativeState(id); }
+  async putNativeTensorArtifact(input: Omit<NativeTensorArtifact, 'id'>): Promise<NativeTensorArtifact> {
+    const artifact = await (await this.opened()).putNativeTensorArtifact(input);
+    this.metadata.set(artifact.id, (await this.meta(artifact.id))!);
+    return artifact;
+  }
+  async getNativeTensorArtifact(id: string): Promise<NativeTensorArtifact | undefined> {
+    const artifact = await (await this.opened()).getNativeTensorArtifact(id);
+    if (!artifact) this.metadata.delete(id);
+    return artifact;
+  }
+  async hasNativeTensorArtifact(id: string): Promise<boolean> {
+    return (await this.opened()).hasNativeTensorArtifact(id);
   }
 }
 
-/** A block's rows as f32 numbers (bf16 and f16 widened). */
-export function rows(block: NeuraleseBlock): Float32Array {
-  const { dtype, length, width } = block.meta, view = new DataView(block.data.buffer, block.data.byteOffset, block.data.byteLength);
-  const out = new Float32Array(length * width);
-  for (let i = 0; i < out.length; i++) {
-    if (dtype === 'f32') out[i] = view.getFloat32(i * 4, true);
-    else if (dtype === 'bf16') { const scratch = new DataView(new ArrayBuffer(4)); scratch.setUint32(0, view.getUint16(i * 2, true) << 16); out[i] = scratch.getFloat32(0); }
-    else {
+/** Exact identity of the embedding coordinate space used by the semantic index. */
+export function nativeStateDialect(state: NativeStateArtifact): string {
+  const { architecture, checkpoint_sha256, tokenizer_fingerprint, embedding_weight_sha256 } = state.metadata;
+  return `native-state/${architecture}/${checkpoint_sha256}/${tokenizer_fingerprint}/${embedding_weight_sha256}`;
+}
+
+/** A native state's token embeddings as f32 numbers (bf16 and f16 widened). */
+export function rows(state: NativeStateArtifact): Float32Array {
+  const embeddings = state.tensors.embeddings;
+  if (!embeddings || embeddings.shape.length !== 2 || !['F32', 'F16', 'BF16'].includes(embeddings.dtype))
+    throw new TypeError('native state has no supported rank-two embedding tensor');
+  const [length, width] = embeddings.shape;
+  if (!Number.isSafeInteger(length) || !Number.isSafeInteger(width) || length! < 1 || width! < 1)
+    throw new TypeError('native state embedding tensor has invalid dimensions');
+  const count = length! * width!, view = new DataView(embeddings.data.buffer, embeddings.data.byteOffset, embeddings.data.byteLength);
+  if (embeddings.data.byteLength !== count * (embeddings.dtype === 'F32' ? 4 : 2))
+    throw new TypeError('native state embedding tensor byte length differs from its shape');
+  const out = new Float32Array(count);
+  for (let i = 0; i < count; i++) {
+    if (embeddings.dtype === 'F32') out[i] = view.getFloat32(i * 4, true);
+    else if (embeddings.dtype === 'BF16') {
+      const scratch = new DataView(new ArrayBuffer(4));
+      scratch.setUint32(0, view.getUint16(i * 2, true) << 16, true);
+      out[i] = scratch.getFloat32(0, true);
+    } else {
       const h = view.getUint16(i * 2, true), sign = h & 0x8000 ? -1 : 1, exponent = (h >> 10) & 0x1f, fraction = h & 0x3ff;
       out[i] = sign * (exponent === 0 ? fraction * 2 ** -24 : exponent === 31 ? (fraction ? NaN : Infinity) : (1 + fraction / 1024) * 2 ** (exponent - 15));
     }
@@ -89,9 +117,11 @@ export function rows(block: NeuraleseBlock): Float32Array {
   return out;
 }
 
-/** The block's index vector: the mean of its rows, scaled to unit length. */
-export function pooled(block: NeuraleseBlock): Float32Array {
-  const values = rows(block), { length, width } = block.meta, out = new Float32Array(width);
+/** Pool the native state's learned token embeddings to a normalized semantic index vector. */
+export function pooled(state: NativeStateArtifact): Float32Array {
+  const values = rows(state), length = state.tensors.token_ids?.shape[0], width = state.tensors.embeddings?.shape[1];
+  if (!length || !width || values.length !== length * width) throw new TypeError('native state token and embedding lengths differ');
+  const out = new Float32Array(width);
   for (let r = 0; r < length; r++) for (let c = 0; c < width; c++) out[c]! += values[r * width + c]! / length;
   return normalized(out);
 }
@@ -132,22 +162,23 @@ export class IvfIndex {
 
   private check(meta: Pick<NeuraleseBlockMeta, 'dialect' | 'width'>) {
     if (meta.dialect !== this.dialect || meta.width !== this.width) {
-      throw new RangeError(`this index serves dialect ${this.dialect} (width ${this.width}); a ${meta.dialect} block (width ${meta.width}) must be re-encoded in it first`);
+      throw new RangeError(`this index serves dialect ${this.dialect} (width ${this.width}); a ${meta.dialect} block (width ${meta.width}) must be re-encoded for the exact checkpoint/tokenizer embedding identity first`);
     }
   }
 
-  add(block: NeuraleseBlock): void {
-    this.check(block.meta);
+  add(state: NativeStateArtifact): void {
+    const meta = { dialect: nativeStateDialect(state), width: state.tensors.embeddings?.shape[1] ?? 0 };
+    this.check(meta);
     if (!this.centroids.length) throw new Error('train the index before adding blocks');
-    const vector = pooled(block), list = this.nearest(vector, 1)[0]!;
+    const vector = pooled(state), list = this.nearest(vector, 1)[0]!;
     const entries = this.lists.get(list) ?? [];
-    if (!entries.some(entry => entry.id === block.meta.id)) entries.push({ id: block.meta.id, vector });
+    if (!entries.some(entry => entry.id === state.id)) entries.push({ id: state.id, vector });
     this.lists.set(list, entries);
   }
 
   /** The `count` most similar blocks, probing the `probes` closest lists. */
-  search(query: NeuraleseBlock, count = 5, probes = 2): Hit[] {
-    this.check(query.meta);
+  search(query: NativeStateArtifact, count = 5, probes = 2): Hit[] {
+    this.check({ dialect: nativeStateDialect(query), width: query.tensors.embeddings?.shape[1] ?? 0 });
     const vector = pooled(query);
     return this.nearest(vector, probes).flatMap(list => this.lists.get(list) ?? [])
       .map(entry => ({ id: entry.id, score: dot(vector, entry.vector) })).sort((a, b) => b.score - a.score).slice(0, count);

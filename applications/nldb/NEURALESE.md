@@ -1,48 +1,26 @@
-# Storing and indexing neuralese
+# Storing and indexing native state
 
-Neuralese values are what natlang programs pass between model calls when text would lose information: immutable
-blocks of vectors written by one model channel (a *dialect*) and read by calls in the same dialect. A database that
-holds them needs four things a text database does not.
+NLDB rows can name exact `nzs1_…` native-state artifacts. Each artifact preserves its source text and tokenizer/model
+identity together with token IDs, positions, embeddings, and the available positional KV or hybrid state tensors. The
+same archive stores named `nnt1_…` tensor artifacts through the full `NeuraleseStore` API; tensor artifacts are kept
+as typed tensors and are never flattened into Neuralese values.
 
-## 1. Storage: content-addressed blocks, referenced by rows
+## Folder archive
 
-- A column of type `neuralese` holds a block's content ID (`nz1_…`: SHA-256 over dialect, shape, dtype and bytes).
-  The ID is the value: equal blocks are one block, and a row can be checked against its block at any time.
-- Payloads live beside the tables: `blocks/<dialect>/<id>.safetensors` in the folder engine (the same layout the
-  Python server's blocks use: natlang metadata in the header, the payload as tensor `payload`), or a
-  `_nl_blocks(id PRIMARY KEY, dialect, length, width, dtype, data BLOB)` table in the SQLite engine.
-- Rows are the references: deleting the last row that names a block makes it garbage; `FolderBlockStore.collect`
-  removes blocks no row names and no running call has pinned. A transaction writes its blocks before its rows, so a
-  committed row never names a missing block.
+`FolderBlockStore` writes the native safetensors artifact bytes under `blocks/<artifact-id>`. IDs are content addresses,
+so repeated writes are idempotent. Reopening the store rebuilds its metadata index from the files. `pin` protects
+in-flight use, and `collect` removes unreferenced artifacts while retaining their exact native dependency closure.
+NLDB rows that contain a `neuralese` value hold an `nzs1_…` state ID; keep the row and artifact changes in the same
+successful transaction boundary.
 
-## 2. Dialect pinning
+## Dialect-aware retrieval
 
-A block means something only to readers of its dialect. The catalog records the dialect of each neuralese column;
-an insert of a block from another dialect fails the transaction, and an index answers only queries in its dialect
-(`IvfIndex` refuses others, naming the fix: re-encode the query in the index's dialect). A backbone change is a new
-dialect: per the foundation rules, the channel is requalified, stored blocks are re-encoded from their sources (the
-log keeps the text a block was written from when there was one), and indexes are rebuilt.
+A state is meaningful in the architecture and checkpoint/tokenizer context recorded by its metadata. The semantic IVF
+index only indexes the state's learned token embedding tensor, retaining its dialect (`native-state/<architecture>`)
+and width. It refuses a query encoded in another dialect or width. Named tensor artifacts remain available by their
+`nnt1_…` IDs for exact parameter, gradient, optimizer, or adapter operations; they are not candidates for semantic
+nearest-neighbour search.
 
-## 3. Similarity indexing
-
-`IvfIndex` (crisp, in `neuralese.ts`) pools each block to one unit vector (the mean of its rows) and files it under
-the nearest of k centroids found by k-means; a search ranks the members of the closest few lists by cosine
-similarity. It lives in `indexes/<table>/<column>.ivf.json` beside the ordinary indexes. Pooling loses order within
-a block; it is a recall stage, and precise answers come from reading candidates (section 4). Larger collections would
-swap IVF for HNSW or product quantization behind the same `add`/`search` contract.
-
-## 4. Queries over meaning
-
-Two kinds of question touch neuralese values:
-
-- *Nearest neighbours* ("notes like this one", "orders whose instructions resemble this request"): encode the query
-  (a stored block, or text written into the column's dialect by the serving model), search the index, return the
-  rows that refer to the hits.
-- *Conditions on meaning* ("notes that mention an allergy"): a decision call reads each candidate block as a
-  `Neuralese<string>` argument; in the SQLite engine this is the same `meets(column, criterion)` mechanism text
-  columns use, with the block read instead of the text, and judgments cached per (criterion, block ID). The index
-  narrows the candidates first when the criterion can be encoded too.
-
-Reading blocks needs a neuralese-capable model server in the column's dialect; until one is attached, the database
-stores, references, collects and indexes blocks (tested with synthetic payloads), and conditions on neuralese columns
-fail with a message naming the missing server.
+Pooling token embeddings to one normalized vector loses token order and the other shared state tensors. IVF is a recall
+stage, not a substitute for reading or consuming the original native state. Text readers do not reinterpret the native
+state: a model must explicitly support native-state consumption and the matching native identity.

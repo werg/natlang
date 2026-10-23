@@ -9,8 +9,7 @@ A database is a folder. Everything in it is plain JSON or JSON Lines, readable b
 | `indexes/<table>/<column>.json` | A JSON array of `[value, _id]` pairs sorted by value, then `_id`: every row of the table, so a value can be found without reading the pages. |
 | `log/<sequence>.json` | One record per committed transaction, written by the host before it changes the files: the request, how it was read (statements), what changed, and every changed file's new content. A commit interrupted after its record is finished from it when the database opens. |
 
-Column types: `integer`, `real`, `text`, `boolean`, `date` (`YYYY-MM-DD`), `timestamp` (ISO 8601), and `neuralese` (the
-content ID of a stored neuralese block; see `NEURALESE.md` in the natlang repository).
+Column types: `integer`, `real`, `text`, `boolean`, `date` (`YYYY-MM-DD`), `timestamp` (ISO 8601), and `neuralese` (an `nzs1_…` native-state artifact ID; see `NEURALESE.md`).
 
 A transaction is one natural-language reducer call over this folder: its changes are kept only if the call
 finishes, and only the host writes `log/` and this file.
