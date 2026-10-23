@@ -188,6 +188,7 @@ def main(argv=None):
     parser.add_argument('--max-model-requests', type=int, default=32)
     parser.add_argument('--max-turns', type=int, default=20)
     parser.add_argument('--seed-base', type=int, default=13000)
+    parser.add_argument('--min-gain-fraction', type=float, default=0.1)
     args = parser.parse_args(argv)
     manifest = select(args.source, args.out, min_each=args.min_each)
     if args.select_only:
@@ -211,22 +212,29 @@ def main(argv=None):
                      '--samples', str(args.samples), '--shards', str(args.shards),
                      '--temperature', str(args.temperature), '--case-seconds', str(args.case_seconds),
                      '--max-model-requests', str(args.max_model_requests), '--max-turns', str(args.max_turns),
-                     '--seed-base', str(args.seed_base)]
+                     '--seed-base', str(args.seed_base), '--min-gain-fraction', str(args.min_gain_fraction)]
         if args.recipe_base:
             arguments.extend(['--recipe-base', str(args.recipe_base)])
         if args.recipe_graph_root:
             arguments.extend(['--recipe-graph-path', str(args.recipe_graph_root /
                 ('program-' + program_id.rsplit(':', 1)[1][:16]) / 'learning/native-guidance-graphs.jsonl')])
         try:
-            memetic_program.main(arguments)
-            results.append({'program_id': program_id, 'status': 'complete', 'binding': str(directory / 'learning/binding.json')})
+            outcome = memetic_program.main(arguments)
+            results.append({'program_id': program_id, 'status': outcome['status'],
+                            'result': str(directory / 'learning/result.json'),
+                            **({'binding': str(directory / 'learning/binding.json')}
+                               if outcome['status'] == 'qualified' else {})})
         except Exception as error:
             results.append({'program_id': program_id, 'status': 'failed', 'error': repr(error)})
         write_json_durable(args.out / 'progress.json', {'schema': 'natlang.memetic-batch-progress/1', 'results': results})
     if any(result['status'] == 'failed' for result in results):
         raise RuntimeError('some memetic program jobs failed; inspect progress.json and rerun to resume')
     if args.recipe_base:
-        bindings = [json.loads(Path(result['binding']).read_text()) for result in results]
+        bindings = [json.loads(Path(result['binding']).read_text()) for result in results if result['status'] == 'qualified']
+        if not bindings:
+            print(json.dumps({'manifest': str(args.out / 'batch.json'), 'status': 'no_qualified_guidance',
+                              'results': results}))
+            return
         if len({canonical(binding['student']) for binding in bindings}) != 1:
             raise ValueError('batch guidance graphs come from different student checkpoints')
         graph_bytes = b''.join(Path(binding['native_training_graphs']['path']).read_bytes()

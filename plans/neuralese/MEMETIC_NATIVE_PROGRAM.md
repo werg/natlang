@@ -14,6 +14,12 @@ rows, keep them in a third packet and use the existing held evaluator after
 the candidate is bound. Development and confirmation use the same student,
 sampler and seeds for seed/candidate comparison. Outcomes come from the normal
 task oracle; infrastructure and incomplete scores stop acceptance.
+The worker first measures an unguided baseline with the same cases and seeds.
+It publishes a program binding only when the best native guide improves both
+development and confirmation success rates by at least
+`--min-gain-fraction` (default 0.1). A run without measured lift writes
+`result.json` with `status: "no_lift"` and leaves no user binding or trainer
+graphs. A longer resumed search can still qualify later.
 
 For existing production packets that lack `program_id`, use the batch selector
 and worker. It derives a stable ID from the exact natlang root, files and

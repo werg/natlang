@@ -66,6 +66,12 @@ def test_binding_requires_actual_native_id_and_oracle_gain(tmp_path):
     assert memetic.acceptance({'scored': 4, 'successes': 1}, {'scored': 4, 'successes': 2})
     assert not memetic.acceptance({'scored': 4, 'successes': 1}, {'scored': 3, 'successes': 3})
     assert not memetic.acceptance({'scored': 4, 'successes': 1}, {'scored': 4, 'successes': 1})
+    baseline = {'development': {'scored': 4, 'successes': 1},
+                'confirmation': {'scored': 4, 'successes': 1}}
+    assert memetic.qualification(baseline, {'development': {'scored': 4, 'successes': 2},
+                                             'confirmation': {'scored': 4, 'successes': 2}}, .1)
+    assert not memetic.qualification(baseline, {'development': {'scored': 4, 'successes': 2},
+                                                 'confirmation': {'scored': 4, 'successes': 1}}, .1)
     output = tmp_path / 'row-000' / 'sample-00'
     output.mkdir(parents=True)
     (output / 'results.jsonl').write_text(json.dumps({'trajectory': [

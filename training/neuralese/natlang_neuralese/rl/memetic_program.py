@@ -148,10 +148,11 @@ def evaluate(args, out: Path, name: str, guidance: str, rows: list[dict]):
     fit = runner.evaluate(options, individual, packet, runner.default_system_prompt())
     if fit['scored'] != len(rows) * args.samples:
         raise ValueError('guidance evaluation lacks complete scored task outcomes')
-    state_id = re.search(r'nzs1_[a-z2-7]{52}', guidance)
-    if not state_id or not native_import_reached(target, state_id.group(0)):
-        raise ValueError('guidance state did not reach the executing model as native state')
-    fit['native_import_reached_model'] = True
+    if guidance:
+        state_id = re.fullmatch(r'\ue002(nzs1_[a-z2-7]{52})\ue003', guidance)
+        if not state_id or not native_import_reached(target, state_id.group(1)):
+            raise ValueError('guidance state did not reach the executing model as native state')
+        fit['native_import_reached_model'] = True
     write_json_durable(fit_path, fit)
     return fit
 
@@ -179,6 +180,12 @@ def acceptance(previous: dict, candidate: dict):
     if previous['scored'] != candidate['scored'] or not previous['scored']:
         return False
     return candidate['successes'] > previous['successes']
+
+
+def qualification(baseline: dict, best: dict, min_gain_fraction: float) -> bool:
+    return all(best[split]['scored'] == baseline[split]['scored'] and best[split]['scored'] > 0 and
+        (best[split]['successes'] - baseline[split]['successes']) / best[split]['scored'] >= min_gain_fraction
+        for split in ('development', 'confirmation'))
 
 
 def guidance_training_graph(rollout: dict, *, program_id: str, written: dict, actor: dict, roles, fetch_block):
@@ -373,7 +380,11 @@ def main(argv=None):
     parser.add_argument('--max-model-requests', type=int, default=32)
     parser.add_argument('--max-turns', type=int, default=20)
     parser.add_argument('--seed-base', type=int, default=13000)
+    parser.add_argument('--min-gain-fraction', type=float, default=0.1,
+                        help='minimum absolute success-rate gain on both disjoint slices')
     args = parser.parse_args(argv)
+    if not 0 < args.min_gain_fraction <= 1:
+        parser.error('--min-gain-fraction must be in (0, 1]')
     dev, confirm = prepare_slices(args.development, args.confirmation, args.program_id)
     teacher = author_provenance(args.author_provenance, args.author_model, args.author)
     identity = actor_identity(args.server)
@@ -384,6 +395,7 @@ def main(argv=None):
         'student': identity, 'student_server': args.server, 'student_model_id': args.model_id,
         'author': teacher, 'author_server': args.author,
         'seed_base': args.seed_base, 'samples': args.samples, 'temperature': args.temperature,
+        'min_gain_fraction': args.min_gain_fraction,
         'shards': args.shards, 'case_seconds': args.case_seconds,
         'max_model_requests': args.max_model_requests, 'max_turns': args.max_turns,
         'recipe_base': (hashlib.sha256(args.recipe_base.read_bytes()).hexdigest()
@@ -395,7 +407,11 @@ def main(argv=None):
         raise ValueError('resume changed program, split, student or sampling identity')
     write_json_durable(input_path, inputs)
     state_path = out / 'state.json'
-    state = json.loads(state_path.read_text()) if state_path.exists() else {'generation': 0, 'best': None, 'history': []}
+    state = json.loads(state_path.read_text()) if state_path.exists() else {'generation': 0, 'best': None, 'baseline': None, 'history': []}
+    if state.get('baseline') is None:
+        state['baseline'] = {'development': evaluate(args, out, 'unguided-dev', '', dev),
+                             'confirmation': evaluate(args, out, 'unguided-confirm', '', confirm)}
+        write_json_durable(state_path, state)
     if state['best'] is None:
         # A native block must contain actual text, including for the seed.
         seed_text = 'Follow the program instructions and verify the requested result before returning it.'
@@ -433,13 +449,30 @@ def main(argv=None):
         write_json_durable(state_path, state)
         pending.unlink(missing_ok=True)
     best = state['best']
+    baseline = state['baseline']
+    qualified = qualification(baseline, best, args.min_gain_fraction)
+    outcome = {'schema': 'natlang.memetic-program-outcome/1', 'program_id': args.program_id,
+               'status': 'qualified' if qualified else 'no_lift',
+               'baseline': {split: {key: baseline[split][key] for key in ('successes', 'scored')}
+                            for split in ('development', 'confirmation')},
+               'best': {split: {key: best[split][key] for key in ('successes', 'scored')}
+                        for split in ('development', 'confirmation')},
+               'min_gain_fraction': args.min_gain_fraction,
+               'accepted_revisions': sum(item['accepted'] for item in state['history'])}
+    write_json_durable(out / 'result.json', outcome)
+    if not qualified:
+        (out / 'binding.json').unlink(missing_ok=True)
+        print(json.dumps({'result': str(out / 'result.json'), 'status': 'no_lift'}))
+        return outcome
     binding = {'schema': 'natlang.memetic-program-guidance/1', 'program_id': args.program_id,
         'student': identity, 'text': best['text'], 'native_state_id': best['write']['id'],
         'native_state_artifact': best['archive'],
         'source_capture': best['write']['source_capture'], 'source_text_sha256': best['write']['source_text_sha256'],
         'program_guidance': state_guidance(best['text'], best['write']['id']),
-        'development': {key: best['development'][key] for key in ('successes', 'scored')},
-        'confirmation': {key: best['confirmation'][key] for key in ('successes', 'scored')},
+        'development': outcome['best']['development'],
+        'confirmation': outcome['best']['confirmation'],
+        'unguided_baseline': outcome['baseline'],
+        'min_gain_fraction': args.min_gain_fraction,
         'inputs_sha256': hashlib.sha256(input_path.read_bytes()).hexdigest()}
     if args.recipe_base is not None:
         binding['native_training_graphs'] = export_training_graphs(Path(best['development']['dir']), out,
@@ -452,6 +485,7 @@ def main(argv=None):
     write_json_durable(out / 'binding.json', binding)
     print(json.dumps({'binding': str(out / 'binding.json'), 'accepted': sum(h['accepted'] for h in state['history']),
                       'development': binding['development'], 'confirmation': binding['confirmation']}))
+    return outcome
 
 
 if __name__ == '__main__':
