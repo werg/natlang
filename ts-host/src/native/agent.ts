@@ -1,5 +1,6 @@
 import { nativeProtocolFailure, nativeProtocolFeedback } from './native-protocol.js';
 import { programGuidance } from '../adaptation/prompts.js';
+import { fingerprint } from '../adaptation/identity.js';
 import type { NativeProgramGuidance } from '../adaptation/prompts.js';
 import { formatType } from './types.js';
 import type { Type, TypeEnv } from './types.js';
@@ -18,11 +19,13 @@ import { SHOWN_CHARS, SCOPE_VALUE_CHARS, shownCharsFor, note as cutNote } from '
 
 /** Scope and input values show at least SCOPE_VALUE_CHARS, and never less than a tool output of the call may. */
 const scopeValueChars = (session: NativeSession) => Math.max(SCOPE_VALUE_CHARS, session.pages.budget);
+const nativeProgramGuidanceWrites = new WeakMap<NeuraleseStore, Map<string, Promise<string>>>();
 import { listingViewInstructions, viewNote } from './prompt.js';
 import { untrustedBlock, type UntrustedRegistry } from './untrusted.js';
 import { writtenReturnResult } from './pseudo-call.js';
 import { decodeTurnValue, encodeMessages, isContentParts, isNeuraleseRef, neuraleseSentinel, neuraleseRefSentinel, nativeStateSentinel, NeuraleseUnsupportedError, supportsNeuralese,
   nativeStateSentinelIds, runtimeTextToParts, type NeuraleseRuntimeOptions } from './neuralese.js';
+import type { NativeStateArtifact, NeuraleseStore } from './neuralese-store.js';
 import { resolveNeuralesePreviews } from './neuralese-preview.js';
 import { blockInput, graphNode, invocationNodeId } from './graph.js';
 import { failureFeedback, type RefinementChecker, type RefinementFailure, type RefinementJudge } from './refinement.js';
@@ -1079,31 +1082,73 @@ export class NativeToolAgent {
   private async runtimeProgramGuidance(): Promise<string> {
     const guidance = this.options.programGuidance;
     if (!guidance) return '';
-    if (typeof guidance === 'string') return programGuidance(guidance);
+    if (typeof guidance === 'string') return '';
     if (guidance.kind !== 'native-program-guidance') throw new TypeError('unknown program guidance binding');
     const neuralese = this.options.neuralese;
     const consumer = neuralese?.nativeStateConsumerForCall ? await neuralese.nativeStateConsumerForCall() : neuralese?.nativeStateConsumer;
-    if (!neuralese || !consumer || !neuralese.port || !supportsNeuralese(this.driver))
-      throw new NeuraleseUnsupportedError('native program guidance requires the exact native reader, a native write port, and a Neuralese-capable driver');
+    if (!neuralese || !consumer || !supportsNeuralese(this.driver))
+      throw new NeuraleseUnsupportedError('native program guidance requires the exact native reader and a Neuralese-capable driver');
     const binding = guidance.binding;
-    const matches = (state: Record<string, unknown>, identity: Record<string, unknown>) =>
+    const programId = binding?.program_id ?? guidance.program_id;
+    if (!programId) throw new NeuraleseUnsupportedError('native program guidance requires its exact program identity');
+    const matches = (state: { architecture?: string; checkpoint_sha256?: string; tokenizer_fingerprint?: string; embedding_weight_sha256?: string },
+        identity: { architecture?: string; checkpoint_sha256?: string; tokenizer_fingerprint?: string; embedding_weight_sha256?: string }) =>
       state.architecture === identity.architecture && state.checkpoint_sha256 === identity.checkpoint_sha256 &&
       state.tokenizer_fingerprint === identity.tokenizer_fingerprint && state.embedding_weight_sha256 === identity.embedding_weight_sha256;
+    const verifyStored = (artifact: NativeStateArtifact | undefined, id: string): NativeStateArtifact => {
+      if (!artifact) throw new NeuraleseUnsupportedError('native program guidance state was not persisted in the runtime store');
+      if (artifact.id !== id || artifact.metadata.schema !== 'neuralese.native-state/1' || artifact.metadata.text !== guidance.text ||
+          !matches(artifact.metadata, consumer))
+        throw new NeuraleseUnsupportedError('native program guidance artifact does not match its text or exact current student checkpoint');
+      return artifact;
+    };
+    const putInPrompt = async (id: string): Promise<string> => {
+      const artifact = verifyStored(await neuralese.store.getNativeState?.(id), id);
+      await neuralese.store.pin(id);
+      return '\n\n<natlang_program_guidance>\n' + nativeStateSentinel(artifact.id) + '\n</natlang_program_guidance>\n';
+    };
     if (binding && matches(consumer, binding.student)) {
       const stored = await neuralese.store.getNativeState?.(binding.native_state_id);
       if (stored) {
-        if (stored.metadata.schema !== 'neuralese.native-state/1' || stored.metadata.text !== guidance.text ||
-            !matches(stored.metadata, binding.student))
+        if (stored.id !== binding.native_state_id || stored.metadata.schema !== 'neuralese.native-state/1' ||
+            stored.metadata.text !== guidance.text || !matches(stored.metadata, binding.student) || !matches(stored.metadata, consumer))
           throw new NeuraleseUnsupportedError('memetic guidance artifact does not match its declared student or text');
-        return '\n\n<natlang_program_guidance>\n' + nativeStateSentinel(binding.native_state_id) + '\n</natlang_program_guidance>\n';
+        await neuralese.store.pin(binding.native_state_id);
+        return '\n\n<natlang_program_guidance>\n' + nativeStateSentinel(stored.id) + '\n</natlang_program_guidance>\n';
       }
     }
-    const block = await neuralese.port.write(guidance.text);
-    const state = block.native_state;
-    const exact = state && state.schema === 'neuralese.native-state/1' && state.text === guidance.text &&
-      matches(state, consumer);
-    if (!exact) throw new NeuraleseUnsupportedError('native program guidance writer did not produce state for the exact current student checkpoint');
-    return '\n\n<natlang_program_guidance>\n' + nativeStateSentinel(block.id) + '\n</natlang_program_guidance>\n';
+    const port = neuralese.port;
+    if (!port)
+      throw new NeuraleseUnsupportedError('native program guidance for this checkpoint requires a native text writer');
+    const actor = { architecture: consumer.architecture, checkpoint_sha256: consumer.checkpoint_sha256,
+      tokenizer_fingerprint: consumer.tokenizer_fingerprint, embedding_weight_sha256: consumer.embedding_weight_sha256 };
+    const key = JSON.stringify({ program_id: programId, text_sha256: fingerprint(guidance.text, 'natlang.program-guidance-text/v1'), actor });
+    let cache = nativeProgramGuidanceWrites.get(neuralese.store);
+    if (!cache) nativeProgramGuidanceWrites.set(neuralese.store, cache = new Map());
+    let pending = cache.get(key);
+    if (!pending) {
+      pending = (async () => {
+        const block = await port.write(guidance.text);
+        if (block.native_state?.schema !== 'neuralese.native-state/1' || block.native_state.text !== guidance.text ||
+            !matches(block.native_state, consumer))
+          throw new NeuraleseUnsupportedError('native program guidance writer did not produce state for the exact current student checkpoint');
+        const stored = await neuralese.store.getNativeState?.(block.id);
+        if (!stored) throw new NeuraleseUnsupportedError('native program guidance writer did not persist the produced native state');
+        if (stored.id !== block.id || stored.metadata.schema !== 'neuralese.native-state/1' ||
+            stored.metadata.text !== guidance.text || !matches(stored.metadata, consumer))
+          throw new NeuraleseUnsupportedError('persisted native program guidance differs from the exact writer result');
+        await neuralese.store.pin(block.id);
+        return block.id;
+      })();
+      cache.set(key, pending);
+      void pending.catch(() => { if (cache!.get(key) === pending) cache!.delete(key); });
+      if (cache.size > 512) {
+        const oldest = cache.keys().next().value;
+        if (oldest !== undefined && oldest !== key) cache.delete(oldest);
+      }
+    }
+    const id = await pending;
+    return putInPrompt(id);
   }
 
   async run(session: NativeSession): Promise<string | void> {
@@ -1154,7 +1199,8 @@ export class NativeToolAgent {
       return failures.length ? { code: failures[0]!.code, message: failures.map(failure => failure.message).join(' ') } : undefined;
     };
     const messages = openingMessages();
-    const decided = await this.decisionReadout(session, messages, nativeGuidance);
+    const decided = await this.decisionReadout(session, messages,
+      programGuidance(typeof this.options.programGuidance === 'string' ? this.options.programGuidance : '') + nativeGuidance);
     if (decided !== false) return decided;
     const openingLength = messages.length;
     // Prompt tokens per character of request, calibrated from the server's reported prompt size.

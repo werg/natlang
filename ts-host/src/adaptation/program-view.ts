@@ -49,7 +49,7 @@ export class ProgramView {
   /** Stored native guidance is encoded by the runtime for its exact current student checkpoint. */
   nativeGuidance(): NativeProgramGuidance | undefined {
     const text = this.guidance();
-    return text ? nativeProgramGuidance(text) : undefined;
+    return text && this.program?.id ? nativeProgramGuidance(text, this.program.id) : undefined;
   }
   source(path: string, fallback: string): string {
     const revision = this.revisions.get(path); if (revision && revision.kind !== 'namespace') return revision.text;

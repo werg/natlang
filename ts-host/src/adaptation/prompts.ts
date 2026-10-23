@@ -6,10 +6,10 @@ export type MemeticGuidanceBinding = {
   program_guidance: string;
 };
 export type NativeProgramGuidance = { readonly kind: 'native-program-guidance'; readonly text: string;
-  readonly binding?: Readonly<MemeticGuidanceBinding> };
+  readonly program_id?: string; readonly binding?: Readonly<MemeticGuidanceBinding> };
 
 /** Bind stored guidance to the current native reader when a runtime call begins. */
-export function nativeProgramGuidance(input: string | MemeticGuidanceBinding): NativeProgramGuidance {
+export function nativeProgramGuidance(input: string | MemeticGuidanceBinding, programId?: string): NativeProgramGuidance {
   if (typeof input !== 'string') {
     const b = input;
     const identity = b?.student;
@@ -27,8 +27,9 @@ export function nativeProgramGuidance(input: string | MemeticGuidanceBinding): N
     return Object.freeze({ kind: 'native-program-guidance', text: b.text, binding: structuredClone(b) });
   }
   const text = input;
-  if (typeof text !== 'string' || !text.trim()) throw new TypeError('native program guidance must be nonempty text');
-  return Object.freeze({ kind: 'native-program-guidance', text });
+  if (typeof text !== 'string' || !text.trim() || typeof programId !== 'string' || !programId)
+    throw new TypeError('native program guidance text and program identity must be nonempty');
+  return Object.freeze({ kind: 'native-program-guidance', text, program_id: programId });
 }
 
 export function programGuidance(guidance: string | NativeProgramGuidance): string {

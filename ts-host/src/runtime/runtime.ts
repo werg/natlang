@@ -225,8 +225,11 @@ export class NatlangTask {
     let binding = options.adaptation === undefined ? runtime.options.adaptation : options.adaptation;
     const program = options.program ?? runtime.options.program ?? binding?.program;
     const guidanceBinding = options.nativeProgramGuidance ?? runtime.options.nativeProgramGuidance;
-    if (guidanceBinding && program?.id && guidanceBinding.program_id !== program.id)
-      throw new Error('native program guidance binding belongs to a different program');
+    if (guidanceBinding) {
+      if (!program) throw new Error('native program guidance requires its exact program descriptor');
+      if (guidanceBinding.program_id !== program.id)
+        throw new Error('native program guidance binding belongs to a different program');
+    }
     this.nativeProgramGuidance = guidanceBinding ? validateNativeProgramGuidance(guidanceBinding) : undefined;
     if (binding) {
       const artifact = binding.artifact;
