@@ -98,7 +98,7 @@ def main(argv=None):
     from ..train.backbone_policy import configure_backbone_training, plain_named_tensors
     from ..train.text_warmup import copy_restored_values
     from .sampling import captured_logps
-    from .full_policy import clipped_token_loss
+    from .policy_math import clipped_token_loss
     torch.set_num_threads(4)
     if args.device != 'cpu':
         from ..common.attention_backend import configure_sdpa_backend

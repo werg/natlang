@@ -174,36 +174,6 @@ def test_native_shared_controller_is_a_headless_recipe_stage(tmp_path):
 
 
 
-def test_foundation_certificate_survives_verified_directory_relocation(tmp_path):
-    from natlang_neuralese.train.recipe import require_foundation
-    from natlang_neuralese.train.output_embedding_projection import sha
-    heads, checkpoint = tmp_path / 'heads.pt', tmp_path / 'feedback.pt'
-    heads.write_bytes(b'head')
-    checkpoint.write_bytes(b'feedback')
-    stages = []
-    for name, kind, gate in [('identity', 'token_identity', {'token_aligned_reference_passed': True}),
-                             ('embedding', 'causal_embedding_distillation', {'feedback_gate_passed': True})]:
-        report = tmp_path / (name + '-report.json')
-        report.write_text(json.dumps({'kind': kind, 'gate': gate}))
-        stages.append({'kind': kind, 'report': '/old/machine/' + report.name, 'report_sha256': sha(report)})
-    certificate = tmp_path / 'foundation-certificate.json'
-    certificate.write_text(json.dumps({'schema': 'natlang.neuralese-foundation-certificate/1', 'qualified': True,
-                                       'heads_sha256': sha(heads), 'feedback_checkpoint_sha256': sha(checkpoint),
-                                       'stages': stages}))
-    assert require_foundation(certificate, heads=heads, checkpoint=checkpoint)['qualified']
-    (tmp_path / 'identity-report.json').write_text('{}')
-    with pytest.raises(ValueError, match='report changed'):
-        require_foundation(certificate, heads=heads, checkpoint=checkpoint)
-
-
-
-
-
-
-
-
-
-
 def test_child_signal_forwarder_delivers_sigterm_and_restores_parent_handler(tmp_path):
     from natlang_neuralese.train.recipe import _ChildSignalForwarder
 
@@ -359,9 +329,11 @@ def test_relative_binding_paths_resolve_against_the_repository_root_not_the_work
     declared = {'input_bindings': {'records': {'path': 'data/records.jsonl',
                                                'sha256': hashlib.sha256(data.read_bytes()).hexdigest()}},
                 'stages': []}
-    stage = {'id': 'warm', 'kind': 'core_text_warmup', 'inputs': {'records': 'records', 'pieces': 'records'}}
+    stage = {'id': 'native', 'kind': 'native_state_sft',
+             'inputs': {'native_graphs': 'records', 'held_native_graphs': 'records'}}
     resolved = runner.resolve_stage_inputs(declared, stage, {})
-    assert resolved['records']['path'] == str(data.resolve())
+    assert resolved['native_graphs']['path'] == str(data.resolve())
+    assert resolved['held_native_graphs']['path'] == str(data.resolve())
 
 
 @pytest.mark.parametrize('hourly_checkpoint', [False, True])
@@ -458,14 +430,14 @@ def test_active_native_data_handoff_binds_both_exact_predecessors(tmp_path):
     candidate = plan(True)
     candidate['recipe']['stages'][0]['parameters'].update(
         epochs=2, batch_tokens=32768, chunk_tokens=1024, learning_rate=6e-6, weight_decay=.05, latent_ns='cubic5')
-    result = runner.lineage_handoff(copy.deepcopy(existing), candidate, frozen, package, path, out, dry_run=True)
+    result = runner.lineage_handoff(copy.deepcopy(existing), candidate, frozen, package, path, out, dry_run=True, started_stage_ids=('native',))
     assert result['handoffs'][-1]['stage_input_changes']['native']['kind'] == 'data_continuation'
     assert result['handoffs'][-1]['native_parameter_changes']['native']['epochs'] == [1, 2]
     assert result['handoffs'][-1]['native_parameter_changes']['native']['chunk_tokens'] == [None, 1024]
     invalid = copy.deepcopy(candidate)
     invalid['stage_inputs']['native']['continued_held_native_graphs']['sha256'] = 'unrelated-held'
-    with pytest.raises(ValueError, match='started stage'):
-        runner.lineage_handoff(copy.deepcopy(existing), invalid, frozen, package, path, out, dry_run=True)
+    with pytest.raises(ValueError, match='inputs of started stage'):
+        runner.lineage_handoff(copy.deepcopy(existing), invalid, frozen, package, path, out, dry_run=True, started_stage_ids=('native',))
 
 
 def test_running_recipe_can_append_future_native_graph_stage_without_restarting(tmp_path):
@@ -525,7 +497,7 @@ def test_removed_projected_recipe_kinds_are_not_loadable(tmp_path):
 
 def test_native_stage_specific_bindings_are_hash_pinned_and_role_scoped(tmp_path):
     from natlang_neuralese.train.recipe import resolve_stage_inputs,stage_input_args
-    from natlang_neuralese.train.output_embedding_projection import sha
+    from natlang_neuralese.common.hashing import sha256_file_hex_cached as sha
     train=tmp_path/'train.jsonl';held=tmp_path/'held.jsonl'
     train.write_text('train\n');held.write_text('held\n')
     recipe=native_declared()
@@ -541,7 +513,7 @@ def test_native_stage_specific_bindings_are_hash_pinned_and_role_scoped(tmp_path
 
 def test_native_input_binding_relocation_keeps_content_identity(tmp_path):
     from natlang_neuralese.train.recipe import parse_input_binding_overrides,resolve_stage_inputs
-    from natlang_neuralese.train.output_embedding_projection import sha
+    from natlang_neuralese.common.hashing import sha256_file_hex_cached as sha
     original=tmp_path/'source.jsonl';relocated=tmp_path/'relocated.jsonl';mismatch=tmp_path/'different.jsonl'
     original.write_text('same\n');relocated.write_bytes(original.read_bytes());mismatch.write_text('different\n')
     recipe=native_declared();recipe['input_bindings']={'graphs.train':{'path':str(original),'sha256':sha(original)}}
@@ -558,7 +530,7 @@ def test_native_input_binding_relocation_keeps_content_identity(tmp_path):
 
 def test_native_recipe_runner_routes_only_declared_controller_input(tmp_path,monkeypatch):
     from natlang_neuralese.train import recipe as runner
-    from natlang_neuralese.train.output_embedding_projection import sha
+    from natlang_neuralese.common.hashing import sha256_file_hex_cached as sha
     out=tmp_path/'run';directory=out/'readiness';config=tmp_path/'controller.json'
     config.write_text(json.dumps({'schema':'natlang.native-shared-stage-controller/1','out':str(directory)}))
     recipe={'schema':'natlang.neuralese-training-recipe/1','id':'native-controller-fixture',

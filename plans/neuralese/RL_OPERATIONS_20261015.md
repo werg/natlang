@@ -46,7 +46,7 @@ requiring explicit per-turn policy provenance and recovery of in-flight groups.
 - Use actual sampled token IDs, stopping tokens and behavior probabilities.
   The initial GRPO contract is unconstrained temperature 1. Unknown guided-mask
   laws or uncaptured legacy turns are not silently treated as on-policy samples.
-- Mixed-success groups use token-level GRPO through `rl.full_policy` and the
+- Mixed-success groups use token-level GRPO through `rl.native_replay` and the
   existing direct trainer, MuonSR, checkpoints and task evaluation. The objective
   uses asymmetric clipping. Base-relative KL and agreement remain telemetry.
 - Flat failure groups need successful verified trajectories or continued declared

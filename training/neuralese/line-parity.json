@@ -1,105 +1,71 @@
 {
- "schema": "natlang.neuralese-line-parity/1",
- "description": "Line parity of the Neuralese stages (owner 2026-10-11: the Mellum line on DGX and the LFM line on Pop use the same recipe, data and code; settings may differ only to fit, or where the backbone requires it, each declared with its reason). natlang_neuralese.train.line_parity checks it in scripts/check-main.sh --quick; plans/neuralese/LINE_PARITY.md holds the audit. stages.<stage>.lines.<line>.recipe names the recipe of the line's NEXT launch and .active the leaf recipe of the lineage running now (its handoff chain; owner 2026-10-13: a key added to only one running chain must not go unnoticed); both are resolved fully (every leaf setting, runtime and continuation members included) and compared with the base. Each difference is a lineage key (lineage_keys), an allowed difference (fit-only or backbone-inherent, with its reason) or a dated line_specific entry {stage, lines, key|keys, reason, date, expires, recipe?}; an undeclared, expired or no-longer-needed entry fails; a direct-stage recipe that declares \"parity\": {\"line\", \"stage\"} is checked the same way, and the direct-stage runner refuses a fresh neuralese_direct or direct-artifact recurrence launch without a parity declaration.",
- "stages": {
-  "native_state_sft": {
-   "base": {"recipe": "native-state-production-lfm-20261015-v1"},
-   "lines": {
-    "lfm": {"recipe": "native-state-production-lfm-20261015-v1"},
-    "mellum": {"recipe": "native-state-production-mellum-20261015-v1"}
-   }
+  "schema": "natlang.neuralese-line-parity/1",
+  "description": "Native production SFT settings are shared across Mellum and LFM except for explicitly justified backbone and tokenizer differences.",
+  "stages": {
+    "native_state_sft": {
+      "base": {
+        "recipe": "native-state-production-lfm-20261015-v1"
+      },
+      "lines": {
+        "lfm": {
+          "recipe": "native-state-production-lfm-20261015-v1"
+        },
+        "mellum": {
+          "recipe": "native-state-production-mellum-20261015-v1"
+        }
+      }
+    }
   },
-  "direct": {
-   "base": {"recipe": "neuralese-direct-v3"},
-   "lines": {
-    "mellum": {"recipe": "neuralese-direct-mellum-v4"},
-    "lfm": {"recipe": "neuralese-direct-lfm-v3"}
-   }
-  },
-  "e2e": {
-   "base": {"recipe": "neuralese-e2e-v1"},
-   "acceptance": {"description": "The shared E2E acceptance is the base recipe's e2e_acceptance (neuralese-e2e-v1; train/e2e_acceptance.py writes e2e-certificate.json; compared across lines as e2e_acceptance.*): consumers reading values (V) against consumers reading the gold tokens (T) on the same held producer calls, V CE at most T CE, V beats shuffled and zeroed blocks by 0.05 nats, at least 32 paired readers; exact-oracle task success, V at most 0.02 below T; base-relative drift report-only (owner 2026-10-15). Reported only: the 48-probe behaviour gate (owner 2026-10-12), the token-readout regression (eval/direct_token_readout.py, held-consumer arm, penalty 0.05 nats), the greedy-T arm. Runtime qualification of the exact starting weights is the lineage's first stage (direct_runtime)."},
-   "lines": {
-    "mellum": {"recipe": "neuralese-e2e-mellum-v1"},
-    "lfm": {"recipe": "neuralese-e2e-lfm-v1"}
-   }
-  }
- },
- "line_specific": [],
- "lineage_keys_reason": "identity of one running lineage, not a setting: its heads, where it resumes from (continuation checkpoint, identity check, monitor reference, the data it already consumed), its frozen package and container pins (runtime.package_code, repo_commit, image) and its output directory and evidence (outputs, lineage). A fresh launch on either line replaces them.",
- "lineage_keys": {
-  "direct": ["inputs.heads", "inputs.continue_from", "inputs.continue_identity", "inputs.continue_monitor_reference",
-             "inputs.continued_text_data", "runtime.package_code", "runtime.repo_commit", "runtime.image", "outputs",
-             "lineage"],
-  "e2e": ["inputs.heads", "inputs.direct_artifact_manifest", "inputs.continue_from", "inputs.direct_parent_proof",
-          "parameters.direct_base_snapshot", "parameters.curriculum_change", "parameters.optimizer_state",
-          "parameters.optimizer_added"]
- },
- "allowed_differences": [
-  {"stage": "native_state_sft", "lines": ["mellum"], "key": "inputs.native_graphs", "kind": "backbone-inherent", "check": "tokenizer_twin",
-   "reason": "native graph token IDs are separately bound to the Mellum tokenizer; graph records, source groups and inherited train/held split are twins"},
-  {"stage": "native_state_sft", "lines": ["mellum"], "key": "inputs.held_native_graphs", "kind": "backbone-inherent", "check": "tokenizer_twin",
-   "reason": "held native graph token IDs are separately bound to the Mellum tokenizer with the same protected source groups and split"},
-  {"stage": "native_state_sft", "lines": ["mellum"], "key": "parameters.base", "kind": "backbone-inherent",
-   "reason": "each production line loads its pinned actual backbone base (QAD LFM2.5 versus Mellum2.1)"},
-  {"stage": "native_state_sft", "lines": ["mellum"], "key": "parameters.dtype", "kind": "backbone-inherent",
-   "reason": "fresh QAD LFM2.5 production uses its pinned full-precision FP32 source; Mellum2.1's pinned source and expert path train in BF16"},
-  {"stage": "native_state_sft", "lines": ["mellum"], "key": "parameters.fp8_training", "kind": "backbone-inherent",
-   "reason": "Mellum's MoE experts require the shared triton-experts memory path; dense LFM has no experts"},
-  {"stage": "direct", "lines": ["mellum"], "key": "inputs.text_data", "kind": "backbone-inherent", "check": "tokenizer_twin",
-   "reason": "the same documents (union r3 renders) rendered with Mellum's tokenizer and chat template (prepared text carries token ids)"},
-  {"stage": "direct", "lines": ["mellum"], "key": "parameters.moe_kernel", "kind": "backbone-inherent",
-   "reason": "Mellum's dense trainable MoE experts run as two grouped GEMMs; LFM2.5-350M has no experts"},
-  {"stage": "direct", "lines": ["mellum"], "key": "parameters.fp8_training", "kind": "backbone-inherent",
-   "reason": "Mellum's dense MoE experts run as Triton FP8 grouped GEMMs (train/fp8_backend.py triton-experts; owner 2026-10-12); LFM2.5-350M has no experts"},
-  {"stage": "direct", "lines": ["mellum", "lfm"], "key": "backbone", "kind": "backbone-inherent",
-   "reason": "the base-model source of a fresh lineage: LFM starts from LiquidAI's QAD full-precision LFM2.5-350M (LiquidAI/LFM2.5-350M-GGUF/qad rev 657e078c; owner 2026-10-12 via Pop pop-7fe7), Mellum from BF16 Mellum2.1-12B-A2.5B-Thinking (owner 2026-10-09). A resume keeps its checkpoint"},
-  {"stage": "direct", "lines": ["mellum"], "key": "quantization.points", "kind": "backbone-inherent",
-   "reason": "Mellum's lower deploy precisions beyond the shared q4 point (ternary-experts required, ternary report): the 12B MoE deploys ternary experts, LFM2.5-350M deploys Q4 (Q4_K_M browser default). The q4 ramp differs with the base weights: LFM starts from QAD weights (q4 ramp 0.25-0.3), Mellum from plain BF16 (0.15-0.3). Curriculum (stage_progress) and loss are shared (owner 2026-10-12: light QAT on LFM, same mechanism and ramp shape)"},
-  {"stage": "direct", "lines": ["mellum"], "key": "family.members", "kind": "backbone-inherent",
-   "reason": "nested axis per backbone (owner 2026-10-12): Mellum nests in experts (first E of the N0 order) and depth (28x32, 28x16, 21x32); LFM2.5-350M is dense and nests in depth (12xall, 8xall). Total member weight 0.3 on both"},
-  {"stage": "direct", "lines": ["mellum"], "key": "family.evaluate", "kind": "backbone-inherent",
-   "reason": "the evaluated members follow each backbone's nested axis (Mellum 28x32/28x24/28x16/21x32; LFM 12xall/10xall/8xall)"},
-  {"stage": "direct", "lines": ["mellum"], "key": "family.order", "kind": "backbone-inherent",
-   "reason": "the N0 expert order (runs/mellum-nested-20261009/n0-v1) exists only for an MoE backbone"},
-  {"stage": "direct", "lines": ["mellum"], "key": "parameters.monitor.gate.output_convention", "kind": "backbone-inherent",
-   "reason": "Mellum's chat/tool-call convention (<tool_call>{json}); the shared probes default to LFM's pythonic calls"},
-  {"stage": "direct", "lines": ["mellum", "lfm"], "key": "parameters.monitor.gate.reference", "kind": "backbone-inherent",
-   "reason": "each backbone's own measured base gate_pass on the shared 48 probes"},
-  {"stage": "direct", "lines": ["mellum", "lfm"], "key": "parameters.task_eval.reference_successes", "kind": "backbone-inherent",
-   "reason": "each backbone's own measured base task successes on the shared held packet v3 cadence subset (plans/neuralese/DECISIONS.md)"},
-  {"stage": "direct", "lines": ["lfm"], "key": "parameters.target_tokens", "kind": "fit-only",
-   "reason": "supervised positions per window that fit Pop's 8 GB GPU at the shared 32768-token context (Mellum 1024)"},
-  {"stage": "direct", "lines": ["mellum"], "key": "parameters.window_execution", "kind": "fit-only",
-   "reason": "Mellum packs each update into one right-padded forward so its latents step in backward with no gradient buffer (sequential accumulation needs ~24 GB of latent gradients; the math is the same token mean)"},
-  {"stage": "direct", "lines": ["lfm"], "key": "parameters.batch_tokens", "kind": "fit-only",
-   "reason": "forward tokens packed per update that fit Pop's 8 GB GPU (Mellum 32768); the budget is epochs (derived.supervision), so the packing changes the update count, not the supervision"},
-  {"stage": "direct", "lines": ["lfm"], "key": "parameters.eval_every", "kind": "fit-only",
-   "reason": "cadence in updates follows the line's derived update count; set from measured seconds to keep evaluation near 3% of wall time"},
-  {"stage": "direct", "lines": ["lfm"], "key": "parameters.checkpoint_every", "kind": "fit-only",
-   "reason": "cadence in updates follows the line's derived update count (half way and end, plus final and emergency saves; no more-frequent checkpoints)"},
-  {"stage": "direct", "lines": ["lfm"], "key": "parameters.drift_every", "kind": "fit-only",
-   "reason": "cadence in updates follows the line's derived update count; set from measured seconds to keep evaluation near 3% of wall time"},
-  {"stage": "direct", "lines": ["lfm"], "key": "parameters.drift_gate_every", "kind": "fit-only",
-   "reason": "cadence in updates follows the line's derived update count; set from measured seconds to keep evaluation near 3% of wall time"},
-  {"stage": "direct", "lines": ["lfm"], "key": "parameters.backbone_lr", "kind": "backbone-inherent",
-   "reason": "LFM2.5-350M drifts at the shared 7.5e-6 (V6 drift-stopped at update 260, gate 16/48 vs base 26/48); 7.5e-7 finished (V8 gate 22/48, response KL 0.018); Mellum passes at 7.5e-6"},
-  {"stage": "direct", "lines": ["mellum"], "key": "parameters.latent_lr", "kind": "backbone-inherent",
-   "reason": "MuonSR 1e-5 on Mellum (bakeoff 2026-10-11: gate 0.75 = base at update 100, response KL 0.30, train CE per wall-clock hour at or above LionSR 3e-6); the shared 3e-6 is LFM's measured MuonSR rate (gate 26/48 = base at 300); plans/neuralese/OPTIMIZER_BAKEOFF_20261011.md"},
-  {"stage": "e2e", "lines": ["lfm"], "key": "parameters.backbone_lr", "kind": "backbone-inherent",
-   "reason": "the direct stage's evidence-backed LFM rate, 7.5e-7"},
-  {"stage": "e2e", "lines": ["mellum"], "key": "parameters.latent_lr", "kind": "backbone-inherent",
-   "reason": "the direct stage's MuonSR rate per line: Mellum 1e-5 (bakeoff 2026-10-11); the shared 3e-6 is LFM's"},
-  {"stage": "e2e", "lines": ["mellum", "lfm"], "key": "parameters.monitor.gate.reference", "kind": "backbone-inherent",
-   "reason": "each backbone's own measured base gate_pass on the shared 48 probes (as in the direct stage)"},
-  {"stage": "e2e", "lines": ["mellum"], "key": "parameters.monitor.gate.output_convention", "kind": "backbone-inherent",
-   "reason": "Mellum's chat/tool-call convention (<tool_call>{json}); the shared probes default to LFM's pythonic calls"},
-  {"stage": "e2e", "lines": ["mellum"], "key": "quantization.points", "kind": "backbone-inherent",
-   "reason": "the shared q4 point plus Mellum's ternary-experts and ternary points (as in the direct stage); the hold at the parent's curriculum progress (stage_progress.e2e) and the loss are shared"},
-  {"stage": "e2e", "lines": ["mellum", "lfm"], "key": "parameters.memory_gb", "kind": "fit-only", "reason": "the machine's CUDA envelope (Pop 7.5 of 8 GB)"},
-  {"stage": "e2e", "lines": ["mellum", "lfm"], "key": "parameters.graph_memory_gb", "kind": "fit-only", "reason": "the machine's graph staging envelope"},
-  {"stage": "e2e", "lines": ["mellum", "lfm"], "key": "parameters.graph_headroom_gb", "kind": "fit-only", "reason": "the machine's graph staging headroom"},
-  {"stage": "e2e", "lines": ["mellum", "lfm"], "key": "parameters.backward_policy", "kind": "fit-only", "reason": "memory staging of the backward pass; the math is the same"},
-  {"stage": "e2e", "lines": ["mellum", "lfm"], "key": "parameters.checkpoint_layers", "kind": "fit-only", "reason": "activation checkpointing trades memory for time; the math is the same"}
- ]
+  "line_specific": [],
+  "lineage_keys_reason": "Native input paths and model checkpoints remain line-specific lineage identity; every other native stage setting is compared.",
+  "lineage_keys": {},
+  "allowed_differences": [
+    {
+      "stage": "native_state_sft",
+      "lines": [
+        "mellum"
+      ],
+      "key": "inputs.native_graphs",
+      "kind": "backbone-inherent",
+      "check": "native_source_twin",
+      "reason": "Model-specific tokenization is allowed only because the shared native graph manifest binds the same admitted source membership and exact train/test split."
+    },
+    {
+      "stage": "native_state_sft",
+      "lines": [
+        "mellum"
+      ],
+      "key": "inputs.held_native_graphs",
+      "kind": "backbone-inherent",
+      "check": "native_source_twin",
+      "reason": "Model-specific tokenization is allowed only because the shared native graph manifest binds the same admitted source membership and exact train/test split."
+    },
+    {
+      "stage": "native_state_sft",
+      "lines": [
+        "mellum"
+      ],
+      "key": "parameters.base",
+      "kind": "backbone-inherent",
+      "reason": "each production line loads its pinned actual backbone base (QAD LFM2.5 versus Mellum2.1)"
+    },
+    {
+      "stage": "native_state_sft",
+      "lines": [
+        "mellum"
+      ],
+      "key": "parameters.dtype",
+      "kind": "backbone-inherent",
+      "reason": "fresh QAD LFM2.5 production uses its pinned full-precision FP32 source; Mellum2.1's pinned source and expert path train in BF16"
+    },
+    {
+      "stage": "native_state_sft",
+      "lines": [
+        "mellum"
+      ],
+      "key": "parameters.fp8_training",
+      "kind": "backbone-inherent",
+      "reason": "Mellum's MoE experts require the shared triton-experts memory path; dense LFM has no experts"
+    }
+  ]
 }

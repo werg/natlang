@@ -289,7 +289,7 @@ def test_explicit_new_base_migration_preserves_basis_coefficients_and_all_moment
         from natlang_neuralese.model.native_actor_graph import run_invocation_actors
         from natlang_neuralese.data.native_graph import parse_graph
         from natlang_neuralese.rl.native_replay import action_logps
-        from natlang_neuralese.rl.full_policy import clipped_token_loss
+        from natlang_neuralese.rl.policy_math import clipped_token_loss
         selected=bindings['writer'][0]
         row={'actions':[{'query':8,'token_id':9,'temperature':1.,'allowed_token_ids':None,'behavior_logp':0.},
                         {'query':9,'token_id':10,'temperature':1.,'allowed_token_ids':None,'behavior_logp':0.}], 'advantage':1.}

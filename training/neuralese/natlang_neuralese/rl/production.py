@@ -192,9 +192,9 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
         saved = json.loads((out / 'score.json').read_text())
         if saved.get('collection_complete'):
             return saved
-    from .grpo import Server
+    from .actor_client import NativeActorClient
     def actor_receipts():
-        receipts = {url: json.loads(Server(url).get_bytes('/v1/neuralese/info'))
+        receipts = {url: json.loads(NativeActorClient(url).get_bytes('/v1/neuralese/info'))
                     .get('rl_policy_binding') for url in endpoints}
         return validate_actor_receipts(receipts, policy_id=policy_id, neuralese_server=neuralese_server, expected_native=expected_native,expected_coefficient=coefficient_runtime)
     actors = actor_receipts()
@@ -219,7 +219,7 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
             if actor_receipts() != actors:
                 raise ValueError('RL actor policy changed before retained artifact custody')
             retain_partial_artifacts(entries, out, policy_id=policy_id, binding=binding,
-                                     servers=[Server(url) for url in endpoints], restore=restore)
+                                     servers=[NativeActorClient(url) for url in endpoints], restore=restore)
             if actor_receipts() != actors:
                 raise ValueError('RL actor policy changed during retained artifact custody')
     # A partial response is not usable without its exact communication inputs.
@@ -261,8 +261,8 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
     from .graph_replay import block_ids, save_bundle
     rollouts = list(read_jsonl(out / 'rollouts.jsonl'))
     if any(block_ids(rollouts)):
-        from .grpo import Server
-        servers = [Server(url) for url in endpoints]
+        from .actor_client import NativeActorClient
+        servers = [NativeActorClient(url) for url in endpoints]
         origins = {}
         def fetch(block_id):
             from .graph_replay import verified_bundle_bytes
@@ -375,7 +375,7 @@ def collect_with_actor(config, values, **kwargs):
         if '--native-actor-view' in command or '--native-actor-view-sha256' in command:
             raise ValueError('managed actor view must come from its exact selected full-source controls')
         command += ['--native-actor-view', view['path'], '--native-actor-view-sha256', view['sha256']]
-    from .grpo import Server
+    from .actor_client import NativeActorClient
     from ..common.hashing import sha256_file_hex_cached
     with (Path(values['out']) / 'actor.log').open('a') as log:
         environment = config.get('actor_environment')
@@ -395,7 +395,7 @@ def collect_with_actor(config, values, **kwargs):
                 if process.poll() is not None:
                     raise RuntimeError('managed RL actor exited; see actor.log')
                 try:
-                    info = json.loads(Server(kwargs['endpoints'][0], timeout=2).get_bytes('/v1/neuralese/info'))
+                    info = json.loads(NativeActorClient(kwargs['endpoints'][0], timeout=2).get_bytes('/v1/neuralese/info'))
                     if (info.get('rl_policy_binding') or {}).get('checkpoint_sha256') == values['policy_id']:
                         if kwargs.get('coefficient_policy') is not None:
                             actor=info['rl_policy_binding']

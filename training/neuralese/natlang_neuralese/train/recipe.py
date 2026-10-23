@@ -55,43 +55,8 @@ def _finite_number(value):
     return type(value) in (int, float) and math.isfinite(value)
 
 
-def validate_cohort_weights(weights):
-    """Explicit training fractions per named cohort (the shared text_supervision semantics). Naming a cohort here
-    admits nothing; admission is the recipe's and the corpus registry's."""
-    if (not isinstance(weights, dict) or not weights or
-            any(not isinstance(name, str) or not name for name in weights) or
-            any(not _finite_number(value) or value <= 0 for value in weights.values()) or
-            not math.isclose(sum(weights.values()), 1., abs_tol=1e-8)):
-        raise ValueError('cohort_weights must map nonempty cohort names to positive fractions that sum to one')
 
 
-def validate_recurrence_parameters(parameters):
-    """Typed values of the trajectory trainer options that recipes declare (train.trajectories flags)."""
-    if 'view' in parameters and parameters['view'] not in ('preview', 'written'):
-        raise ValueError('view must be preview or written')
-    if 'view_window' in parameters and (type(parameters['view_window']) is not int or parameters['view_window'] < 1):
-        raise ValueError('view_window must be a positive integer')
-    for name in ('context_weight', 'distill'):
-        if name in parameters and (not _finite_number(parameters[name]) or parameters[name] < 0):
-            raise ValueError(name + ' must be finite and nonnegative')
-    if 'feedback_weight' in parameters and (not _finite_number(parameters['feedback_weight']) or
-                                            not 0 <= parameters['feedback_weight'] <= 1):
-        raise ValueError('feedback_weight must be finite and between zero and one')
-    if 'context_coverage' in parameters and parameters['context_coverage'] not in ('last-reply', 'records'):
-        raise ValueError('context_coverage must be last-reply or records')
-    if 'cohort_weights' in parameters:
-        validate_cohort_weights(parameters['cohort_weights'])
-    for name in ('stop_pg', 'purpose_contrast', 'purpose_margin', 'view_tokens_per_vector'):
-        if name in parameters and (not _finite_number(parameters[name]) or parameters[name] < 0):
-            raise ValueError(name + ' must be finite and nonnegative')
-    if parameters.get('purpose_contrast') and parameters.get('view') != 'written':
-        raise ValueError('purpose_contrast requires view written')
-    if 'qualification_cohort' in parameters:
-        cohort = parameters['qualification_cohort']
-        if not isinstance(cohort, str) or not cohort:
-            raise ValueError('qualification_cohort must be a nonempty cohort name')
-        if 'cohort_weights' in parameters and cohort not in parameters['cohort_weights']:
-            raise ValueError('qualification_cohort must be one of the cohort_weights cohorts')
 
 
 def refuse_retired_parameters(parameters):
@@ -163,20 +128,6 @@ def validate_stage_parameters(kind, parameters):
                     or not isinstance(value['path'],str) or not value['path']
                     or not isinstance(value['sha256'],str) or not re.fullmatch(r'[0-9a-f]{64}',value['sha256'])):
                 raise ValueError('memory_qualification must be an exact path/sha256 binding')
-    if kind not in ('core_text_warmup', 'raw_recurrence_training'):
-        return
-    if kind == 'raw_recurrence_training':
-        validate_recurrence_parameters(parameters)
-    if 'moe_kernel' in parameters and parameters['moe_kernel'] not in ('loop', 'grouped'):
-        raise ValueError('moe_kernel must be loop or grouped')
-    if ('optimizer_state' in parameters and
-            parameters['optimizer_state'] not in ('restore', 'fresh')):
-        raise ValueError('optimizer_state must be restore or fresh')
-    if 'optimizer_added' in parameters:
-        prefixes = parameters['optimizer_added']
-        if not isinstance(prefixes, list) or any(
-                not isinstance(prefix, str) or not prefix for prefix in prefixes):
-            raise ValueError('optimizer_added must be a list of nonempty parameter-name prefixes')
 
 
 def validate_input_bindings(recipe):
@@ -219,28 +170,13 @@ def validate_input_bindings(recipe):
 
 
 def missing_stage_inputs(kind, roles):
-    """Required input roles a stage of ``kind`` lacks, given the roles it has."""
-    missing = HANDLERS[kind]['required_inputs'] - set(roles)
-    if kind == 'neuralese_direct' and 'text_data' not in roles and 'records' not in roles:
-        missing = missing | {'text_data or records'}
-    if kind == 'neuralese_direct' and 'continue_from' in roles:
-        missing |= {'continue_identity', 'continue_monitor_reference'} - set(roles)
-    if kind == 'neuralese_direct' and 'continued_text_data' in roles and 'text_data' not in roles:
-        missing |= {'text_data (a data continuation moves text_data)'}
-    return missing
+    """Required input roles a current native stage lacks."""
+    if kind not in HANDLERS:
+        raise ValueError('unknown stage implementation: ' + str(kind))
+    return HANDLERS[kind]['required_inputs'] - set(roles)
 
 
-# A later neuralese_direct phase (its ``requires`` names a neuralese_direct stage of the same lineage) continues from
-# that predecessor phase: its final full state plus the two sidecars direct_sft requires with --continue-from (the
-# lineage's step-0 identity qualification, which the phase inherits, and the base model's drift reference). These
-# roles are bound implicitly from the predecessor's output directory, never declared as recipe inputs; one map serves
-# the plan check (load_recipe) and the child argv (main).
-DIRECT_PHASE_CONTINUATION = {'continue_from': 'checkpoint.pt', 'continue_identity': 'identity-check.json',
-                             'continue_monitor_reference': 'monitor-reference.pt'}
-
-
-# Stage kinds that train the direct checkpoint with the direct trainer and so continue phase to phase (S7 RL included).
-DIRECT_TRAINING_KINDS = frozenset({'neuralese_direct', 'neuralese_rl'})
+NATIVE_TRAINING_KINDS = frozenset({'native_state_sft', 'native_state_rl','native_offline_preference'})
 HANDLERS['native_state_rl'] = {
     'module': 'natlang_neuralese.rl.native_stage',
     'required_inputs': {'rollouts', 'held_native_graphs', 'continue_from'},
@@ -267,7 +203,6 @@ HANDLERS['native_coefficient_rl'] = {
                   'checkpoint_layers','fp8_training','fp8_recipe'},
     'result':'checkpoint.pt'}
 COEFFICIENT_NATIVE_KINDS=frozenset({'native_coefficient_rl'})
-NATIVE_TRAINING_KINDS = frozenset({'native_state_sft', 'native_state_rl','native_offline_preference'})
 SHARED_NATIVE_KINDS = frozenset({'native_semantic_training', 'native_shared_stage_controller'})
 HEADLESS_NATIVE_KINDS = NATIVE_TRAINING_KINDS | SHARED_NATIVE_KINDS | COEFFICIENT_NATIVE_KINDS
 NATIVE_IDENTITY_QUALIFICATION = 'native_state_runtime_qualified'
@@ -278,34 +213,10 @@ def native_lineage(recipe):
     return bool(stages) and all(stage.get('kind') in HEADLESS_NATIVE_KINDS for stage in stages)
 
 
-def direct_phase_predecessor(recipe, stage):
-    """The id of the direct-trainer phase (neuralese_direct or neuralese_rl) ``stage`` continues from, or None."""
-    if stage.get('kind') not in DIRECT_TRAINING_KINDS:
-        return None
-    kinds = {other.get('id'): other.get('kind') for other in recipe['stages']}
-    phases = [name for name in stage.get('requires', []) if kinds.get(name) in DIRECT_TRAINING_KINDS]
-    if len(phases) > 1:
-        raise ValueError('a neuralese_direct stage continues from at most one direct predecessor: ' + stage['id'])
-    return phases[0] if phases else None
 
 
-def direct_phase_continuation(directory):
-    """The continuation inputs of a later direct phase, resolved in its predecessor phase's output directory."""
-    return {role: {'binding': None, 'path': str(Path(directory) / name)}
-            for role, name in DIRECT_PHASE_CONTINUATION.items()}
 
 
-def check_direct_phase_continuation(recipe, stage):
-    """Plan check: a continued direct phase has every input its handler needs once the implicit roles are bound."""
-    if direct_phase_predecessor(recipe, stage) is None:
-        return
-    declared = set(stage.get('inputs', {}))
-    if declared & {'continue_from', 'continue_identity', 'continue_monitor_reference'}:
-        raise ValueError('a continued direct phase binds its continuation from its predecessor phase, not from '
-                         'declared inputs: ' + stage['id'])
-    missing = missing_stage_inputs(stage['kind'], declared | set(DIRECT_PHASE_CONTINUATION))
-    if missing:
-        raise ValueError('continued direct phase ' + stage['id'] + ' lacks input(s): ' + ', '.join(sorted(missing)))
 
 
 def parse_input_binding_overrides(values):
@@ -437,7 +348,7 @@ def _staged_inputs(resolved):
     (common/hdd_guard.py ``input_path``)."""
     from ..common import hdd_guard
     return {role: ({**value, 'path': hdd_guard.input_path(role, value['path'], value.get('sha256'))}
-                   if isinstance(value, dict) and 'path' in value and role != 'direct_artifact_manifest' and not value.get('dependencies') else value) for role, value in resolved.items()}
+                   if isinstance(value, dict) and 'path' in value and not value.get('dependencies') else value) for role, value in resolved.items()}
 
 
 def require_input_decoders(stage_inputs):
@@ -459,19 +370,12 @@ def stage_input_args(resolved, kind):
                        ('native_participants', '--participants'), ('resume', '--resume')):
         if role in resolved and role in supported:
             args += [flag, resolved[role]['path']]
-    for role in ('rollouts', 'records', 'pieces', 'text_data', 'continued_text_data', 'native_graphs',
-                 'held_native_graphs', 'continued_native_graphs', 'continued_held_native_graphs', 'foundation_native_graphs', 'foundation_qualification_request', 'withdrawn_native_graphs', 'pending_native_sources', 'source_classification_migration',
-                 'ce_supervision_policy', 'objective_spec', 'rl_block_bundle', 'continue_from', 'continue_identity',
-                 'continue_monitor_reference', 'student_checkpoint', 'warmup_checkpoint',
-                 'warmup_manifest', 'warmup_heads', 'warmup_runtime_report', 'harness_records', 'harness_pieces',
-                 'direct_parent_proof', 'aligned_projection'):
+    for role in ('rollouts', 'native_graphs', 'held_native_graphs', 'continued_native_graphs',
+                 'continued_held_native_graphs', 'foundation_native_graphs', 'foundation_qualification_request',
+                 'withdrawn_native_graphs', 'pending_native_sources', 'source_classification_migration',
+                 'ce_supervision_policy', 'objective_spec', 'rl_block_bundle', 'continue_from'):
         if role in resolved and role in supported:
             args += ['--' + role.replace('_', '-'), resolved[role]['path']]
-    if 'direct_artifact_manifest' in resolved and 'direct_artifact_manifest' in supported:
-        manifest = Path(resolved['direct_artifact_manifest']['path'])
-        if manifest.name != 'manifest.json':
-            raise ValueError('direct_artifact_manifest must bind the artifact manifest.json file')
-        args += ['--direct-artifact', str(manifest.parent)]
     return args
 
 
@@ -485,16 +389,6 @@ def validate_shared_controller_output(config_path, stage_directory):
     return config
 
 
-def mapped_fixup_continuation(stage, reports):
-    """Resolve the immediately declared mapped warm-up's full-state and heads outputs."""
-    predecessors = [report for report in reports
-                    if report['id'] in stage['requires'] and
-                    report['kind'] == 'core_text_warmup']
-    if len(predecessors) != 1:
-        raise ValueError('AR feedback fixup requires exactly one completed mapped warm-up')
-    heads = Path(predecessors[0]['artifact'])
-    checkpoint = heads.parent / 'checkpoint.pt'
-    return checkpoint, heads
 
 
 def effective_stage_parameters(stage, reports, recipe=None):
@@ -507,17 +401,7 @@ def effective_stage_parameters(stage, reports, recipe=None):
     parameters = dict(inherited)
     parameters.update(parameter_defaults.get(stage['kind'], {}))
     parameters.update(stage['parameters'])
-    if stage['kind'] == 'core_text_warmup' and parameters.get('ar_feedback_fixup',False):
-        predecessors = [report for report in reports
-                        if report['id'] in stage['requires'] and
-                        report['kind'] == 'core_text_warmup']
-        if len(predecessors) != 1:
-            raise ValueError('AR feedback fixup requires exactly one completed mapped warm-up')
-        start_step = predecessors[0].get('gate',{}).get('step')
-        updates = parameters.get('steps')
-        if type(start_step) is not int or type(updates) is not int or updates < 1:
-            raise ValueError('AR fixup requires a predecessor step and positive update count')
-        parameters['steps'] = start_step + updates
+
     return parameters
 
 
@@ -721,28 +605,11 @@ def load_recipe(path):
         raise ValueError('only native positional-KV/hybrid-state recipes are supported')
     if recipe.get('identity_qualification') != NATIVE_IDENTITY_QUALIFICATION:
         raise ValueError('native-state recipe requires identity_qualification ' + NATIVE_IDENTITY_QUALIFICATION)
-    if 'e2e_acceptance' in recipe or 'e2e_mix' in recipe:
-        raise ValueError('projected end-to-end objectives are not supported by native recipes')
+    retired={'e2e_acceptance','e2e_mix','family','objective_continuation','quantization','init'} & set(recipe)
+    if retired:
+        raise ValueError('projected recipe fields are retired: '+', '.join(sorted(retired)))
     validate_input_bindings(recipe)
     declared_runtime_environment(recipe)
-    if 'family' in recipe:
-        # The nested family as an in-stage objective (owner 2026-10-12; maple/family.py): it ramps on the stage
-        # curriculum the quantization component declares.
-        from ..maple.family import validate_family
-        validate_family(recipe['family'], {stage['id']: stage['kind'] for stage in recipe['stages']})
-        progress = (recipe.get('quantization') or {}).get('stage_progress', {})
-        if any(stage_id not in progress for stage_id in recipe['family']['stages']):
-            raise ValueError('a family stage needs a curriculum: name it in quantization.stage_progress')
-    if 'objective_continuation' in recipe:
-        validate_objective_continuation(recipe)
-    if 'quantization' in recipe:
-        # QAT woven into the stages (owner 2026-10-10; train/quantization.py): one component, inherited by every
-        # stage it names.
-        from .quantization import validate_spec
-        validate_spec(recipe['quantization'], {stage['id']: stage['kind'] for stage in recipe['stages']})
-    if 'init' in recipe:
-        from .quantization import validate_init
-        validate_init(recipe['init'], recipe.get('quantization'))
     return recipe
 
 
@@ -770,366 +637,39 @@ def declared_runtime_environment(recipe):
         stages = ([recipe.get('stage', {})] if isinstance(recipe.get('stage'), dict)
                   else recipe.get('stages', []))
         te_enabled = any(
-            stage.get('kind') == 'neuralese_direct' and
+            stage.get('kind') in NATIVE_TRAINING_KINDS and
             stage.get('parameters', recipe.get('parameters', {})).get('fp8_training') == 'te-fp8'
             for stage in stages if isinstance(stage, dict))
         if not te_enabled:
-            raise ValueError('trusted TE extra-state restore requires a declared te-fp8 neuralese_direct stage')
+            raise ValueError('trusted TE extra-state restore requires a declared native te-fp8 stage')
     return dict(environment)
 
 
-def validate_direct_stage_recipe(recipe):
-    """Validate a single shared handler stage with exact external lineage pins.
-
-    This path is for a narrowly scoped repair that reuses previously qualified
-    weights and therefore must not rerun unrelated foundation stages. It uses
-    the same handler registry, input-role contracts, and typed parameter CLI as
-    a full recipe.
-    """
-    if recipe.get('execution') != 'direct_shared_stage' or not isinstance(recipe.get('id'), str):
-        raise ValueError('direct stage must declare its execution mode and recipe id')
-    stage = recipe.get('stage')
-    if not isinstance(stage, dict) or set(stage) != {'id', 'kind'}:
-        raise ValueError('direct stage needs exactly an id and registered handler kind')
-    if not re.fullmatch(r'[a-z][a-z0-9_-]*', stage['id']) or stage['kind'] not in HANDLERS:
-        raise ValueError('invalid direct stage identity or handler')
-    handler = HANDLERS[stage['kind']]
-    inputs = recipe.get('inputs')
-    if not isinstance(inputs, dict):
-        raise ValueError('direct stage requires pinned input bindings')
-    roles = set(inputs)
-    if missing_stage_inputs(stage['kind'], roles) or not roles <= handler['required_inputs'] | handler['optional_inputs']:
-        raise ValueError('direct stage input roles do not satisfy the shared handler contract')
-    for role, binding in inputs.items():
-        if (not isinstance(binding, dict) or set(binding) != {'path', 'sha256'} or
-                not isinstance(binding['path'], str) or not binding['path'] or
-                not isinstance(binding['sha256'], str) or
-                not re.fullmatch(r'[0-9a-f]{64}', binding['sha256'])):
-            raise ValueError('invalid direct stage input binding: ' + role)
-    parameters = recipe.get('parameters')
-    if not isinstance(parameters, dict) or not set(parameters) <= handler['parameters']:
-        raise ValueError('direct stage contains unsupported handler parameters')
-    validate_stage_parameters(stage['kind'], parameters)
-    runtime = recipe.get('runtime')
-    if (not isinstance(runtime, dict) or not re.fullmatch(r'sha256:[0-9a-f]{64}', runtime.get('image', '')) or
-            not isinstance(runtime.get('package_code'), dict) or not runtime['package_code']):
-        raise ValueError('direct stage requires a pinned image and shared package code inventory')
-    declared_runtime_environment(recipe)
-    lineage = recipe.get('lineage')
-    if not isinstance(lineage, dict) or not lineage.get('scope'):
-        raise ValueError('direct stage requires an explicit lineage scope')
-    evidence = lineage.get('evidence', [])
-    if not isinstance(evidence, list):
-        raise ValueError('direct-stage lineage evidence must be a list')
-    for item in evidence:
-        if (not isinstance(item, dict) or set(item) != {'role', 'path', 'sha256'} or
-                not isinstance(item['role'], str) or not item['role'] or
-                not isinstance(item['path'], str) or not item['path'] or
-                not isinstance(item['sha256'], str) or not re.fullmatch(r'[0-9a-f]{64}', item['sha256'])):
-            raise ValueError('invalid direct-stage lineage evidence binding')
-    if stage['kind'] == 'raw_recurrence_training':
-        runtime_reports = [item for item in evidence if item['role'] == 'adapted_runtime']
-        if len(runtime_reports) != 1:
-            raise ValueError('direct recurrence requires exactly one pinned adapted_runtime lineage report')
-        has_heads = 'heads' in inputs
-        has_direct_artifact = 'direct_artifact_manifest' in inputs
-        if has_heads == has_direct_artifact:
-            raise ValueError('direct recurrence requires exactly one of heads or direct_artifact_manifest')
-        if has_direct_artifact and Path(inputs['direct_artifact_manifest']['path']).name != 'manifest.json':
-            raise ValueError('direct_artifact_manifest must bind the artifact manifest.json file')
-    outputs = recipe.get('outputs')
-    if not isinstance(outputs, dict) or not isinstance(outputs.get('directory'), str):
-        raise ValueError('direct stage requires a declared output directory')
-    return recipe
 
 
-def verify_direct_stage_lineage_gates(stage, inputs, lineage_evidence):
-    """Bind direct recurrence to the exact adapted-runtime gate for its heads.
-
-    A direct stage has no in-recipe predecessor graph, so the runtime report is
-    an explicit, hashed lineage input. Validate it before creating the output
-    directory or starting the trainer.
-    """
-    if stage['kind'] != 'raw_recurrence_training':
-        return []
-    reports = [item for item in lineage_evidence if item['role'] == 'adapted_runtime']
-    if len(reports) != 1:
-        raise ValueError('direct recurrence requires exactly one pinned adapted_runtime lineage report')
-    item = reports[0]
-    try:
-        report = json.loads(Path(item['path']).read_text())
-    except (OSError, json.JSONDecodeError) as exc:
-        raise ValueError('adapted_runtime lineage evidence is not a readable JSON report') from exc
-    if not isinstance(report, dict):
-        raise ValueError('adapted_runtime lineage report has an unsupported schema')
-    if 'direct_artifact_manifest' in inputs:
-        manifest_sha = inputs['direct_artifact_manifest']['sha256']
-        if (report.get('schema') != 'natlang.neuralese-direct-runtime-qualification/1' or
-                report.get('runtime_qualified') is not True or
-                report.get('artifact_manifest_sha256') != manifest_sha):
-            raise ValueError('adapted_runtime report does not qualify the exact direct artifact manifest')
-        return [{'role': 'adapted_runtime', 'report_sha256': item['sha256'],
-                 'direct_artifact_manifest_sha256': manifest_sha, 'runtime_qualified': True}]
-    if report.get('schema') != 'natlang.latent-sketch-diagnostic/1':
-        raise ValueError('adapted_runtime lineage report has an unsupported schema')
-    require_gate(report, 'text_warmup_runtime')
-    heads_sha = inputs['heads']['sha256']
-    if report.get('parent_sha256') != heads_sha:
-        raise ValueError('adapted_runtime lineage report belongs to different heads weights')
-    if report.get('weights_unmodified') is not True or report.get('retained_trained_heads') is not True:
-        raise ValueError('adapted_runtime lineage report does not attest retained, unmodified trained heads')
-    return [{'role': 'adapted_runtime', 'report_sha256': item['sha256'],
-             'heads_sha256': heads_sha, 'runtime_qualified': True,
-             'output_reference_qualified': True, 'weights_unmodified': True,
-             'retained_trained_heads': True}]
-
-
-# Objective components an active stage may change by a declared objective continuation (``objective_continuation``;
-# the trainer's direct_sft.OBJECTIVE_KEYS): the curriculum continues from the checkpoint's update without a jump.
-OBJECTIVE_COMPONENTS = ('quantization', 'family', 'e2e_mix')
-
-E2E_MIX_KEYS = frozenset({'description', 'stages', 'fraction', 'records', 'pieces', 'options', 'token_choice', 'writer',
-                          'neuralese_spans', 'aligned_projection', 'projection_on_manifold'})
-
-
-def validate_e2e_mix(component, kinds):
-    """``e2e_mix`` (the mixed run, owner 2026-10-13; plans/neuralese/NEURALESE_DIRECT_V1.md "The mixed run"): the
-    e2e producer->consumer updates a neuralese_direct stage interleaves with its direct updates. {stages, fraction p
-    of all updates in (0, 1), records and pieces as content-pinned {path, sha256}, optional aligned_projection (the
-    writer fitted on the parent export, {path, sha256, artifact_manifest_sha256}, gated by projection_on_manifold;
-    without it the writer starts at C = 0, value = E[chosen]), optional neuralese_spans (the union
-    rendering's Neuralese output spans sidecar, {path, sha256}: spans with an e2e edge are context only in direct
-    updates), options (train/trajectories.py
-    settings), token_choice and writer: {lr, optimizer muon|adamw} (the TokenChoiceProjection and the
-    NeuraleseProjection's own rates), description}."""
-    if not isinstance(component, dict) or set(component) - E2E_MIX_KEYS or \
-            not {'stages', 'fraction', 'records', 'pieces', 'token_choice', 'writer'} <= set(component):
-        raise ValueError('e2e_mix is {stages, fraction, records, pieces, neuralese_spans?, aligned_projection?, '
-                         'projection_on_manifold?, options?, token_choice, writer, description?}')
-    stages = component['stages']
-    if not isinstance(stages, list) or not stages or any(kinds.get(s) != 'neuralese_direct' for s in stages):
-        raise ValueError('e2e_mix.stages names neuralese_direct stages of the recipe')
-    fraction = component['fraction']
-    if not isinstance(fraction, (int, float)) or isinstance(fraction, bool) or not 0 < fraction < 1:
-        raise ValueError('e2e_mix.fraction is the e2e share of all updates, in (0, 1)')
-    for key in ('records', 'pieces') + (('neuralese_spans',) if 'neuralese_spans' in component else ()):
-        binding = component[key]
-        if not isinstance(binding, dict) or set(binding) != {'path', 'sha256'} or not binding['path'] or \
-                not re.fullmatch(r'[0-9a-f]{64}', str(binding['sha256'])):
-            raise ValueError('e2e_mix.' + key + ' is a content-pinned {path, sha256}')
-    aligned = component.get('aligned_projection')
-    if aligned is not None and (not isinstance(aligned, dict) or
-                                set(aligned) != {'path', 'sha256', 'artifact_manifest_sha256'} or
-                                not all(re.fullmatch(r'[0-9a-f]{64}', str(aligned[k]))
-                                        for k in ('sha256', 'artifact_manifest_sha256'))):
-        raise ValueError('e2e_mix.aligned_projection is {path, sha256, artifact_manifest_sha256} (projection_align on '
-                         'the parent export)')
-    if aligned is not None or 'projection_on_manifold' in component:
-        from .e2e_acceptance import validate_manifold
-        validate_manifold(component.get('projection_on_manifold'))
-    if not isinstance(component.get('options', {}), dict):
-        raise ValueError('e2e_mix.options maps train/trajectories.py settings to values')
-    for key in ('token_choice', 'writer'):
-        rate = component[key]
-        if not isinstance(rate, dict) or set(rate) != {'lr', 'optimizer'} or \
-                not isinstance(rate['lr'], (int, float)) or not rate['lr'] > 0 or \
-                rate['optimizer'] not in ('muon', 'adamw'):
-            raise ValueError('e2e_mix.' + key + ' is {lr > 0, optimizer: muon|adamw}')
-
-
-def stage_e2e_mix(component, stage_id):
-    """The component as one stage receives it (``--e2e-mix``; as ``stage_family``), its records and pieces verified
-    against their pins; None when the stage does not mix."""
-    if not component or stage_id not in component.get('stages', []):
-        return None
-    for key in ('records', 'pieces', 'neuralese_spans', 'aligned_projection'):
-        if key in component and sha(binding_path(component[key]['path'])) != component[key]['sha256']:
-            raise ValueError('e2e_mix.' + key + ' hash mismatch: ' + component[key]['path'])
-    return {**json.loads(json.dumps(component)), 'stage': stage_id}
-
-
-def validate_objective_continuation(recipe):
-    """``objective_continuation``: {"stage": the active neuralese_direct stage, "previous": {component: canonical
-    sha256 of the component the stage trained with, or null when it had none}, "description"}. The declaration
-    pins exactly what the running stage trained with, as a data continuation pins the data it trained on."""
-    declared = recipe['objective_continuation']
-    if not isinstance(declared, dict) or set(declared) - {'stage', 'previous', 'description'}:
-        raise ValueError('objective_continuation is {stage, previous, description}')
-    kinds = {stage['id']: stage['kind'] for stage in recipe['stages']}
-    if kinds.get(declared.get('stage')) != 'neuralese_direct':
-        raise ValueError('objective_continuation names a neuralese_direct stage of the recipe')
-    previous = declared.get('previous')
-    if (not isinstance(previous, dict) or not previous or set(previous) - set(OBJECTIVE_COMPONENTS) or
-            not all(v is None or isinstance(v, str) and re.fullmatch(r'[0-9a-f]{64}', v) for v in previous.values())):
-        raise ValueError('objective_continuation.previous maps ' + '/'.join(OBJECTIVE_COMPONENTS) +
-                         ' to the canonical sha256 of the component the stage trained with (null: none)')
-
-
-def objective_component_sha256(component):
-    """The canonical SHA-256 an objective continuation pins a recipe component by (None when absent)."""
-    return None if component is None else canonical_json_sha256_hex(component)
-
-
-def objective_handoff(old_recipe, new_recipe, out, *, started_stage_ids=()):
-    """A handoff that changes objective components (``OBJECTIVE_COMPONENTS``) must declare an objective continuation
-    of the active stage pinning the old components. Finished stages keep their curriculum (their stage_progress and
-    family membership); the active stage is the declared one; unstarted stages may change freely. The trainer then
-    continues the curriculum from the checkpoint's update and refuses any λ or member-weight jump
-    (direct_sft.objective_continuation). Returns (record or None, old recipe, new recipe) with the components and the
-    declaration removed when they changed."""
-    changed = [key for key in OBJECTIVE_COMPONENTS if old_recipe.get(key) != new_recipe.get(key)]
-    if not changed:
-        return None, old_recipe, new_recipe
-    declared = new_recipe.get('objective_continuation')
-    if not isinstance(declared, dict):
-        raise ValueError('handoff refused: objective component(s) ' + ', '.join(changed) + ' changed without a '
-                         'declared objective_continuation')
-    stage_id = declared['stage']
-    if (stage_id not in started_stage_ids and not stage_started(out, stage_id)) or stage_finished(out, stage_id):
-        raise ValueError('handoff refused: objective_continuation names ' + stage_id + ', which is not the active '
-                         'stage (started, unfinished)')
-    for key in changed:
-        if declared['previous'].get(key, 'missing') != objective_component_sha256(old_recipe.get(key)):
-            raise ValueError('handoff refused: objective_continuation.previous.' + key + ' is not the running '
-                             'lineage\'s component')
-    for stage in new_recipe.get('stages', []):
-        if not stage_finished(out, stage['id']):
-            continue
-        for key, member in (('quantization', lambda c, s: (c or {}).get('stage_progress', {}).get(s)),
-                            ('family', lambda c, s: s in (c or {}).get('stages', [])),
-                            ('e2e_mix', lambda c, s: s in (c or {}).get('stages', []))):
-            if member(old_recipe.get(key), stage['id']) != member(new_recipe.get(key), stage['id']):
-                raise ValueError('handoff refused: finished stage ' + stage['id'] + ' keeps its ' + key)
-    old_value, new_value = json.loads(json.dumps(old_recipe)), json.loads(json.dumps(new_recipe))
-    for value in (old_value, new_value):
-        for key in changed + ['objective_continuation']:
-            value.pop(key, None)
-    record = {'stage': stage_id, 'changed': changed,
-              'previous_sha256': {key: objective_component_sha256(old_recipe.get(key)) for key in changed},
-              'sha256': {key: objective_component_sha256(new_recipe.get(key)) for key in changed}}
-    return record, old_value, new_value
-
-
-def stage_objective_args(recipe, stage):
-    """The stage's family and e2e_mix components and objective-continuation declaration as trainer arguments."""
-    from ..maple.family import stage_family
-    command = []
-    component = stage_family(recipe.get('family'), stage['id'])
-    if component is not None:
-        command += ['--family', json.dumps(component, sort_keys=True, separators=(',', ':'))]
-    mix = stage_e2e_mix(recipe.get('e2e_mix'), stage['id'])
-    if mix is not None:
-        command += ['--e2e-mix', json.dumps(mix, sort_keys=True, separators=(',', ':'))]
-    declared = recipe.get('objective_continuation')
-    if isinstance(declared, dict) and declared.get('stage') == stage['id']:
-        command += ['--objective-continuation', json.dumps({'stage': declared['stage'],
-                                                            'previous': declared['previous']},
-                                                           sort_keys=True, separators=(',', ':'))]
-    return command
-
-
-def stage_quantization(recipe, stage, parameters, reports, init_mix=None):
-    """The recipe's quantization component for one stage, with its update range: a mapped warm-up from 0 to its
-    steps, an AR fixup from its predecessor's step to its effective steps, a recurrence stage from 0 to its steps."""
-    from .quantization import stage_component
-    spec = recipe.get('quantization')
-    if not spec or stage['id'] not in spec.get('stage_progress', {}):
-        return None
-    start = 0
-    if stage['kind'] == 'core_text_warmup' and parameters.get('ar_feedback_fixup', False):
-        start = next(r for r in reports if r['id'] in stage['requires'] and r['kind'] == 'core_text_warmup')['gate']['step']
-    end = parameters.get('steps', 4096 if stage['kind'] == 'core_text_warmup' else 500)  # the trainers' defaults
-    if stage['kind'] in DIRECT_TRAINING_KINDS and 'epochs' in parameters:
-        if 'steps' in parameters or 'quantization_steps' in parameters:
-            raise ValueError('a neuralese_direct stage declares its budget as epochs or steps, not both')
-        end = 'derived'  # direct_sft derives the update count from its data and packing
-        return stage_component(spec, stage['id'], start=start, end=end, init_mix=init_mix)
-    if 'quantization_steps' in parameters:
-        # The update range the stage's progress span maps onto, when the stage runs longer (an extension of a mapped
-        # warm-up): updates past it hold the stage-end mixes, so extending a stage never moves its ramp back.
-        span = parameters['quantization_steps']
-        if parameters.get('ar_feedback_fixup', False):
-            raise ValueError('quantization_steps is not defined for an AR feedback fixup')
-        if type(span) is not int or not start < span <= end:
-            raise ValueError('quantization_steps must be an integer update count in (start, steps]')
-        end = span
-    return stage_component(spec, stage['id'], start=start, end=end, init_mix=init_mix)
 
 
 def require_gate(report, kind, *, training_progress=False):
-    delta = report.get('ce_delta')
-    safe_training_continuation = (
-        training_progress and kind in ('neuralese_direct', 'neuralese_rl')
-        and report.get('completed') is True
-        and (report.get('identity_check') or {}).get('passed') is True
-        and type(delta) in (int, float) and math.isfinite(delta)
-        and (report.get('final_task_eval') or {}).get('eligible') is True)
-    quantization = report.get('quantization') if isinstance(report, dict) else None
-    precision_failed = isinstance(quantization, dict) and quantization.get('precisions_qualified') is False
-    if precision_failed and not safe_training_continuation:
-        raise ValueError('stage did not pass every required precision: ' +
-                         ', '.join(sorted(set(quantization.get('precisions_required', [])) -
-                                          set(quantization.get('precisions_passed', [])))))
-    if kind == 'token_identity':
-        if report.get('token_aligned_reference_passed') is not True:
-            raise ValueError('token identity gate failed')
-    elif kind == 'causal_embedding_distillation':
-        if report.get('feedback_gate_passed') is not True:
-            raise ValueError('embedding distillation gate failed')
-    elif kind == 'raw_runtime_qualification':
-        if report.get('runtime_transport_passed') is not True:
-            raise ValueError('raw runtime transport gate failed')
-    elif kind == 'verified_heads_handoff':
-        if report.get('handoff_verified') is not True:
-            raise ValueError('exact trained heads handoff gate failed')
-    elif kind == 'direct_runtime_qualification':
-        if (report.get('schema') != 'natlang.neuralese-direct-runtime-qualification/1' or
-                report.get('runtime_qualified') is not True):
-            raise ValueError('direct export runtime qualification failed')
-        manifold = report.get('projection_on_manifold') or {}
-        if manifold.get('passed') is not True:
-            raise ValueError('the aligned NeuraleseProjection is not on the embedding manifold (projection_on_manifold: '
-                             + json.dumps(manifold.get('criteria')) + '); refit it (train/projection_align.py)')
-    elif kind == 'raw_recurrence_training':
-        if report.get('training_stage_completed') is not True or report.get('errors') != 0:
-            raise ValueError('raw recurrence training stage incomplete or errored')
-    elif kind=='core_text_warmup':
-        if report.get('qualified') is not True:raise ValueError('text warm-up alignment goal not met')
-    elif kind in ('neuralese_direct', 'neuralese_rl'):
-        if report.get('qualified') is not True or precision_failed:
-            # Task/held regression is evidence for the supervisor, not an
-            # automatic ban on learning through the next production stage.
-            if safe_training_continuation:
-                print(json.dumps({'event': 'continuing_unqualified_training_stage',
-                                  'kind': kind, 'qualified': False, 'ce_delta': delta,
-                                  'task_gate': report.get('task_gate'),
-                                  'precisions_qualified': not precision_failed,
-                                  'scope': 'Owner20261015 adaptive production; qualification remains false'}), flush=True)
-                return
-            raise ValueError('Neuralese direct stage not qualified (held CE below base, final task '
-                             'successes >= min_successes; base drift and behaviour gate report-only, owner 2026-10-15)')
-    elif kind in COEFFICIENT_NATIVE_KINDS:
-        if (report.get('schema')!='natlang.native-coefficient-training-report/1'
-                or report.get('completed') is not True or report.get('qualification_complete') is not True
+    """Require the exact completed receipt emitted by a current native stage."""
+    if kind in COEFFICIENT_NATIVE_KINDS:
+        if (report.get('schema') != 'natlang.native-coefficient-training-report/1'
+                or report.get('completed') is not True
+                or report.get('qualification_complete') is not True
                 or report.get('base_checkpoint_unchanged') is not True):
-            raise ValueError('native coefficient policy lacks complete exposure and actual current-policy held/task checks')
-    elif kind in NATIVE_TRAINING_KINDS:
+            raise ValueError('native coefficient policy lacks completed exposure and held/task checks')
+        return
+    if kind in NATIVE_TRAINING_KINDS:
         if report.get('schema') != 'natlang.neuralese-native-sft-report/1' or report.get('completed') is not True:
-            raise ValueError('native-state SFT has not completed its declared graph exposure')
+            raise ValueError('native-state training has not completed its declared graph exposure')
         if report.get('numerics_ok') is not True:
-            raise ValueError('native-state SFT reported a numerical failure')
-    elif kind in SHARED_NATIVE_KINDS:
+            raise ValueError('native-state training reported a numerical failure')
+        return
+    if kind in SHARED_NATIVE_KINDS:
         if (report.get('schema') != 'natlang.native-shared-stage-completion/1'
                 or report.get('completed') is not True or report.get('production_ready') is not True):
-            raise ValueError('shared native semantic curriculum has not completed actual exposure/runtime/task checks')
-    elif kind=='text_warmup_runtime':
-        if report.get('runtime_qualified') is not True or report.get('output_reference_qualified') is not True:
-            raise ValueError('adapted warm-up runtime/output reference gate failed')
-    elif kind == 'view_operator_gate':
-        if report.get('view_gate_passed') is not True:
-            raise ValueError('view operator gate failed')
-    else:
-        raise ValueError('no gate adapter for stage')
+            raise ValueError('shared native curriculum has not completed actual exposure/runtime/task checks')
+        return
+    raise ValueError('no native gate adapter for stage: ' + str(kind))
 
 
 def write_json(path, value):
@@ -1141,91 +681,7 @@ def write_json(path, value):
 
 # Stage parameters that change how a stage computes, not what it optimizes: a lineage may switch them in place
 # (``--handoff``). Each trainer also lists them among its resume-operational options.
-OPERATIONAL_STAGE_PARAMETERS = frozenset({'refresh_foundation_readiness', 'foundation_readiness_policy', 'refresh_after_updates', 'eval_every', 'checkpoint_every', 'checkpoint_seconds', 'async_checkpoint', 'moe_kernel',
-                                          'sdpa_backend', 'deterministic_training',
-                                          # Recurrence resume already excludes this allocation envelope from its
-                                          # objective identity; increasing it must not require a fresh optimizer.
-                                          # the execution backend; the trainer refuses a switch that loses FP8 state
-                                          'fp8_training', 'checkpoint_layers', 'window_execution', 'report_column_fraction', 'drift_rows', 'drift_every', 'drift_gate_every', 'drift_gate_rise', 'drift_ce_windows', 'gate_response_kl',
-                                          'drift_gate_now',  # retired by drift_gate_rise (b1cd6632); a lineage that declared it hands off
-                                          # retired 2026-10-13 (owner): the NeuraleseProjection objective left the
-                                          # direct stage; a lineage that declared them hands off without them
-                                          'neuralese_weight', 'value_margin',
-                                          'drift_warn', 'drift_stop', 'drift_agreement_warn', 'drift_agreement_stop',
-                                          # the in-run task-success evaluation (owner 2026-10-12) joins at a handoff
-                                          'task_eval', 'task_eval_every', 'qualify_training_backend'})
-# Stage parameters the runner consumes itself (never passed to a trainer).
-RUNNER_STAGE_PARAMETERS = frozenset({'quantization_steps'})
-
-
-def direct_epoch_budget_change(stage_kind, old_parameters, new_parameters):
-    """Return an epoch-only budget change for a direct stage.
-
-    The trainer rebuilds both schedules from the pinned inputs and proves the
-    checkpoint's consumed batches are an exact prefix of the new schedule.
-    This helper only permits that narrowly scoped request to reach the trainer.
-    """
-    old_parameters, new_parameters = dict(old_parameters), dict(new_parameters)
-    old_epochs, new_epochs = old_parameters.pop('epochs', None), new_parameters.pop('epochs', None)
-    if old_parameters != new_parameters:
-        return None
-    if stage_kind != 'neuralese_direct':
-        return None
-    if (type(old_epochs) not in (int, float) or type(new_epochs) not in (int, float) or
-            not math.isfinite(old_epochs) or not math.isfinite(new_epochs) or
-            old_epochs <= 0 or new_epochs <= 0 or new_epochs == old_epochs):
-        return None
-    return {'old_epochs': old_epochs, 'new_epochs': new_epochs,
-            'verification': 'trainer-reconstructs-exact-schedule-prefix-and-checkpoint-step'}
-
-
-def direct_stage_epoch_handoffs(old_recipe, new_recipe):
-    """Validate epoch-only budget changes on matching neuralese_direct stages."""
-    old_stages = {stage.get('id'): stage for stage in old_recipe.get('stages', [])}
-    changes = {}
-    for stage in new_recipe.get('stages', []):
-        old = old_stages.get(stage.get('id'))
-        if old is None or old.get('kind') != stage.get('kind'):
-            continue
-        kind = stage.get('kind')
-        old_parameters = dict(old_recipe.get('stage_parameter_defaults', {}).get(kind, {}))
-        old_parameters.update(old.get('parameters', {}))
-        new_parameters = dict(new_recipe.get('stage_parameter_defaults', {}).get(kind, {}))
-        new_parameters.update(stage.get('parameters', {}))
-        for key in OPERATIONAL_STAGE_PARAMETERS:
-            old_parameters.pop(key, None)
-            new_parameters.pop(key, None)
-        if old_parameters.get('epochs') != new_parameters.get('epochs'):
-            proof = direct_epoch_budget_change(kind, old_parameters, new_parameters)
-            if proof is None:
-                return None
-            changes[stage['id']] = proof
-    return changes
-
-
-def recipe_handoff_epoch_changes(old_recipe, new_recipe):
-    """Require recipe identity to differ only by runtime code, operational parameters, or direct-stage epochs."""
-    changes = direct_stage_epoch_handoffs(old_recipe, new_recipe)
-    if changes is None:
-        raise ValueError('handoff refused: recipe changes outside the direct-stage epoch budget')
-    old = _without_direct_epochs(_without_package_code(_without_operational(old_recipe)))
-    new = _without_direct_epochs(_without_package_code(_without_operational(new_recipe)))
-    # Owner 2026-10-13 retired the direct-stage plateau prerequisite. Existing
-    # E2E runs may drop its metadata at a handoff; adding/changing it still fails.
-    if 'parent_readiness' not in new:
-        old.pop('parent_readiness', None)
-    if old != new:
-        raise ValueError('handoff refused: the recipe changes more than operational stage parameters, '
-                         'runtime.package_code, and neuralese_direct epoch budgets')
-    return changes
-
-
-# neuralese_direct train-window geometry (direct_sft.WINDOWING_KEYS, plans/neuralese/HEADER_EFFICIENCY_20261012.md):
-# a handoff may change it on an unfinished direct stage; the trainer continues by a windowing continuation (the plan
-# it trained on rebuilt under the saved geometry, its consumed documents seen, the rest under the new geometry).
-DIRECT_WINDOWING_PARAMETERS = ('train_target_tokens', 'merge_prefix_rows', 'cohort_repeats', 'recovery_selection',
-                               'train_min_context_tokens', 'upgrade_window_coverage')
-
+OPERATIONAL_STAGE_PARAMETERS = frozenset({'refresh_foundation_readiness', 'foundation_readiness_policy', 'refresh_after_updates', 'eval_every', 'checkpoint_every', 'checkpoint_seconds', 'async_checkpoint', 'sdpa_backend', 'deterministic_training', 'fp8_training', 'checkpoint_layers', 'task_eval', 'task_eval_every', 'qualify_training_backend', 'memory_qualification', 'refresh_at_checkpoint', 'checkpoint_input_offload', 'checkpoint_input_offload_directory'})
 
 def native_stage_parameter_handoffs(old_recipe, new_recipe, out):
     """Allow only current native trainers' explicit resume-safe parameter changes."""
@@ -1292,60 +748,12 @@ def native_stage_parameter_handoffs(old_recipe, new_recipe, out):
     return changes, stripped[0], stripped[1]
 
 
-def _without_direct_epochs(recipe):
-    value = json.loads(json.dumps(recipe))
-    defaults = value.get('stage_parameter_defaults', {})
-    if isinstance(defaults, dict):
-        direct = defaults.get('neuralese_direct')
-        if isinstance(direct, dict):
-            direct.pop('epochs', None)
-    for stage in value.get('stages', []):
-        if stage.get('kind') == 'neuralese_direct':
-            stage.get('parameters', {}).pop('epochs', None)
-    return value
 
 
-def _stage_steps(recipe, stage):
-    """(steps, quantization update range) of a stage as declared (no AR fixup offset)."""
-    parameters = dict(recipe.get('stage_parameter_defaults', {}).get(stage.get('kind'), {}))
-    parameters.update(stage.get('parameters', {}))
-    steps = parameters.get('steps')
-    return steps, parameters.get('quantization_steps', steps)
 
 
-def stage_extensions(existing, recipe, out):
-    """The stages a handoff extends: ``steps`` raised on a stage that has no qualified report yet, its quantization
-    update range unchanged (``quantization_steps``), so the stage continues from its state with its ramp held at the
-    stage-end mixes. Anything else about steps (a shorter stage, an extended qualified stage, a moved ramp) is refused.
-    Returns {stage id: [old steps, new steps]}."""
-    old_stages = {stage['id']: stage for stage in existing.get('stages', [])}
-    extended = {}
-    for stage in recipe.get('stages', []):
-        old = old_stages.get(stage['id'])
-        if old is None:
-            continue
-        (old_steps, old_span), (new_steps, new_span) = _stage_steps(existing, old), _stage_steps(recipe, stage)
-        if old_steps == new_steps and old_span == new_span:
-            continue
-        if (stage.get('kind') != 'core_text_warmup' or stage.get('parameters', {}).get('ar_feedback_fixup', False)
-                or type(old_steps) is not int or type(new_steps) is not int or new_steps <= old_steps):
-            raise ValueError('handoff refused: only a mapped text warm-up may be extended (more steps): ' + stage['id'])
-        if old_span != new_span:
-            raise ValueError('handoff refused: extending ' + stage['id'] + ' moves its quantization ramp; '
-                             'set quantization_steps to the old steps (' + str(old_span) + ')')
-        if (Path(out) / (stage['id'] + '-report.json')).exists():
-            raise ValueError('handoff refused: ' + stage['id'] + ' already qualified; it cannot be extended')
-        extended[stage['id']] = [old_steps, new_steps]
-    return extended
 
 
-def _without_extensions(recipe, extended):
-    value = json.loads(json.dumps(recipe))
-    for stage in value.get('stages', []):
-        if stage['id'] in extended:
-            for key in ('steps', 'quantization_steps'):
-                stage.get('parameters', {}).pop(key, None)
-    return value
 
 
 def _without_operational(recipe):
@@ -1383,13 +791,10 @@ def stage_finished(out, stage_id):
     return (Path(out) / (stage_id + '-report.json')).exists()
 
 
-DATA_CONTINUATION_ROLE = 'continued_text_data'
 
 
 def _data_continuation(old, new):
-    """Whether a started stage's new inputs are a declared data continuation of its old ones: the stage now reads new
-    ``text_data`` and declares ``continued_text_data`` as exactly the text data it trained on (content), every other
-    role unchanged."""
+    """Whether changed train/held graph manifests retain their exact predecessor custody."""
     if 'native_graphs' in old and 'native_graphs' in new:
         foundation = 'foundation_native_graphs'
         if old.get(foundation) is not None and old[foundation] != new.get(foundation):
@@ -1421,14 +826,7 @@ def _data_continuation(old, new):
         if classification_changed:excluded.add(classification)
         return changed and {k: v for k, v in old.items() if k not in excluded} == {
             k: v for k, v in new.items() if k not in excluded}
-    if 'text_data' not in old or 'text_data' not in new or DATA_CONTINUATION_ROLE not in new:
-        return False
-    if new[DATA_CONTINUATION_ROLE].get('sha256') != old['text_data'].get('sha256'):
-        return False
-    if new['text_data'].get('sha256') == old['text_data'].get('sha256'):
-        return False
-    rest = lambda roles: {k: v for k, v in roles.items() if k not in ('text_data', DATA_CONTINUATION_ROLE)}
-    return rest(old) == rest(new)
+    return False
 
 
 def _priority_only_native_source_continuation(old, new):
@@ -1784,11 +1182,7 @@ def activated_existing_training_stages(old_recipe, new_recipe, out, *, started_s
 
 
 def unstarted_stage_input_changes(existing, plan, out, *, started_stage_ids=()):
-    """The stages whose resolved inputs a handoff changes. A later stage that has not started may take new content for
-    its declared input roles (e.g. a newer data rendering for a not-yet-reached phase). The active (started,
-    unfinished) stage may change its inputs only by a declared data continuation (``continued_text_data`` naming the
-    text data it trained on; direct_sft continues its update counter, weights and optimizer on the new data, the seen
-    documents counted as seen). A finished stage's inputs stay fixed. Returns {stage id: {'kind', 'old', 'new'}}."""
+    """Track new stage inputs, allowing started native stages only verified source continuations."""
     old_inputs, new_inputs = existing.get('stage_inputs'), plan.get('stage_inputs')
     appended = appended_training_stages(existing['recipe'], plan['recipe'], out, started_stage_ids=started_stage_ids)
     activated = activated_existing_training_stages(existing['recipe'], plan['recipe'], out, started_stage_ids=started_stage_ids)
@@ -1842,7 +1236,7 @@ def unstarted_stage_input_changes(existing, plan, out, *, started_stage_ids=()):
                              or _ce_supervision_input_continuation(old, new)))):
                 raise ValueError('handoff refused: inputs of started stage ' + stage_id + ' changed; only a stage '
                                  'that has not started may take new inputs, and the active stage only by an explicit metadata classification or declared '
-                                 'data continuation (' + DATA_CONTINUATION_ROLE + ' = the text data it trained on)')
+                                 'data continuation that retains the exact authenticated native predecessor')
             changes[stage_id] = {'kind': ('ce_supervision_continuation'
                 if _ce_supervision_input_continuation(old, new) else 'metadata_classification_continuation'
                 if _classification_input_continuation(old, new) else 'scheduling_priority_continuation'
@@ -1894,19 +1288,6 @@ def _without_activated_stage_policy(old_recipe, new_recipe, activated):
         for stage in value.get('stages', []):
             if stage['id'] in activated:
                 stage['admitted'] = False
-        for name in ('family', 'e2e_mix'):
-            component = value.get(name)
-            if isinstance(component, dict) and isinstance(component.get('stages'), list):
-                component['stages'] = [sid for sid in component['stages'] if sid not in activated]
-                if not component['stages']:
-                    value.pop(name)
-        progress = (value.get('quantization') or {}).get('stage_progress', {})
-        for sid in activated:
-            progress.pop(sid, None)
-        # No remaining stage consumes this curriculum. Its points have no
-        # effect on existing work (stage_component returns None).
-        if not progress:
-            value.pop('quantization', None)
     return values
 
 
@@ -1925,11 +1306,8 @@ def lineage_handoff(existing, plan, frozen, package, plan_path, out=None, dry_ru
     operational stage parameters, so the lineage's identity (``recipe_sha256``, which its stage reports carry) stays;
     the frozen runtime is replaced, the superseded one kept beside it, and the change appended to the plan's
     ``handoffs``. Each trainer then checks its own resume identity and logs its code handoff. A handoff may also
-    extend an unqualified mapped warm-up (``stage_extensions``); the extension is recorded under ``extended``. A
-    later stage that has not started may take new content for its declared inputs, and the active stage new text data
-    by a declared data continuation (``unstarted_stage_input_changes``; recorded under ``stage_input_changes`` with
-    the previous input map, which reports of earlier stages carry; the trainer records the seen documents and the new
-    budget in its data-continuation.json and the stage report).
+    append future native stages and use declared hash-bound native source continuations. Started and finished inputs
+    remain bound to their recorded evidence.
     ``dry_run`` validates and returns the updated plan without touching the run directory."""
     out = Path(out if out is not None else plan_path.parent)
     if (not isinstance(started_stage_ids,(tuple,list)) or len(set(started_stage_ids))!=len(started_stage_ids)
@@ -2040,7 +1418,7 @@ class _ChildSignalForwarder:
     Container PID 1 can ignore the default SIGTERM disposition. Recipe runners
     therefore install a handler and explicitly notify their child, allowing the
     trainer to finish its current update and write its resumable checkpoint.
-    The same object is used by direct and multi-stage recipes.
+    The same object is used by the native multi-stage recipe runner.
     """
     def __init__(self):
         self.stopped = [False]
@@ -2103,246 +1481,22 @@ class _ChildSignalForwarder:
 
 
 def stage_parameter_args(parameters):
-    """Serialize a validated stage's typed options into CLI arguments."""
+    """Serialize a validated native stage's typed options into CLI arguments."""
     command = []
     for key, value in parameters.items():
+        if key == 'memory_qualification':
+            if value is not None:
+                command += ['--memory-qualification', json.dumps(value, sort_keys=True, separators=(',', ':'))]
+            continue
         if key == 'cotangent_accumulator_backend' and value is None:
-            continue
-        if key=='memory_qualification':
-            if value is None:
-                continue
-            command += ['--memory-qualification',json.dumps(value,sort_keys=True,separators=(',',':'))]
-            continue
-        if key=='cohort_weights':
-            if not isinstance(value,dict):
-                raise ValueError('cohort_weights must be an object of explicit fractions')
-            command += ['--cohort-weights',json.dumps(value,sort_keys=True,separators=(',',':'))]
-            continue
-        if key in ('optimizer_added', 'curriculum_change'):
-            if not isinstance(value, list) or any(not isinstance(prefix, str) or not prefix for prefix in value):
-                raise ValueError(key + ' must be a list of nonempty strings')
-            for prefix in value:
-                command += ['--' + key.replace('_', '-'), prefix]
             continue
         if isinstance(value, bool):
             command += ['--' + ('' if value else 'no-') + key.replace('_', '-')]
-        elif isinstance(value, dict):  # a declared JSON component (e.g. neuralese_direct's monitor)
+        elif isinstance(value, (dict, list)):
             command += ['--' + key.replace('_', '-'), json.dumps(value, sort_keys=True, separators=(',', ':'))]
         else:
             command += ['--' + key.replace('_', '-'), str(value)]
     return command
-
-
-def recurrence_completion_gate(checkpoint, steps):
-    """Read committed progress, rather than infer completion from a clean exit."""
-    import torch
-    state = torch.load(checkpoint, mmap=True, weights_only=False, map_location='cpu')
-    if state.get('schema') != 'natlang.neuralese_recurrence_checkpoint/1':
-        raise ValueError('wrong recurrence artifact schema')
-    return {'training_stage_completed': state['step'] >= steps,
-            'step': state['step'], 'errors': state['errors'], 'semantic_channel_qualified': False}
-
-
-def run_declared_direct_stage(recipe, recipe_path, output, launch_metadata, device, handoff=False):
-    """Freeze, bind, and run one explicitly declared shared stage.
-
-    Direct stages are only appropriate when lineage evidence already qualifies
-    their prerequisites and rerunning those independent stages would change the
-    experiment. The declaration still uses the shared handler registry and
-    records exact input/code/runtime pins before the child starts.
-    """
-    validate_direct_stage_recipe(recipe)
-    output = Path(output).resolve()
-    from ..common import hdd_guard
-    hdd_guard.require_nvme(output)
-    declared_output = Path(recipe['outputs']['directory']).resolve()
-    if output != declared_output:
-        raise ValueError('direct-stage output differs from its declaration')
-    previous = None
-    if output.exists():
-        previous = json.loads((output / 'direct-stage-plan.json').read_text())
-    elif recipe['stage']['kind'] == 'neuralese_direct' or 'direct_artifact_manifest' in recipe['inputs']:
-        # A fresh launch of a line's direct or end-to-end stage is checked against the shared base (LINE_PARITY.md).
-        from .line_parity import check_declared_stage
-        check_declared_stage(recipe)
-    metadata_path = Path(launch_metadata).resolve()
-    if metadata_path.exists() or output == metadata_path or output in metadata_path.parents:
-        raise ValueError('direct-stage launch metadata must be a fresh external path')
-
-    inputs = {}
-    for role, binding in recipe['inputs'].items():
-        path = Path(binding['path']).resolve()
-        if sha(path) != binding['sha256']:
-            raise ValueError('direct-stage input hash mismatch: ' + role)
-        inputs[role] = {'path': str(path), 'sha256': binding['sha256']}
-    lineage_evidence = []
-    for item in recipe['lineage'].get('evidence', []):
-        path = Path(item['path']).resolve()
-        if sha(path) != item['sha256']:
-            raise ValueError('direct-stage lineage evidence hash mismatch: ' + item['role'])
-        lineage_evidence.append({'role': item['role'], 'path': str(path), 'sha256': item['sha256']})
-    lineage_gate_verifications = verify_direct_stage_lineage_gates(
-        recipe['stage'], inputs, lineage_evidence)
-
-    package = Path(__file__).parents[1]
-    actual_code = {str(path.relative_to(package)): sha(path)
-                   for path in sorted(package.rglob('*.py'))}
-    if actual_code != recipe['runtime']['package_code']:
-        raise ValueError('direct-stage shared package differs from its frozen code inventory')
-
-    stage = recipe['stage']
-    stage_output = output / stage['id']
-    handler = HANDLERS[stage['kind']]
-    resume = None
-    if previous is not None:
-        for key, value in [('stage', stage), ('inputs', inputs), ('device', device)]:
-            if previous.get(key) != value:
-                raise ValueError('direct-stage resume changes ' + key)
-        old_parameters, new_parameters = dict(previous['parameters']), dict(recipe['parameters'])
-        if handoff:
-            # A train-window geometry change continues in the trainer (a windowing continuation).
-            for key in OPERATIONAL_STAGE_PARAMETERS | set(DIRECT_WINDOWING_PARAMETERS):
-                old_parameters.pop(key, None)
-                new_parameters.pop(key, None)
-        epoch_budget_handoff = (direct_epoch_budget_change(
-            stage['kind'], old_parameters, new_parameters) if handoff else None)
-        if old_parameters != new_parameters and epoch_budget_handoff is None:
-            raise ValueError('direct-stage resume changes training parameters')
-        if previous['frozen_code'] != actual_code and not handoff:
-            raise ValueError('direct-stage code change requires --handoff')
-        checkpoint = stage_output / 'checkpoint.pt'
-        if not checkpoint.is_file():
-            raise ValueError('direct-stage resume requires the committed handler checkpoint')
-        history = output / 'resume-history' / (time.strftime('%Y%m%dT%H%M%S') + '-' + str(os.getpid()))
-        history.mkdir(parents=True)
-        for name in ('direct-stage-plan.json', 'direct-stage-result.json'):
-            path = output / name
-            if path.is_file():
-                shutil.copyfile(path, history / name)
-        resume = {'checkpoint_path': str(checkpoint), 'checkpoint_sha256': sha(checkpoint),
-                  'previous_plan_path': str(history / 'direct-stage-plan.json'),
-                  'previous_plan_sha256': sha(history / 'direct-stage-plan.json'),
-                  'code_handoff': previous['frozen_code'] != actual_code}
-        if epoch_budget_handoff is not None:
-            resume['epoch_budget_handoff'] = epoch_budget_handoff
-        if resume['code_handoff']:
-            (output / 'runtime').rename(history / 'runtime')
-    output.mkdir(parents=True, exist_ok=True)
-    frozen = output / 'runtime' / 'natlang_neuralese'
-    if not frozen.exists():
-        shutil.copytree(package, frozen, ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
-    frozen_code = {str(path.relative_to(frozen)): sha(path)
-                   for path in sorted(frozen.rglob('*.py'))}
-    if frozen_code != actual_code:
-        raise ValueError('direct-stage runtime snapshot differs from reviewed package bytes')
-    # The handler owns its fresh output boundary; pre-creating this path breaks
-    # handlers that reject an existing --out directory before creating it.
-    stage_output = output / stage['id']
-    handler = HANDLERS[stage['kind']]
-    command = [sys.executable, '-m', handler['module']]
-    if 'heads' in inputs:
-        command += ['--heads', hdd_guard.input_path('heads', inputs['heads']['path'], inputs['heads']['sha256'])]
-    command += stage_input_args(inputs, stage['kind'])
-    command += ['--out', str(stage_output), '--device', device]
-    parameters = dict(recipe['parameters'])
-    if 'text_data' in inputs:
-        parameters.pop('text_data', None)
-    # Hardware profile (train/hardware_profile.py): operational knobs chosen by this GPU. The plan keeps the recipe's
-    # parameters (the resume comparison) and records the profile beside them.
-    from . import hardware_profile
-    profiled, profile_environment, profile_record = hardware_profile.for_stage(stage['kind'], parameters, device)
-    command += stage_parameter_args(profiled)
-    plan = {'schema': 'natlang.neuralese-direct-stage-plan/1', 'recipe_id': recipe['id'],
-            'recipe_path': str(Path(recipe_path).resolve()), 'recipe_sha256': recipe_identity_sha256(recipe_path),
-            'stage': stage, 'inputs': inputs, 'device': device,
-            'runtime_image': recipe['runtime']['image'], 'frozen_code': frozen_code,
-            'parameters': parameters, 'child_argv': command, 'stage_output': str(stage_output),
-            'lineage': recipe['lineage'], 'lineage_evidence': lineage_evidence,
-            'lineage_gate_verifications': lineage_gate_verifications,
-            'runtime_environment': declared_runtime_environment(recipe)}
-    if profile_record is not None:
-        plan['hardware_profile'] = profile_record
-    if hdd_guard.RECORDS:
-        plan['hdd_staged_inputs'] = list(hdd_guard.RECORDS)
-    if resume is not None:
-        plan['resume'] = resume
-    write_json(output / 'direct-stage-plan.json', plan)
-    write_json(metadata_path, {'schema': 'natlang.neuralese-direct-stage-launch-intent/1',
-                               'recipe_id': recipe['id'], 'recipe_sha256': plan['recipe_sha256'],
-                               'plan_path': str(output / 'direct-stage-plan.json'),
-                               'plan_sha256': sha(output / 'direct-stage-plan.json'),
-                               'output_path': str(output), 'device': device,
-                               'input_sha256': {role: value['sha256'] for role, value in inputs.items()},
-                               'lineage_evidence_sha256': {item['role']: item['sha256'] for item in lineage_evidence},
-                               'runtime_image': recipe['runtime']['image'],
-                               'frozen_code_count': len(frozen_code),
-                               'frozen_code_manifest_sha256': hashlib.sha256(
-                                   json.dumps(frozen_code, sort_keys=True, separators=(',', ':')).encode()).hexdigest(),
-                               'child_argv': command})
-    environment = dict(os.environ)
-    declared_environment = declared_runtime_environment(recipe)
-    if 'NVTE_ALLOW_UNSAFE_PICKLE_EXTRA_STATE' not in declared_environment:
-        environment.pop('NVTE_ALLOW_UNSAFE_PICKLE_EXTRA_STATE', None)
-    environment.update(profile_environment)
-    environment.update(declared_environment)
-    environment = python_package_environment(environment, frozen.parent)
-    print(json.dumps({'stage': stage['id'], 'command': command}), flush=True)
-    with _ChildSignalForwarder() as signal_forwarder:
-        result = signal_forwarder.run(command, env=environment)
-    stage_report = stage_output / 'report.json'
-    report = json.loads(stage_report.read_text()) if stage_report.is_file() else None
-    if stage['kind'] == 'raw_recurrence_training' and (stage_output / handler['result']).is_file():
-        report = recurrence_completion_gate(stage_output / handler['result'], parameters.get('steps', 500))
-    qualified = False
-    if result.returncode == 0 and report is not None:
-        try:
-            require_gate(report, stage['kind'])
-            qualified = True
-        except ValueError:
-            qualified = False
-    outputs = {str(path.relative_to(output)): {'bytes': path.stat().st_size, 'sha256': sha(path)}
-               for path in sorted(stage_output.rglob('*')) if path.is_file()}
-    write_json(output / 'direct-stage-result.json',
-               {'schema': 'natlang.neuralese-direct-stage-result/1', 'recipe_id': recipe['id'],
-                'stage_id': stage['id'], 'process_exit_code': result.returncode,
-                'interrupted': signal_forwarder.stopped[0],
-                'process_finished': True,
-                'completed': result.returncode == 0 and not signal_forwarder.stopped[0] and
-                    (bool(report and report.get('training_stage_completed', False)) if stage['kind'] == 'raw_recurrence_training'
-                     else stage['kind'] not in DIRECT_TRAINING_KINDS or bool(report and report.get('completed', False))),
-                'qualified': qualified,
-                'gate_scope': recipe['lineage'].get('qualification_scope'),
-                'report': report, 'outputs': outputs})
-    if signal_forwarder.stopped[0]:
-        print(json.dumps({'status':'interrupted','stage':stage['id'],
-                          'child_exit_code':result.returncode}),flush=True)
-    return result.returncode
-
-
-def require_foundation(certificate, *, heads, checkpoint):
-    """Downstream API: validate exact handoff, not an unrelated passed report.
-
-    This validates foundation only. A runtime must separately qualify its own
-    transport/gradient replay, then requalify when its backbone changes.
-    """
-    proof = json.loads(Path(certificate).read_text())
-    if proof.get('schema') != 'natlang.neuralese-foundation-certificate/1' or proof.get('qualified') is not True:
-        raise ValueError('qualified foundation certificate required')
-    if proof['heads_sha256'] != sha(heads) or proof['feedback_checkpoint_sha256'] != sha(checkpoint):
-        raise ValueError('foundation certificate belongs to different weights')
-    for stage in proof['stages']:
-        # Registered snapshots may relocate a recipe directory across machines.
-        # Resolve its adjacent reports first; exact hashes still bind all bytes.
-        adjacent = Path(certificate).parent / Path(stage['report']).name
-        report_path = adjacent if adjacent.is_file() else Path(stage['report'])
-        if sha(report_path) != stage['report_sha256']:
-            raise ValueError('foundation stage report changed')
-        report = json.loads(report_path.read_text())
-        require_gate(report['gate'], report['kind'])
-    kinds = {stage['kind'] for stage in proof['stages']}
-    if not {'token_identity', 'causal_embedding_distillation'} <= kinds:
-        raise ValueError('foundation stages missing')
-    return proof
 
 
 def main(argv=None):
@@ -2407,16 +1561,12 @@ def main(argv=None):
         print(json.dumps(recipe, indent=2))
         return
     args.out = args.out.resolve()
-    args.heads = None
     from ..common import hdd_guard
     hdd_guard.require_nvme(args.out)
     overrides = parse_input_binding_overrides(args.input_binding)
-    defaults = {}
     stage_inputs = {}
     for stage in recipe['stages']:
-        stage_defaults = dict(defaults)
-        if 'text_data' in stage['parameters']:
-            stage_defaults['text_data'] = stage['parameters']['text_data']
+        stage_defaults = {}
         # A held stage (admitted: false) never runs in this lineage; its inputs are neither resolved nor hashed.
         stage_inputs[stage['id']] = ({} if stage.get('admitted') is False else
                                      resolve_stage_inputs(recipe, stage, stage_defaults, overrides))
@@ -2502,8 +1652,6 @@ def main(argv=None):
                               'recipe_path': str(args.recipe.resolve()),
                               'recipe_sha256': plan['recipe_sha256'],
                               'output_path': str(args.out),
-                              'heads_path': str(args.heads) if args.heads is not None else None,
-                              'heads_sha256': sha(args.heads) if args.heads is not None else None,
                               'device': args.device,
                               'until': args.until,
                               'recipe_plan_path': str(plan_path),
@@ -2511,129 +1659,62 @@ def main(argv=None):
                               'frozen_runtime_sha256': plan.get('code', {}),
                               'stage_inputs': stage_inputs,
                               'runtime_environment': declared_runtime_environment(recipe)})
-    init_mix = {}
-    if recipe.get('quantization') or recipe.get('init'):
-        # The lineage's init decision is recorded in its heads (foundation_heads --init-receipt): check it against
-        # the recipe's ``init`` and carry the latents' ramp position into every quantized stage.
-        import torch
-        from .quantization import init_mix_for
-        heads_identity = (torch.load(args.heads, map_location='cpu', weights_only=False, mmap=True).get('backbone')
-                          if args.heads is not None else None)
-        init_mix = init_mix_for(recipe, heads_identity)
     with _ChildSignalForwarder() as signal_forwarder:
         stopped = signal_forwarder.stopped
         reports = []
-        feedback_checkpoint = None
         for stage in recipe['stages']:
             if stopped[0]:
                 print(json.dumps({'status': 'interrupted_before_child_start', 'stage': stage['id']}), flush=True)
-                return
+                return 128 + signal.SIGTERM
             directory = args.out / stage['id']
             report_path = args.out / (stage['id'] + '-report.json')
             kind = stage['kind']
             if report_path.exists():
                 report = json.loads(report_path.read_text())
-                require_gate(report['gate'], kind, training_progress=True)
-                # A report written before a handoff gave unstarted stages new inputs carries the previous input map.
-                lineage_inputs = [inputs] + [record['previous_inputs'] for record in plan.get('handoffs', [])
-                                             if 'previous_inputs' in record]
-                if report['recipe_sha256'] != plan['recipe_sha256'] or report['inputs'] not in lineage_inputs:
+                require_gate(report['gate'], kind)
+                lineage_inputs = [inputs] + [item['previous_inputs'] for item in plan.get('handoffs', [])
+                                             if 'previous_inputs' in item]
+                if report.get('recipe_sha256') != plan['recipe_sha256'] or report.get('inputs') not in lineage_inputs:
                     raise ValueError('stage report belongs to another recipe/input lineage')
                 if sha(report['artifact']) != report['artifact_sha256']:
                     raise ValueError('qualified artifact changed')
             else:
                 if stage.get('admitted') is False:
-                    # A declared stage whose data or method is held (e.g. the view operator stage pending licence
-                    # review): it never runs until its declaration admits it; run earlier stages with --until.
                     raise ValueError('stage is declared but not admitted: ' + stage['id'] +
                                      (' (' + stage['admission'] + ')' if isinstance(stage.get('admission'), str) else ''))
                 for dependency in stage['requires']:
-                    predecessor = next(report for report in reports if report['id'] == dependency)
-                    require_gate(predecessor['gate'], predecessor['kind'],
-                                 training_progress=kind in DIRECT_TRAINING_KINDS | NATIVE_TRAINING_KINDS)
+                    predecessor = next(item for item in reports if item['id'] == dependency)
+                    require_gate(predecessor['gate'], predecessor['kind'])
                 output = directory / HANDLERS[kind]['result']
-                stage_heads = args.heads
-                continuation_checkpoint = None
-                if kind == 'core_text_warmup' and 'heads' in stage_inputs[stage['id']]:
-                    stage_heads = stage_inputs[stage['id']]['heads']['path']
-                if (kind == 'core_text_warmup' and
-                        stage['parameters'].get('ar_feedback_fixup',False) and
-                        'heads' not in stage_inputs[stage['id']]):
-                    continuation_checkpoint, stage_heads = mapped_fixup_continuation(stage,reports)
-                    continuation_checkpoint = str(continuation_checkpoint)
-                direct_artifact_stage = False
-                if kind in ('core_text_warmup','text_warmup_runtime','raw_recurrence_training') and not direct_artifact_stage:
-                    has_exact_stage_heads = 'heads' in stage_inputs[stage['id']]
-                    if has_exact_stage_heads:
-                        stage_heads = stage_inputs[stage['id']]['heads']['path']
-                    elif kind == 'core_text_warmup':
-                        if not stage['parameters'].get('ar_feedback_fixup',False):
-                            predecessor_kind = 'raw_runtime_qualification'
-                            predecessor = next(r for r in reversed(reports)
-                                               if r['id'] in stage['requires'] and r['kind'] == predecessor_kind)
-                            stage_heads = predecessor['artifact']
-                    else:
-                        predecessor_kind = 'core_text_warmup'
-                        predecessor=next(r for r in reversed(reports) if r['id'] in stage['requires'] and r['kind']==predecessor_kind)
-                        stage_heads=predecessor['artifact']
                 command = [sys.executable, '-m', HANDLERS[kind]['module']]
-                if not direct_artifact_stage and kind not in HEADLESS_NATIVE_KINDS:
-                    command += ['--heads', hdd_guard.input_path('heads', stage_heads)]
+                resolved = stage_inputs[stage['id']]
+                command += stage_input_args(resolved, kind)
                 if kind == 'native_shared_stage_controller':
-                    controller_path = stage_inputs[stage['id']]['controller_config']['path']
-                    validate_shared_controller_output(controller_path, directory)
-                    command += stage_input_args(stage_inputs[stage['id']], kind)
+                    validate_shared_controller_output(resolved['controller_config']['path'], directory)
                 else:
-                    command += stage_input_args(stage_inputs[stage['id']], kind) + ['--out',
-                               str(output if kind == 'token_identity' else directory), '--device', args.device]
-                previous_phase = direct_phase_predecessor(recipe, stage)
-                if previous_phase is not None:
-                    # A later phase of a direct lineage continues from its predecessor phase's final full state and
-                    # sidecars (DIRECT_PHASE_CONTINUATION); refuse before the child loads anything if one is absent.
-                    predecessor = next(r for r in reports if r['id'] == previous_phase)
-                    continuation = direct_phase_continuation(Path(predecessor['artifact']).parent)
-                    absent = sorted(value['path'] for value in continuation.values() if not Path(value['path']).is_file())
-                    if absent:
-                        raise ValueError('continued direct phase ' + stage['id'] + ' lacks predecessor output(s): ' +
-                                         ', '.join(absent))
-                    command += stage_input_args(continuation, kind)
+                    command += ['--out', str(directory), '--device', args.device]
                 native_predecessors = [name for name in stage['requires']
-                                       if next((item['kind'] for item in recipe['stages']
-                                                if item['id'] == name), None) in NATIVE_TRAINING_KINDS]
+                    if next((item['kind'] for item in recipe['stages'] if item['id'] == name), None)
+                       in NATIVE_TRAINING_KINDS]
                 if kind in NATIVE_TRAINING_KINDS and native_predecessors:
                     if len(native_predecessors) != 1:
-                        raise ValueError('native SFT continuation requires one native-state predecessor')
-                    if 'continue_from' in stage_inputs[stage['id']]:
-                        raise ValueError('native SFT continuation cannot declare both a native predecessor and an '
-                                         'independent continue_from input')
-                    predecessor = next(report for report in reports if report['id'] == native_predecessors[0])
+                        raise ValueError('native stage continuation requires one native-state predecessor')
+                    if 'continue_from' in resolved:
+                        raise ValueError('native stage cannot bind both a native predecessor and independent continue_from')
+                    predecessor = next(item for item in reports if item['id'] == native_predecessors[0])
                     command += ['--continue-from', predecessor['artifact']]
-                if continuation_checkpoint:
-                    command += ['--continue-from', continuation_checkpoint]
-                recovery=plan.get('checkpoint_recovery')
-                if recovery and stage['id']==recovery['stage_id']:
+                recovery = plan.get('checkpoint_recovery')
+                if recovery and stage['id'] == recovery['stage_id']:
                     if '--continue-from' in command:
                         raise ValueError('checkpoint recovery conflicts with another stage continuation')
-                    command += ['--continue-from',recovery['checkpoint']['path']]
-                if kind == 'raw_runtime_qualification':
-                    command += ['--checkpoint', feedback_checkpoint, '--certificate', str(args.out / 'foundation-certificate.json')]
-                if kind == 'view_operator_gate':
-                    measured = next(r for r in reversed(reports)
-                                    if r['id'] in stage['requires'] and r['kind'] == 'raw_recurrence_training')
-                    command += ['--checkpoint', measured['artifact']]
-                if kind == 'verified_heads_handoff':
-                    raw = next(r for r in reversed(reports) if r['id'] in stage['requires'] and r['kind']=='raw_runtime_qualification')
-                    command += ['--raw-runtime-report', str(Path(raw['artifact']).parent / 'runtime-report.json')]
-                stage_parameters = effective_stage_parameters(stage,reports,recipe)
-                if 'text_data' in stage_inputs[stage['id']]:
-                    stage_parameters = {key: value for key, value in stage_parameters.items() if key != 'text_data'}
+                    command += ['--continue-from', recovery['checkpoint']['path']]
+                stage_parameters = effective_stage_parameters(stage, reports, recipe)
                 from . import hardware_profile
                 profiled, profile_environment, profile_record = hardware_profile.for_stage(
                     kind, stage_parameters, args.device)
                 if profile_record is not None:
                     print(json.dumps({'event': 'hardware_profile', 'stage': stage['id'], **profile_record}), flush=True)
-                command += stage_parameter_args({key: value for key, value in profiled.items()
-                                                 if key not in RUNNER_STAGE_PARAMETERS})
+                command += stage_parameter_args(profiled)
                 if kind in NATIVE_TRAINING_KINDS:
                     prerequisites = []
                     for dependency in stage['requires']:
@@ -2642,24 +1723,16 @@ def main(argv=None):
                             continue
                         receipt_path = Path(prior['artifact']).parent / 'native-training-receipt.json'
                         if not receipt_path.is_file():
-                            raise ValueError('native predecessor lacks its exposure/readiness receipt: ' +
-                                             prior['id'])
+                            raise ValueError('native predecessor lacks exposure/readiness receipt: ' + prior['id'])
                         receipt = json.loads(receipt_path.read_text())
                         prerequisites.append({'id': prior['id'], 'completed': receipt.get('completed') is True,
-                            'exposure_receipt': {'path': str(receipt_path.resolve()),
-                                                 'sha256': sha(receipt_path)}})
+                            'exposure_receipt': {'path': str(receipt_path.resolve()), 'sha256': sha(receipt_path)}})
                     if kind == 'native_state_sft':
                         command += ['--resident-data-directory', str(args.out / 'resident-data')]
                     recipe_binding = native_recipe_binding(args.recipe, plan['recipe_sha256'])
-                    command += ['--recipe-binding', json.dumps(recipe_binding, sort_keys=True,
-                                                               separators=(',', ':')),
+                    command += ['--recipe-binding', json.dumps(recipe_binding, sort_keys=True, separators=(',', ':')),
                                 '--stage-id', stage['id'], '--prerequisite-stages',
                                 json.dumps(prerequisites, sort_keys=True, separators=(',', ':'))]
-                component = stage_quantization(recipe, stage, stage_parameters, reports, init_mix)
-                if component is not None:
-                    command += ['--quantization', json.dumps(component, sort_keys=True, separators=(',', ':'))]
-                if kind in DIRECT_TRAINING_KINDS:
-                    command += stage_objective_args(recipe, stage)
                 environment = dict(os.environ)
                 declared_environment = declared_runtime_environment(recipe)
                 if 'NVTE_ALLOW_UNSAFE_PICKLE_EXTRA_STATE' not in declared_environment:
@@ -2668,114 +1741,31 @@ def main(argv=None):
                 environment.update(declared_environment)
                 environment = python_package_environment(environment, frozen.parent)
                 if args.plan_only:
-                    # The next stage's own data plan on the current code (budget, data continuation, QAT range, held
-                    # set), from its exact child arguments; a trainer without a plan-only mode is listed only.
                     print(json.dumps({'stage': stage['id'], 'plan_only_command': command}), flush=True)
-                    if kind not in DIRECT_TRAINING_KINDS:
-                        return 0
-                    environment = python_package_environment(environment, package.parent)
-                    return subprocess.run(command + ['--plan-only'], env=environment).returncode
+                    return 0
                 if hdd_guard.RECORDS:
                     write_json(args.out / 'hdd-staged-inputs.json', hdd_guard.RECORDS)
                 print(json.dumps({'stage': stage['id'], 'command': command}), flush=True)
                 result = signal_forwarder.run(command, env=environment)
-                code = result.returncode
-                adopted = recover_resident(args.out / 'resident-data') if (args.out / 'resident-data/current.json').exists() else None
-                if adopted:
-                    plan = adopted['payload']['plan']
-                    recipe = plan['recipe']
-                    stage_inputs = plan['stage_inputs']
-                    inputs = plan['inputs']
-                    args.recipe = Path(adopted['payload']['recipe']['path'])
                 if stopped[0]:
                     print(json.dumps({'status': 'interrupted', 'stage': stage['id'],
-                                      'child_exit_code': code}), flush=True)
-                    return
-                if code:
-                    raise RuntimeError('stage failed: ' + stage['id'])
-                if kind == 'token_identity':
-                    gate = json.loads(output.read_text())
-                elif kind in ('raw_runtime_qualification','text_warmup_runtime'):
-                    gate = json.loads((directory / ('runtime-report.json' if kind=='raw_runtime_qualification' else 'report.json')).read_text())
-                elif kind=='verified_heads_handoff':
-                    gate=json.loads((directory/'report.json').read_text())
-                elif kind in ('core_text_warmup','neuralese_direct') or kind in NATIVE_TRAINING_KINDS | COEFFICIENT_NATIVE_KINDS:
-                    gate=json.loads((directory/'report.json').read_text())
-                elif kind in SHARED_NATIVE_KINDS:
-                    gate=json.loads((directory/'shared-stage-completion.json').read_text())
-                elif kind == 'direct_runtime_qualification':
+                                      'child_exit_code': result.returncode}), flush=True)
+                    return result.returncode or (128 + signal.SIGTERM)
+                if result.returncode:
+                    raise RuntimeError('native stage failed: ' + stage['id'])
+                if kind in NATIVE_TRAINING_KINDS | COEFFICIENT_NATIVE_KINDS:
                     gate = json.loads((directory / 'report.json').read_text())
-                    if gate.get('artifact_manifest_sha256') != stage_inputs[stage['id']]['direct_artifact_manifest']['sha256']:
-                        raise ValueError('direct runtime qualification measured another export than its binding')
-                elif kind == 'view_operator_gate':
-                    gate = json.loads(output.read_text())
                 else:
-                    import torch
-                    state = torch.load(output, mmap=True, weights_only=False, map_location='cpu')
-                    if kind == 'raw_recurrence_training':
-                        if state.get('schema') != 'natlang.neuralese_recurrence_checkpoint/1':
-                            raise ValueError('wrong recurrence artifact schema')
-                        if direct_artifact_stage:
-                            parent = state.get('direct_parent_binding') or {}
-                            if (parent.get('manifest_file_sha256') !=
-                                    stage_inputs[stage['id']]['direct_artifact_manifest']['sha256']):
-                                raise ValueError('recurrence artifact was trained from another direct export')
-                        elif state['identity']['files'].get(str(Path(stage_heads).resolve())) != sha(stage_heads):
-                            raise ValueError('recurrence artifact runtime handoff differs')
-                        gate = recurrence_completion_gate(output, stage['parameters'].get('steps', 500))
-                    else:
-                        gate = state['best']
-                        if state['identity']['inputs'].get(str(args.heads)) != sha(args.heads):
-                            raise ValueError('bootstrap checkpoint backbone identity differs')
+                    gate = json.loads((directory / 'shared-stage-completion.json').read_text())
                 report = {'id': stage['id'], 'kind': kind, 'recipe_sha256': plan['recipe_sha256'],
                           'inputs': inputs, 'gate': gate, 'artifact': str(output), 'artifact_sha256': sha(output)}
-                if kind == 'neuralese_direct' and gate.get('data_continuation') is not None:
-                    report['data_continuation'] = gate['data_continuation']  # previous data, seen count, new budget
                 write_json(args.out / (stage['id'] + '-attempt.json'), report)
-                require_gate(gate, kind, training_progress=True)
+                require_gate(gate, kind)
                 write_json(report_path, report)
             reports.append(report)
-            if kind == 'causal_embedding_distillation':
-                feedback_checkpoint = report['artifact']
-            if kind == 'causal_embedding_distillation':
-                certificate = {'schema': 'natlang.neuralese-foundation-certificate/1', 'qualified': True,
-                               'runtime_qualified': False, 'heads_sha256': sha(args.heads),
-                               'feedback_checkpoint': feedback_checkpoint, 'feedback_checkpoint_sha256': sha(feedback_checkpoint),
-                               'recipe_sha256': plan['recipe_sha256'],
-                               'stages': [{'kind': report['kind'], 'report': str(args.out / (report['id'] + '-report.json')),
-                                           'report_sha256': sha(args.out / (report['id'] + '-report.json'))} for report in reports if report['kind'] in {'token_identity', 'causal_embedding_distillation'}]}
-                write_json(args.out / 'foundation-certificate.json', certificate)
-            if kind == 'raw_recurrence_training' and e2e_lineage:
-                # The lineage's acceptance (consumers reading values against consumers reading tokens, task success,
-                # drift) on the stage's final report; a certificate, not a gate: the stage itself completed.
-                from .e2e_acceptance import certificate as e2e_certificate
-                summary = Path(report['artifact']).parent / 'summary.json'
-                write_json(args.out / 'e2e-certificate.json',
-                           e2e_certificate(recipe['e2e_acceptance'], summary, recipe_sha256=plan['recipe_sha256'],
-                                           stage=stage['id'], report_path=report_path))
-            if kind == 'neuralese_direct':
-                stage_report = json.loads(Path(report['artifact']).read_text())
-                identity = stage_report.get('identity_check') or {}
-                certificate = {'schema': 'natlang.neuralese-direct-certificate/1',
-                               'qualified': (bool(stage_report.get('qualified')) and identity.get('passed') is True
-                                             and (stage_report.get('quantization') or {}).get(
-                                                 'precisions_qualified') is not False),
-                               'quantization': stage_report.get('quantization'),
-                               'identity_qualification': {'kind': DIRECT_IDENTITY_QUALIFICATION, **identity},
-                               # Base drift and the 48-probe behaviour gate are telemetry (owner 2026-10-15).
-                               'task_gate': stage_report.get('task_gate'),
-                               'drift_stopped': stage_report.get('drift_stopped'),
-                               'behaviour_gate_report_only': True,
-                               'behaviour_gate': stage_report.get('behaviour_gate'),
-                               'owner_decision': 'Neuralese direct v1, 2026-10-11 (AGENTS.md "Neuralese training '
-                                                 'foundation")',
-                               'heads_sha256': sha(args.heads), 'recipe_sha256': plan['recipe_sha256'],
-                               'stage': {'id': stage['id'], 'report': str(report_path), 'report_sha256': sha(report_path),
-                                         'artifact_sha256': report['artifact_sha256']}}
-                write_json(args.out / 'direct-certificate.json', certificate)
             if args.until == stage['id']:
-                return
-    print(json.dumps({'status': 'recipe_completed', 'foundation_runtime_qualified': any(r['kind'] == 'raw_runtime_qualification' for r in reports)}), flush=True)
+                return 0
+    print(json.dumps({'status': 'recipe_completed', 'completed_stages': [report['id'] for report in reports]}), flush=True)
 
 
 if __name__ == '__main__':
