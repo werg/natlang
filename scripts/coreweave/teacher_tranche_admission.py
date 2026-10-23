@@ -419,14 +419,18 @@ def _reviewed_predecessor_source(root, spool, original, reviewed):
         raise ValueError('reviewed predecessor source changed during validation')
 
 
-def preceding_tranches(root, spool, tranche, *, relocation_manifest=None, cache_contracts=None):
+def preceding_tranches(root, spool, tranche, *, relocation_manifest=None, cache_contracts=None,
+                       accounted_internal_boundaries=()):
     """Account for every earlier tranche in this batch, including all-rejected ones."""
     admitted = admitted_predecessors(root, tranche.corpus_id,
         namespaces=tuple(dict.fromkeys((LEGACY_TEACHER_NAMESPACE, tranche.teacher_namespace))),
         relocation_manifest=relocation_manifest, cache_contracts=cache_contracts)
     identities = {row['id'] for row in admitted}
     rejected = []
+    accounted_internal_boundaries = set(accounted_internal_boundaries)
     for number in range(tranche.number):
+        if (tranche.batch, number) in accounted_internal_boundaries:
+            continue
         earlier = Tranche(tranche.batch, number, tranche.attempt, teacher_namespace=tranche.teacher_namespace)
         if earlier.corpus_id in identities:
             continue

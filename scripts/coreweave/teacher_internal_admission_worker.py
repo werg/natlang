@@ -6,10 +6,12 @@ verifier, both-model native converter, current protection manifest and exact
 registered-content dedup before normal registry publication.
 """
 from __future__ import annotations
+import hashlib
 import argparse, json, os, subprocess, sys, time, traceback
 from pathlib import Path
 from natlang_neuralese.common.paths import resolve
 from scripts.coreweave.teacher_tranche_admission import Tranche, file_binding, read_bound
+from scripts.coreweave.teacher_internal_conversion import _verified_zero_conversion
 
 ROOT=resolve('repo')
 CODE_ROOT=Path(__file__).resolve().parents[2]
@@ -116,17 +118,70 @@ def _registered_ids()->set[str]:
                           capture_output=True,text=True,check=True)
     return {row['id'] for row in json.loads(result.stdout)['corpora']}
 
+def _existing_conversion(corpus_id:str,conversion_ref:dict)->dict|None:
+    """Return a prior exact publication; reject immutable-ID content conflicts."""
+    try:
+        registry_ref=file_binding(ROOT/'training/neuralese_corpora.json')
+        registry=read_bound(registry_ref)
+        matches=[entry for entry in registry.get('corpora',[]) if entry.get('id')==corpus_id]
+        if len(matches)!=1 or matches[0].get('training_admission') is not True:
+            raise ValueError(f'existing publication is not one admitted registry entry: {corpus_id}')
+        entry=matches[0]
+        manifest_ref=file_binding(ROOT/'training/corpus-manifests'/f'{corpus_id}.json')
+        manifest=read_bound(manifest_ref)
+        if manifest.get('id')!=corpus_id or manifest.get('path')!=entry.get('path'):
+            raise ValueError(f'existing publication manifest differs from registry: {corpus_id}')
+        proof_rel='evidence/registration-proof.json'
+        proof_members=[row for row in manifest.get('files',[]) if row.get('path')==proof_rel]
+        registry_proof=(entry.get('source_binding') or {}).get('registration_proof') or {}
+        if (len(proof_members)!=1 or registry_proof.get('path')!=f"{entry['path']}/{proof_rel}"
+                or any(registry_proof.get(key)!=proof_members[0].get(key) for key in ('sha256','bytes'))):
+            raise ValueError(f'existing publication does not bind its exact registration proof: {corpus_id}')
+        entry_path=ROOT/entry['path']/proof_rel
+        proof_ref=file_binding(entry_path)
+        proof=read_bound(proof_ref)
+    except FileNotFoundError:
+        return None
+    if (proof.get('schema')!='natlang.teacher-internal-tranche-registration-proof/1'
+            or proof.get('corpus_id')!=corpus_id or proof.get('training_admission') is not True):
+        raise ValueError(f'existing publication has an invalid registration proof: {corpus_id}')
+    if any(proof_ref.get(key)!=proof_members[0].get(key) for key in ('sha256','bytes')):
+        raise ValueError(f'existing registration proof differs from its manifest: {corpus_id}')
+    registered_ref=proof.get('conversion') or {}
+    if (registered_ref.get('sha256')!=conversion_ref.get('sha256')
+            or registered_ref.get('bytes')!=conversion_ref.get('bytes')):
+        raise ValueError(f'immutable corpus ID is already bound to a different conversion: {corpus_id}')
+    if (file_binding(ROOT/'training/neuralese_corpora.json')!=registry_ref
+            or file_binding(ROOT/'training/corpus-manifests'/f'{corpus_id}.json')!=manifest_ref
+            or file_binding(entry_path)!=proof_ref):
+        raise ValueError(f'existing publication custody changed while checking idempotency: {corpus_id}')
+    return {'corpus_id':corpus_id,'proof':proof_ref,'idempotent':True,
+            'registered':True,'training_exposure':False}
+
 def _publish_if_new_delta(ctx:Tranche,conversion:Path)->dict|None:
-    proof=read_bound(file_binding(conversion/'both-port-conversion.json'))
+    conversion_ref=file_binding(conversion/'both-port-conversion.json')
+    proof=read_bound(conversion_ref)
     row_counts={}
     for row in proof['models']:
         receipt=read_bound(row['receipt']); row_counts[row['model']]=receipt['outputs']['train']['rows']
-    if not any(row_counts.values()): return None
+    if not any(row_counts.values()):
+        if set(row_counts)!={'lfm25','mellum21'}:
+            raise ValueError('zero-row disposition requires both exact native model receipts')
+        source_proof=read_bound(proof['source_proof'])
+        contracts={'lfm25':{'tokenizer_fingerprint':'be949ec48f44e17b2b17e1131aeb1dab4262175ba20f9783ecd8e59c27a58105'},
+                   'mellum21':{'tokenizer_fingerprint':'fbf22d8773d09be802cb9977895067db36cdfba747fcb24b02ddbf1312d3778f'}}
+        verified=_verified_zero_conversion(ROOT,conversion/'both-port-conversion.json',ctx,
+                                           source_proof,contracts)
+        return {'status':'verified-zero-delta','conversion':conversion_ref,
+                'training_admission':False,'training_exposure':False,
+                'accounted_boundary':verified}
     known=_registered_ids()
     base=f'qwen36-verified-positive-native-graphs-20261023-internal-batch{ctx.batch:04d}-tranche{ctx.number:04d}'
     if ctx.batch==82 and ctx.number==0:
         repair_id=base+'-history-policy-keep-repair-v1'
-        if repair_id in known: return None
+        if repair_id in known:
+            existing=_existing_conversion(repair_id,conversion_ref)
+            if existing: return existing
         if BAD_82 not in known:
             raise ValueError('bad unexposed batch82 view is no longer registered; repair publication needs its prior exact entry')
         # Repair the already registered but unexposed incomplete view under a
@@ -136,7 +191,36 @@ def _publish_if_new_delta(ctx:Tranche,conversion:Path)->dict|None:
             '--batch',str(ctx.batch),'--number',str(ctx.number),'--conversion',str(conversion),
             '--suffix','history-policy-keep-repair-v1','--supersedes',BAD_82],cwd=ROOT,
             env=env,capture_output=True,text=True,check=True).stdout
-    suffix='content-delta-v1' if base in known else ''
+    if base in known:
+        try:
+            existing=_existing_conversion(base,conversion_ref)
+        except ValueError as error:
+            if 'different conversion' not in str(error):
+                raise
+            existing=None
+        if existing: return existing
+        # Recognize the one immutable suffix used by earlier worker versions
+        # before switching to conversion-addressed deltas.
+        legacy_delta=base+'-content-delta-v1'
+        if legacy_delta in known:
+            try:
+                existing=_existing_conversion(legacy_delta,conversion_ref)
+            except ValueError as error:
+                if 'different conversion' not in str(error):
+                    raise
+            if existing: return existing
+        # The source boundary may legitimately yield an additional numeric
+        # view after a separately versioned repair. Name that immutable delta
+        # from its exact conversion binding so polling is idempotent.
+        suffix='content-delta-'+hashlib.sha256(
+            f"{conversion_ref['sha256']}:{conversion_ref['bytes']}".encode()).hexdigest()[:16]
+        delta_id=base+'-'+suffix
+        if delta_id in known:
+            existing=_existing_conversion(delta_id,conversion_ref)
+            if existing: return existing
+            raise ValueError(f'exact conversion-derived corpus ID conflicts: {delta_id}')
+    else:
+        suffix=''
     env={**os.environ,'PYTHONPATH':os.pathsep.join((str(CODE_ROOT),str(CODE_ROOT/'training/neuralese')))}
     return subprocess.run([sys.executable,str(CODE_ROOT/'scripts/coreweave/publish_teacher_internal_tranche.py'),
         '--batch',str(ctx.batch),'--number',str(ctx.number),'--conversion',str(conversion),
@@ -191,8 +275,11 @@ def run(*,once:bool,poll_seconds:int,batches:set[int]|None=None,tranches:set[int
                     'conversion':file_binding(conversion/'both-port-conversion.json'),
                     'row_counts':{x['model']:read_bound(x['receipt'])['outputs']['train']['rows']
                                   for x in read_bound(file_binding(conversion/'both-port-conversion.json'))['models']},
-                    'publication':result,'status':'registered' if result else 'no-new-numeric-rows',
-                    'training_admission':bool(result),'training_exposure':False})
+                    'publication':result,
+                    'status':('no-new-numeric-rows' if isinstance(result,dict) and result.get('status')=='verified-zero-delta'
+                              else 'registered' if result else 'no-new-numeric-rows'),
+                    'training_admission':bool(result) and not (isinstance(result,dict) and result.get('status')=='verified-zero-delta'),
+                    'training_exposure':False})
             except Exception as error:
                 record.update({'status':'error','error':f'{type(error).__name__}: {error}',
                     'traceback':traceback.format_exc(),'training_admission':False,'training_exposure':False})
