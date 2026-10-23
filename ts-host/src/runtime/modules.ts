@@ -48,7 +48,18 @@ export function setPackageLoader(loader: (specifier: string) => unknown): void {
 export function setModuleTarget(target: 'node' | 'browser'): void { moduleTarget = target; }
 let realm: EvalEnvironment | undefined;
 /** Installed by the platform entry point: the evaluator in which module instances live. */
-export function setModuleRealm(factory: () => EvalEnvironment): void { defaultRealm = factory; realm = undefined; }
+export function setModuleRealm(factory: () => EvalEnvironment): void {
+  if(typeof factory!=='function')throw new TypeError('Module evaluator factory required');
+  // A cutover must never hand back CommonJS exports created by the previous
+  // realm (which may have been native and untraced). Invalidate the shared
+  // module-instance cache and close the old realm before installing the new
+  // authority. Active task-local caches cannot be migrated in place.
+  const previous=realm;
+  defaultRealm=factory;
+  realm=undefined;
+  instances=new WeakMap();
+  previous?.close();
+}
 function moduleRealm(): EvalEnvironment {
   if (!defaultRealm) throw new Error('no module realm is installed for this platform');
   return realm ??= defaultRealm();
@@ -165,7 +176,7 @@ export function compileModule(record: ModuleRecord, level: Record<string, ItemRe
   return output.outputText;
 }
 
-const instances = new WeakMap<ModuleRecord, { exports: Record<string, unknown>; ready: boolean }>();
+let instances = new WeakMap<ModuleRecord, { exports: Record<string, unknown>; ready: boolean }>();
 // Compilation is immutable and shareable; mutable exports remain in the task's instance cache.
 const compiled = new Map<string, string>();
 function compiledCode(record: ModuleRecord, level: Record<string, ItemRecord>): string {
