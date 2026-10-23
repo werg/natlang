@@ -527,9 +527,8 @@ def test_qwen35_raw_policy_precision_inventory_rejects_bf16_delta_controls():
 
 def test_qwen35_lora_injection_covers_nested_hybrid_layers():
     from natlang_neuralese.train.adapters import (
-        adapter_layers, inject_lora, lora_state, lora_target_names, restore_lora_checkpoint,
+        adapter_layer_indices, adapter_layers, inject_lora, lora_state, lora_target_names, restore_lora_checkpoint,
     )
-    from natlang_neuralese.train.warmup_export import _adapter_layer_indices
 
     port = tiny_port()
     targets = lora_target_names(port, [0, 1])
@@ -543,7 +542,7 @@ def test_qwen35_lora_injection_covers_nested_hybrid_layers():
     saved = lora_state(port)
     assert any('model.language_model.layers.1.linear_attn.in_proj_qkv.lora_A' in name for name in saved)
     assert not any('.visual.' in name for name in saved)
-    assert _adapter_layer_indices(saved) == [0, 1]
+    assert adapter_layer_indices(saved) == [0, 1]
 
     checkpoint = {'lora': saved, 'lora_layers': [0, 1], 'lora_rank': 2}
     restored_port = tiny_port()

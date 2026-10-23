@@ -10,11 +10,11 @@ import { improvementStep, stepView, validateImprovementStep } from '../dist/impr
 
 const fields = () => ({
   episode: { id: 'ep-1', family: 'decision:sst5', split: 'train' }, facets: ['family:decision:sst5'],
-  before: [{ kind: 'soft-skill', id: 'nz1_before' }],
+  before: [{ kind: 'soft-skill', id: 'nzs1_' + 'a'.repeat(52) }],
   operator: { kind: 'soft-skill-tuned', version: 'test/1', regime: 'supervised', hyper: { lr: 0.01 } },
-  view: { visibility: 'reward-blind-observations', evidence: ['nz1_trace'] },
-  proposal: { deltas: [{ artifact: { kind: 'soft-skill', id: 'nz1_after' }, delta: null, scale: 1 }] },
-  after: [{ kind: 'soft-skill', id: 'nz1_after' }],
+  view: { visibility: 'reward-blind-observations', evidence: ['trace-sha256:' + 'b'.repeat(64)] },
+  proposal: { deltas: [{ artifact: { kind: 'soft-skill', id: 'nzs1_' + 'c'.repeat(52) }, delta: null, scale: 1 }] },
+  after: [{ kind: 'soft-skill', id: 'nzs1_' + 'c'.repeat(52) }],
   outcome: { query: { before: 0.5, after: 0.7, effect: 0.2 } },
   trajectory: { id: 't-1', step: 0 },
 });
@@ -34,6 +34,8 @@ test('validation: visibility, regime, content IDs (null only when legacy)', () =
   assert.throws(() => improvementStep({ ...fields(), view: { visibility: 'peeking', evidence: [] } }), /view.visibility/);
   assert.throws(() => improvementStep({ ...fields(), operator: { ...fields().operator, regime: 'magic' } }), /operator.regime/);
   assert.throws(() => improvementStep({ ...fields(), before: [{ kind: 'soft-skill', id: null }] }), /before\[0\].id/);
+  assert.throws(() => improvementStep({ ...fields(), before: [{ kind: 'soft-skill', id: 'nz1_retired' }] }), /retired projected-block identity/);
+  assert.throws(() => improvementStep({ ...fields(), before: [{ kind: 'soft-skill', id: 'source-digest' }] }), /archived native state/);
   assert.ok(improvementStep({ ...fields(), before: [{ kind: 'soft-skill', id: null }], provenance: { legacy: true } }));
 });
 
@@ -46,7 +48,7 @@ test('the converter turns authoring results and soft-skill results into valid st
     search: { baseline: { quality: 0.5 }, validation: { quality: 0.75 } }, query: paired(0.5, 0.75), transfer: null,
     authorExchanges: [{}, {}], author_identity: 'author-model' };
   const failed = { version: 'natlang.skill-authoring-trajectory/1', episode: 'ep-b', disposition: 'failed' };
-  const soft = [{ arm: 'generic', block: 'nz1_generic', trace: [1, 0.5] },
+  const soft = [{ arm: 'generic', block: 'nzs1_' + 'd'.repeat(52), trace: [1, 0.5] },
     { family: 'decision:sst5', scores: Object.fromEntries(['none', 'text-init', 'generic', 'tuned', 'specific'].map((arm, i) =>
       [arm, { query: { quality: 0.5 + i / 10 }, transfer: { quality: 0.5 } }])), traces: { tuned: [1, 0.4], specific: [1, 0.3] } }];
   writeFileSync(join(dir, 'a.json'), JSON.stringify(authoring));
@@ -61,6 +63,10 @@ test('the converter turns authoring results and soft-skill results into valid st
   for (const step of steps) assert.deepEqual(validateImprovementStep(step), []);
   const crisp = steps.find(step => step.operator.kind === 'crisp-skill-search');
   assert.deepEqual([crisp.before[0].id, crisp.after[0].id, crisp.outcome.query.effect, crisp.outcome.support.effect], ['aaa', 'bbb', 0.25, 0.25]);
+  const generic = steps.find(step => step.operator.kind === 'soft-skill-generic');
+  assert.equal(generic.provenance.legacy, true);
+  assert.equal(generic.before[0].id, null, 'historical projected IDs are not relabeled as native state');
+  assert.equal(generic.proposal.deltas[0].artifact.id, null);
   const specific = steps.find(step => step.operator.kind === 'soft-skill-specific');
   assert.ok(Math.abs(specific.outcome.query.effect - 0.2) < 1e-9, 'the specific arm is measured from generic');
   assert.throws(() => execFileSync(process.execPath, [script, '--out', out, join(dir, 'a.json')], { stdio: 'pipe' }), 'never overwrites');

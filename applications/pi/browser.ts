@@ -64,10 +64,10 @@ export type BrowserPiOptions = {
    */
   session?: Storage | WasmSqliteDb | string;
   /**
-   * Where the blocks of a Neuralese agent are archived: a block store, or the OPFS to keep them in (default the
-   * runtime's store, else `navigator.storage`, else memory). Unused for a text reader.
+   * Where native states and tensor artifacts are archived: a store or OPFS storage (default the runtime's store,
+   * else `navigator.storage`, else memory). Unused for a text reader.
    */
-  blocks?: NeuraleseStore | OpfsStorage;
+  nativeArtifacts?: NeuraleseStore | OpfsStorage;
   /** Network access for the agent's shell commands (default off). */
   network?: boolean;
   /**
@@ -136,9 +136,9 @@ export async function openBrowserPi(options: BrowserPiOptions): Promise<BrowserP
       { kind: 'text' };
     // A Neuralese agent's blocks are archived with the runtime, so a view outlives the engine that wrote it.
     let store = natlang.options.neuralese?.store;
-    if (reader.kind === 'neuralese' && (options.blocks || !store)) {
-      store = options.blocks && isStore(options.blocks) ? options.blocks :
-        await openBrowserNeuraleseStore(options.blocks ? { storage: options.blocks } : {});
+    if (reader.kind === 'native-state' && (options.nativeArtifacts || !store)) {
+      store = options.nativeArtifacts && isStore(options.nativeArtifacts) ? options.nativeArtifacts :
+        await openBrowserNeuraleseStore(options.nativeArtifacts ? { storage: options.nativeArtifacts } : {});
       natlang = new NatlangRuntime({ ...natlang.options, neuralese: { ...natlang.options.neuralese, store } });
     }
     models = agentModels({ endpoint: root, modelId: agent.model, ...(agent.apiKey === undefined ? {} : { apiKey: agent.apiKey }),

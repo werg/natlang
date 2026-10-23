@@ -228,6 +228,7 @@ class QwenPortBackbone(PortBackbone):
             attention_scope = profile_scope("attention")
             attention_scope.__enter__()
             x = layer.input_layernorm(h)
+            gate = None
             tables = self._fused_rope_tables(i, attn, x, cos, sin)
             if tables is not None:  # maple/rope_kernels.py: q/k norm + rotary + head-major layout in one kernel
                 from ..maple.rope_kernels import qk_norm_rope
@@ -238,7 +239,6 @@ class QwenPortBackbone(PortBackbone):
                 v = attn.v_proj(x).view(batch, steps, -1, hd).transpose(1, 2)
             else:
                 q_projection = attn.q_proj(x)
-                gate = None
                 if self.architecture == 'qwen3_5':
                     q_projection = q_projection.view(batch, steps, -1, hd * 2)
                     q_projection, gate = torch.chunk(q_projection, 2, dim=-1)

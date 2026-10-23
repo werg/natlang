@@ -2,7 +2,7 @@ import copy
 
 import pytest
 
-from natlang_neuralese.train.recipe import direct_windowing_handoffs, _without_operational
+from natlang_neuralese.train.recipe import native_stage_parameter_handoffs, _without_operational
 
 
 def recipes():
@@ -16,7 +16,7 @@ def recipes():
 
 def test_exact_expert_transition_preserves_recipe_and_requires_runtime_qualification(tmp_path):
     old, new = recipes()
-    changes, before, after = direct_windowing_handoffs(old, new, tmp_path)
+    changes, before, after = native_stage_parameter_handoffs(old, new, tmp_path)
     assert changes == {'native': {'fp8_recipe': ['delayed', 'current-bf16-dx']}}
     assert _without_operational(before) == _without_operational(after)
     assert new['stages'][0]['parameters']['qualify_training_backend'] is True
@@ -32,18 +32,18 @@ def test_unqualified_or_nonstateless_expert_changes_do_not_bypass_guard(tmp_path
         old['stages'][0]['parameters']['fp8_recipe'] = 'current-bf16-dx'
     new['stages'][0]['parameters'].update(change)
     with pytest.raises(ValueError, match='exact stateless transition'):
-        direct_windowing_handoffs(old, new, tmp_path)
+        native_stage_parameter_handoffs(old, new, tmp_path)
 
 
 def test_expert_transition_does_not_admit_backbone_dtype_change(tmp_path):
     old, new = recipes()
     new['stages'][0]['parameters']['dtype'] = 'float32'
-    _, before, after = direct_windowing_handoffs(old, new, tmp_path)
+    _, before, after = native_stage_parameter_handoffs(old, new, tmp_path)
     assert _without_operational(before) != _without_operational(after)
 
 
 def test_finished_stage_cannot_change_expert_recipe(tmp_path):
     old, new = recipes()
     (tmp_path / 'native-report.json').write_text('{}')
-    with pytest.raises(ValueError, match='finished stage'):
-        direct_windowing_handoffs(old, new, tmp_path)
+    with pytest.raises(ValueError, match='finished native stage'):
+        native_stage_parameter_handoffs(old, new, tmp_path)

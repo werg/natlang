@@ -341,7 +341,7 @@ function checkedSoftBodyMapping(site: Dict, origin: Dict): boolean {
       parentEnd <= parentTemplate || checkedEnd <= checkedStart) return false;
   // The raw call text is checked against its exact paired authored marker by materialization. Here we confirm the
   // compiler's deterministic lowering and that the two attested template slices are the corresponding literals.
-  return /^nz1_[a-z2-7]{20,}$/.test(bodyId) && !!written && !!checkedHash &&
+  return /^nzs1_[a-z2-7]{52}$/.test(bodyId) && !!written && !!checkedHash &&
     site.raw_body_source_sha256 === (typeof site.raw_body_source === 'string' ? hexDigest(site.raw_body_source) : undefined);
 }
 function validTemplateSource(code: string, span: { start: number; end: number }, cooked: string): boolean {
@@ -523,7 +523,9 @@ function attestSnapshotBody(site: Dict, code: string, span: { start: number; end
     body_source_sha256: bodyHash, captures: bindingRows, parent_invocation_id: stringAt(asDict(parent.source_ref), 'invocation_id') ?? '',
     parent_scope_sha256: parentScopeDigest, child_scope_sha256: childScopeDigest };
   if (!plan.parent_invocation_id) return { valid: false, reason: 'capture-parent-invocation-missing' };
-  if (bodyId ? !bodyInChildInstructions(child, bodyId) : !openingText(child)?.includes(bodySource.endsWith('\n') ? bodySource : `${bodySource}\n`))
+  if (bodyId ? !bodyInChildInstructions(child, bodyId, site.soft_body_stop_gradient === true,
+    typeof site.soft_body_source_occurrence === 'string' ? site.soft_body_source_occurrence : undefined) :
+    !openingText(child)?.includes(bodySource.endsWith('\n') ? bodySource : `${bodySource}\n`))
     return { valid: false, reason: 'instruction-body-not-visible-in-child' };
   return { valid: true, plan, bodySource, bodyCodeSource };
 }
@@ -538,7 +540,7 @@ function rowText(row: Row): string {
     else if (Array.isArray(content)) for (const part of content) {
       const record = asDict(part);
       if (record?.type === 'text' && typeof record.text === 'string') values.push(record.text);
-      else if (record?.type === 'neuralese' && typeof record.id === 'string') values.push(`${record.id}`);
+      else if (record?.type === 'native_state' && typeof record.id === 'string') values.push(`${record.id}`);
     }
     for (const call of Array.isArray(item.tool_calls) ? item.tool_calls : []) {
       const args = asDict(asDict(call)?.function)?.arguments;
@@ -606,13 +608,14 @@ function childScopeDeclarations(row: Row): string {
   return '';
 }
 
-function bodyInChildInstructions(row: Row, id: string): boolean {
+function bodyInChildInstructions(row: Row, id: string, stopGradient = false, sourceOccurrence?: string): boolean {
   const opening = (row.messages ?? []).map(asDict).find(item => item?.role === 'user');
   if (!opening) return false;
   const content = opening.content;
   const parts = Array.isArray(content) ? content.map(part => {
     const value = asDict(part);
-    return value?.type === 'neuralese' && typeof value.id === 'string' ? `${value.id}` :
+    return value?.type === 'native_state' && typeof value.id === 'string' ? neuraleseSentinel(value.id,
+      value.stop_gradient === true, typeof value.source_occurrence === 'string' ? value.source_occurrence : undefined) :
       value?.type === 'text' && typeof value.text === 'string' ? value.text : '';
   }).join('') : typeof content === 'string' ? content : '';
   const marker = parts.indexOf('Instructions:\n');
@@ -620,8 +623,14 @@ function bodyInChildInstructions(row: Row, id: string): boolean {
   const tail = parts.slice(marker + 'Instructions:\n'.length);
   const boundary = /\n\n(?:In eval\b|Eval also\b)/.exec(tail);
   const section = boundary ? tail.slice(0, boundary.index + 1) : '';
-  const needle = `${id}`;
-  return !!section && section.split(needle).length === 2;
+  const occurrences = !!section ? [...section.matchAll(/(nzs1_[a-z2-7]{52})(!)?(?:@([^]+))?/g)]
+    .filter(match => match[1] === id) : [];
+  if (occurrences.length !== 1) return false;
+  const match = occurrences[0]!;
+  let occurrence: string | undefined;
+  try { occurrence = match[3] === undefined ? undefined : decodeURIComponent(match[3]); }
+  catch { return false; }
+  return (match[2] === '!' ) === stopGradient && occurrence === sourceOccurrence;
 }
 
 function openingText(row: Row): string | undefined {

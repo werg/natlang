@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { createNativeStateFixturePort } from './fixtures/native-state-port.mjs';
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { buildProject, createNatlangRuntime, defineNatlang, loadNatlang, save, softFunction } from '../dist/index.js';
-import { MemoryNeuraleseStore, StandInNeuralesePort, hashingEmbedder } from '../dist/native/neuralese-store.js';
+import { MemoryNeuraleseStore } from '../dist/native/neuralese-store.js';
 import { neuraleseRef } from '../dist/native/neuralese.js';
 import { analyzeEvalSnippet } from '../dist/compiler/eval-check.js';
 import { eagerTyping, explicitCaptures, rewriteTrajectory } from '../dist/compiler/data-rewrites.js';
@@ -19,7 +20,7 @@ const runtimeModule = { url: new URL('../dist/index.js', import.meta.url).href, 
 
 const standIn = (width = 8) => {
   const store = new MemoryNeuraleseStore();
-  return { store, port: new StandInNeuralesePort(store, hashingEmbedder(width), width, 'nd:natlang@1') };
+  return { store, port: createNativeStateFixturePort(store, 'native-state/fixture') };
 };
 const neuraleseDriver = fn => Object.assign(fn, { neuralese: true });
 
@@ -46,7 +47,7 @@ test('a companion folder binds its .nz files and skills by default; imported blo
   const source = standIn();
   const memo = await source.port.write('the customer prefers email');
   const bytes = await save({ memo: { type: 'Neuralese<string>', value: neuraleseRef('Neuralese<string>', memo.id) } },
-    { store: source.store, dialect: 'nd:natlang@1' });
+    { store: source.store, dialect: 'native-state/fixture' });
   const root = folder({ 'reply.nl': '---\nargs:\n  ticket: string\nreturns: string\n---\nReply to the ticket using notes.memo.\n',
     'reply/notes.nz': bytes, 'reply/skills/tone/SKILL.md': TONE_SKILL });
   const reply = loadNatlang(join(root, 'reply.nl'), root);
@@ -63,7 +64,7 @@ test('a companion folder binds its .nz files and skills by default; imported blo
   assert.match(reading, /const greeting: string = \\"Hello there\\";\s*\/\/ from skill tone/);
   assert.match(opening, /notes/);
   assert.match(opening, /- tone: Matching a customer's tone\./);
-  assert.ok(Array.isArray(opened) && opened.some(part => part.type === 'neuralese' && part.id === memo.id),
+  assert.ok(Array.isArray(opened) && opened.some(part => part.type === 'native_state' && part.id === memo.id),
     'the bound .nz block reaches the call as a literal');
   assert.equal(await target.store.has(memo.id), true, 'the imported block was adopted by the runtime store');
 });
@@ -97,7 +98,7 @@ const SCOPE = { types: {}, inputs: [], locals: [{ name: 'rubric', type: 'string'
 test('soft-bodied nl takes only nl.with captures; text nl.with lists them (soft-literal-requires-explicit-captures)', () => {
   const analyze = code => analyzeEvalSnippet(code, SCOPE);
   const errors = result => result.diagnostics.filter(item => item.severity === 'error').map(item => item.code);
-  const id = `nz1_${'a'.repeat(52)}`;
+  const id = `nzs1_${'a'.repeat(52)}`;
   // A soft body without nl.with captures nothing, though rubric is in scope (and may be what the body is about).
   const soft = analyze(sourceWithLiteralCalls('const f: Neuralese<(t: string) => Promise<string>> = nl`' + neuraleseSentinel(id) + '`; return 1;'));
   assert.deepEqual(errors(soft), []);
@@ -225,10 +226,10 @@ test('every node event of a Neuralese run validates against the graph schema (gr
   const manifest = traces.find(trace => trace.events[0]?.kind === 'manifest').events[0];
   assert.equal(manifest.graph.version, 'natlang.exec-graph/1');
   assert.deepEqual(manifest.graph.model, { id: 'stand-in', revision: 'r1' });
-  // The soft argument of the inner call is an edge from the block's writer.
+  // The archived text literal is an external native-state artifact; the inner invocation imports it and retains its caller edge.
   const write = nodes.find(event => event.kind === 'block_write');
   const inner = nodes.find(event => event.kind === 'invocation' && event.inputs.some(input => input.block === write.block));
-  assert.ok(inner && inner.inputs.find(input => input.block === write.block).node === write.node);
+  assert.ok(inner && inner.inputs.find(input => input.block === write.block).node === 'external');
   assert.ok(inner.inputs.some(input => input.port === 'caller'));
   // A malformed node is caught.
   assert.ok(validateGraph([{ version: 'x', seq: 0, kind: 'block_write', node: 'n1', inputs: [] }], GRAPH_SCHEMA).length);
@@ -236,7 +237,7 @@ test('every node event of a Neuralese run validates against the graph schema (gr
 
 // --- Law-based rewrites (spec/NEURALESE_REWRITES.md) -------------------------------------------------------------
 
-const VERSION = { model: 'm1', dialect: 'nd:natlang@1' };
+const VERSION = { model: 'm1', dialect: 'native-state/fixture' };
 const measured = (rule, extra = {}) => ({ rule, ...VERSION, comparison: `cmp-${rule}`, verdict: 'no-harm', ...extra });
 
 test('a rule is not applied before its comparison has run (rewrite-off-until-enabled)', () => {

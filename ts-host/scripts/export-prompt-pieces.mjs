@@ -9,7 +9,7 @@
 // of earlier runtime versions. Every revision of native/prompt.ts and model/text-neuralese-emulation.ts in git is
 // loaded (as migrate-system-prompt.mjs promptHistory() does, also in the read_code-renamed form); each exported string
 // constant and each derived piece of that revision becomes a historical piece with the scope its current counterpart
-// has. Program declarations (depth-limit notice, directory-reducer declaration, Neuralese text-channel emulation,
+// has. Program declarations (depth-limit notice, directory-reducer declaration,
 // Neuralese string boundaries, the edit_code capability line) are 'program'; everything else is 'generic'.
 // IN.jsonl rows: {"id": ..., "text": <system prompt>}; FIXTURE_OUT rows add "program_header": renderSystemPrompt(text).
 import { readFileSync, writeFileSync } from 'node:fs';

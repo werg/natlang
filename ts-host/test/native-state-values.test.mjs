@@ -1,17 +1,18 @@
 import test from 'node:test';
+import { createNativeStateFixturePort } from './fixtures/native-state-port.mjs';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { createServer } from 'node:http';
-import { neuraleseServerModelTurn, encodeBlockBody, requestNativeStateIds } from '../dist/model/neuralese-server.js';
+import { neuraleseServerModelTurn, requestNativeStateIds } from '../dist/model/neuralese-server.js';
 import { nativeStateRuntimeOptions } from '../dist/model/native-state-client.js';
 import { join } from 'node:path';
-import { MemoryNeuraleseStore, encodeNativeState, StandInNeuralesePort, hashingEmbedder } from '../dist/native/neuralese-store.js';
+import { MemoryNeuraleseStore, encodeNativeState } from '../dist/native/neuralese-store.js';
 import { neuraleseRef, neuraleseSentinel, isNeuraleseRef, soleSentinel, sourceWithLiteralCalls,
   textToParts, partsToText, sentinelIds, decodeTurnValue, dialectBinding, nativeStateConsumerFromInfo } from '../dist/native/neuralese.js';
 import { TypeEnv, parseType } from '../dist/native/types.js';
 import { coerce } from '../dist/native/values.js';
-import { saveNz, loadNz, loadNzSync, registerImportedBlocks, adoptImportedBlocks } from '../dist/native/nz-file.js';
+import { saveNz, loadNz, loadNzSync, registerImportedNativeArtifacts, adoptImportedNativeArtifacts } from '../dist/native/nz-file.js';
 import { FileNeuraleseStore } from '../dist/neuralese/node-block-store.js';
 import { OpfsNeuraleseStore } from '../dist/browser/neuralese-opfs-store.js';
 import { NativeToolAgent } from '../dist/native/agent.js';
@@ -201,20 +202,6 @@ test('assistant native completion is decoded against the declared return type', 
   assert.equal(mixedSession.lam.return, 'before middle after');
 });
 
-test('textual assistant producer spans remain recorded as writes', async () => {
-  const store = new MemoryNeuraleseStore(), port = new StandInNeuralesePort(store, hashingEmbedder(8), 8);
-  const neuralese = { store, port, dialect: port.dialect };
-  const driver = Object.assign(async () => ({
-    text: '<|neuralese|>recorded producer<|/neuralese|>', calls: [],
-  }), { neuralese: true });
-  const session = open({ type: '() => Neuralese<string>', instructions: 'Return a produced memo.' }, { neuralese }).session;
-  await new NativeToolAgent(driver, { maxTurns: 2, neuralese }).run(session);
-  assert.equal((await store.get(session.lam.return.$neuralese.id)).meta.producer.kind, 'stand-in');
-  const writes = session.runtime.trace.events.filter(event => event.kind === 'block_write');
-  assert.equal(writes.length, 1);
-  assert.equal(writes[0].block, session.lam.return.$neuralese.id);
-});
-
 test('native typed artifacts survive file/OPFS restart, pin lifecycle, .nz and compiled-import adoption', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'natlang-native-store-'));
   const { storage } = fakeOpfs();
@@ -232,7 +219,7 @@ test('native typed artifacts survive file/OPFS restart, pin lifecycle, .nz and c
       assert.equal(loaded.exports.memo.$neuralese.id, artifact.id);
       assert.deepEqual(encodeNativeState(await restored.getNativeState(artifact.id)), encodeNativeState(artifact));
       const compiled = loadNzSync(wire), adopted = new MemoryNeuraleseStore();
-      registerImportedBlocks(compiled.blocks.values(), compiled.nativeStates.values()); await adoptImportedBlocks(adopted);
+      registerImportedNativeArtifacts(compiled.nativeStates.values(), compiled.nativeTensors.values()); await adoptImportedNativeArtifacts(adopted);
       assert.equal((await adopted.getNativeState(artifact.id)).id, artifact.id);
       const corrupted = wire.slice(); corrupted[corrupted.length-1] ^= 1;
       assert.throws(() => loadNzSync(corrupted), /neuralese-block-integrity/);
@@ -329,12 +316,12 @@ test('shared semantic standard libraries retain their dialect and archived zero 
 });
 
 
-for (const format of ['native_state', 'neuralese']) {
+for (const format of ['native_state']) {
   test(`${format} transport retains its identity at nested value boundaries and rejects ordinary strings`, async () => {
     const store = new MemoryNeuraleseStore();
-    const port = format === 'neuralese' ? new StandInNeuralesePort(store, hashingEmbedder(8), 8) : undefined;
-    const artifact = port ? await port.write('opaque legacy payload') : await store.putNativeState(nativeStateFixture());
-    const options = port ? { store, port, dialect: port.dialect } : runtimeFor(store);
+    const port = createNativeStateFixturePort(store);
+    const artifact = await port.write('opaque native payload');
+    const options = { store, port, dialect: port.dialect };
     const parts = [{ type: format, id: artifact.id }], env = envFor(options);
     const decoded = await decodeTurnValue({ rows: [{ memo: parts }] }, port, { marker_context: 'return-result' });
     assert.deepEqual(decoded.rows[0].memo, parts);
@@ -359,9 +346,9 @@ for (const format of ['native_state', 'neuralese']) {
 
   test(`${format} genuine producer output cannot escape as an opaque-ID string result`, async () => {
     const store = new MemoryNeuraleseStore();
-    const port = format === 'neuralese' ? new StandInNeuralesePort(store, hashingEmbedder(8), 8) : undefined;
-    const artifact = port ? await port.write('opaque payload') : await store.putNativeState(nativeStateFixture());
-    const neuralese = port ? { store, port, dialect: port.dialect } : runtimeFor(store);
+    const port = createNativeStateFixturePort(store);
+    const artifact = await port.write('opaque payload');
+    const neuralese = { store, port, dialect: port.dialect };
     const invocation = open({ type: '() => string', instructions: 'Return the answer text.' }, { neuralese }).session;
     let turns = 0, feedback = '';
     const driver = Object.assign(async request => {
@@ -376,21 +363,21 @@ for (const format of ['native_state', 'neuralese']) {
 }
 
 test('nested declared literal strings remain exact while typed legacy literals retain transport provenance', async () => {
-  const store = new MemoryNeuraleseStore(), port = new StandInNeuralesePort(store, hashingEmbedder(8), 8);
+  const store = new MemoryNeuraleseStore(), port = createNativeStateFixturePort(store);
   const neuralese = { store, port, dialect: port.dialect }, env = envFor(neuralese);
   const literal = '<|neuralese|>literal user text<|/neuralese|>';
   const type = parseType('{ literal: string, items: { memo: Neuralese<string> }[], tags: { [key: string]: string } }');
   const decoded = await decodeTurnValue({ literal, items: [{ memo: '<|neuralese|>memo<|/neuralese|>' }],
     tags: { source: literal } }, port, { marker_context: 'return-result' }, [], { type, env });
   assert.equal(decoded.literal, literal); assert.equal(decoded.tags.source, literal);
-  assert.equal(decoded.items[0].memo[0].type, 'neuralese');
+  assert.equal(decoded.items[0].memo[0].type, 'native_state');
   const value = coerce(decoded, type, env);
   assert.equal(value.literal, literal); assert.ok(isNeuraleseRef(value.items[0].memo));
 });
 
 
 test('declared union discriminants preserve the selected nested literal/Neuralese contract', async () => {
-  const store = new MemoryNeuraleseStore(), port = new StandInNeuralesePort(store, hashingEmbedder(8), 8);
+  const store = new MemoryNeuraleseStore(), port = createNativeStateFixturePort(store);
   const env = envFor({ store, port, dialect: port.dialect });
   const type = parseType('{ mode: "state", memo: Neuralese<string> } | { mode: "text", memo: string }');
   const literal = '<|neuralese|>literal<|/neuralese|>';
@@ -407,7 +394,7 @@ test('declared union discriminants preserve the selected nested literal/Neurales
   assert.equal(await decodeTurnValue(literal, port, { marker_context: 'return-result' }, [],
     { type: untrusted, env }), literal);
   const id = state.memo[0].id;
-  const argument = await decodeTurnValue({ nested: [[{ type: 'neuralese', id }]] }, port,
+  const argument = await decodeTurnValue({ nested: [[{ type: 'native_state', id }]] }, port,
     { marker_context: 'other-tool-argument' });
   assert.equal(coerce(argument, parseType('{ nested: Neuralese<string>[] }'), env).nested[0].$neuralese.id, id);
 });
@@ -436,14 +423,11 @@ test('typed native-state completion preserves refined, untrusted, and union-list
 });
 
 
-for (const format of ['native_state', 'neuralese']) for (const channel of ['tool', 'assistant']) {
+for (const format of ['native_state']) for (const channel of ['tool', 'assistant']) {
   test(`${format} ${channel} real HTTP normalization preserves producer provenance through agent rejection`, async () => {
     const store = new MemoryNeuraleseStore();
-    const port = format === 'neuralese' ? new StandInNeuralesePort(store, hashingEmbedder(8), 8) : undefined;
-    const artifact = port ? await port.write('opaque transport payload') : await store.putNativeState(nativeStateFixture());
-    const neuralese = port ? { store, port, dialect: port.dialect } : runtimeFor(store);
-    let incidentalWrites = 0;
-    if (port) { const write = port.write.bind(port); port.write = async (...args) => { incidentalWrites++; return write(...args); }; }
+    const artifact = await store.putNativeState(nativeStateFixture());
+    const neuralese = runtimeFor(store);
     const requests = [];
     let replyMode = 'block';
     const server = createServer(async (request, response) => {
@@ -454,23 +438,20 @@ for (const format of ['native_state', 'neuralese']) for (const channel of ['tool
       if (request.url?.endsWith('/meta')) {
         response.setHeader('content-type', 'application/json'); response.end('{}'); return;
       }
-      if (request.url === '/v1/neuralese/blocks/' + artifact.id) {
-        response.end(encodeBlockBody(artifact, (await store.get(artifact.id)).data)); return;
-      }
       if (request.url === '/v1/neuralese/native-states/' + artifact.id) {
         response.end(encodeNativeState(artifact)); return;
       }
       let body = ''; for await (const chunk of request) body += chunk;
       requests.push(JSON.parse(body));
       response.setHeader('content-type', 'application/json');
-      const parts = [{ type: format, id: artifact.id }];
+      const parts = [{ type: 'native_state', id: artifact.id }];
       const value = requests.length !== 1 ? 'actual HTTP answer' : replyMode === 'literal' ?
         neuraleseSentinel(artifact.id) : replyMode === 'mixed' ? [{ type: 'text', text: '<|neuralese|>literal text<|/neuralese|> ' }, ...parts] : parts;
       const message = channel === 'assistant' ? { role: 'assistant', content: value } :
         { role: 'assistant', content: '', tool_calls: [{ id: 'reply-' + requests.length, type: 'function',
           function: { name: 'return_result', arguments: JSON.stringify({ status: 'success', value }) } }] };
-      response.end(JSON.stringify({ choices: [{ message, finish_reason: requests.length === 1 && replyMode === 'truncated' ? 'length' : 'stop' }], ...(requests.length !== 1 ? {} : format === 'native_state' ?
-        { native_state: { blocks: [{ ...artifact.metadata, id: artifact.id }] } } : { neuralese: { blocks: [artifact] } }) }));
+      response.end(JSON.stringify({ choices: [{ message, finish_reason: requests.length === 1 && replyMode === 'truncated' ? 'length' : 'stop' }], ...(requests.length !== 1 ? {} :
+        { native_state: { blocks: [{ ...artifact.metadata, id: artifact.id }] } }) }));
     });
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     try {
@@ -478,7 +459,7 @@ for (const format of ['native_state', 'neuralese']) for (const channel of ['tool
       const driver = neuraleseServerModelTurn({ endpoint, model: 'exact-protocol-fixture', store });
       const invocation = open({ type: '() => string', instructions: 'Return actual answer text.' }, { neuralese }).session;
       await new NativeToolAgent(driver, { maxTurns: 2, neuralese }).run(invocation);
-      const assistantNativeText = format === 'native_state' && channel === 'assistant';
+      const assistantNativeText = channel === 'assistant';
       assert.equal(invocation.lam.return, assistantNativeText ? 'the balance is 42' : 'actual HTTP answer');
       assert.equal(requests.length, assistantNativeText ? 1 : 2);
       if (!assistantNativeText) assert.match(JSON.stringify(requests[1].messages), /type-mismatch/);
@@ -491,27 +472,25 @@ for (const format of ['native_state', 'neuralese']) for (const channel of ['tool
           requests.length = 0;
           const target = open({ type: '() => string', instructions: 'Return actual answer text.' }, { neuralese }).session;
           await new NativeToolAgent(driver, { maxTurns: 2, neuralese }).run(target);
-          const mixedNativeText = format === 'native_state' && replyMode === 'mixed';
+          const mixedNativeText = replyMode === 'mixed';
           assert.equal(target.lam.return, replyMode === 'literal' ? neuraleseSentinel(artifact.id) : mixedNativeText ?
             '<|neuralese|>literal text<|/neuralese|> the balance is 42' : 'actual HTTP answer');
           assert.equal(requests.length, replyMode === 'literal' || mixedNativeText ? 1 : 2);
           if (replyMode === 'mixed' && !mixedNativeText) assert.match(JSON.stringify(requests[1].messages), /type-mismatch/);
-          assert.equal(incidentalWrites, 0, 'sourced text runs must not create an incidental producer');
         }
       }
     } finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
   });
 }
 
-for (const format of ['native_state', 'neuralese']) {
+for (const format of ['native_state']) {
   test(`${format} assistant producer reply to compaction cannot finish the function`, async () => {
     const store = new MemoryNeuraleseStore();
-    const port = format === 'neuralese' ? new StandInNeuralesePort(store, hashingEmbedder(8), 8) : undefined;
-    const note = port ? await port.write('compaction note') : await store.putNativeState(nativeStateFixture());
+    const note = await store.putNativeState(nativeStateFixture());
     const fixture = nativeStateFixture();
-    const answer = port ? await port.write('actual answer') : await store.putNativeState({ ...fixture,
+    const answer = await store.putNativeState({ ...fixture,
       metadata: { ...fixture.metadata, text: 'actual answer' } });
-    const neuralese = port ? { store, port, dialect: port.dialect } : runtimeFor(store);
+    const neuralese = runtimeFor(store);
     const invocation = open({ type: '() => Neuralese<string>', instructions: 'Return the actual answer.' }, { neuralese }).session;
     let turns = 0, compactions = 0;
     const driver = Object.assign(async request => {

@@ -153,8 +153,6 @@ def main(argv=None):
     ap.add_argument("--members", default="24x32,24x64,8x16")
     ap.add_argument("--phase", choices=["bootstrap", "joint", "eval"], default="bootstrap",
                     help="eval: evaluate every member on the held rows and exit (no update)")
-    ap.add_argument("--heads", help="eval: a Neuralese engine checkpoint (heads.pt): evaluate the family with that "
-                                    "run's backbone changes (its student state's members, its QAT deltas)")
     ap.add_argument("--resume", help="trainable state from a previous phase (nested-state.pt)")
     ap.add_argument("--data", required=True, help="natlang task rows")
     ap.add_argument("--sample-rows", type=int, default=0,
@@ -202,25 +200,16 @@ def main(argv=None):
     task, mixed = task[args.eval_rows:], mixed[args.eval_rows:]
 
     start = time.time()
-    if args.heads:
-        if args.phase != "eval":
-            raise ValueError("--heads evaluates a Neuralese run's family; training starts from --resume")
-        from ..serve import load_engine
-        model = load_engine(heads_checkpoint=args.heads, device="cuda").backbone.hf
-        total_layers = model.config.num_hidden_layers
-        members = model.members
-        adapters, scales, private = [], [], []
-    else:
-        from .student import default_cache
+    from .student import default_cache
 
-        cache = default_cache(args.model) if args.cache == "default" else (args.cache or None)
-        model = load_maple(args.model, device="cuda", ternary_attention=False, cache=cache)
-        if args.order:
-            model.order_experts(torch.load(args.order)["orders"])
-        total_layers = model.config.num_hidden_layers
-        members = [Member.parse(m, total_layers) for m in args.members.split(",")]
-        adapters, scales, private = setup(model, members, args.rank, args.private_rank, not args.no_learned_scales,
-                                          not args.no_expert_scales)
+    cache = default_cache(args.model) if args.cache == "default" else (args.cache or None)
+    model = load_maple(args.model, device="cuda", ternary_attention=False, cache=cache)
+    if args.order:
+        model.order_experts(torch.load(args.order)["orders"])
+    total_layers = model.config.num_hidden_layers
+    members = [Member.parse(m, total_layers) for m in args.members.split(",")]
+    adapters, scales, private = setup(model, members, args.rank, args.private_rank, not args.no_learned_scales,
+                                      not args.no_expert_scales)
     if args.resume:
         state = torch.load(args.resume, map_location="cuda")
         result = model.load_state_dict(state["trainable"], strict=False)

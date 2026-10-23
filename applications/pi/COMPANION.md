@@ -143,7 +143,7 @@ When the agent's model is Neuralese-capable (its driver advertises `neuralese: t
     recall("ID") returns all of it` (the bench's `recall_note`). A text reader is sent the text form. The block is
     started by the `afterTool` hook as soon as the result exists, and the request joins or finds it;
   - the token estimate (`ai.estimateTokens`, both the crisp and the natural-language estimate) is per reader: for a
-    Neuralese reader a stored call counts as its block's length plus the recall note. `ai.blockMeta`, the async
+    Neuralese reader a stored call counts as its block's length plus the recall note. `ai.nativeStateMeta`, the async
     preparation harness/context.ts and harness/estimate.ts run before estimating, forces each call the reader has not
     forced yet and fills a synchronous index (call → length per representation) from the durable memo; a call that
     could not be forced fails the estimate (`neuralese-unknown-view-length`, naming the call), never a guess;

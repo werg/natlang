@@ -218,7 +218,7 @@ export function companion(natlang: NatlangRuntime, options: CompanionOptions): E
       const conversation = await harness.conversation(conversationId, context);
       const ref = conversation && (await conversation.agent(context)).model;
       const model = ref && models.getModel(ref.provider, ref.modelId);
-      if (!conversation || !model || modelReader(model).kind !== 'neuralese') return;
+      if (!conversation || !model || modelReader(model).kind !== 'native-state') return;
       const owner = (await harness.snapshot(ProviderDoc, conversationId, context))?.sessionId;
       if (!owner) return;
       const docs: ViewDocs = { conversationId, read: harness, commit: (change, at) => conversation.commit(change, at) };

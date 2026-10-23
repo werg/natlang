@@ -221,7 +221,7 @@ def test_real_collect_seam_cannot_launch_before_missing_partial_closure(tmp_path
         'native_identity': identity}}
     original_get = actor.get_bytes
     actor.get_bytes = lambda route: json.dumps(info).encode() if route.endswith('/info') else original_get(route)
-    monkeypatch.setattr('natlang_neuralese.rl.grpo.Server', lambda _: actor)
+    monkeypatch.setattr('natlang_neuralese.rl.actor_client.NativeActorClient', lambda _: actor)
     monkeypatch.setattr(production, 'root', lambda _: repo)
     def prepare(args):
         (args.out / 'queue.jsonl').write_text(''.join(json.dumps(x) + '\n' for x in entries))
@@ -251,7 +251,7 @@ def test_collect_stop_archives_new_partial_then_fresh_actor_restores_before_work
         original = actor.get_bytes
         actor.get_bytes = lambda route, original=original: (json.dumps(info).encode()
             if route.endswith('/info') else original(route))
-    monkeypatch.setattr('natlang_neuralese.rl.grpo.Server', lambda _: current[0])
+    monkeypatch.setattr('natlang_neuralese.rl.actor_client.NativeActorClient', lambda _: current[0])
     monkeypatch.setattr(production, 'root', lambda _: repo)
     def prepare(args):
         (args.out / 'queue.jsonl').write_text(''.join(json.dumps(x) + '\n' for x in entries))
@@ -310,7 +310,7 @@ def test_wait_exception_drains_actual_child_before_native_partial_archive(tmp_pa
             assert children[0].poll() is not None, 'archive began while collector could still mutate partials'
         return json.dumps(info).encode() if route.endswith('/info') else original_get(route)
     actor.get_bytes = get
-    monkeypatch.setattr('natlang_neuralese.rl.grpo.Server', lambda _: actor)
+    monkeypatch.setattr('natlang_neuralese.rl.actor_client.NativeActorClient', lambda _: actor)
     monkeypatch.setattr(production, 'root', lambda _: repo)
     def prepare(args):
         (args.out / 'queue.jsonl').write_text(''.join(json.dumps(x) + '\n' for x in entries))

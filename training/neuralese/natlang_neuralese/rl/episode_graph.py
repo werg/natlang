@@ -46,11 +46,6 @@ def validate_model_turn_coverage(captured_turn_names, execution_graph):
     return nodes
 
 
-def validate_import_gradient_uses(name, capture, nodes):
-    """Compatibility entry point for the shared exact occurrence verifier."""
-    from .native_occurrences import capture_occurrences
-    capture_occurrences(name,capture,nodes)
-
 
 def rollout_turn_names(turns):
     counters, result = {}, []

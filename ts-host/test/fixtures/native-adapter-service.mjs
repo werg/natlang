@@ -5,24 +5,26 @@ import { MemoryNeuraleseStore } from '../../dist/native/neuralese-store.js';
 import { nativeAdapterCreate, nativeAdapterOptimizerStep, nativeGraphGradient } from '../../dist/neuralese/native-learning-client.js';
 import { restoreNativeTensorArtifacts } from '../../dist/neuralese/native-tensor-client.js';
 import { neuraleseServerModelTurn } from '../../dist/model/neuralese-server.js';
-import { neuraleseRef } from '../../dist/native/neuralese.js';
-import { withAdapters } from '../../dist/neuralese/learning.js';
+import { nativeAdapterRef, nativeTensorRef, neuraleseRef } from '../../dist/native/neuralese.js';
+import { createLearning, learningService } from '../../dist/neuralese/learning.js';
 import { nativeTextOperation } from '../../dist/model/native-state-client.js';
 import { saveNz, loadNz } from '../../dist/native/nz-file.js';
 const [endpoint, archive, fixturePath] = process.argv.slice(2);
 const fixture=JSON.parse(await readFile(fixturePath,'utf8'));
 const info=await (await fetch(endpoint+'/v1/neuralese/info')).json();
-assert.deepEqual(info.adapters,['xs','tiny']);
-assert.equal(info.grad_order,1);
+assert.ok(info.capabilities.includes('native.adapters'));
+assert.equal(info.adapters,undefined);
+assert.equal(info.grad_order,2);
 assert.ok(info.native_state.consumption_modes.includes('same-base-adapter-state'));
-assert.deepEqual(info.projections,{});
+assert.equal(info.projections,undefined);
 const store=await FileNeuraleseStore.open(archive,{residentBytes:0});
 let adapter=await nativeAdapterCreate(endpoint,store,{nativeIdentity:fixture.identity,
   parameterNames:[fixture.target],rank:2});
 const driver=neuraleseServerModelTurn({endpoint,model:'native-fixture',store});
+const {withNativeAdapters}=createLearning(learningService({endpoint,store}));
 const request={messages:[{role:'user',content:'t4 t5'}],options:['t6 t8','t7 t9']};
 const base=await driver.decide(request);
-const zero=await withAdapters(neuraleseRef('Adapter',adapter.id),()=>driver.decide(request));
+const zero=await withNativeAdapters(nativeAdapterRef(adapter.id),()=>driver.decide(request));
 assert.deepEqual(zero.log_probs,base.log_probs);
 assert.deepEqual(zero.tokens,base.tokens);
 assert.ok(base.tokens.every(count=>count>0),'decision fixture must score actual reply tokens');
@@ -36,15 +38,17 @@ for(let step=1;step<=2;step++){
   assert.notEqual(updated.adapter.id,adapter.id);
   adapter=updated.adapter;state=updated.optimizer_state_id;
 }
-const adapted=await withAdapters(neuraleseRef('Adapter',adapter.id),()=>driver.decide(request));
+const adapted=await withNativeAdapters(nativeAdapterRef(adapter.id),()=>driver.decide(request));
 assert.notDeepEqual(adapted.log_probs,base.log_probs);
 const written=await nativeTextOperation({endpoint,store},'write-text',{text:'t5 t6',adapters:[adapter.id]});
-const bytes=await saveNz({memo:{type:'Neuralese<string>',value:neuraleseRef('Neuralese<string>',written.result.id)},adapter:{type:'Adapter',value:neuraleseRef('Adapter',adapter.id)},
-  optimizer:{type:'Neuralese<unknown>',value:neuraleseRef('Neuralese<unknown>',state)}},
+const bytes=await saveNz({memo:{type:'Neuralese<string>',value:neuraleseRef('Neuralese<string>',written.result.id)},adapter:{type:'NativeAdapter',value:nativeAdapterRef(adapter.id)},
+  optimizer:{type:'NativeTensor',value:nativeTensorRef(state,'optimizer-state')}},
   {store,dialect:'native-tensor/adapter-coefficients'});
 const portable=new MemoryNeuraleseStore();
 const loaded=await loadNz(bytes,{store:portable});
-assert.equal(loaded.exports.adapter.$neuralese.id,adapter.id);
+assert.equal(loaded.exports.adapter.$nativeAdapter.id,adapter.id);
+assert.equal(loaded.exports.optimizer.$nativeTensor.id,state,'the portable optimizer reference retains the continuation ID');
+assert.equal(loaded.exports.optimizer.$nativeTensor.kind,'optimizer-state');
 assert.equal(loaded.nativeStates.size,1);
 assert.ok(loaded.nativeTensors.size>=3,'coefficients, exact bases, optimizer continuation travel together');
 await portable.collect(new Set([adapter.id,state]));
@@ -55,9 +59,10 @@ assert.equal(await driver.artifacts.has(adapter.id),false);
 assert.deepEqual(await restoreNativeTensorArtifacts(endpoint,portable,[adapter.id,state]),[]);
 const reopened=await FileNeuraleseStore.open(archive,{residentBytes:0});
 const again=neuraleseServerModelTurn({endpoint,model:'native-fixture',store:reopened});
-const restored=await withAdapters(neuraleseRef('Adapter',adapter.id),()=>again.decide(request));
+const restoredLearning=createLearning(learningService({endpoint,store:reopened}));
+const restored=await restoredLearning.withNativeAdapters(nativeAdapterRef(adapter.id),()=>again.decide(request));
 assert.deepEqual(restored.log_probs,adapted.log_probs);
 assert.deepEqual(restored.tokens,adapted.tokens);
 assert.deepEqual((await again.decide(request)).log_probs,base.log_probs,'adaptation remains scoped after reload');
-await withAdapters(neuraleseRef('Adapter',adapter.id),()=>again({messages:request.messages,tools:[],max_tokens:1}));
+await restoredLearning.withNativeAdapters(nativeAdapterRef(adapter.id),()=>again({messages:request.messages,tools:[],max_tokens:1}));
 console.log(JSON.stringify({adapter:adapter.id,state,portable:loaded.nativeTensors.size,restored:true}));

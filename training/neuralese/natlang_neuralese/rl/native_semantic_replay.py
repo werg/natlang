@@ -121,7 +121,7 @@ def semantic_episode_loss(participants,replays,dependencies,*,channel,external_b
     import math
     import torch
     from .native_replay import action_logps
-    from .full_policy import clipped_token_loss
+    from .policy_math import clipped_token_loss
     from ..model.native_codec_graph import execute_codec_graph
     if mode not in {'grpo','rft'} or not math.isfinite(advantage):
         raise ValueError('semantic policy objective needs an actual finite admitted advantage and supported mode')

@@ -69,9 +69,27 @@ def test_native_checkpoint_chat_produces_captures_and_consumes_exact_stored_stat
         with urllib.request.urlopen(request, timeout=30) as response:
             return response.read()
 
+    def retired_request(path, method, body=None):
+        request = urllib.request.Request(endpoint + path,
+            data=json.dumps(body).encode() if body is not None else None, method=method,
+            headers={'content-type': 'application/json'})
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                return response.status
+        except urllib.request.HTTPError as error:
+            return error.code
+
     try:
         with urllib.request.urlopen(endpoint + '/v1/neuralese/info', timeout=30) as response:
             info = json.loads(response.read())
+        for path, method, body in [
+                ('/v1/neuralese/blocks/nz1_' + 'a' * 52, 'GET', None),
+                ('/v1/neuralese/blocks/nz1_' + 'a' * 52, 'PUT', {}),
+                ('/v1/neuralese/embed', 'POST', {'text': 'old'}),
+                ('/v1/neuralese/encode', 'POST', {'text': 'old'}),
+                ('/v1/neuralese/write', 'POST', {}),
+                ('/v1/neuralese/init_body', 'POST', {})]:
+            assert retired_request(path, method, body) == 404, (method, path)
         binding = info['rl_policy_binding']
         assert binding['communication'] == 'native-state'
         assert binding['native_identity'] == engine.native_identity
@@ -203,14 +221,15 @@ def test_native_checkpoint_chat_produces_captures_and_consumes_exact_stored_stat
 
         info = get('/v1/neuralese/info')
         assert {'template', 'guidance'} <= set(info['capabilities'])
-        assert 'guidance' not in info['capability_gaps']
+        assert not {'embed', 'encode', 'init-body', 'write'} & set(info['capabilities'])
         assert info['native_state']['consumption_modes'] == [
             'exact-native-state', 'same-base-adapter-state', 'best-effort-text-retokenization']
-        assert info['adapters'] == ['xs', 'tiny']
+        assert 'adapters' not in info, 'legacy projected-adapter inventory is retired'
+        assert 'native.adapters' in info['capabilities'], 'native modelLoRA remains available'
         assert {'native.text-write', 'native.init-body'} <= set(info['capabilities'])
         assert {'decide', 'score'} <= set(info['capabilities'])
         assert 'store.native-tensor-artifact' in info['capabilities']
-        assert info['grad'] is True and info['grad_order'] == 1
+        assert info['grad'] is True and info['grad_order'] == 2
         assert 'optim' in info['capabilities']
         placeholder = post_path('/v1/neuralese/native-states/write-text',
                                 {'text': 'placeholder body', 'type': 'Neuralese<string>'})
@@ -230,8 +249,8 @@ def test_native_checkpoint_chat_produces_captures_and_consumes_exact_stored_stat
         assert roles.produce_open not in literal_record.block.token_ids.tolist()
         assert literal_record.block.text == 'keep <|neuralese_produce|> literal'
 
-        from natlang_neuralese.serve.grad import GradSession
-        monkeypatch.setattr(GradSession, '_target_items', lambda _self, _messages, _tools, target:
+        from natlang_neuralese.serve import native_learning
+        monkeypatch.setattr(native_learning, 'target_items', lambda _engine, _messages, _tools, target:
             ([('tok', 4)], [('tok', int(target['content'][1:]))]))
         decision_body = {'messages': [{'role': 'user', 'content': 'choose'}],
                          'options': ['t5', 't6']}

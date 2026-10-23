@@ -12,6 +12,7 @@ from natlang_neuralese.common.hashing import (  # noqa: E402
     canonical_json_sha256_hex,
     sha256_file_hex,
     sha256_hex,
+    sha256_reference,
 )
 from natlang_neuralese.common.jsonio import (  # noqa: E402
     canonical_json_bytes,
@@ -57,6 +58,15 @@ def test_canonical_json_sha256_hex_golden():
     assert canonical_json_sha256_hex(NESTED) == "767457078e9052a5eabede57ab810287b716aff4fb56c4a2e4ea9c8a22c58f7f"
     assert canonical_json_sha256_hex(NESTED_REORDERED) == canonical_json_sha256_hex(NESTED)
     assert canonical_json_sha256_hex(NESTED) == sha256_hex(CANONICAL.encode("utf-8"))
+
+
+def test_sha256_reference_accepts_exact_reference_shapes():
+    digest = "a" * 64
+    assert sha256_reference({"sha256": digest, "bytes": 12}) == digest
+    assert sha256_reference(digest) == digest
+    assert sha256_reference({"bytes": 12}) is None
+    assert sha256_reference("short") is None
+    assert sha256_reference(None) is None
 
 
 def test_utc_now_iso_shape():

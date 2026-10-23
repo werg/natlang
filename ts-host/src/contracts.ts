@@ -9,13 +9,12 @@ export type ModelTurnRequest = { invocation_id?: string; messages: unknown[]; to
   adapters?: { id: string; scale: number }[];
   /**
    * Template readout (Neuralese servers only): the reply is forced to a call of `call` with `arguments`, cut at its
-   * `value` argument; `write` makes the value a written block and closes the call, `decode` decodes the value.
+   * `value` argument; `write` makes the value a written native state span and closes the call, `decode` decodes the value.
    */
   template?: { call: string; arguments: Record<string, unknown>; value: 'write' | 'decode';
     /** Native value syntax in the model prefix; opaque placeholders remain strings on the wire. */
     value_type?: 'string' | 'unknown';
-    /** Optional size hint for a written value: exactly this many vectors, no stop decision; `passes` writes the block
-     * block-wise in that many parallel passes. Never required: without it the stop head decides. */
+    /** Optional size hint for a written value, in tokens. Never required: without it the native writer chooses the span length. */
     length?: number; passes?: number };
   /** Guided generation (natlang's servers only): see the agent's `guidance` option. */
   guidance?: boolean | Record<string, unknown>;
@@ -30,13 +29,11 @@ export type NativeExecutionOccurrence = { schema:'natlang.execution-occurrence/1
   argument_binding_sha256:string; occurrence_sha256:string };
 export type ModelTurnRequestWithOccurrence = ModelTurnRequest & { native_execution_occurrence?: NativeExecutionOccurrence };
 /**
- * Neuralese content (S0 §10, S4 §3). In a request, a message's `content` and a tool call's `function.arguments` may be
- * an array of parts instead of a string, where they carry soft values; in a reply, `text` and string call arguments
- * may be such arrays, where the server wrote a block. A transport that carries parts sets `neuralese: true` on its
- * driver function; the runtime fails a call with `neuralese-unsupported-backend` rather than send blocks elsewhere.
+ * Native state content. In a request, a message's `content` and a tool call's `function.arguments` may be arrays of
+ * parts instead of strings, where they carry archived `nzs1` state. Drivers that carry these parts declare native
+ * state transport explicitly; the runtime never sends them through a flat vector-block adapter.
  */
-export type ModelContentPart = { type: 'text'; text: string } | { type: 'neuralese'; id: string; value_type?: 'string' | 'unknown' } |
-  { type: 'native_state'; id: string };
+export type ModelContentPart = { type: 'text'; text: string } | { type: 'native_state'; id: string };
 /** Calls are an ordered, non-atomic batch. Dependent calls belong in later turns. */
 /** A server-observed malformed native control turn, never executable model text. */
 export type NativeProtocolFailure = { schema: 'natlang.native-marker-failure/1';
@@ -46,7 +43,7 @@ export type NativeProtocolFailure = { schema: 'natlang.native-marker-failure/1';
 
 export type ModelTurn = { protocol_failure?: NativeProtocolFailure; calls?: [string, Record<string, unknown>][]; text?: string;
   raw_calls?: unknown[]; completion_tokens?: number; prompt_tokens?: number;
-  /** Exact rendered-provider-context and explicit text-channel emulation provenance, when an adapter supplies it. */
+  /** Exact provider-context provenance, when an adapter supplies it. */
   transport_provenance?: Record<string, unknown>;
   value_confidence?: (number | { geometric_mean?: number } | null)[];
   raw_response?: Record<string, unknown>;
@@ -65,7 +62,7 @@ export type ModelTurn = { protocol_failure?: NativeProtocolFailure; calls?: [str
  * - `text`, `reasoning`: the next characters of the reply or of the reasoning before it;
  * - `tool_call`: a fragment of call `index` — its `id` and `name` when they arrive (names already as the runtime
  *   knows them, tool aliases undone), and the next `arguments` text (JSON text, possibly with Neuralese parts);
- * - `neuralese`: a block the server wrote into the reply, once complete (`block`: its metadata, when sent);
+ * - `native_state`: a native-state artifact the server wrote into the reply, once complete (`block`: metadata when sent);
  * - `reset`: the turn's request is sent again (a malformed-call retry, or a retry after restoring blocks); deltas so
  *   far belong to an abandoned attempt.
  * Deltas are hints for showing and preparing: the turn the driver returns stays authoritative (on a Neuralese server,
@@ -75,7 +72,6 @@ export type ModelTurn = { protocol_failure?: NativeProtocolFailure; calls?: [str
  */
 export type ModelTurnDelta = { type: 'text'; text: string } | { type: 'reasoning'; text: string } |
   { type: 'tool_call'; index: number; id?: string; name?: string; arguments?: string } |
-  { type: 'neuralese'; part: Extract<ModelContentPart, { type: 'neuralese' }>; block?: Record<string, unknown> } |
   { type: 'native_state'; part: Extract<ModelContentPart, { type: 'native_state' }>; block?: Record<string, unknown> } |
   { type: 'reset' };
 /**

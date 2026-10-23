@@ -64,6 +64,9 @@ def graph_binding(name,capture,nodes,*,semantic=False):
     binding={'graph_turn':name,'written_nodes':{item['id']:item['node'] for item in writes if write_counts[item['id']]==1},
         'read_bindings':{item['source_state_id']:item['source'] for item in reads if read_counts[item['source_state_id']]==1 and item['source']!='external'}}
     if any(count>1 for count in write_counts.values()):binding['written_occurrences']=writes
-    if any(count>1 for count in read_counts.values()) or any(item['id']!=item['source_state_id'] for item in reads):
+    # Keep every external read occurrence explicit. An ID-keyed producer map
+    # cannot represent a unique external root, and omitting it loses the exact
+    # request/position binding needed by native typed learning.
+    if any(count>1 for count in read_counts.values()) or any(item['id']!=item['source_state_id'] or item['source']=='external' for item in reads):
         binding['read_occurrences']=reads
     return binding

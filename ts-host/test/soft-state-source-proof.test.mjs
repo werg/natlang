@@ -4,7 +4,7 @@ import { neuraleseRef } from '../dist/native/neuralese.js';
 import { resolveSoftStateArgument, signatureHasExactArgumentPath, signatureHasExactParameter, summarizeSourceEvidence,
   validateExpectedReadCount, validateSoftStateEdge } from '../scripts/inline-curriculum/soft-state-proof.mjs';
 
-const block = `nz1_${'a'.repeat(32)}`;
+const block = `nzs1_${'a'.repeat(52)}`;
 const writerCallId = 'seed-0';
 const consumerCallId = 'step-1';
 const writerNode = `${writerCallId}#7`;
@@ -143,7 +143,7 @@ test('rejects a mismatched block, declared type, writer, reader, argument port, 
   assert.throws(() => validate(graphFixture().filter(event => event.kind !== 'invocation')), /no exact prior invocation edge/);
   assert.throws(() => validate(graphFixture().filter(event => event.kind !== 'block_read')), /no block_read/);
   assert.throws(() => validate(graphFixture().map(event => event.kind === 'invocation' ? {
-    ...event, inputs: [{ node: writerNode, block: 'nz1_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', port: 'arg:prior' }]
+    ...event, inputs: [{ node: writerNode, block: `nzs1_${'b'.repeat(52)}`, port: 'arg:prior' }]
   } : event)), /no exact prior invocation edge/);
   assert.throws(() => validate(graphFixture().map(event => event.kind === 'invocation' ? {
     ...event, inputs: [{ node: writerNode, block, port: 'arg:other' }]

@@ -347,83 +347,70 @@ def _walk_paths(value, path=''):
 
 
 def writer_payload(record, write_name, expected_sha):
-    found = []
-    for value in _walk(record.get('target') or {}):
-        write = value.get('$write') if isinstance(value, dict) else None
-        if isinstance(write, dict) and write.get('name') == write_name:
-            body = write.get('source')
-            if isinstance(body, str): found.append(body)
-    unique = set(found)
-    # A terminal Neuralese<string> return is an assistant-text producer.  Its
-    # authenticated receipt is carried beside the unchanged target bytes, so
-    # it has no synthetic $write object to find in target.
-    if not unique and isinstance((record.get('target') or {}).get('assistant_text_result'), dict):
-        from natlang_neuralese.train.write_sites import extract_write_sites
-        sites = [site for site in extract_write_sites(record)
-                 if site.source_kind == 'assistant-text-sidecar']
-        if len(sites) != 1 or sites[0].name != write_name or sites[0].source == '':
-            raise ValueError('assistant-text producer sidecar is invalid or names another writer event')
-        _, sources = authenticated_context_writer_sources([record])
-        sidecar = (record.get('target') or {}).get('assistant_text_result') or {}
-        candidate = [item for item in sources.get(sidecar.get('block_id'), [])
-                     if item.get('write_name') == write_name
-                     and item.get('body_sha256') == expected_sha]
-        if len(candidate) == 1:
-            found.append(candidate[0].get('body'))
-            unique = set(found)
-    if len(unique) != 1:
-        raise ValueError(f'writer target has {len(unique)} exact values for {write_name}')
-    body = next(iter(unique))
+    metadata = record.get('native_source_conversion') or {}
+    found = [item for item in metadata.get('occurrences', [])
+             if item.get('role') == 'producer' and item.get('reference') == write_name and
+             item.get('body_sha256') == expected_sha]
+    if len(found) != 1:
+        raise ValueError(f'writer target has {len(found)} exact native producer occurrences for {write_name}')
+    body = found[0].get('body')
+    if not isinstance(body, str): raise ValueError('native producer occurrence body is missing')
     if sha256_bytes(body.encode()) != expected_sha:
         raise ValueError('writer target payload SHA differs from the admitted edge')
+    if found[0].get('source_kind') == 'assistant-text-return':
+        native = record.get('native_source_conversion') or {}
+        source_target = native.get('source_target') or {}
+        proofs = [item for item in native.get('source_receipts', [])
+                  if isinstance(item, dict) and item.get('source') == 'assistant-text-return']
+        proof = (source_target.get('assistant_text_result') if isinstance(source_target, dict) else None)
+        if proof is None and len(proofs) == 1: proof = proofs[0]
+        content = source_target.get('content') if isinstance(source_target, dict) else None
+        if not isinstance(content, str) and proofs: content = proofs[0].get('raw_assistant_text')
+        from natlang_neuralese.train.write_sites import direct_result_event_name
+        source_ref = record.get('source_ref') or {}
+        expected_name = (direct_result_event_name(proof.get('block_id'), source_ref.get('trajectory_id'),
+            proof.get('writer_call_id'), proof.get('writer_node')) if isinstance(proof, dict) else None)
+        if (not isinstance(proof, dict) or not isinstance(content, str) or
+                proof.get('schema') != 'natlang.assistant-text-result-write/1' or
+                proof.get('body_source') != body or proof.get('body_sha256') != expected_sha or
+                proof.get('source_row_sha256') != source_ref.get('source_row_sha256') or
+                found[0].get('reference') != expected_name or
+                source_ref.get('invocation_id') != proof.get('writer_call_id') or
+                not isinstance(proof.get('body_start'), int) or not isinstance(proof.get('body_end'), int) or
+                content[proof['body_start']:proof['body_end']] != body):
+            raise ValueError('invalid assistant-text-result writer sidecar')
     return body
 
 
-def source_occurrences(writer_record, reader_record, write_name, body, expected_sha):
-    writers, readers = [], []
-    # The edge authenticates an emitted target and a later consumed input.
-    # Similar historical mentions elsewhere in a row are not the occurrence.
-    for pointer, value in _walk_paths(writer_record.get('target') or {}, '/target'):
-        write = value.get('$write') if isinstance(value, dict) else None
-        if isinstance(write, dict) and write.get('name') == write_name and write.get('source') == body:
-            writers.append(pointer + '/$write')
-    # Bind the new producer form to the materializer's typed-result receipt;
-    # do not infer a write from matching prose alone.
-    text_result = (writer_record.get('target') or {}).get('assistant_text_result')
-    if isinstance(text_result, dict):
-        from natlang_neuralese.train.write_sites import extract_write_sites
-        sites = [site for site in extract_write_sites(writer_record)
-                 if site.source_kind == 'assistant-text-sidecar']
-        _, sources = authenticated_context_writer_sources([writer_record])
-        candidates = [item for item in sources.get(text_result.get('block_id'), [])
-                      if item.get('write_name') == write_name
-                      and item.get('body') == body
-                      and item.get('body_sha256') == expected_sha]
-        if len(sites) == 1 and sites[0].name == write_name and len(candidates) == 1:
-            writers.append('/target/assistant_text_result')
-    suffix = write_name.removeprefix('soft-state:') if write_name.startswith('soft-state:') else None
-    block_id = suffix.split('@', 1)[0] if suffix else None
-    allow_unqualified_block = bool(suffix and '@' not in suffix)
-    for pointer, value in _walk_paths(reader_record.get('messages') or [], '/messages'):
-        if ((value.get('type')=='read' and value.get('name')==write_name and value.get('source')==body)
-                or (allow_unqualified_block and block_id and value.get('type')=='neuralese'
-                    and value.get('id')==block_id)):
-            readers.append(pointer)
+def source_occurrences(writer_record, reader_record, write_name, body, expected_sha,
+                       *, writer_occurrence_id=None, reader_occurrence_id=None):
+    writer_payload(writer_record, write_name, expected_sha)
+    def collect(record, role):
+        metadata = record.get('native_source_conversion') or {}
+        return [item for item in metadata.get('occurrences', [])
+                if item.get('role') == role and item.get('reference') == write_name and
+                item.get('body') == body and item.get('body_sha256') == expected_sha]
+    writers = [item for item in collect(writer_record, 'producer')
+               if writer_occurrence_id is None or item.get('id') == writer_occurrence_id]
+    readers = [item for item in collect(reader_record, 'consumer')
+               if reader_occurrence_id is None or item.get('id') == reader_occurrence_id]
     if len(writers) != 1 or not readers or sha256_bytes(body.encode()) != expected_sha:
         raise ValueError(f'communication occurrence is ambiguous or disagrees with payload SHA: writes={len(writers)} reads={len(readers)}')
-    return {'writer_json_pointer': writers[0], 'reader_json_pointers': readers,
+    pointer = lambda path: '/' + '/'.join(_pointer_part(part) for part in path)
+    return {'writer_json_pointer': pointer(writers[0]['path']),
+            'writer_occurrence_id': writers[0]['id'],
+            'write_name': write_name,
+            'reader_json_pointers': [pointer(item['path']) for item in readers],
+            'reader_occurrence_ids': [item['id'] for item in readers],
             'payload_sha256': expected_sha,
             'transform': 'static-shared-producer-multi-read' if len(readers) > 1 else 'static-exact-read'}
 
 
 def reader_has_payload(record, write_name, body, expected_sha):
-    suffix = write_name.removeprefix('soft-state:') if write_name.startswith('soft-state:') else None
-    block_id = suffix.split('@', 1)[0] if suffix else None
-    allow_unqualified_block = bool(suffix and '@' not in suffix)
-    matches = [value for value in _walk(record.get('messages') or [])
-               if (value.get('type')=='read' and value.get('name')==write_name and value.get('source')==body)
-               or (allow_unqualified_block and block_id and value.get('type')=='neuralese'
-                   and value.get('id')==block_id)]
+    metadata = record.get('native_source_conversion') or {}
+    matches = [item for item in metadata.get('occurrences', [])
+               if item.get('role') == 'consumer' and item.get('reference') == write_name and
+               item.get('body') == body and item.get('body_sha256') == expected_sha]
     return bool(matches) and sha256_bytes(body.encode()) == expected_sha
 
 
@@ -600,11 +587,17 @@ def normalized_pair_rows(writer_record, reader_record, pieces, *, tokenizer, pay
     for record in records:authenticated_crisp_context_messages(record,piece_map,writer_sources)
     digest=lambda value:sha256_bytes(json.dumps(value,sort_keys=True,separators=(',',':'),ensure_ascii=False).encode())
     source_values=dict(_walk_paths(reader_record))
-    replacements=[{'pointer':pointer,'source_value_sha256':digest(source_values[pointer]),
-        'payload_sha256':sha256_bytes(payload.encode()),'writer_source':{'record_id':writer_record['id'],
-            'record_sha256':digest(writer_record),'write_name':source_values[pointer].get('name') or
-                'soft-state:'+source_values[pointer]['id']},'replacement':{'type':'text',
-            'text':role_markers[2]+payload+role_markers[3]}} for pointer in occurrence['reader_json_pointers']]
+    replacements=[]
+    for pointer, occurrence_id in zip(occurrence['reader_json_pointers'], occurrence['reader_occurrence_ids']):
+        source_value=source_values.get(pointer)
+        if not isinstance(source_value,dict) or source_value.get('type')!='text' or source_value.get('text')!=payload:
+            raise ValueError('native occurrence path does not point to its exact text consumer source')
+        replacements.append({'pointer':pointer,'occurrence_id':occurrence_id,
+            'source_value_sha256':digest(source_value),
+            'payload_sha256':sha256_bytes(payload.encode()),'writer_source':{'record_id':writer_record['id'],
+                'record_sha256':digest(writer_record),'write_name':occurrence['write_name'],
+                'occurrence_id':occurrence['writer_occurrence_id']},'replacement':{'type':'text',
+                'text':role_markers[2]+payload+role_markers[3]}})
     derivations={writer_record['id']:{'schema':'natlang.native-pair-static-derivation/1',
         'source_record_sha256':digest(writer_record),'source_target_sha256':digest(writer_record['target']),
         'target':{'role':'assistant','content':role_markers[0]+payload+role_markers[1]}},
@@ -736,7 +729,8 @@ def _render_trajectory(task):
                 raise ValueError('edge, writer and reader do not share the admitted split')
             body = writer_payload(writer_record, edge['write_name'], edge['body_sha256'])
             occurrence = source_occurrences(writer_record, reader_record, edge['write_name'],
-                body, edge['body_sha256'])
+                body, edge['body_sha256'], writer_occurrence_id=edge.get('writer_occurrence_id'),
+                reader_occurrence_id=edge.get('reader_occurrence_id'))
             occurrence_binding = {'edge_id': edge_identity, 'trajectory': chain,
                 'writer_source_row_sha256': (writer_record.get('source_ref') or {}).get('source_row_sha256'),
                 'reader_source_row_sha256': (reader_record.get('source_ref') or {}).get('source_row_sha256'),

@@ -17,11 +17,16 @@ RECIPES = ROOT / 'training/neuralese/recipes'
 def base_recipe():
     return {
         'schema': 'natlang.neuralese-training-recipe/1', 'id': 'base-r', 'description': 'base',
+        'identity_qualification': 'native_state_runtime_qualified',
+        'input_bindings': {'train': {'path': '/tmp/train.jsonl', 'sha256': 'a' * 64},
+                           'held': {'path': '/tmp/held.jsonl', 'sha256': 'b' * 64}},
         'stages': [
-            {'id': 'token_identity', 'kind': 'token_identity', 'requires': [],
-             'parameters': {'limit': 32, 'max_tokens': 512}},
-            {'id': 'embedding_distillation', 'kind': 'causal_embedding_distillation',
-             'requires': ['token_identity'], 'parameters': {'cutoff': 12, 'steps': 8, 'batch': 2}},
+            {'id': 'graphs', 'kind': 'native_state_sft', 'requires': [],
+             'inputs': {'native_graphs': 'train', 'held_native_graphs': 'held'},
+             'parameters': {'epochs': 1, 'batch_graphs': 2}},
+            {'id': 'graphs_again', 'kind': 'native_state_sft', 'requires': ['graphs'],
+             'inputs': {'native_graphs': 'train', 'held_native_graphs': 'held'},
+             'parameters': {'epochs': 1, 'batch_graphs': 2}},
         ]}
 
 
@@ -48,14 +53,14 @@ def test_deep_merge_objects_merge_lists_and_scalars_replace_and_delete_marker_re
 def test_stage_overrides_merge_by_stage_id_and_lists_replace(tmp_path):
     write(tmp_path, 'base', base_recipe())
     path = write(tmp_path, 'child', child(stages={
-        'embedding_distillation': {'parameters': {'cutoff': 18, 'seed': 3}, 'requires': ['token_identity', 'token_identity']},
-        'token_identity': {'parameters': {'limit': {'$delete': True}}}}))
+        'graphs_again': {'parameters': {'epochs': 2, 'seed': 3}, 'requires': ['graphs', 'graphs']},
+        'graphs': {'parameters': {'batch_graphs': {'$delete': True}}}}))
     resolved = resolve_recipe_data(path)
     stages = {s['id']: s for s in resolved['stages']}
-    assert stages['embedding_distillation']['parameters'] == {'cutoff': 18, 'steps': 8, 'batch': 2, 'seed': 3}
-    assert stages['embedding_distillation']['requires'] == ['token_identity', 'token_identity']  # replaced
-    assert stages['token_identity']['parameters'] == {'max_tokens': 512}
-    assert [s['id'] for s in resolved['stages']] == ['token_identity', 'embedding_distillation']
+    assert stages['graphs_again']['parameters'] == {'epochs': 2, 'batch_graphs': 2, 'seed': 3}
+    assert stages['graphs_again']['requires'] == ['graphs', 'graphs']  # replaced
+    assert stages['graphs']['parameters'] == {'epochs': 1}
+    assert [s['id'] for s in resolved['stages']] == ['graphs', 'graphs_again']
     assert resolved['id'] == 'child-r' and resolved['description'] == 'child'
     assert 'extends' not in resolved and 'overrides' not in resolved
 
@@ -65,7 +70,7 @@ def test_top_level_override_and_unknown_stage_and_forbidden_keys(tmp_path):
     resolved = resolve_recipe_data(write(tmp_path, 'c1', child(scope={'a': 1})))
     assert resolved['scope'] == {'a': 1}
     for bad in (child(stages={'nope': {'parameters': {}}}), child(id='x'), child(schema='y'),
-                child(stages={'token_identity': {'id': 'renamed'}})):
+                child(stages={'graphs': {'id': 'renamed'}})):
         with pytest.raises(ValueError):
             resolve_recipe_data(write(tmp_path, 'bad', bad))
     with pytest.raises(ValueError):
@@ -90,23 +95,23 @@ def test_unknown_parent_and_cycles_fail(tmp_path):
 
 def test_handler_whitelist_applies_after_resolution(tmp_path):
     write(tmp_path, 'base', base_recipe())
-    good = write(tmp_path, 'good', child(stages={'embedding_distillation': {'parameters': {'seed': 1}}}))
+    good = write(tmp_path, 'good', child(stages={'graphs_again': {'parameters': {'seed': 1}}}))
     assert load_recipe(good)['stages'][1]['parameters']['seed'] == 1
-    bad = write(tmp_path, 'bad', child(stages={'embedding_distillation': {'parameters': {'not_a_parameter': 1}}}))
+    bad = write(tmp_path, 'bad', child(stages={'graphs_again': {'parameters': {'not_a_parameter': 1}}}))
     with pytest.raises(ValueError, match='unknown stage parameters'):
         load_recipe(bad)
 
 
 def test_hash_is_canonical_over_resolved_content_and_stable(tmp_path):
     write(tmp_path, 'base', base_recipe())
-    path = write(tmp_path, 'child', child(stages={'embedding_distillation': {'parameters': {'seed': 1}}}))
+    path = write(tmp_path, 'child', child(stages={'graphs_again': {'parameters': {'seed': 1}}}))
     first = recipe_identity_sha256(path)
     assert first == canonical_json_sha256_hex(resolve_recipe_data(path))
     # key order and whitespace in the file do not matter; resolved content does
     data = json.loads(path.read_text())
     path.write_text(json.dumps(data, indent=4, sort_keys=True))
     assert recipe_identity_sha256(path) == first
-    data['overrides']['stages']['embedding_distillation']['parameters']['seed'] = 2
+    data['overrides']['stages']['graphs_again']['parameters']['seed'] = 2
     path.write_text(json.dumps(data))
     assert recipe_identity_sha256(path) != first
     # a plain recipe keeps its file-bytes hash so earlier receipts stay comparable
@@ -117,27 +122,27 @@ def test_hash_is_canonical_over_resolved_content_and_stable(tmp_path):
 
 def test_resolve_cli_prints_recipe_and_hash(tmp_path):
     out = subprocess.run([sys.executable, '-m', 'natlang_neuralese.train.recipe', 'resolve',
-                          'neuralese-direct-mellum-v2'],
+                          'native-state-production-mellum-20261015-v1'],
                          capture_output=True, text=True, check=True, cwd=ROOT,
                          env={**__import__('os').environ, 'PYTHONPATH': str(ROOT / 'training/neuralese')}).stdout
     lines = out.strip().splitlines()
     summary = json.loads(lines[-1])
     recipe = json.loads('\n'.join(lines[:-1]))
     assert summary['recipe_sha256'] == canonical_json_sha256_hex(recipe) and summary['inherits'] is True
-    assert recipe['id'] == 'neuralese-direct-mellum-v2' and 'extends' not in recipe
-    assert recipe['stages'] == load_recipe(RECIPES / 'neuralese-direct-mellum-v2.json')['stages']
+    assert recipe['id'] == 'native-state-production-mellum-20261015-v1'
+    assert recipe['stages'] == load_recipe(RECIPES / 'native-state-production-mellum-20261015-v1.json')['stages']
 
 
 def test_stages_added_insert_after_a_named_stage(tmp_path):
     (tmp_path / 'base.json').write_text(json.dumps(base_recipe()))
-    extra = {'id': 'token_identity_again', 'kind': 'token_identity', 'requires': ['token_identity'],
-             'parameters': {'limit': 8, 'max_tokens': 64}}
+    extra = {'id': 'graphs_extra', 'kind': 'native_state_sft', 'requires': ['graphs'],
+             'inputs': {'native_graphs': 'train', 'held_native_graphs': 'held'}, 'parameters': {'epochs': 1}}
     child = {'schema': 'natlang.neuralese-training-recipe/1', 'id': 'child-r', 'extends': 'base-r',
-             'overrides': {'stages_added': [{'after': 'token_identity', 'stage': extra}]}}
+             'overrides': {'stages_added': [{'after': 'graphs', 'stage': extra}]}}
     (tmp_path / 'child.json').write_text(json.dumps(child))
     resolved = resolve_recipe_data(tmp_path / 'child.json')
-    assert [s['id'] for s in resolved['stages']] == ['token_identity', 'token_identity_again', 'embedding_distillation']
-    for bad in ({'after': 'nowhere', 'stage': extra}, {'after': 'token_identity', 'stage': {**extra, 'id': 'token_identity'}},
+    assert [s['id'] for s in resolved['stages']] == ['graphs', 'graphs_extra', 'graphs_again']
+    for bad in ({'after': 'nowhere', 'stage': extra}, {'after': 'graphs', 'stage': {**extra, 'id': 'graphs'}},
                 {'stage': extra}):
         child['overrides']['stages_added'] = [bad]
         (tmp_path / 'child.json').write_text(json.dumps(child))
@@ -145,49 +150,16 @@ def test_stages_added_insert_after_a_named_stage(tmp_path):
             resolve_recipe_data(tmp_path / 'child.json')
 
 
-def legacy_lineage(tmp_path, name='legacy'):
-    import legacy_recipes
-    path = write(tmp_path, name, legacy_recipes.raw_recurrence())
-    return resolve_recipe_data(path)
 
-
-def test_operational_stage_parameters_do_not_change_the_training_semantics(tmp_path):
-    from natlang_neuralese.train.recipe import _without_operational
-    old = legacy_lineage(tmp_path)
+def test_native_parameter_handoff_preserves_epoch_extension_and_operational_updates(tmp_path):
+    from natlang_neuralese.train.recipe import _without_operational, native_stage_parameter_handoffs
+    old = base_recipe()
     new = copy.deepcopy(old)
-    new['id'], new['description'] = 'legacy-operational', 'an operational handoff'
-    new['stage_parameter_defaults']['core_text_warmup'].update(moe_kernel='grouped', eval_every=256,
-                                                                         sdpa_backend='flash', deterministic_training=False)
-    next(s for s in new['stages'] if s['id'] == 'recurrence_warmup')['parameters']['checkpoint_every'] = 50
-    assert old != new and _without_operational(old) == _without_operational(new)
-    from natlang_neuralese.train.recipe import recipe_handoff_epoch_changes
-    assert recipe_handoff_epoch_changes(old, new) == {}
+    new['stages'][0]['parameters'].update(epochs=3, eval_every=128, checkpoint_every=64,
+                                          sdpa_backend='flash', deterministic_training=False)
+    changes, old_contract, new_contract = native_stage_parameter_handoffs(old, new, tmp_path)
+    assert changes['graphs']['epochs'] == [1, 3]
+    assert _without_operational(old_contract) == _without_operational(new_contract)
     changed = copy.deepcopy(new)
-    changed['stage_parameter_defaults']['core_text_warmup']['lr'] = 1e-4
-    assert _without_operational(changed) != _without_operational(old)
-
-
-def test_a_handoff_extends_an_unqualified_warmup_with_its_quantization_range_held(tmp_path):
-    from natlang_neuralese.train.recipe import _without_extensions, _without_operational, stage_extensions
-    old = legacy_lineage(tmp_path)
-    new = copy.deepcopy(old)
-    warm = next(stage for stage in new['stages'] if stage['id'] == 'core_text_warmup')
-    warm['parameters'].update(steps=6144, quantization_steps=4096)
-    new['stage_parameter_defaults']['core_text_warmup']['report_column_fraction'] = 0.25
-    out = tmp_path / 'lineage'
-    out.mkdir()
-    extended = stage_extensions(old, new, out)
-    assert extended == {'core_text_warmup': [4096, 6144]}
-    assert (_without_operational(_without_extensions(old, extended)) ==
-            _without_operational(_without_extensions(new, extended)))
-    del warm['parameters']['quantization_steps']
-    with pytest.raises(ValueError, match='quantization ramp'):
-        stage_extensions(old, new, out)
-    warm['parameters']['quantization_steps'] = 4096
-    (out / 'core_text_warmup-report.json').write_text('{}')
-    with pytest.raises(ValueError, match='already qualified'):
-        stage_extensions(old, new, out)
-    shorter = copy.deepcopy(old)
-    next(stage for stage in shorter['stages'] if stage['id'] == 'core_text_warmup')['parameters']['steps'] = 2048
-    with pytest.raises(ValueError, match='only a mapped text warm-up'):
-        stage_extensions(old, shorter, tmp_path / 'other')
+    changed['stages'][0]['parameters']['batch_graphs'] = 4
+    assert _without_operational(old) != _without_operational(changed)

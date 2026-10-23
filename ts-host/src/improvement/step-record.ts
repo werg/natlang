@@ -120,6 +120,12 @@ export function validateImprovementStep(value: unknown): string[] {
       if (!ARTIFACT_KINDS.includes(ref?.kind)) errors.push(`${where}[${index}].kind must be one of ${ARTIFACT_KINDS.join(', ')}`);
       if (!(typeof ref?.id === 'string' && ref.id) && !(ref?.id === null && legacy))
         errors.push(`${where}[${index}].id must be a content ID (null only in legacy conversions)`);
+      if (typeof ref?.id === 'string' && ref.id.startsWith('nz1_'))
+        errors.push(`${where}[${index}].id uses retired projected-block identity`);
+      if (typeof ref?.id === 'string' && ['soft-skill', 'soft-value'].includes(ref.kind) && !ref.id.startsWith('nzs1_'))
+        errors.push(`${where}[${index}].id for ${ref.kind} must name an archived native state`);
+      if (typeof ref?.id === 'string' && ref.kind === 'adapter' && !ref.id.startsWith('nnt1_'))
+        errors.push(`${where}[${index}].id for adapter must name a native tensor artifact`);
     }
   };
   refs('before', record.before);

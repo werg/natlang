@@ -6,8 +6,7 @@
  * was already bound: a program sees pool changes only when it is rebound.
  */
 import { hexDigest } from '../native/hash.js';
-import { parseMarkdownSkill, parseNzSkill, SKILL_FILE, unsupportedNzSkills, type NzSkillHook, type Skill,
-  type SkillDiagnostic } from './skill.js';
+import { parseMarkdownSkill, SKILL_FILE, type Skill, type SkillDiagnostic } from './skill.js';
 
 /** Read access to a context folder. Paths are relative to the context root and use `/`. */
 export type SkillSource = {
@@ -46,7 +45,7 @@ export function memorySkillSource(files: Readonly<Record<string, string | Uint8A
 /**
  * Copy a selected markdown skill set into context data entries. Pass the result to `Context.with()` when a topic pool
  * should be bound to one function or a group of functions. The returned map is detached from the pool snapshot.
- * `.nz` skills need a host metadata/block loader and cannot be materialized as Markdown context files here.
+ * Native artifacts in skill folders stay files; Markdown skill manifests reference their exact native IDs.
  */
 export async function skillContextFiles(set: SkillSet, root = 'skills'): Promise<Record<string, string | Uint8Array>> {
   const prefix = root.replace(/\/+$/, '');
@@ -55,8 +54,6 @@ export async function skillContextFiles(set: SkillSet, root = 'skills'): Promise
   const output: Record<string, string | Uint8Array> = {};
   for (const skill of set.list()) {
     if (!/^[a-z][a-z0-9-]{0,63}$/.test(skill.name)) throw new Error(`skill has an unsafe name: ${skill.name}`);
-    if (skill.format !== 'markdown')
-      throw new Error(`skill "${skill.name}" uses .nz and needs a host Neuralese loader before context binding`);
     const source = set.sourceOf(skill.name);
     if (!source) throw new Error(`skill "${skill.name}" has no source snapshot to materialize`);
     const rootPath = skill.root.replace(/\/+$/, '');
@@ -77,7 +74,6 @@ export async function skillContextFiles(set: SkillSet, root = 'skills'): Promise
 }
 
 const text = (body: string | Uint8Array) => typeof body === 'string' ? body : new TextDecoder().decode(body);
-const bytes = (body: string | Uint8Array) => typeof body === 'string' ? new TextEncoder().encode(body) : body;
 /** Supporting files are kept as text when they decode cleanly, so revisions are stable across sources. */
 const asStored = (body: string | Uint8Array): string | Uint8Array => {
   if (typeof body === 'string') return body;
@@ -87,13 +83,11 @@ const asStored = (body: string | Uint8Array): string | Uint8Array => {
 export type LoadedSkills = { set: SkillSet; diagnostics: SkillDiagnostic[] };
 
 /**
- * Load every skill under `root` (default `skills`): `skills/<name>/SKILL.md` folders, and `.nz` skills either as
- * `skills/<name>.nz` or as a folder `skills/<name>/` whose only skill file is `<name>.nz`. Invalid skills are left out
- * and reported.
+ * Load every Markdown skill under `root` (default `skills`): `skills/<name>/SKILL.md`. Native `.nz` archives are
+ * ordinary artifact files and do not define skill metadata.
  */
-export async function loadSkills(source: SkillSource, options: { root?: string; nz?: NzSkillHook } = {}): Promise<LoadedSkills> {
+export async function loadSkills(source: SkillSource, options: { root?: string } = {}): Promise<LoadedSkills> {
   const root = (options.root ?? 'skills').replace(/\/+$/, '');
-  const hook = options.nz ?? unsupportedNzSkills;
   const diagnostics: SkillDiagnostic[] = [];
   const paths = (await source.list()).filter(path => path.startsWith(root + '/'));
   const captured: Record<string, string | Uint8Array> = {};
@@ -105,11 +99,10 @@ export async function loadSkills(source: SkillSource, options: { root?: string; 
     return body;
   };
   const folders = new Map<string, string[]>();
-  const looseNz: string[] = [];
   for (const path of paths) {
     const rest = path.slice(root.length + 1);
     const slash = rest.indexOf('/');
-    if (slash < 0) { if (rest.endsWith('.nz')) looseNz.push(path); continue; }
+    if (slash < 0) continue;
     const folder = rest.slice(0, slash);
     folders.set(folder, [...(folders.get(folder) ?? []), rest.slice(slash + 1)]);
   }
@@ -121,16 +114,7 @@ export async function loadSkills(source: SkillSource, options: { root?: string; 
       for (const file of inner) files[file] = asStored(await readCaptured(`${base}/${file}`));
       const skill = parseMarkdownSkill(base, files, diagnostics);
       if (skill) skills.push(skill);
-    } else if (inner.includes(`${folder}.nz`)) {
-      const skill = await parseNzSkill(`${base}/${folder}.nz`, bytes(await readCaptured(`${base}/${folder}.nz`)), hook,
-        inner.filter(file => file !== `${folder}.nz`), diagnostics);
-      for (const file of inner.filter(file => file !== `${folder}.nz`)) await readCaptured(`${base}/${file}`);
-      if (skill) skills.push(skill);
-    } else diagnostics.push({ path: base, code: 'skill-file-missing', message: `${base} has no SKILL.md or ${folder}.nz`, severity: 'error' });
-  }
-  for (const path of looseNz.sort()) {
-    const skill = await parseNzSkill(path, bytes(await readCaptured(path)), hook, [], diagnostics);
-    if (skill) skills.push(skill);
+    } else diagnostics.push({ path: base, code: 'skill-file-missing', message: `${base} has no SKILL.md`, severity: 'error' });
   }
   const seen = new Map<string, Skill>();
   const unique: Skill[] = [];
@@ -146,7 +130,7 @@ export async function loadSkills(source: SkillSource, options: { root?: string; 
 export async function readSkillFile(set: SkillSet, name: string, file: string): Promise<string> {
   const skill = set.get(name);
   if (!skill) throw new Error(`no skill named "${name}"`);
-  if (skill.format !== 'markdown' || !skill.files.includes(file)) throw new Error(`skill "${name}" has no file ${file}`);
+  if (!skill.files.includes(file)) throw new Error(`skill "${name}" has no file ${file}`);
   const source = set.sourceOf(name);
   if (!source) throw new Error(`skill "${name}" has no readable source`);
   return text(await source.read(`${skill.root}/${file}`));

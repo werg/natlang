@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import hashlib
 import json
 import re
+import errno
 from pathlib import Path
 
 
@@ -229,7 +230,12 @@ def packet_references(ready_reference, collection):
                 or qualification.get('passed') is not True
                 or qualification.get('training_admission') is not False
                 or qualification.get('model_calls') != 0
-                or _exact(qualification.get('qualified_cases_binding')) != _exact(prepared['cases'])):
+                # A verified internal relocation changes only the path field.
+                # The original packet and its qualification are hash-bound by
+                # the relocation manifest; compare the immutable content
+                # identity here so the original proof remains valid.
+                or any((qualification.get('qualified_cases_binding') or {}).get(key) != prepared['cases'].get(key)
+                       for key in ('sha256', 'bytes'))):
             raise ValueError('teacher packet is not the unchanged reference-qualified source')
         values = {key: read_bound(ref) for key, ref in references.items() if key != 'selected_cases'}
         # Cases are JSONL, not a JSON object. Verify their bytes without decoding
@@ -268,7 +274,8 @@ def packet_references(ready_reference, collection):
     return matches[0]
 
 
-def admitted_predecessors(root, corpus_id, *, namespaces=(LEGACY_TEACHER_NAMESPACE,)):
+def admitted_predecessors(root, corpus_id, *, namespaces=(LEGACY_TEACHER_NAMESPACE,), relocation_manifest=None,
+                          cache_contracts=None):
     """Return the registered positive corpus closure in registry order.
 
     No directory glob or unregistered partial output grants predecessor status.
@@ -279,6 +286,20 @@ def admitted_predecessors(root, corpus_id, *, namespaces=(LEGACY_TEACHER_NAMESPA
     before = file_binding(registry_path)
     registry = read_bound(before)
     rows = []
+    relocated = {}
+    relocation_binding = None
+    if relocation_manifest is not None:
+        relocation_binding = file_binding(relocation_manifest)
+        relocation = read_bound(relocation_binding)
+        if relocation.get('schema') != 'natlang.teacher-predecessor-relocations/1' or relocation.get('training_admission') is not False:
+            raise ValueError('teacher predecessor relocation declaration is not a non-admission transport record')
+        if relocation.get('registry') != before:
+            raise ValueError('teacher predecessor relocation declaration is bound to a different registry')
+        for item in relocation.get('corpora', []):
+            ident = item.get('id')
+            if not isinstance(ident, str) or ident in relocated:
+                raise ValueError('teacher predecessor relocation repeats or omits a corpus identity')
+            relocated[ident] = item
     seen = set()
     prefixes = tuple(namespace + '-' for namespace in namespaces)
     for entry in registry['corpora']:
@@ -288,13 +309,63 @@ def admitted_predecessors(root, corpus_id, *, namespaces=(LEGACY_TEACHER_NAMESPA
         seen.add(ident)
         if ident == corpus_id or not ident.startswith(prefixes) or entry.get('training_admission') is not True:
             continue
-        folder = root / entry['path']
-        manifest = json.loads((root / 'training/corpus-manifests' / (ident + '.json')).read_bytes())
+        manifest_path = root / 'training/corpus-manifests' / (ident + '.json')
+        manifest_ref = file_binding(manifest_path)
+        manifest = read_bound(manifest_ref)
         if manifest.get('id') != ident or manifest.get('path') != entry['path']:
             raise ValueError('teacher predecessor manifest differs from its registry entry')
         by_path = {item['path']: item for item in manifest['files']}
         if len(by_path) != len(manifest['files']):
             raise ValueError('teacher predecessor manifest repeats file paths')
+        folder = root / entry['path']
+        try:
+            folder_present = folder.is_dir()
+        except OSError as error:
+            if error.errno not in (errno.ENOENT, errno.EIO):
+                raise
+            folder_present = False
+        if not folder_present and cache_contracts is not None:
+            # An unavailable admitted package can still participate in exact
+            # deduplication through its manifest-bound current-law content
+            # indexes. The registry grants predecessor identity; the index
+            # grants only byte-equivalent content fingerprints for that exact
+            # train member and model/tokenizer/policy contract.
+            from scripts.neuralese_data.build_verified_teacher_trajectory_graphs import registered_cached_content_index
+            outputs = {}
+            for model in ('lfm25', 'mellum21'):
+                contract = cache_contracts.get(model) or {}
+                fingerprint, policy = contract.get('tokenizer_fingerprint'), contract.get('policy_sha256')
+                if not isinstance(fingerprint, str) or not isinstance(policy, str):
+                    raise ValueError('registered cache predecessor lacks both exact model contracts')
+                cached, _ = registered_cached_content_index(root, ident, model, fingerprint, policy,
+                    registry_ref=before, registry_entry=entry, manifest_ref=manifest_ref,
+                    manifest=manifest, verify_bindings=False)
+                if cached.get('manifest') != manifest_ref:
+                    raise ValueError('registered content cache points to a different exact corpus manifest')
+                outputs[model] = cached
+            rows.append({'id': ident, 'outputs': outputs, 'cache_only': True,
+                         'registry_entry': entry, 'manifest': manifest_ref})
+            continue
+        if not folder_present:
+            item = relocated.get(ident)
+            if item is None:
+                raise FileNotFoundError(f'registered teacher predecessor has no canonical or declared relocated bytes: {ident}')
+            if item.get('registry_entry') != entry or item.get('manifest') != manifest_ref:
+                raise ValueError('teacher predecessor relocation differs from its exact registry/manifest binding')
+            folder = Path(item.get('directory', ''))
+            if not folder.is_absolute():
+                raise ValueError('teacher predecessor relocation directory is not absolute')
+            members = item.get('members')
+            expected_paths = {member['path'] for member in manifest['files']}
+            if not isinstance(members, list) or {member.get('path') for member in members} != expected_paths or len(members) != len(expected_paths):
+                raise ValueError('teacher predecessor relocation does not bind every exact manifest member')
+            for member in members:
+                ref = next(source for source in manifest['files'] if source['path'] == member['path'])
+                if member.get('manifest_member') != ref:
+                    raise ValueError('teacher predecessor relocated member differs from its manifest')
+                actual = file_binding(folder / member['path'])
+                if any(actual.get(key) != ref.get(key) for key in ('sha256', 'bytes')):
+                    raise ValueError('teacher predecessor relocated member content differs from its registry manifest')
         validation_ref = by_path['validation-proof.json']
         validation = read_bound({**validation_ref, 'path': str(folder / 'validation-proof.json')})
         if (validation.get('status') != 'passed' or validation.get('training_admission') is not True):
@@ -312,6 +383,8 @@ def admitted_predecessors(root, corpus_id, *, namespaces=(LEGACY_TEACHER_NAMESPA
         rows.append({'id': ident, 'outputs': outputs})
     if file_binding(registry_path) != before:
         raise ValueError('teacher registry changed during predecessor resolution')
+    if relocation_binding is not None and file_binding(relocation_binding['path']) != relocation_binding:
+        raise ValueError('teacher predecessor relocation declaration changed during resolution')
     return rows
 
 
@@ -346,10 +419,11 @@ def _reviewed_predecessor_source(root, spool, original, reviewed):
         raise ValueError('reviewed predecessor source changed during validation')
 
 
-def preceding_tranches(root, spool, tranche):
+def preceding_tranches(root, spool, tranche, *, relocation_manifest=None, cache_contracts=None):
     """Account for every earlier tranche in this batch, including all-rejected ones."""
     admitted = admitted_predecessors(root, tranche.corpus_id,
-        namespaces=tuple(dict.fromkeys((LEGACY_TEACHER_NAMESPACE, tranche.teacher_namespace))))
+        namespaces=tuple(dict.fromkeys((LEGACY_TEACHER_NAMESPACE, tranche.teacher_namespace))),
+        relocation_manifest=relocation_manifest, cache_contracts=cache_contracts)
     identities = {row['id'] for row in admitted}
     rejected = []
     for number in range(tranche.number):

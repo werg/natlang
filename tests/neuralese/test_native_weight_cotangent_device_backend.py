@@ -97,7 +97,7 @@ def test_device_backend_fails_closed_for_non_cuda_targets(tmp_path):
 def test_device_backend_recipe_contract_is_explicit_and_transition_needs_fresh_capacity(tmp_path):
     from natlang_neuralese.train.native_state_sft import build_parser
     from natlang_neuralese.train.recipe import (
-        direct_windowing_handoffs, stage_parameter_args, validate_stage_parameters)
+        native_stage_parameter_handoffs, stage_parameter_args, validate_stage_parameters)
 
     parser = build_parser()
     assert parser.get_default('cotangent_accumulator_backend') is None
@@ -111,11 +111,11 @@ def test_device_backend_recipe_contract_is_explicit_and_transition_needs_fresh_c
     unsafe = {'stages': [{'id': 'ce', 'kind': 'native_state_sft', 'parameters': {
         'cotangent_accumulator_backend': 'device_fp32'}}]}
     with pytest.raises(ValueError, match='fresh exact-parent memory qualification'):
-        direct_windowing_handoffs(old, unsafe, out=tmp_path)
+        native_stage_parameter_handoffs(old, unsafe, out=tmp_path)
     safe = {'stages': [{'id': 'ce', 'kind': 'native_state_sft', 'parameters': {
         'cotangent_accumulator_backend': 'device_fp32',
         'memory_qualification': {'path': 'new.json', 'sha256': 'a' * 64}}}]}
-    direct_windowing_handoffs(old, safe, out=tmp_path)
+    native_stage_parameter_handoffs(old, safe, out=tmp_path)
 
 
 def test_legacy_resume_identity_defaults_backend_without_mutating_saved_identity():

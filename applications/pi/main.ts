@@ -13,12 +13,12 @@
  *   --agent-transport natlang               reach the agent model through natlang's own model transport, which speaks
  *                                           the Neuralese wire standard as natlang programs do (host/natlang-provider.ts;
  *                                           default: pi-ai's OpenAI-compatible provider)
- *   --agent-reader text|DIALECT             with --agent-transport natlang: what the agent model reads (default text);
- *                                           a Neuralese dialect is checked at startup against the server's
- *                                           /v1/neuralese/info, and Neuralese parts then reach it as blocks
+ *   --agent-reader text|native-state        with --agent-transport natlang: what the agent model reads (default text);
+ *                                           native-state consumption is checked at startup against the server
+ *                                           `/v1/neuralese/info` capability declaration
  *   --cwd DIR                               the agent's working directory (default: the workspace)
  *   --session FILE                          the SQLite session (default: a new one under the state directory)
- *                                           (with a Neuralese reader, its block archive is FILE.blocks/)
+ *                                           (with a native-state reader, its archive is FILE.native-artifacts/)
  *   Pluggable hot paths, each crisp|nl|shadow (default crisp; nl runs the natural-language functions, shadow runs
  *   both, uses the natural-language result and records whether they agree; natural-language is accepted for nl):
  *   --context MODE                          context building
@@ -148,13 +148,12 @@ function executor(target: TargetContext, args: string[], store?: NeuraleseStore)
 }
 
 /**
- * The block archive of a session whose agent reads Neuralese: a content-addressed directory beside the SQLite file
- * (`SESSION.blocks/`), so the blocks its conversations were sent (stored views, host/views.ts) outlive a harness
- * restart as the session does, and are restored to a server that lost them. Undefined for a text reader.
+ * The native artifact archive of a session whose agent reads native state: a content-addressed directory beside the
+ * SQLite file, so stored views outlive a harness restart and can be restored to the server. Undefined for a text reader.
  */
-export async function sessionBlockStore(args: string[], sessionPath: string): Promise<NeuraleseStore | undefined> {
-  const neuralese = option(args, '--agent-transport') === 'natlang' && (option(args, '--agent-reader') ?? 'text') !== 'text';
-  return neuralese ? FileNeuraleseStore.open(`${sessionPath}.blocks`) : undefined;
+export async function sessionNativeArtifactStore(args: string[], sessionPath: string): Promise<NeuraleseStore | undefined> {
+  const nativeState = option(args, '--agent-transport') === 'natlang' && (option(args, '--agent-reader') ?? 'text') === 'native-state';
+  return nativeState ? FileNeuraleseStore.open(`${sessionPath}.native-artifacts`) : undefined;
 }
 
 export type { RunResult };
@@ -162,7 +161,7 @@ export type { RunResult };
 /** Run one task to its answer on a session at `sessionPath`. */
 export async function runTask(target: TargetContext, args: string[], task: string, cwd: string, sessionPath: string, signal?: AbortSignal,
     confine?: string): Promise<RunResult> {
-  const natlang = executor(target, args, await sessionBlockStore(args, sessionPath));
+  const natlang = executor(target, args, await sessionNativeArtifactStore(args, sessionPath));
   const { models, ref } = await agentModels(args, (target as { modelEndpoint?: { endpoint: string; model: string } }).modelEndpoint,
     natlang.options.neuralese?.store);
   const quiet = args.includes('--quiet');

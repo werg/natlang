@@ -10,17 +10,17 @@ export type NeuraleseServerInfo = { dialects: string[]; width?: number; dtype?: 
   capabilities?: string[] } & Record<string, unknown>;
 
 /**
- * Whether a server serves `capability` (spec/NEURALESE_PORT.md "Capabilities"), from its `capabilities` list. A server
- * from before the list is judged by its older fields: `adapters: "lora"` (the fork) loads LoRAs and serves no grad,
- * embed, optim, adapter creation or streaming; otherwise (the reference) everything but LoRA loading.
+ * Whether a server serves `capability` (spec/NEURALESE_PORT.md "Capabilities"), from its `capabilities` list. Older
+ * servers get the conservative fallback for the shared endpoints; retired LoRA and generic adapter capabilities are
+ * never inferred from stale `adapters` metadata.
  */
 export function serves(info: Record<string, unknown>, capability: string): boolean {
   if (Array.isArray(info.capabilities)) return info.capabilities.includes(capability);
-  const lora = info.adapters === 'lora';
-  if (capability === 'adapters.lora-load') return lora;
-  const referenceOnly = ['grad', 'grad.order2', 'embed', 'optim', 'adapters.create', 'adapters.direct', 'adapters.lora-export',
-    'adapters.projection', 'chat.stream', 'template.value-type', 'template.argument-path', 'parts.value-type'];
-  return !(lora && referenceOnly.includes(capability));
+  if (capability.startsWith('adapters.') && capability !== 'native.adapters') return false;
+  const legacyFork = info.adapters === 'lora';
+  const unavailableOnLegacyFork = ['grad', 'grad.order2', 'embed', 'optim',
+    'chat.stream', 'template.value-type', 'template.argument-path', 'parts.value-type'];
+  return !(legacyFork && unavailableOnLegacyFork.includes(capability));
 }
 
 /**

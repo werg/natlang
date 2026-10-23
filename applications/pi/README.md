@@ -79,21 +79,19 @@ level; `--quiet` hides the phase log.
 
 `--agent-transport natlang` reaches the agent model through natlang's own model transport instead of pi-ai's
 OpenAI provider (`host/natlang-provider.ts`): the request, content parts, tool-call decoding and token accounting are
-those of natlang programs, so the agent speaks the Neuralese wire standard (spec/NEURALESE_PORT.md) exactly as they
-do. `--agent-reader DIALECT` declares that the agent model reads that Neuralese dialect; it is checked at startup
-against the server's `/v1/neuralese/info` (a dialect the server does not speak is a startup error), and the model
-object carries it as `reader` (`{ kind: 'text' }` or `{ kind: 'neuralese', dialect }`), so code making a value for the
-agent can choose its representation (plans/neuralese/DECISIONS.md, 2026-10-09). A Neuralese block in a message
-(`{ type: 'neuralese', id }`, types.ts `NeuraleseContent`) reaches such a model unchanged; sent to any model that reads
-text, the request fails with `neuralese-unsupported-backend`. There is no text fallback. Each request names the
-conversation (its provider session ID) as the owner of its blocks (`x-natlang-owner`).
+those of natlang programs, so the agent carries native state references as native state. `--agent-reader native-state`
+declares that the model consumes native state; startup checks the server's `native_state.enabled` capability. The model
+object carries the declaration as `reader: { kind: 'native-state' }`. Messages use `{ type: 'native_state', id }` with
+content addressed `nzs1` IDs. A text reader cannot receive native state, and the request fails with
+`neuralese-unsupported-backend`. Each request names the conversation (its provider session ID) as the owner of its
+native artifacts (`x-natlang-owner`).
 
 With `--companion`, a tool output longer than 2,000 characters is stored as a call of `view` (host/views.ts): the
 result keeps its text form (the output, shaped past 6,000 characters by `--shaping`) with a reference to the call. A
-text reader reads that text. With `--agent-reader DIALECT` the agent model instead reads the view's block in that
-dialect, written by its server for the agent's intent at the call (and the note that `recall` returns the output),
-once per call: memoized in the session, pinned on the server, restored from the runtime's Neuralese store when the
-server lost it. The view is started right after the tool result; a view that cannot be written fails the turn
+text reader reads that text. With `--agent-reader native-state` the agent model instead reads a native view written by
+its server for the agent's intent at the call (and the note that `recall` returns the output), once per call: memoized
+in the session, pinned on the server, restored from the runtime's native artifact store when the server lost it. The
+view is started right after the tool result; a view that cannot be written fails the turn
 (retried by pi's retry policy when the server was unreachable or overloaded).
 
 The companion also reads the agent's reply while it streams (COMPANION.md §7): what the reasoning names is looked up

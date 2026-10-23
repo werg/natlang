@@ -704,7 +704,7 @@ def materialize_qwen_repair_run(*,failed_run_dir,task_id,failed_sample,repaired_
     from ..eval.task_packet import read_jsonl
     from ..rl.task_rollouts import rollout_turns
     from ..rl.graph_replay import NativeBundleStore,save_bundle,verified_bundle_bytes
-    from ..rl.grpo import Server
+    from ..rl.actor_client import NativeActorClient
     failed_dir=Path(failed_run_dir).resolve(strict=True);capture=json.loads(Path(capture_path).read_text())
     output=Path(output_dir).resolve();output.mkdir(parents=True,exist_ok=True)
     if any(output.iterdir()):raise ValueError('Qwen repair materialization output must be an empty immutable directory')
@@ -803,7 +803,7 @@ def materialize_qwen_repair_run(*,failed_run_dir,task_id,failed_sample,repaired_
         raise ValueError('source failed rollout changed while preparing the repaired result')
     bundle_dir=output/'blocks';bundle_dir.mkdir()
     old_manifest=failed_dir/'blocks'/'manifest.json'
-    repaired_policy_id=live['checkpoint_sha256'];server=Server(endpoint)
+    repaired_policy_id=live['checkpoint_sha256'];server=NativeActorClient(endpoint)
     def fetch(block_id):
         kind='native-states' if block_id.startswith('nzs1_') else 'native-tensor-artifacts' if block_id.startswith('nnt1_') else 'blocks'
         return server.get_bytes('/v1/neuralese/'+kind+'/'+block_id)

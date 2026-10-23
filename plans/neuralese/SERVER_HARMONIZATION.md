@@ -1,5 +1,11 @@
 # Neuralese server harmonization (2026-10-09)
 
+**Current status (2026-10-23):** This document records historical
+reference/fork conformance work. The reference runtime's legacy tiny-block
+adapter create/apply/export routes have since been retired. The llama.cpp
+server retains its generic caller-supplied GGUF LoRA loader; native actor
+coefficient artifacts are served by the native model runtime.
+
 Owner: "Can we harmonize our server behaviors?" This is the audit of the runtimes that serve
 the Neuralese wire protocol, the divergences found, and the single capability model they now
 follow. The normative contract is `spec/NEURALESE_PORT.md` ("Wire protocol", "Capabilities").

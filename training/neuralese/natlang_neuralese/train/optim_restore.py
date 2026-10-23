@@ -318,48 +318,6 @@ def add_optimizer_restore_arguments(parser):
                         help="parameter-name prefix declared as newly added to the optimizer (starts fresh; repeatable)")
 
 
-def drop_port_optimizer_slots(saved, names_by_group, drop):
-    """A PortMuonAdamW ``state_dict`` without the slots of the parameters ``drop(name)`` selects: their moments,
-    their schema entries, groups left empty, and a child (Muon) left without groups (``None``). ``names_by_group``:
-    the checkpoint's parameter names per group, in the optimizer's ``param_groups`` order (Muon, AdamW, latent).
-    Returns (state, names_by_group, dropped names). Used when a declared component leaves a stage (the direct stage's
-    NeuraleseProjection, owner 2026-10-13): the remaining parameters keep their exact state."""
-    if "muon" not in saved:
-        raise OptimizerRestoreError("not a PortMuonAdamW state")
-    groups = [list(group) for group in names_by_group]
-    out = dict(saved)
-    kept_names, dropped, cursor = [], [], 0
-    for kind, child in _saved_children(saved):
-        new_state, new_groups, next_index = {}, [], 0
-        for group in child["param_groups"]:
-            if cursor >= len(groups) or len(groups[cursor]) != len(group["params"]):
-                raise OptimizerRestoreError("parameter names do not line up with the saved optimizer groups")
-            names = groups[cursor]
-            cursor += 1
-            params, kept = [], []
-            for index, name in zip(group["params"], names):
-                if drop(name):
-                    dropped.append(name)
-                    continue
-                if index in child["state"]:
-                    new_state[next_index] = child["state"][index]
-                params.append(next_index)
-                kept.append(name)
-                next_index += 1
-            if params:
-                new_groups.append({**group, "params": params})
-                kept_names.append(kept)
-        key = "adamw" if kind == "adamw" else kind
-        out[key] = {"state": new_state, "param_groups": new_groups} if new_groups else None
-    if cursor != len(groups):
-        raise OptimizerRestoreError("more named groups than saved optimizer groups")
-    out["schema"] = [entry for entry in saved["schema"] if not drop(entry.get("name") or "")]
-    if 'param_names' in saved:
-        out['param_names']={kind:[name for name in names if not drop(name or '')]
-                            for kind,names in saved['param_names'].items() if out.get(kind) is not None}
-    return out, kept_names, dropped
-
-
 def port_saved_slot_names(saved, kind, child):
     """Actual serialized child slot names; schema order never binds split groups."""
     groups=child['param_groups'];slots=[index for group in groups for index in group['params']]

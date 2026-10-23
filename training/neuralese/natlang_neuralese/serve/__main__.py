@@ -1,4 +1,4 @@
-"""`python -m natlang_neuralese.serve --port 8090 [--device cuda] [--heads checkpoint.pt | --direct-artifact DIR --direct-base-snapshot DIR] [--store-dir [DIR]]`"""
+"""Serve one complete native shared-state checkpoint."""
 
 from __future__ import annotations
 
@@ -8,39 +8,26 @@ import os
 import re
 import sys
 
-from . import load_engine, load_native_engine
+from . import load_native_engine
 from .http import serve
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="Neuralese reference server")
+    parser = argparse.ArgumentParser(description="Native Neuralese shared-state server")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=0, help="0 picks a free port; the chosen port is printed")
     parser.add_argument("--device", default="cpu", help="cpu, cuda[:N], or auto: cuda when it has room, else cpu")
     parser.add_argument("--dtype", choices=("float32", "bfloat16"), default=None,
                         help="model weight and cache dtype (default: float32 on CPU, bfloat16 on CUDA)")
-    parser.add_argument("--base", default=None)
-    parser.add_argument("--lora", default=None)
-    parser.add_argument("--heads", default=None, help="S3 trainer checkpoint with port heads and control rows")
-    parser.add_argument("--native-checkpoint", default=None,
-                        help="complete native shared-state model checkpoint; restores without projected PortHeads")
+    parser.add_argument("--native-checkpoint", required=True,
+                        help="complete native shared-state model checkpoint")
+    parser.add_argument("--base", default=None, help="exact source model snapshot for native restoration")
     parser.add_argument('--native-participant', help='model identity selected from a complete shared semantic checkpoint')
     parser.add_argument('--native-actor-view', help='optional source-bound compact inference receipt')
     parser.add_argument('--native-actor-view-sha256', help='exact independently bound inference receipt SHA-256')
     parser.add_argument('--semantic-adapter', help='identity-bound shared semantic adapter export receipt')
-    parser.add_argument("--recurrence-checkpoint", default=None,
-                        help="complete learned recurrent checkpoint; requires its exact runtime qualification")
-    parser.add_argument("--runtime-qualification", default=None,
-                        help="passed recurrence_runtime report binding the exact checkpoint")
-    parser.add_argument("--direct-artifact", default=None,
-                        help="strictly restored direct-SFT serving artifact for ordinary HF chat/tool generation")
-    parser.add_argument("--direct-base-snapshot", default=None,
-                        help="exact base snapshot pinned by --direct-artifact")
     parser.add_argument("--prompt-rendering", choices=("full", "program-header"), default=None,
                         help="serving prompt policy (direct artifacts bind this in their manifest; base default: full)")
-    parser.add_argument("--cutoff", type=int, default=None)
-    parser.add_argument("--max-block", type=int, default=None)
-    parser.add_argument("--dialect", default=None)
     parser.add_argument("--threads", type=int, default=8)
     parser.add_argument("--deterministic-gradients", action="store_true",
                         help="gradient replay under torch.use_deterministic_algorithms (same request, same gradient bytes on a GPU; "
@@ -52,8 +39,6 @@ def main(argv=None):
                         help="pack prompts of different lengths into one left-padded prefill (faster, not bit-identical)")
     parser.add_argument("--memory-gb", type=float, default=float(os.environ["NATLANG_CUDA_MEMORY_GB"]) if os.environ.get("NATLANG_CUDA_MEMORY_GB") else None,
                         help="cap this process's CUDA allocations (memory is shared with the rest of the machine)")
-    parser.add_argument("--projection", action="append", default=[], metavar="NAME=PATH",
-                        help="an adapter projection P (model/projections.py) served under NAME; repeatable")
     parser.add_argument("--store-dir", nargs="?", const="", default=None, metavar="DIR",
                         help="keep blocks, holds and pins on disk so they outlive restarts (serve/store.py); without DIR, "
                              "<data_nvme>/neuralese-blocks/<dialect> (NVMe)")
@@ -69,12 +54,6 @@ def main(argv=None):
         from pathlib import Path
         actor_view = {'path':str(Path(args.native_actor_view).resolve(strict=True)),
                       'sha256':args.native_actor_view_sha256,'bytes':Path(args.native_actor_view).stat().st_size}
-    if args.direct_base_snapshot and not args.direct_artifact:
-        parser.error('--direct-base-snapshot requires --direct-artifact')
-    if args.native_checkpoint and (args.direct_artifact or args.recurrence_checkpoint or args.runtime_qualification or
-            args.lora or args.heads or args.cutoff is not None or args.max_block is not None or args.dialect or
-            args.projection or args.direct_base_snapshot):
-        parser.error('--native-checkpoint cannot be combined with legacy heads, projection, direct or recurrence inputs')
     if args.deterministic_gradients:
         os.environ["NATLANG_NEURALESE_DETERMINISTIC"] = "1"
         os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
@@ -89,61 +68,9 @@ def main(argv=None):
     if args.device == "auto":
         args.device = auto_device()
     cap_cuda_memory(args.device, args.memory_gb)
-    if args.native_checkpoint:
-        engine = load_native_engine(args.native_checkpoint, base=args.base, device=args.device, dtype=model_dtype,
-                                    prompt_rendering=args.prompt_rendering or "full", participant=args.native_participant,
-                                    semantic_adapter=args.semantic_adapter,actor_view=actor_view)
-    elif args.recurrence_checkpoint:
-        if model_dtype is not None:
-            parser.error('--dtype cannot override a recurrence checkpoint runtime qualification')
-        if not args.runtime_qualification or any(value is not None for value in
-                (args.base, args.lora, args.heads, args.cutoff, args.max_block, args.dialect,
-                 args.direct_artifact, args.direct_base_snapshot)):
-            parser.error('recurrence checkpoint requires runtime qualification and no backbone/port overrides')
-        from pathlib import Path
-        from ..train.output_embedding_projection import sha
-        proof = json.loads(Path(args.runtime_qualification).read_text())
-        if (proof.get('schema') != 'natlang.recurrence-runtime-requalification/1'
-                or proof.get('runtime_transport_passed') is not True
-                or proof.get('input_gradient_equal_direct_raw') is not True
-                or proof.get('weights_unmodified') is not True
-                or proof.get('device_type') != torch.device(args.device).type
-                or proof.get('model_dtype') != str(torch.float32 if args.device == 'cpu' else torch.bfloat16)
-                or proof.get('pins', {}).get(str(Path(args.recurrence_checkpoint))) != sha(args.recurrence_checkpoint)):
-            parser.error('runtime qualification does not qualify this exact recurrence checkpoint')
-        from .recurrence_checkpoint import load_recurrence_checkpoint
-        engine, _ = load_recurrence_checkpoint(args.recurrence_checkpoint, device=args.device)
-        if proof.get('conv_kernel_enabled') != (getattr(engine.backbone, 'conv_kernel', None) is not None):
-            parser.error('convolution execution differs from the qualified runtime')
-        if (proof.get('conv_kernel_runtime_info') is not None
-                and proof['conv_kernel_runtime_info'] != engine.backbone.conv_kernel_runtime_info):
-            parser.error('convolution implementation differs from the qualified runtime')
-        engine.recurrence_checkpoint['runtime_requalified'] = True
-        engine.recurrence_checkpoint['runtime_report_sha256'] = sha(args.runtime_qualification)
-    elif args.direct_artifact:
-        if (not args.direct_base_snapshot or args.runtime_qualification or any(value is not None for value in
-                (args.base, args.lora, args.heads, args.cutoff, args.max_block, args.dialect))):
-            parser.error('--direct-artifact requires --direct-base-snapshot and cannot be combined with other model inputs')
-        from pathlib import Path
-        from ..common.hashing import sha256_file_hex
-        from ..train.direct_export import load_direct_artifact
-        restored = load_direct_artifact(args.direct_artifact, base_snapshot=args.direct_base_snapshot,
-                                        device=args.device, dtype=model_dtype)
-        engine = restored.engine
-        if args.prompt_rendering is not None and args.prompt_rendering != engine.prompt_rendering:
-            parser.error("--prompt-rendering conflicts with the direct artifact's bound mode")
-        manifest_path = Path(args.direct_artifact) / "manifest.json"
-        print(json.dumps({"event": "direct_artifact_restored",
-                          "artifact": str(Path(args.direct_artifact).resolve()),
-                          "manifest_sha256": sha256_file_hex(manifest_path),
-                          "training_checkpoint": restored.manifest.get("training_checkpoint"),
-                          "status": restored.manifest.get("status"),
-                          "base_snapshot": str(Path(args.direct_base_snapshot).resolve())}), flush=True)
-    else:
-        if args.runtime_qualification:
-            parser.error('runtime qualification requires a recurrence checkpoint')
-        engine = load_engine(args.base, args.lora, args.heads, args.cutoff, args.max_block, args.device,
-                             args.dialect, dtype=model_dtype, prompt_rendering=args.prompt_rendering or "full")
+    engine = load_native_engine(args.native_checkpoint, base=args.base, device=args.device, dtype=model_dtype,
+                                prompt_rendering=args.prompt_rendering or "full", participant=args.native_participant,
+                                semantic_adapter=args.semantic_adapter, actor_view=actor_view)
     engine.prefill_padding = args.prefill_padding
     if args.ctx_size:
         engine.context = min(engine.context, args.ctx_size)
@@ -154,17 +81,11 @@ def main(argv=None):
         directory = args.store_dir or resolve("data_nvme", "neuralese-blocks", re.sub(r"[^A-Za-z0-9._-]+", "_", engine.dialect))
         engine.store = TensorStore(directory, int(args.store_resident_gb * 2**30))  # the loaders return an empty store
     engine.default_guidance = json.loads(args.guidance) if args.guidance else None
-    if args.projection:
-        from ..model.projections import AdapterProjection
-
-        for item in args.projection:
-            name, path = item.split("=", 1)
-            engine.projections[name] = AdapterProjection.load(path, map_location=args.device).to(args.device).eval()
     engine.start()
     server = serve(engine, args.host, args.port)
     from ..data.prompt_rendering import prompt_rendering_identity
     print(json.dumps({"listening": f"http://{server.server_address[0]}:{server.server_address[1]}",
-                      "dialect": engine.dialect, "cutoff": engine.heads.cutoff if engine.heads else None,
+                      "dialect": engine.dialect, "cutoff": None,
                       "architecture": getattr(engine, "model_config", {}).get("architecture"),
                       "native_checkpoint": getattr(engine, "native_checkpoint", None), "device": args.device,
                       "model_dtype": str(next(engine.backbone.parameters()).dtype),

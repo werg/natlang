@@ -6,7 +6,8 @@ import { join } from 'node:path';
 import { createNatlangRuntime, MemoryNeuraleseStore } from '../dist/index.js';
 import { FolderDatabase, SqliteDatabase } from '../../applications/dist/nldb/index.js';
 import { judgeStep } from '../../applications/dist/nldb/main.js';
-import { FolderBlockStore, IvfIndex, decodeBlock, encodeBlock, pooled } from '../../applications/dist/nldb/neuralese.js';
+import { FolderBlockStore, IvfIndex, nativeStateDialect, pooled } from '../../applications/dist/nldb/neuralese.js';
+import { nativeStateFixture } from './fixtures/native-state.mjs';
 import { scriptedModel } from './support/natlang.mjs';
 
 const CATALOG = { version: 1, tables: { customers: { description: 'A customer of the shop.', key: ['_id'], indexes: ['city'],
@@ -207,41 +208,69 @@ test('the SQLite database: requests compile to one transaction; a failing statem
   } finally { db.close(); rmSync(root, { recursive: true, force: true }); }
 });
 
-test('neuralese blocks: content-addressed safetensors files, per-dialect IVF search, refusal across dialects', async () => {
+test('native NLDB artifacts persist as typed states and tensors and support dialect-bound semantic search', async () => {
   const root = mkdtempSync(join(tmpdir(), 'natlang-nldb-'));
-  const block = (dialect, rows) => {
-    const data = new Uint8Array(new Float32Array(rows.flat()).buffer);
-    return { dialect, length: rows.length, width: rows[0].length, dtype: 'f32', data };
+  const nativeState = (rows, text) => {
+    const state = nativeStateFixture('nldb-test@1');
+    const f32 = values => new Uint8Array(new Float32Array(values.flat()).buffer);
+    state.metadata.text = text;
+    state.tensors.token_ids = { dtype: 'I64', shape: [rows.length], data: new Uint8Array(new BigInt64Array(rows.map((_, i) => BigInt(i + 1))).buffer) };
+    state.tensors.positions = { dtype: 'I64', shape: [rows.length], data: new Uint8Array(new BigInt64Array(rows.map((_, i) => BigInt(i))).buffer) };
+    state.tensors.embeddings = { dtype: 'F32', shape: [rows.length, rows[0].length], data: f32(rows) };
+    return state;
   };
   try {
     const store = new FolderBlockStore(root);
     const memory = new MemoryNeuraleseStore();
-    const input = block('nd:test@1', [[1, 0, 0, 0], [0.8, 0.2, 0, 0]]);
-    const meta = await store.put(input);
-    assert.equal(meta.id, (await memory.put(input)).id, 'the same content ID as the runtime store');
-    assert.equal((await store.put(input)).id, meta.id);
-    const stored = await store.get(meta.id);
-    assert.deepEqual([...stored.data], [...input.data]);
-    assert.deepEqual(decodeBlock(encodeBlock(stored)).meta, stored.meta);
-    // Three clusters of blocks; a query near each finds its cluster first.
+    const input = nativeState([[1, 0, 0, 0], [0.8, 0.2, 0, 0]], 'initial state');
+    const meta = await store.putNativeState(input);
+    assert.equal(meta.id, (await memory.putNativeState(input)).id, 'folder and runtime stores compute the same state ID');
+    assert.equal((await store.putNativeState(input)).id, meta.id);
+    const restoredStore = await FolderBlockStore.open(root);
+    const restored = await restoredStore.getNativeState(meta.id);
+    const normalizeState = state => ({ ...state, tensors: Object.fromEntries(Object.entries(state.tensors).map(([name, tensor]) =>
+      [name, { ...tensor, data: Buffer.from(tensor.data).toString('hex') }])) });
+    assert.deepEqual(normalizeState(restored), normalizeState(await store.getNativeState(meta.id)));
+    assert.deepEqual(normalizeState(restored), normalizeState({ id: meta.id, ...input }));
+    assert.equal(await store.hasNativeState(meta.id), true);
+    assert.ok(existsSync(join(root, 'blocks', meta.id)), 'the native safetensors artifact is durable in the NLDB folder');
+
+    const native_identity = { checkpoint_sha256: '2'.repeat(64), tokenizer_fingerprint: '1'.repeat(64),
+      embedding_weight_sha256: '3'.repeat(64), architecture: 'nldb-test@1' };
+    const tensor = await store.putNativeTensorArtifact({
+      metadata: { schema: 'natlang.neuralese-native-tensor-artifact/1', kind: 'parameter-set', native_identity,
+        source_artifact_id: null, provenance: {}, tensors: [{ name: 'weights', dtype: 'F32', shape: [2] }] },
+      tensors: { weights: { dtype: 'F32', shape: [2], data: new Uint8Array(new Float32Array([1, 2]).buffer) } },
+    });
+    const reopened = await FolderBlockStore.open(root);
+    const normalizeTensor = artifact => ({ ...artifact, tensors: Object.fromEntries(Object.entries(artifact.tensors).map(([name, value]) =>
+      [name, { ...value, data: Buffer.from(value.data).toString('hex') }])) });
+    assert.deepEqual(normalizeTensor(await reopened.getNativeTensorArtifact(tensor.id)), normalizeTensor(tensor));
+    assert.equal(await reopened.hasNativeTensorArtifact(tensor.id), true);
+
+    // Three semantic clusters over actual native-state embedding rows.
     const centers = [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0]];
     const blocks = [];
     for (const [c, center] of centers.entries()) for (let i = 0; i < 5; i++) {
-      const rows = [center.map((v, j) => v + 0.05 * Math.sin(i + j + c)), center.map((v, j) => v + 0.05 * Math.cos(i * j + c))];
-      blocks.push({ ...(await store.put(block('nd:test@1', rows))), cluster: c });
+      const rows = [center.map((v, j) => v + 0.05 * Math.sin(i + j + c)),
+        center.map((v, j) => v + 0.05 * Math.cos(i * j + c))];
+      const artifact = await store.putNativeState(nativeState(rows, `cluster ${c}, sample ${i}`));
+      blocks.push({ artifact, cluster: c });
     }
-    const loaded = await Promise.all(blocks.map(b => store.get(b.id)));
-    const index = new IvfIndex('nd:test@1', 4).train(loaded.map(pooled), 3);
-    for (const b of loaded) index.add(b);
+    const loaded = await Promise.all(blocks.map(async b => ({ ...b, artifact: await store.getNativeState(b.artifact.id) })));
+    const index = new IvfIndex(nativeStateDialect(loaded[0].artifact), 4).train(loaded.map(b => pooled(b.artifact)), 3);
+    for (const { artifact } of loaded) index.add(artifact);
     for (const [c, center] of centers.entries()) {
-      const hits = index.search({ meta: { id: 'q', dialect: 'nd:test@1', length: 1, width: 4, dtype: 'f32' }, data: new Uint8Array(new Float32Array(center).buffer) }, 5, 1);
-      assert.deepEqual(hits.map(hit => blocks.find(b => b.id === hit.id).cluster), [c, c, c, c, c]);
+      const query = await store.putNativeState(nativeState([center, center], `query ${c}`));
+      const queryArtifact = await store.getNativeState(query.id);
+      const hits = index.search(queryArtifact, 5, 1);
+      assert.deepEqual(hits.map(hit => loaded.find(b => b.artifact.id === hit.id).cluster), [c, c, c, c, c]);
     }
     const copy = IvfIndex.fromJSON(JSON.parse(JSON.stringify(index)));
-    assert.deepEqual(copy.search(loaded[0], 1), index.search(loaded[0], 1));
-    assert.throws(() => index.search({ meta: { id: 'q', dialect: 'nd:other@1', length: 1, width: 4, dtype: 'f32' }, data: new Uint8Array(16) }),
-      /serves dialect nd:test@1/);
-    const removed = await store.collect(new Set(blocks.slice(0, 5).map(b => b.id)));
-    assert.equal(removed.length, 11, 'blocks no row refers to are collected');
+    assert.deepEqual(copy.search(loaded[0].artifact, 1), index.search(loaded[0].artifact, 1));
+    const wrongDialect = nativeStateFixture('other-architecture');
+    assert.throws(() => index.search(wrongDialect), /serves dialect native-state\/nldb-test@1\//);
+    const removed = await store.collect(new Set([meta.id, tensor.id, ...blocks.slice(0, 5).map(b => b.artifact.id)]));
+    assert.equal(removed.length, 13, 'only unreferenced native artifacts are collected');
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

@@ -52,8 +52,8 @@ a clarifying question):
   `meets(column, criterion)`. `judge` decides them once per distinct value before the query runs (`_nl_semantic`
   cache), because SQLite functions are synchronous.
 
-Neuralese values (storage, dialect pinning, IVF similarity index) are designed in [NEURALESE.md](NEURALESE.md) and
-implemented as `neuralese.ts`. Blocks are content-addressed safetensors files, and the index is per dialect.
+Native-state values and named tensor artifacts (folder persistence, dialect pinning, IVF similarity index) are
+designed in [NEURALESE.md](NEURALESE.md) and implemented as `neuralese.ts` over the shared native artifact store.
 
 ## Running
 

@@ -1,14 +1,40 @@
-"""A real-model protocol fixture through the unchanged native collector.
-
-Forced tool decisions isolate transport/typing/graph correctness; these are NOT
-student task-success examples and must never enter RL rewards or training data.
-The writer vectors themselves run on the real model and checkpoint projection.
-"""
+"""A real-model protocol fixture through the native collector and positional-state writer."""
 from __future__ import annotations
 import json
 import subprocess
 import threading
 from pathlib import Path
+
+
+def native_artifact_bytes(engine, artifact_id):
+    """Fetch the exact native artifact produced by the protocol fixture."""
+    if artifact_id.startswith('nzs1_'):
+        from ..serve.store import encode_native_state
+        record = engine.store.get_native_state(artifact_id)
+        if record is None:
+            raise ValueError(f'value harness omitted native state {artifact_id}')
+        return encode_native_state(record.block)
+    if artifact_id.startswith('nnt1_'):
+        from ..model.native_artifact import encode_native_tensor_artifact
+        record = engine.store.get_native_tensor_artifact(artifact_id)
+        if record is None:
+            raise ValueError(f'value harness omitted native tensor artifact {artifact_id}')
+        return encode_native_tensor_artifact(record.artifact)
+    raise ValueError(f'value harness received a non-native artifact ID: {artifact_id}')
+
+
+def _forced_native_reply_tokens(engine, segments):
+    """Encode a diagnostic assistant reply, writing named spans through native role markers."""
+    result = []
+    for kind, text in segments:
+        if kind == 'text':
+            result.extend(engine._template_tokens(text))
+        elif kind == 'native-state':
+            result.extend((engine.role_tokens.produce_open, *engine._tokens(text), engine.role_tokens.produce_close))
+        else:
+            raise ValueError(f'unknown native value-harness reply segment: {kind}')
+    result.append(engine.stop_ids[0])
+    return result
 
 
 def validate(engine, out, runtime):
@@ -19,19 +45,22 @@ def validate(engine, out, runtime):
     code = ('const seed: Neuralese<string> = await nl<Neuralese<string>>`Write a note.`(); '
             'const reader: Neuralese<(prior: Neuralese<string>) => Promise<string>> = '
             'nl.with<string>({})`Read the note and answer ok.`; return await reader(seed);')
-    plans = [
-        ["<|tool_call_start|>[eval(code=" + repr(code) + ", finish=True)]<|tool_call_end|>"],
-        ["<|tool_call_start|>[eval(code='return ", {'neuralese': 'write'}, ";', finish=True)]<|tool_call_end|>"],
-        ["<|tool_call_start|>[return_result(status='success', value='ok')]<|tool_call_end|>"],
+    replies = [
+        [('text', "<|tool_call_start|>[eval(code=" + repr(code) + ", finish=True)]<|tool_call_end|>")],
+        [('text', "<|tool_call_start|>[eval(code='return "),
+         ('native-state', 'A durable note for the reader.'),
+         ('text', ";', finish=True)]<|tool_call_end|>")],
+        [('text', "<|tool_call_start|>[return_result(status='success', value='ok')]<|tool_call_end|>")],
     ]
-    original, captured = engine.submit, []
+    original, original_token, captured = engine.submit, engine._native_token, []
     def submit(request):
-        if len(captured) >= len(plans):
+        if len(captured) >= len(replies):
             raise RuntimeError('unexpected extra request in forced value harness fixture')
-        request.forced = plans[len(captured)]
+        request.value_harness_tokens = _forced_native_reply_tokens(engine, replies[len(captured)])
         request.guidance = None
         request.rl_capture = True
-        request.neuralese_length = 2
+        request.native_recording = True
+        request.temperature = 0.0
         request.max_tokens = 1024
         captured.append(request)
         future = original(request)
@@ -41,7 +70,13 @@ def validate(engine, out, runtime):
                 traceback.print_exception(done.exception())
         future.add_done_callback(diagnose)
         return future
+    def native_token(sequence):
+        plan = sequence.request.value_harness_tokens
+        if not plan:
+            raise RuntimeError('forced native value-harness reply ended without a stop token')
+        return plan.pop(0), None
     engine.submit = submit
+    engine._native_token = native_token
     engine.start()
     server = serve(engine, '127.0.0.1', 0)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -85,12 +120,12 @@ if (!row.outcome.accepted) throw new Error(JSON.stringify(row.outcome));
             raise RuntimeError('real value harness lost exact writer-reader occurrence edge')
         from .task_rollouts import rollout_turns
         from .graph_replay import save_bundle
-        from ..serve.store import encode_block
         save_bundle([{'turns': rollout_turns(row), 'execution_graph': graph}], out / 'blocks',
-                    policy_id='diagnostic-not-training', fetch=lambda bid: encode_block(engine.lookup(bid)))
+                    policy_id='diagnostic-not-training', fetch=lambda bid: native_artifact_bytes(engine, bid))
         report = {'schema': 'natlang.rl-value-harness-validation/1', 'accepted': True,
             'forced_tool_decisions': True, 'admitted_training_or_reward': False,
-            'real_model_writer': True, 'model_requests': len(captured),
+            'forced_native_write': True, 'checkpoint_native_writer_compute': True,
+            'model_requests': len(captured),
             'writer_nodes': len(writes), 'reader_nodes': len(reads),
             'durable_bundle': str(out / 'blocks/manifest.json')}
         write_json_durable(out / 'validation.json', report)
@@ -100,3 +135,4 @@ if (!row.outcome.accepted) throw new Error(JSON.stringify(row.outcome));
         server.server_close()
         engine.stop()
         engine.submit = original
+        engine._native_token = original_token

@@ -76,41 +76,39 @@ test('scope bindings are injected with checked types', async () => {
   assert.deepEqual(reserved.diagnostics.map(d => d.code), ['skill-scope-reserved']);
 });
 
-test('scope values that do not fit their type, duplicate names and .nz sources are diagnosed', async () => {
+test('scope values that do not fit their type, duplicate names and native state references are checked', async () => {
   const skill = (name, scope) => `---\nname: ${name}\ndescription: Fixture skill ${name}.\nnatlang:\n  scope:\n${scope}\n---\nBody.\n`;
   const source = memorySkillSource({
     'skills/a/SKILL.md': skill('a', '    limit:\n      type: number\n      value: "many"'),
     'skills/b/SKILL.md': skill('b', '    shared:\n      type: string\n      value: one'),
     'skills/c/SKILL.md': skill('c', '    shared:\n      type: string\n      value: two'),
-    'skills/d/SKILL.md': skill('d', '    plan:\n      type: Neuralese<string>\n      nz: plan.nz#body'),
-    'skills/d/plan.nz': new Uint8Array([1, 2, 3]),
+    'skills/d/SKILL.md': skill('d', '    plan:\n      type: Neuralese<string>\n      value: {"$neuralese":{"type":"Neuralese<string>","id":"nzs1_' + 'a'.repeat(52) + '"}}'),
   });
   const { set, diagnostics } = await loadSkills(source);
   assert.deepEqual(diagnostics.filter(d => d.severity === 'error'), []);
   const first = await scopeBindings(set);
-  assert.deepEqual(first.diagnostics.map(d => d.code).sort(), ['nz-skill-unsupported', 'skill-scope-conflict', 'skill-scope-type']);
-  assert.deepEqual(first.bindings.map(b => b.name), ['shared']);
-  const seen = [];
-  const resolved = await scopeBindings(set, { nz: async (skill, file, name) => { seen.push([skill.name, file, name]); return 'nz1_' + 'a'.repeat(52); } });
-  assert.deepEqual(seen, [['d', 'plan.nz', 'body']]);
+  assert.deepEqual(first.diagnostics.map(d => d.code).sort(), ['skill-scope-conflict', 'skill-scope-type']);
+  assert.deepEqual(first.bindings.map(b => b.name), ['shared', 'plan']);
+  const resolved = await scopeBindings(set);
   const plan = resolved.bindings.find(b => b.name === 'plan');
   assert.ok(plan && isNeuraleseRef(plan.value));
   assert.equal(plan.value.$neuralese.type, 'Neuralese<string>');
+  assert.equal(plan.value.$neuralese.id, 'nzs1_' + 'a'.repeat(52));
 });
 
-test('.nz skills go through the metadata hook', async () => {
-  const source = memorySkillSource({ 'skills/soft-rubric.nz': new Uint8Array([0]), 'skills/folded/folded.nz': new Uint8Array([1]) });
+test('native archives do not imply skill metadata; Markdown manifests bind state by exact ID', async () => {
+  const source = memorySkillSource({ 'skills/soft-rubric.nz': new Uint8Array([0]) });
   const unsupported = await loadSkills(source);
-  assert.equal(unsupported.set.size, 0);
-  assert.deepEqual(unsupported.diagnostics.map(d => d.code), ['nz-skill-unsupported', 'nz-skill-unsupported']);
-  const meta = { 'skills/soft-rubric.nz': { skill: { name: 'soft-rubric', description: 'A soft rubric.', body: 'instructions' } },
-    'skills/folded/folded.nz': { skill: { name: 'folded', description: 'A soft skill in a folder.', body: 'body',
-      natlang: { exports: { score: 'Neuralese<number>' } } } } };
-  const { set, diagnostics } = await loadSkills(source, { nz: { async readMetadata(path) { return meta[path]; } } });
+  assert.equal(unsupported.set.size, 0, 'archive files do not imply a skill manifest');
+  assert.deepEqual(unsupported.diagnostics, []);
+  const manifest = `---\nname: folded\ndescription: A native-state skill.\nnatlang:\n  scope:\n    rubric:\n      type: Neuralese<string>\n      value: {"$neuralese":{"type":"Neuralese<string>","id":"nzs1_${'b'.repeat(52)}"}}\n---\nRead the bound rubric.\n`;
+  const { set, diagnostics } = await loadSkills(memorySkillSource({ 'skills/folded/SKILL.md': manifest }));
   assert.deepEqual(diagnostics, []);
-  assert.deepEqual(set.names, ['folded', 'soft-rubric']);
-  const doc = await readSkillDocument(set, 'skills.soft-rubric');
-  assert.deepEqual([doc.kind, doc.export], ['neuralese', 'instructions']);
+  assert.deepEqual(set.names, ['folded']);
+  assert.equal((await readSkillDocument(set, 'skills.folded')).text, 'Read the bound rubric.');
+  assert.deepEqual(set.get('folded').files, []);
+  const bindings = await scopeBindings(set);
+  assert.equal(bindings.bindings[0].value.$neuralese.id, 'nzs1_' + 'b'.repeat(52));
 });
 
 test('skill sets are immutable; the pool changes only by new revisions', async () => {
@@ -239,7 +237,7 @@ test('contexts snapshot ordinary data and detach binary reads while preserving r
   const input = { rubric: { threshold: 0.8 }, examples: [{ result: 'review' }] };
   const bytes = new Uint8Array([1, 2, 3]);
   const liveValue = live(() => 'dynamic');
-  const reference = { $neuralese: { type: 'Neuralese<string>', id: 'nz1_aaaaaaaaaaaaaaaaaaaa' } };
+  const reference = { $neuralese: { type: 'Neuralese<string>', id: 'nzs1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' } };
   const context = Context.of({}, { input, bytes, liveValue, reference });
   const id = context.id;
   input.rubric.threshold = 0.1;

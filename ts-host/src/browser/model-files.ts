@@ -12,11 +12,10 @@ import { chooseNeuraleseBuild, startBrowserNeuralese, type NeuraleseWasmOptions,
 export type ModelFileRef = { url: string; bytes?: number; sha256?: string };
 
 /**
- * A Neuralese model for the browser: the GGUF model, its port heads, the dialect they speak, and weight adapters it
- * ships as GGUF LoRAs by adapter block ID (`python -m natlang_neuralese.export.adapters`).
+ * A Neuralese model for the browser: the GGUF model, its port heads and the dialect they speak.
  */
 export type NeuraleseModelManifest = { id: string; label: string; dialect: string; model: ModelFileRef; heads: ModelFileRef;
-  contextTokens?: number; adapters?: readonly { id: string; lora: ModelFileRef }[] };
+  contextTokens?: number };
 
 type FileHandle = { getFile(): Promise<File>; createWritable(): Promise<WritableStream<Uint8Array> & { close(): Promise<void>; abort(): Promise<void> }> };
 type DirectoryHandle = { getDirectoryHandle(name: string, options?: { create?: boolean }): Promise<DirectoryHandle>;
@@ -78,15 +77,13 @@ export async function cachedModelFile(file: ModelFileRef, options: { storage?: M
 /**
  * Start a Neuralese model from its manifest in a Web Worker: the build this browser runs best
  * (`chooseNeuraleseBuild`), model and heads from the OPFS cache. `moduleBase` is the directory (ending in `/`) that
- * holds the `neuralese-wasm*.mjs` builds. `store` is the block archive; by default the OPFS block store in `storage`
- * (an in-memory store without OPFS), so blocks survive a page reload or an engine restart and are restored from it.
+ * holds the `neuralese-wasm*.mjs` builds. `store` is the native artifact archive; by default the OPFS archive in `storage`
+ * (an in-memory store without OPFS), so native states survive a page reload or an engine restart and are restored from it.
  */
 export async function startNeuraleseModel(manifest: NeuraleseModelManifest, options: NeuraleseWasmOptions & { worker: Worker;
   moduleBase: string | URL; endpoint?: string; storage?: ModelFileStorage | null; fetcher?: typeof fetch; store?: NeuraleseStore;
   onProgress?: (file: 'model' | 'heads', received: number, total: number | null) => void; gpu?: boolean }):
-    Promise<StartedNeuralese & { build: string; reason: string;
-      /** The manifest's adapter LoRAs (from the OPFS cache), for `neuraleseServerModelTurn({ adapterLoras })`. */
-      adapterLoras: (id: string) => Promise<Uint8Array | null> }> {
+    Promise<StartedNeuralese & { build: string; reason: string }> {
   const [model, heads] = await Promise.all((['model', 'heads'] as const).map(which => cachedModelFile(manifest[which], {
     storage: options.storage, fetcher: options.fetcher, onProgress: (received, total) => options.onProgress?.(which, received, total) })));
   const chosen = await chooseNeuraleseBuild(globalThis as never, { gpu: options.gpu });
@@ -96,11 +93,5 @@ export async function startNeuraleseModel(manifest: NeuraleseModelManifest, opti
     threads: options.threads ?? chosen.threads, gpuLayers: options.gpuLayers ?? chosen.gpuLayers,
     nCtx: options.nCtx ?? manifest.contextTokens, dialect: options.dialect ?? manifest.dialect,
     moduleUrl: new URL(`${chosen.build}.mjs`, moduleBase).href });
-  const adapterLoras = async (id: string) => {
-    const shipped = manifest.adapters?.find(adapter => adapter.id === id);
-    if (!shipped) return null;
-    const file = await cachedModelFile(shipped.lora, { storage: options.storage, fetcher: options.fetcher });
-    return new Uint8Array(await file.arrayBuffer());
-  };
-  return { ...started, build: chosen.build, reason: chosen.reason, adapterLoras };
+  return { ...started, build: chosen.build, reason: chosen.reason };
 }

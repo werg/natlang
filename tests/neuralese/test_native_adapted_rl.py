@@ -145,7 +145,11 @@ def test_adapted_policy_bundle_restart_gradient_service_and_optimizer(tmp_path,m
     torch.manual_seed(1701)
     engine=engine_fixture(tmp_path,family,service_template=True)
     adapter,name=nonzero_adapter(engine)
-    peer,_=nonzero_adapter(engine,'tiny')
+    from dataclasses import replace
+    from natlang_neuralese.model.native_adapters import create_adapter as create_xs_adapter
+    peer_record=create_xs_adapter(engine,{'kind':'xs','rank':2,'parameter_names':[name]})
+    peer=engine.store.put_native_tensor_artifact(replace(peer_record.artifact,
+        tensors={key:torch.full_like(value,.02) for key,value in peer_record.artifact.tensors.items()}))
     entries=[{'id':adapter.id,'scale':.75},{'id':peer.id,'scale':-.25},{'id':adapter.id,'scale':.1}]
     identity=effective_identity(engine,resolve_adapters(engine,entries))
     block_id,turns=capture_actor(engine,entries,monkeypatch,explicit_state_mode=external_observation=='explicit')
@@ -224,7 +228,7 @@ def test_adapted_policy_bundle_restart_gradient_service_and_optimizer(tmp_path,m
         # accepted under the declared exact-base mode on both executions.
         from concurrent.futures import Future
         from natlang_neuralese.serve.engine import Sequence
-        from natlang_neuralese.rl.full_policy import clipped_token_loss
+        from natlang_neuralese.rl.policy_math import clipped_token_loss
         coefficient=engine.store.get_native_tensor_artifact(current_id).artifact.tensors[name].clone().requires_grad_(True)
         request=GenerationRequest(messages=[{'role':'user','content':[
             {'type':'text','text':'t6 '},{'type':'native_state','id':block_id}]}],

@@ -1385,7 +1385,13 @@ def _compiled_flex(q, k, v, scale, *, precision='ieee'):
     # Inference tensors and global grad/inference scopes have separate guards.
     key = (precision, q.dtype, k.dtype, v.dtype, q.shape[0], q.shape[1], k.shape[1], q.shape[-1], v.shape[-1],
            scale, native_attention_layout(q), native_attention_layout(k), native_attention_layout(v), torch.is_grad_enabled(), torch.is_inference_mode_enabled(),
-           tuple((tensor.requires_grad, tensor.is_inference()) for tensor in (q, k, v)))
+           tuple((tensor.requires_grad, tensor.is_inference()) for tensor in (q, k, v)),
+           # Dynamo guards on the process-wide intra-op thread count. Since
+           # this cache owns compiled code objects across calls, keep that
+           # global specialization in the contract key instead of consuming
+           # the same code object's bounded recompile cache when a host
+           # changes its thread pool.
+           torch.get_num_threads())
     return compile_native_attention_contract(_flex, _flex_entry, key)
 
 

@@ -25,7 +25,6 @@ import { requestNativeStateIds } from '../model/neuralese-server.js';
 import { currentFrame } from '../runtime/context.js';
 import { graphNode, traceFor, blockInput } from '../native/graph.js';
 import { archiveNativeState, restoreNativeInputs } from '../model/native-state-client.js';
-import { HttpNeuraleseStore, withRestoredBlocks } from '../model/neuralese-server.js';
 
 /** The type of a written view: the Neuralese instance of view's result. */
 export const VIEW_TYPE = 'Neuralese<string>';
@@ -41,7 +40,6 @@ export type Viewer = (site: ViewSite) => Promise<NeuraleseRef | undefined>;
  * value tokens of one write site (default: the server's, from the model's context). */
 export function serverViewer(options: { endpoint: string; headers?: Record<string, string>; store?: NeuraleseStore;
   bank?: SystemPromptBank; window?: number; onSourceTurns?: (turns: NativeViewTurn[]) => void | Promise<void> }): Viewer {
-  const remote = new HttpNeuraleseStore(options.endpoint, options.headers);
   const base = options.endpoint.replace(/\/$/, '');
   const info = neuraleseServerInfo(options.endpoint, { headers: options.headers });
   return async site => {
@@ -133,23 +131,11 @@ export function serverViewer(options: { endpoint: string; headers?: Record<strin
       if(result.x_natlang_native_failure!==undefined||!result.id||!written.has(result.id))
         throw new Error('neuralese-view-source-integrity: final view is not an actual output of the preserved turns');
       await options.onSourceTurns?.(result.source_turns);
+      if (!/^nzs1_[a-z2-7]{52}$/.test(result.id))
+        throw new Error('neuralese-view-source-integrity: native view returned a non-native artifact ID');
       return neuraleseRef(VIEW_TYPE, result.id);
     }
-    const ids = Array.isArray(system) ? system.flatMap(part => part.type === 'neuralese' ? [part.id] : []) : [];
-    const meta = await withRestoredBlocks(remote, options.store, ids, async () => {
-      const response = await fetchModel(`${base}/v1/neuralese/view`, { method: 'POST',
-        headers: { 'content-type': 'application/json', ...options.headers },
-        body: JSON.stringify({ value: site.value, ...(site.instructions ? { instructions: site.instructions } : {}), system,
-          ...(options.window ? { window: options.window } : {}) }) });
-      if (!response.ok) throw new Error(`view failed (${response.status}): ${(await response.text()).slice(0, 300)}`);
-      return await response.json() as { id: string };
-    });
-    if (options.store && !(await options.store.has(meta.id))) {
-      const block = await remote.get(meta.id);
-      if (!block) throw new Error(`neuralese-unknown-block: the server wrote ${meta.id} but does not have it`);
-      const { id: _, ...rest } = block.meta;
-      await options.store.put({ ...rest, data: block.data });
-    }
-    return neuraleseRef(VIEW_TYPE, meta.id);
+    throw Object.assign(new Error('neuralese-native-state-unavailable: view requires a native state producer and consumer'),
+      { code: 'neuralese-native-state-unavailable' });
   };
 }

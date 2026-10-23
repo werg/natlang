@@ -122,16 +122,20 @@ test('derived typed text target preserves source action and exact provenance whi
   assert.equal(derived.derived_target.runtime_gradient_qualification, false);
 });
 
-test('shared conversion emits only a derivation-qualified typed text writer for the transformed target', () => {
+test('shared conversion emits a plain source target and exact native producer occurrence', () => {
   const row = sourceRow();
   const proof = witness(row);
   const derived = derivePureLiteralTypedTextTarget(row, proof);
   assert.ok(derived);
   const converted = convertTrajectory(derived).record;
   const args = JSON.parse(converted.target.tool_calls[0].function.arguments);
-  assert.equal(args.value.$write.source, proof.body_source);
-  assert.equal(args.value.$write.type, 'Neuralese<string>');
-  assert.match(args.value.$write.name, /^soft-state:nz1_[a-z2-7]+@derived:/);
+  assert.equal(args.value, proof.body_source);
+  assert.doesNotMatch(JSON.stringify(converted.messages), /\"type\":\"(?:soft|read|neuralese|native_state)\"/);
+  const occurrences = converted.native_source_conversion.occurrences.filter(item => item.role === 'producer');
+  assert.equal(occurrences.length, 1);
+  assert.equal(occurrences[0].body, proof.body_source);
+  assert.match(occurrences[0].reference, /^soft-state:nz1_[a-z2-7]+@derived:/);
+  assert.equal(occurrences[0].source_kind, 'derived-equivalent-pure-terminal-eval-finish-target');
   assert.equal(converted.neuralese_conversion.selected_runtime_result_writes, undefined);
   assert.deepEqual(converted.neuralese_conversion.derived_semantic_text_writes.map(write => write.role),
     ['derived-equivalent-pure-terminal-eval-finish-target']);

@@ -1,8 +1,9 @@
-"""Identity-bound tiny adapters for functional native ports.
+"""Identity-bound XS modelLoRA actors for functional native ports.
 
 Frozen bases and coefficients use the existing named tensor artifact lifecycle.
-Application uses torch.func's exact parameter substitution, not legacy module
-hooks. The operation includes any checkpoint recomputation and backward.
+Application uses torch.func's exact parameter substitution, not projected
+codes or legacy module hooks. The operation includes any checkpoint
+recomputation and backward.
 """
 from __future__ import annotations
 
@@ -13,7 +14,7 @@ from torch import nn
 
 from ..common.hashing import canonical_json_sha256_hex
 from .native_artifact import NativeTensorArtifact
-from .tiny_adapters import coefficient_core, singular_bases
+from .native_adapter_math import singular_bases
 
 SCHEMA = 'natlang.native-adapter/1'
 _ACTIVE = contextvars.ContextVar('natlang_native_adapter_execution', default=())
@@ -41,11 +42,9 @@ def create_adapter(engine, options, owner=None):
 
 def _create_adapter(engine, options, owner=None):
     kind = options.get('kind', 'xs')
-    rank, dim, seed = options.get('rank', 8), options.get('u', 0), options.get('seed', 0)
-    if (kind not in ('xs', 'tiny') or type(rank) is not int or rank < 1
-            or type(dim) is not int or dim < 0 or (kind == 'tiny' and dim < 1)
-            or type(seed) is not int):
-        raise ValueError('native adapter requires kind xs/tiny, positive rank, tiny u and integer seed')
+    rank, seed = options.get('rank', 8), options.get('seed', 0)
+    if kind != 'xs' or type(rank) is not int or rank < 1 or type(seed) is not int:
+        raise ValueError('native modelLoRA requires kind xs, a positive rank and integer seed')
     if options.get('native_identity') not in (None, engine.native_identity):
         raise ValueError('native adapter creation is bound to another exact live model')
     names = options.get('parameter_names')
@@ -53,7 +52,7 @@ def _create_adapter(engine, options, owner=None):
     if (not isinstance(names, list) or not names or any(not isinstance(name, str) for name in names)
             or len(set(names)) != len(names) or any(name not in available for name in names)):
         raise ValueError('parameter_names must uniquely select actual named native layer matrices')
-    spec = {'schema': SCHEMA, 'kind': kind, 'rank': rank, 'u': dim, 'seed': seed,
+    spec = {'schema': SCHEMA, 'kind': kind, 'rank': rank, 'seed': seed,
             'parameter_names': names, 'bases': 'weight-svd-sign-canonical-v2'}
     tensors, coefficients = {}, {}
     with torch.inference_mode(False), torch.no_grad():
@@ -61,15 +60,10 @@ def _create_adapter(engine, options, owner=None):
             weight = available[name]
             if rank > min(weight.shape[-2:]):
                 raise ValueError(f'adapter rank exceeds target matrix dimensions: {name}')
-            left, right = singular_bases(weight.detach().float(), rank, version=2)
+            left, right = singular_bases(weight.detach().float(), rank)
             tensors['left.'+name], tensors['right.'+name] = left.cpu(), right.cpu()
-            shape = (*weight.shape[:-2], rank * rank if kind == 'xs' else dim)
+            shape = (*weight.shape[:-2], rank * rank)
             coefficients[name] = torch.zeros(shape, dtype=torch.float32)
-            if kind == 'tiny':
-                from .tiny_adapters import AdapterBank, AdapterSpec
-                legacy = AdapterSpec(base='native', kind=kind, rank=rank, dim=dim,
-                                     layers=(0,), targets=('out',), seed=seed)
-                tensors['projection.'+name] = AdapterBank.projections(engine.adapter_bank, legacy, index, 'cpu')
     basis = engine.store.put_native_tensor_artifact(NativeTensorArtifact(
         'adapter-basis', engine.native_identity, tensors, provenance={'adapter_spec': spec}), owner)
     return engine.store.put_native_tensor_artifact(NativeTensorArtifact(
@@ -109,14 +103,12 @@ def resolve_adapters(engine, entries, leaves=None):
                 or not isinstance(spec, dict) or spec != (basis.provenance or {}).get('adapter_spec')
                 or spec.get('schema') != SCHEMA or spec.get('bases') != 'weight-svd-sign-canonical-v2'):
             raise ValueError('native adapter/basis must bind the exact live checkpoint, architecture and declared specification')
-        names, rank, dim, kind = (spec.get(key) for key in ('parameter_names', 'rank', 'u', 'kind'))
+        names, rank, kind = (spec.get(key) for key in ('parameter_names', 'rank', 'kind'))
         if (not isinstance(names, list) or not names or any(not isinstance(name, str) for name in names)
                 or len(set(names)) != len(names) or set(adapter.tensors) != set(names)
-                or type(rank) is not int or rank < 1 or type(dim) is not int or dim < 0
-                or kind not in ('xs', 'tiny') or (kind == 'tiny' and dim < 1)):
+                or type(rank) is not int or rank < 1 or kind != 'xs'):
             raise ValueError('invalid native adapter specification/inventory')
-        expected_basis = {prefix+name for name in names for prefix in
-                          (('left.', 'right.', 'projection.') if kind == 'tiny' else ('left.', 'right.'))}
+        expected_basis = {prefix+name for name in names for prefix in ('left.', 'right.')}
         if set(basis.tensors) != expected_basis:
             raise ValueError('native adapter basis inventory differs from its specification')
         values = leaves.get(adapter_id, adapter.tensors) if leaves else adapter.tensors
@@ -131,11 +123,10 @@ def resolve_adapters(engine, entries, leaves=None):
             if name not in available:
                 raise ValueError(f'native adapter target is not a supported layer matrix: {name}')
             shape = available[name].shape
-            expected = (*shape[:-2], rank * rank if kind == 'xs' else dim)
+            expected = (*shape[:-2], rank * rank)
             if (rank > min(shape[-2:]) or tuple(values[name].shape) != expected
                     or tuple(basis.tensors['left.'+name].shape) != (*shape[:-2], shape[-2], rank)
-                    or tuple(basis.tensors['right.'+name].shape) != (*shape[:-2], shape[-1], rank)
-                    or (kind == 'tiny' and tuple(basis.tensors['projection.'+name].shape) != (dim, rank, rank))):
+                    or tuple(basis.tensors['right.'+name].shape) != (*shape[:-2], shape[-1], rank)):
                 raise ValueError(f'native adapter tensor geometry differs for {name}')
         resolved.append((record.id, float(scale), spec, values, basis.tensors))
     return resolved
@@ -236,9 +227,8 @@ def _effective_replacements(parameters, resolved, gradient_precision):
             weight = parameters[name]
             left, right = (bases[prefix+name].to(device=weight.device, dtype=torch.float32)
                            for prefix in ('left.', 'right.'))
-            projection = bases.get('projection.'+name)
-            core = coefficient_core(spec['kind'], coefficient.to(device=weight.device), spec['rank'],
-                projection.to(device=weight.device) if projection is not None else None)
+            core = coefficient.to(device=weight.device, dtype=torch.float32).reshape(
+                *coefficient.shape[:-1], spec['rank'], spec['rank'])
             delta = ((left @ core) @ right.transpose(-2, -1)) * scale
             key = 'model.'+name
             deltas_by_key.setdefault(key, []).append((delta, coefficient))

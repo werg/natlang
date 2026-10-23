@@ -17,7 +17,6 @@
     "scripts/run_skill_authoring_queue.py": 1,
     "scripts/sync_training_corpora.py": 1,
     "training/neuralese/natlang_neuralese/data/fixtures.py": 1,
-    "training/neuralese/natlang_neuralese/train/recipe.py": 1,
-    "training/neuralese/natlang_neuralese/train/text_warmup.py": 1
+    "training/neuralese/natlang_neuralese/train/recipe.py": 1
   }
 }

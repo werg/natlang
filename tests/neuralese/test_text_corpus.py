@@ -1,11 +1,12 @@
 import hashlib
 import json
+import copy
 
 from natlang_neuralese.data.text_corpus import (authenticated_context_writer_sources,
                                                 gold_text_preview_rows, gold_text_rows)
 from natlang_neuralese.data.context_refs import context_ref_count, typed_neuralese_ref_count
 from natlang_neuralese.train.write_sites import extract_write_sites
-from natlang_neuralese.train.trajectories import handover_notes, native_writer_prefix, producer_text_target
+from natlang_neuralese.data.trajectory_text import handover_notes, native_writer_prefix, producer_text_target
 
 
 def test_shared_context_occurrence_counter_matches_typed_marker_and_read_contract():
@@ -599,6 +600,8 @@ def test_provider_expanded_context_only_read_hydrates_without_selected_writer_ta
             "source_record_sha256":_sha(_canonical(record)),"context_replacements":[{
                 "pointer":"/messages/0/content/1","source_value_sha256":_sha(_canonical(value)),
                 "payload_sha256":payload_hash,"replacement":{"type":"text","text":"<consume>"+body+"</consume>"}}]}}
+    # This fixture is a frozen admitted historical source. Its exact typed
+    # context remains readable only while building the native static view.
     original=json.loads(json.dumps(typed_input))
     derived_rows,_,derived_omitted,derived_provenance=gold_text_rows([typed_input],[],tokenizer=_Tokenizer(),
         require_independent_splits=False,static_derivations=derivation(typed_input))
@@ -611,7 +614,7 @@ def test_provider_expanded_context_only_read_hydrates_without_selected_writer_ta
     assert evidence==derived_provenance[0]["static_derivations"][0]
     _,_,bad_body,_=gold_text_rows([typed_input],[],tokenizer=_Tokenizer(),require_independent_splits=False,
         static_derivations=derivation(typed_input,payload_hash="f"*64))
-    assert bad_body and "authenticated payload" in bad_body[0]["detail"]
+    assert bad_body and "authenticated typed source body" in bad_body[0]["detail"]
     for forged in (wrong_typed_id,wrong_typed_body,wrong_v2_count,forged_v2,corrupt):
         # Binding the transformation to fresh forged bytes cannot bypass the
         # original context/provider proof validation.
@@ -627,18 +630,35 @@ def test_provider_expanded_context_only_read_hydrates_without_selected_writer_ta
     assert stale_omissions and "exact original source record" in stale_omissions[0]["detail"]
 
 
-    # Explicit paired admission may provide a literal original $write even
-    # when it is not a legacy runtime writer-index candidate. Bind its exact
-    # approved row, name and target descriptor, never body text alone.
+    # Explicit paired admission binds an approved native producer occurrence,
+    # name and target descriptor, never body text alone.
     writer={**common,"id":"static-approved-writer","messages":[{"role":"user","content":"write note"}],
-        "target":{"role":"assistant","tool_calls":[{"id":"write","type":"function",
-            "function":{"name":"return_result","arguments":json.dumps({"value":{"$write":{
-                "name":"soft-state:"+block_id,"source":body,"type":"Neuralese<string>"}}})}}]}}
+        "source_ref":{"trajectory_id":"run-context-only","invocation_id":"writer-call",
+            "source_row_sha256":row_sha},
+        "target":{"role":"assistant","content":body}}
+    writer_source=copy.deepcopy(writer)
+    writer["native_source_conversion"]={"schema":"natlang.native-source-conversion/1",
+        "row_id":writer["id"],"source_record_sha256":_sha(_canonical(writer_source)),
+        "source_messages":copy.deepcopy(writer["messages"]),
+        "source_messages_sha256":_sha(_canonical(writer["messages"])),
+        "source_target":copy.deepcopy(writer["target"]),"source_target_present":True,
+        "source_target_sha256":_sha(_canonical(writer["target"])),
+        "native_target_sha256":_sha(_canonical(writer["target"])),
+        "source_neuralese_conversion_present":False,"source_neuralese_conversion":None,
+        "trajectory_id":"run-context-only","invocation_id":"writer-call",
+        "source_trajectory_row_sha256":row_sha,"source_ref":copy.deepcopy(writer["source_ref"]),
+        "source_provenance":{},"training_admission":writer["training_admission"],
+        "split":writer["split"],"source_groups":writer["source_groups"],"views":[],
+        "unresolved_references":[],"occurrences":[{"schema":"natlang.native-source-occurrence/1",
+            "id":"nso_"+"a"*64,"role":"producer","reference":"soft-state:"+block_id,
+            "path":["target","content"],"body":body,"body_sha256":body_sha,
+            "source_kind":"typed-result","trajectory_id":"run-context-only",
+            "invocation_id":"writer-call","source_row_sha256":row_sha}]}
     def paired_derivation(source_writer):
         plan=derivation(typed_input)
         plan[typed_input["id"]]["context_replacements"][0]["writer_source"]={
             "record_id":source_writer["id"],"record_sha256":_sha(_canonical(source_writer)),
-            "write_name":"soft-state:"+block_id}
+                "write_name":"soft-state:"+block_id,"occurrence_id":"nso_"+"a"*64}
         plan[source_writer["id"]]={"schema":"natlang.native-pair-static-derivation/1",
             "source_record_sha256":_sha(_canonical(source_writer)),
             "source_target_sha256":_sha(_canonical(source_writer["target"])),

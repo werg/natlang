@@ -178,7 +178,7 @@ def test_already_upgraded_checkpoint_composite_and_mislabeled_tensor_rejection(t
 
 @pytest.mark.parametrize('kind',['native_state_sft','native_state_rl','native_offline_preference'])
 def test_recipe_declares_norm_profile_handoff_and_fresh_capacity(tmp_path,kind):
-    from natlang_neuralese.train.recipe import HANDLERS,validate_stage_parameters,direct_windowing_handoffs,stage_parameter_args
+    from natlang_neuralese.train.recipe import HANDLERS,validate_stage_parameters,native_stage_parameter_handoffs,stage_parameter_args
     assert 'native_ordinary_precision' in HANDLERS[kind]['parameters']
     validate_stage_parameters(kind,{'native_ordinary_precision':PROFILE})
     assert stage_parameter_args({'native_ordinary_precision':PROFILE})==['--native-ordinary-precision',PROFILE]
@@ -187,9 +187,9 @@ def test_recipe_declares_norm_profile_handoff_and_fresh_capacity(tmp_path,kind):
     old={'stages':[{'id':'foundation','kind':kind,'parameters':{'epochs':2}}]}
     new=copy.deepcopy(old);new['stages'][0]['parameters']['native_ordinary_precision']=PROFILE
     with pytest.raises(ValueError,match='fresh restored-model'):
-        direct_windowing_handoffs(old,new,tmp_path)
+        native_stage_parameter_handoffs(old,new,tmp_path)
     new['stages'][0]['parameters']['memory_qualification']={'path':'actual-profile-max-request.json','sha256':'a'*64}
-    changes,_,_=direct_windowing_handoffs(old,new,tmp_path)
+    changes,_,_=native_stage_parameter_handoffs(old,new,tmp_path)
     assert changes['foundation']['native_ordinary_precision']==[None,PROFILE]
     for bad in ({'memory_qualification':True}, {'memory_qualification':{'path':'x','sha256':'bad'}}):
         with pytest.raises(ValueError,match='memory_qualification'):
@@ -197,6 +197,6 @@ def test_recipe_declares_norm_profile_handoff_and_fresh_capacity(tmp_path,kind):
     old_with_request=copy.deepcopy(old)
     old_with_request['stages'][0]['parameters']['memory_qualification']=new['stages'][0]['parameters']['memory_qualification']
     with pytest.raises(ValueError,match='fresh restored-model'):
-        direct_windowing_handoffs(old_with_request,new,tmp_path)
+        native_stage_parameter_handoffs(old_with_request,new,tmp_path)
     with pytest.raises(ValueError,match='norm storage upgrade'):
-        direct_windowing_handoffs(new,old,tmp_path)
+        native_stage_parameter_handoffs(new,old,tmp_path)

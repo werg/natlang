@@ -1,9 +1,9 @@
-"""In-run task-success evaluation (owner decision 2026-10-12, plans/neuralese/DECISIONS.md "Qualification is task success
+"""In-run native task-success evaluation (owner decision 2026-10-12, plans/neuralese/DECISIONS.md "Qualification is task success
 plus drift").
 
 A fixed subset of the protected held task packet is executed for real at the training eval cadence, against the
-model being trained, in the trainer's own process: the stage's serve ``Engine`` (the object direct SFT trains
-through) is served on a loopback port for the duration of the evaluation, and the shared TS collector
+native checkpoint being trained, in the trainer's own process: its native serving engine is served on a loopback
+port for the duration of the evaluation, and the shared TS collector
 (``scripts/run_bonsai_queue.py`` -> ``ts-host/dist/teacher/cli.js``) executes each task's authored root program,
 asks the model for every child decision, and runs the tool calls (eval, return_result, ...) in the native runtime.
 Scoring is the shared exact scorer (``eval.task_packet.score_rows``): a task succeeds only when the collector's own
@@ -37,16 +37,8 @@ The pass bar is relative (coordinator 2026-10-12): the final evaluation is eligi
 previous eligible evaluation of the stage minus ``noise_successes``. Every evaluation records the same comparison
 (``regressed``) for monitoring; only the final one gates.
   runtime         TS runtime directory with dist/teacher (default: the live checkout's ts-host, the newest code)
-  async           (default false) cadence evaluations run off the training critical path (coordinator 2026-10-13):
-                  the trainer links its just-saved checkpoint as the step's eval snapshot, a child at idle priority
-                  prunes it to weights only (the checkpoint offload's weights-only copy), and training continues. A
-                  separate job (scripts/task_eval_dispatch.py: its own resumable ledger unit) restores the weights into
-                  a serving engine, runs the evaluation and appends its row to task-eval.jsonl with its step; the
-                  snapshot is deleted when the row lands. The final evaluation stays synchronous (it gates
-                  qualification), and a pending result is no failure until its job reports. Snapshots live on the
-                  external checkpoint mirror (the offload's mirror tree), never on the NVMe, and only if the mirror
-                  keeps its HDD floor free after the copy; a stage keeps at most ``max_pending`` (default 2) unlanded
-                  requests: older ones are dropped and recorded ``superseded`` (no failure).
+  native asynchronous evaluation uses the checkpoint-addressed export service in ``eval.native_async``; synchronous
+  cadence evaluation remains available in the trainer.
   max_consecutive_failures  ineligible evaluations in a row (infrastructure errors, unresolved tasks, a collector or
                   serving exception) before the training run stops (default 3). A single failed evaluation is recorded
                   in task-eval.jsonl and the next cadence evaluates again: a transient eval failure must not end a
@@ -193,7 +185,7 @@ def parse_task_eval(value):
         raise ValueError('task_eval.cases must be distinct nonnegative row indices')
     for key, default in (('case_seconds', 7200), ('max_model_requests', 128), ('max_turns', 160), ('workers', 8),
                          ('min_successes', 0), ('noise_successes', 0), ('noise_repeats', 2),
-                         ('max_consecutive_failures', 3), ('max_pending', 2), ('identical_turn_limit', 0),
+                         ('max_consecutive_failures', 3), ('identical_turn_limit', 0),
                          ('min_free_mib', 0)):
         spec.setdefault(key, default)
         if isinstance(spec[key], bool) or not isinstance(spec[key], int) or spec[key] < (
@@ -202,8 +194,6 @@ def parse_task_eval(value):
     reference = spec.setdefault('reference_successes', None)
     if reference is not None and (isinstance(reference, bool) or not isinstance(reference, int) or reference < 0):
         raise ValueError('task_eval.reference_successes must be a nonnegative integer or null (unmeasured)')
-    if not isinstance(spec.setdefault('async', False), bool):
-        raise ValueError('task_eval.async must be true or false')
     if not isinstance(spec.setdefault('neuralese_server', False), bool):
         raise ValueError('task_eval.neuralese_server must be true or false')
     if spec.get('prompt_rendering') not in (None, 'full', 'program-header'):
@@ -583,69 +573,6 @@ class TaskEval:
                                f'{summary.get("error") or summary.get("outcome_counts")}); see {summary.get("run")}')
         return summary
 
-    # Asynchronous cadence evaluations ---------------------------------------------------------------------------------
-    def submit(self, step: int, checkpoint: Path, *, heads: str | None, device: str = 'cuda') -> dict:
-        """Request the evaluation of ``step`` off the critical path. ``checkpoint`` is the stage's rolling slot, just
-        written at this step: it is hard-linked (the slot is only ever replaced atomically, so the linked inode is
-        immutable, as for the best checkpoint), pruned to weights only by a child process at idle priority, and the
-        link dropped. Returns at once with a pending summary. Repeated landed failures still stop the run."""
-        request_dir = self.root / 'async' / f'step-{step:07d}'
-        request_dir.mkdir(parents=True, exist_ok=True)
-        full, weights = request_dir / 'full.pt', snapshot_path(request_dir)
-        if not weights.exists():
-            pending = full.with_name(full.name + '.pending-link')
-            pending.unlink(missing_ok=True)
-            os.link(Path(checkpoint).resolve(strict=True), pending)
-            pending.replace(full)
-        request = {'schema': ASYNC_SCHEMA, 'step': step, 'stage_out': str(self.out.resolve()), 'spec': self.spec,
-                   'prompt_rendering': self.prompt_rendering, 'heads': heads, 'device': device,
-                   'checkpoint': str(Path(checkpoint).resolve()), 'requested_at': time.time(),
-                   'weights': str(weights),
-                   'sdpa_backend': os.environ.get('NATLANG_NEURALESE_SDPA_BACKEND', 'default'),
-                   'trainer_code_commit': _git_head()}
-        _write_json(request_dir / 'request.json', request)
-        queue = request_queue()
-        queue.mkdir(parents=True, exist_ok=True)
-        import hashlib
-        stage = hashlib.sha256(str(self.out.resolve()).encode()).hexdigest()[:8]
-        _write_json(queue / f'{stage}-step-{step:07d}.json', {'request': str(request_dir.resolve())})
-        if not weights.exists():
-            threading.Thread(target=self._prune_in_background, args=(request_dir,), name=f'task-eval-prune-{step}',
-                             daemon=True).start()
-        for older in pending_requests(self.out)[:-self.spec.get('max_pending', 2)]:
-            self.supersede(older)
-        failures = self.consecutive_failures()
-        print(json.dumps({'event': 'task_eval_submitted', 'step': step, 'request': str(request_dir),
-                          'consecutive_failures': failures}), flush=True)
-        if failures >= self.spec['max_consecutive_failures'] and self.spec.get('runtime_failure_policy') != 'report':
-            raise RuntimeError(f'task_eval failed {failures} times in a row (asynchronous results in '
-                               f'{self.out / "task-eval.jsonl"})')
-        return {'schema': SCHEMA, 'step': step, 'pending': True, 'eligible': None, 'task_successes': None,
-                'cases': len(self.rows), 'outcome_counts': None, 'seconds': 0.0, 'request': str(request_dir)}
-
-    def submit_or_run(self, step: int, checkpoint: Path, **kwargs) -> dict:
-        """``submit``; when the slot cannot be linked (e.g. offloaded to another filesystem), the synchronous
-        ``cadence`` instead, so an evaluation is never silently skipped."""
-        try:
-            return self.submit(step, checkpoint, **kwargs)
-        except OSError as error:
-            print(json.dumps({'event': 'task_eval_async_unavailable', 'step': step, 'error': repr(error)}), flush=True)
-            return self.cadence(step)
-
-    def _prune_in_background(self, request_dir: Path) -> None:
-        """The trainer's pruning thread. The full-state link never outlives it: without room above the mirror's floor
-        the request is skipped (recorded, no failure); any other error drops the link and leaves the request for its
-        job, which records the missing snapshot as a failed evaluation."""
-        try:
-            prune_snapshot(request_dir)
-        except SnapshotSpaceError as error:
-            self.supersede(request_dir, str(error))
-        except Exception as error:  # noqa: BLE001 - never raise in the trainer's thread
-            print(json.dumps({'event': 'task_eval_prune_failed', 'request': str(request_dir), 'error': repr(error)}),
-                  flush=True)
-        finally:
-            (Path(request_dir) / 'full.pt').unlink(missing_ok=True)
-
     def landed(self, step: int) -> dict | None:
         """The row recorded for ``step`` on this packet and subset (eligible or not), or None."""
         log = self.out / 'task-eval.jsonl'
@@ -661,20 +588,9 @@ class TaskEval:
                     found = row
         return found
 
-    def supersede(self, request_dir: Path, reason: str = 'superseded by newer pending requests (max_pending)') -> None:
-        """Drop an unlanded request (its snapshot and dir) and record it as no evaluation, not as a failure."""
-        request_dir = Path(request_dir)
-        step = int(request_dir.name.removeprefix('step-'))
-        if self.landed(step) is None:
-            space = 'floor' in reason
-            self.record_failure(step, reason, superseded=not space, skipped=space)
-        drop_request(request_dir)
-        print(json.dumps({'event': 'task_eval_superseded', 'step': step, 'reason': reason}), flush=True)
-
-    def record_failure(self, step: int, error: str, *, superseded: bool = False, skipped: bool = False) -> dict:
-        """An ineligible row for an evaluation whose job could not produce one (counted by consecutive_failures),
-        or, ``superseded``/``skipped``, a dropped request (not counted)."""
-        summary = {'superseded': superseded, 'skipped': skipped,'schema': SCHEMA, 'step': step, 'task_successes': None, 'task_success_rate': None, 'model_outcome': 'unscored', 'cases': len(self.rows),
+    def record_failure(self, step: int, error: str) -> dict:
+        """Record an ineligible asynchronous evaluation result for this exact step."""
+        summary = {'schema': SCHEMA, 'step': step, 'task_successes': None, 'task_success_rate': None, 'model_outcome': 'unscored', 'cases': len(self.rows),
                    'outcome_counts': None, 'eligible': False, 'error': error, 'async': True,
                    'packet_sha256': self.spec['packet']['sha256'], 'case_indices': self.spec['cases'],
                    'code_commit': _git_head(), 'seconds': 0.0, 'run': str(self.root / f'step-{step:07d}')}
@@ -690,56 +606,10 @@ class TaskEval:
 ASYNC_SCHEMA = 'natlang.in-run-task-eval-request/1'
 
 
-def _write_json(path: Path, value) -> None:
-    temp = path.with_name(path.name + '.pending')
-    temp.write_text(json.dumps(value, indent=1) + '\n')
-    temp.replace(path)
-
-
-def prune_snapshot(request_dir: Path) -> Path:
-    """``full.pt`` (a link to the step's full training state) -> ``weights.pt`` through the checkpoint offload's
-    weights-only copy in a child at idle priority; the full link is dropped. Idempotent (trainer thread or job)."""
-    from ..train.checkpoint_offload import OffloadSettings, child_copy, verified_copy
-    request_dir = Path(request_dir)
-    full, weights = request_dir / 'full.pt', request_weights(request_dir)
-    if not weights.exists():
-        if not full.exists():
-            raise FileNotFoundError(f'eval snapshot missing: {full}')
-        weights.parent.mkdir(parents=True, exist_ok=True)
-        floor = OffloadSettings.from_env().hdd_floor_bytes
-        free = shutil.disk_usage(weights.parent).free
-        if free - full.stat().st_size < floor:  # the weights-only copy is smaller than the full state
-            raise SnapshotSpaceError(f'{weights.parent}: {free / 2**30:.0f} GiB free, the snapshot would leave less '
-                                     f'than the {floor / 2**30:.0f} GiB floor')
-        record = child_copy(full, weights, prune=True)
-        if not weights.exists():  # a state without optimizer entries is copied byte for byte
-            record = verified_copy(full, weights)
-        _write_json(request_dir / 'snapshot.json', record)
-    full.unlink(missing_ok=True)
-    return weights
-
-
 def request_queue() -> Path:
-    """Pointers to every pending asynchronous request on this machine (``<data_nvme>/task-eval-queue``), so the
-    dispatcher never walks the runs tree (minutes on the DGX)."""
+    """Pointers to pending native async task evaluations, so the dispatcher never walks the runs tree."""
     from ..common.paths import root as logical_root
     return logical_root('data_nvme') / 'task-eval-queue'
-
-
-class SnapshotSpaceError(OSError):
-    """No room for an eval snapshot above the disk floor: the request is skipped (no evaluation, no failure)."""
-
-
-def snapshot_path(request_dir: Path) -> Path:
-    """Where a request's weights-only snapshot lives: its place in the external checkpoint mirror (the offload's
-    mirror tree, <data_hdd>/natlang-active-lineage), so pending snapshots never fill the NVMe; the
-    request dir itself only when no mirror is configured (e.g. tests, a machine without one)."""
-    from ..train.checkpoint_offload import OffloadSettings, mirror_path, mirror_unavailable
-    target = Path(request_dir) / 'weights.pt'
-    settings = OffloadSettings.from_env()
-    if mirror_unavailable(target, settings) is None:
-        return mirror_path(target, settings)
-    return target
 
 
 def request_weights(request_dir: Path) -> Path:
@@ -765,104 +635,32 @@ def drop_request(request_dir: Path) -> None:
     shutil.rmtree(request_dir, ignore_errors=True)
 
 
-def pending_requests(stage_out: Path) -> list[Path]:
-    """Asynchronous evaluation requests of a stage whose row has not landed (their snapshot dirs still exist)."""
-    root = Path(stage_out) / 'task-eval' / 'async'
-    return sorted(p.parent for p in root.glob('step-*/request.json')) if root.is_dir() else []
-
-
-def restore_neuralese_projections(engine, state):
-    """Restore value writer/readout from the SAME full checkpoint as its backbone.
-
-    Explicit opt-in: ordinary SFT task evaluations retain their token-only path.
-    A mixed/value-channel consumer must never silently omit trained projections.
-    """
-    from ..model.neuralese_projection import (projection_config_from_state,
-                                             projection_from_config, TokenChoiceProjection)
-    saved = state.get('neuralese_projection')
-    if not isinstance(saved, dict):
-        raise ValueError('Neuralese serving requires the checkpoint writer projection')
-    if engine.heads.read_markers or engine.heads.profile != 'raw-token-v1':
-        raise ValueError('direct Neuralese serving requires raw-token-v1 heads')
-    # cutoff captures an intermediate state; PortBackbone still runs every layer.
-    if getattr(engine.backbone, 'exit_layers', None) not in (None, engine.backbone.num_layers):
-        raise ValueError('direct Neuralese serving requires the complete active backbone')
-    config = projection_config_from_state(saved)
-    if (config['width'] != engine.backbone.config.hidden_size or
-            config['embedding_width'] != engine.backbone.embedding_weight.shape[1]):
-        raise ValueError('checkpoint writer projection does not match backbone geometry')
-    projection = projection_from_config(config)
-    projection.load_state_dict(saved, strict=True, assign=True)
-    projection = projection.to(device=engine.device).eval()
-    for parameter in projection.parameters():
-        parameter.requires_grad_(False)
-    options = (state.get('identity') or {}).get('options') or {}
-    choice = None
-    if state.get('token_choice_projection') is not None:
-        choice = TokenChoiceProjection(config['width'],
-            blocks=options.get('projection_blocks', 2), hidden=options.get('projection_hidden') or None,
-            kernel=options.get('projection_kernel', 4))
-        choice.load_state_dict(state['token_choice_projection'], strict=True, assign=True)
-        choice = choice.to(device=engine.device).eval()
-        for parameter in choice.parameters():
-            parameter.requires_grad_(False)
-    elif options.get('token_choice_projection'):
-        raise ValueError('checkpoint declares a token-choice projection but does not contain it')
-    engine.neuralese_projection, engine.token_choice_projection = projection, choice
-    engine.neuralese_checkpoint_binding = {'step': state.get('step'),
-        'source': 'same-full-checkpoint-as-backbone', 'writer': config,
-        'token_choice': choice is not None}
-    return engine.neuralese_checkpoint_binding
-
-
 def restore_engine(request: dict, *, dtype=None):
-    """The serving engine of a direct-stage eval snapshot: the stage's clean heads engine (as the trainer builds it)
-    with the snapshot's backbone trainables copied in by their plain names (a BF16 serving model: no quantization
-    parametrizations, experts as buffers; train/backbone_policy.plain_named_tensors)."""
-    import torch
+    """Restore the exact native checkpoint bound to an asynchronous evaluation request."""
     from ..common.attention_backend import configure_sdpa_backend
+    from ..serve import load_native_engine
+    if request.get('native_state') is not True:
+        raise ValueError('task evaluation requests must bind a native-state checkpoint')
     configure_sdpa_backend(request.get('sdpa_backend', 'default'))
-    if request.get('native_state'):
-        from .native_async import file_binding,verify_request
-        from ..serve import load_native_engine
-        provenance=request['evaluation_provenance']
-        verify_request(request)
-        weights=request_weights(Path(request['dir']))
-        actual=file_binding(weights)
-        expected=provenance['checkpoint']
-        if any(actual[key]!=expected[key] for key in ('sha256','bytes')):
-            raise ValueError('native async eval checkpoint bytes changed')
-        engine=load_native_engine(str(weights),base=request['base'],device=request['device'],
-            prompt_rendering=request['prompt_rendering'])
-        saved=provenance['model_config']
-        for key in ('architecture','rank','marker_ids','tokenizer_fingerprint','base_inventory_sha256',
-                    'dtype','sparse_row_dtype','token_override_ids','token_override_dtype','native_linear_precision','native_attention_precision','precision'):
-            default='ieee' if key in ('native_linear_precision','native_attention_precision') else None
-            expected_value=saved.get(key,default)
-            if engine.model_config.get(key,default)!=expected_value:
-                raise ValueError('native async eval model contract changed: '+key)
-        if engine.native_identity['checkpoint_sha256']!=expected['sha256']:
-            raise ValueError('native async eval restored another checkpoint identity')
-        return engine
-    from ..serve import load_engine
-    from ..train.backbone_policy import plain_named_tensors
-    from ..train.checkpoint_offload import load_state
-    from ..train.text_warmup import copy_restored_values
-
-    engine = load_engine(heads_checkpoint=request['heads'], device=request['device'],
-                         **({'base': request['base']} if request.get('base') else {}),
-                         dtype=dtype or (torch.bfloat16 if request['device'] != 'cpu' else torch.float32),
-                         prompt_rendering=request['prompt_rendering'])
-    state = load_state(request_weights(Path(request['dir'])))
-    saved = state['student_parameters']
-    targets = {'backbone.' + n: t for n, t in plain_named_tensors(engine.backbone.hf).items()}
-    missing = sorted(set(saved) - set(targets))
-    if missing:
-        raise ValueError(f'eval snapshot names absent from the serving model: {missing[:5]}')
-    copy_restored_values(targets, saved)
-    if request.get('neuralese'):
-        restore_neuralese_projections(engine, state)
-    saved = state = None
+    from .native_async import file_binding, verify_request
+    provenance=request['evaluation_provenance']
+    verify_request(request)
+    weights=request_weights(Path(request['dir']))
+    actual=file_binding(weights)
+    expected=provenance['checkpoint']
+    if any(actual[key]!=expected[key] for key in ('sha256','bytes')):
+        raise ValueError('native async eval checkpoint bytes changed')
+    engine=load_native_engine(str(weights),base=request['base'],device=request['device'],
+        prompt_rendering=request['prompt_rendering'])
+    saved=provenance['model_config']
+    for key in ('architecture','rank','marker_ids','tokenizer_fingerprint','base_inventory_sha256',
+                'dtype','sparse_row_dtype','token_override_ids','token_override_dtype','native_linear_precision','native_attention_precision','precision'):
+        default='ieee' if key in ('native_linear_precision','native_attention_precision') else None
+        expected_value=saved.get(key,default)
+        if engine.model_config.get(key,default)!=expected_value:
+            raise ValueError('native async eval model contract changed: '+key)
+    if engine.native_identity['checkpoint_sha256']!=expected['sha256']:
+        raise ValueError('native async eval restored another checkpoint identity')
     return engine
 
 
@@ -882,7 +680,6 @@ def run_request(request_dir: Path, *, engine_factory=restore_engine) -> dict:
     if summary is None:
         started = time.time()
         try:
-            if not request.get('native_state'):prune_snapshot(request_dir)
             evaluator.evaluation_provenance=request.get('evaluation_provenance')
             evaluator.engine = engine_factory(request)
             if request.get('native_state'):
@@ -893,8 +690,6 @@ def run_request(request_dir: Path, *, engine_factory=restore_engine) -> dict:
                                    if str(request['device']).startswith('cuda') else None),
                     'request_sha256':__import__('hashlib').sha256((request_dir/'request.json').read_bytes()).hexdigest()}
             summary = evaluator.run(step)
-        except SnapshotSpaceError as error:
-            summary = evaluator.record_failure(step, str(error), skipped=True)
         except Exception as error:  # noqa: BLE001 - recorded as an ineligible evaluation, counted by the trainer
             summary = evaluator.record_failure(step, f'{type(error).__name__}: {error}')
             summary['seconds'] = time.time() - started
@@ -967,14 +762,14 @@ def task_gate(summary: dict | None, spec: dict | None) -> dict | None:
 
 
 def main(argv=None) -> int:
-    """Standalone: evaluate a base model (or a direct heads checkpoint) with the in-run evaluator, e.g. to measure a
+    """Standalone: evaluate a native-state checkpoint with the in-run evaluator, e.g. to measure a
     line's ``reference_successes`` or smoke the path: ``python -m natlang_neuralese.eval.task_cadence --base DIR
     --spec JSON --out DIR``."""
     import argparse
 
     parser = argparse.ArgumentParser(description=main.__doc__)
     parser.add_argument('--base', default=None)
-    parser.add_argument('--heads', default=None)
+    parser.add_argument('--native-checkpoint', default=None)
     parser.add_argument('--async-request', type=Path, default=None,
                         help='run one asynchronous in-run evaluation request (task-eval/async/step-N) and exit')
     parser.add_argument('--spec')
@@ -986,7 +781,7 @@ def main(argv=None) -> int:
     parser.add_argument('--step', type=int, default=0)
     args = parser.parse_args(argv)
     import torch
-    from ..serve import load_engine
+    from ..serve import load_native_engine
 
     if args.async_request is not None:
         torch.set_num_threads(args.threads)
@@ -994,13 +789,13 @@ def main(argv=None) -> int:
         print(json.dumps({'event': 'task_eval_async_done', **{k: summary.get(k) for k in
                           ('step', 'task_successes', 'cases', 'eligible', 'error', 'seconds')}}), flush=True)
         return 0
-    if not args.spec or args.out is None:
-        parser.error('--spec and --out are required without --async-request')
+    if not args.spec or args.out is None or not args.native_checkpoint:
+        parser.error('--spec, --out, and --native-checkpoint are required without --async-request')
 
     torch.set_num_threads(args.threads)
     dtype = {'float32': torch.float32, 'bfloat16': torch.bfloat16}[args.dtype]
-    engine = load_engine(args.base, None, args.heads, None, None, args.device, None, dtype=dtype,
-                         prompt_rendering=args.prompt_rendering)
+    engine = load_native_engine(args.native_checkpoint, base=args.base, device=args.device, dtype=dtype,
+                                prompt_rendering=args.prompt_rendering)
     spec = parse_task_eval(args.spec)
     summary = TaskEval(spec, args.out, engine, prompt_rendering=args.prompt_rendering).run(args.step)
     print(json.dumps(summary, indent=1))

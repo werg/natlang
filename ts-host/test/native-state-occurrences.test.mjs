@@ -25,3 +25,12 @@ test('same artifact independent writer/use occurrences bind completely rather th
   delete ambiguousNodes.get('read-first').stop_gradient;
   assert.throws(()=>nativeCaptureGraphBinding('reader',{prompt:[{kind:'native_state',id},{kind:'native_state',id}]},ambiguousNodes),/ambiguous/);
 });
+
+test('a unique external native-state root retains its differentiable read occurrence',()=>{
+  const id='nzs1_'+'b'.repeat(52);
+  const nodes=new Map([['external-read',{kind:'block_read',node:'external-read',turn:'reader',block:id,
+    inputs:[{node:'external',block:id}]}]]);
+  const binding=nativeCaptureGraphBinding('reader',{prompt:[{kind:'native_state',id}]},nodes);
+  assert.deepEqual(binding.read_bindings,{});
+  assert.deepEqual(binding.read_occurrences,[{index:0,id,source_state_id:id,node:'external-read',source:'external'}]);
+});

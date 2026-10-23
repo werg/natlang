@@ -70,7 +70,7 @@ def qualify_semantic_transport(participants, channel, *, texts, rtol, atol):
                                    checkpoint_sha256=identity['checkpoint_sha256']) != identity:
                     raise ValueError('semantic transport participant differs from actual exported model identity')
                 device = next(participant.model.parameters()).device
-                engine = Engine(participant.model.port, None, participant.tokenizer, TensorStore(),
+                engine = Engine(participant.model.port, participant.tokenizer, TensorStore(),
                     'native-state/' + identity['architecture'], device=device,
                     shared_model=participant.model, role_tokens=RoleTokens(*participant.model.marker_ids),
                     model_config=participant.config, checkpoint_sha256=identity['checkpoint_sha256'],

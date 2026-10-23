@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { createNativeStateFixturePort } from './fixtures/native-state-port.mjs';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as runtimeNamespace from '../dist/index.js';
 import { CallStore, compileVirtualProject, createNatlangRuntime, defineNatlang, invokeAt, loadVirtualNatlang } from '../dist/index.js';
-import { MemoryNeuraleseStore, StandInNeuralesePort, hashingEmbedder } from '../dist/native/neuralese-store.js';
+import { MemoryNeuraleseStore } from '../dist/native/neuralese-store.js';
 import { isNeuraleseRef } from '../dist/native/neuralese.js';
 import { modelTurnsSoFar } from '../dist/native/agent.js';
 import { parseNatlang, PATH_ONLY } from '../dist/runtime/loader.js';
@@ -19,7 +20,7 @@ const CONSUME = '---\nargs:\n  notes: Neuralese<string>\nreturns: string\n---\nA
 
 const standIn = () => {
   const store = new MemoryNeuraleseStore();
-  return { store, port: new StandInNeuralesePort(store, hashingEmbedder(8), 8, 'nd:natlang@1') };
+  return { store, port: createNativeStateFixturePort(store, 'native-state/fixture') };
 };
 
 /** A Neuralese-capable scripted model: every call returns `value`; `requests` keeps what each call was sent. */
@@ -62,11 +63,11 @@ test('one function runs as text or as a template write, as the call asks', async
   assert.equal(block.$neuralese.type, 'Neuralese<string>');
   assert.equal(requests.at(-1).template.value, 'write');
   assert.equal(requests.at(-1).template.call, 'return_result');
-  assert.equal((await store.meta(block.$neuralese.id)).dialect, 'nd:natlang@1');
+  assert.equal((await store.meta(block.$neuralese.id)).dialect, 'native-state/fixture');
   // The reader's dialect, named explicitly, is the same instance.
-  assert.ok(isNeuraleseRef(await runtime.run(() => invokeAt(gist, ['x'], { kind: 'neuralese', dialect: 'nd:natlang@1' }))));
-  await assert.rejects(runtime.run(() => invokeAt(gist, ['x'], { kind: 'neuralese', dialect: 'nd:other@1' })),
-    /neuralese-dialect-mismatch: gist is asked for Neuralese in dialect "nd:other@1", but its generic result writes "nd:natlang@1"/);
+  assert.ok(isNeuraleseRef(await runtime.run(() => invokeAt(gist, ['x'], { kind: 'neuralese', dialect: 'native-state/fixture' }))));
+  await assert.rejects(runtime.run(() => invokeAt(gist, ['x'], { kind: 'neuralese', dialect: 'native-state/other' })),
+    new RegExp('neuralese-dialect-mismatch: gist is asked for Neuralese in dialect \"native-state/other\", but its generic result writes \"native-state/fixture\"'));
   assert.throws(() => invokeAt(gist, ['x'], { kind: 'soft' }), /a representation is \{ kind: "crisp" \}/);
 });
 

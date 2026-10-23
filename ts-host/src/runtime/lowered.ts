@@ -17,7 +17,7 @@ import type { Representation } from '../native/representation.js';
 import { registerFileRecords, type ItemRecord, type NatlangRecord } from './loader.js';
 import type { CallableDefinition, CaptureCell } from './kernel.js';
 import { Iteration } from './iterate.js';
-import { fromBase64, importedBlocks, loadNzSync, registerImportedBlocks } from '../native/nz-file.js';
+import { fromBase64, importedNativeArtifacts, loadNzSync, registerImportedNativeArtifacts } from '../native/nz-file.js';
 import { live, nzExports, softFunction } from './contexts.js';
 import { resolveFrame } from './runtime.js';
 import { readNeuraleseForCurrentTask } from '../neuralese/combinators.js';
@@ -444,14 +444,14 @@ export function folder(codebase: Record<string, ItemRecord>): Record<string, unk
 
 /**
  * A `.nz` import compiled into a module: the file is embedded at build time. Its blocks are kept for the runtime's
- * store (`importedBlocks`); soft-function exports become callables.
+ * store (`importedNativeArtifacts`); soft-function exports become callables.
  */
 export function nzModule(base64: string): Record<string, unknown> {
   const loaded = loadNzSync(fromBase64(base64));
-  registerImportedBlocks(loaded.blocks.values(), loaded.nativeStates.values(), loaded.nativeTensors.values());
+  registerImportedNativeArtifacts(loaded.nativeStates.values(), loaded.nativeTensors.values());
   return nzExports(loaded);
 }
-export { importedBlocks };
+export { importedNativeArtifacts };
 
 /** Numeric loop bounds are fixed at entry; rounding must never stall the counter. */
 export function numericProgress(initial: number, bound: number, upward: boolean): (current: number) => void {

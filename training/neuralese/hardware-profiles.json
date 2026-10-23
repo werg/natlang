@@ -1,32 +1,31 @@
 {
  "schema": "natlang.neuralese-hardware-profiles/1",
- "description": "Operational knobs selected by the GPU a stage runs on (natlang_neuralese/train/hardware_profile.py; plans/COREWEAVE_HARDWARE_OPTIMIZATION.md). Only execution choices that are recipe-operational (checkpoint_layers, window_execution) and execution environment switches; training math stays in the shared recipes. Matched in order; NATLANG_HARDWARE_PROFILE=<name>|none overrides. A profile with empty stage_parameters runs the recipe unchanged. Values marked pending are decided by the first sandbox's hw_bench result (runs/coreweave-hw-bench/<date>/hw-bench.json) and land here with that evidence.",
+ "description": "Operational knobs selected by the GPU a stage runs on (natlang_neuralese/train/hardware_profile.py). Profiles may select native activation checkpointing and execution environment switches; training math and objectives stay in the shared recipes. Matched in order; NATLANG_HARDWARE_PROFILE=<name>|none overrides. A profile with empty stage_parameters runs the recipe unchanged.",
  "profiles": [
   {
    "name": "dgx-gb10",
    "match": {"capability": [12, 1], "integrated": true},
-   "status": "baseline: the recipes and kernels were tuned here (plans/neuralese/TRAINING_SPEED_20261012.md); nothing to override",
+   "status": "baseline: the native recipe already uses the measured DGX execution settings; nothing to override",
    "stage_parameters": {},
    "environment": {}
   },
   {
    "name": "rtx-pro-6000-blackwell",
    "match": {"capability": [12, 0], "min_memory_gb": 90, "integrated": false},
-   "status": "provisional until the first hw_bench run: allocator setting only. Pending from the bench: neuralese_direct.checkpoint_layers (Mellum stays checkpointed: ~9.5 MB/token uncheckpointed does not fit 96 GB at 27k tokens; LFM's auto planner already drops checkpointing when it fits), window_execution for LFM (packed vs sequential), NATLANG_MAPLE_COMPILE",
+   "status": "allocator setting only; native stage parameters remain recipe-owned",
    "stage_parameters": {},
    "environment": {"PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True"},
    "sandbox": {
     "train-mellum": {"cpu": "16", "memory": "160Gi", "scratch": "400Gi", "reason": "the 47 GB checkpoint.pt is loaded with map_location=cpu (plus the 23 GB model safetensors read once) and saved from host copies; 160Gi covers load plus a save in flight. Dataloading is in-process tokenized JSONL: 16 cores leave headroom for the inductor/Triton compile workers and the bundle publisher. Re-size from the bench's host peak (hw-bench.json host_peak_gb)"},
     "train-lfm": {"cpu": "8", "memory": "48Gi", "scratch": "100Gi", "reason": "350M parameters: checkpoints are a few GB; the union text data is read once"},
     "eval": {"cpu": "16", "memory": "64Gi", "scratch": "120Gi", "reason": "task-success eval: node workers plus model load (scripts/coreweave/jobs/heldv2-base-mellum.json)"},
-    "teacher": {"cpu": "16", "memory": "96Gi", "scratch": "150Gi", "reason": "vLLM: weights are staged through host memory at load; tokenization and the API server use a few cores; prefix-cache CPU offload is off"},
-    "bench": {"cpu": "16", "memory": "160Gi", "scratch": "200Gi", "reason": "the hw_bench matrix loads the full Mellum (23 GB) once per arm through host memory"}
+    "teacher": {"cpu": "16", "memory": "96Gi", "scratch": "150Gi", "reason": "vLLM: weights are staged through host memory at load; tokenization and the API server use a few cores; prefix-cache CPU offload is off"}
    }
   },
   {
    "name": "pop-ada",
    "match": {"capability": [8, 9]},
-   "status": "baseline for the LFM line on Pop; Pop owns any override",
+   "status": "baseline for the native LFM line on Pop; Pop owns any override",
    "stage_parameters": {},
    "environment": {}
   }

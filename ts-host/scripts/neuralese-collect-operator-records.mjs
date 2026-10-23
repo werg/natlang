@@ -4,7 +4,7 @@
  *
  * For every operator case (natlang_neuralese.data.operator_cases) this runs small natlang programs over the standard
  * library against a Neuralese server, each inside `valueAndGrad` with the library's bodies as the arguments, and keeps
- * every gradient session as a replay record (natlang:learning `replayRecords`):
+ * every native whole-graph gradient session as a replay record (natlang:learning `replayRecords`):
  *
  * | Program | Loss (cross-entropy of the checked output) |
  * | --- | --- |
@@ -13,11 +13,11 @@
  * | `read(split(zip(a, b))[0])`, `[1]` | the first and second span |
  * | law `combineIdentity`, `splitZip` | the right side's readout (objectives.law) |
  *
- * Multi-call programs replay whole: `read` consumes the block `map` wrote, so its loss reaches the `map` body through
- * the producer chain. Records go to OUT (JSONL) with their blocks in OUT-without-.jsonl + `.blocks/`.
+ * Multi-call programs replay whole: `read` consumes the native state `map` wrote, so its loss reaches the `map` body
+ * through the producer chain. Records go to OUT (JSONL) with native dependencies in OUT-without-.jsonl + `.native/`.
  *
  *   node scripts/neuralese-collect-operator-records.mjs --endpoint URL --library stdlib.nz --cases cases.jsonl \
- *     --out records.jsonl [--programs read,map,zipsplit,laws] [--limit N] [--gate-reply-tokens 8] [--max-turns 24]
+ *     --out records.jsonl [--programs read,map,zipsplit,laws] [--limit N] [--max-turns 24]
  */
 import { readFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
@@ -31,13 +31,14 @@ import { neuraleseServerModelTurn } from '../dist/model/neuralese-server.js';
 const { values: args } = parseArgs({ options: {
   endpoint: { type: 'string' }, library: { type: 'string' }, cases: { type: 'string' }, out: { type: 'string' },
   programs: { type: 'string', default: 'read,map,zipsplit,laws' }, limit: { type: 'string', default: '0' },
-  split: { type: 'string', default: '' }, 'gate-reply-tokens': { type: 'string', default: '8' }, 'max-turns': { type: 'string', default: '24' }, model: { type: 'string', default: 'natlang-neuralese' } } });
+  split: { type: 'string', default: '' }, 'max-turns': { type: 'string', default: '24' }, model: { type: 'string', default: 'natlang-neuralese' } } });
 for (const key of ['endpoint', 'library', 'cases', 'out']) if (!args[key]) throw new Error(`--${key} is required`);
 
 const programs = new Set(args.programs.split(',').filter(Boolean));
 const store = new MemoryNeuraleseStore();
 const info = await neuraleseServerInfo(args.endpoint);
 const nativePort = info.native_state?.enabled ? await nativeStateWritePort({ endpoint: args.endpoint, store, info }) : undefined;
+if (!nativePort) throw new Error('neuralese-native-state-unavailable: operator record collection requires native text and state producers');
 const library = await loadStandardLibrary(args.library, store);
 const lib = createNeuraleseLibrary(library);
 let current = {};
@@ -54,23 +55,16 @@ const runtime = createNatlangRuntime({ model: limited, neuralese: { store } });
 const { valueAndGrad, objectives } = createLearning(learningService({ endpoint: args.endpoint, store, replayRecords: sink }),
   { library });
 
-async function post(path, body) {
-  const response = await fetch(args.endpoint.replace(/\/$/, '') + path, { method: 'POST',
-    headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-  if (!response.ok) throw new Error(`${path}: ${response.status} ${(await response.text()).slice(0, 300)}`);
-  return response.json();
-}
-const encode = async (text, type = 'Neuralese<string>') => ({ $neuralese: { type, id: nativePort ? (await nativePort.write(text, { type })).id : (await post('/v1/neuralese/encode', { text, type })).id } });
+const encode = async (text, type = 'Neuralese<string>') => ({ $neuralese: { type, id: (await nativePort.write(text, { type })).id } });
 // A transform's soft body is initialised in context (src/neuralese/text-init.ts): in a call of the soft function on the
 // case's text, so that at initialisation it is the text-instructed function. Its gate is kept in the case's records.
 const FUNCTION_TYPE = 'Neuralese<(text: string) => string>';
 let gate = null;
 async function instructionBody(instruction, text) {
   const result = await initBodyInContext({ store, endpoint: args.endpoint, text: instruction, type: FUNCTION_TYPE,
-    acceptFailedGate: true, replyTokens: Number(args['gate-reply-tokens']),
     render: (placeholder, driver) => createNatlangRuntime({ model: driver, neuralese: { store } })
       .run(() => softFunction({ type: '(text: string) => string', body: placeholder })(text)) });
-  gate = { init: result.init, gate: result.gate };
+  gate = { init: result.init };
   return result.id;
 }
 

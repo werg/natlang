@@ -1,7 +1,7 @@
 /** Exact immutable program/evaluation linkage for inner and outer gradients. */
 import {nativeCanonicalJson,type NativeTensorArtifact,type NeuraleseStore} from './neuralese-store.js';
 import {hexDigest} from './hash.js';
-import {validateNativeDerivativeTarget,validateNativeFunctionalActor,nativeOptimizerOptions} from './native-derivative-contract.js';
+import {validateNativeDerivativeTarget,validateNativeFunctionalActor,nativeOptimizerOptions,nativeQueryReadoutDependencies} from './native-derivative-contract.js';
 export async function verifyNativeDerivativeGradientOrigin(store:Pick<NeuraleseStore,'getNativeTensorArtifact'|'getNativeState'>,
     artifact:Omit<NativeTensorArtifact,'id'>):Promise<void>{
   if(!validateNativeDerivativeTarget(artifact.metadata,artifact.tensors))return;
@@ -13,8 +13,8 @@ export async function verifyNativeDerivativeGradientOrigin(store:Pick<NeuraleseS
   if(!program||program.metadata.kind!=='derivative-program'||program.metadata.provenance.schema!=='natlang.native-derivative-program/1'||
     nativeCanonicalJson(program.metadata.native_identity)!==nativeCanonicalJson(artifact.metadata.native_identity))
     throw new RangeError('native derivative gradient lacks its exact executable program/base');
-  type Objective={request:{graph:Record<string,unknown>;objective?:unknown};bindings:Record<string,string>};
-  type Node=Objective&{name:string;kind:string;value:string;gradient:string;optimizer:Record<string,unknown>};
+  type Objective={request:Record<string,any>;bindings:Record<string,string>};
+  type Node=Objective&{name:string;kind:string;value?:string;targets?:{name:string;value:string}[];gradient:string;optimizer:Record<string,unknown>};
   const parsed=JSON.parse(program.metadata.provenance.program_json as string) as {
     inputs:Record<string,{id:string;kind:string}>;nodes:Node[];outer:Objective};
   let objective:Objective=parsed.outer;
@@ -34,8 +34,11 @@ export async function verifyNativeDerivativeGradientOrigin(store:Pick<NeuraleseS
     if(!value.names.length||value.names.some(name=>!available.includes(name)))throw new RangeError('native derivative evaluation lacks exact bound root names/artifacts');
   }
   if(target.stage==='inner'){
-    const node=parsed.nodes.find(node=>node.name===provenance.node);
-    if(!node||node.kind!=='gradient'||node.value!==target.variable)throw new RangeError('native derivative gradient changed its declared inner objective');
+    const node=parsed.nodes.find(node=>node.name===provenance.gradient_node);
+    const nodeTargets=node?.targets??(node?.value? [{name:node.name,value:node.value}]:[]);
+    const selected=nodeTargets.find(item=>item.name===provenance.node);
+    if(!node||node.kind!=='gradient'||!selected||selected.value!==target.variable)
+      throw new RangeError('native derivative gradient changed its declared inner objective');
     objective=node;
     const owners=Object.keys(parsed.inputs).filter(key=>(node.bindings[key]??key)===target.variable);
     if(!owners.length||owners.some(key=>inputs[key]?.value_id!==target.value_id||nativeCanonicalJson(inputs[key]?.names)!==nativeCanonicalJson(target.names)))
@@ -71,13 +74,30 @@ export async function verifyNativeDerivativeGradientOrigin(store:Pick<NeuraleseS
       }
     }
   }
-  const expectedGraph=structuredClone(objective.request.graph);
-  const replacements=new Map(Object.entries(parsed.inputs).filter(([,root])=>root.kind==='native-state').map(([name,root])=>[root.id,inputs[name]!.value_id]));
-  for(const state of Object.values((expectedGraph.external_states??{}) as Record<string,{id:string}>))state.id=replacements.get(state.id)??state.id;
-  const graphText=provenance.graph_json;
-  if(typeof graphText!=='string'||hexDigest(graphText)!==provenance.graph_sha256||
-      nativeCanonicalJson(JSON.parse(graphText))!==nativeCanonicalJson(expectedGraph))
-    throw new RangeError('native derivative gradient changed its declared objective graph');
+  if(objective.request.schema==='natlang.native-recorded-objective-request/1'){
+    const recordedText=provenance.recorded_objective_request_json;
+    if(typeof recordedText!=='string'||hexDigest(recordedText)!==provenance.recorded_objective_request_sha256||
+        nativeCanonicalJson(JSON.parse(recordedText))!==nativeCanonicalJson(objective.request))
+      throw new RangeError('native derivative gradient changed its exact recorded objective envelope');
+    const graphText=provenance.graph_json,queryText=provenance.query_objective_json;
+    if(typeof graphText!=='string'||hexDigest(graphText)!==provenance.graph_sha256||typeof queryText!=='string'||
+        hexDigest(queryText)!==provenance.query_objective_sha256)
+      throw new RangeError('native derivative recorded objective lacks its exact lowered graph and query');
+    const loweredGraph=JSON.parse(graphText) as Record<string,unknown>,query=JSON.parse(queryText) as Record<string,unknown>;
+    if(loweredGraph.recorded_objective_sha256!==hexDigest(nativeCanonicalJson({turns:objective.request.turns,
+        events:objective.request.events,terms:objective.request.terms}))||query.kind!=='native-query'||
+        query.schema!=='natlang.native-query-objective/1'||query.graph_sha256!==provenance.graph_sha256)
+      throw new RangeError('native derivative lowered graph differs from its exact recorded source');
+    nativeQueryReadoutDependencies(query);
+  }else{
+    const expectedGraph=structuredClone(objective.request.graph);
+    const replacements=new Map(Object.entries(parsed.inputs).filter(([,root])=>root.kind==='native-state').map(([name,root])=>[root.id,inputs[name]!.value_id]));
+    for(const state of Object.values((expectedGraph.external_states??{}) as Record<string,{id:string}>))state.id=replacements.get(state.id)??state.id;
+    const graphText=provenance.graph_json;
+    if(typeof graphText!=='string'||hexDigest(graphText)!==provenance.graph_sha256||
+        nativeCanonicalJson(JSON.parse(graphText))!==nativeCanonicalJson(expectedGraph))
+      throw new RangeError('native derivative gradient changed its declared objective graph');
+  }
   const expectedObjective=structuredClone(objective.request.objective) as Record<string,unknown>|undefined;
   if(expectedObjective?.kind==='native-query'){
     expectedObjective.graph_sha256=provenance.graph_sha256;
@@ -85,7 +105,7 @@ export async function verifyNativeDerivativeGradientOrigin(store:Pick<NeuraleseS
     if(typeof text!=='string'||hexDigest(text)!==provenance.query_objective_sha256||
         nativeCanonicalJson(JSON.parse(text))!==nativeCanonicalJson(expectedObjective))
       throw new RangeError('native derivative gradient changed its declared query objective');
-  }else if(provenance.query_objective_json!==undefined)
+  }else if(objective.request.schema!=='natlang.native-recorded-objective-request/1'&&provenance.query_objective_json!==undefined)
     throw new RangeError('native derivative gradient introduced an undeclared query objective');
   for(const entries of [actor.uniform_adapters,...Object.values(actor.invocation_adapters??{})])for(const entry of entries){
     const value=await store.getNativeTensorArtifact?.(entry.id);

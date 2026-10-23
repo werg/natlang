@@ -752,7 +752,7 @@ def test_runtime_configuration_requires_exact_future_global_and_rebinds_factory_
     actor_environment={'NATLANG_REPO':str(actor_root),
         'PYTHONPATH':str(actor_root/'training/neuralese')+':'+str(actor_root)}
     actor_command=['env','NATLANG_REPO='+str(actor_root),'PYTHONPATH='+actor_environment['PYTHONPATH'],
-        'python',str(actor_entry),'--native-state','--preserved-arg','yes']
+        'python',str(actor_entry),'--port','8123']
     monkeypatch.setattr(production,'actor_runtime_configuration',lambda repository:{'actor_command':actor_command.copy(),
         'actor_environment':actor_environment,'native_actor_python_runtime':{'exact':'new-runtime'}})
     monkeypatch.setattr(native_bootstrap_metadata,'save',lambda *a:None)

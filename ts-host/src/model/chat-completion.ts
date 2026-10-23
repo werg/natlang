@@ -92,7 +92,7 @@ export function isStream(value: AsyncIterable<Json> | Json): value is AsyncItera
 /**
  * Fold streamed chunks into the `chat.completion` body a non-streaming request would have returned: content,
  * reasoning, and tool calls are concatenated per index; usage and timings come from the chunk that carries them.
- * Content deltas may be arrays of parts (a Neuralese server's `[{"type": "neuralese", "id"}]` per written block); then
+ * Content deltas may be arrays of native state parts; then
  * the content is the parts in order, adjacent text merged. A chunk with `x_natlang_message` (natlang's servers: the
  * complete parsed message) is final and authoritative: the body's message is that message, and its other top-level
  * fields (`neuralese`, `x_natlang_…`) are the body's.
@@ -114,7 +114,7 @@ export async function assembleChatCompletion(chunks: AsyncIterable<Json>, onDelt
     if (text) emit({ type: 'text', text });
   };
   const blockFor = (chunk: Json, id: string) => {
-    for (const key of ['neuralese', 'native_state']) {
+    for (const key of ['native_state']) {
       const block = (chunk[key] as Json | undefined)?.block as Json | undefined;
       if (block?.id === id) return block;
     }
@@ -137,11 +137,7 @@ export async function assembleChatCompletion(chunks: AsyncIterable<Json>, onDelt
       sawContent = true; partsOnly = false;
       for (const part of delta.content as ModelContentPart[]) {
         if (part?.type === 'text') addText(part.text);
-        else if (part?.type === 'neuralese') {
-          parts.push({ ...part });
-          const block = blockFor(chunk, part.id);
-          emit({ type: 'neuralese', part: { ...part }, ...(block ? { block } : {}) });
-        } else if (part?.type === 'native_state') {
+        else if (part?.type === 'native_state') {
           parts.push({ ...part });
           const block = blockFor(chunk, part.id);
           emit({ type: 'native_state', part: { ...part }, ...(block ? { block } : {}) });
@@ -178,7 +174,6 @@ function contentText(value: unknown): string {
   if (typeof value === 'string') return value;
   if (Array.isArray(value) && value.every(part => part && typeof part === 'object' &&
       (part.type === 'text' && typeof part.text === 'string' ||
-       part.type === 'neuralese' && typeof part.id === 'string' ||
        part.type === 'native_state' && typeof part.id === 'string')))
     return runtimePartsToText(value as RuntimeContentPart[]);
   if (value == null) return '';

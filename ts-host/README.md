@@ -143,13 +143,13 @@ contain:
 {
   "name": "evidence-review",
   "description": {
-    "$neuralese": { "type": "Neuralese<string>", "id": "nz1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }
+    "$neuralese": { "type": "Neuralese<string>", "id": "nzs1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }
   }
 }
 ```
 
-The ID above illustrates the reference shape; use the ID of a real stored block.
-The block must be available in the runtime's Neuralese store and persisted with
+The ID above illustrates the reference shape; use the ID of a real native state.
+The state must be available in the runtime's native artifact store and persisted with
 the skill asset. The discovery opening carries it as Neuralese content, rather
 than converting it to a text gloss. A text-only backend fails explicitly.
 `.nz` skills still require a host metadata loader; complete `.nz` skill context

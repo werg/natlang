@@ -34,7 +34,7 @@ test('generated guided soft scaffold compiles marker guidance as literal templat
   const run = new Function('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
     `${executable.program}; return __natlang_scope;`)(value => value, value => value, async value => value,
     output => output.result, { readNeuralese: async () => 'computed next note' });
-  return run({ priorNotes: neuraleseRef('Neuralese<string>', 'nz1_ffffffffffffffffffff') }, {}, {}).then(value => {
+  return run({ priorNotes: neuraleseRef('Neuralese<string>', 'nzs1_ffffffffffffffffffffffffffffffffffffffffffffffffffff') }, {}, {}).then(value => {
     assert.equal(value, 'computed next note');
   });
 });
