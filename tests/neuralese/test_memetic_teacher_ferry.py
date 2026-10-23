@@ -405,6 +405,44 @@ def test_deployment_manifest_pins_roles_and_leaves_mellum_unbound():
         ferry.evaluator_profile('mellum')
 
 
+@pytest.mark.parametrize('endpoint', [
+    'http://example.com:8770', 'http://127.0.0.1:0',
+    'http://127.0.0.1:65536', 'http://127.0.0.1:8770/other',
+    'http://127.0.0.1:8770@elsewhere', 'https://127.0.0.1:8770',
+])
+def test_deployment_rejects_non_loopback_or_invalid_endpoint(tmp_path, endpoint):
+    value = json.loads(ferry.deployment_file_bytes())
+    value['evaluators']['lfm']['endpoint'] = endpoint
+    path = tmp_path / 'deployments.json'
+    path.write_text(json.dumps(value))
+    with pytest.raises(ValueError, match='loopback HTTP port'):
+        ferry.load_deployments(path)
+
+
+def test_identity_check_queries_the_bound_endpoint_and_rejects_wrong_actor(monkeypatch):
+    identity = dict(ferry.evaluator_profile('lfm')['native_identity'])
+    endpoint = 'http://127.0.0.1:18770'
+    monkeypatch.setattr(ferry, 'evaluator_profile', lambda role: {
+        'native_identity': identity, 'endpoint': endpoint})
+    info = {'native_state': {'enabled': True, **identity},
+            'rl_policy_binding': {'schema': 'natlang.rl-policy-binding/2',
+                'communication': 'native-state', 'native_identity': dict(identity),
+                'checkpoint_sha256': identity['checkpoint_sha256']}}
+    seen = []
+
+    class Opener:
+        def open(self, request, timeout):
+            seen.append(request.full_url)
+            return io.BytesIO(json.dumps(info).encode())
+
+    monkeypatch.setattr(ferry.urllib.request, 'build_opener', lambda *args: Opener())
+    assert ferry.evaluator_native_identity('lfm') == identity
+    assert seen == [endpoint + '/v1/neuralese/info']
+    info['rl_policy_binding']['checkpoint_sha256'] = '0' * 64
+    with pytest.raises(ValueError, match='consistent native RL policy'):
+        ferry.evaluator_native_identity('lfm')
+
+
 def test_download_contract_matches_observed_keys_and_serving_alias_is_separate(tmp_path, monkeypatch):
     download_path = tmp_path / ferry.TEACHER_SOURCE_BINDINGS[2]['path'].lstrip('/')
     download_path.parent.mkdir(parents=True)

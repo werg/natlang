@@ -75,10 +75,14 @@ def load_deployments(path: Path = DEPLOYMENTS_PATH):
                    'source_bindings': list(TEACHER_SOURCE_BINDINGS)}:
         raise ValueError('teacher ferry deployment manifest changed the exact authorized teacher binding')
     for role, profile in value['evaluators'].items():
-        if not isinstance(profile, dict) or set(profile) != {'sandbox_id', 'native_identity'}:
+        if not isinstance(profile, dict) or set(profile) != {'sandbox_id', 'native_identity', 'endpoint'}:
             raise ValueError('evaluator deployment profile has unexpected fields')
         if profile['sandbox_id'] != EVALUATOR_IDS[role]:
             raise ValueError('evaluator sandbox ID is outside the exact role allowlist')
+        if (not isinstance(profile['endpoint'], str)
+                or not re.fullmatch(r'http://127\.0\.0\.1:([1-9][0-9]{0,4})', profile['endpoint'])
+                or not 1 <= int(profile['endpoint'].rsplit(':', 1)[1]) <= 65535):
+            raise ValueError('evaluator endpoint must be an explicit loopback HTTP port')
         identity = profile['native_identity']
         if identity is not None and (not isinstance(identity, dict)
                 or set(identity) != {'checkpoint_sha256', 'tokenizer_fingerprint', 'embedding_weight_sha256', 'architecture'}
@@ -498,12 +502,12 @@ def served_native_identity(info):
 
 
 def evaluator_native_identity(student='lfm'):
-    request = urllib.request.Request('http://127.0.0.1:8765/v1/neuralese/info', method='GET')
+    profile = evaluator_profile(student)
+    request = urllib.request.Request(profile['endpoint'] + '/v1/neuralese/info', method='GET')
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     with opener.open(request, timeout=20) as response:
         raw = response.read(1024 * 1024)
     identity = served_native_identity(json.loads(raw))
-    profile = evaluator_profile(student)
     if identity != profile['native_identity']:
         raise ValueError('active evaluator checkpoint/tokenizer/embedding identity differs from the pinned native actor')
     return identity
