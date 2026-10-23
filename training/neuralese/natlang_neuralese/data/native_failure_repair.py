@@ -397,7 +397,7 @@ def _score_reference(model,example,actions,*,reference_identity,runtime_sha256,c
 
 def admit_run_pair(*,failed_run_dir,repaired_run_dir,task_id,failed_sample,repaired_sample,reference_checkpoint,
                    base,held_native_graphs,block_bundle,output_dir,continue_from,stage_id,
-                   requires=(),device='cpu',beta=.1):
+                   requires=(),device='cpu',beta=.1,_context=None):
     """Build DPO data from actual result files, replay captures and current held-source manifests."""
     import torch
     from ..common.hashing import sha256_file_hex_cached
@@ -415,17 +415,25 @@ def admit_run_pair(*,failed_run_dir,repaired_run_dir,task_id,failed_sample,repai
         raise ValueError('original case did not have an exact task-caused failure outcome')
     if repaired_evidence['outcome']!='task_success':
         raise ValueError('corrected execution does not pass the exact task packet oracle')
-    model,tokenizer,roles,config,_=load_native_checkpoint(reference_checkpoint,base=base,device=device,allow_weights_only=True)
-    model.eval();fingerprint=tokenizer_fingerprint(tokenizer)
+    shared_context=_context is not None
+    if _context is None:
+        model,tokenizer,roles,config,_=load_native_checkpoint(reference_checkpoint,base=base,device=device,allow_weights_only=True)
+        model.eval();fingerprint=tokenizer_fingerprint(tokenizer)
+        held=NativeGraphSource(held_native_graphs,fingerprint,required_split='test',role_ids=roles.ids)
+        from scripts.source_review import pending_unpinned_source_groups,pending_family_hold_reason
+        protected=set(held.groups)|pending_unpinned_source_groups()
+        reference_id=native_identity(model,config,checkpoint_sha256=sha256_file_hex_cached(reference_checkpoint))
+        _context={'model':model,'tokenizer':tokenizer,'roles':roles,'config':config,'fingerprint':fingerprint,
+            'held':held,'protected':protected,'reference_id':reference_id}
+    else:
+        model=_context['model'];tokenizer=_context['tokenizer'];roles=_context['roles'];config=_context['config']
+        fingerprint=_context['fingerprint'];held=_context['held'];protected=_context['protected'];reference_id=_context['reference_id']
     if config['tokenizer_fingerprint']!=fingerprint:
         raise ValueError('loaded reference checkpoint/tokenizer fingerprint mismatch')
-    held=NativeGraphSource(held_native_graphs,fingerprint,required_split='test',role_ids=roles.ids)
-    from scripts.source_review import pending_unpinned_source_groups,pending_family_hold_reason
-    protected=set(held.groups)|pending_unpinned_source_groups()
+    from scripts.source_review import pending_family_hold_reason
     task_groups=set(task_a.get('source_groups') or [])
     if not task_groups or task_groups & protected or pending_family_hold_reason(task_a):
         raise ValueError('source task intersects actual held or source-review protection')
-    reference_id=native_identity(model,config,checkpoint_sha256=sha256_file_hex_cached(reference_checkpoint))
     if failed['split']!='train' or repaired['split']!='train':raise ValueError('only original train tasks can enter repair DPO')
     captured_policies=[turn['sampling']['policy'] for rollout in (failed,repaired) for turn in rollout['turns']]
     if not captured_policies or any(value['tokenizer_fingerprint']!=fingerprint for value in captured_policies):
@@ -496,19 +504,90 @@ def admit_run_pair(*,failed_run_dir,repaired_run_dir,task_id,failed_sample,repai
         'oracle_evidence':{'failed':failed_evidence,'repaired':repaired_evidence},'alternatives':alternatives}
     output=Path(output_dir);output.mkdir(parents=True,exist_ok=True)
     result=_write_admitted_rows([record],output,tokenizer_fingerprint=fingerprint,protected_groups=protected,
-        stage_inputs={'held_native_graphs':held_native_graphs,'continue_from':continue_from,
+        stage_inputs=None if shared_context else {'held_native_graphs':held_native_graphs,'continue_from':continue_from,
                       'stage_id':stage_id,'requires':requires,'beta':beta})
     return {**result,'reference_checkpoint_sha256':reference_id['checkpoint_sha256'],
         'reference_tokenizer_fingerprint':fingerprint,'task_id':task_id,'outcomes':{
             'failed':failed_evidence['outcome'],'repaired':repaired_evidence['outcome']}}
 
 
+def admit_run_pairs(*,pairs,reference_checkpoint,base,held_native_graphs,output_dir,continue_from,stage_id,
+                    prior_admission_dir=None,requires=(),device='cpu',beta=.1):
+    """Admit a batch with one fixed-reference model/source load and append-only prior graph bindings."""
+    import tempfile
+    from ..common.hashing import sha256_file_hex_cached
+    from ..common.jsonio import write_json_durable,write_canonical_jsonl
+    from ..model.native_model import load_native_checkpoint,native_identity
+    from ..data.text_corpus import tokenizer_fingerprint
+    from ..data.native_sources import NativeGraphSource
+    from ..eval.task_packet import read_jsonl
+    from scripts.source_review import pending_unpinned_source_groups
+    if not pairs:raise ValueError('failure-repair DPO batch must contain at least one task pair')
+    model,tokenizer,roles,config,_=load_native_checkpoint(reference_checkpoint,base=base,device=device,allow_weights_only=True)
+    model.eval();fingerprint=tokenizer_fingerprint(tokenizer)
+    if config['tokenizer_fingerprint']!=fingerprint:raise ValueError('loaded reference checkpoint/tokenizer fingerprint mismatch')
+    held=NativeGraphSource(held_native_graphs,fingerprint,required_split='test',role_ids=roles.ids)
+    context={'model':model,'tokenizer':tokenizer,'roles':roles,'config':config,'fingerprint':fingerprint,
+        'held':held,'protected':set(held.groups)|pending_unpinned_source_groups(),
+        'reference_id':native_identity(model,config,checkpoint_sha256=sha256_file_hex_cached(reference_checkpoint))}
+    graph_rows=[];objective_rows={}
+    if prior_admission_dir is not None:
+        prior=Path(prior_admission_dir).resolve(strict=True)
+        old_graphs=read_jsonl(prior/'repair-graphs.jsonl');old_objective=json.loads((prior/'repair-objective.json').read_text())
+        old_ids=[row.get('id') for row in old_graphs]
+        if (old_objective.get('schema')!=OBJECTIVE_SCHEMA or old_objective.get('kind')!=KIND
+                or len(old_ids)!=len(set(old_ids)) or set(old_ids)!=set(old_objective.get('rows',{}))):
+            raise ValueError('prior repair admission graph/objective bindings disagree')
+        graph_rows.extend(old_graphs);objective_rows.update(old_objective['rows'])
+    with tempfile.TemporaryDirectory(prefix='failure-repair-batch-') as temp:
+        for index,pair in enumerate(pairs):
+            options=dict(pair)
+            block_bundle=options.pop('block_bundle',None)
+            result=admit_run_pair(**options,reference_checkpoint=reference_checkpoint,base=base,
+                held_native_graphs=held_native_graphs,block_bundle=block_bundle,output_dir=Path(temp)/str(index),
+                continue_from=continue_from,stage_id=stage_id,requires=requires,device=device,beta=beta,_context=context)
+            new_graphs=read_jsonl(result['graphs']);new_objective=json.loads(Path(result['objective']).read_text())
+            for graph in new_graphs:
+                if graph['id'] in objective_rows:raise ValueError('repair batch duplicates an existing pair identity')
+                graph_rows.append(graph);objective_rows[graph['id']]=new_objective['rows'][graph['id']]
+    output=Path(output_dir);output.mkdir(parents=True,exist_ok=True)
+    if any(output.iterdir()):raise ValueError('failure-repair batch output directory must be empty and immutable')
+    graph_path=output/'repair-graphs.jsonl';objective_path=output/'repair-objective.json';sources_path=output/'repair-sources.json'
+    write_canonical_jsonl(graph_path,graph_rows)
+    write_json_durable(objective_path,{'schema':OBJECTIVE_SCHEMA,'kind':KIND,'beta':float(beta),
+        'normalization':'token-mean-v1','rows':objective_rows})
+    write_json_durable(sources_path,{'schema':'natlang.native-graph-sources/1','sources':[
+        {'kind':'native-graphs','path':graph_path.name,'sha256':sha256_file_hex(graph_path)}]})
+    bindings={}
+    def bind(role,path):
+        path=Path(path).resolve(strict=True);name='failure_repair_'+role
+        bindings[name]={'path':str(path),'sha256':sha256_file_hex_cached(path)};return name
+    inputs={'native_graphs':bind('graphs',sources_path),'objective_spec':bind('objective',objective_path),
+        'held_native_graphs':bind('held',held_native_graphs),'continue_from':bind('parent_checkpoint',continue_from)}
+    stage={'id':stage_id,'kind':'native_offline_preference','requires':list(requires),'inputs':inputs,
+        'parameters':{'preference_beta':beta,'preference_margin':0}}
+    addition={'schema':'natlang.native-failure-repair-recipe-addition/1',
+        'training_admission':'pending-normal-recipe-source-and-custody-validation','input_bindings':bindings,'stage':stage,
+        'continuation':{'objective_continuation':True,'weights_optimizer_rng_exposure':'preserved',
+            'append_policy':'exact prior graph/objective row prefix; new pairs receive their own exposure visits'},
+        'objective':{'kind':KIND,'beta':beta,'reference_normalization':'token-mean-v1','protected_failures_admitted':False},
+        'pairs':len(graph_rows),'new_pairs':len(pairs),'prior_pair_count':len(graph_rows)-len(pairs)}
+    addition_path=output/'recipe-stage-addition.json';write_json_durable(addition_path,addition)
+    return {'graphs':str(graph_path),'objective':str(objective_path),'sources':str(sources_path),
+        'recipe_stage_addition':str(addition_path),'pairs':len(graph_rows),'new_pairs':len(pairs),
+        'reference_checkpoint_sha256':context['reference_id']['checkpoint_sha256'],
+        'reference_tokenizer_fingerprint':fingerprint}
+
+
 def main(argv=None):
     import argparse
     parser = argparse.ArgumentParser(description='Build failure-repair DPO from actual collector results and native captures')
-    parser.add_argument('--failed-run-dir', required=True, type=Path)
-    parser.add_argument('--repaired-run-dir', required=True, type=Path)
-    parser.add_argument('--task-id',required=True)
+    parser.add_argument('--pairs-json',type=Path,
+        help='JSON array of exact run-pair objects; each names failed_run_dir, repaired_run_dir, task_id and samples')
+    parser.add_argument('--prior-admission-dir',type=Path)
+    parser.add_argument('--failed-run-dir', type=Path)
+    parser.add_argument('--repaired-run-dir', type=Path)
+    parser.add_argument('--task-id')
     parser.add_argument('--failed-sample',type=int,default=0)
     parser.add_argument('--repaired-sample',type=int,default=1)
     parser.add_argument('--reference-checkpoint',required=True,type=Path)
@@ -523,12 +602,23 @@ def main(argv=None):
     parser.add_argument('--beta',type=float,default=.1)
     parser.add_argument('--device',default='cpu')
     args = parser.parse_args(argv)
-    print(json.dumps(admit_run_pair(failed_run_dir=args.failed_run_dir,repaired_run_dir=args.repaired_run_dir,
-        task_id=args.task_id,failed_sample=args.failed_sample,repaired_sample=args.repaired_sample,
-        reference_checkpoint=args.reference_checkpoint,
-        base=args.base,held_native_graphs=args.held_native_graphs,block_bundle=args.block_bundle,
-        output_dir=args.output_dir,continue_from=args.continue_from,stage_id=args.stage_id,
-        requires=args.requires,device=args.device,beta=args.beta),sort_keys=True))
+    if args.pairs_json:
+        jobs=json.loads(args.pairs_json.read_text())
+        if not isinstance(jobs,list) or any(not isinstance(job,dict) for job in jobs):
+            parser.error('--pairs-json must contain a JSON array of pair objects')
+        result=admit_run_pairs(pairs=jobs,reference_checkpoint=args.reference_checkpoint,base=args.base,
+            held_native_graphs=args.held_native_graphs,output_dir=args.output_dir,continue_from=args.continue_from,
+            stage_id=args.stage_id,prior_admission_dir=args.prior_admission_dir,requires=args.requires,
+            device=args.device,beta=args.beta)
+    else:
+        if not all((args.failed_run_dir,args.repaired_run_dir,args.task_id)):
+            parser.error('single-pair mode requires --failed-run-dir, --repaired-run-dir and --task-id')
+        result=admit_run_pair(failed_run_dir=args.failed_run_dir,repaired_run_dir=args.repaired_run_dir,
+            task_id=args.task_id,failed_sample=args.failed_sample,repaired_sample=args.repaired_sample,
+            reference_checkpoint=args.reference_checkpoint,base=args.base,held_native_graphs=args.held_native_graphs,
+            block_bundle=args.block_bundle,output_dir=args.output_dir,continue_from=args.continue_from,
+            stage_id=args.stage_id,requires=args.requires,device=args.device,beta=args.beta)
+    print(json.dumps(result,sort_keys=True))
 
 
 if __name__ == '__main__': raise SystemExit(main())

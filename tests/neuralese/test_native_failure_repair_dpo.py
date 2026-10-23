@@ -8,6 +8,7 @@ import torch
 from torch import nn
 
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex
+from natlang_neuralese.data import native_failure_repair as repair
 from natlang_neuralese.data.native_failure_repair import (_merge_graphs, _write_admitted_rows,
     _collector_actor_binding, PAIR_SCHEMA)
 from natlang_neuralese.data.native_graph_schema import SCHEMA, parse_graph
@@ -147,6 +148,40 @@ def test_reference_custody_and_source_dynamic_append(tmp_path):
     forged=record();forged['alternatives']['failed']['reference_score']['checkpoint_sha256']='z'*64
     with pytest.raises(ValueError,match='fixed reference score receipt'):
         _merge_graphs(forged,'tok')
+
+
+def test_batch_builder_loads_fixed_reference_once_and_preserves_prior_rows(tmp_path,monkeypatch):
+    held=tmp_path/'held.jsonl';held.write_text('{}\n')
+    reference=tmp_path/'reference.pt';reference.write_bytes(b'reference')
+    parent=tmp_path/'parent.pt';parent.write_bytes(b'parent')
+    prior=tmp_path/'prior'
+    _write_admitted_rows([record()],prior,tokenizer_fingerprint='tok',protected_groups=set())
+    output=tmp_path/'batch';loads=[]
+    model=SimpleNamespace(eval=lambda:None);roles=SimpleNamespace(ids=[1,2,3,4])
+    monkeypatch.setattr('natlang_neuralese.model.native_model.load_native_checkpoint',
+        lambda *a,**k:(loads.append(1) or (model,object(),roles,{'tokenizer_fingerprint':'tok'},None)))
+    monkeypatch.setattr('natlang_neuralese.data.text_corpus.tokenizer_fingerprint',lambda _t:'tok')
+    monkeypatch.setattr('natlang_neuralese.data.native_sources.NativeGraphSource',
+        lambda *a,**k:SimpleNamespace(groups=[]))
+    monkeypatch.setattr('natlang_neuralese.model.native_model.native_identity',
+        lambda *a,**k:{'checkpoint_sha256':'f'*64})
+    monkeypatch.setattr('scripts.source_review.pending_unpinned_source_groups',lambda:set())
+    def fake_pair(**kwargs):
+        tasksha=kwargs['task_id'].ljust(64,'0')[:64]
+        _write_admitted_rows([record(tasksha)],kwargs['output_dir'],tokenizer_fingerprint='tok',protected_groups=set())
+        return {'graphs':str(kwargs['output_dir']/'repair-graphs.jsonl'),
+            'objective':str(kwargs['output_dir']/'repair-objective.json')}
+    monkeypatch.setattr(repair,'admit_run_pair',fake_pair)
+    result=repair.admit_run_pairs(pairs=[{'failed_run_dir':'f','repaired_run_dir':'r','task_id':'e'*64,
+        'failed_sample':0,'repaired_sample':1}],reference_checkpoint=reference,base=tmp_path,
+        held_native_graphs=held,output_dir=output,continue_from=parent,stage_id='repair-dpo',
+        prior_admission_dir=prior)
+    graph_rows=[json.loads(line) for line in (output/'repair-graphs.jsonl').read_text().splitlines()]
+    prior_rows=[json.loads(line) for line in (prior/'repair-graphs.jsonl').read_text().splitlines()]
+    objective=json.loads((output/'repair-objective.json').read_text())
+    assert len(loads)==1 and result['new_pairs']==1 and result['pairs']==2
+    assert graph_rows[0]==prior_rows[0]
+    assert graph_rows[0]['id'] in objective['rows'] and graph_rows[1]['id'] in objective['rows']
 
 
 def test_recipe_stage_addition_and_sft_to_dpo_continuation(tmp_path):
