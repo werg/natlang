@@ -28,7 +28,7 @@ def test_started_native_append_adds_bound_finite_foundation_and_keeps_predecesso
     assert not recipe._data_continuation(new,{**later,'foundation_native_graphs':bound('weaker','e')})
     before={'stages':[{'id':'full','kind':'native_state_sft','parameters':{'epochs':1}}]}
     after=deepcopy(before);after['stages'][0]['parameters']['communication_foundation']=True
-    changes,left,right=recipe.direct_windowing_handoffs(before,after,tmp_path)
+    changes,left,right=recipe.native_stage_parameter_handoffs(before,after,tmp_path)
     assert changes['full']['communication_foundation']==[None,True]
     assert left==right
 
@@ -52,14 +52,14 @@ def test_explicit_reasoning_row_upgrade_is_a_supported_native_continuation(tmp_p
         'parameters':{'epochs':1,'communication_foundation':True}}]}
     after=deepcopy(before)
     after['stages'][0]['parameters']['learn_reasoning_boundaries']=True
-    changes,left,right=recipe.direct_windowing_handoffs(before,after,tmp_path)
+    changes,left,right=recipe.native_stage_parameter_handoffs(before,after,tmp_path)
     assert changes=={'full':{'learn_reasoning_boundaries':[None,True]}}
     assert left==right
     assert 'learn_reasoning_boundaries' in recipe.HANDLERS['native_state_sft']['parameters']
     assert '--learn-reasoning-boundaries' in recipe.stage_parameter_args(after['stages'][0]['parameters'])
     (tmp_path/'full-report.json').write_text('{}')
-    with pytest.raises(ValueError,match='finished stage'):
-        recipe.direct_windowing_handoffs(before,after,tmp_path)
+    with pytest.raises(ValueError,match='finished native stage'):
+        recipe.native_stage_parameter_handoffs(before,after,tmp_path)
 
 
 @pytest.mark.parametrize('kind',['native_state_sft','native_offline_preference','native_state_rl'])
@@ -69,12 +69,12 @@ def test_history_reasoning_profile_is_an_explicit_native_recipe_handoff(tmp_path
     before={'stages':[{'id':'full','kind':kind,'parameters':{'epochs':1}}]}
     after=deepcopy(before)
     after['stages'][0]['parameters']['history_reasoning_policy']='keep'
-    changes,left,right=recipe.direct_windowing_handoffs(before,after,tmp_path)
+    changes,left,right=recipe.native_stage_parameter_handoffs(before,after,tmp_path)
     assert changes=={'full':{'history_reasoning_policy':[None,'keep']}}
     assert left==right
     (tmp_path/'full-report.json').write_text('{}')
-    with pytest.raises(ValueError,match='finished stage'):
-        recipe.direct_windowing_handoffs(before,after,tmp_path)
+    with pytest.raises(ValueError,match='finished native stage'):
+        recipe.native_stage_parameter_handoffs(before,after,tmp_path)
 
 
 @pytest.mark.parametrize('enabled',[False,True])
@@ -96,11 +96,11 @@ def test_guarded_native_arithmetic_is_operational_tuning_not_a_new_lineage(tmp_p
         'native_linear_precision':'ieee','base':'/pinned-base'}}]}
     after=deepcopy(before)
     after['stages'][0]['parameters']['native_linear_precision']='bf16x6'
-    changes,left,right=recipe.direct_windowing_handoffs(before,after,tmp_path)
+    changes,left,right=recipe.native_stage_parameter_handoffs(before,after,tmp_path)
     assert changes=={'full':{'native_linear_precision':['ieee','bf16x6']}}
     assert left==right
     after['stages'][0]['parameters']['base']='/different-base'
-    _,left,right=recipe.direct_windowing_handoffs(before,after,tmp_path)
+    _,left,right=recipe.native_stage_parameter_handoffs(before,after,tmp_path)
     assert left!=right  # Arithmetic permission never licenses a backbone replacement.
 
 
@@ -366,47 +366,31 @@ def test_relative_binding_paths_resolve_against_the_repository_root_not_the_work
 
 @pytest.mark.parametrize('hourly_checkpoint', [False, True])
 def test_lineage_handoff_takes_newest_code_and_operational_recipe_changes_only(tmp_path, hourly_checkpoint):
-    import json as _json
-
+    import json
     from natlang_neuralese.train import recipe as runner
-
-    out = tmp_path / 'run'
-    frozen = out / 'runtime' / 'natlang_neuralese'
-    frozen.mkdir(parents=True)
-    (frozen / 'a.py').write_text('old = 1\n')
-    package = tmp_path / 'package'
-    package.mkdir()
-    (package / 'a.py').write_text('new = 1\n')
-    (package / 'b.py').write_text('added = 1\n')
-    old_recipe = {'id': 'r-v10', 'description': 'v10', 'stages': [{'id': 's', 'parameters': {'lr': 1}}],
-                  'stage_parameter_defaults': {'core_text_warmup': {'latent_step_in_backward': True}}}
-    new_recipe = {'id': 'r-v11', 'description': 'v11', 'extends': 'r-v10',
-                  'stages': [{'id': 's', 'parameters': {'lr': 1}}],
-                  'stage_parameter_defaults': {'core_text_warmup': {'latent_step_in_backward': True,
-                                                                    'moe_kernel': 'grouped'},
-                                               'raw_recurrence_training': {'moe_kernel': 'grouped'}}}
-    existing = {'recipe': old_recipe, 'recipe_sha256': 'lineage', 'inputs': {'x': '1'}, 'device': 'cuda',
-                'code': {'a.py': runner.sha(frozen / 'a.py')}}
-    plan_path = out / 'recipe-plan.json'
-    plan_path.write_text(_json.dumps(existing))
-    plan = {'recipe': new_recipe, 'recipe_sha256': 'v11', 'inputs': {'x': '1'}, 'device': 'cuda'}
-    if hourly_checkpoint:
-        old_recipe['stages'][0]['kind'] = 'native_state_sft'
-        new_recipe['stages'][0]['kind'] = 'native_state_sft'
-        new_recipe['stages'][0]['parameters']['checkpoint_seconds'] = 3600
-    updated = runner.lineage_handoff(existing, plan, frozen, package, plan_path)
-    assert updated['recipe_sha256'] == 'lineage'  # stage reports keep matching the lineage
-    assert updated['recipe'] == new_recipe and (frozen / 'b.py').read_text() == 'added = 1\n'
-    assert set(updated['code']) == {'a.py', 'b.py'}
-    record = updated['handoffs'][-1]
-    assert record['recipe_id'] == 'r-v11' and record['code_changed'] == ['a.py'] and record['code_added'] == ['b.py']
-    assert (out / record['superseded_runtime'] / 'natlang_neuralese' / 'a.py').read_text() == 'old = 1\n'
-    assert _json.loads(plan_path.read_text()) == updated
-    changed = dict(new_recipe, stages=[{'id': 's', 'parameters': {'lr': 2}}])
-    with pytest.raises(ValueError, match='more than operational'):
-        runner.lineage_handoff(updated, dict(plan, recipe=changed), frozen, package, plan_path)
-    with pytest.raises(ValueError, match='inputs changed'):
-        runner.lineage_handoff(updated, dict(plan, inputs={'x': '2'}), frozen, package, plan_path)
+    out=tmp_path/'run'; frozen=out/'runtime'/'natlang_neuralese'; frozen.mkdir(parents=True)
+    (frozen/'a.py').write_text('old = 1\n')
+    package=tmp_path/'package'; package.mkdir(); (package/'a.py').write_text('new = 1\n'); (package/'b.py').write_text('added = 1\n')
+    old_recipe={'id':'r-v10','description':'v10','stages':[{'id':'s','kind':'native_state_sft','parameters':{'epochs':1}}],
+                'stage_parameter_defaults':{'native_state_sft':{'latent_ns':'cubic5'}}}
+    new_recipe={'id':'r-v11','description':'v11','extends':'r-v10',
+                'stages':[{'id':'s','kind':'native_state_sft','parameters':{'epochs':1,**({'checkpoint_seconds':3600} if hourly_checkpoint else {})}}],
+                'stage_parameter_defaults':{'native_state_sft':{'latent_ns':'cubic5'}}}
+    existing={'recipe':old_recipe,'recipe_sha256':'lineage','inputs':{'x':'1'},'device':'cuda',
+              'code':{'a.py':runner.sha(frozen/'a.py')}}
+    path=out/'recipe-plan.json';path.write_text(json.dumps(existing))
+    plan={'recipe':new_recipe,'recipe_sha256':'v11','inputs':{'x':'1'},'device':'cuda'}
+    updated=runner.lineage_handoff(existing,plan,frozen,package,path)
+    assert updated['recipe_sha256']=='lineage' and updated['recipe']==new_recipe
+    assert (frozen/'b.py').read_text()=='added = 1\n' and set(updated['code'])=={'a.py','b.py'}
+    record=updated['handoffs'][-1]
+    assert record['recipe_id']=='r-v11' and record['code_changed']==['a.py'] and record['code_added']==['b.py']
+    assert (out/record['superseded_runtime']/'natlang_neuralese'/'a.py').read_text()=='old = 1\n'
+    changed=json.loads(json.dumps(new_recipe));changed['stages'][0]['parameters']['rank']=64
+    with pytest.raises(ValueError,match='recipe changes more than operational'):
+        runner.lineage_handoff(updated,dict(plan,recipe=changed),frozen,package,path,dry_run=True)
+    with pytest.raises(ValueError,match='inputs changed'):
+        runner.lineage_handoff(updated,dict(plan,inputs={'x':'2'}),frozen,package,path,dry_run=True)
 
 
 def test_lineage_handoff_allows_pinned_code_memory_and_retired_readiness_change(tmp_path):
@@ -425,10 +409,10 @@ def test_lineage_handoff_allows_pinned_code_memory_and_retired_readiness_change(
     old_code = {str(path.relative_to(frozen)): runner.sha(path) for path in frozen.rglob('*.py')}
     new_code = {str(path.relative_to(package)): runner.sha(path) for path in package.rglob('*.py')}
     old_recipe = {'id': 'r-v10', 'runtime': {'image': 'sha256:' + '1' * 64, 'package_code': old_code},
-                  'stages': [{'id': 's', 'parameters': {'lr': 1, 'memory_gb': 9}}]}
-    old_recipe['parent_readiness'] = {'held_ce_plateau': {'evaluations': 3}}
+                  'stages': [{'id': 's', 'kind': 'native_state_sft', 'parameters': {'epochs': 1}}]}
     new_recipe = {'id': 'r-v10', 'runtime': {'image': 'sha256:' + '1' * 64, 'package_code': new_code},
-                  'stages': [{'id': 's', 'parameters': {'lr': 1, 'memory_gb': 16}}]}
+                  'stages': [{'id': 's', 'kind': 'native_state_sft', 'parameters': {'epochs': 1,
+                      'memory_qualification': {'path': '/qualification.json', 'sha256': 'c' * 64}}}]}
     existing = {'recipe': old_recipe, 'recipe_sha256': 'lineage', 'inputs': {'x': '1'}, 'device': 'cuda',
                 'code': old_code}
     plan_path = out / 'recipe-plan.json'
@@ -439,7 +423,7 @@ def test_lineage_handoff_allows_pinned_code_memory_and_retired_readiness_change(
 
     assert updated['recipe_sha256'] == 'lineage'
     assert updated['recipe']['runtime']['package_code'] == new_code
-    assert updated['recipe']['stages'][0]['parameters']['memory_gb'] == 16
+    assert updated['recipe']['stages'][0]['parameters']['memory_qualification']['sha256'] == 'c' * 64
     assert updated['code'] == new_code
 
 
@@ -476,356 +460,44 @@ def test_active_native_data_handoff_binds_both_exact_predecessors(tmp_path):
         epochs=2, batch_tokens=32768, chunk_tokens=1024, learning_rate=6e-6, weight_decay=.05, latent_ns='cubic5')
     result = runner.lineage_handoff(copy.deepcopy(existing), candidate, frozen, package, path, out, dry_run=True)
     assert result['handoffs'][-1]['stage_input_changes']['native']['kind'] == 'data_continuation'
-    assert result['handoffs'][-1]['windowing_changes']['native']['epochs'] == [1, 2]
-    assert result['handoffs'][-1]['windowing_changes']['native']['chunk_tokens'] == [None, 1024]
+    assert result['handoffs'][-1]['native_parameter_changes']['native']['epochs'] == [1, 2]
+    assert result['handoffs'][-1]['native_parameter_changes']['native']['chunk_tokens'] == [None, 1024]
     invalid = copy.deepcopy(candidate)
     invalid['stage_inputs']['native']['continued_held_native_graphs']['sha256'] = 'unrelated-held'
     with pytest.raises(ValueError, match='started stage'):
         runner.lineage_handoff(copy.deepcopy(existing), invalid, frozen, package, path, out, dry_run=True)
 
 
-def test_shared_lineage_handoff_allows_direct_stage_epoch_change_with_other_parameters_pinned(tmp_path):
-    import json as _json
-
-    from natlang_neuralese.train import recipe as runner
-
-    out = tmp_path / 'run'
-    frozen = out / 'runtime' / 'natlang_neuralese'
-    frozen.mkdir(parents=True)
-    (frozen / 'a.py').write_text('old = 1\n')
-    package = tmp_path / 'package'
-    package.mkdir()
-    (package / 'a.py').write_text('new = 1\n')
-    old_code = {str(path.relative_to(frozen)): runner.sha(path) for path in frozen.rglob('*.py')}
-    new_code = {str(path.relative_to(package)): runner.sha(path) for path in package.rglob('*.py')}
-    old_recipe = {
-        'id': 'direct-lineage', 'runtime': {'image': 'sha256:' + '1' * 64, 'package_code': old_code},
-        'stage_parameter_defaults': {'neuralese_direct': {'epochs': 2.0}},
-        'stages': [{'id': 'header', 'kind': 'neuralese_direct',
-                    'parameters': {'batch': 4, 'eval_every': 100}}],
-    }
-    new_recipe = {
-        'id': 'direct-lineage', 'runtime': {'image': 'sha256:' + '1' * 64, 'package_code': new_code},
-        'stage_parameter_defaults': {'neuralese_direct': {'epochs': 1.0}},
-        'stages': [{'id': 'header', 'kind': 'neuralese_direct',
-                    'parameters': {'batch': 4, 'eval_every': 50}}],
-    }
-    existing = {'recipe': old_recipe, 'recipe_sha256': 'lineage', 'inputs': {'x': '1'}, 'device': 'cuda',
-                'code': old_code}
-    plan_path = out / 'recipe-plan.json'
-    plan_path.write_text(_json.dumps(existing))
-    plan = {'recipe': new_recipe, 'recipe_sha256': 'new-recipe-hash', 'inputs': {'x': '1'}, 'device': 'cuda'}
-
-    updated = runner.lineage_handoff(existing, plan, frozen, package, plan_path)
-    assert updated['recipe_sha256'] == 'lineage'
-    assert updated['recipe']['stage_parameter_defaults']['neuralese_direct']['epochs'] == 1.0
-    assert updated['handoffs'][-1]['epoch_budget_changes'] == {
-        'header': {
-            'old_epochs': 2.0,
-            'new_epochs': 1.0,
-            'verification': 'trainer-reconstructs-exact-schedule-prefix-and-checkpoint-step',
-        }
-    }
-
-    changed = _json.loads(_json.dumps(updated['recipe']))
-    changed['stages'][0]['parameters']['batch'] = 8
-    with pytest.raises(ValueError, match='changes more than operational stage parameters'):
-        runner.recipe_handoff_epoch_changes(updated['recipe'], changed)
-
-
-def test_lineage_handoff_rejects_changed_objective_or_stale_frozen_code(tmp_path):
-    import json as _json
-
-    from natlang_neuralese.train import recipe as runner
-
-    out = tmp_path / 'run'
-    frozen = out / 'runtime' / 'natlang_neuralese'
-    frozen.mkdir(parents=True)
-    (frozen / 'a.py').write_text('old = 1\n')
-    package = tmp_path / 'package'
-    package.mkdir()
-    (package / 'a.py').write_text('new = 1\n')
-    old_code = {str(path.relative_to(frozen)): runner.sha(path) for path in frozen.rglob('*.py')}
-    new_code = {str(path.relative_to(package)): runner.sha(path) for path in package.rglob('*.py')}
-    old_recipe = {'id': 'r', 'runtime': {'image': 'sha256:' + '1' * 64, 'package_code': old_code},
-                  'stages': [{'id': 's', 'parameters': {'lr': 1}}]}
-    new_recipe = {'id': 'r', 'runtime': {'image': 'sha256:' + '1' * 64, 'package_code': new_code},
-                  'stages': [{'id': 's', 'parameters': {'lr': 1}}]}
-    existing = {'recipe': old_recipe, 'recipe_sha256': 'lineage', 'inputs': {'x': '1'}, 'device': 'cuda',
-                'code': old_code}
-    plan_path = out / 'recipe-plan.json'
-    plan_path.write_text(_json.dumps(existing))
-    plan = {'recipe': new_recipe, 'recipe_sha256': 'new-recipe-hash', 'inputs': {'x': '1'}, 'device': 'cuda'}
-    changed = _json.loads(_json.dumps(plan))
-    changed['recipe']['stages'][0]['parameters']['lr'] = 2
-    with pytest.raises(ValueError, match='changes more than operational stage parameters'):
-        runner.lineage_handoff(existing, changed, frozen, package, plan_path)
-
-    (frozen / 'a.py').write_text('tampered = 1\n')
-    with pytest.raises(ValueError, match='old frozen runtime differs'):
-        runner.lineage_handoff(existing, plan, frozen, package, plan_path)
-
-
-def test_lineage_handoff_extends_an_unqualified_text_warmup_with_its_quantization_ramp_held(tmp_path):
-    """A handoff may raise an unqualified mapped warm-up's steps when its quantization
-    update range stays (quantization_steps = the old steps), so the stage continues from its state at the stage-end
-    mixes; a moved ramp, a shorter stage or an extended qualified stage is refused."""
-    import json as _json
-
-    from natlang_neuralese.train import recipe as runner
-
-    out = tmp_path / 'run'
-    frozen = out / 'runtime' / 'natlang_neuralese'
-    frozen.mkdir(parents=True)
-    (frozen / 'a.py').write_text('x = 1\n')
-    package = tmp_path / 'package'
-    package.mkdir()
-    (package / 'a.py').write_text('x = 2\n')
-
-    def recipe(**parameters):
-        return {'id': 'r', 'stages': [{'id': 'warm', 'kind': 'core_text_warmup', 'parameters': parameters}],
-                'quantization': {'stage_progress': {'warm': [0.0, 0.35]}}}
-    existing = {'recipe': recipe(steps=4096), 'recipe_sha256': 'lineage', 'inputs': {}, 'device': 'cuda',
-                'code': {'a.py': runner.sha(frozen / 'a.py')}}
-    plan_path = out / 'recipe-plan.json'
-    plan = {'recipe_sha256': 'v12', 'inputs': {}, 'device': 'cuda'}
-    for refused, match in ((recipe(steps=6144), 'moves its quantization ramp'),
-                           (recipe(steps=2048, quantization_steps=2048), 'only a mapped text warm-up'),
-                           (recipe(steps=6144, quantization_steps=4096, lr=2), 'more than operational')):
-        with pytest.raises(ValueError, match=match):
-            runner.lineage_handoff(existing, dict(plan, recipe=refused), frozen, package, plan_path)
-    extended = recipe(steps=6144, quantization_steps=4096)
-    updated = runner.lineage_handoff(existing, dict(plan, recipe=extended), frozen, package, plan_path)
-    assert updated['handoffs'][-1]['extended'] == {'warm': [4096, 6144]} and updated['recipe_sha256'] == 'lineage'
-    # The stage's quantization component keeps its update range, so the trainer's resume identity holds.
-    stage = extended['stages'][0]
-    spec = {'stage_progress': {'warm': [0.0, 0.35]}, 'points': []}
-    component = runner.stage_quantization({'quantization': spec}, stage, stage['parameters'], [])
-    assert component['stage'] == {'id': 'warm', 'progress': [0.0, 0.35], 'start': 0, 'end': 4096}
-    assert '--quantization-steps' not in runner.stage_parameter_args(
-        {k: v for k, v in stage['parameters'].items() if k not in runner.RUNNER_STAGE_PARAMETERS})
-    (out / 'warm-report.json').write_text('{}')
-    with pytest.raises(ValueError, match='already qualified'):
-        runner.lineage_handoff(_json.loads(_json.dumps(existing)), dict(plan, recipe=extended), frozen, package,
-                               plan_path)
-
-
-def test_lineage_handoff_lets_only_an_unstarted_stage_take_new_inputs(tmp_path):
-    """Mellum v4 (2026-10-12): a later phase that has not started may read new content for its declared inputs on a
-    handoff (union r3 for direct_trajectory while direct_sft runs); the active or a finished phase's may not, a binding
-    shared with a started phase may not change, and roles/bindings stay. The previous input map is recorded so the
-    reports of earlier phases keep matching the lineage."""
-    import copy
-    import json as _json
-
-    from natlang_neuralese.train import recipe as runner
-
-    out = tmp_path / 'run'
-    frozen = out / 'runtime' / 'natlang_neuralese'
-    frozen.mkdir(parents=True)
-    (frozen / 'a.py').write_text('x = 1\n')
-    package = tmp_path / 'package'
-    package.mkdir()
-    (package / 'a.py').write_text('x = 2\n')
-    (out / 'sft').mkdir()  # the active phase has started
-
-    def recipe(trajectory_sha, header_sha='h'):
-        return {'id': 'r', 'input_bindings': {'header': {'path': 'h.jsonl', 'sha256': header_sha},
-                                              'trajectory': {'path': 't.jsonl', 'sha256': trajectory_sha}},
-                'stages': [{'id': 'sft', 'kind': 'neuralese_direct', 'inputs': {'text_data': 'header'},
-                            'parameters': {'epochs': 1.0}},
-                           {'id': 'traj', 'kind': 'neuralese_direct', 'requires': ['sft'],
-                            'inputs': {'text_data': 'trajectory'}, 'parameters': {'epochs': 1.0}}]}
-
-    def plan_for(trajectory_sha, header_sha='h'):
-        stage_inputs = {'sft': {'text_data': {'binding': 'header', 'path': '/d/h' + header_sha, 'sha256': header_sha}},
-                        'traj': {'text_data': {'binding': 'trajectory', 'path': '/d/t' + trajectory_sha,
-                                               'sha256': trajectory_sha}}}
-        inputs = {'/heads': 'H', '/d/h' + header_sha: header_sha, '/d/t' + trajectory_sha: trajectory_sha}
-        return {'recipe': recipe(trajectory_sha, header_sha), 'recipe_sha256': 'new', 'inputs': inputs,
-                'device': 'cuda', 'stage_inputs': stage_inputs}
-
-    existing = dict(plan_for('r2'), recipe_sha256='lineage', code={'a.py': runner.sha(frozen / 'a.py')})
-    plan_path = out / 'recipe-plan.json'
-    plan_path.write_text(_json.dumps(existing))
-
-    dry = runner.lineage_handoff(copy.deepcopy(existing), plan_for('r3'), frozen, package, plan_path, out,
-                                 dry_run=True)
-    assert dry['stage_inputs']['traj']['text_data']['sha256'] == 'r3'
-    assert (frozen / 'a.py').read_text() == 'x = 1\n' and _json.loads(plan_path.read_text()) == existing
-
-    updated = runner.lineage_handoff(copy.deepcopy(existing), plan_for('r3'), frozen, package, plan_path, out)
-    record = updated['handoffs'][-1]
-    assert updated['recipe_sha256'] == 'lineage' and updated['inputs'] == plan_for('r3')['inputs']
-    assert record['stage_input_changes']['traj']['new']['text_data']['sha256'] == 'r3'
-    assert record['previous_inputs'] == existing['inputs'] and list(record['stage_input_changes']) == ['traj']
-    assert _json.loads(plan_path.read_text()) == updated
-
-    # The active phase's inputs stay fixed.
-    (frozen / 'a.py').write_text('x = 2\n')
-    (package / 'a.py').write_text('x = 3\n')
-    with pytest.raises(ValueError, match='inputs of started stage sft'):
-        runner.lineage_handoff(updated, plan_for('r3', header_sha='h2'), frozen, package, plan_path, out)
-    # Once the later phase has started, its inputs are fixed too.
-    (out / 'traj').mkdir()
-    with pytest.raises(ValueError, match='inputs of started stage traj'):
-        runner.lineage_handoff(updated, plan_for('r4'), frozen, package, plan_path, out)
-    (out / 'traj').rmdir()
-    # A binding shared with a started phase cannot change under it.
-    shared = plan_for('r4')
-    shared['recipe']['stages'][0]['inputs']['trajectory_too'] = 'trajectory'
-    old_shared = copy.deepcopy(updated)
-    old_shared['recipe']['stages'][0]['inputs']['trajectory_too'] = 'trajectory'
-    with pytest.raises(ValueError, match='also feed a started or unchanged stage'):
-        runner.lineage_handoff(old_shared, shared, frozen, package, plan_path, out)
-    # Roles and bindings of the unstarted phase stay; only their content changes.
-    renamed = plan_for('r4')
-    renamed['stage_inputs']['traj']['text_data']['binding'] = 'other'
-    with pytest.raises(ValueError, match='changes its input roles or bindings'):
-        runner.lineage_handoff(updated, renamed, frozen, package, plan_path, out)
-    # Any other recipe change is still refused.
-    objective = plan_for('r4')
-    objective['recipe']['stages'][1]['parameters']['lr'] = 2
-    with pytest.raises(ValueError, match='more than operational'):
-        runner.lineage_handoff(updated, objective, frozen, package, plan_path, out)
-
-
-@pytest.mark.parametrize('previous_quantization', [None, {'stage_progress': {}, 'points': ['unchanged']}])
-def test_running_recipe_can_append_future_training_stages_without_restarting(tmp_path, previous_quantization):
-    import copy
-    from natlang_neuralese.train import recipe as runner
-
-    out = tmp_path / 'run'
-    frozen = out / 'runtime' / 'natlang_neuralese'
-    frozen.mkdir(parents=True)
-    (frozen / 'a.py').write_text('x = 1\n')
-    package = tmp_path / 'package'
-    package.mkdir()
-    (package / 'a.py').write_text('x = 1\n')
-    (out / 'warmup').mkdir()
-    old_recipe = {'id': 'r', 'stages': [{'id': 'warmup', 'kind': 'neuralese_direct',
-                                        'parameters': {'epochs': 1}}]}
-    old = {'recipe': old_recipe, 'recipe_sha256': 'lineage', 'device': 'cuda',
-           'inputs': {'/heads': 'H'}, 'stage_inputs': {'warmup': {}},
-           'code': {'a.py': runner.sha(frozen / 'a.py')}}
-    plan = copy.deepcopy(old)
-    plan['recipe']['input_bindings'] = {'header': {'path': 'h.jsonl', 'sha256': 'h'}}
-    # Absence versus empty catalogs isn't a semantic change to an old stage.
-    old['recipe']['input_bindings'] = {}
-    plan['recipe']['stages'] += [
-        {'id': 'sft', 'kind': 'neuralese_direct', 'requires': ['warmup'],
-         'inputs': {'text_data': 'header'}, 'parameters': {'epochs': 1}},
-        {'id': 'trajectory', 'kind': 'neuralese_direct', 'requires': ['sft'],
-         'parameters': {'epochs': 1}}]
-    plan['stage_inputs'].update(sft={'text_data': {'binding': 'header', 'path': '/d/h', 'sha256': 'h'}},
-                                trajectory={})
-    plan['inputs']['/d/h'] = 'h'
-    if previous_quantization is not None:
-        old['recipe']['quantization'] = previous_quantization
-    plan['recipe']['quantization'] = {'stage_progress': {'sft': [0, 0.75], 'trajectory': [0.75, 1]},
-                                      'points': ['unchanged']}
-    plan['recipe']['family'] = {'stages': ['sft', 'trajectory'], 'members': {'small': 0.1}}
-    path = out / 'recipe-plan.json'
-    path.write_text(json.dumps(old))
-    result = runner.lineage_handoff(copy.deepcopy(old), plan, frozen, package, path, out, dry_run=True)
-    assert result['recipe_sha256'] == 'lineage'
-    assert result['recipe']['stages'] == plan['recipe']['stages']
-    assert set(result['handoffs'][-1]['appended_stages']) == {'sft', 'trajectory'}
-    assert result['stage_inputs'] == plan['stage_inputs']
-    assert json.loads(path.read_text()) == old
-    assert not (out / 'sft').exists()
-    mutated = copy.deepcopy(plan)
-    mutated['recipe']['stages'][0]['parameters']['lr'] = 2
-    with pytest.raises(ValueError, match='more than operational'):
-        runner.lineage_handoff(copy.deepcopy(old), mutated, frozen, package, path, out, dry_run=True)
-    active_family = copy.deepcopy(plan)
-    active_family['recipe']['family']['stages'].append('warmup')
-    with pytest.raises(ValueError, match='objective_continuation'):
-        runner.lineage_handoff(copy.deepcopy(old), active_family, frozen, package, path, out, dry_run=True)
-    active_quantization = copy.deepcopy(plan)
-    active_quantization['recipe']['quantization']['stage_progress']['warmup'] = [0, 0.5]
-    with pytest.raises(ValueError, match='objective_continuation'):
-        runner.lineage_handoff(copy.deepcopy(old), active_quantization, frozen, package, path, out, dry_run=True)
-    for stages in [plan['recipe']['stages'][1:], list(reversed(plan['recipe']['stages']))]:
-        invalid = copy.deepcopy(plan)
-        invalid['recipe']['stages'] = stages
-        with pytest.raises(ValueError, match='only append'):
-            runner.lineage_handoff(copy.deepcopy(old), invalid, frozen, package, path, out, dry_run=True)
-    invalid = copy.deepcopy(plan)
-    invalid['recipe']['stages'][1]['requires'] = ['trajectory']
-    with pytest.raises(ValueError, match='must depend'):
-        runner.lineage_handoff(copy.deepcopy(old), invalid, frozen, package, path, out, dry_run=True)
-    (out / 'sft').mkdir()
-    with pytest.raises(ValueError, match='already has output'):
-        runner.lineage_handoff(copy.deepcopy(old), plan, frozen, package, path, out, dry_run=True)
-
-
-def test_lineage_handoff_can_activate_only_an_unstarted_declared_stage(tmp_path):
+def test_running_recipe_can_append_future_native_graph_stage_without_restarting(tmp_path):
     import copy
     import json
-
     from natlang_neuralese.train import recipe as runner
 
-    out = tmp_path / 'run'
-    frozen = out / 'runtime' / 'natlang_neuralese'
-    frozen.mkdir(parents=True)
-    (frozen / 'a.py').write_text('x = 1\n')
-    package = tmp_path / 'package'
-    package.mkdir()
-    (package / 'a.py').write_text('x = 2\n')
-    (out / 'sft').mkdir()
-
-    def make_plan(admitted, trajectory_sha='new'):
-        recipe = {
-            'id': 'r',
-            'input_bindings': {'trajectory': {'path': '/data/trajectory.jsonl', 'sha256': trajectory_sha}},
-            'stages': [
-                {'id': 'sft', 'kind': 'neuralese_direct', 'inputs': {'text_data': 'sft_data'},
-                 'parameters': {'epochs': 1}},
-                {'id': 'trajectory', 'kind': 'neuralese_direct', 'admitted': admitted,
-                 'inputs': {'text_data': 'trajectory'}, 'parameters': {'epochs': 1}},
-            ],
-            'stage_parameter_defaults': {'neuralese_direct': {'lr': 1e-5}},
-        }
-        stage_inputs = {'sft': {}, 'trajectory': {}}
-        inputs = {'/heads': 'H'}
-        if admitted:
-            recipe['quantization'] = {'stage_progress': {'trajectory': [0, 1]}, 'points': ['new']}
-            stage_inputs['trajectory'] = {
-                'text_data': {'binding': 'trajectory', 'path': '/data/trajectory-' + trajectory_sha,
-                              'sha256': trajectory_sha}}
-            inputs[stage_inputs['trajectory']['text_data']['path']] = trajectory_sha
-        return {'recipe': recipe, 'recipe_sha256': 'new', 'device': 'cuda', 'inputs': inputs,
-                'stage_inputs': stage_inputs}
-
-    old = make_plan(False, 'old')
-    old['recipe']['input_bindings']['trajectory']['sha256'] = 'old'
-    old.update(recipe_sha256='lineage', code={'a.py': runner.sha(frozen / 'a.py')})
-    plan = make_plan(True, 'new')
-    path = out / 'recipe-plan.json'
-    path.write_text(json.dumps(old))
-
-    result = runner.lineage_handoff(copy.deepcopy(old), plan, frozen, package, path, out, dry_run=True)
-    record = result['handoffs'][-1]
-    assert result['recipe_sha256'] == 'lineage'
-    assert record['activated_stages'] == ['trajectory']
-    assert record['stage_input_changes']['trajectory']['kind'] == 'admitted_stage'
-    assert record['stage_input_changes']['trajectory']['new']['text_data']['sha256'] == 'new'
-    assert record['previous_inputs'] == old['inputs']
-    assert json.loads(path.read_text()) == old
-    assert not (out / 'trajectory').exists()
-
-    # An existing run directory means the stage has crossed its safe activation boundary.
-    (out / 'trajectory').mkdir()
-    with pytest.raises(ValueError, match='cannot activate already-started stage trajectory'):
-        runner.lineage_handoff(copy.deepcopy(old), copy.deepcopy(plan), frozen, package, path, out, dry_run=True)
-    (out / 'trajectory').rmdir()
-
-    # Activation cannot smuggle unrelated edits to an existing stage's recipe.
-    changed = copy.deepcopy(plan)
-    changed['recipe']['stages'][1]['parameters']['lr'] = 2e-5
-    with pytest.raises(ValueError, match='more than operational'):
-        runner.lineage_handoff(copy.deepcopy(old), changed, frozen, package, path, out, dry_run=True)
+    out=tmp_path/'run'; frozen=out/'runtime'/'natlang_neuralese'; frozen.mkdir(parents=True)
+    (frozen/'a.py').write_text('old=1\n')
+    package=tmp_path/'package'; package.mkdir(); (package/'a.py').write_text('new=1\n')
+    (out/'warmup').mkdir()
+    old_recipe={'id':'r','stages':[{'id':'warmup','kind':'native_state_sft','parameters':{'epochs':1}}]}
+    old={'recipe':old_recipe,'recipe_sha256':'lineage','device':'cuda','inputs':{},
+         'stage_inputs':{'warmup':{}},'code':{'a.py':runner.sha(frozen/'a.py')}}
+    plan=copy.deepcopy(old)
+    plan['recipe']['input_bindings']={'graphs':{'path':'/data/graphs','sha256':'a'*64},
+                                      'held':{'path':'/data/held','sha256':'b'*64}}
+    plan['recipe']['stages'].append({'id':'graphs','kind':'native_state_sft','requires':['warmup'],
+        'inputs':{'native_graphs':'graphs','held_native_graphs':'held'},'parameters':{'epochs':1}})
+    plan['stage_inputs']['graphs']={
+        'native_graphs':{'binding':'graphs','path':'/data/graphs','sha256':'a'*64},
+        'held_native_graphs':{'binding':'held','path':'/data/held','sha256':'b'*64}}
+    plan['inputs']={'/data/graphs':'a'*64,'/data/held':'b'*64}
+    path=out/'recipe-plan.json';path.write_text(json.dumps(old))
+    updated=runner.lineage_handoff(copy.deepcopy(old),plan,frozen,package,path,out,dry_run=True)
+    assert updated['recipe_sha256']=='lineage'
+    assert updated['handoffs'][-1]['appended_stages']=={'graphs':plan['recipe']['stages'][1]}
+    assert updated['stage_inputs']==plan['stage_inputs']
+    assert json.loads(path.read_text())==old
+    (out/'graphs').mkdir()
+    with pytest.raises(ValueError,match='already has output'):
+        runner.lineage_handoff(copy.deepcopy(old),plan,frozen,package,path,out,dry_run=True)
 
 
 def test_absent_prepared_memory_request_is_omitted_from_actual_sft_cli():

@@ -1145,7 +1145,6 @@ OPERATIONAL_STAGE_PARAMETERS = frozenset({'refresh_foundation_readiness', 'found
                                           'sdpa_backend', 'deterministic_training',
                                           # Recurrence resume already excludes this allocation envelope from its
                                           # objective identity; increasing it must not require a fresh optimizer.
-                                          'memory_gb',
                                           # the execution backend; the trainer refuses a switch that loses FP8 state
                                           'fp8_training', 'checkpoint_layers', 'window_execution', 'report_column_fraction', 'drift_rows', 'drift_every', 'drift_gate_every', 'drift_gate_rise', 'drift_ce_windows', 'gate_response_kl',
                                           'drift_gate_now',  # retired by drift_gate_rise (b1cd6632); a lineage that declared it hands off
@@ -1228,12 +1227,12 @@ DIRECT_WINDOWING_PARAMETERS = ('train_target_tokens', 'merge_prefix_rows', 'coho
                                'train_min_context_tokens', 'upgrade_window_coverage')
 
 
-def direct_windowing_handoffs(old_recipe, new_recipe, out):
-    """Declared trainer-supported tuning, preserving each trainer's resume checks."""
-    tuning = {'neuralese_direct': DIRECT_WINDOWING_PARAMETERS,
-              'native_state_sft': ('epochs', 'batch_graphs', 'batch_tokens', 'chunk_tokens', 'learning_rate', 'learned_row_learning_rate', 'interface_row_learning_rate', 'native_optimizer_migration', 'native_ordinary_precision', 'native_norm_execution', 'native_shared_execution', 'history_reasoning_policy', 'weight_decay', 'latent_ns', 'held_eval_tokens', 'held_eval_graphs', 'communication_foundation', 'foundation_communication_batches', 'urgent_cohort_fairness', 'learn_reasoning_boundaries', 'native_linear_precision', 'native_attention_precision', 'share_causal_prefixes', 'fp8_recipe', 'resident_geometry_qualification', 'checkpoint_input_offload', 'checkpoint_input_offload_directory', 'ffn_chunk_tokens', 'memory_qualification', 'cotangent_accumulator_backend'),
+def native_stage_parameter_handoffs(old_recipe, new_recipe, out):
+    """Allow only current native trainers' explicit resume-safe parameter changes."""
+    tuning = {
+              'native_state_sft': ('epochs', 'batch_graphs', 'batch_tokens', 'chunk_tokens', 'learning_rate', 'learned_row_learning_rate', 'interface_row_learning_rate', 'native_optimizer_migration', 'native_ordinary_precision', 'native_norm_execution', 'native_shared_execution', 'history_reasoning_policy', 'weight_decay', 'latent_ns', 'held_eval_tokens', 'held_eval_graphs', 'communication_foundation', 'foundation_communication_batches', 'urgent_cohort_fairness', 'learn_reasoning_boundaries', 'native_linear_precision', 'native_attention_precision', 'share_causal_prefixes', 'fp8_recipe', 'resident_geometry_qualification', 'checkpoint_input_offload', 'checkpoint_input_offload_directory', 'ffn_chunk_tokens', 'memory_qualification', 'cotangent_accumulator_backend', 'refresh_foundation_readiness', 'foundation_readiness_policy', 'refresh_after_updates', 'eval_every', 'checkpoint_every', 'checkpoint_seconds', 'async_checkpoint', 'task_eval', 'task_eval_every', 'qualify_training_backend'),
               'native_offline_preference': ('preference_beta', 'preference_margin', 'epochs', 'batch_graphs', 'batch_tokens', 'chunk_tokens', 'learning_rate', 'learned_row_learning_rate', 'interface_row_learning_rate', 'native_optimizer_migration', 'native_ordinary_precision', 'native_norm_execution', 'native_shared_execution', 'history_reasoning_policy', 'weight_decay', 'latent_ns', 'held_eval_tokens', 'held_eval_graphs', 'communication_foundation', 'foundation_communication_batches', 'urgent_cohort_fairness', 'learn_reasoning_boundaries', 'native_linear_precision', 'native_attention_precision', 'share_causal_prefixes', 'fp8_recipe', 'resident_geometry_qualification', 'checkpoint_input_offload', 'checkpoint_input_offload_directory', 'ffn_chunk_tokens', 'memory_qualification', 'cotangent_accumulator_backend'),
-              'native_state_rl': ('epochs', 'batch_graphs', 'batch_tokens', 'learning_rate', 'learned_row_learning_rate', 'interface_row_learning_rate', 'native_optimizer_migration', 'native_ordinary_precision', 'native_norm_execution', 'native_shared_execution', 'history_reasoning_policy', 'weight_decay', 'latent_ns', 'held_eval_tokens', 'held_eval_graphs', 'native_linear_precision', 'native_attention_precision', 'checkpoint_input_offload', 'checkpoint_input_offload_directory', 'ffn_chunk_tokens', 'memory_qualification', 'cotangent_accumulator_backend')}
+              'native_state_rl': ('epochs', 'batch_graphs', 'batch_tokens', 'learning_rate', 'learned_row_learning_rate', 'interface_row_learning_rate', 'native_optimizer_migration', 'native_ordinary_precision', 'native_norm_execution', 'native_shared_execution', 'history_reasoning_policy', 'weight_decay', 'latent_ns', 'held_eval_tokens', 'held_eval_graphs', 'native_linear_precision', 'native_attention_precision', 'checkpoint_input_offload', 'checkpoint_input_offload_directory', 'ffn_chunk_tokens', 'memory_qualification', 'cotangent_accumulator_backend', 'refresh_foundation_readiness', 'foundation_readiness_policy', 'refresh_after_updates', 'eval_every', 'checkpoint_every', 'checkpoint_seconds', 'async_checkpoint', 'task_eval', 'task_eval_every', 'qualify_training_backend')}
     def parameters(recipe, stage):
         merged = dict(recipe.get('stage_parameter_defaults', {}).get(stage.get('kind'), {}))
         merged.update(stage.get('parameters', {}))
@@ -1246,7 +1245,7 @@ def direct_windowing_handoffs(old_recipe, new_recipe, out):
         if kind not in tuning or old is None or old.get('kind') != kind:
             continue
         before, after = parameters(old_recipe, old), parameters(new_recipe, stage)
-        if kind in {'native_state_sft','native_state_rl','native_offline_preference'} and before.get('native_ordinary_precision') != after.get('native_ordinary_precision'):
+        if before.get('native_ordinary_precision') != after.get('native_ordinary_precision'):
             from ..model.native_parameter_precision import ORDINARY_PRECISION_PROFILES
             if (before.get('native_ordinary_precision') is not None
                     or after.get('native_ordinary_precision') not in ORDINARY_PRECISION_PROFILES
@@ -1255,7 +1254,7 @@ def direct_windowing_handoffs(old_recipe, new_recipe, out):
                 raise ValueError('handoff refused: norm storage upgrade requires its explicit FP32 ordinary-precision profile and fresh restored-model memory qualification')
         old_cotangent_backend = before.get('cotangent_accumulator_backend') or 'cpu_file'
         new_cotangent_backend = after.get('cotangent_accumulator_backend') or old_cotangent_backend
-        if kind in {'native_state_sft','native_state_rl','native_offline_preference'} and old_cotangent_backend != new_cotangent_backend:
+        if old_cotangent_backend != new_cotangent_backend:
             if (new_cotangent_backend not in ('cpu_file', 'device_fp32')
                     or not after.get('memory_qualification')
                     or after.get('memory_qualification') == before.get('memory_qualification')):
@@ -1272,10 +1271,10 @@ def direct_windowing_handoffs(old_recipe, new_recipe, out):
                 raise ValueError('handoff refused: expert recipe changes require an exact stateless transition '
                                  'and restored-model backend qualification with declared tolerances')
         changed = {key: [before.get(key), after.get(key)] for key in tuning[kind]
-                   if before.get(key) != after.get(key)}
+                   if key != 'qualify_training_backend' and before.get(key) != after.get(key)}
         if changed:
             if stage_finished(out, stage['id']):
-                raise ValueError('handoff refused: finished stage ' + stage['id'] + ' keeps its train windows')
+                raise ValueError('handoff refused: finished native stage ' + stage['id'] + ' keeps its training contract')
             changes[stage['id']] = changed
     if not changes:
         return changes, old_recipe, new_recipe
@@ -1944,9 +1943,8 @@ def lineage_handoff(existing, plan, frozen, package, plan_path, out=None, dry_ru
     if (_inputs_without(existing.get('inputs'), existing.get('stage_inputs') or {}, input_changes, 'old') !=
             _inputs_without(plan.get('inputs'), plan.get('stage_inputs') or {}, input_changes, 'new')):
         raise ValueError('handoff refused: inputs changed; use a new stage lineage')
-    extended = stage_extensions(existing['recipe'], plan['recipe'], out)
-    old_handoff_recipe = _without_extensions(existing['recipe'], extended)
-    new_handoff_recipe = _without_extensions(plan['recipe'], extended)
+    old_handoff_recipe = existing['recipe']
+    new_handoff_recipe = plan['recipe']
     old_handoff_recipe, new_handoff_recipe = _without_unstarted_bindings(
         old_handoff_recipe, new_handoff_recipe, input_changes)
     old_handoff_recipe, new_handoff_recipe = _without_activated_stage_policy(
@@ -1956,19 +1954,13 @@ def lineage_handoff(existing, plan, frozen, package, plan_path, out=None, dry_ru
         for value in (old_handoff_recipe, new_handoff_recipe):
             value = json.loads(json.dumps(value))
             value['stages'] = [stage for stage in value['stages'] if stage['id'] not in appended]
-            # Stage membership is policy for the added future stages only.
-            # Keep every existing stage's effective objective unchanged.
-            for name in ('family', 'e2e_mix'):
-                component = value.get(name)
-                if isinstance(component, dict) and isinstance(component.get('stages'), list):
-                    component['stages'] = [sid for sid in component['stages'] if sid not in appended]
-                    if not component['stages']:
-                        value.pop(name)
-            progress = (value.get('quantization') or {}).get('stage_progress', {})
-            for sid in appended:
-                progress.pop(sid, None)
-            if not progress:
-                value.pop('quantization', None)
+            used_bindings = {binding for stage in value['stages']
+                             for binding in (stage.get('inputs') or {}).values()}
+            if isinstance(value.get('input_bindings'), dict):
+                value['input_bindings'] = {name: binding for name, binding in value['input_bindings'].items()
+                                           if name in used_bindings}
+                if not value['input_bindings']:
+                    value.pop('input_bindings')
             compared.append(value)
         old_handoff_recipe, new_handoff_recipe = compared
         old_kinds = {stage['kind'] for stage in old_handoff_recipe.get('stages', [])}
@@ -1979,11 +1971,12 @@ def lineage_handoff(existing, plan, frozen, package, plan_path, out=None, dry_ru
         record_activated = sorted(activated)
     else:
         record_activated = []
-    objective_change, old_handoff_recipe, new_handoff_recipe = objective_handoff(
-        old_handoff_recipe, new_handoff_recipe, out, started_stage_ids=started_stage_ids)
-    windowing_changes, old_handoff_recipe, new_handoff_recipe = direct_windowing_handoffs(
+    native_parameter_changes, old_handoff_recipe, new_handoff_recipe = native_stage_parameter_handoffs(
         old_handoff_recipe, new_handoff_recipe, out)
-    epoch_budget_changes = recipe_handoff_epoch_changes(old_handoff_recipe, new_handoff_recipe)
+    old_contract = _without_package_code(_without_operational(old_handoff_recipe))
+    new_contract = _without_package_code(_without_operational(new_handoff_recipe))
+    if old_contract != new_contract:
+        raise ValueError('handoff refused: recipe changes more than operational native stage parameters, input continuation, or future-stage append')
     old_code = existing['code']
     old_runtime = existing['recipe'].get('runtime', {})
     new_runtime = plan['recipe'].get('runtime', {})
@@ -2024,14 +2017,8 @@ def lineage_handoff(existing, plan, frozen, package, plan_path, out=None, dry_ru
         record['appended_stages'] = appended
     if record_activated:
         record['activated_stages'] = record_activated
-    if extended:
-        record['extended'] = extended
-    if epoch_budget_changes:
-        record['epoch_budget_changes'] = epoch_budget_changes
-    if objective_change:
-        record['objective_continuation'] = objective_change
-    if windowing_changes:
-        record['windowing_changes'] = windowing_changes
+    if native_parameter_changes:
+        record['native_parameter_changes'] = native_parameter_changes
     updated = dict(existing, recipe=plan['recipe'], code=new_code,
                    handoffs=list(existing.get('handoffs', [])) + [record])
     if input_changes:

@@ -234,11 +234,11 @@ def test_actual_file_capacity_reference_preserves_optimizer_and_original_hook(tm
 
 @pytest.mark.parametrize('kind',['native_state_sft','native_state_rl','native_offline_preference'])
 def test_recipe_handoff_explicitly_tunes_storage_without_changing_the_stage(tmp_path,kind):
-    from natlang_neuralese.train.recipe import direct_windowing_handoffs,_without_operational
+    from natlang_neuralese.train.recipe import native_stage_parameter_handoffs,_without_operational
     old={'stages':[{'id':'native','kind':kind,'parameters':{'checkpoint_input_offload':True}}]}
     new=copy.deepcopy(old)
     new['stages'][0]['parameters']['checkpoint_input_offload_directory']=str(tmp_path/'scratch')
-    changes,before,after=direct_windowing_handoffs(old,new,tmp_path)
+    changes,before,after=native_stage_parameter_handoffs(old,new,tmp_path)
     assert changes['native']['checkpoint_input_offload_directory']==[None,str(tmp_path/'scratch')]
     assert _without_operational(before)==_without_operational(after)
 
