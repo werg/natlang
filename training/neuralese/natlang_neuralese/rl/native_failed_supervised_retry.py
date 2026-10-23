@@ -679,6 +679,10 @@ def verify_release(reference,declaration):
     from ..train.recipe import resolve_recipe_data
     failed_request,failed_result=verify_result_inventory(_bound(request['failed_request']),
         _bound(request['failed_result']))
+    failed_invocation=_read(failed_request['config'])
+    old_memory=(failed_invocation.get('trainer_parameters') or {}).get('memory_qualification')
+    _validate_corrected_capacity_binding(request.get('failure_kind',MEMORY_FAILURE_KIND),
+        old_memory,request.get('corrected_request'))
     source=request.get('failure_log',{}).get('source')
     snapshot=intent.get('failure_log_snapshot')
     if (not isinstance(source,dict) or intent.get('failure_log_source')!=source
