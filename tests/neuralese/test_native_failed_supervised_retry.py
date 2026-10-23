@@ -284,7 +284,8 @@ def test_preference_capacity_descriptor_is_bound_to_the_exact_future_inputs(tmp_
                 package=tmp_path,stage_id='full')
 
 
-def test_retry_installs_durable_future_plan_through_shared_resident_verifier(tmp_path):
+@pytest.mark.parametrize('fresh_namespace',[False,True])
+def test_retry_installs_durable_future_plan_through_shared_resident_verifier(tmp_path,fresh_namespace):
     import natlang_neuralese
     from natlang_neuralese.train.native_resident import code_inventory,digest as resident_digest
     from natlang_neuralese.train.recipe import lineage_handoff,recipe_identity_sha256
@@ -319,7 +320,16 @@ def test_retry_installs_durable_future_plan_through_shared_resident_verifier(tmp
     request={'recipe':binding(recipe),'lineage_handoff':binding(lineage_path),
         'future_plan':binding(future_path),'package':str(package),'lineage_handoff_sha256':retry._digest(proof),
         'failure_kind':retry.RESIDENT_PLAN_FAILURE_KIND,'stage_id':'full','stale_resident_plan':stale}
+    old_target=target
+    if fresh_namespace:
+        new_recipe=tmp_path/'fresh'/'recipe.json';new_recipe.parent.mkdir()
+        new_recipe.write_bytes(recipe.read_bytes());recipe=new_recipe
+        request['recipe']=binding(recipe)
+        config.update(production_recipe=str(recipe),resident_data_directory=str(recipe.parent/'resident-data'))
+        config['seed_trainer_parameters']['resident_data_directory']=config['resident_data_directory']
     installed=retry._install_retry_resident_plan(request,config)
+    if fresh_namespace:
+        assert json.loads(old_target.read_text())==stale_plan
     target=recipe.parent/'recipe-plan.json'
     assert installed==binding(target)
     assert json.loads(target.read_text())==proof

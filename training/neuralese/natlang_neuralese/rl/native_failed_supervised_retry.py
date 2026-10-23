@@ -600,7 +600,14 @@ def _install_retry_resident_plan(request,config):
         evidence=_verify_stale_plan_evidence(request)
         from ..common.jsonio import write_json_durable
         from ..train.native_resident import binding as resident_binding, current as resident_current, locked
-        directory=Path(config['resident_data_directory']).resolve(strict=True)
+        directory=Path(config['resident_data_directory']).resolve()
+        prior_directory=Path(evidence['initial_path']).resolve(strict=True).parent
+        if directory!=prior_directory:
+            # A retry installs its own authenticated namespace. The captured
+            # failed initializer remains historical evidence, never its plan target.
+            if directory!=_bound(request['recipe']).parent/'resident-data':
+                raise ValueError('fresh retry resident namespace differs from its exact recipe')
+            return _install_resident_plan(proof,config)
         if Path(evidence['path']).resolve()!=directory.parent/'recipe-plan.json':
             raise ValueError('stale resident plan target differs from the exact adopted resident namespace')
         with locked(directory):
