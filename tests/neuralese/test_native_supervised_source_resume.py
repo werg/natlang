@@ -83,7 +83,8 @@ def test_partial_checkpoint_change_during_source_verification_rejects(tmp_path,m
     with pytest.raises(ValueError,match='checkpoint changed'):supervised._resume_source_arguments(config,directory,values)
 
 
-def test_actual_partial_trainer_retry_updates_once_and_retains_exact_source_credits(tmp_path,monkeypatch):
+@pytest.mark.parametrize('entry',['mandatory','rl-seed'])
+def test_actual_partial_trainer_retry_updates_once_and_retains_exact_source_credits(tmp_path,monkeypatch,entry):
     from test_native_model import tiny_source
     from natlang_neuralese.model.native_model import load_native_model
     from natlang_neuralese.data.native_graph import SCHEMA
@@ -97,7 +98,8 @@ def test_actual_partial_trainer_retry_updates_once_and_retains_exact_source_cred
         path.write_text(json.dumps({'schema':SCHEMA,'id':split,'split':split,'source_groups':[split],
             'tokenizer_fingerprint':model_config['tokenizer_fingerprint'],
             'nodes':[{'name':'answer','token_ids':[1,2,3],'target_weights':[0,1,1]}]})+'\n')
-    out=tmp_path/'work';directory=out/'learner'
+    out=tmp_path/'work'
+    directory=(out if entry=='mandatory' else out/'round-000000')/'learner'
     parameters={'base':str(base),'dtype':'float32','rank':4,'device':'cpu','epochs':3,
         'checkpoint_every':1,'eval_every':1,'refresh_at_checkpoint':True,'stage_id':'full',
         'forward_atol':.001,'gradient_atol':.01}
@@ -117,16 +119,42 @@ def test_actual_partial_trainer_retry_updates_once_and_retains_exact_source_cred
             '--out','{learner_out}','--continued-native-graphs','{continued_native_graphs}','{seed_trainer_args}']}
     calls=[]
     def run(command,values):
+        if command==['publish']:return
         assert '--continued-native-graphs' not in command
         calls.append(command)
         assert main(['--native-graphs',values['seed_native_graphs'],'--held-native-graphs',values['held_native_graphs'],
             '--out',values['learner_out'],*values['seed_trainer_args']])==0
     monkeypatch.setattr(production,'run_command',run)
     state={'checkpoint':str(directory/'checkpoint.pt'),'round':0};state_path=out/'state.json'
-    result=supervised.execute(config,state,state_path,None)
+    if entry=='mandatory':
+        result=supervised.execute(config,state,state_path,None)
+    else:
+        # A real partial checkpoint with no qualified publication boundary must
+        # resume through production's zero-success fallback, not mandatory SFT.
+        report_path=directory/'report.json';report=json.loads(report_path.read_text())
+        report['continuation_boundary']={};report_path.write_text(json.dumps(report))
+        cases=tmp_path/'cases.jsonl';cases.write_text(json.dumps({'id':'task','split':'train'})+'\n')
+        config.update(native_state=True,checkpoint=str(directory/'checkpoint.pt'),base=str(base),
+            cases=str(cases),endpoints=['unused'],after_update=['publish'],
+            seed_trainer_parameters=parameters,trainer_parameters={'stage_id':'policy-stage'})
+        config_path=tmp_path/'config.json';config_path.write_text(json.dumps(config))
+        from natlang_neuralese.rl import native_raw_policy
+        monkeypatch.setattr(native_raw_policy,'prepare_raw_policy',lambda *a,**kw:{'tokenizer':'bound-parent'})
+        def collect(**kwargs):
+            (kwargs['out']/'rollouts.jsonl').write_text(json.dumps({'task_id':'task','split':'train',
+                'reward':{'quality':0},'turns':[]})+'\n')
+            return {'scored':1,'groups_with_spread':0,'successes':0}
+        monkeypatch.setattr(production,'collect',collect)
+        result=production.run(config_path,rounds=1)
     after=torch.load(directory/'checkpoint.pt',weights_only=False)
     assert after['training']['step']==2 and after['training']['exposure_counts']=={'train':2}
     assert after['training']['source_receipts']==before['training']['source_receipts']
     assert after['training']['optimizer'] and after['training']['rng']
-    assert result['phase']=='awaiting_semantic_refresh' and result['resumed_current_source_inputs']['checkpoint']['sha256']!=binding(directory/'checkpoint.pt')['sha256']
-    assert supervised.execute(config,result,state_path,None)==result and len(calls)==1
+    assert result['resumed_current_source_inputs']['checkpoint']['sha256']!=binding(directory/'checkpoint.pt')['sha256']
+    assert len(calls)==1
+    if entry=='mandatory':
+        assert result['phase']=='awaiting_semantic_refresh'
+        assert supervised.execute(config,result,state_path,None)==result and len(calls)==1
+    else:
+        assert result['round']==1 and result['trained_task_ids']==[]
+        assert result['update_mode']=='seed' and not result['production_complete']

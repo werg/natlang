@@ -782,7 +782,12 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
                 if config.get('before_update') and not already_complete:
                     run_command(config['before_update'], values)
                 if not already_complete:
-                    run_command(config['seed_command'] if mode == 'seed' else config['learner_command'], values)
+                    command=config['seed_command'] if mode == 'seed' else config['learner_command']
+                    if mode == 'seed':
+                        from .native_supervised import prepare_seed_command
+                        command=prepare_seed_command(config,stage_out,values,state,state_path,
+                            parameters=config.get('seed_trainer_parameters',config.get('trainer_parameters',{})))
+                    run_command(command, values)
                 checkpoint = stage_out / 'checkpoint.pt'
                 if (not checkpoint.is_file() or not learner_report.is_file()) and control is not None and control.stop.requested:
                     state['phase'] = 'requested_stop'

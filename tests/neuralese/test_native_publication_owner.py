@@ -72,6 +72,23 @@ def test_raw_owner_binds_explicit_role_python_runtime_and_nested_writer(tmp_path
     assert published['qualification_credit'] is False
 
 
+def test_shared_seed_entry_publishes_actual_nested_writer_and_persists_owner(tmp_path):
+    from natlang_neuralese.rl.native_supervised import prepare_seed_command
+    config,command,output,writer,_=_raw_fixture(tmp_path)
+    config.update(out=str(output),seed_command=command)
+    values={'checkpoint':config['checkpoint'],'trainer_args':[],'seed_trainer_args':[]}
+    state={'checkpoint':config['checkpoint'],'update_mode':'seed'}
+    state_path=output/'state.json'
+    assert prepare_seed_command(config,writer,values,state,state_path)==command
+    persisted=json.loads(state_path.read_text())
+    published=persisted['checkpoint_publication_owner']
+    manifest,_=owner.read_owner(config['native_checkpoint_publication_owner_pointer'],role='lfm')
+    assert published['generation_sha256']==manifest['generation_sha256']
+    assert manifest['publication_spec']['effective_argv']['writer_output']==str(writer.resolve())
+    assert persisted['checkpoint']==config['checkpoint'] and persisted['update_mode']=='seed'
+    assert published['qualification_credit'] is False
+
+
 @pytest.mark.parametrize('change,pattern', [
     ('role', 'differs from the configured model'),
     ('runtime', 'differs from the expanded trainer environment'),

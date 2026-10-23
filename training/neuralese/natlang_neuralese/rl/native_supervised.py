@@ -195,7 +195,7 @@ def stage_pending(adapter,participant,stage,sources,epochs,*,objective=None):
 
 
 
-def _resume_source_arguments(config,directory,values):
+def _resume_source_arguments(config,directory,values,*,parameters=None):
     """Do not reapply an obsolete append predecessor to an already adopted source."""
     command=list(config['seed_command'])
     roles=(('continued_native_graphs','seed_native_graphs',0),
@@ -214,13 +214,14 @@ def _resume_source_arguments(config,directory,values):
     reference=binding(checkpoint)
     saved=CheckpointPolicy.load(checkpoint)
     training=require_raw_training(saved)
-    stage=config['trainer_parameters'].get('stage_id',config['production_stage'])
+    parameters=config['trainer_parameters'] if parameters is None else parameters
+    stage=parameters.get('stage_id',config['production_stage'])
     if ((training.get('options') or {}).get('stage_id')!=stage
             or (training.get('identity') or {}).get('objective') is not None):
         return command,None
     receipts=training.get('source_receipts') or []
     if len(receipts)<2:raise ValueError('supervised retry checkpoint lost its actual source receipts')
-    resident_directory=config['trainer_parameters'].get('resident_data_directory',config.get('resident_data_directory'))
+    resident_directory=parameters.get('resident_data_directory',config.get('resident_data_directory'))
     resident=current(resident_directory) if resident_directory else None
     selected=(resident['payload'] if resident and resident['payload']['stage_id']==stage else None)
     omitted={}
@@ -244,6 +245,20 @@ def _resume_source_arguments(config,directory,values):
     return command,{'checkpoint':reference,'stage_id':stage,'already_current_sources':omitted}
 
 
+def prepare_seed_command(config,directory,values,state,state_path,*,parameters=None):
+    """Use the same exact resume and publication binding for every SFT entry."""
+    command,reused=_resume_source_arguments(config,directory,values,parameters=parameters)
+    if reused is not None:state['resumed_current_source_inputs']=reused
+    if config.get('native_checkpoint_publication_owner_pointer') is not None:
+        from .production import expand_command
+        from .native_publication_owner import emit_current
+        state['checkpoint_publication_owner']=emit_current(config,expand_command(command,values),
+            out=config['out'],selected_checkpoint=values['checkpoint'],
+            runtime_root=config.get('native_checkpoint_publication_runtime_root',config.get('runtime')))
+    write_json_durable(state_path,state)
+    return command
+
+
 def execute(config,state,state_path,control):
     """Existing bridge kind=round enters here without starting a rollout actor."""
     from .production import run_command
@@ -262,18 +277,8 @@ def execute(config,state,state_path,control):
         'seed_trainer_args':stage_parameter_args(config['trainer_parameters'])}
     if control is not None:values['_run_control']=control
     if config.get('before_update'):run_command(config['before_update'],values)
-    command,reused=_resume_source_arguments(config,directory,values)
-    if reused is not None:state['resumed_current_source_inputs']=reused
     state.update(phase='updating_mandatory_sft',pending_update_kind='mandatory_sft')
-    write_json_durable(state_path,state)
-    if config.get('native_checkpoint_publication_owner_pointer') is not None:
-        from .production import expand_command
-        from .native_publication_owner import emit_current
-        effective_command=expand_command(command,values)
-        state['checkpoint_publication_owner']=emit_current(config,effective_command,
-            out=config['out'],selected_checkpoint=values['checkpoint'],
-            runtime_root=config.get('native_checkpoint_publication_runtime_root',config.get('runtime')))
-        write_json_durable(state_path,state)
+    command=prepare_seed_command(config,directory,values,state,state_path)
     run_command(command,values)
     checkpoint=directory/'checkpoint.pt'
     if not checkpoint.is_file() or not report_path.is_file():
