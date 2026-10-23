@@ -847,7 +847,9 @@ def main(argv=None):
         if any('teacher_replay' in job for job in jobs):
             import os,subprocess,tempfile
             from ..common.jsonio import write_json_durable
-            node=os.environ.get('NATLANG_NODE','/home/werg/.local/share/natlang-dev/node-v24.0.1-linux-arm64/bin/node')
+            import shutil
+            node=os.environ.get('NATLANG_NODE') or shutil.which('node')
+            if not node:parser.error('Node is required for native teacher replay; set NATLANG_NODE or add node to PATH')
             cli=Path(__file__).resolve().parents[4]/'ts-host'/'dist'/'teacher'/'native-forced-replay-cli.js'
             if not cli.is_file():parser.error(f'Qwen replay CLI is missing; build ts-host first: {cli}')
             with tempfile.TemporaryDirectory(prefix='qwen-repair-admission-') as temp_root:
