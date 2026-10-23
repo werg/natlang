@@ -1002,24 +1002,53 @@ def _reconcile_teacher(ident: str, store: TeacherJobStore):
             store.claim(ident, {'pid': os.getpid(), 'start_ticks': _proc_start_ticks(os.getpid()),
                                 'boot_id': _boot_id()})
             value = store.status(ident)
-    _publish_teacher_terminal(ident, value)
-    return value
+    manifest = _publish_teacher_terminal(ident, value)
+    result = {'request_id': ident, 'request_sha256': value['request_sha256'],
+              'state': value['state']}
+    if manifest is not None:
+        result['result_manifest'] = manifest
+    return result
+
+
+def _assemble_sdk_chunks(root: Path, ident: str, total_bytes: int,
+                         chunk_count: int, digest: str, destination: Path) -> dict:
+    """Verify the complete SDK transfer before atomically installing its file."""
+    raw = read_chunked(root, ident, total_bytes, chunk_count, digest)
+    _durable_write(destination, raw)
+    return {'request_id': ident, 'assembled_sha256': hashlib.sha256(raw).hexdigest(),
+            'total_bytes': len(raw)}
 
 
 def cli(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest='operation', required=True)
     serve = sub.add_parser('evaluator-serve')
+    serve.add_argument('--student', choices=tuple(EVALUATOR_IDS), required=True)
     serve.add_argument('--host', default='127.0.0.1')
     serve.add_argument('--port', type=int, default=8766)
+    serve.add_argument('--key-file', type=Path, default=KEY_PATH)
     next_job = sub.add_parser('evaluator-next')
+    next_job.add_argument('--student', choices=tuple(EVALUATOR_IDS), required=True)
     next_job.add_argument('--key-file', type=Path, default=KEY_PATH)
     deliver = sub.add_parser('evaluator-deliver')
     deliver.add_argument('request_id')
+    deliver.add_argument('--student', choices=tuple(EVALUATOR_IDS), required=True)
     deliver.add_argument('--key-file', type=Path, default=KEY_PATH)
+    assemble_result = sub.add_parser('evaluator-assemble')
+    assemble_result.add_argument('request_id')
+    assemble_result.add_argument('--student', choices=tuple(EVALUATOR_IDS), required=True)
+    assemble_result.add_argument('--bytes', type=int, required=True)
+    assemble_result.add_argument('--chunks', type=int, required=True)
+    assemble_result.add_argument('--sha256', required=True)
     enqueue = sub.add_parser('teacher-enqueue')
     enqueue.add_argument('request_id')
     enqueue.add_argument('--key-file', type=Path, default=KEY_PATH)
+    assemble = sub.add_parser('teacher-assemble')
+    assemble.add_argument('request_id')
+    assemble.add_argument('--bytes', type=int, required=True)
+    assemble.add_argument('--chunks', type=int, required=True)
+    assemble.add_argument('--sha256', required=True)
+    assemble.add_argument('--key-file', type=Path, default=KEY_PATH)
     status = sub.add_parser('teacher-status')
     status.add_argument('request_id')
     status.add_argument('--key-file', type=Path, default=KEY_PATH)
@@ -1028,16 +1057,33 @@ def cli(argv=None):
     worker.add_argument('--key-file', type=Path, default=KEY_PATH)
     args = parser.parse_args(argv)
     if args.operation == 'evaluator-serve':
-        server = evaluator_server(key_path=args.key_file, host=args.host, port=args.port)
+        profile = evaluator_profile(args.student)
+        server = evaluator_server(path=EVALUATOR_DB, key_path=args.key_file,
+                                  host=args.host, port=args.port, student=args.student)
         print(json.dumps({'host': args.host, 'port': args.port, 'database': str(EVALUATOR_DB),
-                          'identity': profile['native_identity']}), flush=True)
+                          'student': args.student, 'sandbox_id': profile['sandbox_id'],
+                          'identity': profile['native_identity']}, separators=(',', ':')), flush=True)
         try:
             server.serve_forever(poll_interval=.25)
         finally:
             server.server_close()
         return 0
     if args.operation == 'evaluator-next':
-        print(json.dumps(_evaluator_queue(args.key_file).next(), separators=(',', ':')))
+        print(json.dumps(_evaluator_queue(args.key_file, args.student).next_manifest(), separators=(',', ':')))
+        return 0
+    if args.operation == 'evaluator-assemble':
+        evaluator_profile(args.student)
+        if not ID_RE.fullmatch(args.request_id):
+            raise ValueError('invalid evaluator result request ID')
+        assembled = _assemble_sdk_chunks(EVALUATOR_ROOT / 'inbox',
+            args.request_id, args.bytes, args.chunks, args.sha256,
+            _evaluator_result_path(args.request_id))
+        value = json.loads(_evaluator_result_path(args.request_id).read_bytes())
+        if (not isinstance(value, dict) or set(value) != {'request_id', 'response_b64', 'receipt'}
+                or value['request_id'] != args.request_id):
+            _evaluator_result_path(args.request_id).unlink(missing_ok=True)
+            raise ValueError('assembled evaluator result has an unknown or rebound envelope')
+        print(json.dumps(assembled, separators=(',', ':')))
         return 0
     if args.operation == 'evaluator-deliver':
         path = _evaluator_result_path(args.request_id)
@@ -1047,7 +1093,24 @@ def cli(argv=None):
         if not isinstance(value, dict) or set(value) != {'request_id','response_b64','receipt'} or value['request_id'] != args.request_id:
             raise ValueError('evaluator ferry receipt file changed its exact request binding')
         response = base64.b64decode(value['response_b64'], validate=True)
-        print(json.dumps(_evaluator_queue(args.key_file).complete(args.request_id, response, value['receipt']),
+        print(json.dumps(_evaluator_queue(args.key_file, args.student).complete(args.request_id, response, value['receipt']),
+                         separators=(',', ':')))
+        return 0
+    if args.operation == 'teacher-assemble':
+        if not ID_RE.fullmatch(args.request_id):
+            raise ValueError('invalid teacher request ID')
+        _assemble_sdk_chunks(TEACHER_ROOT / 'inbox',
+            args.request_id, args.bytes, args.chunks, args.sha256,
+            _teacher_inbox_path(args.request_id))
+        value = json.loads(_teacher_inbox_path(args.request_id).read_bytes())
+        result = _teacher_store(args.key_file).enqueue(value)
+        if result['state'] == 'queued':
+            result = {**result, 'worker': _launch_teacher_worker(args.request_id)}
+        else:
+            result = _reconcile_teacher(args.request_id, _teacher_store(args.key_file))
+            if result['state'] == 'queued':
+                result = {**result, 'worker': _launch_teacher_worker(args.request_id)}
+        print(json.dumps({key: result[key] for key in ('request_id', 'request_sha256', 'state')},
                          separators=(',', ':')))
         return 0
     if args.operation == 'teacher-enqueue':
@@ -1065,7 +1128,12 @@ def cli(argv=None):
         print(json.dumps(result, separators=(',', ':')))
         return 0
     if args.operation == 'teacher-status':
-        value = _reconcile_teacher(args.request_id, _teacher_store(args.key_file))
+        store = _teacher_store(args.key_file)
+        value = store.status(args.request_id)
+        if value is None:
+            value = {'request_id': args.request_id, 'state': 'missing'}
+        else:
+            value = _reconcile_teacher(args.request_id, store)
         print(json.dumps(value, separators=(',', ':')))
         return 0
     if args.operation == 'teacher-run':

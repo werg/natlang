@@ -1,7 +1,12 @@
 import base64
 import concurrent.futures
+import contextlib
 import hashlib
+import io
 import json
+import os
+import threading
+import urllib.request
 from pathlib import Path
 
 import pytest
@@ -71,8 +76,11 @@ class FakeSandbox:
         try:
             if self.role == 'eval' and operation == 'evaluator-next':
                 value = self.evaluator_queue.next_manifest()
-            elif self.role == 'eval' and operation == 'evaluator-result-assemble':
-                ident = argv[3]; total, count, digest = int(argv[5]), int(argv[7]), argv[9]
+            elif self.role == 'eval' and operation == 'evaluator-assemble':
+                ident = argv[3]
+                total = int(argv[argv.index('--bytes') + 1])
+                count = int(argv[argv.index('--chunks') + 1])
+                digest = argv[argv.index('--sha256') + 1]
                 raw = ferry.read_chunked(ferry.EVALUATOR_ROOT / 'inbox', ident, total, count, digest)
                 ferry._durable_write(ferry._evaluator_result_path(ident), raw)
                 value = {'request_id': ident, 'assembled_sha256': digest}
@@ -123,7 +131,7 @@ class FakeSandbox:
             return FakeFuture(Result('', str(error), 1))
 
 
-def setup(monkeypatch, tmp_path, *, forge=False, timeout=False, prompt_size=40, response_size=40):
+def setup(monkeypatch, tmp_path, *, forge=False, timeout=False, prompt_size=40, response_size=40, student='lfm'):
     monkeypatch.setattr(ferry, 'TEACHER_ROOT', tmp_path / 'teacher')
     monkeypatch.setattr(ferry, 'EVALUATOR_ROOT', tmp_path / 'evaluator')
     monkeypatch.setattr(ferry, 'TEACHER_DB', tmp_path / 'teacher' / 'requests.sqlite3')
@@ -132,7 +140,7 @@ def setup(monkeypatch, tmp_path, *, forge=False, timeout=False, prompt_size=40, 
     if prompt_size != 40:
         request = json.loads(raw); request['messages'][0]['content'] = 'x' * prompt_size
         raw = json.dumps(request, separators=(',', ':')).encode()
-    profile = ferry.evaluator_profile('lfm')
+    profile = ferry.evaluator_profile(student)
     ident = ferry.request_id(ferry.TEACHER_SERVE_ALIAS, raw, profile['sandbox_id'], profile['native_identity'])
     queue = ferry.EvaluatorQueue(ferry.EVALUATOR_DB, KEY, profile['native_identity'], evaluator_sandbox_id=profile['sandbox_id'])
     queue.enqueue(raw, ident)
@@ -144,6 +152,59 @@ def setup(monkeypatch, tmp_path, *, forge=False, timeout=False, prompt_size=40, 
     evaluator = FakeSandbox('eval', queue, store, response)
     monkeypatch.setattr(sdk_ferry, 'PROTOCOL_REMOTE', {'teacher': '/fake/teacher.py', 'evaluator': '/fake/evaluator.py'})
     return ident, queue, store, evaluator, teacher
+
+
+class ActualCliSandbox:
+    """SDK transport fixture that runs the deployed protocol's real cli()."""
+    def __init__(self, role, sandbox_id, *, timeout_after_teacher_assemble=False):
+        self.role, self.id = role, sandbox_id
+        self.timeout_after_teacher_assemble = timeout_after_teacher_assemble
+        self.timed_out = False
+
+    def write_file(self, path, raw):
+        if len(raw) > ferry.SDK_CHUNK_BYTES:
+            raise AssertionError('test SDK fixture observed an over-limit chunk')
+        destination = Path(path)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(raw)
+        return FakeFuture(True)
+
+    def read_file(self, path):
+        if path.endswith('.py'):
+            return FakeFuture(Path(ferry.__file__).read_bytes())
+        if path.endswith('.json') and 'deployments' in path:
+            return FakeFuture(ferry.deployment_file_bytes())
+        return FakeFuture(Path(path).read_bytes())
+
+    def exec(self, argv, timeout_seconds=60):
+        assert argv[0] == 'python3' and len(argv) >= 3
+        operation = argv[2]
+        output = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(output):
+                ferry.cli(argv[2:])
+        except Exception as error:
+            if (self.role == 'teacher' and operation == 'teacher-assemble'
+                    and self.timeout_after_teacher_assemble and not self.timed_out):
+                self.timed_out = True
+                raise TimeoutError('SDK lost response after real CLI durably accepted request') from error
+            if isinstance(error, TimeoutError):
+                raise
+            return FakeFuture(Result('', f'{type(error).__name__}: {error}', 1))
+        if (self.role == 'teacher' and operation == 'teacher-assemble'
+                and self.timeout_after_teacher_assemble and not self.timed_out):
+            self.timed_out = True
+            raise TimeoutError('SDK lost response after real CLI durably accepted request')
+        return FakeFuture(Result(output.getvalue()))
+
+
+def _test_deployments(monkeypatch):
+    deployments = json.loads(ferry.deployment_file_bytes())
+    deployments['evaluators']['mellum']['native_identity'] = {
+        'checkpoint_sha256': 'c' * 64, 'tokenizer_fingerprint': 'd' * 64,
+        'embedding_weight_sha256': 'e' * 64, 'architecture': 'mellum'}
+    monkeypatch.setattr(ferry, 'load_deployments', lambda path=ferry.DEPLOYMENTS_PATH: deployments)
+    return deployments
 
 
 def test_sdk_restart_reuses_durable_request_without_second_generation(monkeypatch, tmp_path):
@@ -211,6 +272,92 @@ def test_sdk_chunks_reassemble_only_complete_hash_bound_payload(tmp_path):
     chunk.write_bytes(b'forged')
     with pytest.raises(ValueError, match='byte count'):
         ferry.read_chunked(tmp_path, ident, manifest['total_bytes'], manifest['chunk_count'], manifest['sha256'])
+
+
+@pytest.mark.parametrize('student', ['lfm', 'mellum'])
+def test_actual_cli_server_startup_binds_selected_native_role(monkeypatch, tmp_path, student):
+    from http.server import ThreadingHTTPServer
+    deployments = _test_deployments(monkeypatch)
+    profile = ferry.evaluator_profile(student, deployments)
+    root = tmp_path/student
+    monkeypatch.setattr(ferry, 'EVALUATOR_ROOT', root)
+    monkeypatch.setattr(ferry, 'EVALUATOR_DB', root/'requests.sqlite3')
+    key = tmp_path/'key'; key.write_bytes(KEY); key.chmod(0o600)
+    monkeypatch.setattr(ferry, 'KEY_PATH', key)
+    monkeypatch.setattr(ferry, 'evaluator_native_identity', lambda role: profile['native_identity'])
+    original = ThreadingHTTPServer.serve_forever
+    def serve_until_health(self, poll_interval=0.5):
+        worker = threading.Thread(target=original, args=(self,), kwargs={'poll_interval': poll_interval}, daemon=True)
+        worker.start()
+        with urllib.request.urlopen(f'http://127.0.0.1:{self.server_address[1]}/health', timeout=3) as response:
+            assert response.status == 200
+            assert json.loads(response.read()) == {'ok': True, 'service': 'memetic-teacher-ferry'}
+        self.shutdown(); worker.join(timeout=3)
+        assert not worker.is_alive()
+    monkeypatch.setattr(ThreadingHTTPServer, 'serve_forever', serve_until_health)
+    output = io.StringIO()
+    with contextlib.redirect_stdout(output):
+        assert ferry.cli(['evaluator-serve', '--student', student, '--host', '127.0.0.1',
+                          '--port', '0', '--key-file', str(key)]) == 0
+    started = json.loads(output.getvalue())
+    assert started == {'host': '127.0.0.1', 'port': 0, 'database': str(root/'requests.sqlite3'),
+                       'student': student, 'sandbox_id': profile['sandbox_id'],
+                       'identity': profile['native_identity']}
+
+
+@pytest.mark.parametrize('student', ['lfm', 'mellum'])
+def test_host_ferry_exercises_real_cli_large_chunks_restart_and_at_most_once(
+        monkeypatch, tmp_path, student):
+    deployments = _test_deployments(monkeypatch)
+    profile = ferry.evaluator_profile(student, deployments)
+    ident, queue, store, _, fake_teacher = setup(monkeypatch, tmp_path, student=student,
+        timeout=False, prompt_size=300_000, response_size=400_000)
+    key = tmp_path/'key'; key.write_bytes(KEY); key.chmod(0o600)
+    monkeypatch.setattr(ferry, 'KEY_PATH', key)
+    monkeypatch.setattr(ferry, 'evaluator_native_identity', lambda role: profile['native_identity'])
+
+    # Use the real CLI's persistent store and worker launch boundary. The worker
+    # seam performs one exact durable claim/finish with the CPU fake response.
+    def cli_store(key_path=ferry.KEY_PATH):
+        return ferry.TeacherJobStore(ferry.TEACHER_DB, ferry.load_key(key_path),
+                                     identity_provider=teacher_identity)
+    monkeypatch.setattr(ferry, '_teacher_store', cli_store)
+    worker_calls = []
+    def worker(request_id):
+        worker_calls.append(request_id)
+        current = cli_store()
+        state, raw, before = current.claim(request_id, {'pid': os.getpid(),
+            'start_ticks': ferry._proc_start_ticks(os.getpid()), 'boot_id': ferry._boot_id()})
+        if state == 'submitted':
+            assert raw
+            current.finish(request_id, fake_teacher.response, 200, before, teacher_identity())
+        return {'worker': 'local-cpu-test-seam'}
+    monkeypatch.setattr(ferry, '_launch_teacher_worker', worker)
+    monkeypatch.setattr(ferry, '_validate_launch_process', lambda *args, **kwargs: None)
+    evaluator = ActualCliSandbox('evaluator', profile['sandbox_id'])
+    teacher = ActualCliSandbox('teacher', ferry.TEACHER_SANDBOX_ID,
+                               timeout_after_teacher_assemble=True)
+
+    with pytest.raises(TimeoutError, match='after real CLI durably accepted'):
+        sdk_ferry.ferry_once(evaluator, teacher, student=student)
+    assert store.status(ident)['state'] == 'complete'
+    delivered = sdk_ferry.ferry_once(evaluator, teacher, student=student)
+    assert delivered == {'request_id': ident, 'state': 'complete'}
+    assert worker_calls == [ident]
+    assert queue.result(ident)['state'] == 'complete'
+    assert hashlib.sha256(queue.result(ident)['response']).hexdigest() == store.status(ident)['response_sha256']
+
+
+def test_actual_cli_rejects_bad_assembly_manifest_without_installing_result(monkeypatch, tmp_path):
+    ident, _, _, _, _ = setup(monkeypatch, tmp_path)
+    raw = ferry.canonical_bytes({'request_id': ident, 'response_b64': '', 'receipt': {}})
+    manifest = ferry.write_chunked(ferry.EVALUATOR_ROOT/'inbox', ident, raw)
+    destination = ferry._evaluator_result_path(ident)
+    with pytest.raises(ValueError, match='assembled bytes differ'):
+        ferry.cli(['evaluator-assemble', ident, '--student', 'lfm',
+            '--bytes', str(manifest['total_bytes']), '--chunks', str(manifest['chunk_count']),
+            '--sha256', '0'*64])
+    assert not destination.exists()
 
 
 def test_deployment_manifest_pins_roles_and_leaves_mellum_unbound():

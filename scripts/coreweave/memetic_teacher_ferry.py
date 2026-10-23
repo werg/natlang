@@ -216,7 +216,7 @@ def ferry_once(evaluator, teacher, student='lfm'):
 
     result_manifest = _write_chunks(evaluator, protocol.EVALUATOR_ROOT / 'inbox', ident, result_raw)
     assembled = _json_result(evaluator, [
-        'python3', PROTOCOL_REMOTE['evaluator'], 'evaluator-result-assemble', ident,
+        'python3', PROTOCOL_REMOTE['evaluator'], 'evaluator-assemble', ident, '--student', student,
         '--bytes', str(result_manifest['total_bytes']), '--chunks', str(result_manifest['chunk_count']),
         '--sha256', result_manifest['sha256']], timeout=180)
     if assembled.get('request_id') != ident or assembled.get('assembled_sha256') != result_manifest['sha256']:
