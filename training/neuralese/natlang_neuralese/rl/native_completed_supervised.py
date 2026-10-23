@@ -718,7 +718,20 @@ def verify(reference):
                                     value['recipe'],config['raw_model_id'],package)
     expected_config=_future_config(config,value['recipe'],future['recipe'],value['checkpoint'],value['lineage'],
                                    declaration=declaration,plan_reference=value.get('future_global_plan'))
-    if future_config!=expected_config:raise ValueError('completed adaptation changed its declared future invocation')
+    if future_config!=expected_config:
+        # Actor factories and scheduling defaults can legitimately improve.
+        # Replay this immutable invocation with its authenticated package,
+        # just as we replay its historical recipe reader above. Still require
+        # equality of every field; do not normalize away changed commands.
+        from ..common.native_metadata_replay import package_metadata_replay
+        references=[value['recipe']]
+        if value.get('future_global_plan') is not None:
+            references.append(value['future_global_plan'])
+        expected_config=package_metadata_replay(package,value['code'],'completed-future-config',
+            {'args':[config,value['recipe'],future['recipe'],value['checkpoint'],value['lineage']],
+             'kwargs':{'declaration':declaration,'plan_reference':value.get('future_global_plan')}},references)
+        if not isinstance(expected_config,dict) or future_config!=expected_config:
+            raise ValueError('completed adaptation changed its declared future invocation')
     if (binding(future_config['production_recipe'])!=_artifact_binding(value['recipe'])
             or future_config['raw_model_id']!=config['raw_model_id']
             or future_config['bootstrap_binding']!=config['bootstrap_binding']

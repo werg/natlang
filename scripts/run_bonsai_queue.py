@@ -27,6 +27,8 @@ from natlang_neuralese.common.hashing import sha256_file_hex as sha256_file  # n
 
 OUTPUT_ACCOUNTING_VERSION = 'natlang.supervisor_output_accounting/2'
 OBSERVATION_POLICY_VERSION = 'natlang.collection_observations/2'
+REPETITION_GUARD_POLL_SECONDS = 1.0
+ACTIVITY_HEARTBEAT_SECONDS = 30.0
 
 
 class ProviderStreamOverflow(RuntimeError):
@@ -534,6 +536,22 @@ def identical_turn_streak(entry, limit):
     return None
 
 
+def partial_progress_signature(entry, jobs=None):
+    """Snapshot durable per-job partial identities without reading their contents."""
+    jobs = resolve_entry_jobs(entry) if jobs is None else jobs
+    root = Path(entry['jobs'])
+    rows = []
+    for job in jobs:
+        path = root / f"{job['key']}.partial.json"
+        try:
+            stat = path.stat()
+        except FileNotFoundError:
+            rows.append((job['key'], None))
+        else:
+            rows.append((job['key'], stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns))
+    return tuple(rows)
+
+
 def retry_deadline(entry):
     """Provider minimum delays survive exhausted retries, timeouts, and supervisor restarts."""
     deadline = 0
@@ -646,7 +664,7 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
                 'unstarted_keys':[row['key'] for row in entries if row['key'] not in attempted],
                 'disposition':'active case finished; no next request; remove drain file to resume exact remaining keys'}, durable=True)
             return 75
-        resolve_entry_jobs(entry, runtime)
+        entry_jobs = resolve_entry_jobs(entry, runtime)
         if min_free_mib:
             free_mib = shutil.disk_usage(journal.parent).free // (1024 * 1024)
             if free_mib < min_free_mib:
@@ -740,6 +758,14 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
         start = time.monotonic()
         last_activity, previous = start, partial_metrics(entry)
         previous_poll, unobserved_seconds, was_waiting = start, 0, False
+        last_activity_heartbeat = start
+        repetition_poll_seconds = (REPETITION_GUARD_POLL_SECONDS if identical_turn_limit
+                                   else ACTIVITY_HEARTBEAT_SECONDS)
+        # Force one initial read at the first supervision tick. A partial may
+        # already contain the repeated window when the child starts (or before
+        # this supervisor attaches), and baseline-only stat comparison would
+        # otherwise suppress that evidence indefinitely.
+        last_partial_signature = None
         observer = ProviderObservations(entry['log']) if provider else None
         observation = {'pending_requests': []}
         observations = []
@@ -761,23 +787,39 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
         with Path(entry['log']).open('a') as log:
             child = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT)
             try:
-                for tick in range(math.ceil(case_seconds / 30)):
+                for tick in range(math.ceil(case_seconds / repetition_poll_seconds)):
                     remaining = case_seconds - (time.monotonic() - start)
                     if remaining <= 0:
                         limit_reason = 'case_wall_budget'
                         raise subprocess.TimeoutExpired(command, case_seconds)
                     try:
-                        code = child.wait(timeout=min(30, remaining))
+                        code = child.wait(timeout=min(repetition_poll_seconds, remaining))
                         break
                     except subprocess.TimeoutExpired:
-                        current = partial_metrics(entry)
-                        repeated = identical_turn_streak(entry, identical_turn_limit)
+                        now = time.monotonic()
+                        partial_changed = False
+                        if identical_turn_limit:
+                            current_partial_signature = partial_progress_signature(entry, entry_jobs)
+                            partial_changed = (last_partial_signature is None or
+                                               current_partial_signature != last_partial_signature)
+                            last_partial_signature = current_partial_signature
+                            current = partial_metrics(entry) if partial_changed else previous
+                        else:
+                            current = partial_metrics(entry)
+                        heartbeat = (not identical_turn_limit or
+                                     now - last_activity_heartbeat >= ACTIVITY_HEARTBEAT_SECONDS)
+                        repeated = (identical_turn_streak(entry, identical_turn_limit)
+                                    if identical_turn_limit and partial_changed else None)
                         if repeated:
                             limit_reason = repeated.get('reason', 'identical_turn_limit')
                             limit_evidence = repeated
                             record({'event': 'repetition_detected', 'key': entry['key'], 'time': time.time(),
                                     'limit': identical_turn_limit, **repeated})
                             raise IdenticalTurnLimit('same action and observation repeated without progress')
+                        if not partial_changed and not heartbeat:
+                            continue
+                        if heartbeat:
+                            last_activity_heartbeat = now
                         decode = (local_decode_progress(server) if neuralese_server else
                                   local_decode_progress() if not remote else None)
                         decoding = decode is not None and previous_decode is not None and decode > previous_decode
@@ -795,7 +837,6 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
                                 f'tool-call stream exceeded {toolcall_stream_limit} bytes '
                                 f'for {action_tokens} requested output tokens')
                         waiting = bool(remote and retry_waiting(entry))
-                        now = time.monotonic()
                         observations = []
                         if current['saved_turns'] > previous['saved_turns']:
                             observations.append('durable_checkpoint')
@@ -825,7 +866,7 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
                                 'seconds_since_observed_output': round(now - last_activity, 1),
                                 'no_observation_budget_used_seconds': round(unobserved_seconds, 1),
                                 'provider_observation': observation,
-                                'local_decode_total': decode, **partial_metrics(entry)})
+                                'local_decode_total': decode, **current})
                 else:
                     limit_reason = 'case_wall_budget'
                     raise subprocess.TimeoutExpired(command, case_seconds)

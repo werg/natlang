@@ -1,6 +1,7 @@
 """S7 task-success rollouts: reward mapping, train-only derivation, sampled queue and spread routing."""
 import hashlib
 import json
+from pathlib import Path
 
 import pytest
 
@@ -66,6 +67,169 @@ def test_score_routes_groups_by_spread(tmp_path):
     routes = [g["route"] for g in report["groups"]]
     assert routes == ["grpo", "rejection-sampling"]
     assert report["successes"] == 1 and report["groups_with_spread"] == 1
+
+
+def _budget_prefix_fixture(tmp_path, *, graph_turn="inv#turn1", pending=False, manifest_tamper=False,
+                           native_pair=False, stale_attempt=False, missing_frame=False, split="train"):
+    from natlang_neuralese.rl.task_rollouts import build_queue
+    task = {**authored_root_row(_row()), "id": "budget-prefix-task", "split": split}
+    packet_path = tmp_path / "packet.jsonl"
+    packet_path.write_text(json.dumps(task) + "\n")
+    packet_sha = hashlib.sha256(packet_path.read_bytes()).hexdigest()
+    (tmp_path / "preparation.json").write_text(json.dumps({
+        "schema": "natlang.task-rollout-preparation/1", "root_mode": "authored",
+        "packet_sha256": packet_sha,
+    }) + "\n")
+    entries = build_queue(packet_path, 1, 2, tmp_path, temperature=0.7, case_seconds=60,
+                          max_model_requests=4, max_turns=8, seed_base=3)
+    entry = entries[0]
+    jobs = Path(entry["jobs"])
+    jobs.mkdir(parents=True, exist_ok=True)
+    source_sha, program_sha = packet_sha, "d" * 64
+    attempt, execution = "evidence-attempt", "execution-attempt"
+    response_calls = [["eval", {"code": "return_result({status:'failed'});"}]]
+    raw_calls = [{"id": "call-1", "type": "function", "function": {
+        "name": "eval", "arguments": json.dumps({"code": "return_result({status:'failed'});"})}}]
+    frame_specs = [("inv", graph_turn, None)]
+    graph_events = [{"kind": "model_turn", "node": graph_turn, "call_id": "inv", "inputs": []}]
+    if native_pair:
+        producer_sampling = {"prompt": [{"kind": "tokens", "token_ids": [7], "producing": [False]}],
+                            "writes": [{"state_id": "state"}]}
+        consumer_sampling = {"prompt": [{"kind": "native_state", "id": "state"}], "writes": []}
+        frame_specs = [("producer", "producer#turn1", producer_sampling),
+                       ("consumer", "consumer#turn1", consumer_sampling)]
+        graph_events = [
+            {"kind": "model_turn", "node": "producer#turn1", "call_id": "producer", "inputs": []},
+            {"kind": "model_turn", "node": "consumer#turn1", "call_id": "consumer", "inputs": []},
+            {"kind": "block_write", "node": "writer", "turn": "producer#turn1", "block": "state", "inputs": []},
+            {"kind": "block_read", "node": "reader", "turn": "consumer#turn1", "block": "state",
+             "inputs": [{"node": "writer", "block": "state"}]},
+        ]
+    frames = []
+    for invocation_id, node, sampling in frame_specs:
+        frame = {"phase": "action", "invocation_id": invocation_id,
+                 "context": [{"role": "user", "content": "q"}],
+                 "tools_offered": [{"type": "function", "function": {"name": "eval", "parameters": {"type": "object"}}}],
+                 "assistant": {"content": "", "calls": [{"tool": "eval", "arguments": {"code": "return_result({status:'failed'});"}}]},
+                 "model_response": {"calls": response_calls, "raw_calls": raw_calls,
+                                    **({"rl_sampling": sampling} if sampling else {})}}
+        frames.append((invocation_id, frame))
+    payloads = [
+        {"kind": "execution_snapshot", "schema": "natlang.partial_execution_snapshot/1",
+         "run_id": f"root/execution-{execution}", "logical_run_id": "root",
+         "execution_attempt_id": execution, "status": "interrupted",
+         "failure_reason": "whole-case model request budget exceeded (4)", "pending_children": pending,
+         "root_event_count": len(graph_events), "invocation_count": 0},
+        *[{"kind": "trace_event", "trace_role": "root", "invocation_id": f"root/execution-{execution}", "event": event}
+          for event in graph_events],
+        *([] if missing_frame else [{"kind": "teacher_action_frame", "source": "live_provider", "request_sha256": f"{index + 10:064x}",
+           "invocation_id": invocation, "response_frame": frame, "saved_turn_index": index}
+          for index, (invocation, frame) in enumerate(frames)]),
+    ]
+    records = [json.dumps({"version": "natlang.teacher_partial_evidence_record/1", "attempt_id": attempt,
+                           "sequence": index, "payload": payload}, separators=(",", ":"))
+               for index, payload in enumerate(payloads)]
+    evidence = ("\n".join(records) + "\n").encode()
+    evidence_path = jobs / f"{entry['key']}.partial.evidence-{attempt}.jsonl"
+    evidence_path.write_bytes(evidence)
+    (jobs / f"000000-{program_sha[:16]}.partial.json").write_text(json.dumps({
+        "version": "natlang.teacher_partial.native/1", "program_id": task["id"],
+        "provenance": {"program_ir_sha256": program_sha}, "execution_attempt_id": execution,
+        "turns": [{"request_sha256": f"{index + 10:064x}", "invocation_id": invocation,
+                   "response": {"calls": response_calls, "raw_calls": frame["model_response"]["raw_calls"],
+                                "text": ""}}
+                  for index, (invocation, frame) in enumerate(frames)],
+        "request_attempt_ids": [attempt, "newer-attempt"] if stale_attempt else [attempt], "evidence_snapshots": [{
+            "schema": "natlang.teacher_partial_evidence/1", "path": evidence_path.name,
+            "attempt_id": attempt, "status": "execution_interrupted", "records": len(payloads),
+            "bytes": len(evidence) + (1 if manifest_tamper else 0), "sha256": hashlib.sha256(evidence).hexdigest()}]},
+        ) + "\n")
+    error = {"index": 0, "program_id": task["id"], "program_ir_sha256": program_sha,
+        "source_sha256": source_sha, "code": "NATLANG_MODEL_REQUEST_BUDGET",
+        "error": "Error: whole-case model request budget exceeded (4)"}
+    error_path = jobs / "000000.error.json"
+    error_bytes = (json.dumps(error) + "\n").encode()
+    error_path.write_bytes(error_bytes)
+    state = {"index": 0, "program_id": task["id"], "digest": program_sha, "state": "failed",
+             "resource_limit_reason": "model_request_budget",
+             "terminal_error": {"program_ir_sha256": program_sha, "record_binding_verified": True,
+                                "source_sha256": source_sha,
+                                "sha256": hashlib.sha256(error_bytes).hexdigest(), "path": str(error_path),
+                                "error": error["error"]}}
+    finish = {"event": "finish", "key": entry["key"], "status": "incomplete_export",
+              "resource_limit_reason": "model_request_budget",
+              "output_accounting": {"source_sha256": source_sha, "job_states": [state]}}
+    return task, entries, finish
+
+
+def test_scored_model_budget_prefix_reconstructs_exact_whole_graph(tmp_path):
+    task, entries, finish = _budget_prefix_fixture(tmp_path)
+    (tmp_path / "packet.jsonl").write_text(json.dumps(task) + "\n")
+    (tmp_path / "queue.jsonl").write_text("".join(json.dumps(row) + "\n" for row in entries))
+    (tmp_path / "journal.jsonl").write_text(json.dumps(finish) + "\n")
+    emitted = tmp_path / "native-rollouts.jsonl"
+    score(tmp_path, emit=emitted)
+    row = json.loads(emitted.read_text().splitlines()[0])
+    assert row["outcome"] == "budget_exhaustion"
+    assert row["reward"] == {"quality": 0.0}
+    assert len(row["turns"]) == 1 and row["turns"][0]["replay"]["raw_calls_retained"]
+    assert row["execution_graph"][0]["kind"] == "model_turn"
+    assert row["budget_termination_evidence"]["attempt_id"] == "evidence-attempt"
+
+
+def test_budget_prefix_keeps_producer_and_consumer_as_one_graph(tmp_path):
+    task, entries, finish = _budget_prefix_fixture(tmp_path, native_pair=True)
+    (tmp_path / "packet.jsonl").write_text(json.dumps(task) + "\n")
+    (tmp_path / "queue.jsonl").write_text("".join(json.dumps(row) + "\n" for row in entries))
+    (tmp_path / "journal.jsonl").write_text(json.dumps(finish) + "\n")
+    emitted = tmp_path / "native-rollouts.jsonl"
+    score(tmp_path, emit=emitted)
+    row = json.loads(emitted.read_text().splitlines()[0])
+    assert [turn["invocation_id"] for turn in row["turns"]] == ["producer", "consumer"]
+    assert {event["kind"] for event in row["execution_graph"]} == {"model_turn", "block_write", "block_read"}
+    from natlang_neuralese.rl.episode_graph import whole_episode_turns
+    bound = whole_episode_turns(row)
+    assert bound[1]["read_bindings"] == {"state": "writer"}
+
+
+@pytest.mark.parametrize("change", ["graph", "pending", "manifest", "error_code", "stale_attempt", "missing_frame", "held_split", "duplicate_state"])
+def test_unverifiable_budget_prefix_is_never_emitted_as_trainable(tmp_path, change):
+    task, entries, finish = _budget_prefix_fixture(tmp_path,
+        graph_turn="other#turn1" if change == "graph" else "inv#turn1",
+        pending=change == "pending", manifest_tamper=change == "manifest",
+        stale_attempt=change == "stale_attempt", missing_frame=change == "missing_frame",
+        split="test" if change == "held_split" else "train")
+    (tmp_path / "packet.jsonl").write_text(json.dumps(task) + "\n")
+    (tmp_path / "queue.jsonl").write_text("".join(json.dumps(row) + "\n" for row in entries))
+    if change == "error_code":
+        error_path = Path(entries[0]["jobs"]) / "000000.error.json"
+        error = json.loads(error_path.read_text()); error["code"] = "SOME_OTHER_FAILURE"
+        error_path.write_text(json.dumps(error) + "\n")
+    if change == "duplicate_state":
+        finish["output_accounting"]["job_states"].append(json.loads(json.dumps(finish["output_accounting"]["job_states"][0])))
+    (tmp_path / "journal.jsonl").write_text(json.dumps(finish) + "\n")
+    emitted = tmp_path / "native-rollouts.jsonl"
+    score(tmp_path, emit=emitted)
+    row = json.loads(emitted.read_text().splitlines()[0])
+    assert row["reward"] is None and row["unscored"] == "budget_prefix_capture_unavailable"
+    assert row["turns"] == [] and row["execution_graph"] == []
+
+
+def test_stale_self_consistent_terminal_is_rejected_when_current_packet_changes(tmp_path):
+    task, entries, finish = _budget_prefix_fixture(tmp_path)
+    packet_path = tmp_path / "packet.jsonl"
+    changed_task = {**task, "current_source_revision": "new packet content with same task identity"}
+    packet_path.write_text(json.dumps(changed_task) + "\n")
+    preparation = json.loads((tmp_path / "preparation.json").read_text())
+    preparation["packet_sha256"] = hashlib.sha256(packet_path.read_bytes()).hexdigest()
+    (tmp_path / "preparation.json").write_text(json.dumps(preparation) + "\n")
+    (tmp_path / "queue.jsonl").write_text("".join(json.dumps(row) + "\n" for row in entries))
+    (tmp_path / "journal.jsonl").write_text(json.dumps(finish) + "\n")
+    emitted = tmp_path / "native-rollouts.jsonl"
+    score(tmp_path, emit=emitted)
+    row = json.loads(emitted.read_text().splitlines()[0])
+    assert row["reward"] is None and row["unscored"] == "budget_prefix_capture_unavailable"
+    assert row["turns"] == [] and row["execution_graph"] == []
 
 
 def test_student_root_score_rejects_host_authored_action(tmp_path):
