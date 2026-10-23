@@ -347,8 +347,9 @@ def _staged_inputs(resolved):
     """Data inputs resolving to the external HDD are read from a verified NVMe copy; load-once state is read in place
     (common/hdd_guard.py ``input_path``)."""
     from ..common import hdd_guard
-    return {role: ({**value, 'path': hdd_guard.input_path(role, value['path'], value.get('sha256'))}
-                   if isinstance(value, dict) and 'path' in value and not value.get('dependencies') else value) for role, value in resolved.items()}
+    return {role: ({**value, 'path': hdd_guard.input_path(role, value['path'], value.get('sha256'),
+                                                         value.get('dependencies'))}
+                   if isinstance(value, dict) and 'path' in value else value) for role, value in resolved.items()}
 
 
 def require_input_decoders(stage_inputs):

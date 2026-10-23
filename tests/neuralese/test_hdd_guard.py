@@ -1,4 +1,5 @@
 import hashlib
+from pathlib import Path
 
 import pytest
 
@@ -99,3 +100,80 @@ def test_the_staged_cache_is_bounded_least_recently_used_first(hdd, tmp_path, mo
     source.write_bytes(b'd' * 1024)
     hdd_guard.stage_input(source)
     assert os.path.exists(paths[0]) and not os.path.exists(paths[1])
+
+
+def _json_hash(path):
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def test_native_source_manifest_staging_keeps_relative_transitive_leaves_for_real_reader(hdd, tmp_path, monkeypatch):
+    import json
+    from natlang_neuralese.data.native_sources import NativeGraphSource
+    from natlang_neuralese.train.recipe import _staged_inputs
+
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE', str(tmp_path / 'row-index'))
+    rows = hdd / 'trees' / 'rows'
+    manifests = hdd / 'trees' / 'manifests'
+    rows.mkdir(parents=True)
+    manifests.mkdir(parents=True)
+    leaf = rows / 'train.jsonl'
+    leaf.write_text(json.dumps({'schema': 'natlang.neuralese-native-graph/1', 'id': 'train-row',
+        'split': 'train', 'source_groups': ['world-a'], 'tokenizer_fingerprint': 'tok',
+        'nodes': [{'name': 'text', 'token_ids': [1, 2], 'target_weights': [0., 1.]}]}) + '\n')
+    child = manifests / 'child.json'
+    child.write_text(json.dumps({'schema': 'natlang.native-graph-sources/1', 'sources': [
+        {'kind': 'native-graphs', 'path': '../rows/train.jsonl', 'sha256': _json_hash(leaf)}]}))
+    root = manifests / 'root.json'
+    root.write_text(json.dumps({'schema': 'natlang.native-graph-sources/1', 'sources': [
+        {'kind': 'native-graphs', 'path': 'child.json', 'sha256': _json_hash(child)}]}))
+    dependencies = [{'path': str(path), 'sha256': _json_hash(path)} for path in (child, leaf)]
+    staged = _staged_inputs({'native_graphs': {'path': str(root), 'sha256': _json_hash(root),
+        'dependencies': dependencies}})['native_graphs']['path']
+    staged_root = Path(staged)
+    assert staged_root.read_bytes() == root.read_bytes()
+    assert (staged_root.parent / 'child.json').read_bytes() == child.read_bytes()
+    assert (staged_root.parent.parent / 'rows' / 'train.jsonl').read_bytes() == leaf.read_bytes()
+    source = NativeGraphSource(staged_root, 'tok', required_split='train')
+    assert [entry['id'] for entry in source.entries] == ['train-row']
+
+    leaf.write_text(leaf.read_text().replace('train-row', 'tampered-row'))
+    with pytest.raises(ValueError, match='manifest dependency .*SHA-256'):
+        _staged_inputs({'native_graphs': {'path': str(root), 'sha256': _json_hash(root),
+            'dependencies': dependencies}})
+
+
+def test_directory_rl_bundle_staging_preserves_real_bundle_reader_and_repairs_tampered_cache(hdd, tmp_path):
+    import json
+    import torch
+    from natlang_neuralese.model.native_artifact import NativeTensorArtifact, decode_native_tensor_artifact, encode_native_tensor_artifact
+    from natlang_neuralese.rl.graph_replay import NativeBundleStore
+
+    identity = {'checkpoint_sha256': '1' * 64, 'tokenizer_fingerprint': '2' * 64,
+        'embedding_weight_sha256': '3' * 64, 'architecture': 'hdd-bundle-reader-test'}
+    artifact = NativeTensorArtifact('parameter-set', identity, {'layer.weight': torch.tensor([1., 2.])})
+    wire = encode_native_tensor_artifact(artifact)
+    _, ident = decode_native_tensor_artifact(wire)
+    bundle = hdd / 'bundle'
+    bundle.mkdir(parents=True)
+    block_path = bundle / (ident + '.nzb')
+    block_path.write_bytes(wire)
+    manifest = {'schema': 'natlang.rl-block-bundle/1', 'policy_id': identity['checkpoint_sha256'],
+        'blocks': {ident: {'path': block_path.name, 'sha256': _json_hash(block_path),
+            'bytes': len(wire), 'format': 'native-tensor', 'native_identity': identity}}}
+    manifest_path = bundle / 'manifest.json'
+    manifest_path.write_text(json.dumps(manifest))
+    tree_sha = hdd_guard._directory_sha256(bundle)
+    staged = Path(hdd_guard.input_path('rl_block_bundle', bundle, tree_sha))
+    staged_manifest = staged / 'manifest.json'
+    reader = NativeBundleStore(staged_manifest, policy_id=identity['checkpoint_sha256'])
+    loaded = reader.get_native_tensor_artifact(ident)
+    assert loaded.id == ident and loaded.artifact.tensors['layer.weight'].tolist() == [1., 2.]
+    assert json.loads(staged_manifest.read_text()) == manifest
+
+    staged_block = staged / block_path.name
+    staged_block.write_bytes(b'corrupt cached copy')
+    repaired = Path(hdd_guard.input_path('rl_block_bundle', bundle, tree_sha))
+    restored = NativeBundleStore(repaired / 'manifest.json', policy_id=identity['checkpoint_sha256'])
+    assert restored.get_native_tensor_artifact(ident).artifact.tensors['layer.weight'].tolist() == [1., 2.]
+    with pytest.raises(ValueError, match='directory input .*declared SHA-256'):
+        hdd_guard.input_path('rl_block_bundle', bundle, '0' * 64)
