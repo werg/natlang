@@ -84,20 +84,22 @@ def test_native_serving_engine_uses_explicit_checkpoint_keep_profile():
     backbone = SimpleNamespace(config=SimpleNamespace(model_type='lfm2', hidden_size=8,
                                                        max_position_embeddings=1024))
     tokenizer = Template('preserve_thinking')
-    engine = Engine(backbone, None, tokenizer, TensorStore(), 'test', context=64,
-                    model_config={'history_reasoning_policy':'keep'})
+    engine = Engine(backbone, tokenizer, TensorStore(), 'test', context=64,
+                    shared_model=object(), role_tokens={}, model_config={'history_reasoning_policy':'keep'},
+                    checkpoint_sha256='a' * 64, embedding_weight_sha256='b' * 64)
     assert engine.tokenizer.natlang_history_reasoning['policy'] == 'keep'
     assert 'EARLIER-THOUGHT' in engine.tokenizer.apply_chat_template(HISTORY, tokenize=False)
 
 
-def test_native_serving_engine_keeps_legacy_backbone_default_without_profile():
+def test_native_serving_engine_uses_backbone_policy_when_checkpoint_has_no_override():
     from types import SimpleNamespace
     from natlang_neuralese.serve.engine import Engine
     from natlang_neuralese.serve.store import TensorStore
     backbone = SimpleNamespace(config=SimpleNamespace(model_type='lfm2', hidden_size=8,
                                                        max_position_embeddings=1024))
-    engine = Engine(backbone, None, Template('preserve_thinking'), TensorStore(), 'test', context=64,
-                    model_config={})
+    engine = Engine(backbone, Template('preserve_thinking'), TensorStore(), 'test', context=64,
+                    shared_model=object(), role_tokens={}, model_config={},
+                    checkpoint_sha256='a' * 64, embedding_weight_sha256='b' * 64)
     assert engine.tokenizer.natlang_history_reasoning['policy'] == 'last_turn_only'
     rendered = engine.tokenizer.apply_chat_template(HISTORY, tokenize=False)
     assert 'EARLIER-THOUGHT' not in rendered and 'LATEST-THOUGHT' in rendered

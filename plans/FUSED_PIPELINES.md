@@ -190,7 +190,7 @@ sites in crisp TypeScript").
 
 Fusion is only as good as the channel. `on` engages only when all of these hold (`fusionStatus`):
 
-- the runtime has a Neuralese store and write port, and the model driver declares Neuralese capability;
+- the runtime has a native state archive and checkpoint-backed state writer, and the model driver declares native-state capability;
 - the model profile carries a **runtime-qualification certificate for the exact weights and dialect**:
   `natlang.fusion-certificate/1`, issued by the training pipeline and named by `fusion.certificate` in natlang.json
   (the profile's weights digest is `fusion.weights`);
@@ -202,10 +202,6 @@ Fusion is only as good as the channel. `on` engages only when all of these hold 
 Anything else falls back to text for every planned edge and traces `fusion_fallback` with the reason, once per edge and
 task. Legacy marker/RMS checkpoints and the foundation certificate do not satisfy it. A backbone change is a new
 certificate.
-
-The text emulation (`model/text-neuralese-emulation.ts`) exercises the whole path in tests. A host declares it with
-`fusion.emulation = { dialect }`; it is accepted only when the port writes exactly that dialect, and every fusion trace
-event then carries `emulation: true`. It is not a certificate: the benchmark gate fails for an emulated run.
 
 ### What the training side must deliver
 
@@ -228,8 +224,8 @@ from a checkpoint's inheritance:
 }
 ```
 
-and a server speaking that dialect (`GET /v1/neuralese/info`, `neuralese: true` driver, `neuraleseServerModelTurn`) that
-can write a block as a typed function result and read one as a soft argument in the same request. The runtime
+and a server speaking that dialect (`GET /v1/neuralese/info`, native-state-capable driver, `neuraleseServerModelTurn`) that
+can write a native state as a typed function result and read it as a soft argument in the same request. The runtime
 profile then sets `"fusion": { "mode": "shadow", "certificate": "cert.json", "weights": "<same digest>" }`.
 
 ## Modes
@@ -239,17 +235,17 @@ profile then sets `"fusion": { "mode": "shadow", "certificate": "cert.json", "we
 | Mode | Behaviour |
 | --- | --- |
 | `off` | Nothing changes, nothing is traced. The runtime option is not even installed. |
-| `shadow` | Text is served. For each planned producer call a second call of the same producer runs with a soft result (traced `fusion_shadow`, `scope: producer`): its block is read back and compared with the text value (`agree`, `shadow_ms`). The consumer is not re-run, because it may have effects; a host that knows it is pure may extend the comparison. End-to-end agreement comes from the benchmark, which runs the chains in a sandbox. |
+| `shadow` | Text is served. For each planned producer call a second call of the same producer runs with a native state result (traced `fusion_shadow`, `scope: producer`): its state is read back and compared with the text value (`agree`, `shadow_ms`). The consumer is not re-run, because it may have effects; a host that knows it is pure may extend the comparison. End-to-end agreement comes from the benchmark, which runs the chains in a sandbox. |
 | `on` | Planned edges are fused where the certificate holds; fallback otherwise. |
 
 Trace events, on the orchestrator's call: `fusion_edge` (`status`: `fused` | `consumed` | `fallback`), `fusion_fallback`
-(`reason`), `fusion_shadow` (`agree`, `block`, `error`, `shadow_ms`). The planner's own comparison appears as
+(`reason`), `fusion_shadow` (`agree`, `state`, `error`, `shadow_ms`). The planner's own comparison appears as
 `pluggable_shadow` (name `fusion-plan`).
 
 ## Measurements and the gate
 
 `ts-host/scripts/fusion-bench.mjs` runs one application's entry over a case file as text and fused, against the same
-Neuralese-capable server, and reports for each mode: tokens (prompt, completion), turns, latency (total, p50, p95),
+native-state-capable checkpoint server, and reports for each mode: tokens (prompt, completion), turns, latency (total, p50, p95),
 errors, accuracy against `expected` when cases carry it; and for the pair: output **agreement** (canonical equality case
 by case), token ratio, latency ratio, whether fusion engaged, the fallback reasons and the count of fused blocks nobody
 consumed.
@@ -264,25 +260,22 @@ node scripts/fusion-bench.mjs --app ../applications/compilers --entry compiler.n
 **Gate for enabling fusion for an application** (all of): the text pipeline runs the cases (no errors); fusion engaged
 (at least one fused edge and none fell back); output agreement at least 0.98 (and no loss of accuracy where `expected`
 exists); total tokens of the fused run not above the text run; total latency not above; every fused block consumed;
-not an emulated run. Then `shadow` on live traffic must show `fusion_shadow.agree` at the same level before `on`. The
+every fused state consumed. Then `shadow` on live traffic must show `fusion_shadow.agree` at the same level before `on`. The
 defaults are in `DEFAULT_GATE` and are meant to be tightened by evidence, not loosened to pass.
 
-The benchmark was not run against a real model; the test suite runs it on the text emulation with scripted models only
-to prove the harness and that an emulated run can never pass the gate.
+The benchmark has not been run against a qualified real model. Repository tests cover plan verification and runtime
+settings; they do not establish fused checkpoint behavior or performance.
 
 ## Tests
 
 `ts-host/test/fusion.test.mjs`: detection on small projects (bound, nested, service, different models, TypeScript
 orchestrators); the verifier rejects a bad plan, the retry carries the problems, ignored problems fall back to text, a
 failing planner falls back; the natural-language planner program runs on a scripted model and its verified plan equals
-the crisp one; fusion off changes nothing; fused end to end under the emulation (the consumer is shown a block, traces
-mark the emulation); fallback without certificate, without Neuralese backend, with a mismatched certificate;
-shadow agreement and disagreement; `natlang check` text and `--json`; the benchmark harness. Observed readers: supporting and
+the crisp one; fusion off changes nothing; `natlang check` text and `--json`. Observed readers: supporting and
 contradicting runs, the minimum in the crisp planner and the verifier, the evidence in plan and report, reads the analysis
 must see (field, return, display, fan-out, destructuring, evals sharing a name), the call store adapter (model evidence only,
 same instructions, revision), the settings. Explicit chains: nested and bound forms proven in prose, a field read not. TypeScript
-call sites: the facts' site IDs, an exported name, a project built with the marks, and the emulated run (the planned
-hand-offs pass a block, a re-read or shared value and fusion off stay text).
+call sites: the facts' site IDs, an exported name, and a project built with the marks.
 
 ## Open items
 

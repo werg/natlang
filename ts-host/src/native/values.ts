@@ -1,7 +1,7 @@
-import { checkHost, DEFAULT_DIALECT, fitsType, formatType, isAdapterType, parseType, TypeEnv } from './types.js';
+import { checkHost, DEFAULT_DIALECT, fitsType, formatType, parseType, TypeEnv } from './types.js';
 import type { Type } from './types.js';
 import { FileHandle, Folder, FolderHandle, type FolderTransaction } from './scoped-fs.js';
-import { isNeuraleseRef, neuraleseRef, soleSentinelUse, isContentParts, partsToText } from './neuralese.js';
+import { isNeuraleseRef, isNativeTensorRef, neuraleseRef, soleSentinelUse, isContentParts, partsToText } from './neuralese.js';
 import { isFusedRef } from './fusion-blocks.js';
 
 export const MISSING = Symbol('natlang-missing');
@@ -170,6 +170,10 @@ export function coerce(raw: unknown, type: Type, env: TypeEnv, path = 'value', o
   // A refinement is structural here (its base); the predicate is checked by native/refinement.ts where the value enters.
   if (wanted.kind === 'refined' || wanted.kind === 'untrusted') return coerce(raw, wanted.base, env, path, options);
   if (wanted.kind === 'host') {
+    if (wanted.name === 'NativeTensor') {
+      if (isNativeTensorRef(raw)) return raw as unknown as Value;
+      return reject(path, 'type-mismatch', wanted.name, preview(raw));
+    }
     if (isContentParts(raw) && raw.some(part => part.type !== 'text'))
       return reject(path, 'type-mismatch', wanted.name, preview(raw));
     if (checkHost(raw, wanted.contract, env.classes)) return raw as Value;
@@ -187,8 +191,7 @@ export function coerce(raw: unknown, type: Type, env: TypeEnv, path = 'value', o
     let fits = false;
     try { fits = !!got && got.kind === 'neuralese' && fitsType(got, wanted, env); } catch { fits = false; }
     if (!fits) return reject(path, 'type-mismatch', formatType(wanted), raw.$neuralese.type);
-    // An adapter block's dialect is its spec (model/tiny_adapters.py), not a dialect a model reads.
-    if (!isAdapterType(got!)) checkBlockDialect(raw.$neuralese.id, wanted, env, path);
+    checkBlockDialect(raw.$neuralese.id, wanted, env, path);
     return raw as unknown as Value;
   }
   // A function-typed slot holds a live function (for example a natlang callable), never a pending node.

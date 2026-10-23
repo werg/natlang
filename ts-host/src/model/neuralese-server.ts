@@ -1,89 +1,55 @@
 /**
- * Transport to a Neuralese-capable model server (spec/NEURALESE_PORT.md, "Wire protocol"; S4 §3–4).
+ * Transport to a native-state-capable model server (spec/NEURALESE_PORT.md, "Wire protocol"; S4 §3–4).
  *
  * The reference server is `python -m natlang_neuralese.serve` (training/neuralese). Requests are ordinary chat
- * completions whose message content and tool-call arguments may be arrays of `{ type: "text" }` and
- * `{ type: "neuralese", id }` parts; the server writes blocks while decoding and returns them the same way, plus a
- * `neuralese.blocks` list with each written block's metadata and write record (temperature, seed, IDs of the payload
- * mean and log-scale, stop logits).
+ * completions whose message content and tool-call arguments carry native positional state references. The server
+ * returns exact native-state artifacts and import receipts; projected value blocks are not a transport format.
  *
  * Replies stream when the server declares `stream: true` in `/v1/neuralese/info` (plans/STREAMING.md §1.2): text and
- * each written block arrive as the turn's deltas (`ModelTurnOptions.onDelta`), and the final `x_natlang_message` is the
+ * each written native state arrives as the turn's deltas (`ModelTurnOptions.onDelta`), and the final `x_natlang_message` is the
  * reply. A server that does not declare it (the llama.cpp fork until it serves SSE) gets whole requests.
  *
- * The driver keeps the runtime's store and the server's store in step: before a request it uploads any block the
- * conversation refers to that the server lacks, and after a reply it downloads the blocks the server wrote, so that
- * references the runtime holds resolve locally (for `.nz` files, saving, re-sending). Content IDs are computed the same
- * way on both sides, so a downloaded block lands under the ID the server reported.
+ * The driver keeps native state and named tensor custody in step across the runtime archive and model server.
  *
- * The runtime's store is also the archive that makes blocks outlive the server (plans/neuralese/DECISIONS.md,
- * "representation chosen by use"): `withRestoredBlocks` is the one place blocks move runtime → server, and when the
- * server answers `neuralese-unknown-block` (it restarted, or collected them) it re-uploads them from the archive and
+ * The runtime's store is also the archive that makes native artifacts outlive the server: `withRestoredNativeArtifacts` moves
+ * exact native states and tensor artifacts runtime → server, and when the server reports an unknown native artifact it
+ * re-uploads it from the archive and
  * retries once. A client names itself with `owner` (the `x-natlang-owner` header), so its pins and collections never
- * touch other sessions' blocks.
+ * touch other sessions' artifacts.
  */
 import { assembleChatCompletion, chatCompletionModelTurn, fetchModel, httpChatTransport, isStream, type ChatCompletionOptions, type ChatTransport,
   type HttpChatOptions } from './chat-completion.js';
 import { coalescingScorer, explicitBatchScoreMany } from './scoring.js';
 import type { DecisionScorer, DecisionScores, ModelTurn, ModelTurnDelta, ModelTurnOptions, ModelTurnRequest } from '../contracts.js';
-import { activeAdapters, activeRecorder, type AdapterBinding, type TurnRecorder } from '../neuralese/recording.js';
+import { activeNativeAdapters, activeNativeStates, activeRecorder, type NativeAdapterBinding, type TurnRecorder } from '../native/model-recording.js';
 import { serves } from './neuralese-info.js';
 import {validateCoefficientRuntime,requireCoefficientAttestation,coefficientBindings,coefficientStateModes} from './native-coefficient-policy.js';
 import { isContentParts, nativeStateSentinel, nativeStateSentinelIds,
   isNativeStateId, runtimeTextToParts, type RuntimeContentPart } from '../native/neuralese.js';
-import { constantBlock, decodeNativeState, encodeNativeState, nativeStateContentId, nativeStateBlockMeta,
+import { nativeStateConsumerFromInfo } from '../native/neuralese.js';
+import { decodeNativeState, encodeNativeState, nativeStateContentId, nativeStateBlockMeta,
   decodeNativeTensorArtifact, encodeNativeTensorArtifact, nativeTensorArtifactContentId, nativeTensorArtifactDependencies, nativeStateArtifactDependencies, archiveNativeArtifactFrom, archiveNativeTensorFrom,
-  nativeTensorArtifactBlockMeta, neuraleseContentId, type NeuraleseBlock, type NeuraleseBlockMeta, type NeuraleseBlockInput,
-  type NativeStateArtifact, type NativeTensorArtifact, type NeuraleseDtype, type NeuraleseStore } from '../native/neuralese-store.js';
+  nativeTensorArtifactBlockMeta, nativeModelIdentityEqual, type NeuraleseBlockMeta,
+  type NativeStateArtifact, type NativeTensorArtifact, type NeuraleseStore } from '../native/neuralese-store.js';
 
 type Json = Record<string, unknown>;
-
-const SAFETENSORS_DTYPE: Record<NeuraleseDtype, string> = { f32: 'F32', f16: 'F16', bf16: 'BF16' };
-const FROM_SAFETENSORS: Record<string, NeuraleseDtype> = { F32: 'f32', F16: 'f16', BF16: 'bf16' };
-
-/** One block as a safetensors body: a `payload` tensor and the metadata under `natlang.block`. */
-export function encodeBlockBody(meta: NeuraleseBlockMeta, data: Uint8Array): Uint8Array {
-  const header: Json = { __metadata__: { 'natlang.block': JSON.stringify(meta) },
-    payload: { dtype: SAFETENSORS_DTYPE[meta.dtype], shape: [meta.length, meta.width], data_offsets: [0, data.length] } };
-  const json = JSON.stringify(header);
-  const length = new TextEncoder().encode(json).length;
-  const raw = new TextEncoder().encode(json + ' '.repeat((8 - length % 8) % 8));
-  const out = new Uint8Array(8 + raw.length + data.length);
-  new DataView(out.buffer).setBigUint64(0, BigInt(raw.length), true);
-  out.set(raw, 8); out.set(data, 8 + raw.length);
-  return out;
-}
-
-export function decodeBlockBody(body: Uint8Array): NeuraleseBlock {
-  if (body.length < 8) throw new Error('neuralese-bad-block: not a safetensors body');
-  const size = Number(new DataView(body.buffer, body.byteOffset, body.byteLength).getBigUint64(0, true));
-  const header = JSON.parse(new TextDecoder().decode(body.subarray(8, 8 + size))) as Json;
-  const meta = JSON.parse(String((header.__metadata__ as Json | undefined)?.['natlang.block'] ?? '{}')) as NeuraleseBlockMeta;
-  const entry = header.payload as { dtype: string; shape: [number, number]; data_offsets: [number, number] } | undefined;
-  if (!entry) throw new Error('neuralese-bad-block: no payload tensor');
-  const dtype = FROM_SAFETENSORS[entry.dtype];
-  if (!dtype) throw new Error(`neuralese-bad-block: unsupported dtype ${entry.dtype}`);
-  const data = body.slice(8 + size + entry.data_offsets[0], 8 + size + entry.data_offsets[1]);
-  return { meta: { ...meta, length: entry.shape[0], width: entry.shape[1], dtype }, data };
-}
 
 /** Header naming the owner of requests (a session or runtime ID): its pins and collections are its own (serve/store.py). */
 export const OWNER_HEADER = 'x-natlang-owner';
 
-/** Whether `error` is a server's `neuralese-unknown-block`: the server lacks a block a request names. */
-export function isUnknownBlockError(error: unknown): boolean {
+/** Whether `error` says the native server lost a named state or tensor artifact. */
+export function isUnknownNativeArtifactError(error: unknown): boolean {
   const found = error as { providerCode?: unknown; code?: unknown; message?: unknown } | null;
-  return found?.providerCode === 'neuralese-unknown-block' || found?.code === 'neuralese-unknown-block' ||
-    found?.providerCode === 'neuralese-unknown-native-state' || found?.code === 'neuralese-unknown-native-state' ||
+  return found?.providerCode === 'neuralese-unknown-native-state' || found?.code === 'neuralese-unknown-native-state' ||
     found?.providerCode === 'neuralese-unknown-native-artifact' || found?.code === 'neuralese-unknown-native-artifact' ||
-    (typeof found?.message === 'string' && /neuralese-unknown-(?:block|native-state|native-artifact)/.test(found.message));
+    (typeof found?.message === 'string' && /neuralese-unknown-native-(?:state|artifact)/.test(found.message));
 }
 
 /**
- * Upload to the server every block of `ids` it lacks, from `archive` (the runtime's content-addressed store) or the
+ * Upload to the server every native artifact of `ids` it lacks, from `archive` (the runtime's content-addressed store) or the
  * registered constants. Returns the IDs that neither has; the caller reports them in its own terms.
  */
-export async function restoreBlocks(remote: NeuraleseStore, archive: NeuraleseStore | undefined,
+export async function restoreNativeArtifacts(remote: NeuraleseStore, archive: NeuraleseStore | undefined,
     ids: Iterable<string>): Promise<string[]> {
   const missing: string[] = [], visited = new Set<string>();
   const restore = async (id: string): Promise<void> => {
@@ -111,28 +77,25 @@ export async function restoreBlocks(remote: NeuraleseStore, archive: NeuraleseSt
       }
       return;
     }
-    if (await remote.has(id)) return;
-    const block = (archive && await archive.get(id)) ?? constantBlock(id);
-    if (!block) { missing.push(id); return; }
-    const { id: _, ...rest } = block.meta;
-    await remote.put({ ...rest, data: block.data });
+    throw Object.assign(new TypeError(`native artifact restore requires an nzs1 state or nnt1 tensor ID, got ${JSON.stringify(id)}`),
+      { code: 'neuralese-native-artifact-id' });
   };
   for (const id of new Set(ids)) await restore(id);
   return missing;
 }
 
 /**
- * Run a server request that reads `ids`, with those blocks on the server first. `known` caches IDs already uploaded
- * (they are not checked again); when the server still answers `neuralese-unknown-block` (it restarted or collected
+ * Run a server request that reads `ids`, with those native artifacts on the server first. `known` caches IDs already uploaded
+ * (they are not checked again); when the server still answers `neuralese-unknown-native-*` (it restarted or collected
  * them since), every block is checked and restored from `archive`, and the request runs once more.
  */
-export async function withRestoredBlocks<T>(remote: NeuraleseStore, archive: NeuraleseStore | undefined,
+export async function withRestoredNativeArtifacts<T>(remote: NeuraleseStore, archive: NeuraleseStore | undefined,
     ids: readonly string[], run: () => Promise<T>, known?: Set<string>): Promise<T> {
   const restore = async (all: boolean) => {
     if (all) for (const id of ids) known?.delete(id);
     const pending = known ? ids.filter(id => !known.has(id)) : ids;
-    const missing = await restoreBlocks(remote, archive, pending);
-    if (missing.length) throw new Error(`neuralese-unknown-block: ${missing.join(', ')} ${missing.length === 1 ? 'is' : 'are'} ` +
+    const missing = await restoreNativeArtifacts(remote, archive, pending);
+    if (missing.length) throw new Error(`neuralese-unknown-native-artifact: ${missing.join(', ')} ${missing.length === 1 ? 'is' : 'are'} ` +
       `neither on the server nor in the runtime's store`);
     for (const id of pending) known?.add(id);
   };
@@ -140,13 +103,13 @@ export async function withRestoredBlocks<T>(remote: NeuraleseStore, archive: Neu
   try {
     return await run();
   } catch (error) {
-    if (!isUnknownBlockError(error)) throw error;
+    if (!isUnknownNativeArtifactError(error)) throw error;
     await restore(true);
     return await run();
   }
 }
 
-/** The server's block endpoints as a `NeuraleseStore`. */
+/** Native artifact endpoints as a store. The server has no projected block API. */
 export class HttpNeuraleseStore implements NeuraleseStore {
   private readonly base: string;
   constructor(endpoint: string, private readonly headers: Record<string, string> = {}) {
@@ -154,20 +117,6 @@ export class HttpNeuraleseStore implements NeuraleseStore {
   }
   private async request(path: string, init: RequestInit = {}): Promise<Response> {
     return fetchModel(this.base + path, { ...init, headers: { ...this.headers, ...(init.headers as Record<string, string> ?? {}) } });
-  }
-  async put(block: NeuraleseBlockInput): Promise<NeuraleseBlockMeta> {
-    const { data, ...rest } = block;
-    const id = neuraleseContentId(block);
-    const response = await this.request(`/blocks/${id}`, { method: 'PUT', body: encodeBlockBody({ id, ...rest }, data) as BodyInit,
-      headers: { 'content-type': 'application/octet-stream' } });
-    if (!response.ok) throw new Error(`neuralese block upload failed (${response.status}): ${(await response.text()).slice(0, 500)}`);
-    return await response.json() as NeuraleseBlockMeta;
-  }
-  async get(id: string): Promise<NeuraleseBlock | undefined> {
-    const response = await this.request(`/blocks/${id}`);
-    if (response.status === 404) return undefined;
-    if (!response.ok) throw new Error(`neuralese block fetch failed (${response.status})`);
-    return decodeBlockBody(new Uint8Array(await response.arrayBuffer()));
   }
   async putNativeState(artifact: Omit<NativeStateArtifact, 'id'>): Promise<NativeStateArtifact> {
     const id = nativeStateContentId(artifact.metadata, artifact.tensors);
@@ -228,19 +177,18 @@ export class HttpNeuraleseStore implements NeuraleseStore {
         native_identity: record.native_identity, source_artifact_id: record.source_artifact_id,
         provenance: record.provenance, tensors: record.tensors } });
     }
-    const response = await this.request(`/blocks/${id}/meta`);
-    if (response.status === 404) return undefined;
-    if (!response.ok) throw new Error(`neuralese block metadata failed (${response.status})`);
-    return await response.json() as NeuraleseBlockMeta;
+    return undefined;
   }
   async has(id: string): Promise<boolean> { return (await this.meta(id)) !== undefined; }
   async pin(id: string): Promise<void> {
-    const family = id.startsWith('nzs1_') ? 'native-states' : id.startsWith('nnt1_') ? 'native-tensor-artifacts' : 'blocks';
+    const family = id.startsWith('nzs1_') ? 'native-states' : id.startsWith('nnt1_') ? 'native-tensor-artifacts' : undefined;
+    if (!family) throw new Error(`neuralese-native-archive-api: only native states and tensor artifacts can be pinned (${id})`);
     const response = await this.request(`/${family}/${id}/pin`, { method: 'POST' });
-    if (!response.ok) throw new Error(`neuralese-unknown-block: ${id}`);
+    if (!response.ok) throw new Error(`neuralese-unknown-native-artifact: ${id}`);
   }
   async unpin(id: string): Promise<void> {
-    const family = id.startsWith('nzs1_') ? 'native-states' : id.startsWith('nnt1_') ? 'native-tensor-artifacts' : 'blocks';
+    const family = id.startsWith('nzs1_') ? 'native-states' : id.startsWith('nnt1_') ? 'native-tensor-artifacts' : undefined;
+    if (!family) throw new Error(`neuralese-native-archive-api: only native states and tensor artifacts can be unpinned (${id})`);
     await this.request(`/${family}/${id}/unpin`, { method: 'POST' });
   }
   async collect(referenced: ReadonlySet<string>): Promise<string[]> {
@@ -251,54 +199,19 @@ export class HttpNeuraleseStore implements NeuraleseStore {
 }
 
 export type NeuraleseServerOptions = Omit<HttpChatOptions, 'stream'> & Pick<ChatCompletionOptions, 'onExchange' | 'onTurn'> & {
-  /** The runtime's store: blocks are uploaded (and restored after a server restart) from it and written blocks are
-   * downloaded into it. */
+  /** The runtime's store: native state and tensor artifacts are uploaded and restored after a server restart. */
   store?: NeuraleseStore;
-  /** This session's or runtime's ID on the server (`x-natlang-owner`): it holds the blocks it uploads or is sent, and
-   * its pins and collections (`blocks.pin`, `blocks.collect`) leave other owners' blocks alone. */
+  /** This session's or runtime's ID on the server (`x-natlang-owner`): native artifact pins and collections are scoped to it. */
   owner?: string;
-  /** Neuralese temperature for written payloads (spec/NEURALESE_PORT.md, "Temperature"); 0, the default, is deterministic. */
-  neuraleseTemperature?: number;
-  /** Requested maximum block length; the server caps it by its hard maximum. */
-  neuraleseMaxLength?: number;
   /** Explicit raw-state exchange between actors of the exact same native base. */
   nativeStateModes?: Record<string, 'same-base-adapter-state'>;
   /** Extra request fields. */
   request?: Json;
-  /**
-   * Weight adapters as GGUF LoRAs, for servers that apply adapters as LoRAs (the llama.cpp fork, native or in the
-   * browser: capability `adapters.lora-load` in `/v1/neuralese/info`): the driver uploads each bound adapter's LoRA once
-   * (`PUT /v1/neuralese/adapters/{id}/lora`). `referenceAdapterLoras` exports them from a reference server; a browser
-   * runtime passes the files its model manifest ships. Without a LoRA the fork refuses the request (409).
-   */
-  adapterLoras?: (id: string) => Promise<Uint8Array | null>;
 };
-
-/** Adapter LoRAs exported by a reference server (`GET /v1/neuralese/adapters/{id}/lora`), for `adapterLoras`. */
-export function referenceAdapterLoras(endpoint: string, headers: Record<string, string> = {}): (id: string) => Promise<Uint8Array | null> {
-  return async id => {
-    const response = await fetchModel(`${endpoint.replace(/\/$/, '')}/v1/neuralese/adapters/${id}/lora`, { headers });
-    if (response.status === 404) return null;
-    if (!response.ok) throw new Error(`adapter LoRA ${id}: HTTP ${response.status}: ${(await response.text()).slice(0, 500)}`);
-    return new Uint8Array(await response.arrayBuffer());
-  };
-}
-
-/** Block IDs a request's messages carry as parts. */
-export function requestBlockIds(messages: readonly unknown[]): string[] {
-  const ids = new Set<string>();
-  const visit = (value: unknown) => {
-    if (isContentParts(value)) { for (const part of value) if (part.type === 'neuralese') ids.add(part.id); return; }
-    if (Array.isArray(value)) value.forEach(visit);
-    else if (value && typeof value === 'object') Object.values(value).forEach(visit);
-  };
-  visit(messages);
-  return [...ids];
-}
 
 function malformedNativePartList(value: unknown): boolean {
   return Array.isArray(value) && value.length > 0 && value.every(part => part && typeof part === 'object' &&
-    ['text', 'neuralese', 'native_state'].includes(part.type)) &&
+    ['text', 'native_state'].includes(part.type)) &&
     value.some(part => part.type === 'native_state' && !isNativeStateId(part.id));
 }
 
@@ -313,7 +226,6 @@ export function requestNativeStateIds(messages: readonly unknown[]): string[] {
     if (malformedNativePartList(value)) return;
     if (Array.isArray(value) && value.length && value.every(part => part && typeof part === 'object' &&
         (part.type === 'text' && typeof part.text === 'string' ||
-         part.type === 'neuralese' && typeof part.id === 'string' ||
          part.type === 'native_state' && isNativeStateId(part.id)))) {
       for (const part of value as RuntimeContentPart[]) if (part.type === 'native_state') ids.add(part.id);
       return;
@@ -331,17 +243,27 @@ export function requestNativeStateIds(messages: readonly unknown[]): string[] {
 }
 
 function materializeNativeStateSentinels(value: unknown, key?: string): unknown {
+  if (Array.isArray(value)) {
+    if (value.some(part => part && typeof part === 'object' && (part as Json).type === 'neuralese'))
+      throw new TypeError('native chat content does not accept flat vector blocks');
+    if (value.some(part => part && typeof part === 'object' && (part as Json).type === 'native_state' &&
+        !isNativeStateId((part as Json).id)))
+      throw new TypeError('native chat content requires an archived nzs1 state ID');
+  }
   if (key === 'arguments' && typeof value === 'string') {
     try { return JSON.stringify(materializeNativeStateSentinels(JSON.parse(value))); }
     catch { return value; } // preserve malformed input for the server's existing argument error path
   }
   if (malformedNativePartList(value)) return value;
-  if (typeof value === 'string') return nativeStateSentinelIds(value).length ? runtimeTextToParts(value) : value;
+  if (typeof value === 'string') {
+    return nativeStateSentinelIds(value).length ? runtimeTextToParts(value) : value;
+  }
   if (Array.isArray(value) && value.length && value.every(part => part && typeof part === 'object' &&
       (part.type === 'text' && typeof part.text === 'string' ||
-       part.type === 'neuralese' && typeof part.id === 'string' ||
        part.type === 'native_state' && isNativeStateId(part.id))))
-    return value.flatMap(part => part.type === 'text' ? runtimeTextToParts(part.text) : [part]);
+    return value.flatMap(part => {
+      return part.type === 'text' ? runtimeTextToParts(part.text) : [part];
+    });
   if (Array.isArray(value)) return value.map(item => materializeNativeStateSentinels(item));
   if (value && typeof value === 'object') {
     const part = value as { type?: unknown; id?: unknown;stop_gradient?:unknown;source_occurrence?:unknown };
@@ -362,7 +284,7 @@ export async function restoreNativeStates(remote: HttpNeuraleseStore, archive: N
   for (const id of ids) {
     const local = await archive?.getNativeState?.(id);
     if (local) {
-      const absent = await restoreBlocks(remote, archive, nativeStateArtifactDependencies(local));
+      const absent = await restoreNativeArtifacts(remote, archive, nativeStateArtifactDependencies(local));
       if (absent.length) throw new Error(`neuralese-unknown-native-artifact: restore source adapter coefficients and bases ${absent.join(', ')}`);
     }
     if (known?.has(id)) continue;
@@ -408,19 +330,10 @@ function normalizeReply(body: Json): Json {
 /** Archive the same exact reply closure for live turns and saved-turn replay. */
 export async function archiveNeuraleseReplyArtifacts(reply: Json, remote: NeuraleseStore,
     store: NeuraleseStore | undefined, references: readonly unknown[] = []):
-    Promise<{ blocks: Set<string>; native: Set<string> }> {
-  const blocks = new Set<string>();
-  if (store) for (const meta of ((reply.neuralese as Json | undefined)?.blocks ?? []) as NeuraleseBlockMeta[]) {
-    if (!(await store.has(meta.id))) {
-      const block = await remote.get(meta.id);
-      if (!block) throw new Error(`neuralese-unknown-block: the server reported ${meta.id} but does not have it`);
-      const { id: _, ...rest } = meta;
-      const local = await store.put({ ...rest, dtype: block.meta.dtype, length: block.meta.length,
-        width: block.meta.width, data: block.data });
-      if (local.id !== meta.id) throw new Error(`neuralese block ${meta.id} arrived as ${local.id}: content IDs disagree`);
-    }
-    blocks.add(meta.id);
-  }
+    Promise<{ native: Set<string> }> {
+  const projectedBlocks = (reply.neuralese as { blocks?: unknown } | undefined)?.blocks;
+  if (Array.isArray(projectedBlocks) && projectedBlocks.length)
+    throw new Error('neuralese-projected-api-retired: server returned flat neuralese blocks');
   const nativeBlocks = ((reply.native_state as Json | undefined)?.blocks ?? []) as Array<{ id: string }>;
   const sampling = reply.x_natlang_rl_capture as { prompt?: Array<{ kind?: string; id?: string; source_state_id?: string }>;
     writes?: Array<{ state_id?: string; raw_state_id?: string }> } | undefined;
@@ -436,13 +349,13 @@ export async function archiveNeuraleseReplyArtifacts(reply: Json, remote: Neural
       throw new Error('neuralese-native-archive-unavailable: configure a store that preserves native-state artifacts');
     await archiveNativeArtifactFrom(remote, store, id);
   }
-  return { blocks, native };
+  return { native };
 }
 
 /** A model-turn driver for a Neuralese server. It advertises `neuralese: true`. */
 export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
-    ((request: ModelTurnRequest, signal?: AbortSignal, options?: ModelTurnOptions) => Promise<ModelTurn>) & { neuralese: true; blocks: HttpNeuraleseStore; decide: DecisionScorer } {
-  const { store, neuraleseTemperature, neuraleseMaxLength, request: extra, onExchange, onTurn, adapterLoras, owner, nativeStateModes,
+    ((request: ModelTurnRequest, signal?: AbortSignal, options?: ModelTurnOptions) => Promise<ModelTurn>) & { neuralese: true; artifacts: HttpNeuraleseStore; decide: DecisionScorer } {
+  const { store, request: extra, onExchange, onTurn, owner, nativeStateModes,
     ...connection } = options;
   const http = { ...connection, headers: { ...connection.headers,
     ...(connection.apiKey ? { authorization: 'Bearer ' + connection.apiKey } : {}),
@@ -451,41 +364,105 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
   const coefficientPolicy=extra?.x_natlang_native_coefficient_policy===undefined?undefined:validateCoefficientRuntime(extra.x_natlang_native_coefficient_policy);
   const uploaded = new Set<string>();
   const nativeUploaded = new Set<string>();
-  // What the server declares (`/v1/neuralese/info`), read once: whether it applies adapters as LoRAs, and whether it
-  // streams (`stream: true`; a server that does not declare it gets whole requests, never a streamed try first).
+  // What the server declares (`/v1/neuralese/info`), read once; a server that does not declare streaming gets whole requests.
   let info: Promise<Json | null> | undefined;
-  const serverInfo = () => info ??= fetchModel(http.endpoint.replace(/\/$/, '') + '/v1/neuralese/info', { headers: http.headers })
+  const serverInfo = (refresh = false) => { if (refresh) info = undefined; return info ??= fetchModel(http.endpoint.replace(/\/$/, '') + '/v1/neuralese/info', { headers: http.headers })
     .then(async response => response.ok ? await response.json() as Json : null).catch(() => null);
+  };
   const whole = httpChatTransport({ ...http, stream: false });
   const streamed = httpChatTransport({ ...http, stream: true });
-  // Adapter blocks are uploaded like message blocks; their IDs travel as request parts the server resolves.
-  // Adapters of the dynamic scope (`withAdapters`) and those the calling function's context binds (request field).
-  // A server that applies adapters as LoRAs (the fork) gets each adapter's LoRA once, from `adapterLoras`.
-  const loras = new Set<string>();
-  const uploadLoras = async (ids: readonly string[]) => {
-    if (!adapterLoras || !serves((await serverInfo()) ?? {}, 'adapters.lora-load')) return;
-    for (const id of ids) {
-      if (loras.has(id)) continue;
-      const bytes = await adapterLoras(id);
-      if (!bytes) continue;
-      const response = await fetchModel(`${http.endpoint.replace(/\/$/, '')}/v1/neuralese/adapters/${id}/lora`, { method: 'PUT',
-        headers: { 'content-type': 'application/octet-stream', ...http.headers }, body: bytes as unknown as BodyInit });
-      if (!response.ok) throw new Error(`adapter LoRA ${id}: HTTP ${response.status}: ${(await response.text()).slice(0, 500)}`);
-      loras.add(id);
-    }
-  };
-  const adapterParts = async (bound: readonly { id: string; scale: number }[] = [], active: readonly AdapterBinding[] = activeAdapters()) => {
+  // Exact native actor coefficients remain native model parameters, never GGUF LoRA transport.
+  const adapterParts = async (bound: readonly { id: string; scale: number }[] = [], active: readonly NativeAdapterBinding[] = activeNativeAdapters()) => {
     if(coefficientPolicy)requireCoefficientAttestation(coefficientPolicy,await serverInfo());
     const adapters = coefficientBindings(coefficientPolicy,active,bound);
-    if (adapters.length) await uploadLoras(adapters.map(item => item.id));
     return adapters;
   };
-  const blockIds = (messages: unknown[], adapters: readonly { id: string }[]) =>
-    [...requestBlockIds(messages), ...adapters.map(item => item.id)];
+  const adapterArtifactIds = (adapters: readonly { id: string }[]) => adapters.map(item => item.id);
+  const bindNativeStateContext = async (messages: unknown[], states: readonly { id: string; source_occurrence?: string; stop_gradient?: true }[], capabilities: Json | null) => {
+    if (!states.length) return messages;
+    const consumer = capabilities ? nativeStateConsumerFromInfo(capabilities) : undefined;
+    if (!consumer || !store?.getNativeState)
+      throw Object.assign(new Error('neuralese-native-state-unavailable: withNativeStates requires a declared native reader and an archived state store'),
+        { code: 'neuralese-native-state-unavailable' });
+    const parts: RuntimeContentPart[] = [];
+    const alreadyPresent = new Set(requestNativeStateIds(messages));
+    for (const binding of states) {
+      const { id } = binding;
+      // A caller may already have put this exact state in the request. Keep
+      // those explicit occurrences and do not implicitly reinsert that ID.
+      // Repeated scope entries remain repeated prepared imports.
+      if (alreadyPresent.has(id)) continue;
+      const artifact = await store.getNativeState(id);
+      if (!artifact)
+        throw Object.assign(new Error(`neuralese-unknown-native-state: withNativeStates cannot resolve ${id} from its archive`),
+          { code: 'neuralese-unknown-native-state' });
+      const identity = { architecture: artifact.metadata.architecture,
+        checkpoint_sha256: artifact.metadata.checkpoint_sha256,
+        tokenizer_fingerprint: artifact.metadata.tokenizer_fingerprint,
+        embedding_weight_sha256: artifact.metadata.embedding_weight_sha256 };
+      const readerIdentity = { architecture: consumer.architecture,
+        checkpoint_sha256: consumer.checkpoint_sha256,
+        tokenizer_fingerprint: consumer.tokenizer_fingerprint,
+        embedding_weight_sha256: consumer.embedding_weight_sha256 };
+      const sourceBaseIdentity = artifact.metadata.adapter_binding?.base_native_identity;
+      if (!nativeModelIdentityEqual(identity, readerIdentity) &&
+          (!sourceBaseIdentity || !nativeModelIdentityEqual(sourceBaseIdentity, readerIdentity)))
+        throw Object.assign(new Error(`neuralese-native-state-identity: ${id} was written by another actor; write or semantically adapt it for the current exact reader`),
+          { code: 'neuralese-native-state-identity' });
+      const sourceOccurrence = binding.source_occurrence ?? activeRecorder()?.nativeStateWriter?.(id);
+      parts.push({ type: 'native_state', id, ...(sourceOccurrence ? { source_occurrence: sourceOccurrence } : {}),
+        ...(binding.stop_gradient ? { stop_gradient: true } : {}) });
+    }
+    if (!parts.length) return messages;
+    if (!Array.isArray(messages))
+      throw Object.assign(new Error('neuralese-native-state-prompt: model call has no message list for stored state context'),
+        { code: 'neuralese-native-state-prompt' });
+    return [{ role: 'system', content: parts }, ...messages];
+  };
+  const nativeStateModesFor = async (messages: readonly unknown[]) => {
+    const ids = requestNativeStateIds(messages);
+    const actualIds = new Set(ids);
+    const modes: Record<string, 'same-base-adapter-state'> = Object.fromEntries(
+      Object.entries(nativeStateModes ?? {}).filter(([id]) => actualIds.has(id)));
+    if (store?.getNativeState) for (const id of ids) {
+      const artifact = await store.getNativeState(id);
+      if (artifact?.metadata.adapter_binding) modes[id] = 'same-base-adapter-state';
+    }
+    return coefficientStateModes(coefficientPolicy, ids, Object.keys(modes).length ? modes : undefined);
+  };
+  const requireExactNativeImports = (capture: unknown, ids: readonly string[],
+      modes?: Readonly<Record<string, 'same-base-adapter-state'>>) => {
+    const imports = (capture as { native_state_imports?: unknown } | undefined)?.native_state_imports;
+    if (!Array.isArray(imports))
+      throw Object.assign(new Error(`neuralese-native-state-import: server returned no actual native-state import receipt (capture=${
+        (capture as { schema?: unknown } | undefined)?.schema ?? 'missing'})`),
+        { code: 'neuralese-native-state-import' });
+    const prompt = (capture as { prompt?: unknown } | undefined)?.prompt;
+    if (!Array.isArray(prompt))
+      throw Object.assign(new Error('neuralese-native-state-import: server returned no exact native prompt occurrence list'),
+        { code: 'neuralese-native-state-import' });
+    for (const id of new Set(ids)) {
+      const expectedCount = prompt.filter(value => value && typeof value === 'object' &&
+        (value as Json).kind === 'native_state' && (value as Json).id === id).length;
+      const receipts = imports.filter(value => value && typeof value === 'object' && (value as Json).id === id) as Json[];
+      const expectedMode = modes?.[id] ?? 'exact-native-state';
+      if (!expectedCount || receipts.length !== expectedCount || receipts.some(receipt =>
+          receipt.mode !== expectedMode || receipt.observed_native_state_id !== id))
+        throw Object.assign(new Error(`neuralese-native-state-import: server did not consume ${id} with declared mode ${expectedMode} (imports=${
+          JSON.stringify(imports).slice(0, 1200)})`),
+          { code: 'neuralese-native-state-import' });
+    }
+  };
   const transport: ChatTransport = async (body, signal, meta) => {
-    const capabilities = await serverInfo();
+    const scopedNativeStates = activeNativeStates();
+    let implicitNativeReadOccurrences: Json[] = [];
+    const capabilities = await serverInfo(scopedNativeStates.length > 0);
+    const preexistingStateIds = requestNativeStateIds(materializeNativeStateSentinels(body.messages as unknown[]) as unknown[]);
+    const implicitStateBindings = scopedNativeStates.filter(state => !preexistingStateIds.includes(state.id));
+    if (scopedNativeStates.length) body = { ...body,
+      messages: await bindNativeStateContext(body.messages as unknown[], scopedNativeStates, capabilities) };
     const recorder=activeRecorder();
-    const nativeRecording=!!recorder&&(capabilities?.native_state as {enabled?:boolean}|undefined)?.enabled===true;
+    const nativeRecording=(!!recorder||scopedNativeStates.length>0)&&(capabilities?.native_state as {enabled?:boolean}|undefined)?.enabled===true;
     if(nativeRecording)body={...body,x_natlang_native_recording:true};
     if(Array.isArray(capabilities?.capabilities)&&capabilities.capabilities.includes('native.protocol-recovery'))body={...body,x_natlang_native_protocol_recovery:true};
     if (body.guidance && capabilities && !serves(capabilities, 'guidance.check'))
@@ -498,18 +475,39 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
         throw Object.assign(new Error(`neuralese-${capability.replaceAll('.', '-')}-unavailable: use a server that implements this typed readout`),
           { code: `neuralese-${capability.replaceAll('.', '-')}-unavailable` });
     }
-    const consumptionModes=coefficientStateModes(coefficientPolicy,requestNativeStateIds(materializeNativeStateSentinels(body.messages) as unknown[]),nativeStateModes);
+    const consumptionModes=await nativeStateModesFor(materializeNativeStateSentinels(body.messages) as unknown[]);
     if (consumptionModes) body = { ...body, x_natlang_native_state_modes: consumptionModes };
     if(coefficientPolicy){body={...body};delete body.x_natlang_native_coefficient_policy;}
     const adapters = await adapterParts((body.x_natlang_adapters ?? []) as { id: string; scale: number }[]);
     const inner = (await serverInfo())?.stream === true ? streamed : whole;
     // A streamed reply is assembled here, where its body is post-processed; its deltas go to the turn's observer, and a
-    // request re-sent after restoring blocks first voids what the failed attempt streamed.
+    // request re-sent after restoring native artifacts first voids what the failed attempt streamed.
     let emitted = false;
     const onDelta = meta?.onDelta && ((delta: ModelTurnDelta) => { emitted = true; meta.onDelta!(delta); });
     const preparedMessages = materializeNativeStateSentinels(body.messages) as unknown[];
+    if (implicitStateBindings.length) {
+      const first = preparedMessages[0] as { content?: unknown } | undefined;
+      const parts = Array.isArray(first?.content) ? first.content as Array<{ type?: string; id?: string; source_occurrence?: string; stop_gradient?: true }> : [];
+      const usedPartIndices = new Set<number>();
+      const occurrences = implicitStateBindings.flatMap(binding => {
+        const index = parts.findIndex((part, partIndex) => partIndex >= 0 && !usedPartIndices.has(partIndex) &&
+          part.type === 'native_state' && part.id === binding.id);
+        if (index < 0) return [];
+        usedPartIndices.add(index);
+        const part = parts[index]!;
+        return [{ id: binding.id, positions: [[0, index]],
+          ...(part.source_occurrence ? { source_occurrence: part.source_occurrence } : {}),
+          ...(part.stop_gradient ? { stop_gradient: true } : {}) }];
+      });
+      if (occurrences.length !== implicitStateBindings.length)
+        throw Object.assign(new Error('neuralese-native-state-import: scoped state was not present at its prepared prompt position'),
+          { code: 'neuralese-native-state-import' });
+      // This is local transport provenance for NativeToolAgent's graph recorder.
+      // It is derived from the exact request sent and does not come from a shim.
+      implicitNativeReadOccurrences = occurrences;
+    }
     const nativeIds = requestNativeStateIds(preparedMessages);
-    const reply = await withRestoredBlocks(remote, store, blockIds(preparedMessages, adapters), async () =>
+    const reply = await withRestoredNativeArtifacts(remote, store, adapterArtifactIds(adapters), async () =>
       await withRestoredNativeStates(remote, store, nativeIds, async () => {
         if (onDelta && emitted) { onDelta({ type: 'reset' }); emitted = false; }
         const requestBody = adapters.length ? { ...body, messages: preparedMessages, x_natlang_adapters: adapters } :
@@ -517,13 +515,47 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
         const answer = await inner(requestBody, signal);
         return isStream(answer) ? await assembleChatCompletion(answer, onDelta) : answer;
       }, nativeUploaded), uploaded);
+    if (implicitNativeReadOccurrences.length)
+      (reply as Json).__natlang_native_read_occurrences = implicitNativeReadOccurrences;
+    const rawCapture = reply.x_natlang_rl_capture as Record<string, unknown> | undefined;
+    const nativeStateImports = (reply.native_state as { imports?: unknown } | undefined)?.imports;
+    if (scopedNativeStates.length && !Array.isArray(nativeStateImports))
+      throw Object.assign(new Error('neuralese-native-state-import: response lacks the authoritative native_state.imports receipt list'),
+        { code: 'neuralese-native-state-import' });
+    if (Array.isArray(nativeStateImports) && Array.isArray(rawCapture?.native_state_imports) &&
+        JSON.stringify(nativeStateImports) !== JSON.stringify(rawCapture.native_state_imports))
+      throw Object.assign(new Error('neuralese-native-state-import: capture and response native-state receipts disagree'),
+        { code: 'neuralese-native-state-import' });
+    // The engine carries actual import receipts alongside native_state
+    // artifacts; the sampling capture carries prompts, samples and writes.
+    // Combine those two server-owned pieces before validating or recording a
+    // turn so exact external imports remain available to learning and replay.
+    const capture = rawCapture && Array.isArray(nativeStateImports) ?
+      { ...rawCapture, native_state_imports: structuredClone(nativeStateImports) } : rawCapture;
+    if (scopedNativeStates.length)
+      requireExactNativeImports(capture, scopedNativeStates.map(state => state.id), consumptionModes);
+    const implicitById = new Map<string, Json[]>();
+    for (const expected of implicitNativeReadOccurrences) {
+      const id = expected.id as string;
+      implicitById.set(id, [...(implicitById.get(id) ?? []), expected]);
+    }
+    for (const [id, expected] of implicitById) {
+      const promptOccurrences = ((capture?.prompt ?? []) as Json[]).filter(segment => segment.kind === 'native_state' && segment.id === id);
+      const importReceipts = ((capture?.native_state_imports ?? []) as Json[]).filter(receipt => receipt.id === id);
+      // A scoped list is an occurrence list, not a set of IDs. Repeated IDs
+      // deliberately create repeated prompt parts and receipts, each sharing
+      // the same source node when they refer to the same produced state.
+      const sourcesMatch = (actual: Json[]) => actual.length === expected.length &&
+        actual.every((item, index) => item.source_occurrence === expected[index]!.source_occurrence);
+      if (!sourcesMatch(promptOccurrences) || !sourcesMatch(importReceipts))
+        throw Object.assign(new Error(`neuralese-native-state-import: ${expected.length} prepared occurrence(s) for ${id} differ from the server prompt and import receipts`),
+          { code: 'neuralese-native-state-import' });
+    }
     const archived = await archiveNeuraleseReplyArtifacts(reply, remote, store);
-    for (const id of archived.blocks) uploaded.add(id);
     const archiveIds = archived.native;
     for (const id of archiveIds) nativeUploaded.add(id);
     if(recorder){
       const message=(reply.choices as Json[]|undefined)?.[0]?.message as Json|undefined;
-      const capture=reply.x_natlang_rl_capture as Record<string,unknown>|undefined;
       if(nativeRecording&&(!capture||!['natlang.native-rl-sampling/1','natlang.native-rl-sampling/2','natlang.native-rl-sampling/3','natlang.native-rl-sampling/4','natlang.native-structural-capture/1','natlang.native-structural-capture/2','natlang.native-teacher-forced-capture/1'].includes(String(capture.schema))||
           !Array.isArray(capture.prompt)||!Array.isArray(capture.samples)))
         throw Object.assign(new Error('neuralese-native-grad-invalid: native learning needs the actual server sampling receipt'),{code:'neuralese-native-grad-invalid'});
@@ -534,16 +566,13 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
       if(native)reply.x_natlang_native_recorded_turn=native.id;
       if(message)recorder.record({messages:structuredClone((nativeRecording?preparedMessages:body.messages) as unknown[]),
         tools:body.tools?structuredClone(body.tools as unknown[]):undefined,reply:structuredClone(message),
-        blocks:structuredClone([...(((reply.neuralese as Json|undefined)?.blocks??[]) as Json[]),
-          ...(((reply.native_state as Json|undefined)?.blocks??[]) as Json[])]),
+        blocks:structuredClone((((reply.native_state as Json|undefined)?.blocks??[]) as Json[])),
         ...(adapters.length?{adapters:[...adapters]}:{}),
         ...(consumptionModes?{native_state_modes:{...consumptionModes}}:{}),...(native?{native}:{})});
     }
     return normalizeReply(reply);
   };
-  const request: Json = { ...extra,
-    ...(neuraleseTemperature === undefined ? {} : { neuralese_temperature: neuraleseTemperature }),
-    ...(neuraleseMaxLength === undefined ? {} : { neuralese_max_length: neuraleseMaxLength }) };
+  const request: Json = { ...extra };
   const driver = chatCompletionModelTurn(transport, { request, onExchange, onTurn });
   // Decision readout: one prompt pass, every option scored from its cache (serve/grad.py `decide`).
   type Item = Parameters<DecisionScorer>[0];
@@ -551,27 +580,30 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
   // A coalesced decision is scored in the batch's flush, whose asynchronous context is another caller's (or none): the
   // recorder and the dynamically scoped adapters are taken where the decision was asked for (`scope`), so concurrent
   // objectives each record their own turn and adapters do not leak between batched callers.
-  type Scope = { recorder: TurnRecorder | undefined; adapters: readonly AdapterBinding[] };
+  type Scope = { recorder: TurnRecorder | undefined; adapters: readonly NativeAdapterBinding[]; nativeStates: readonly { id: string }[] };
   const scopes = new WeakMap<object, Scope>();
-  const here = (): Scope => ({ recorder: activeRecorder(), adapters: activeAdapters() });
+  const here = (): Scope => ({ recorder: activeRecorder(), adapters: activeNativeAdapters(), nativeStates: activeNativeStates() });
   const scopeOf = (item: object): Scope => scopes.get(item) ?? here();
   const prepare = async (messages: unknown[], replies: readonly string[], bound: readonly { id: string; scale: number }[] | undefined,
       scope: Scope = here()):Promise<Item> => {
     const adapters = await adapterParts(bound ?? [], scope.adapters);
-    const native=(await serverInfo())?.native_state as {enabled?:boolean}|undefined;
-    const preparedMessages=native?.enabled?materializeNativeStateSentinels(messages) as unknown[]:messages;
-    const modes=coefficientStateModes(coefficientPolicy,requestNativeStateIds(preparedMessages),nativeStateModes);
+    const info = await serverInfo(scope.nativeStates.length > 0);
+    const native=info?.native_state as {enabled?:boolean}|undefined;
+    const preparedMessages=materializeNativeStateSentinels(await bindNativeStateContext(messages,scope.nativeStates,info)) as unknown[];
+    const modes=await nativeStateModesFor(preparedMessages);
     if(!native?.enabled)scope.recorder?.record({messages:structuredClone(messages),reply:{role:'assistant',content:null},blocks:[],
       decision:{options:[...replies]},...(adapters.length?{adapters:[...adapters]}:{}),...(modes?{native_state_modes:modes}:{})});
     return {messages:preparedMessages,options:[...replies],...(adapters.length?{adapters:[...adapters]}:{}),
-      ...(modes?{native_state_modes:modes}:{}),...(native?.enabled&&scope.recorder?{native_recording:true}:{})};
+      ...(modes?{native_state_modes:modes}:{}),...(native?.enabled&&(scope.recorder||scope.nativeStates.length)?{native_recording:true}:{})};
   };
   const finish = async (item:Item,scope:Scope,scores:DecisionScores):Promise<DecisionScores> => {
     if(!item.native_recording)return scores;
     const capture=scores.native_decision_capture;
-    if(!scope.recorder||capture?.schema!=='natlang.native-decision-capture/1'||!Array.isArray(capture.prompt)||
+    if(capture?.schema!=='natlang.native-decision-capture/1'||!Array.isArray(capture.prompt)||
         !Array.isArray(capture.continuations)||capture.continuations.length!==item.options.length)
       throw Object.assign(new Error('neuralese-native-grad-invalid: native decision learning needs its actual rendered continuation receipt'),{code:'neuralese-native-grad-invalid'});
+    if(scope.nativeStates.length)requireExactNativeImports(capture,scope.nativeStates.map(state=>state.id),item.native_state_modes);
+    if(!scope.recorder)return scores;
     const ids=new Set<string>(requestNativeStateIds(item.messages));
     for(const segment of capture.prompt as {kind?:string;id?:string;source_state_id?:string}[])if(segment.kind==='native_state')for(const id of [segment.id,segment.source_state_id])if(id)ids.add(id);
     for(const receipt of (capture.native_state_imports??[]) as {id?:string;observed_native_state_id?:string}[])
@@ -586,7 +618,7 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
     return {...scores,x_natlang_native_recorded_turn:native.id};
   };
   const restore = async (item:Item,run:()=>Promise<DecisionScores>):Promise<DecisionScores> =>
-    withRestoredBlocks(remote,store,blockIds(item.messages,item.adapters??[]),()=>
+    withRestoredNativeArtifacts(remote,store,adapterArtifactIds(item.adapters??[]),()=>
       withRestoredNativeStates(remote,store,requestNativeStateIds(item.messages),run,nativeUploaded),uploaded);
   const issue = async (item:Item,signal?:AbortSignal):Promise<DecisionScores> => restore(item,async()=>{
     const response=await fetchModel(http.endpoint.replace(/\/$/,'')+'/v1/neuralese/decide',{method:'POST',signal,
@@ -625,5 +657,5 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
     scopes.set(request, here());
     return coalesced(request, signal);
   }, { scoreMany: coalesced.scoreMany });
-  return Object.assign(driver, { neuralese: true as const, blocks: remote, decide: scoped });
+  return Object.assign(driver, { neuralese: true as const, artifacts: remote, decide: scoped });
 }

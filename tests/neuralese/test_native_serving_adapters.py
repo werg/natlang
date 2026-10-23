@@ -39,17 +39,17 @@ def engine_fixture(tmp_path, family, *, service_template=False, context=None):
     return load_native_engine(str(checkpoint), device=device, dtype=dtype)
 
 
-def nonzero_adapter(engine, kind='xs'):
+def nonzero_adapter(engine, kind='xs', seed=0):
     available = target_parameters(engine.shared_model)
     name = next(name for name in available if name.endswith('q_proj.weight'))
-    record = create_adapter(engine, {'kind':kind,'rank':2,'u':3,'parameter_names':[name]})
+    record = create_adapter(engine, {'kind':kind,'rank':2,'seed':seed,'parameter_names':[name]})
     artifact = record.artifact
     values = {name:torch.ones_like(value)*.04 for name,value in artifact.tensors.items()}
     return engine.store.put_native_tensor_artifact(replace(artifact,tensors=values)), name
 
 
 @pytest.mark.parametrize('family',['lfm','mellum'])
-@pytest.mark.parametrize('kind',['xs','tiny'])
+@pytest.mark.parametrize('kind',['xs'])
 def test_native_adapter_cached_graph_gradient_and_exact_restoration(tmp_path,family,kind):
     engine = engine_fixture(tmp_path,family)
     adapter,name = nonzero_adapter(engine,kind)
@@ -207,10 +207,9 @@ def test_adapted_real_dag_all_hidden_logits_and_coefficient_adjoints_match_refer
     torch.nn.init.normal_(model.adapter.up.weight,std=.03)
     for parameter in model.parameters():parameter.requires_grad_(False)
     from natlang_neuralese.serve.store import TensorStore
-    from natlang_neuralese.model.tiny_adapters import AdapterBank
     engine=SimpleNamespace(shared_model=model,native_execution_lock=threading.RLock(),store=TensorStore(),
         native_identity={'checkpoint_sha256':'1'*64,'tokenizer_fingerprint':'2'*64,
-                         'embedding_weight_sha256':'3'*64,'architecture':family},adapter_bank=AdapterBank.of(port))
+                         'embedding_weight_sha256':'3'*64,'architecture':family})
     adapter,name=nonzero_adapter(engine)
     coefficient=adapter.artifact.tensors[name].clone().requires_grad_(True)
     plan=graph()
@@ -266,7 +265,6 @@ def test_native_adapter_preserves_tied_parameters_and_rejects_incomplete_optimiz
     from types import SimpleNamespace
     from test_shared_state import tiny
     from natlang_neuralese.model.shared_state import SharedStateModel
-    from natlang_neuralese.model.tiny_adapters import AdapterBank
     from natlang_neuralese.serve.store import TensorStore
     from natlang_neuralese.model.native_adapters import optimize_adapter
     port=tiny('lfm')
@@ -275,7 +273,7 @@ def test_native_adapter_preserves_tied_parameters_and_rejects_incomplete_optimiz
     model=SharedStateModel(port,(60,61,62,63),rank=4)
     engine=SimpleNamespace(shared_model=model,native_execution_lock=threading.RLock(),store=TensorStore(),
         native_identity={'checkpoint_sha256':'1'*64,'tokenizer_fingerprint':'2'*64,
-                         'embedding_weight_sha256':'3'*64,'architecture':'lfm'},adapter_bank=AdapterBank.of(port))
+                         'embedding_weight_sha256':'3'*64,'architecture':'lfm'})
     adapter,name=nonzero_adapter(engine)
     def inspect_ties():
         assert port.layers[1].self_attn.q_proj.weight is port.layers[3].self_attn.q_proj.weight
@@ -321,8 +319,8 @@ def test_mellum_warm_deployed_cache_never_ignores_or_leaks_expert_adapter(tmp_pa
     engine.store.close()
 
 
-def test_legacy_adapter_algebra_stays_bitwise_identical_for_matrix_and_batched_bases():
-    from natlang_neuralese.model.tiny_adapters import singular_bases,coefficient_core
+def test_native_model_lora_basis_is_sign_canonical_for_matrix_and_batched_weights():
+    from natlang_neuralese.model.native_adapter_math import singular_bases
     torch.manual_seed(20261016)
     for shape in ((11,7),(3,11,7)):
         weight=torch.randn(shape)
@@ -332,12 +330,6 @@ def test_legacy_adapter_algebra_stays_bitwise_identical_for_matrix_and_batched_b
         actual=singular_bases(weight,3)
         assert torch.equal(actual[0],left*signs)
         assert torch.equal(actual[1],right*signs)
-    coefficient=torch.randn(9)
-    assert torch.equal(coefficient_core('xs',coefficient,3),coefficient.view(3,3))
-    coefficient=torch.randn(5);projection=torch.randn(5,3,3)
-    assert torch.equal(coefficient_core('tiny',coefficient,3,projection),torch.einsum('j,jab->ab',coefficient,projection))
-
-
 @pytest.mark.parametrize('family',['lfm','mellum'])
 def test_adapted_stored_state_import_gradients_require_the_exact_effective_model(tmp_path,family):
     from natlang_neuralese.serve.chat import RequestError

@@ -1184,7 +1184,7 @@ def _render_shard_materialized(job):
                                                     authenticated_crisp_context_messages, gold_text_rows,
                                                     native_gold_document, target_with_teacher_reasoning,
                                                     tokenizer_fingerprint)
-    from natlang_neuralese.train.trajectories import crisp_messages, handover_notes
+    from natlang_neuralese.data.trajectory_text import crisp_messages, handover_notes
     tok = _G['tok'][tok_name]
     records = []
     with open_jsonl_text(shard_path) as f:

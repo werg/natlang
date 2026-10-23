@@ -11,9 +11,9 @@ from natlang_neuralese.model.shared_state import Invocation,ImportSpan,compile_g
 def adapters(engine):
     names=list(target_parameters(engine.shared_model))
     values=[]
-    for kind in ('xs','tiny'):
-        adapter=create_adapter(engine,{'kind':kind,'rank':2,'u':3,'parameter_names':names})
-        tensors={name:torch.full_like(value,.04 if kind=='xs' else -.03) for name,value in adapter.artifact.tensors.items()}
+    for seed in (0,1):
+        adapter=create_adapter(engine,{'kind':'xs','rank':2,'seed':seed,'parameter_names':names})
+        tensors={name:torch.full_like(value,.04 if seed==0 else -.03) for name,value in adapter.artifact.tensors.items()}
         values.append(engine.store.put_native_tensor_artifact(replace(adapter.artifact,tensors=tensors)))
     return values
 

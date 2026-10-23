@@ -297,6 +297,7 @@ def test_native_factory_retains_full_recipe_budget_and_uses_headless_actor(tmp_p
         production_stage='native_full', port=8097, **{key: tmp_path/key for key in (
             'semantic_refresh_config', 'seed_native_graphs', 'held_native_graphs', 'production_recipe',
             'base', 'out', 'config', 'cases', 'runtime')})
+    args.actor_runtime = Path(__file__).resolve().parents[2]
     monkeypatch.setattr(recipe,'resolve_stage_inputs',lambda *args:{'foundation_native_graphs':{'path':str(tmp_path/'exact-foundation')}})
     if separate_actor:
         actor = tmp_path/'actor-snapshot'
@@ -324,7 +325,7 @@ def test_native_factory_retains_full_recipe_budget_and_uses_headless_actor(tmp_p
     assert saved['trainer_parameters']['recipe_binding']==reference
     assert saved['seed_trainer_parameters']['recipe_binding']==reference
     assert saved['trainer_parameters']['dtype'] == 'float32'
-    assert '--native-state' in saved['actor_command'] and '--heads' not in saved['actor_command']
+    assert '--checkpoint' in saved['actor_command'] and '--heads' not in saved['actor_command']
     assert 'natlang_neuralese.rl.native_stage' in saved['learner_command']
     handler = recipe.HANDLERS['native_state_rl']
     assert handler['required_inputs'].isdisjoint(handler['optional_inputs'])
@@ -394,6 +395,13 @@ def test_bootstrap_binds_actual_export_and_train_files_then_preserves_hot_config
     adapter['sha256']=sha256_file_hex(adapter['path'])
     completion.write_text(json.dumps(proof))
     monkeypatch.setattr(recipe,'checkpoint_recipe_binding',lambda path,*,participant:references[participant])
+    from natlang_neuralese.rl import production as rl_production
+    actor_repo = Path(__file__).resolve().parents[2]
+    from natlang_neuralese.common.runtime_inventory import python_runtime_binding
+    monkeypatch.setattr(rl_production, 'actor_runtime_configuration', lambda _repository: {
+        'native_actor_python_runtime': python_runtime_binding(actor_repo/'training/neuralese/natlang_neuralese'),
+        'actor_environment': {'NATLANG_REPO': str(actor_repo),
+            'PYTHONPATH': str(actor_repo/'training/neuralese')+':'+str(actor_repo)}})
     plan = tmp_path/'bootstrap-plan.json'
     plan.write_text(json.dumps({'schema': 'natlang.native-rl-bootstrap/1', 'models': models}))
     configs = native_rounds.bootstrap_configs(plan, completion, tmp_path/'rl')

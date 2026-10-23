@@ -52,7 +52,7 @@ exercised on the 350M port and the Python reference server. "Not wired" mostly m
 | llama.cpp fork (LFM2): ports, server, LoRA adapters, read adapter | used | fork 8155cff42, `tests/neuralese/test_server_conformance.py` |
 | llama.cpp fork for Maple/Mellum (MoE, ternary TQ2_0, heads) (#26, #32) | not started | `export/` handles LFM2 only |
 | Browser wasm/WebGPU | used (LFM, lagging fork build) | `ts-host/vendor/neuralese-wasm/provenance.json` (fork 5d999c0c5) |
-| vLLM rollouts (text on vLLM, writes on reference) | partial | `scripts/neuralese_vllm_parity.py`; no Mellum plugin |
+| Legacy vLLM Neuralese parity (projected PortHeads) | retired | `scripts/neuralese_vllm_parity.py` removed with the projected adapter path; current vLLM serving is ordinary teacher inference |
 | Batched-execution integration (BATCHED_EXECUTION §7: diagnostic code union, turn/function in requests, shared scheduler in improvement/pi drivers, author note) | not started on main | Owner: TS batching session |
 
 ## S5 program-level training
@@ -77,7 +77,7 @@ exercised on the 350M port and the Python reference server. "Not wired" mostly m
 | System-prompt bank: text-init plus trained | partial | LFM text-init banks `system-prompt-bank-lfm2.5-350m-text-init-20261004-v1/v2` superseded (context-free encoding, 2026-10-10); the builder initialises pieces in context (a sample call, else a minimal call's system message); `train.decision --soft-prompts` and `trajectories --bank` train and save `system-prompts.nz`; no Maple/Mellum bank yet (trajectory runs on Maple ran without `--bank`, so no bank was saved) |
 | M0 records/arms, M2 deltas, M4 adapters, M5 P/D projections | used (LFM) | `step-record.ts`, `deltas.ts`, `model/tiny_adapters.py`, `model/projections.py` |
 | M3 memetic optimiser (#15) | used (LFM direct v1, smoke) | `memetic-decision.mjs`; revived 2026-10-12 on the direct LFM export (v8 step 1000) with in-context init: sms-spam query best .728 vs seed .507, soft-gold .745 (10-05: .686/.520/.745), Muon-main step 10006 .749/.741/.721. All of these are at the uniform answer (.75): the 350M backbone does not discriminate sms-spam (exact HF reference agrees), so the search learned calibration only. Coalesced-decision recorder/adapter scope fix 45255079; concurrent-readout trace fix 361f216d. Muon 10006 screen: trec-question and ag-news beat uniform; ag-news memetic query .838 (acc .75) vs seed .770 (.667) and soft-gold .774. Details in LEARNING_CONTINUUM M3 status. Next: families where the seed beats uniform, then a task-success population over text, soft values and adapters |
-| Learned updater v0 | partial (LFM, unqualified) | 2026-10-09: `train/learned_updater.py` (U block + base skill + support view → write unroll → D delta, fit to recorded soft-gold deltas), `evaluate-soft-skills.mjs`; artifact `learned-updater-v0-lfm2.5-350m-20261009`. Held-out 4 families query quality: soft-init 0.607, updater 0.601, gradient 1 step 0.633, 8 steps 0.802 (does not beat matched-compute gradient; delta-space held-out cosine 0.12). Next: more step records, D stage-1 init, serve D |
+| Learned updater v0 | retired | The flat soft-gold delta updater and its unqualified artifact were removed with the projected adapter path. The future shared-space VAE remains a separate native stage, gated on completed producer/consumer graph training in both models. |
 | Gradient digests, query-trained updater, self-revision | not started | — |
 | M6 reward-blind improver | partial | `improvement/blind-view.ts` (views only) |
 

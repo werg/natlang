@@ -129,6 +129,28 @@ def test_author_requires_exact_self_hosted_source_receipt(tmp_path):
         memetic.author_provenance(path, receipt['serve_alias'], receipt['endpoint'])
 
 
+def test_author_attempt_context_is_retry_stable_and_generation_distinct(monkeypatch):
+    ferry = memetic.teacher_ferry
+    prompts = []
+    monkeypatch.setattr(memetic.runner, 'author_call', lambda url, model, prompt: (
+        prompts.append(prompt) or {'text': '<guidance>Use the typed contract.</guidance>', 'custody': {}}))
+    args = Namespace(author='http://127.0.0.1:8766', author_ferry='http://127.0.0.1:8766',
+                     author_model=ferry.TEACHER_SERVE_ALIAS, program_id='exact-program')
+    context0 = {'schema': 'natlang.memetic-guidance-author-attempt/1', 'program_id': 'exact-program',
+                'phase': 'candidate', 'generation': 0, 'author_provenance_sha256': 'a' * 64}
+    parent = {'guidance': 'Check the typed result.'}
+    memetic.runner.propose_guidance(args, parent, '- development failure', attempt_context=context0)
+    memetic.runner.propose_guidance(args, parent, '- development failure', attempt_context=context0)
+    context1 = {**context0, 'generation': 1}
+    memetic.runner.propose_guidance(args, parent, '- development failure', attempt_context=context1)
+    bodies = [memetic.runner.author_request_body(ferry.TEACHER_SERVE_ALIAS, prompt) for prompt in prompts]
+    request_ids = [ferry.request_id(ferry.TEACHER_SERVE_ALIAS, body) for body in bodies]
+    assert request_ids[0] == request_ids[1], 'same attempt body must retain the ferry idempotency key across retries'
+    assert request_ids[2] != request_ids[0], 'a distinct generation must produce a distinct exact-body request ID'
+    assert 'exact-program' in prompts[0] and 'generation":0' in prompts[0]
+    assert 'generation":1' in prompts[2]
+
+
 def test_writer_rejects_wrong_student_or_missing_producer(monkeypatch):
     ident = 'nzs1_' + 'a' * 52
     actor = {key: 'f' * 64 for key in memetic.IDENTITY}
@@ -260,7 +282,7 @@ def test_real_collector_imports_written_state_from_tiny_shared_http_server(tmp_p
     weights = tmp_path / 'weights.pt'; torch.save(model_state(model), weights)
     config = {'architecture': port.config.model_type, 'tokenizer_fingerprint': tokenizer_fingerprint(tokenizer)}
     identity = native_identity(model, config, checkpoint_sha256=sha256_file_hex(weights))
-    engine = Engine(port, None, tokenizer, TensorStore(), 'native-state/' + port.config.model_type, shared_model=model,
+    engine = Engine(port, tokenizer, TensorStore(), 'native-state/' + port.config.model_type, shared_model=model,
         role_tokens=RoleTokens(*model.marker_ids), model_config=config,
         checkpoint_sha256=identity['checkpoint_sha256'],
         embedding_weight_sha256=identity['embedding_weight_sha256'], device='cpu')
@@ -335,8 +357,25 @@ def test_baseline_only_binds_student_and_continues_with_author(tmp_path, monkeyp
     monkeypatch.setattr(memetic, 'evaluate', fake_evaluate)
     written = {'id': 'nzs1_' + 'e' * 52, 'source_capture': {'policy': actor},
                'source_text_sha256': hashlib.sha256(b'guide').hexdigest()}
+    receipt_id = 'mtf1_' + '7' * 64
+    receipt = {'schema': memetic.teacher_ferry.RECEIPT_SCHEMA, 'request_id': receipt_id,
+        'request_sha256': '8' * 64, 'response_sha256': '9' * 64, 'response_bytes': 1,
+        'status': 'complete', 'hmac_sha256': 'a' * 64}
+    custody = {'schema': 'natlang.memetic-author-call-custody/1', 'request_id': receipt_id,
+        'request_sha256': '8' * 64, 'response_sha256': '9' * 64,
+        'ferry_receipt_sha256': 'b' * 64, 'ferry_receipt': receipt}
+    authored_calls = []
+    def fake_propose(args, parent, digest, *, attempt_context, prior_rejection=None):
+        authored_calls.append({'prompt_input': digest, 'attempt': attempt_context, 'parent': parent,
+            'prior_rejection': prior_rejection})
+        return {'text': 'Teacher-authored: check the contract and verify the result.', 'author_call': custody}
+    monkeypatch.setattr(memetic.runner, 'propose_guidance', fake_propose)
+    monkeypatch.setattr(memetic.runner, 'failure_digest', lambda fit: 'DEV failure evidence')
+    fail_candidate_write = {'enabled': True}
     def fake_write(*args):
         calls.append(('write', '', actor))
+        if len([call for call in calls if call[0] == 'write']) == 2 and fail_candidate_write['enabled']:
+            raise RuntimeError('simulated candidate write interruption')
         return written
     monkeypatch.setattr(memetic, 'write_state', fake_write)
     monkeypatch.setattr(memetic, 'archive_state', lambda *args: {'path': '/tmp/state', 'sha256': 'f'*64, 'bytes': 1})
@@ -345,7 +384,7 @@ def test_baseline_only_binds_student_and_continues_with_author(tmp_path, monkeyp
     confirmation.write_text(''.join(json.dumps(case(index)) + '\n' for index in ('c', 'd')))
     common = ['--program-id', 'p', '--development', str(development), '--confirmation', str(confirmation),
               '--out', str(tmp_path / 'run'), '--server', 'http://student', '--model-id', 'lfm',
-              '--samples', '2', '--generations', '0']
+              '--samples', '2', '--generations', '1']
     baseline = memetic.main([*common, '--baseline-only'])
     assert baseline['status'] == 'baseline_complete'
     assert [name for name, _, _ in calls] == ['unguided-dev', 'unguided-confirm']
@@ -361,9 +400,21 @@ def test_baseline_only_binds_student_and_continues_with_author(tmp_path, monkeyp
     path = tmp_path / 'teacher.json'; path.write_text(json.dumps(receipt))
     author = ['--author', ferry.TEACHER_URL, '--author-model', ferry.TEACHER_SERVE_ALIAS,
               '--author-ferry', 'http://127.0.0.1:8766', '--author-provenance', str(path)]
+    with pytest.raises(RuntimeError, match='candidate write interruption'):
+        memetic.main([*common, *author])
+    assert [item['attempt']['phase'] for item in authored_calls] == ['initial-seed', 'candidate']
+    assert all(item['prompt_input'] == 'DEV failure evidence' for item in authored_calls)
+    assert 'confirmation' not in json.dumps(authored_calls)
+    candidate_pending = json.loads((tmp_path / 'run/candidate-000-pending.json').read_text())
+    assert candidate_pending['author_call']['request_id'] == receipt_id
+    fail_candidate_write['enabled'] = False
     result = memetic.main([*common, *author])
     assert result['status'] == 'qualified'
-    assert [name for name, _, _ in calls].count('write') == 1
+    assert [name for name, _, _ in calls].count('write') == 3
+    assert len(authored_calls) == 2, 'resuming the candidate must retain its pending teacher answer and request ID'
+    state = json.loads((tmp_path / 'run/state.json').read_text())
+    assert state['best']['author_call']['request_id'] == receipt_id
+    assert state['history'][0]['candidate']['author_call']['request_id'] == receipt_id
     assert json.loads((tmp_path / 'run/binding.json').read_text())['unguided_baseline']['development']['successes'] == 0
     new_actor = {**actor, 'checkpoint_sha256': '9'*64}
     student['rl_policy_binding']['native_identity'] = new_actor

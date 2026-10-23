@@ -23,7 +23,7 @@ def actual_engine_gradient(engine,graph,row,bindings,adapter_id,name):
     from natlang_neuralese.model.shared_state import concatenate_captures,splice_block
     from natlang_neuralese.model.state_block import NativeStateBlock
     from natlang_neuralese.rl.native_replay import action_logps
-    from natlang_neuralese.rl.full_policy import clipped_token_loss
+    from natlang_neuralese.rl.policy_math import clipped_token_loss
     example=parse_graph(graph,tokenizer_fingerprint=engine.native_identity['tokenizer_fingerprint'])
     coefficient=engine.store.get_native_tensor_artifact(adapter_id).artifact.tensors[name].clone().requires_grad_(True)
     def execute(bank):

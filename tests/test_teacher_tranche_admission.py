@@ -65,6 +65,24 @@ def test_resolves_actual_packet_and_keeps_remote_provenance(tmp_path):
     assert result['remote_references']['selection']['path'] == '/remote/selection'
 
 
+def test_path_only_relocation_preserves_qualification_content_binding(tmp_path):
+    ready, collection, prepared_ref, references = packet(tmp_path)
+    original = json.loads(Path(prepared_ref['path']).read_text())
+    relocated_cases = tmp_path / 'relocated-cases.jsonl'
+    relocated_cases.write_bytes(Path(references['selected_cases']['path']).read_bytes())
+    relocated_cases_ref = file_binding(relocated_cases)
+    original['cases'] = relocated_cases_ref
+    original['references'] = dict(original['references'])
+    original['references']['selected_cases'] = relocated_cases_ref
+    relocated_prepared = put(tmp_path / 'relocated-prepared.json', original)
+    relocated_ready = put(tmp_path / 'relocated-ready.json', {
+        'entries': [{'qualified_packet': relocated_prepared}],
+    })
+    result = packet_references(relocated_ready, collection)
+    assert result['prepared'] == relocated_prepared
+    assert result['references']['selected_cases'] == relocated_cases_ref
+
+
 def test_embedded_selection_is_typed_exact(tmp_path):
     ready, collection, *_ = packet(tmp_path)
     collection['protected_selection']['cases'] = 1.0
@@ -119,6 +137,62 @@ def test_predecessors_span_batches_in_registry_order_exclude_self(tmp_path):
     put(tmp_path / 'training/neuralese_corpora.json', {'corpora': [first, second]})
     assert [row['id'] for row in admitted_predecessors(tmp_path, second['id'])] == [first['id']]
     assert [row['id'] for row in admitted_predecessors(tmp_path, Tranche(22, 1).corpus_id)] == [first['id'], second['id']]
+
+
+def test_registered_predecessor_can_use_only_full_manifest_bound_relocation(tmp_path):
+    from scripts.coreweave.teacher_predecessor_relocations import build
+
+    entry = corpus(tmp_path, 21, 27)
+    put(tmp_path / 'training/neuralese_corpora.json', {'corpora': [entry]})
+    canonical = tmp_path / entry['path']
+    relocated = tmp_path / 'relocated' / 'batch21-tr27-exact'
+    relocated.parent.mkdir(parents=True)
+    import shutil
+    shutil.copytree(canonical, relocated)
+    shutil.rmtree(canonical)
+    declaration = build(tmp_path, [relocated.parent], namespace='qwen-verified-positive-native-graphs-20261017-recovery7853')
+    path = tmp_path / 'relocations.json'
+    path.write_text(json.dumps(declaration))
+    rows = admitted_predecessors(tmp_path, 'another-corpus',
+        namespaces=('qwen-verified-positive-native-graphs-20261017-recovery7853',),
+        relocation_manifest=path)
+    assert [row['id'] for row in rows] == [entry['id']]
+    (relocated / 'lfm25/train/native-graphs.jsonl.zst').write_bytes(b'changed')
+    with pytest.raises(ValueError, match='relocated member content'):
+        admitted_predecessors(tmp_path, 'another-corpus',
+            namespaces=('qwen-verified-positive-native-graphs-20261017-recovery7853',),
+            relocation_manifest=path)
+
+
+def test_unavailable_registered_predecessor_requires_both_exact_cache_views(tmp_path, monkeypatch):
+    entry = corpus(tmp_path, 21, 27)
+    put(tmp_path / 'training/neuralese_corpora.json', {'corpora': [entry]})
+    import shutil
+    shutil.rmtree(tmp_path / entry['path'])
+    import scripts.neuralese_data.build_verified_teacher_trajectory_graphs as converter
+    calls = []
+
+    def cached(root, ident, model, fingerprint, policy, **refs):
+        calls.append((ident, model, fingerprint, policy, refs['manifest_ref']))
+        return {'corpus_id': ident, 'manifest': refs['manifest_ref'],
+                'path': f'registered-cache:{ident}/{model}', 'sha256': 'a' * 64,
+                'bytes': 1, 'cache_only_source': True}, {}
+
+    monkeypatch.setattr(converter, 'registered_cached_content_index', cached)
+    rows = admitted_predecessors(tmp_path, 'another-corpus',
+        namespaces=('qwen-verified-positive-native-graphs-20261017-recovery7853',),
+        cache_contracts={model: {'tokenizer_fingerprint': model, 'policy_sha256': 'b' * 64}
+                         for model in ('lfm25', 'mellum21')})
+    assert [row['id'] for row in rows] == [entry['id']]
+    assert rows[0]['cache_only'] is True
+    assert all(rows[0]['outputs'][model]['cache_only_source'] is True
+               for model in ('lfm25', 'mellum21'))
+    assert [item[1] for item in calls] == ['lfm25', 'mellum21']
+
+    with pytest.raises(ValueError, match='both exact model contracts'):
+        admitted_predecessors(tmp_path, 'another-corpus',
+            namespaces=('qwen-verified-positive-native-graphs-20261017-recovery7853',),
+            cache_contracts={'lfm25': {'tokenizer_fingerprint': 'lfm25', 'policy_sha256': 'b' * 64}})
 
 
 def test_new_teacher_epoch_keeps_actual_batch_zero_and_both_admitted_predecessors(tmp_path):

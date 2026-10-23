@@ -2,6 +2,27 @@
 
 Draft, 2026-10-04. A cross-cutting plan that revises [S6](S6_META_LEARNING.md) and extends [S5](S5_PROGRAM_TRAINING.md) and [S7](S7_RL.md). It puts every way a natlang program can improve into one framework, so that improvement methods can be combined, compared at matched compute and distilled into one another. The design choices listed in §14 were accepted by the owner on 2026-10-04 as **defaults**, not rules: each is where work starts and what a run uses unless it says otherwise. Any of them may be overridden per experiment, artifact or program when evidence or a task calls for it, and the override is recorded with the run. Decision 37 (adapters as program artifacts) is the owner's direction of 2026-10-04.
 
+**Current implementation status (2026-10-23).** The generic tiny-adapter block
+and projected adapter-code interfaces described in §6 and §8 are historical
+and retired from the reference runtime. Stored program guidance is positional
+native KV/hybrid state through `withNativeStates`; it changes call context and
+does not change model weights. Exact-checkpoint native actor coefficients use
+named nnt1 artifacts through `learning.nativeAdapters`, `withNativeAdapters`,
+recorded whole-graph gradients, native Adam/SGD updates, and nnt1 save/load and
+delta arithmetic. High-level `valueAndGrad` now covers nzs1 state-only,
+nnt1 actor-only, and joint state/coefficient targets, repeated aliases,
+separately scoped actors, and order-2 updates through the native derivative
+program. A scoped import binds to the exact in-trajectory writer when present;
+adapter-produced states carry their authenticated base actor and use the
+same-base state receipt. The actual HTTP harness checks the prepared import
+against the server prompt and import receipt. CPU fixtures against the tiny LFM
+and Mellum checkpoint families exercise objective reduction, producer-to-
+consumer gradient flow, scoped multi-actor learning, higher-order derivatives,
+optimizer updates, archive reload, and delta application. These fixtures
+validate mechanisms, not task-level learning or capability lift. The llama.cpp
+fork's generic externally supplied GGUF LoRA serving is a separate
+model-serving feature.
+
 ## 1. Thesis
 
 Every improvement method we have or want is the same act: an **operator** reads a program's current **state** and some **evidence**, and proposes a new state. The methods differ along three axes:
@@ -435,7 +456,7 @@ The first run (8 rows × 2 samples, temperature 1, 3 generations, Muon 10006, Qw
 12. Learned updater trained from records (imitation in delta form, then query-trained), with faceted meta-skills and the hold-to-generic term.
 13. Delta projection `D` (§5) and adapter projection `P` (per base and kind) fitted to directly trained adapters, then trained end to end; adapter writer producing `AdapterCode` blocks; codes as first-class adapters (§6.4).
 
-*Status 2026-10-04:* `model/projections.py` has `BlockProjection` and `AdapterProjection` (P) plus `DeltaProjection` (D). In each, a zero block decodes to zero and an untrained projection is the identity update. The server takes adapters as `{code, projection}`, and gradients reach the code through P. Stage 1 (`train/projection.py`) is in: on 33 method-arm adapters, the held-out round trip has relative error 0.0023 against 0.277 through a random P (codes of 8 vectors; codes of 1–2 vectors cannot separate the output rows). Stage 2 (`train/projection_e2e.py`, end to end on decision loss; held-out families compare a code through P, a direct adapter, a random P and no adapter) is running as `projection-e2e-v1`. D's training waits for recorded soft deltas.
+*Historical status 2026-10-04; retired 2026-10-23:* `model/projections.py` formerly held `BlockProjection` and `AdapterProjection` (P) plus `DeltaProjection` (D). Stage 1 (`train/projection.py`) reported a 0.0023 held-out relative round-trip error on 33 method-arm adapters, and stage 2 (`train/projection_e2e.py`) was planned as an end-to-end decision-loss run. The current server no longer loads or serves P, and those trainer entrypoints have been removed. The native replacement learns positional KV and hybrid-state artifacts directly with native-state gradients and optimizer derivations. Old recipe files remain immutable provenance records; current native-state recipes reject projected stages.
 
 **M6: reward-blind improver.**
 14. View builders and gate checks for both visibility classes.

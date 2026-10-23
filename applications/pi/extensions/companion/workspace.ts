@@ -136,14 +136,14 @@ export function companionService(read: DocumentReader, context: Context, env: Ex
   };
 }
 
-/** A message part as the transcript reads it; Neuralese blocks (types.ts NeuraleseContent) are not in pi-ai's union. */
+/** A message part as the transcript reads it; Neuralese blocks (types.ts NativeStateContent) are not in pi-ai's union. */
 type Part = { type: string; text?: string; id?: string };
 
 /** The text of a message, compact: tool calls with their arguments, results cut; a Neuralese block named by its ID. */
 export function renderMessage(message: Message): string {
   const cut = (text: string, limit: number) => text.length > limit ? `${text.slice(0, limit)} …[${text.length - limit} more chars]` : text;
   if (message.role === 'user') return `USER: ${cut(typeof message.content === 'string' ? message.content : (message.content as Part[]).map(transcriptText).join(''), 2000)}`;
-  if (message.role === 'assistant') return (message.content as Part[]).map(part => part.type === 'text' || part.type === 'neuralese' ?
+  if (message.role === 'assistant') return (message.content as Part[]).map(part => part.type === 'text' || part.type === 'native_state' ?
     `AGENT: ${cut(transcriptText(part), 1500)}` : part.type === 'toolCall' ? `AGENT CALLS ${(part as ToolCall).name} ` +
     `${cut(JSON.stringify((part as ToolCall).arguments), 400)}` : '').filter(Boolean).join('\n');
   if (message.role === 'toolResult') return `RESULT of ${message.toolName}${message.isError ? ' (error)' : ''}: ${cut((message.content as Part[]).map(transcriptText).join(''), 800)}`;

@@ -46,7 +46,7 @@ class PolicySource:
     def __init__(self,declaration,*,previous_sources=()):
         self.declaration=validate_policy_training(declaration)
         self.sources=[];self.entries=[];self.by_id={};self.channels={};self.readers={}
-        from ..rl.grpo import group_advantages
+        from ..rl.rollout_math import group_advantages
         groups=defaultdict(list)
         for binding in [*previous_sources,*declaration['sources']]:
             if binding in self.sources:continue

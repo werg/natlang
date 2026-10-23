@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { createNativeStateFixturePort } from './fixtures/native-state-port.mjs';
 import { createNatlangRuntime, defineNatlang } from '../dist/index.js';
-import { MemoryNeuraleseStore, StandInNeuralesePort, hashingEmbedder } from '../dist/native/neuralese-store.js';
+import { MemoryNeuraleseStore } from '../dist/native/neuralese-store.js';
 import { neuraleseSentinel } from '../dist/native/neuralese.js';
 
 const requestParts = messages => messages.flatMap(message => [message.content,
@@ -10,7 +11,7 @@ const requestParts = messages => messages.flatMap(message => [message.content,
 
 async function exercise({ explicitCapture }) {
   const store = new MemoryNeuraleseStore();
-  const port = new StandInNeuralesePort(store, hashingEmbedder(8), 8, 'nd:natlang@1');
+  const port = createNativeStateFixturePort(store, 'native-state/fixture');
   const body = await port.write('Classify the note using the supplied rule.');
   const note = 'The package arrived damaged.';
   const policy = 'Only use details stated in the note.';
@@ -33,7 +34,7 @@ async function exercise({ explicitCapture }) {
   assert.ok(requests.length >= 2, 'the child invocation reached the model boundary');
   const childRequest = requests[1];
   const parts = requestParts(childRequest);
-  assert.ok(parts.some(part => part.type === 'neuralese' && part.id === body.id), 'the child opening transports the exact body block');
+  assert.ok(parts.some(part => part.type === 'native_state' && part.id === body.id), 'the child opening transports the exact body block');
   const openingText = parts.filter(part => part.type === 'text').map(part => part.text).join('\n');
   assert.match(openingText, /note:\s*string\s*=\s*"The package arrived damaged\."/);
   if (explicitCapture) {
@@ -62,7 +63,7 @@ test('whole-block soft body preserves explicit snapshot capture values and types
 
 test('soft inline child carries eval-local Draft aliases through iterateOn and its captured snapshot', async () => {
   const store = new MemoryNeuraleseStore();
-  const port = new StandInNeuralesePort(store, hashingEmbedder(8), 8, 'nd:natlang@1');
+  const port = createNativeStateFixturePort(store, 'native-state/fixture');
   const body = await port.write('Reconcile the scoped pass with the complete current Draft. Return the complete Draft.');
   const requests = [];
   const draft = { stop: 'WILLOW-9', route: 'R-16' };
@@ -90,7 +91,7 @@ return final.draft;
   assert.deepEqual(await runtime.run(() => root()), { stop: 'WILLOW-9', route: 'R-17' });
   assert.ok(requests.length >= 2, 'the root eval and child call both reached the model boundary');
   const childParts = requestParts(requests[1]);
-  assert.ok(childParts.some(part => part.type === 'neuralese' && part.id === body.id), 'the child retains its exact soft body');
+  assert.ok(childParts.some(part => part.type === 'native_state' && part.id === body.id), 'the child retains its exact soft body');
   const childOpening = childParts.filter(part => part.type === 'text').map(part => part.text).join('\n');
   assert.match(childOpening, /type Draft\s*=\s*\{[^}]*stop: string[^}]*route: string[^}]*\}/,
     'the alias used by the child signature is declared in the generated opening');

@@ -2,7 +2,7 @@
 
 An artifact is a `.nz` file (or a small set of files) a run produces or consumes as a value rather than as model
 weights: system-prompt banks, the standard library of combinator soft bodies, operators, soft skills, data blocks,
-adapters and projections. Like corpora (training/neuralese_corpora.json), artifacts are registered in
+adapters. Like corpora (training/neuralese_corpora.json), artifacts are registered in
 `training/neuralese_artifacts.json` and pinned by an immutable SHA-256 manifest in `training/artifact-manifests/`.
 An entry also pins what an artifact means: its dialect (every block's dialect must equal it), the backbone and
 revision its space belongs to, how it was initialised (text, a parent artifact, conversion), what trained it
@@ -33,7 +33,7 @@ STORE = "data/neuralese/artifacts"
 SCHEMA = "natlang.neuralese-artifacts/1"
 SNAPSHOT_SCHEMA = "natlang.neuralese-artifact-snapshot/1"
 # "bundle": one file holding several kinds, e.g. a method-arm or memetic run's soft skills and adapters.
-KINDS = {"prompt-bank", "standard-library", "operator", "soft-skill", "data-block", "adapter", "projection", "bundle"}
+KINDS = {"prompt-bank", "standard-library", "operator", "soft-skill", "data-block", "adapter", "bundle"}
 INIT_METHODS = {"text", "trained", "converted", "written"}
 QUALIFICATION = {"unqualified", "qualified", "failed", "superseded"}
 ID = re.compile(r"[a-z0-9][a-z0-9.-]{2,127}")
@@ -361,7 +361,7 @@ def register_run(run: Path, identity: str, *, backbone_revision: str | None = No
         raise ArtifactError(f"{run} does not record its backbone; register it with the CLI")
     return register_output(path, identity=identity, kind="prompt-bank", dialect=dialects[0],
                            backbone=backbone_identity(model, backbone_revision or backbone.get("revision")),
-                           trainer=trainer or summary.get("trainer") or "natlang_neuralese.train.trajectories",
+                           trainer=trainer or summary.get("trainer") or "unspecified",
                            commit=commit, corpora=corpora, parent=parent[0] if parent else None,
                            run=str(run.resolve()), notes=f"inputs not registered as corpora: "
                            f"{len(shas) - len(corpora_by_sha(shas, repo))} of {len(shas)}", repo=repo)

@@ -15,7 +15,7 @@ import { DECISION_SYSTEM_PROMPT } from './decision.js';
 import { isNeuraleseRef, neuraleseSentinel, type NeuraleseRef } from './neuralese.js';
 import { APPROACH_PROMPT, AUTOMATIC_NOTE, COMPACTED_RESULT, COMPACTION_NOTICE, directoryReducerPrompt, DIRECTORY_REDUCER_DECLARATION, FILE_TOOL_SURFACES, FUNCTION_TOOLS_PROMPT,
   GENERATION_GUIDANCE, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN, LAST_TURN_NOTICE, NL_DEPTH_LIMIT_NOTICE, promptAtNlDepthLimit,
-  SEMANTIC_RESULT_PROMPT, TEXT_NEURALESE_EMULATION_PROMPT, TOOLS_PROMPT } from './prompt.js';
+  SEMANTIC_RESULT_PROMPT, TOOLS_PROMPT } from './prompt.js';
 import { VIEW_PROMPT } from '../builtin/index.js';
 import { DEFAULT_JUDGE_INSTRUCTIONS, predicatePrompt } from '../runtime/iterate.js';
 
@@ -38,7 +38,6 @@ export function promptPieces(): PromptPiece[] {
     { id: 'interpreter/depth-limit', text: promptAtNlDepthLimit(TOOLS_PROMPT), scope: 'generic' },
     { id: 'depth-limit-notice', text: NL_DEPTH_LIMIT_NOTICE, scope: 'program' },
     { id: 'directory-reducer/declaration', text: DIRECTORY_REDUCER_DECLARATION, scope: 'program' },
-    { id: 'neuralese/text-emulation', text: TEXT_NEURALESE_EMULATION_PROMPT, scope: 'program' },
     { id: 'neuralese/string-boundaries', text: SEMANTIC_RESULT_PROMPT.split('\n\n')[1]!, scope: 'program' },
     { id: 'function-tools/edit-capability', text: FUNCTION_TOOLS_PROMPT.split('\n')[1]!, scope: 'program' },
     { id: 'function-tools', text: FUNCTION_TOOLS_PROMPT, scope: 'generic' },

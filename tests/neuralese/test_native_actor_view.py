@@ -161,7 +161,7 @@ def test_actual_actor_cli_and_provider_consumed_closure(source,tmp_path,monkeypa
         seen.append(actual.native_identity)
         return SimpleNamespace(server_address=(host,port),serve_forever=lambda:None,server_close=lambda:None)
     monkeypatch.setattr(cli,'serve',serve)
-    monkeypatch.setattr(sys,'argv',['serve','--native-state','--checkpoint',str(path),
+    monkeypatch.setattr(sys,'argv',['serve','--checkpoint',str(path),
         '--checkpoint-sha256',sha256_file_hex_cached(path),'--native-actor-view',ref['path'],
         '--native-actor-view-sha256',ref['sha256'],'--device','cpu','--threads','1'])
     cli.main();assert len(seen)==1

@@ -1,6 +1,6 @@
 {
  "schema": "natlang.prompt-rendering-contract-fixtures/1",
- "note": "Frozen inputs of the behavioural prompt-rendering identity (data/rendering_contract.py). Changing this file changes every identity: add the superseded identities to rendering-identity-equivalence.json.",
+ "note": "Frozen inputs of the behavioural prompt-rendering identity (data/rendering_contract.py). Changing this file changes the active behavioral identity.",
  "specials": [
   "<|im_start|>",
   "<|im_end|>",

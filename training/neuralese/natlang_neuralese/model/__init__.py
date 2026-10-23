@@ -1,9 +1,9 @@
-from .dialect import DIALECT, StoredBlock, block_id
-from .heads import ContentProjection, FeedbackProjection, InterfaceNorm, PortHeads, StopHead
+"""Current native model components.
+
+The backbone classes remain model internals used by shared positional-state
+execution. Projected Neuralese heads are not exported from this package.
+"""
+
 from .lfm2_port import ControlTokens, PortBackbone, PortCache, load_backbone
 
-__all__ = [
-    "DIALECT", "StoredBlock", "block_id",
-    "ContentProjection", "FeedbackProjection", "InterfaceNorm", "PortHeads", "StopHead",
-    "ControlTokens", "PortBackbone", "PortCache", "load_backbone",
-]
+__all__ = ["ControlTokens", "PortBackbone", "PortCache", "load_backbone"]

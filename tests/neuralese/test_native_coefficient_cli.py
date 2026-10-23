@@ -196,7 +196,7 @@ def test_actual_managed_actor_policy_cli_and_durable_restart(tmp_path,family):
     fixture.write_text(json.dumps({'runtime':expected,'handle':actor.id,'current':changed.id,
                                   'defaults':[{'id':changed.id,'scale':1}]}))
     command=[sys.executable,str(Path(__file__).resolve().parents[2]/'scripts/neuralese_data/serve_native_checkpoint.py'),
-        '--native-state','--checkpoint',engine.native_checkpoint,
+        '--checkpoint',engine.native_checkpoint,
         '--checkpoint-sha256',sha256_file_hex_cached(engine.native_checkpoint),
         '--coefficient-policy',str(policy),'--coefficient-policy-sha256',sha256_file_hex_cached(policy),
         '--device',str(engine.device),'--port','0','--store-dir',str(tmp_path/'durable-store')]
@@ -210,7 +210,7 @@ def test_actual_managed_actor_policy_cli_and_durable_restart(tmp_path,family):
             for line in log.read_text().splitlines():
                 if line.startswith('{'):
                     receipt=json.loads(line)
-                    if receipt.get('event')=='direct_training_checkpoint_serving':return child,receipt
+                    if receipt.get('event')=='native_training_checkpoint_serving':return child,receipt
             if child.poll() is not None:raise AssertionError(log.read_text())
             time.sleep(.05)
         child.terminate();child.wait(30)

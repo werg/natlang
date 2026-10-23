@@ -164,7 +164,7 @@ export class CompanionStream {
   }
 
   /** The generation's `onStream` hook: read one provider event. Synchronous; work it starts runs in the background. */
-  observe(event: AssistantMessageEvent | { type: 'neuralese'; contentIndex: number }, attempt: number, api: StreamHookApi, context: Context): void {
+  observe(event: AssistantMessageEvent | { type: 'native_state'; contentIndex: number }, attempt: number, api: StreamHookApi, context: Context): void {
     let turn = this.#turns.get(api.conversationId);
     if (event.type === 'start' || !turn || turn.taskId !== api.taskId || turn.attempt !== attempt) {
       if (turn && !turn.settled) this.#discard(turn, 'superseded');
@@ -178,7 +178,7 @@ export class CompanionStream {
     switch (event.type) {
       case 'error': this.#discard(turn, 'failed'); return;
       case 'done': if (event.message.stopReason === 'deferred') this.#discard(turn, 'aborted'); return;
-      case 'text_start': case 'thinking_start': case 'toolcall_start': case 'neuralese': {
+      case 'text_start': case 'thinking_start': case 'toolcall_start': case 'native_state': {
         if (event.contentIndex <= turn.started) {
           // The request was sent again (a reset) or the final turn replaced the streamed parts: start over.
           this.#discard(turn, 'reset');

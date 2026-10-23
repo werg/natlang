@@ -490,6 +490,46 @@ def acceptance(previous: dict, candidate: dict):
     return candidate['successes'] > previous['successes']
 
 
+def _prior_development_rejection(state: dict) -> dict | None:
+    """Return only a rejected proposal's development evidence; never confirmation rows or scores."""
+    for item in reversed(state.get('history') or []):
+        if item.get('accepted'):
+            continue
+        candidate = item.get('candidate') or {}
+        development = candidate.get('development')
+        text = candidate.get('text')
+        if isinstance(text, str) and isinstance(development, dict):
+            return {'guidance': text, 'development_failures': runner.failure_digest(development)}
+    return None
+
+
+def _author_attempt(args, teacher: dict, phase: str, generation: int) -> dict:
+    return {'schema': 'natlang.memetic-guidance-author-attempt/1',
+            'program_id': args.program_id, 'phase': phase, 'generation': generation,
+            'author_provenance_sha256': teacher['sha256']}
+
+
+def _author_record(authored: dict, attempt: dict) -> dict:
+    custody = authored.get('author_call')
+    if (not isinstance(custody, dict)
+            or custody.get('schema') != 'natlang.memetic-author-call-custody/1'
+            or not isinstance(custody.get('request_id'), str)
+            or not re.fullmatch(r'mtf1_[a-f0-9]{64}', custody['request_id'])
+            or any(not isinstance(custody.get(key), str) or not re.fullmatch(r'[0-9a-f]{64}', custody[key])
+                   for key in ('request_sha256', 'response_sha256', 'ferry_receipt_sha256'))
+            or not isinstance(custody.get('ferry_receipt'), dict)):
+        raise ValueError('authored guidance lacks exact durable ferry request/response custody')
+    receipt = custody['ferry_receipt']
+    if (receipt.get('request_id') != custody['request_id']
+            or receipt.get('request_sha256') != custody['request_sha256']
+            or receipt.get('response_sha256') != custody['response_sha256']
+            or receipt.get('status') != 'complete'
+            or receipt.get('schema') != teacher_ferry.RECEIPT_SCHEMA):
+        raise ValueError('authored guidance custody differs from its signed ferry receipt')
+    return {'schema': 'natlang.memetic-guidance-author-record/1',
+            'attempt': attempt, **custody}
+
+
 def qualification(baseline: dict, best: dict, min_gain_fraction: float) -> bool:
     return all(best[split]['scored'] == baseline[split]['scored'] and best[split]['scored'] > 0 and
         (best[split]['successes'] - baseline[split]['successes']) / best[split]['scored'] >= min_gain_fraction
@@ -755,41 +795,76 @@ def main(argv=None):
         raise ValueError('resume changed author or guidance training recipe identity')
     write_json_durable(author_path, author_inputs)
     if state['best'] is None:
-        # A native block must contain actual text, including for the seed.
-        seed_text = 'Follow the program instructions and verify the requested result before returning it.'
-        seed_write = write_state(args.server, seed_text, identity)
-        seed = {'text': seed_text, 'write': seed_write,
-                'archive': archive_state(args.server, out, seed_write)}
-        seed['development'] = evaluate(args, out, 'seed-dev', state_guidance(seed_text, seed_write['id']), dev,
-                                       base_system=base_system, actor=identity, server_info_sha256=server_info_sha256,
-                                       evaluation_inputs_sha256=current_inputs_sha256)
-        seed['confirmation'] = evaluate(args, out, 'seed-confirm', state_guidance(seed_text, seed_write['id']), confirm,
-                                        base_system=base_system, actor=identity, server_info_sha256=server_info_sha256,
-                                        evaluation_inputs_sha256=current_inputs_sha256)
+        # The first authored state is based only on the already measured
+        # development baseline. Confirmation data and outcomes never enter the
+        # author request.
+        seed_pending_path = out / 'seed-pending.json'
+        attempt = _author_attempt(args, teacher, 'initial-seed', 0)
+        if seed_pending_path.exists():
+            seed = json.loads(seed_pending_path.read_text())
+            if seed.get('attempt') != attempt:
+                raise ValueError('resumed initial-seed attempt changed its stable author context')
+            _author_record({'author_call': seed.get('author_call')}, attempt)
+        else:
+            authored = runner.propose_guidance(args, {'guidance': ''},
+                runner.failure_digest(measured_baseline['development']), attempt_context=attempt)
+            seed = {'schema': 'natlang.memetic-guidance-candidate/1', 'text': authored['text'],
+                    'attempt': attempt, 'author_call': _author_record(authored, attempt)}
+            write_json_durable(seed_pending_path, seed)
+        seed_text = seed.get('text')
+        if not isinstance(seed_text, str) or not seed_text.strip():
+            raise ValueError('teacher initial seed has no authored guidance text')
+        if 'write' not in seed:
+            seed_write = write_state(args.server, seed_text, identity)
+            seed.update(write=seed_write, archive=archive_state(args.server, out, seed_write))
+            write_json_durable(seed_pending_path, seed)
+        if 'development' not in seed:
+            seed['development'] = evaluate(args, out, 'seed-dev', state_guidance(seed_text, seed['write']['id']), dev,
+                base_system=base_system, actor=identity, server_info_sha256=server_info_sha256,
+                evaluation_inputs_sha256=current_inputs_sha256)
+            write_json_durable(seed_pending_path, seed)
+        if 'confirmation' not in seed:
+            seed['confirmation'] = evaluate(args, out, 'seed-confirm', state_guidance(seed_text, seed['write']['id']), confirm,
+                base_system=base_system, actor=identity, server_info_sha256=server_info_sha256,
+                evaluation_inputs_sha256=current_inputs_sha256)
+            write_json_durable(seed_pending_path, seed)
         state['best'] = seed
         write_json_durable(state_path, state)
+        seed_pending_path.unlink(missing_ok=True)
     while state['generation'] < args.generations:
         generation = state['generation']
         best = state['best']
         pending = out / f'candidate-{generation:03d}-pending.json'
         if pending.exists():
             candidate = json.loads(pending.read_text())
+            attempt = _author_attempt(args, teacher, 'candidate', generation)
+            if candidate.get('attempt') != attempt:
+                raise ValueError('resumed candidate attempt changed its stable author context')
+            _author_record({'author_call': candidate.get('author_call')}, attempt)
         else:
-            proposed = runner.propose_guidance(args, {'guidance': best['text']}, runner.failure_digest(best['development']))
-            if proposed == best['text']:
-                proposed += ' Check the type and output contract before returning.'
-            written = write_state(args.server, proposed, identity)
-            candidate = {'text': proposed, 'write': written,
-                         'archive': archive_state(args.server, out, written)}
+            attempt = _author_attempt(args, teacher, 'candidate', generation)
+            authored = runner.propose_guidance(args, {'guidance': best['text']},
+                runner.failure_digest(best['development']), attempt_context=attempt,
+                prior_rejection=_prior_development_rejection(state))
+            candidate = {'schema': 'natlang.memetic-guidance-candidate/1', 'text': authored['text'],
+                         'attempt': attempt, 'author_call': _author_record(authored, attempt)}
+            write_json_durable(pending, candidate)
+        if 'write' not in candidate:
+            written = write_state(args.server, candidate['text'], identity)
+            candidate.update(write=written, archive=archive_state(args.server, out, written))
             write_json_durable(pending, candidate)
         proposed, written = candidate['text'], candidate['write']
         prefix = f'candidate-{generation:03d}'
-        candidate['development'] = evaluate(args, out, prefix + '-dev', state_guidance(proposed, written['id']), dev,
+        if 'development' not in candidate:
+            candidate['development'] = evaluate(args, out, prefix + '-dev', state_guidance(proposed, written['id']), dev,
                                              base_system=base_system, actor=identity, server_info_sha256=server_info_sha256,
                                              evaluation_inputs_sha256=current_inputs_sha256)
-        candidate['confirmation'] = evaluate(args, out, prefix + '-confirm', state_guidance(proposed, written['id']), confirm,
+            write_json_durable(pending, candidate)
+        if 'confirmation' not in candidate:
+            candidate['confirmation'] = evaluate(args, out, prefix + '-confirm', state_guidance(proposed, written['id']), confirm,
                                               base_system=base_system, actor=identity, server_info_sha256=server_info_sha256,
                                               evaluation_inputs_sha256=current_inputs_sha256)
+            write_json_durable(pending, candidate)
         accepted = (acceptance(best['development'], candidate['development'])
                     and acceptance(best['confirmation'], candidate['confirmation']))
         state['history'].append({'generation': generation, 'accepted': accepted, 'candidate': candidate})
@@ -821,6 +896,7 @@ def main(argv=None):
         'student': identity, 'text': best['text'], 'native_state_id': best['write']['id'],
         'native_state_artifact': best['archive'],
         'source_capture': best['write']['source_capture'], 'source_text_sha256': best['write']['source_text_sha256'],
+        'author_call': best['author_call'],
         'program_guidance': state_guidance(best['text'], best['write']['id']),
         'development': outcome['best']['development'],
         'confirmation': outcome['best']['confirmation'],

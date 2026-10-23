@@ -30,7 +30,7 @@ def test_current_actor_monitor_is_bound_once_and_never_loads_a_model(tmp_path,mo
             calls.append(step)
             if failure=='collector':raise OSError('owned collector failed')
             return {'eligible':True,'cases':16,'task_successes':3}
-    monkeypatch.setattr(monitor,'Server',Server);monkeypatch.setattr(monitor,'TaskEval',Evaluation)
+    monkeypatch.setattr(monitor,'NativeActorClient',Server);monkeypatch.setattr(monitor,'TaskEval',Evaluation)
     spec_path=tmp_path/'spec.json';spec_path.write_text(json.dumps({'packet':{'path':'protected','sha256':'bound'},'neuralese_server':True}))
     kwargs=dict(endpoint='http://same-actor',checkpoint_sha256='current',spec_path=spec_path,
         spec_sha256=hashlib.sha256(spec_path.read_bytes()).hexdigest(),out=tmp_path/'held-only',step=123)

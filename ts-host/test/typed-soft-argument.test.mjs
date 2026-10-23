@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { test } from 'node:test';
+import { createNativeStateFixturePort } from './fixtures/native-state-port.mjs';
 import { readFileSync } from 'node:fs';
 import { createNatlangRuntime, defineNatlang, Folder } from '../dist/index.js';
-import { MemoryNeuraleseStore, StandInNeuralesePort, hashingEmbedder } from '../dist/native/neuralese-store.js';
+import { MemoryNeuraleseStore } from '../dist/native/neuralese-store.js';
 import { neuraleseRef } from '../dist/native/neuralese.js';
 import { validateGraph } from '../dist/native/graph.js';
 import { convertTrajectory } from '../dist/compiler/neuralese-conversion.js';
@@ -18,7 +19,7 @@ const success = () => Object.assign(async () => ({ calls: [['return_result', { s
 
 function writer() {
   const store = new MemoryNeuraleseStore();
-  const port = new StandInNeuralesePort(store, hashingEmbedder(8), 8, 'nd:natlang@1');
+  const port = createNativeStateFixturePort(store, 'native-state/fixture');
   const writes = [];
   const originalWrite = port.write.bind(port);
   port.write = async (text, options) => { writes.push({ text, options }); return originalWrite(text, options); };
@@ -45,9 +46,9 @@ test('a crisp string at a declared Neuralese<string> argument boundary is writte
   const start = events.find(event => event.kind === 'invocation' && event.phase === 'start');
   assert.equal(write.source_kind, 'typed-text-argument');
   assert.equal(write.inputs[0].node, 'external', 'a root call has an external caller argument source');
-  assert.ok(start.inputs.some(input => input.node === write.node && input.block === write.block),
-    'the invocation consumes the materialized block from its write node');
-  assert.notEqual(write.inputs[0].node, start.node, 'the source edge does not point at the child that consumes the block');
+  assert.ok(start.inputs.some(input => input.node === 'external' && input.block === write.block),
+    'the invocation consumes the archived state written from its external text argument');
+  assert.equal(write.inputs[0].node, 'external', 'the writer retains the actual source boundary');
   assert.deepEqual(validateGraph(events, GRAPH_SCHEMA), []);
 });
 
@@ -73,8 +74,8 @@ test('a nested soft call writes from the parent model turn without a graph cycle
   assert.ok(write);
   assert.equal(write.inputs[0].node, `call:${parentTrace.callId}`, 'the block write points to its caller invocation');
   const start = child.events.find(event => event.kind === 'invocation' && event.phase === 'start');
-  assert.ok(start.inputs.some(input => input.node === write.node && input.block === write.block));
-  assert.notEqual(write.inputs[0].node, start.node, 'the block write does not depend on the consuming child invocation');
+  assert.ok(start.inputs.some(input => input.block === write.block), 'the child invocation consumes the archived argument state');
+  assert.equal(write.inputs[0].node, `call:${parentTrace.callId}`, 'the block is written from the parent producer occurrence');
   assert.deepEqual(validateGraph(traces.flatMap(trace => trace.events), GRAPH_SCHEMA), []);
 });
 
@@ -123,7 +124,8 @@ test('the converter selects a modern result receipt but excludes the same action
   const resultReceipt = {
     schema: 'natlang.typed-result-write/1', trajectory_id: 'boundary-run', source_row_sha256: 'row-sha',
     invocation_id: 'call-1', writer_call_id: 'call-1', writer_node: 'call-1#9',
-    block_id: `nz1_${'a'.repeat(52)}`, source_kind: 'typed-text-result', source: 'return_result',
+    block_id: `nzs1_${'a'.repeat(52)}`, source_kind: 'typed-text-result', source: 'return_result',
+    source_occurrence: 'call-1#9',
     result_type: 'Neuralese<string>', marker_context: 'return-result', result_path: ['return'],
     body_source: body, body_sha256: bodySha, body_source_basis: 'exact-raw-model-result-string',
     request_sha256: 'b'.repeat(64), raw_response_sha256: 'c'.repeat(64),
@@ -142,15 +144,31 @@ test('the converter selects a modern result receipt but excludes the same action
 
   const selected = convertTrajectory(makeRow(resultReceipt)).record;
   const selectedArgs = JSON.parse(selected.target.tool_calls[0].function.arguments);
-  assert.equal(selectedArgs.value.$write.block_id, resultReceipt.block_id);
-  assert.equal(selectedArgs.value.$write.type, 'Neuralese<string>');
-  assert.equal(selectedArgs.value.$write.source, body);
-  assert.match(selectedArgs.value.$write.name, /^(?:typed-result:|soft-state:)/);
+  assert.equal(selectedArgs.value, body, 'the source action remains ordinary text in the target');
+  assert.equal(selected.target.neuralese_code, undefined);
+  const occurrence = selected.native_source_conversion.occurrences.find(item => item.role === 'producer');
+  assert.ok(occurrence);
+  assert.equal(occurrence.reference, `soft-state:${resultReceipt.block_id}@` +
+    createHash('sha256').update(JSON.stringify(['boundary-run', 'call-1', 'call-1#9'])).digest('hex').slice(0, 12));
+  assert.equal(occurrence.body, body);
+  assert.equal(occurrence.source_kind, 'typed-text-result');
+  assert.equal(selected.neuralese_conversion.selected_runtime_result_writes[0].block_id, resultReceipt.block_id);
+
+  const historicalReceipt = { ...resultReceipt, block_id: `nz1_${'h'.repeat(32)}` };
+  delete historicalReceipt.source_occurrence;
+  const historical = convertTrajectory(makeRow(historicalReceipt)).record;
+  const historicalOccurrence = historical.native_source_conversion.occurrences.find(item => item.role === 'producer');
+  assert.ok(historicalOccurrence, 'the exact frozen source reader remains usable during current conversion');
+  assert.equal(historicalOccurrence.reference, `soft-state:${historicalReceipt.block_id}@` +
+    createHash('sha256').update(JSON.stringify(['boundary-run', 'call-1', 'call-1#9'])).digest('hex').slice(0, 12));
+  assert.equal(historicalOccurrence.body, body);
+  assert.equal(historical.native_source_conversion.source_ref.source_row_sha256, 'row-sha');
 
   const argumentReceipt = { ...resultReceipt, source_kind: 'typed-text-argument', argument_type: 'Neuralese<string>' };
   delete argumentReceipt.result_type;
   const excluded = convertTrajectory(makeRow(argumentReceipt)).record;
   const excludedArgs = JSON.parse(excluded.target.tool_calls[0].function.arguments);
   assert.equal(excludedArgs.value, body, 'argument provenance does not become a return-result write');
+  assert.equal(excluded.native_source_conversion.occurrences.filter(item => item.role === 'producer').length, 0);
   assert.equal(excluded.neuralese_conversion.sites['typed-result-write']?.converted ?? 0, 0);
 });

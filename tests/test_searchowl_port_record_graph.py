@@ -96,8 +96,13 @@ def test_teacher_target_stays_context_while_source_is_a_real_consumer_import(tmp
     graph = _graph(row)
     parsed = parse_graph(graph, tokenizer_fingerprint="2" * 64)
     writer, consumer = graph["nodes"]
+    assert graph["schema"] == "natlang.neuralese-native-graph/1"
     assert writer["producing"]
     assert len(consumer["imports"]) == 1
+    assert consumer["imports"][0]["source"] == "producer"
+    assert consumer["imports"][0]["start"] == writer["producing"][0][0]
+    assert consumer["imports"][0]["stop"] == writer["producing"][0][1]
+    assert parsed.external_states == {}
     assert graph["conversion"]["consumer_target_positive_tokens"] == 0
     assert graph["conversion"]["consumer_target_context_tokens"] > 0
     assert graph["conversion"]["source_payload_tokens"] == len(row.record.source_text())

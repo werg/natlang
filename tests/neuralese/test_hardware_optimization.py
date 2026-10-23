@@ -1,5 +1,4 @@
-"""Hardware profiles, selective checkpointing, the hw_bench matrix and the teacher bench
-(plans/COREWEAVE_HARDWARE_OPTIMIZATION.md)."""
+"""Current hardware profiles, native selective checkpointing, and teacher deployment checks."""
 import json
 import sys
 import threading
@@ -10,7 +9,6 @@ import pytest
 import torch
 
 from natlang_neuralese.train import hardware_profile as hp
-from natlang_neuralese.train import hw_bench
 from natlang_neuralese.train.recipe import OPERATIONAL_STAGE_PARAMETERS
 
 REPO = Path(__file__).resolve().parents[2]
@@ -43,7 +41,7 @@ def test_selection_by_device():
 
 def test_training_math_is_refused():
     base = {'schema': hp.SCHEMA, 'profiles': [{'name': 'x', 'match': {'capability': [12, 0]},
-                                                'stage_parameters': {'neuralese_direct': {'batch_tokens': 65536}}}]}
+                                                'stage_parameters': {'native_state_sft': {'batch_tokens': 65536}}}]}
     with pytest.raises(hp.ProfileError, match='Training math stays in the recipe'):
         hp.validate(base)
     base['profiles'][0]['stage_parameters'] = {}
@@ -54,89 +52,54 @@ def test_training_math_is_refused():
 
 def test_apply_records_replaced_values(tmp_path):
     profile = {'name': 'p', 'match': {'capability': [12, 0]}, 'status': 'measured',
-               'stage_parameters': {'neuralese_direct': {'checkpoint_layers': False, 'window_execution': 'packed'}},
+               'stage_parameters': {'native_state_sft': {'checkpoint_layers': False}},
                'environment': {'NATLANG_MAPLE_COMPILE': '1'}}
-    merged, env, record = hp.apply(profile, 'neuralese_direct', {'window_execution': 'packed', 'epochs': 1.0})
-    assert merged == {'window_execution': 'packed', 'epochs': 1.0, 'checkpoint_layers': False}
+    merged, env, record = hp.apply(profile, 'native_state_sft', {'checkpoint_layers': True, 'epochs': 1.0})
+    assert merged == {'checkpoint_layers': False, 'epochs': 1.0}
     assert env == {'NATLANG_MAPLE_COMPILE': '1'}
-    assert record['applied'] == {'checkpoint_layers': {'recipe': None, 'profile': False}}
-    assert hp.apply(profile, 'core_text_warmup', {'a': 1})[0] == {'a': 1}  # other stage kinds untouched
+    assert record['applied'] == {'checkpoint_layers': {'recipe': True, 'profile': False}}
+    assert hp.apply(profile, 'native_state_rl', {'checkpoint_layers': True})[0] == {'checkpoint_layers': True}
     path = tmp_path / 'profiles.json'
     path.write_text(json.dumps({'schema': hp.SCHEMA, 'profiles': [profile]}))
-    merged, env, record = hp.for_stage('neuralese_direct', {}, path=path, detected=SM120)
+    merged, env, record = hp.for_stage('native_state_sft', {}, path=path, detected=SM120)
     assert record['profile'] == 'p' and record['device'] == SM120 and merged['checkpoint_layers'] is False
-    assert hp.for_stage('neuralese_direct', {'k': 1}, path=tmp_path / 'absent.json', detected=SM120) == (
+    assert hp.for_stage('native_state_sft', {'k': 1}, path=tmp_path / 'absent.json', detected=SM120) == (
         {'k': 1}, {}, None)
 
 
 def test_gb10_profile_changes_nothing():
     """The running DGX lineages see no profile change: the GB10 profile is empty."""
-    merged, env, record = hp.for_stage('neuralese_direct', {'window_execution': 'packed'}, detected=GB10)
-    assert merged == {'window_execution': 'packed'} and env == {} and record['applied'] == {}
+    merged, env, record = hp.for_stage('native_state_sft', {'checkpoint_layers': True}, detected=GB10)
+    assert merged == {'checkpoint_layers': True} and env == {} and record['applied'] == {}
 
 
-def test_uncheckpointed_layers_are_exact():
-    """Selective checkpointing (the top N layers keep their activations) equals full checkpointing."""
-    from transformers import Qwen3Config, Qwen3ForCausalLM
-    from natlang_neuralese.model.hf_port import QwenPortBackbone
-    from natlang_neuralese.model.lfm2_port import ControlTokens
-    config = Qwen3Config(vocab_size=64, hidden_size=32, intermediate_size=64, num_hidden_layers=4,
-                         num_attention_heads=4, num_key_value_heads=2, head_dim=8, max_position_embeddings=128,
-                         attn_implementation='eager')
-    torch.manual_seed(0)
-    model = Qwen3ForCausalLM(config).eval()
-    for p in model.parameters():
-        p.requires_grad_(False)
-    port = QwenPortBackbone(model, ControlTokens(open_id=62, close_id=63))
-    for p in port.layers[3].parameters():
-        p.requires_grad_(True)
-    ids = torch.randint(0, 60, (2, 12))
+@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+def test_native_checkpointed_graph_ce_and_gradients_match(family):
+    """Operational activation checkpointing preserves the actual native graph objective."""
+    import copy
+    from test_shared_state import tiny
+    from test_native_state_sft import graph
+    from natlang_neuralese.data.native_graph import parse_graph
+    from natlang_neuralese.model.shared_state import SharedStateModel
+    from natlang_neuralese.data.native_graph import graph_loss
 
-    def run(uncheckpointed):
-        port.checkpoint_layers, port.uncheckpointed_layers = True, uncheckpointed
-        for p in port.layers[3].parameters():
-            p.grad = None
-        x = port.embed(ids).detach().requires_grad_(True)
-        h, cache = port.run_layers(x, range(0, port.num_layers), port_cache(port))
-        (h.square().sum() + sum(s.k.sum() for s in cache.states)).backward()
-        return h.detach(), x.grad, port.layers[3].mlp.down_proj.weight.grad.clone()
-
-    def port_cache(p):
-        from natlang_neuralese.model.lfm2_port import PortCache
-        return PortCache.empty(p.num_layers)
-
-    full = run(0)
-    for n in (1, 2, 4):
-        other = run(n)
-        for a, b in zip(other, full):
-            torch.testing.assert_close(a, b)
-
-
-def test_hw_bench_arms_and_derive():
-    for matrix in ('smoke', 'full'):
-        names = [arm['name'] for arm in hw_bench.arms(matrix)]
-        assert len(names) == len(set(names)) and 'm-ref' in names and 'l-ref' in names
-    records = [
-        {'name': 'm-ref', 'reference': 'm-ref', 'status': 'ok', 'losses': [15.2], 'median_seconds': 4.0,
-         'supervised_per_update': 32000, 'supervised_tokens_per_second': 8000.0},
-        {'name': 'm-unckpt4', 'reference': 'm-ref', 'status': 'ok', 'losses': [15.2005], 'median_seconds': 3.5,
-         'supervised_per_update': 32000, 'supervised_tokens_per_second': 32000 / 3.5},
-        {'name': 'm-bf16', 'reference': None, 'status': 'ok', 'losses': [15.3], 'median_seconds': 3.0,
-         'supervised_per_update': 32000, 'supervised_tokens_per_second': 32000 / 3.0},
-        {'name': 'm-unckpt14', 'reference': 'm-ref', 'status': 'oom'},
-    ]
-    derived = hw_bench.derive(records)
-    assert derived['numerics']['m-unckpt4']['equal']
-    assert derived['fastest_equal']['m-ref']['arm'] == 'm-unckpt4'
-    assert derived['fastest_equal']['m-ref']['speedup_over_reference'] == pytest.approx(4.0 / 3.5)
-    assert derived['fastest_any']['m']['arm'] == 'm-bf16'
-
-
-def test_hw_bench_dry_run(capsys):
-    assert hw_bench.main(['--out', '/tmp/unused', '--matrix', 'smoke', '--dry-run', '--only', '^l-',
-                          '--lfm', '/models/lfm']) == 0
-    arms = json.loads(capsys.readouterr().out)
-    assert [a['name'] for a in arms] == ['l-ref', 'l-nockpt'] and arms[0]['args'][-2:] == ['--model', '/models/lfm']
+    torch.manual_seed(817)
+    model = SharedStateModel(tiny(family), (58, 59, 60, 61), rank=4)
+    checkpointed = copy.deepcopy(model)
+    example = parse_graph({**graph('hardware-native-checkpoint'),
+                           'tokenizer_fingerprint': 'tokenizer-sha'}, tokenizer_fingerprint='tokenizer-sha')
+    full_loss, _ = graph_loss(model, example, checkpoint_layers=False, chunk_tokens=4)
+    checked_loss, _ = graph_loss(checkpointed, example, checkpoint_layers=True, chunk_tokens=4)
+    torch.testing.assert_close(checked_loss, full_loss, atol=3e-6, rtol=2e-5)
+    parameters = tuple(parameter for parameter in model.parameters() if parameter.requires_grad)
+    full_gradients = torch.autograd.grad(full_loss, parameters, allow_unused=True)
+    checked_parameters = tuple(parameter for parameter in checkpointed.parameters() if parameter.requires_grad)
+    assert len(checked_parameters) == len(parameters)
+    checked_gradients = torch.autograd.grad(checked_loss, checked_parameters, allow_unused=True)
+    for actual, expected in zip(checked_gradients, full_gradients):
+        assert (actual is None) == (expected is None)
+        if actual is not None:
+            torch.testing.assert_close(actual, expected, atol=3e-5, rtol=3e-4)
 
 
 def _load_teacher_bench():

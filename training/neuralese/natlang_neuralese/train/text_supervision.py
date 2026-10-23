@@ -12,6 +12,18 @@ from array import array
 ROLE_CODES = ('other', 'system', 'user', 'tool', 'assistant_reasoning', 'assistant_reply')
 
 
+def target_bearing_window(window):
+    """Whether a prepared text window contains any declared assistant target."""
+    size = len(window['ids']) - window['prefix']
+    if 'supervised_spans' in window:
+        return bool(window['supervised_spans'])
+    if window.get('supervised_suffix_start') is not None:
+        return window['supervised_suffix_start'] < size
+    roles = window.get('roles')
+    assistant = (ROLE_CODES.index('assistant_reasoning'), ROLE_CODES.index('assistant_reply'))
+    return roles is None or any(roles[i] in assistant for i in range(window['prefix'], len(window['ids'])))
+
+
 def chat_roles(ids, *, start_id, role_ids, think_open=None, think_close=None,
                tool_response_prefixes=()):
     """Per-token chat roles, including reasoning spans and tool-response bodies."""
@@ -65,6 +77,19 @@ def failed_feedback(body):
     """True when a tool-response body (the text after ``<tool_response>``) is a runtime failure form."""
     body = body.lstrip()
     return any(pattern.search(body) for pattern in FAILED_TOOL_FEEDBACK)
+
+
+def context_only_mask(source, labels, declared, decode):
+    """Mark failed-assistant turns and declared spans as context rather than positive targets.
+
+    ``source`` is framed by one leading open token and one trailing close token;
+    declared spans are half-open offsets into the unframed document.
+    """
+    mask = failed_assistant_mask(source, labels, decode) if labels is not None else array('B', bytes(len(source)))
+    for begin, end in declared:
+        for position in range(begin + 1, min(end + 1, len(mask))):
+            mask[position] = 1
+    return mask
 
 
 def failed_assistant_mask(ids, labels, decode, *, evidence=None):
@@ -159,7 +184,7 @@ positions are all excluded has weight 0 everywhere.
 
 def segmented_position_weights(span, spans, *, roles=None, context_weight=1., feedback_weight=.25, exclude=None):
     """``balanced_position_weights`` for one window that holds several observed suffixes (a merged decision chain,
-    ``text_warmup.merge_prefix_rows``): ``spans`` are the window's ``[begin, end)`` suffix spans, sorted and disjoint.
+    ``spans`` are the window's ``[begin, end)`` suffix spans, sorted and disjoint.
 
     Each decision keeps the policy it had as its own document: the window is cut into segments at every suffix end
     (segment j runs from the previous suffix end to suffix j's end; positions after the last suffix are a context-only

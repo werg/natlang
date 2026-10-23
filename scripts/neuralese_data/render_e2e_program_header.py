@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'training' / 'neuralese'))
 from natlang_neuralese.data.e2e_rendering import program_header_native_record  # noqa: E402
 from natlang_neuralese.data.prompt_rendering import prompt_rendering_identity  # noqa: E402
-from natlang_neuralese.train.trajectories import authenticated_recurrence_context_view  # noqa: E402
+from natlang_neuralese.data.trajectory_text import authenticated_recurrence_context_view  # noqa: E402
 from natlang_neuralese.common.hashing import sha256_file_hex as sha  # noqa: E402
 
 

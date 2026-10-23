@@ -49,8 +49,8 @@ export function agentModels(settings: AgentModelSettings): AgentModels {
   const driver = (reasoning: boolean, owner?: string): ModelDriver => {
     const request = { endpoint: root, model: modelId, apiKey,
       request: { chat_template_kwargs: { enable_thinking: reasoning } } };
-    const key = reader.kind === 'neuralese' ? `${reasoning}\0${owner ?? ''}` : String(reasoning);
-    if (!drivers.has(key)) drivers.set(key, reader.kind === 'neuralese' ?
+    const key = reader.kind === 'native-state' ? `${reasoning}\0${owner ?? ''}` : String(reasoning);
+    if (!drivers.has(key)) drivers.set(key, reader.kind === 'native-state' ?
       neuraleseServerModelTurn({ ...request, store, ...(owner ? { owner } : {}) }) : openAICompatibleModelTurn(request));
     return drivers.get(key)!;
   };

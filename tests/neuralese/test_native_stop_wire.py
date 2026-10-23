@@ -5,7 +5,7 @@ import torch
 from test_native_rl_replay import actor_rollout
 from test_native_serving_adapters import engine_fixture, nonzero_adapter
 from natlang_neuralese.rl.native_replay import compile_replay, replay_logps
-from natlang_neuralese.rl.episode_graph import validate_import_gradient_uses
+from natlang_neuralese.rl.native_occurrences import capture_occurrences
 from natlang_neuralese.model.native_actor_graph import run_invocation_actors
 from natlang_neuralese.model.shared_state import Invocation, compile_graph
 from natlang_neuralese.serve.chat import render_messages, RequestError
@@ -33,13 +33,16 @@ def test_stopped_capture_replay_retains_forward_and_blocks_only_source_gradient(
 def test_stop_capture_must_agree_with_actual_event_and_be_true_or_absent():
     event={'node':'read','kind':'block_read','turn':'reader','block':'state','stop_gradient':True,'inputs':[{'node':'external','block':'state'}]}
     capture={'prompt':[{'kind':'native_state','id':'state','stop_gradient':True}]}
-    validate_import_gradient_uses('reader',capture,{'read':event})
+    writes, reads = capture_occurrences('reader',capture,{'read':event})
+    assert writes == []
+    assert reads == [{'index':0,'id':'state','source_state_id':'state','node':'read','source':'external',
+                      'stop_gradient':True}]
     bad=copy.deepcopy(capture);bad['prompt'][0].pop('stop_gradient')
     with pytest.raises(ValueError,match='gradient use'):
-        validate_import_gradient_uses('reader',bad,{'read':event})
+        capture_occurrences('reader',bad,{'read':event})
     bad['prompt'][0]['stop_gradient']=False
     with pytest.raises(ValueError,match='true or absent'):
-        validate_import_gradient_uses('reader',bad,{'read':event})
+        capture_occurrences('reader',bad,{'read':event})
 
 
 @pytest.mark.parametrize('family',['lfm','mellum'])

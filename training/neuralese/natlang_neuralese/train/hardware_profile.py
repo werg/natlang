@@ -27,7 +27,7 @@ from pathlib import Path
 
 SCHEMA = 'natlang.neuralese-hardware-profiles/1'
 # Execution choices only: each is in recipe.OPERATIONAL_STAGE_PARAMETERS and in the trainers' resume-operational sets.
-PROFILE_STAGE_PARAMETERS = frozenset({'checkpoint_layers', 'window_execution'})
+PROFILE_STAGE_PARAMETERS = frozenset({'checkpoint_layers'})
 # Environment switches a profile may set: allocator and cache placement, and numerics-preserving compilation.
 PROFILE_ENVIRONMENT = frozenset({'PYTORCH_CUDA_ALLOC_CONF', 'TORCHINDUCTOR_CACHE_DIR', 'TRITON_CACHE_DIR',
                                  'NATLANG_MAPLE_COMPILE', 'CUDA_DEVICE_MAX_CONNECTIONS'})

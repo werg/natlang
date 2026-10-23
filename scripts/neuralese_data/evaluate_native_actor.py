@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 from natlang_neuralese.common.jsonio import write_json_durable
 from natlang_neuralese.eval.task_cadence import TaskEval, parse_task_eval
-from natlang_neuralese.rl.grpo import Server
+from natlang_neuralese.rl.actor_client import NativeActorClient
 
 
 def evaluate(*, endpoint, checkpoint_sha256, spec_path, spec_sha256, out, step):
@@ -20,7 +20,7 @@ def evaluate(*, endpoint, checkpoint_sha256, spec_path, spec_sha256, out, step):
     spec = parse_task_eval(raw.decode())
     if not spec or not spec.get('neuralese_server') or spec.get('async'):
         raise ValueError('held actor monitoring needs synchronous native transport')
-    server = Server(endpoint, timeout=30)
+    server = NativeActorClient(endpoint, timeout=30)
     def identity():
         info = json.loads(server.get_bytes('/v1/neuralese/info'))
         policy = info.get('rl_policy_binding') or {}

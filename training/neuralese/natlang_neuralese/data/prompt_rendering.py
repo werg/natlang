@@ -21,16 +21,10 @@ PROMPT_RENDERINGS = ("full", "program-header")
 
 def prompt_rendering_identity(mode: str) -> dict:
     """Content identity for the serving/training prompt transformation contract: the behavioural /2 identity
-    (data/rendering_contract.py; the rendered outputs of a pinned fixture set plus the piece table), so a refactor or
-    an unrelated helper in this module keeps it. Check a recorded binding with ``prompt_rendering_binding_accepted``,
-    which also accepts a superseded (/1) identity bound to behaviourally identical code."""
+    (data/rendering_contract.py; the rendered outputs of a pinned fixture set plus the piece table). A refactor or
+    unrelated helper keeps it; active callers bind directly to this identity."""
     from .rendering_contract import behavioural_identity
     return behavioural_identity(mode)
-
-
-def prompt_rendering_binding_accepted(identity_sha256, mode: str) -> bool:
-    from .rendering_contract import binding_accepted
-    return binding_accepted(identity_sha256, mode)
 
 
 def checkpoint_prompt_rendering(identity: dict, *, serving_mode: str | None = None) -> tuple[str, dict]:

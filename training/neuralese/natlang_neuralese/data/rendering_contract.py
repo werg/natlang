@@ -13,17 +13,8 @@ fixture case, and the piece table's sha256. A refactor or an unrelated helper ke
 renders to alters it. Identity /1 (natlang.prompt-rendering-identity/1) hashed the source bytes of
 prompt_rendering.py, serve/engine.py and serve/chat.py, so any edit there refused every export bound before it.
 
-Compatibility: ``training/prompt-pieces/rendering-identity-equivalence.json`` maps each known superseded identity (a
-/1 identity, or a /2 identity of an earlier fixture set) to the /2 identity of the exact code it was bound to,
-computed by running the current fingerprint over that commit's blobs
-(``scripts/neuralese_data/prompt_rendering_equivalence.py``; re-verified from git by
-tests/neuralese/test_rendering_contract.py). A binding is accepted when its identity equals the current /2 identity,
-or when the table maps it to the current /2 identity. A behaviour change therefore still refuses old bindings,
-unless the table declares an ADOPTION for it: a deliberate rendering change that applies to artifacts bound before
-it (first: 95bc6eca, program-header serving keeps externally supplied tool schemas; native natlang requests send none
-in that mode, so weights trained without schemas see the same native prompts). An adoption maps the /2 identity
-just before its commit to the /2 identity at it, both recomputed from git by the test; a binding is accepted when
-its /2 identity reaches the current one through adoptions. Undeclared behaviour changes still refuse.
+The identity is used to verify the active rendering behavior. Historical packages retain their own exact source and
+identity metadata; current serving does not accept legacy rendering bindings or adoption aliases.
 """
 from __future__ import annotations
 
@@ -36,7 +27,6 @@ _PACKAGE = Path(__file__).resolve().parents[1]
 _PIECE_DIR = _PACKAGE.parents[1] / "prompt-pieces"
 FIXTURES_PATH = _PIECE_DIR / "rendering-contract-fixtures.json"
 PIECES_PATH = _PIECE_DIR / "pieces.json"
-EQUIVALENCE_PATH = _PIECE_DIR / "rendering-identity-equivalence.json"
 
 
 def _canonical(value) -> str:
@@ -116,58 +106,3 @@ def behavioural_identity(mode: str) -> dict:
     if mode not in _CACHE:
         _CACHE[mode] = compute_identity(mode)
     return dict(_CACHE[mode])
-
-
-def _table() -> dict:
-    if not EQUIVALENCE_PATH.exists():
-        return {}
-    return json.loads(EQUIVALENCE_PATH.read_text(encoding="utf-8"))
-
-
-def equivalence_table() -> dict:
-    return _table().get("identities") or {}
-
-
-def adoptions() -> list:
-    """Declared rendering changes that apply to artifacts bound before them (owner/agent decisions with a commit):
-    each maps the /2 identity just before the change to the /2 identity at it, for one mode."""
-    return _table().get("adoptions") or []
-
-
-def _reaches_current(v2: str, mode: str, current: str) -> bool:
-    steps = [a for a in adoptions() if a.get("mode") == mode]
-    for _ in range(len(steps) + 1):
-        if v2 == current:
-            return True
-        nxt = next((a["to_v2"] for a in steps if a.get("from_v2") == v2), None)
-        if nxt is None:
-            return False
-        v2 = nxt
-    return False
-
-
-def binding_accepted(identity_sha256, mode: str) -> bool:
-    """Whether a recorded identity (any schema) binds the current contract's behaviour for ``mode``: it is the current
-    /2 identity, or the table maps it to a /2 identity that is current or reaches it through declared adoptions."""
-    if not isinstance(identity_sha256, str):
-        return False
-    current = behavioural_identity(mode)["identity_sha256"]
-    if identity_sha256 == current:
-        return True
-    entry = equivalence_table().get(identity_sha256)
-    if entry is not None:
-        return entry.get("mode") == mode and _reaches_current(entry.get("v2_identity_sha256"), mode, current)
-    return _reaches_current(identity_sha256, mode, current) if any(
-        a.get("from_v2") == identity_sha256 for a in adoptions()) else False
-
-
-def comparison_binding(mode: str) -> dict:
-    """The identity a stable comparison key uses for ``mode``: the table's designated canonical older identity while
-    it binds the current behaviour (directly or through declared adoptions), so evaluation keys recorded before /2
-    still compare; else the /2 identity."""
-    current = behavioural_identity(mode)
-    for entry in equivalence_table().values():
-        if (entry.get("mode") == mode and entry.get("comparison_canonical") and
-                _reaches_current(entry.get("v2_identity_sha256"), mode, current["identity_sha256"])):
-            return dict(entry["identity"])
-    return current

@@ -14,9 +14,9 @@ import { streamResponse } from '../vendor/durable/src/harness/generation.ts';
 import type { DeferredHandle, ModelInfo, ModelRef, RetryPolicy, StreamOptions, ThinkingLevel } from '../types.ts';
 import { ONCE_EFFECTS, type NeuraleseStore } from 'natlang:runtime';
 import { plain } from './durable.ts';
-import { blockPositions, modelReader, isNeuraleseContent, neuraleseBlockIds, neuraleseBlocks, noteBlockMeta } from './natlang-provider.ts';
+import { nativeStatePositions, modelReader, isNativeStateContent, nativeStateIds, nativeStateParts, noteNativeStateMeta } from './natlang-provider.ts';
 import { ProviderDoc } from '../vendor/durable/src/harness/provider.ts';
-import { collectViewBlocks, forceStoredViews, forceView, recallNote, representationKey, storedCall, storedCalls, VIEW_FAILED, VIEW_UNAVAILABLE,
+import { collectViewNativeStates, forceStoredViews, forceView, recallNote, representationKey, storedCall, storedCalls, VIEW_FAILED, VIEW_UNAVAILABLE,
   type ForcedView, type ViewDocs } from './views.ts';
 
 /**
@@ -39,7 +39,7 @@ function unreadable(model: Model<Api>): AssistantMessage {
     usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
     stopReason: 'error', timestamp: Date.now(),
     errorMessage: `neuralese-unsupported-backend: the messages hold Neuralese blocks, but ${model.provider}/${model.id} reads text ` +
-      '(declare a Neuralese reader for it: --agent-transport natlang --agent-reader DIALECT)' };
+      '(declare native-state input with --agent-transport natlang --agent-reader native-state)' };
 }
 
 /** The answer when a stored view call could not be forced for a Neuralese reader (views.ts): the request is not sent. */
@@ -58,12 +58,12 @@ export type TurnOptions = StreamOptions & { thinkingLevel: ThinkingLevel; sessio
  * request always streams; compaction never does), so a turn the executor sends without `live` still streams.
  * `store`: the runtime's Neuralese store, where token estimates read each block's length and blocks are archived.
  * `collect`: the task's requests are its conversation's context (a generation task), so a request to a Neuralese reader
- * collects the conversation's blocks on the server when the context's head moved (views.ts `collectViewBlocks`).
+ * collects the conversation's blocks on the server when the context's head moved (views.ts `collectViewNativeStates`).
  * `agent`: the conversation's agent model, the reader token estimates are for unless they name another;
  * `owner`: the conversation's provider session ID, which views forced while preparing an estimate are held under.
  *
- * For a model whose reader is a Neuralese dialect, `turn` sends each stored view call (views.ts) as its block, forced
- * once per call and dialect under the conversation's owner (its provider session ID); a call that cannot be forced
+ * For a model whose reader is a Neuralese representation, `turn` sends each stored view call (views.ts) as its block, forced
+ * once per call and representation under the conversation's owner (its provider session ID); a call that cannot be forced
  * fails the turn (`neuralese-view-unavailable`: retryable; `neuralese-view-failed`: not), never falling back to text.
  */
 export function aiService(runtime: Runtime, context: Context, streamAttempt?: () => number, phase: { failed?: string } = {},
@@ -93,13 +93,13 @@ export function aiService(runtime: Runtime, context: Context, streamAttempt?: ()
    */
   const forcedViews = new Map<string, ForcedView>();
   const unforcedViews = new Map<string, string>();
-  const viewKey = (call: string, dialect: string) => `${call}\0${representationKey(dialect)}`;
-  const viewPositions = (call: string, dialect: string): number => {
-    const forced = forcedViews.get(viewKey(call, dialect));
+  const viewKey = (call: string, representation: string) => `${call}\0${representationKey(representation)}`;
+  const viewPositions = (call: string, representation: string): number => {
+    const forced = forcedViews.get(viewKey(call, representation));
     if (forced) return forced.length;
-    const cause = unforcedViews.get(viewKey(call, dialect));
-    throw new Error(`neuralese-unknown-view-length: the stored view call ${call} is not forced for the ${JSON.stringify(dialect)} reader, ` +
-      `so its block's length is unknown${cause ? ` (forcing it failed: ${cause})` : '; call await ai.blockMeta(messages) before ' +
+    const cause = unforcedViews.get(viewKey(call, representation));
+    throw new Error(`neuralese-unknown-view-length: the stored view call ${call} is not forced for the ${JSON.stringify(representation)} reader, ` +
+      `so its block's length is unknown${cause ? ` (forcing it failed: ${cause})` : '; call await ai.nativeStateMeta(messages) before ' +
       'estimating them, which forces it'}. The estimate counts the block the reader is sent, never the text form.`);
   };
   return {
@@ -119,11 +119,11 @@ export function aiService(runtime: Runtime, context: Context, streamAttempt?: ()
         '(for example messages.length = 0 on the same array it then copies back), and pass the context\'s messages.');
       const resolved = resolve(model);
       const reader = modelReader(resolved);
-      // A Neuralese block reaches only a model that reads its dialect (natlang-provider.ts); there is no text fallback.
-      if (reader.kind !== 'neuralese' && messages.some(message => neuraleseBlocks(message))) return storable(unreadable(resolved), phase);
+      // A Neuralese block reaches only a model that reads its representation (natlang-provider.ts); there is no text fallback.
+      if (reader.kind !== 'native-state' && messages.some(message => nativeStateParts(message))) return storable(unreadable(resolved), phase);
       let sent = messages;
-      if (reader.kind === 'neuralese') {
-        // Stored view calls at this reader's dialect, under the conversation's owner (views.ts).
+      if (reader.kind === 'native-state') {
+        // Stored view calls at this reader's representation, under the conversation's owner (views.ts).
         const docs = viewDocs();
         const views = { models: runtime.models, model: resolved, owner: turn.sessionId, store };
         try { sent = await forceStoredViews(messages, docs, views, context); }
@@ -133,7 +133,7 @@ export function aiService(runtime: Runtime, context: Context, streamAttempt?: ()
           // owner's blocks are collected to the ones it references. Housekeeping: a failure is reported, not fatal.
           try {
             const head = (await runtime.context(runtime.conversationId, context)).head?.id ?? 0;
-            await collectViewBlocks(docs, views, new Set(neuraleseBlockIds(sent)), head, context);
+            await collectViewNativeStates(docs, views, new Set(nativeStateIds(sent)), head, context);
           } catch (error) { runtime.report(error); }
         }
       }
@@ -160,21 +160,21 @@ export function aiService(runtime: Runtime, context: Context, streamAttempt?: ()
       // from the index blockMeta filled) and the recall note; a text reader reads the text form, which pi-ai counts.
       const { reader } = estimated(model);
       return messages.map(message => {
-        const views = reader.kind === 'neuralese' && Array.isArray(message.content) && message.content.some(part => storedCall(part));
-        if (!views && !neuraleseBlocks(message)) return estimateMessageTokens(message);
-        let positions = blockPositions(message, store);
+        const views = reader.kind === 'native-state' && Array.isArray(message.content) && message.content.some(part => storedCall(part));
+        if (!views && !nativeStateParts(message)) return estimateMessageTokens(message);
+        let positions = nativeStatePositions(message, store);
         const text = (message.content as unknown[]).flatMap(part => {
-          if (isNeuraleseContent(part)) return [];
+          if (isNativeStateContent(part)) return [];
           const ref = storedCall(part);
-          if (!ref || reader.kind !== 'neuralese') return [part];
-          positions += viewPositions(ref.call, reader.dialect);
+          if (!ref || reader.kind !== 'native-state') return [part];
+          positions += viewPositions(ref.call, 'native-state');
           return [{ type: 'text', text: recallNote(ref.call) }];
         });
         return estimateMessageTokens({ ...message, content: text } as Message) + positions;
       });
     },
-    async blockMeta(messages: Message[], model?: ModelRef): Promise<string[]> {
-      const ids = neuraleseBlockIds(messages).filter(id => !store?.peek?.(id));
+    async nativeStateMeta(messages: Message[], model?: ModelRef): Promise<string[]> {
+      const ids = nativeStateIds(messages).filter(id => !store?.peek?.(id));
       const calls = storedCalls(messages);
       if (!ids.length && !calls.length) return [];
       let ref = model ?? agentRef;
@@ -186,11 +186,11 @@ export function aiService(runtime: Runtime, context: Context, streamAttempt?: ()
       // Stored view calls this Neuralese reader has not forced are forced now (the memo when there is one), so the
       // estimate counts their blocks; one that cannot be forced stays unknown, and its estimate fails naming it.
       const unknownViews: string[] = [];
-      if (reader.kind === 'neuralese' && resolved) {
-        const pending = calls.filter(call => !forcedViews.has(viewKey(call, reader.dialect)));
+      if (reader.kind === 'native-state' && resolved) {
+        const pending = calls.filter(call => !forcedViews.has(viewKey(call, 'native-state')));
         const owner = pending.length ? service.owner ?? (await runtime.snapshot(ProviderDoc, runtime.conversationId, context))?.sessionId : undefined;
         await Promise.all(pending.map(async call => {
-          const key = viewKey(call, reader.dialect);
+          const key = viewKey(call, 'native-state');
           try {
             if (!owner) throw new Error('the conversation has no provider session ID yet, which its blocks are held under');
             forcedViews.set(key, await forceView(viewDocs(), call, { models: runtime.models, model: resolved, owner, store }, context));
@@ -201,9 +201,9 @@ export function aiService(runtime: Runtime, context: Context, streamAttempt?: ()
           }
         }));
       }
-      // Blocks the store already describes need nothing; the rest are asked of the agent model's server, once each.
-      if (!ids.length || !store || !resolved || reader.kind !== 'neuralese') return [...ids, ...unknownViews];
-      return [...await noteBlockMeta(resolved.baseUrl, ids, store, { signal: runtime.signal }), ...unknownViews];
+      // Artifacts the store already describes need nothing; the rest are asked of the agent model's server, once each.
+      if (!ids.length || !store || !resolved || reader.kind !== 'native-state') return [...ids, ...unknownViews];
+      return [...await noteNativeStateMeta(resolved.baseUrl, ids, store, { signal: runtime.signal }), ...unknownViews];
     },
     validateArguments(toolName: string, parameters: Record<string, unknown>, args: Record<string, unknown>): { args: Record<string, unknown> } | { error: string } {
       try {
@@ -255,6 +255,6 @@ export function estimateTokens(messages: Message[], model?: ModelRef): number[];
  * still unknown: block IDs (the block is lost: neither the store nor the server has it) and "view:CALL" for a stored
  * call whose view could not be forced (estimateTokens then says why); empty when everything is known.
  */
-export function blockMeta(messages: Message[], model?: ModelRef): Promise<string[]>;
+export function nativeStateMeta(messages: Message[], model?: ModelRef): Promise<string[]>;
 /** Validate and coerce tool arguments against the tool's JSON Schema parameters, as pi does; error is pi's exact message. */
 export function validateArguments(toolName: string, parameters: Record<string, unknown>, args: Record<string, unknown>): { args: Record<string, unknown> } | { error: string };`;

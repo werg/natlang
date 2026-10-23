@@ -323,6 +323,16 @@ def test_native_attention_compiler_contract_separates_actual_adjoint_and_inferen
         inf=torch.randn(1,2,5,4)
         inference=shared_state._compiled_flex(inf,inf.clone(),inf.clone(),.5)
     assert len({fn.__code__ for fn in (base,q_grad,kv_grad,no_grad,inference)})==5
+    previous_threads=torch.get_num_threads()
+    alternate_threads=2 if previous_threads==1 else 1
+    try:
+        torch.set_num_threads(alternate_threads)
+        changed_threads=shared_state._compiled_flex(q.detach(),k.detach(),v.detach(),.5)
+        assert changed_threads is not base
+        assert shared_state._compiled_flex(q.detach(),k.detach(),v.detach(),.5) is changed_threads
+    finally:
+        torch.set_num_threads(previous_threads)
+    assert shared_state._compiled_flex(q.detach(),k.detach(),v.detach(),.5) is base
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(),reason='requires actual grouped CUDA kernel')

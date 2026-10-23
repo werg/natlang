@@ -112,11 +112,11 @@ def test_fairness_is_explicit_recipe_parameter_and_saved_trainer_option():
 
 
 def test_existing_unfinished_recipe_accepts_explicit_fairness_tuning(tmp_path):
-    from natlang_neuralese.train.recipe import direct_windowing_handoffs
+    from natlang_neuralese.train.recipe import native_stage_parameter_handoffs
     before={'stages':[{'id':'sft','kind':'native_state_sft','parameters':{'epochs':1}}]}
     after=copy.deepcopy(before)
     after['stages'][0]['parameters']['urgent_cohort_fairness']=True
-    changes,old_identity,new_identity=direct_windowing_handoffs(before,after,tmp_path)
+    changes,old_identity,new_identity=native_stage_parameter_handoffs(before,after,tmp_path)
     assert changes=={'sft':{'urgent_cohort_fairness':[None,True]}}
     assert old_identity==new_identity
 

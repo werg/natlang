@@ -1,55 +1,9 @@
 /**
- * Conversion of natlang trajectory records to Neuralese form (plans/neuralese/DECISIONS.md 41, 42; S5 §2.2).
- *
- * What becomes Neuralese, and why (decision 42): a value is worth a soft form when it is reused (one encoding serves
- * many reads), when one agent produces it and another consumes it (the model writes it and the next reads it, with no
- * text in between), or when it is large and a short view saves context. A value read once by the call that produced
- * it stays text: turning it into Neuralese costs a pass and saves nothing. Every site is counted, converted or kept
- * exact with its reason.
- *
- * - **Prompt sites** (reused by every call). The system message and runtime-written frames are split into registered
- *   prompt pieces (native/system-prompts.ts); each becomes a content-versioned soft parameter part
- *   `{ type: 'soft', name: 'prompt:<id>@<sha12>' }`, so the same stable runtime ID can safely carry old/new wording.
- *   Text that matches no registered piece (an older runtime's wording) becomes a versioned piece `prompt:system@<sha12>`.
- *   Program guidance (`guidance@<sha12>`) is a soft parameter of its own, adapted by self-improvement.
- * - **Instructions** (stored function bodies). Instructions used by at least `instructionsReuse` distinct calls of the
- *   corpus become a shared soft parameter `instructions@<sha12>` (one parameter for all their calls). A deterministic
- *   `instructionsShare` of single-use instructions converts too, so the position has Neuralese samples; the rest stay
- *   text (`single-use`).
- * - **Handover sites** (written by one turn, read by every later one). A `compact_history` note becomes
- *   `{ $write: { name, type: 'Neuralese<HandoverNote>', source } }` in the call's arguments, and the pinned note
- *   message reads the same block (`{ type: 'read', name, source }` between the soft handover frames). `source` is the
- *   crisp note: the teacher's view; the read carries it too, since the producing call may lie outside the record.
- * - **View sites** (large values in the opening listing). A value the listing cuts off becomes
- *   `{ type: 'view', name, source, preview }` when the record has the full value (the root call's inputs): a block the
- *   builtin `view`'s Neuralese instance writes from the full value for the receiving call (its template write; the
- *   trainer writes it at view's write site), shown in place of the cut-off preview while the value itself stays in
- *   scope for exact access. Without the full value the preview stays (`full-value-unavailable`). Version 15 renamed
- *   the part type from `digest`; the trainer rejects `digest` parts and names their conversion.
- *
- * - **Child results** (one call produces a value, its caller reads it: the recurrence of calling a function, retrieving
- *   its value and splicing it into the caller's trajectory). A child `nl` call's `return_result` value that the
- *   caller's eval output prints, within one collected run (`childResults`, built over the corpus by the converter
- *   script), becomes `{ $write: { name: 'result:<producer-identity-sha12>', type, source } }` in the child's final call (the template
- *   readout's write site) and a `{ type: 'read', name, source }` part where the caller's eval output shows it. A
- *   trainer writes the block from the child's record and trains it by the caller's loss. Kept exact, counted:
- *   `crisp-value` (a boolean, number or short text: its exact form is the value), `producer-missing` (the child's
- *   final turn is not in the corpus), `value-not-printed` (the output does not show the returned value as returned).
- *   A return whose value the child's own eval showed it first (code computed it; the model relays it) is an
- *   `observed-host-result`: crisp context, never a writer. Version 16: a return the child writes itself is a producer
- *   even though the collector's host capture also observed it.
- *
- * - **Argument reads** (field-level flow). A structured child result's long text field that the caller passes into
- *   another call (`notes.push(found.facts)`, then `answer(notes)`) is written field by field in the producer's
- *   `return_result` (`{ facts: { $write: ... } }`, the other fields exact) and read where the consumer's argument
- *   listing (`scope_0`) shows it. Producers are identified as for child results; ambiguous ones stay text.
- *   The consumer is the producer's caller or (version 16) a sibling call: the caller passed the value it read on.
- *
- * Kept exact, counted: tool outputs (`single-use`), `nl` literals in eval code (`later-curriculum-step`), turn-count
- * notices (`dynamic-text`).
- *
- * Initialisation: soft parameters start from their text encoded in one forward pass through the port (`encode`), not
- * from a summarising call. Their texts are collected once in `pieces`.
+ * Authenticates source-level trajectory transformations and emits a model-neutral
+ * text record plus exact producer/import occurrence bindings. Token positions,
+ * masks and shared KV spans are compiled later by the same native graph path
+ * for every backbone. The source messages and target remain attached to the
+ * receipt so a conversion never discards the teacher's original action.
  */
 import { createHash } from 'node:crypto';
 import * as ts from 'typescript';
@@ -59,7 +13,7 @@ import { promptPieces, findPieces, type PromptPiece } from '../native/system-pro
 import { AUTOMATIC_NOTE, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN } from '../native/prompt.js';
 import { VIEW_PROMPT } from '../builtin/index.js';
 
-export const NEURALESE_CONVERSION_VERSION = 'natlang.neuralese-conversion/16';
+export const NEURALESE_CONVERSION_VERSION = 'natlang.neuralese-conversion/17';
 export const HANDOVER_TYPE = 'Neuralese<HandoverNote>';
 
 export type PureLiteralEvalReturn = {
@@ -120,6 +74,22 @@ export type ConvertedPart = { type: 'text'; text: string } | { type: 'soft'; nam
     instructions?: string;
     /** How the reader gets the whole value, when not the holder variable (a recall handle). */
     note?: string };
+export type NativeSourceOccurrence = {
+  schema: 'natlang.native-source-occurrence/1';
+  id: string;
+  role: 'producer' | 'consumer';
+  reference: string;
+  path: string[];
+  body: string;
+  body_sha256: string;
+  source_kind: string;
+  trajectory_id: string;
+  source_row_sha256?: string;
+  invocation_id: string;
+  decision_index?: number;
+  stop_gradient?: true;
+  source_occurrence?: string;
+};
 type Message = Record<string, unknown> & { role: string; content?: unknown; tool_calls?: { id?: string; function: { name: string; arguments: string } }[] };
 export type SoftPiece = { name: string; kind: 'system-prompt' | 'program-guidance' | 'function-body'; text: string };
 export type SiteCounts = Record<string, { converted: number; exact: Record<string, number> }>;
@@ -242,6 +212,190 @@ type ChildResultRun = { returned: Set<string>; producers: ChildResultProducer[];
   outputs: Map<string, ChildResultOutput>; observed_host_results: ObservedHostResult[] };
 
 function sha256Text(value: string): string { return createHash('sha256').update(value).digest('hex'); }
+
+function sourceUseKey(id: string, stopGradient = false, sourceOccurrence?: string): string {
+  return JSON.stringify([id, stopGradient, sourceOccurrence ?? null]);
+}
+
+function nativeOccurrenceId(trajectoryId: string, rowId: string, invocationId: string,
+  role: 'producer' | 'consumer', path: readonly string[], reference: string): string {
+  const digest = sha256Text(canonical([trajectoryId, rowId, invocationId, role, path, reference]));
+  return `nso_${digest}`;
+}
+
+/** Convert the old compiler's internal decisions into plain text plus an exact
+ * tokenizer-neutral occurrence ledger. This is the only current serialized
+ * representation; the serving/runtime projected-part vocabulary is not
+ * emitted. Model-specific renderers later bind these source paths to actual
+ * token positions and native producer/import spans. */
+function nativeSourceView(record: Record<string, unknown>, messages: Message[], target: Message | undefined,
+  sourceTarget: Message | undefined, pieces: ReadonlyMap<string, SoftPiece>,
+  sourceMessagesSha256: string, sourceTargetSha256: string,
+  externalSources: ReadonlyMap<string, { body: string; reference: string; sourceKind: string }>,
+  selectedRuntimeResultWrites: readonly Record<string, unknown>[] = [],
+  inlineInstructionRead?: { writer_id: string; body_source: string }) {
+  const rowId = String(record.id ?? '');
+  const sourceRef = record.source_ref && typeof record.source_ref === 'object' ? record.source_ref as Record<string, unknown> : {};
+  const trajectoryId = typeof sourceRef.trajectory_id === 'string' ? sourceRef.trajectory_id : rowId;
+  const invocationId = typeof sourceRef.invocation_id === 'string' ? sourceRef.invocation_id : invocationOf(record);
+  const decision = record.decision && typeof record.decision === 'object' ? record.decision as Record<string, unknown> : {};
+  const occurrences: NativeSourceOccurrence[] = [];
+  const views: Record<string, unknown>[] = [];
+  const unresolved: Record<string, unknown>[] = [];
+  const sourceReceipts: Record<string, unknown>[] = [];
+  const add = (role: 'producer' | 'consumer', reference: string, body: string, sourceKind: string,
+    path: string[], custody?: { stop_gradient?: true; source_occurrence?: string }) => {
+    const bodySha = sha256Text(body);
+    occurrences.push({ schema: 'natlang.native-source-occurrence/1',
+      id: nativeOccurrenceId(trajectoryId, rowId, invocationId, role, path, reference), role, reference, path,
+      body, body_sha256: bodySha, source_kind: sourceKind, trajectory_id: trajectoryId,
+      ...(typeof sourceRef.source_row_sha256 === 'string' ? { source_row_sha256: sourceRef.source_row_sha256 } : {}),
+      invocation_id: invocationId, ...(Number.isSafeInteger(decision.index) ? { decision_index: Number(decision.index) } : {}),
+      ...(custody?.stop_gradient ? { stop_gradient: true as const } : {}),
+      ...(custody?.source_occurrence ? { source_occurrence: custody.source_occurrence } : {}) });
+  };
+  for (const [index, write] of selectedRuntimeResultWrites.entries()) {
+    if (typeof write.target_write_name !== 'string' || typeof write.body_source !== 'string' ||
+        typeof write.source_row_sha256 !== 'string')
+      throw new Error('selected native runtime writer lacks its exact source body and occurrence identity');
+    add('producer', write.target_write_name, write.body_source,
+      typeof write.source_kind === 'string' ? write.source_kind : 'typed-text-result',
+      ['selected_runtime_result_writes', String(index), 'body_source'], {
+        ...(write.stop_gradient === true ? { stop_gradient: true as const } : {}),
+        ...(typeof write.source_occurrence === 'string' ? { source_occurrence: write.source_occurrence } : {}),
+      });
+  }
+  if (inlineInstructionRead && !occurrences.some(item => item.role === 'consumer' &&
+      item.reference === inlineInstructionRead.writer_id && item.body === inlineInstructionRead.body_source))
+    add('consumer', inlineInstructionRead.writer_id, inlineInstructionRead.body_source,
+      'inline-instruction', ['messages', 'user', 'inline-instruction']);
+  const rewrite = (value: unknown, path: string[]): unknown => {
+    if (Array.isArray(value)) return value.map((item, index) => rewrite(item, [...path, String(index)]));
+    if (!value || typeof value !== 'object') return value;
+    const item = value as Record<string, unknown>;
+    if (item.type === 'soft') {
+      const piece = typeof item.name === 'string' ? pieces.get(item.name) : undefined;
+      if (!piece) throw new Error(`native source conversion lacks exact text for soft source ${String(item.name)}`);
+      // A registered soft piece is an actual imported source occurrence. Keep
+      // its identity and exact text in the tokenizer-neutral ledger even though
+      // the materialized target is ordinary text.
+      add('consumer', piece.name, piece.text, piece.kind, path);
+      return { type: 'text', text: piece.text };
+    }
+    if (item.type === 'read') {
+      if (typeof item.name !== 'string' || !item.name || typeof item.source !== 'string')
+        throw new Error('native source conversion read needs an exact source name and body');
+      add('consumer', item.name, item.source, 'authenticated-static-read', path, {
+        ...(item.stop_gradient === true ? { stop_gradient: true as const } : {}),
+        ...(typeof item.source_occurrence === 'string' ? { source_occurrence: item.source_occurrence } : {}),
+      });
+      return { type: 'text', text: item.source };
+    }
+    if (item.type === 'view') {
+      if (typeof item.source !== 'string' || typeof item.preview !== 'string')
+        throw new Error('native source conversion view needs the exact full value and preview');
+      views.push({ schema: 'natlang.native-source-view/1', path, source: item.source,
+        source_sha256: sha256Text(item.source), preview: item.preview, preview_sha256: sha256Text(item.preview),
+        holder: item.holder, value_type: item.value_type, instructions: item.instructions, note: item.note });
+      return { type: 'text', text: item.preview };
+    }
+    if (item.type === 'neuralese' || item.type === 'native_state') {
+      const unresolvedId = typeof item.id === 'string' ? item.id : null;
+      const exact = unresolvedId ? externalSources.get(sourceUseKey(unresolvedId, item.stop_gradient === true,
+        typeof item.source_occurrence === 'string' ? item.source_occurrence : undefined)) : undefined;
+      if (exact) {
+      add('consumer', exact.reference, exact.body, exact.sourceKind, path, {
+        ...(item.stop_gradient === true ? { stop_gradient: true as const } : {}),
+        ...(typeof item.source_occurrence === 'string' ? { source_occurrence: item.source_occurrence } : {}),
+      });
+        return { type: 'text', text: exact.body };
+      }
+      unresolved.push({ schema: 'natlang.unresolved-native-source-reference/1', path,
+        id: unresolvedId, reason: 'exact source text and producer binding are unavailable to the current converter' });
+      return { type: 'text', text: '' };
+    }
+    if (Object.hasOwn(item, '$write')) {
+      const write = item.$write && typeof item.$write === 'object' && !Array.isArray(item.$write) ?
+        item.$write as Record<string, unknown> : undefined;
+      if (!write || typeof write.name !== 'string' || !write.name || typeof write.source !== 'string')
+        throw new Error('native source conversion writer needs an exact name and body');
+      const sourceKind = typeof write.source_kind === 'string' ? write.source_kind :
+        path[0] === 'target' && record.derived_target &&
+          typeof record.derived_target === 'object' ? 'derived-equivalent-pure-terminal-eval-finish-target' :
+          String(write.type ?? 'typed-result');
+      add('producer', write.name, write.source, sourceKind, path, {
+        ...(write.stop_gradient === true ? { stop_gradient: true as const } : {}),
+        ...(typeof write.source_occurrence === 'string' ? { source_occurrence: write.source_occurrence } : {}),
+      });
+      if (write.source_encoding === 'json' || write.type === 'Neuralese<unknown>') {
+        try { return JSON.parse(write.source); } catch { /* Preserve exact source text if it is not valid JSON. */ }
+      }
+      return write.source;
+    }
+    const out: Record<string, unknown> = {};
+    for (const [key, child] of Object.entries(item)) {
+      if (key === 'arguments' && typeof child === 'string') {
+        let parsed: unknown;
+        try { parsed = JSON.parse(child); }
+        catch { out[key] = child; continue; }
+        out[key] = JSON.stringify(rewrite(parsed, [...path, 'arguments<json>']));
+      } else out[key] = rewrite(child, [...path, key]);
+    }
+    return out;
+  };
+  const plainMessages = rewrite(messages, ['messages']) as Message[];
+  // The actual source action stays exact. Writer bodies and paths are separate
+  // statically derived inputs to native graph rendering, never a target rewrite.
+  let plainTarget: Message | undefined;
+  if (target) {
+    plainTarget = rewrite(target, ['target']) as Message;
+    const sourceCalls = Array.isArray(target.tool_calls) ? target.tool_calls : [];
+    const targetCalls = Array.isArray(plainTarget.tool_calls) ? plainTarget.tool_calls : [];
+    for (let index = 0; index < sourceCalls.length; index++) {
+      const sourceCall = sourceCalls[index] as Record<string, unknown> | undefined;
+      const targetCall = targetCalls[index] as Record<string, unknown> | undefined;
+      if (!sourceCall || !targetCall || !Object.hasOwn(sourceCall, 'neuralese_code')) continue;
+      sourceReceipts.push({ schema: 'natlang.native-inline-instruction-source-receipt/1',
+        call_id: sourceCall.id ?? null, sidecar: structuredClone(sourceCall.neuralese_code) });
+      delete targetCall.neuralese_code;
+    }
+    const proof = (target as Record<string, unknown>).assistant_text_result;
+    if (proof && typeof proof === 'object' && !Array.isArray(proof)) {
+      const item = proof as Record<string, unknown>;
+      if (item.schema === 'natlang.assistant-text-result-write/1' &&
+          typeof item.block_id === 'string' && typeof item.writer_call_id === 'string' &&
+          typeof item.writer_node === 'string' && typeof item.body_source === 'string') {
+        const receiptIndex = sourceReceipts.length;
+        sourceReceipts.push({ source: 'assistant-text-return', ...structuredClone(item) });
+        add('producer', directTypedResultEventName(item.block_id, trajectoryId, item.writer_call_id, item.writer_node),
+          item.body_source, 'assistant-text-return', ['source_receipts', String(receiptIndex), 'body_source']);
+      }
+    }
+  }
+  if (plainTarget && Object.hasOwn(plainTarget, 'assistant_text_result'))
+    delete (plainTarget as Record<string, unknown>).assistant_text_result;
+  return { messages: plainMessages, target: plainTarget,
+    conversion: { schema: 'natlang.native-source-conversion/1',
+      source_record_sha256: sha256Text(canonical(JSON.parse(JSON.stringify(record)))),
+      source_messages_sha256: sourceMessagesSha256, source_target_sha256: sourceTargetSha256,
+      source_messages: structuredClone(record.messages), source_target: structuredClone(sourceTarget ?? null),
+      source_target_present: sourceTarget !== undefined,
+      source_neuralese_conversion_present: Object.hasOwn(record, 'neuralese_conversion'),
+      source_neuralese_conversion: structuredClone(record.neuralese_conversion ?? null),
+      source_receipts: sourceReceipts,
+      native_target_sha256: sha256Text(canonical(plainTarget ?? null)),
+      trajectory_id: trajectoryId, row_id: rowId, invocation_id: invocationId,
+      ...(typeof sourceRef.source_row_sha256 === 'string' ? { source_trajectory_row_sha256: sourceRef.source_row_sha256 } : {}),
+      ...(Number.isSafeInteger(decision.index) ? { decision_index: decision.index } : {}),
+      split: record.split ?? (record.task && typeof record.task === 'object' ?
+        ((record.task as Record<string, unknown>).program_ir as Record<string, unknown> | undefined)?.split : undefined),
+      source_groups: record.source_groups ?? ((record.task && typeof record.task === 'object' ?
+        ((record.task as Record<string, unknown>).program_ir as Record<string, unknown> | undefined)?.source_groups : undefined) ?? []),
+      source_ref: structuredClone(sourceRef), source_provenance: structuredClone(record.provenance ?? {}),
+      training_admission: structuredClone(record.training_admission ?? null),
+      occurrences, views, unresolved_references: unresolved },
+  };
+}
 
 function protectedTargetSidecarEquivalent(record: Record<string, unknown>, receipt: Record<string, unknown>,
                                           sourceActionDigest: string | undefined): boolean {
@@ -611,7 +765,13 @@ const OPENING_CALL = /^You are inside this call: (\w+)\(/;
 /** The record's parts and soft pieces, with site counts. */
 function providerContextWriterSourceValid(writer: Record<string, unknown> | null | undefined, sourceClass: unknown,
   witness: Record<string, unknown> | null | undefined, blockType: unknown, blockId: string): boolean {
-  return sourceClass === 'modern-typed-text-result' ?
+  return sourceClass === 'native-positional-state-writer' ?
+    writer?.producer === 'native-state-producer' && writer.format === 'native-state' &&
+      writer.source_kind === 'native-state-producer' && writer.block === blockId &&
+      writer.result_type === blockType && writer.truncated === false && writer.learned_vectors === false &&
+      typeof writer.node === 'string' && typeof writer.text_body_sha256 === 'string' &&
+      !!writer.native_identity && typeof writer.native_identity === 'object' :
+    sourceClass === 'modern-typed-text-result' ?
     writer?.producer === 'text-marker-emulation' && writer.source_kind === 'typed-text-result' :
     sourceClass === 'legacy-text-marker-standin-eval-code' ?
       writer?.emulation_version === 'text-marker-standin/2' && writer.marker_context === 'eval-code' &&
@@ -642,6 +802,9 @@ function providerContextWriterSourceValid(writer: Record<string, unknown> | null
 
 export function convertTrajectory<R extends { messages: Message[]; target?: Message }>(record: R, options: ConversionOptions = {}):
     { record: R & { neuralese_conversion: { version: string; sites: SiteCounts; soft_state_edges?: unknown[] } }; pieces: SoftPiece[] } {
+  const sourceMessagesSha256 = sha256Text(canonical(record.messages));
+  const sourceTarget = record.target ? structuredClone(record.target) : undefined;
+  const sourceTargetSha256 = sha256Text(canonical(sourceTarget ?? null));
   const registered = options.pieces ?? promptPieces();
   const pieces = new Map<string, SoftPiece>();
   const sites: SiteCounts = {};
@@ -720,7 +883,7 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
         throw new Error(`provider-expanded context graph or transport binding mismatch for ${id}`);
       if (['natlang.provider-expanded-read-context/2', 'natlang.provider-expanded-read-context/3'].includes(String(receipt.schema)) &&
           (receipt.origin !== 'same-run-producer' || receipt.writer_target_selected !== false ||
-          !['modern-typed-text-result', 'legacy-text-marker-standin-eval-code',
+          !['native-positional-state-writer', 'modern-typed-text-result', 'legacy-text-marker-standin-eval-code',
              'legacy-text-marker-standin-return-result', 'legacy-text-marker-standin-eval-finish',
              'legacy-text-marker-standin-eval-return']
              .includes(String(receipt.writer_source_class)) ||
@@ -857,7 +1020,10 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
       throw new Error(`validated soft-state provenance does not bind ${rowId}`);
     const edge = softEdgeForRecord;
     if (edge.expected_type !== 'Neuralese<string>' || !/^[a-z2-7]{20,}$/.test(edge.block_id.replace(/^nz1_/, '')) ||
-        !/^[0-9a-f]{64}$/.test(edge.body_sha256)) throw new Error(`invalid soft-state edge descriptor for ${rowId}`);
+        !/^[0-9a-f]{64}$/.test(edge.body_sha256) ||
+        !Number.isSafeInteger(edge.writer_decision_index) || !Number.isSafeInteger(edge.reader_decision_index) ||
+        edge.writer_decision_index >= edge.reader_decision_index)
+      throw new Error(`invalid or noncausal soft-state edge descriptor for ${rowId}`);
     if (typeof softEdgeForRecord.body_source !== 'string' ||
         createHash('sha256').update(softEdgeForRecord.body_source).digest('hex') !== softEdgeForRecord.body_sha256)
       throw new Error(`soft-state proof body digest mismatch for ${rowId}`);
@@ -1289,7 +1455,8 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
               for (const writer of sorted) {
               const start = writer.code_span.start + 1, end = writer.code_span.end - 1;
               parts.push({type:'text',text:args.code.slice(cursor,start)});
-                parts.push({$write:{name:writer.writer_id,type:'Neuralese<string>',source:writer.body_source ?? args.code.slice(start,end),
+                parts.push({$write:{name:writer.writer_id,type:'Neuralese<string>',source_kind:'inline-instruction',
+                  source:writer.body_source ?? args.code.slice(start,end),
                   ...(writer.body_source !== undefined ? { code_source: writer.body_code_source } : {})}});
                 cursor=end; count('inline-instruction-write'); count('nl-literal');
               }
@@ -1321,7 +1488,8 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
               code_sha256: createHash('sha256').update(code).digest('hex'),
               parts: [
                 { type: 'text', text: code.slice(0, parsed.markerStart) },
-                { $write: { name, type: edge.expected_type, source: parsed.body, code_source: marker } },
+                { $write: { name, type: edge.expected_type, source_kind: 'runtime-soft-state-writer',
+                  source: parsed.body, code_source: marker } },
                 { type: 'text', text: code.slice(parsed.markerEnd) },
               ],
               sites: [{ name, purpose: 'validated-runtime-soft-state-writer', block_id: edge.block_id,
@@ -1390,7 +1558,12 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
             if (receipt.schema !== 'natlang.typed-result-write/1' || receipt.invocation_id !== invocation ||
                 receipt.writer_call_id !== invocation || receipt.source_row_sha256 !== sourceSha ||
                 !['typed-text-result', 'typed-text-result-field', 'typed-json-result'].includes(String(receipt.source_kind)) ||
-                typeof receipt.block_id !== 'string' || !/^nz1_[a-z2-7]{20,}$/.test(receipt.block_id) ||
+                typeof receipt.block_id !== 'string' ||
+                !(/^nzs1_[a-z2-7]{52}$/.test(receipt.block_id) || /^nz1_[a-z2-7]{20,}$/.test(receipt.block_id)) ||
+                (receipt.block_id.startsWith('nzs1_') && (receipt.source_occurrence !== receipt.writer_node ||
+                  receipt.stop_gradient !== undefined && receipt.stop_gradient !== true)) ||
+                (receipt.block_id.startsWith('nz1_') &&
+                  (receipt.source_occurrence !== undefined || receipt.stop_gradient !== undefined)) ||
                 typeof receipt.writer_node !== 'string' || typeof receipt.result_type !== 'string' ||
                 !receipt.result_type.startsWith('Neuralese<') || typeof receipt.body_sha256 !== 'string' ||
                 !/^[0-9a-f]{64}$/.test(receipt.body_sha256) || typeof receipt.body_source !== 'string' ||
@@ -1433,7 +1606,11 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
                   receipt.writer_node as string) : selectedEdge ? blockName(edge!) :
                 `typed-result:${receipt.block_id}:${sha12(JSON.stringify([receipt.writer_node, resultPath]))}`;
               const write = { $write: { name, block_id: receipt.block_id, type: receipt.result_type,
-                source: receipt.body_source, ...(receipt.source_kind === 'typed-json-result' ? { source_encoding: 'json' } : {}) } };
+                source_kind: receipt.source_kind,
+                source: receipt.body_source,
+                ...(receipt.stop_gradient === true ? { stop_gradient: true } : {}),
+                ...(typeof receipt.source_occurrence === 'string' ? { source_occurrence: receipt.source_occurrence } : {}),
+                ...(receipt.source_kind === 'typed-json-result' ? { source_encoding: 'json' } : {}) } };
               if (directSemanticText) selectedRuntimeResultWrites.push({
                 schema: 'natlang.selected-runtime-result-write/1',
                 role: 'selected-direct-typed-text-semantic-writer',
@@ -1447,6 +1624,10 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
                 action_arguments_sha256: createHash('sha256').update(stableJson(args) ?? '').digest('hex'),
                 target_write_name: name,
                 target_write_sha256: createHash('sha256').update(stableJson(write) ?? '').digest('hex'),
+                source_kind: receipt.source_kind,
+                body_source: receipt.body_source,
+                ...(receipt.stop_gradient === true ? { stop_gradient: true } : {}),
+                ...(typeof receipt.source_occurrence === 'string' ? { source_occurrence: receipt.source_occurrence } : {}),
                 body_source_basis: receipt.body_source_basis,
                 learned_vectors: false, qualification_certificate: false, training_admission: false,
               });
@@ -1532,7 +1713,7 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
     if (Array.isArray(value)) return value.reduce((count, item) => count + countReferences(item, id), 0);
     if (!value || typeof value !== 'object') return 0;
     const item = value as Record<string, unknown>;
-    let count = item.type === 'neuralese' && item.id === id ? 1 : 0;
+    let count = (item.type === 'neuralese' || item.type === 'native_state') && item.id === id ? 1 : 0;
     for (const [key, child] of Object.entries(item)) {
       if (key === 'arguments' && typeof child === 'string') {
         try { count += countReferences(JSON.parse(child), id); } catch { /* Preserve opaque arguments. */ }
@@ -1644,14 +1825,51 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
   });
   if ((record as Record<string, unknown>).derived_target !== undefined && derivedTextWrites.length !== 1)
     throw new Error(`derived typed-text target did not produce exactly one validated derived writer for ${rowId}`);
-  return { record: { ...record, messages, ...(target ? { target } : {}),
+  const externalSources = new Map<string, { body: string; reference: string; sourceKind: string }>();
+  for (const value of externalBodies.values()) {
+    const receipt = value.receipt as Record<string, unknown>;
+    const block = receipt.block as Record<string, unknown>;
+    const id = typeof block.id === 'string' ? block.id : undefined;
+    if (!id) continue;
+    const sourceKind = receipt.origin === 'same-run-producer' ? 'authenticated-provider-context' : 'external-provider-context';
+    const addSource = (stopGradient: boolean, sourceOccurrence: string | undefined,
+      writer: Record<string, unknown> | undefined) => {
+      const key = sourceUseKey(id, stopGradient, sourceOccurrence);
+      const reference = sourceOccurrence && writer ? directTypedResultEventName(id, trajectoryId,
+        String(writer.call_id ?? ''), sourceOccurrence) : `context-only:${id}`;
+      const previous = externalSources.get(key);
+      if (previous && (previous.body !== value.body || previous.reference !== reference))
+        throw new Error(`native source conversion has conflicting exact external occurrence custody for ${id}`);
+      externalSources.set(key, { body: value.body, reference, sourceKind });
+    };
+    if (receipt.origin === 'same-run-producer') {
+      const pairs = [{ read: receipt.block_read as Record<string, unknown> | undefined,
+        writer: receipt.producer_write as Record<string, unknown> | undefined },
+      ...((Array.isArray(receipt.additional_read_turn_pairs) ? receipt.additional_read_turn_pairs : []) as Record<string, unknown>[])
+        .map(pair => ({ read: pair.block_read as Record<string, unknown> | undefined,
+          writer: (pair.producer_write ?? receipt.producer_write) as Record<string, unknown> | undefined }))];
+      for (const pair of pairs) {
+        if (!pair.read || !pair.writer || typeof pair.writer.node !== 'string')
+          throw new Error(`native source conversion lacks exact producer occurrence for ${id}`);
+        addSource(pair.read.stop_gradient === true, pair.writer.node, pair.writer);
+      }
+      if (pairs.length === 1 && pairs[0]?.read?.stop_gradient !== true)
+        addSource(false, undefined, undefined); // exact historical id-only source form
+    } else addSource(false, undefined, undefined);
+  }
+  const native = nativeSourceView(record as Record<string, unknown>, messages, target, sourceTarget,
+    pieces, sourceMessagesSha256, sourceTargetSha256, externalSources, selectedRuntimeResultWrites,
+    inlineRead && plainInline && inlineBody !== undefined ?
+      { writer_id: inlineRead.writer_id, body_source: inlineRead.body_source ?? inlineBody } : undefined);
+  return { record: { ...record, messages: native.messages, ...(native.target ? { target: native.target } : {}),
+    native_source_conversion: native.conversion,
     neuralese_conversion: { version: NEURALESE_CONVERSION_VERSION, sites,
       ...(observedHostMetadata.length ? { observed_host_result_contexts: observedHostMetadata } : {}),
       ...(externalContextMetadata.length ? { external_context_inputs: externalContextMetadata } : {}),
       ...(selectedRuntimeResultWrites.length ? { selected_runtime_result_writes: selectedRuntimeResultWrites } : {}),
       ...(derivedTextWrites.length ? { derived_semantic_text_writes: derivedTextWrites } : {}),
       ...(runtimeResultForwardings.length ? { runtime_result_forwardings: runtimeResultForwardings } : {}),
-      ...(softStateMetadata ? { soft_state_edges: softStateMetadata } : {}) } }, pieces: [...pieces.values()] };
+      ...(softStateMetadata ? { soft_state_edges: softStateMetadata } : {}) } }, pieces: [] };
 }
 
 function signatureHasExactParameter(signature: string, argument: string, type: string): boolean {

@@ -61,7 +61,7 @@
       request: { x_natlang_forced: ['Note: ', { neuralese: 'write' }] } });
     const written = await writing({ messages: [{ role: 'user', content: 'Write a note.' }], tools: [], seed: null, max_tokens: 16 });
     report.written_turn = JSON.stringify(written).slice(0, 600);
-    const id = JSON.stringify(written).match(/nz1_[a-z2-7]{52}/)?.[0];
+    const id = JSON.stringify(written).match(/nzs1_[a-z2-7]{52}/)?.[0];
     report.block = id ? await store.meta(id) : null;
     // A natlang call through the runtime: a Neuralese<string> result by template readout.
     const runtime = natlang.createNatlangRuntime({ model: { driver }, neuralese: { store }, seed: { mode: 'backend' } });

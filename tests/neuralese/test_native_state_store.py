@@ -59,14 +59,17 @@ def test_native_state_uses_shared_store_holds_and_survives_restart(tmp_path):
     store.close()
 
 
-def test_native_state_parts_remain_structured_and_cannot_enter_legacy_renderer():
+def test_native_state_parts_render_as_structured_imports():
     messages = [{"role": "user", "content": [{"type": "text", "text": "read "},
                                                   {"type": "native_state", "id": "nzs1_" + "a" * 52}]}]
     apply = lambda rows, tools: rows[0]["content"]
-    with pytest.raises(RequestError, match="native-state-unavailable"):
-        render_messages(messages, None, apply)
-    rendered = render_messages(messages, None, apply, native_state=True)
+    rendered = render_messages(messages, None, apply)
     assert rendered.blocks == ["nzs1_" + "a" * 52]
-    assert rendered.block_kinds == ["native_state"]
     assert len(rendered.segments) == 2 and rendered.segments[1] == 0
+
+
+def test_projected_parts_are_rejected_instead_of_being_forwarded_to_the_template():
+    messages = [{"role": "user", "content": [{"type": "neuralese", "id": "nz1_" + "a" * 52}]}]
+    with pytest.raises(RequestError, match="projected neuralese parts are retired"):
+        render_messages(messages, None, lambda rows, tools: rows[0]["content"])
 

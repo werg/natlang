@@ -3,15 +3,14 @@ import { verifyNativeStateDerivation } from './native-state-derivation.js';
 /**
  * Neuralese tensor store (S0 §3.4, S4 §2.4).
  *
- * Every soft value is an immutable, content-addressed block of vectors. The runtime's value model holds only
- * references (`{ $neuralese: { type, id } }`); bytes move between this store, `.nz` files and model servers.
+ * Native state spans and named tensor artifacts are immutable and content addressed. The runtime's value model holds
+ * opaque references (`{ $neuralese: { type, id } }` or `{ $nativeAdapter: { id } }`); exact bytes move between this
+ * archive, `.nz` files and native model servers.
  */
 import { digest, hexDigest } from './hash.js';
 import { validateNativeStateDerivation, nativeStateDerivationDependencies, validateNativeDerivativeArtifact, validateNativeDerivativeTarget, validateNativeFunctionalActor, nativeQueryReadoutDependencies, type NativeStateDerivation } from './native-derivative-contract.js';
 
-export type NeuraleseDtype = 'f32' | 'f16' | 'bf16';
-
-/** Metadata of one stored block. `id` is derived from dialect, shape, dtype and payload bytes. */
+/** Metadata for a native state or named tensor artifact. */
 export type NeuraleseBlockMeta = {
   id: string;
   dialect: string;
@@ -19,7 +18,6 @@ export type NeuraleseBlockMeta = {
   type?: string;
   length: number;
   width: number;
-  dtype: NeuraleseDtype;
   /** Invocation, file, combinator call or gradient step that produced the block. */
   producer?: Record<string, unknown>;
   /** Present for exact multi-tensor state; this metadata is not a flat-vector payload. */
@@ -29,10 +27,6 @@ export type NeuraleseBlockMeta = {
   /** Writing hit the runtime's hard maximum instead of stopping. */
   truncated?: boolean;
 };
-
-export type NeuraleseBlock = { meta: NeuraleseBlockMeta; data: Uint8Array };
-
-export type NeuraleseBlockInput = Omit<NeuraleseBlockMeta, 'id'> & { data: Uint8Array };
 
 export type NativeStateDtype = 'F16' | 'BF16' | 'F32' | 'F64' | 'I64';
 export type NativeStateTensor = { dtype: NativeStateDtype; shape: number[]; data: Uint8Array };
@@ -81,7 +75,6 @@ export function nativeStateBlockMeta(artifact: Pick<NativeStateArtifact, 'id' | 
     ? `semantic-state/${artifact.metadata.adapter_sha256}` : `native-state/${artifact.metadata.architecture}`;
   return { id: artifact.id, dialect,
     length: artifact.tensors.token_ids!.shape[0]!, width: embeddings.shape[1]!,
-    dtype: embeddings.dtype === 'BF16' ? 'bf16' : embeddings.dtype === 'F16' ? 'f16' : 'f32',
     native_state: { ...structuredClone(artifact.metadata), embedding_dtype: embeddings.dtype },
     producer: { checkpoint_sha256: artifact.metadata.checkpoint_sha256,
       tokenizer_fingerprint: artifact.metadata.tokenizer_fingerprint,
@@ -90,7 +83,7 @@ export function nativeStateBlockMeta(artifact: Pick<NativeStateArtifact, 'id' | 
 
 export function nativeTensorArtifactBlockMeta(artifact: Pick<NativeTensorArtifact, 'id' | 'metadata'>): NeuraleseBlockMeta {
   return { id: artifact.id, dialect: `native-tensor/${artifact.metadata.kind}`, length: artifact.metadata.tensors.length,
-    width: 1, dtype: 'f32', native_tensor_artifact: structuredClone(artifact.metadata),
+    width: 1, native_tensor_artifact: structuredClone(artifact.metadata),
     producer: { ...artifact.metadata.native_identity, objective: artifact.metadata.provenance.objective } };
 }
 
@@ -239,38 +232,35 @@ export async function nativeArtifactDependencyClosure(store: Pick<NeuraleseStore
   return keep;
 }
 
-/** Client interface to a tensor store: in memory, on disk, or a model server's block endpoints. */
+/** Client interface to a native artifact archive: in memory, on disk, or a model server's native artifact endpoints. */
 export interface NeuraleseStore {
-  put(block: NeuraleseBlockInput): Promise<NeuraleseBlockMeta>;
-  get(id: string): Promise<NeuraleseBlock | undefined>;
   meta(id: string): Promise<NeuraleseBlockMeta | undefined>;
   has(id: string): Promise<boolean>;
   /**
-   * Metadata of a block this store holds, or was told about with `note`, without I/O (a process-local store), for
-   * synchronous checks such as a value's dialect when it is coerced to a type (native/values.ts) or a block's length
+   * Metadata of an artifact this store holds, or was told about with `note`, without I/O (a process-local store), for
+   * synchronous checks such as a value's dialect when it is coerced to a type (native/values.ts) or a state span's length
    * in a context estimate. Undefined when the store would have to ask.
    */
   peek?(id: string): NeuraleseBlockMeta | undefined;
   /**
-   * Remember the metadata of a block held elsewhere (a model server's `GET /v1/neuralese/blocks/{id}/meta`), so that
-   * `peek` answers for it. It does not make the block present: `has`, `get` and `meta` still answer for held blocks only.
+   * Remember metadata of a native artifact held elsewhere, so `peek` can answer without I/O. It does not make the
+   * artifact present: `has`, `getNativeState`, `getNativeTensorArtifact` and `meta` still answer for held artifacts only.
    */
   note?(meta: NeuraleseBlockMeta): void;
-  /** Keep a block through garbage collection (for example while a file or a running call refers to it). */
+  /** Keep a native artifact through garbage collection (for example while a file or a running call refers to it). */
   pin(id: string): Promise<void>;
   unpin(id: string): Promise<void>;
-  /** Drop every unpinned block that `referenced` does not name. Returns the IDs removed. */
+  /** Drop every unpinned artifact that `referenced` does not name. Returns the IDs removed. */
   collect(referenced: ReadonlySet<string>): Promise<string[]>;
-  /** Exact positional-KV/hybrid-state artifacts share this store's ownership lifecycle when supported. */
-  putNativeState?(artifact: Omit<NativeStateArtifact, 'id'>): Promise<NativeStateArtifact>;
-  getNativeState?(id: string): Promise<NativeStateArtifact | undefined>;
-  hasNativeState?(id: string): Promise<boolean>;
-  putNativeTensorArtifact?(artifact: Omit<NativeTensorArtifact, 'id'>): Promise<NativeTensorArtifact>;
-  getNativeTensorArtifact?(id: string): Promise<NativeTensorArtifact | undefined>;
-  hasNativeTensorArtifact?(id: string): Promise<boolean>;
+  /** Exact positional-KV/hybrid-state and named tensor artifacts share this store's ownership lifecycle. */
+  putNativeState(artifact: Omit<NativeStateArtifact, 'id'>): Promise<NativeStateArtifact>;
+  getNativeState(id: string): Promise<NativeStateArtifact | undefined>;
+  hasNativeState(id: string): Promise<boolean>;
+  putNativeTensorArtifact(artifact: Omit<NativeTensorArtifact, 'id'>): Promise<NativeTensorArtifact>;
+  getNativeTensorArtifact(id: string): Promise<NativeTensorArtifact | undefined>;
+  hasNativeTensorArtifact(id: string): Promise<boolean>;
 }
 
-const BYTES: Record<NeuraleseDtype, number> = { f32: 4, f16: 2, bf16: 2 };
 const BASE32 = 'abcdefghijklmnopqrstuvwxyz234567';
 
 function base32(bytes: Uint8Array): string {
@@ -281,31 +271,6 @@ function base32(bytes: Uint8Array): string {
   }
   if (bits > 0) out += BASE32[(value << (5 - bits)) & 31];
   return out;
-}
-
-/** Content ID: `nz1_` + base32 SHA-256 over dialect, shape, dtype and payload bytes. */
-/** Blocks that are pure constants of a dialect (the zero-length identity of `combine`), known to every runtime. */
-const constants = new Map<string, NeuraleseBlock>();
-
-/** The zero-length block of a dialect and width; registered so that upload paths can supply it. */
-export function emptyBlock(dialect: string, width: number): NeuraleseBlock {
-  const id = neuraleseContentId({ dialect, length: 0, width, dtype: 'f32', data: new Uint8Array(0) });
-  let block = constants.get(id);
-  if (!block) constants.set(id, block = { meta: { id, dialect, type: 'Neuralese<unknown>', length: 0, width, dtype: 'f32',
-    producer: { kind: 'constant', name: 'empty' } }, data: new Uint8Array(0) });
-  return block;
-}
-
-/** A registered constant block, when `id` names one. */
-export function constantBlock(id: string): NeuraleseBlock | undefined {
-  return constants.get(id);
-}
-
-export function neuraleseContentId(block: Pick<NeuraleseBlockInput, 'dialect' | 'length' | 'width' | 'dtype' | 'data'>): string {
-  const header = new TextEncoder().encode(`natlang.neuralese-block/1\0${block.dialect}\0${block.length}x${block.width}\0${block.dtype}\0`);
-  const joined = new Uint8Array(header.length + block.data.length);
-  joined.set(header); joined.set(block.data, header.length);
-  return `nz1_${base32(digest(joined))}`;
 }
 
 const NATIVE_DTYPE_BYTES: Record<NativeStateDtype, number> = { F16: 2, BF16: 2, F32: 4, F64: 8, I64: 8 };
@@ -720,45 +685,18 @@ export function decodeNativeState(bytes: Uint8Array): NativeStateArtifact {
   return { id: actual, metadata, tensors };
 }
 
-export function checkBlockShape(block: NeuraleseBlockInput): void {
-  if (!Number.isSafeInteger(block.length) || block.length < 0 || !Number.isSafeInteger(block.width) || block.width <= 0)
-    throw new RangeError('a Neuralese block needs a nonnegative integer length and a positive integer width');
-  if (block.data.length !== block.length * block.width * BYTES[block.dtype])
-    throw new RangeError(`a ${block.length}x${block.width} ${block.dtype} block has ${block.length * block.width * BYTES[block.dtype]} bytes, ` +
-      `got ${block.data.length}`);
-}
-
 /** Process-local store; the default for runtimes without a model-side store, and for tests. */
 export class MemoryNeuraleseStore implements NeuraleseStore {
-  private readonly blocks = new Map<string, NeuraleseBlock>();
   private readonly nativeStates = new Map<string, NativeStateArtifact>();
   private readonly nativeTensorArtifacts = new Map<string, NativeTensorArtifact>();
   /** Metadata of blocks held elsewhere (`note`). */
   private readonly noted = new Map<string, NeuraleseBlockMeta>();
   private readonly pins = new Map<string, number>();
-  async put(block: NeuraleseBlockInput): Promise<NeuraleseBlockMeta> {
-    checkBlockShape(block);
-    const id = neuraleseContentId(block);
-    const found = this.blocks.get(id);
-    if (found) {
-      // Same bytes: keep the first producer; learn a type the first writer did not know.
-      if (!found.meta.type && block.type) found.meta = { ...found.meta, type: block.type };
-      return { ...found.meta };
-    }
-    const { data, ...rest } = block;
-    const meta: NeuraleseBlockMeta = { id, ...rest };
-    this.blocks.set(id, { meta, data: data.slice() });
-    return { ...meta };
-  }
-  async get(id: string): Promise<NeuraleseBlock | undefined> {
-    const found = this.blocks.get(id);
-    return found && { meta: { ...found.meta }, data: found.data.slice() };
-  }
   async meta(id: string): Promise<NeuraleseBlockMeta | undefined> {
     const found = this.peek(id);
     return found && { ...found };
   }
-  async has(id: string): Promise<boolean> { return this.blocks.has(id) || this.nativeStates.has(id) || this.nativeTensorArtifacts.has(id); }
+  async has(id: string): Promise<boolean> { return this.nativeStates.has(id) || this.nativeTensorArtifacts.has(id); }
   async putNativeState(artifact: Omit<NativeStateArtifact, 'id'>): Promise<NativeStateArtifact> {
     if(artifact.metadata.derivation)await verifyNativeStateDerivation(this,artifact);
     const id = nativeStateContentId(artifact.metadata, artifact.tensors);
@@ -790,15 +728,15 @@ export class MemoryNeuraleseStore implements NeuraleseStore {
   peek(id: string): NeuraleseBlockMeta | undefined {
     const native = this.nativeStates.get(id);
     const tensor = this.nativeTensorArtifacts.get(id);
-    const found = this.blocks.get(id)?.meta ?? (native && nativeStateBlockMeta(native)) ??
+    const found = (native && nativeStateBlockMeta(native)) ??
       (tensor && nativeTensorArtifactBlockMeta(tensor)) ?? this.noted.get(id);
     return found && { ...found };
   }
   note(meta: NeuraleseBlockMeta): void {
-    if (!this.blocks.has(meta.id)) this.noted.set(meta.id, { ...meta });
+    if (!this.nativeStates.has(meta.id) && !this.nativeTensorArtifacts.has(meta.id)) this.noted.set(meta.id, { ...meta });
   }
   async pin(id: string): Promise<void> {
-    if (!this.blocks.has(id) && !this.nativeStates.has(id) && !this.nativeTensorArtifacts.has(id)) throw new Error(`neuralese-unknown-block: ${id}`);
+    if (!this.nativeStates.has(id) && !this.nativeTensorArtifacts.has(id)) throw new Error(`neuralese-unknown-native-artifact: ${id}`);
     this.pins.set(id, (this.pins.get(id) ?? 0) + 1);
   }
   async unpin(id: string): Promise<void> {
@@ -808,69 +746,22 @@ export class MemoryNeuraleseStore implements NeuraleseStore {
   async collect(referenced: ReadonlySet<string>): Promise<string[]> {
     referenced = await nativeArtifactDependencyClosure(this, [...referenced, ...this.pins.keys()]);
     const removed: string[] = [];
-    for (const id of [...this.blocks.keys(), ...this.nativeStates.keys(), ...this.nativeTensorArtifacts.keys()])
+    for (const id of [...this.nativeStates.keys(), ...this.nativeTensorArtifacts.keys()])
       if (!referenced.has(id) && !this.pins.has(id)) {
-        this.blocks.delete(id); this.nativeStates.delete(id); this.nativeTensorArtifacts.delete(id); removed.push(id);
+        this.nativeStates.delete(id); this.nativeTensorArtifacts.delete(id); removed.push(id);
       }
     for (const id of [...this.noted.keys()]) if (!referenced.has(id)) this.noted.delete(id);
     return removed;
   }
-  get size(): number { return this.blocks.size + this.nativeStates.size + this.nativeTensorArtifacts.size; }
+  get size(): number { return this.nativeStates.size + this.nativeTensorArtifacts.size; }
 }
 
-/** Write port: turns what a model wrote inside a literal into a stored block.
+/** Write port: records a model's native-state output as a stored artifact.
  * Returned type/producer/truncation describe this write occurrence. The content
- * store may retain an earlier producer for an identical payload; inspect it via
- * store.get() when original stored custody is required.
+ * store may retain an earlier producer for an identical payload; occurrence receipts
+ * remain separate from the content-addressed artifact.
  */
 export interface NeuralesePort {
   readonly dialect: string;
   write(text: string, options?: { type?: string; producer?: Record<string, unknown>; truncated?: boolean }): Promise<NeuraleseBlockMeta>;
-}
-
-/** Text to its token embeddings, one vector per token, each `width` long. */
-export type TokenEmbedder = (text: string) => Float32Array[] | Promise<Float32Array[]>;
-
-/**
- * The untrained stand-in port (S4 §4.3): until a trained writer exists, a written block is the token embeddings of
- * the text the model wrote inside the literal. It exercises protocol, store and runtime paths, not writing quality.
- */
-export class StandInNeuralesePort implements NeuralesePort {
-  constructor(private readonly store: NeuraleseStore, private readonly embed: TokenEmbedder,
-    readonly width: number, readonly dialect = 'nd:standin@0') {}
-  async write(text: string, options: { type?: string; producer?: Record<string, unknown>; truncated?: boolean } = {}):
-      Promise<NeuraleseBlockMeta> {
-    const vectors = await this.embed(text);
-    const data = new Float32Array(vectors.length * this.width);
-    vectors.forEach((vector, index) => {
-      if (vector.length !== this.width) throw new RangeError(`embedding width ${vector.length}, expected ${this.width}`);
-      data.set(vector, index * this.width);
-    });
-    const producer = { kind: 'stand-in', ...(options.producer ?? {}) };
-    const stored = await this.store.put({ dialect: this.dialect, type: options.type, length: vectors.length, width: this.width, dtype: 'f32',
-      data: new Uint8Array(data.buffer), producer,
-      ...(options.truncated ? { truncated: true } : {}) });
-    // The store retains immutable payload custody. A successful write reports
-    // this occurrence even when its bytes deduplicate with an earlier writer.
-    const { type: _storedType, producer: _storedProducer, truncated: _storedTruncated, ...payload } = stored;
-    return { ...payload, ...(options.type === undefined ? {} : { type: options.type }), producer,
-      ...(options.truncated ? { truncated: true } : {}) };
-  }
-}
-
-/**
- * A deterministic stand-in embedder for runtimes without a model's embedding table, and for tests: one vector per
- * whitespace-separated token, derived from the token's hash. It carries no meaning.
- * Text transports can retain whitespace fragments so distinct literal bodies have distinct payloads.
- */
-export function hashingEmbedder(width: number, options: { preserveWhitespace?: boolean } = {}): TokenEmbedder {
-  return text => (options.preserveWhitespace ? text.match(/\s+|\S+/g) ?? [] : text.split(/\s+/).filter(Boolean)).map(token => {
-    const vector = new Float32Array(width);
-    let seed = digest(token);
-    for (let index = 0; index < width; index++) {
-      if (index && index % seed.length === 0) seed = digest(seed);
-      vector[index] = (seed[index % seed.length]! - 127.5) / 127.5;
-    }
-    return vector;
-  });
 }

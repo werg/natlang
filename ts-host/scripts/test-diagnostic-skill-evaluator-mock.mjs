@@ -17,7 +17,7 @@ catch (error) { if (error.message.includes('already exists')) throw error; if (e
 const expected = ['eligible','ineligible','unresolved','ineligible'];
 const plan={...sourcePlan,root_approved:true,model:'mock-luna',endpoint:'http://127.0.0.1:65533',provider:null,
   local_fake_provider:true,pi_options:{},output:resolve(output),job_wall_cap_ms:30000,min_free_bytes:0,
-  text_neuralese_emulation:false,execution_plans:true,max_requests_per_execution:4,max_total_requests:32};
+  execution_plans:true,max_requests_per_execution:4,max_total_requests:32};
 const bytes=Buffer.from(JSON.stringify(plan,null,2)+'\n'); await writeFile(planPath,bytes,{flag:'wx'});
 const runner=resolve('ts-host/scripts/diagnostic-evaluate-student-skills.mjs');
 const exchangeLog=join(base,`${proofId}-provider-exchanges.jsonl`);

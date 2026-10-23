@@ -54,14 +54,14 @@ def test_attention_mode_preserves_legacy_identity_and_restores_explicit_checkpoi
 
 @pytest.mark.parametrize('kind',['native_state_sft','native_offline_preference','native_state_rl'])
 def test_recipe_declares_and_validates_attention_arithmetic(kind,tmp_path):
-    from natlang_neuralese.train.recipe import HANDLERS, validate_stage_parameters,direct_windowing_handoffs
+    from natlang_neuralese.train.recipe import HANDLERS, validate_stage_parameters,native_stage_parameter_handoffs
     assert 'native_attention_precision' in HANDLERS[kind]['parameters']
     validate_stage_parameters(kind,{'native_attention_precision':'tf32x3'})
     with pytest.raises(ValueError,match='attention precision'):
         validate_stage_parameters(kind,{'native_attention_precision':'tf32'})
     before={'stages':[{'id':'native','kind':kind,'parameters':{'native_attention_precision':'ieee'}}]}
     after=copy.deepcopy(before);after['stages'][0]['parameters']['native_attention_precision']='tf32x3'
-    changes,_,_=direct_windowing_handoffs(before,after,tmp_path)
+    changes,_,_=native_stage_parameter_handoffs(before,after,tmp_path)
     assert changes['native']['native_attention_precision']==['ieee','tf32x3']
 
 

@@ -1,6 +1,6 @@
 # Fused pipelines: settings, certificate, traces
 
-Fusion keeps the value between two natural-language functions as a Neuralese block instead of text, when nothing else
+Fusion keeps the value between two natural-language functions as native state instead of text, when nothing else
 reads it. It is a compilation decision: declared types stay `T`. Design and gate: `plans/FUSED_PIPELINES.md`.
 
 ## Settings (`natlang.json`)
@@ -32,11 +32,11 @@ Embedded hosts compile their TypeScript with the project build (`buildProject`) 
 
 ## When `on` engages
 
-Only when the runtime has a Neuralese store and port, the driver declares `neuralese: true`, and the certificate
+Only when the runtime has a native state archive and checkpoint-backed writer, the driver declares native-state
+capability, and the certificate
 (`natlang.fusion-certificate/1`, issued by the training pipeline after runtime qualification and the self-feedback gates
 of the exact weights) matches model id, `weights`, and the port's dialect. Otherwise every planned edge stays text and
-the orchestrator's trace gets `fusion_fallback` with the reason. A text emulation stands in only where the host sets
-`fusion.emulation = { dialect }` and the port writes that dialect; events then carry `emulation: true`. Never ship that.
+the orchestrator's trace gets `fusion_fallback` with the reason. The runtime does not emulate native state through text.
 
 ## What you see
 
@@ -44,7 +44,7 @@ the orchestrator's trace gets `fusion_fallback` with the reason. A text emulatio
   (another reader, different models, a finite value, a chain the prose does not make explicit).
 - Trace events on the orchestrator's call: `fusion_edge` (`fused`, `consumed`, `fallback`), `fusion_fallback`,
   `fusion_shadow`; the planner comparison is `pluggable_shadow` (name `fusion-plan`).
-- A fused block is accepted where its declared type `T` is expected, in that task only. Code that reads it as `T`
+- A fused state is accepted where its declared type `T` is expected, in that task only. Code that reads it as `T`
   (field access, comparison, `String(v)`) is a reader the plan should have excluded; if you find one, the facts missed
   it: keep the edge as text and report the case.
 - `scripts/fusion-bench.mjs` measures tokens, latency and agreement, and applies the gate before `on`.

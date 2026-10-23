@@ -1,6 +1,6 @@
 /** Exact native state service plumbing shared by typed writes, body init and views. */
 import { fetchModel } from '../model/chat-completion.js';
-import { HttpNeuraleseStore, requestNativeStateIds, restoreBlocks, restoreNativeStates } from '../model/neuralese-server.js';
+import { HttpNeuraleseStore, requestNativeStateIds, restoreNativeArtifacts, restoreNativeStates } from '../model/neuralese-server.js';
 import { archiveNativeTensorFrom, archiveNativeArtifactFrom, nativeStateBlockMeta, type NativeStateArtifact, type NeuraleseBlockMeta,
   type NeuralesePort, type NeuraleseStore, type NativeAdapterStateConsumption, validateNativeAdapterStateConsumption, nativeCanonicalJson } from '../native/neuralese-store.js';
 import { hexDigest } from '../native/hash.js';
@@ -108,7 +108,7 @@ export async function nativeTextOperation(options: NativeClientOptions, operatio
   if (Array.isArray(body.adapters)) {
     const ids = body.adapters.map(entry => typeof entry === 'string' ? entry : (entry as { id?: string }).id);
     if (ids.some(id => typeof id !== 'string')) return failure('neuralese-native-adapter-invalid', 'native adapters require exact coefficient artifact IDs');
-    const missing = await restoreBlocks(new HttpNeuraleseStore(options.endpoint, options.headers), options.store, ids as string[]);
+    const missing = await restoreNativeArtifacts(new HttpNeuraleseStore(options.endpoint, options.headers), options.store, ids as string[]);
     if (missing.length) return failure('neuralese-unknown-native-artifact', `restore native adapter coefficients and bases ${missing.join(', ')}`);
   }
   const response = await fetchModel(`${options.endpoint.replace(/\/$/, '')}/v1/neuralese/native-states/${operation}`, {

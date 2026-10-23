@@ -87,12 +87,12 @@ export function summarizedMessages(view: View, cut: number): Message[] {
   return orderToolResults(view.contributions.slice(0, cut).flat());
 }
 
-/** The text of message content; a Neuralese block (types.ts NeuraleseContent), which a text reader cannot read, is named. */
+/** The text of message content; a Neuralese block (types.ts NativeStateContent), which a text reader cannot read, is named. */
 function contentText(content: unknown): string {
   if (typeof content === 'string') return content;
   return (content as { type: string; text?: string; id?: string }[])
     .flatMap(block => (block.type === 'text' && block.text !== undefined ? [block.text] :
-      block.type === 'neuralese' ? [`[Neuralese block ${block.id}]`] : []))
+      block.type === 'native_state' ? [`[Neuralese block ${block.id}]`] : []))
     .join('\n');
 }
 

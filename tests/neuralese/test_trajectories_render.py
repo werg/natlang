@@ -1,6 +1,6 @@
 import json
 
-from natlang_neuralese.train.trajectories import crisp_messages, handover_notes, reads, render, target_write
+from natlang_neuralese.data.trajectory_text import crisp_messages, handover_notes, reads, render, target_write
 
 NOTE = "Line 2 is a fee; check prior invoices."
 WRITE = {"$write": {"name": "handover:abc", "type": "Neuralese<string>", "source": NOTE}}
@@ -22,14 +22,11 @@ def test_crisp_rendering_restores_the_original_texts():
     assert reads(RECORD) == {"handover:abc"} and target_write(RECORD) is None
 
 
-def test_written_notes_are_block_parts_in_reads_and_inside_the_quoted_argument():
-    block = "nz1_" + "b" * 52
-    out = render(RECORD["messages"], lambda name: {"type": "neuralese", "id": "nz1_" + "c" * 52}, handover_notes(RECORD),
-                 {"handover:abc": block})
-    assert {"type": "neuralese", "id": block} in out[1]["content"]
-    # Tool arguments stay a JSON string; typed block parts live inside its value.
-    arguments = json.loads(out[2]["tool_calls"][0]["function"]["arguments"])
-    assert arguments == {"note": [{"type": "neuralese", "id": block, "value_type": "string"}]}
+def test_opaque_native_state_requires_authenticated_source_conversion():
+    import pytest
+    messages = [{"role": "user", "content": [{"type": "neuralese", "id": "nzs1_opaque"}]}]
+    with pytest.raises(ValueError, match="authenticated graph/source conversion"):
+        render(messages, lambda name: None, {})
 
 
 def test_view_parts_render_as_their_preview_until_view_writes_them():
@@ -39,10 +36,7 @@ def test_view_parts_render_as_their_preview_until_view_writes_them():
         {"type": "text", "text": "\nDeclared state for the rest of this call."}]}]
     out = render(messages, lambda name: None, {})
     assert out[0]["content"].startswith("state: unknown = { a: 1, <<cut off")
-    block = "nz1_" + "d" * 52
-    written = render(messages, lambda name: None, {}, views={"view:abc": block})
-    assert {"type": "neuralese", "id": block} in written[0]["content"]
-    assert {"type": "text", "text": "  // view of the value; state holds all of it"} in written[0]["content"]
+    assert "<<cut off" in out[0]["content"]
 
 
 def test_digest_parts_from_before_the_rename_are_refused_with_their_conversion():
@@ -65,7 +59,7 @@ def test_structured_child_returns_keep_their_type_in_crisp_replay():
 
 
 def test_concrete_typed_json_result_replays_as_json_without_parsing_json_strings():
-    from natlang_neuralese.train.trajectories import write_value_type
+    from natlang_neuralese.data.trajectory_text import write_value_type
     body = '{"count":4,"flag":true}'
     marker = {"$write": {"name": "typed-result:object", "block_id": "nz1_" + "a" * 32,
                          "type": "Neuralese<{ count: number, flag: boolean }>",
@@ -102,17 +96,12 @@ def test_nested_structured_child_writes_expand_recursively_in_crisp_replay():
         "labels": ["catalog verified"],
     }}
 
-    blocks = {"result:nested": "nz1_" + "a" * 52, "result:string": "nz1_" + "b" * 52}
-    replay = render([message], lambda _: None, {}, blocks=blocks)[0]
-    args = json.loads(replay["tool_calls"][0]["function"]["arguments"])
-    assert args == {"status": "success", "value": {
-        "record": [{"type": "neuralese", "id": blocks["result:nested"], "value_type": "unknown"}],
-        "labels": [[{"type": "neuralese", "id": blocks["result:string"], "value_type": "string"}]],
-    }}
+    assert args["value"]["record"] == payload
+    assert args["value"]["labels"] == ["catalog verified"]
 
 
 def test_nested_writer_site_keeps_exact_path_source_type_and_template_cut():
-    from natlang_neuralese.train.trajectories import (
+    from natlang_neuralese.data.trajectory_text import (
         handover_notes, native_writer_prefix, target_writes, write_site,
         write_site_arguments, write_value_path, write_value_type,
     )
@@ -143,7 +132,7 @@ def test_nested_writer_site_keeps_exact_path_source_type_and_template_cut():
 
 
 def test_nested_unknown_writer_site_keeps_json_value_without_string_coercion():
-    from natlang_neuralese.train.trajectories import handover_notes, write_value_type
+    from natlang_neuralese.data.trajectory_text import handover_notes, write_value_type
     payload = {"source_id": "p0", "quote": "An observed fact."}
     marker = {"$write": {"name": "result:object", "type": "Neuralese<unknown>",
                          "source": json.dumps(payload)}}
@@ -155,7 +144,7 @@ def test_nested_unknown_writer_site_keeps_json_value_without_string_coercion():
 
 def test_nested_write_site_paths_are_unique_and_ambiguous_names_are_rejected():
     import pytest
-    from natlang_neuralese.train.trajectories import write_site, write_value_path
+    from natlang_neuralese.data.trajectory_text import write_site, write_value_path
     def marker(name, source):
         return {"$write": {"name": name, "type": "Neuralese<string>", "source": source}}
     arguments = {"status": "success", "value": {"access": marker("result:access", "open"),
@@ -194,19 +183,12 @@ def test_authenticated_read_parts_in_tool_arguments_preserve_writer_ports():
     crisp = render([message], lambda _: None, handover_notes(record))[0]
     assert crisp["tool_calls"][0]["function"]["arguments"] == '{"code":"const prior = prior pass facts;"}'
 
-    block = "nz1_" + "d" * 52
-    written = render([message], lambda _: None, handover_notes(record), {name: block})[0]
-    args = written["tool_calls"][0]["function"]["arguments"]
-    assert args[1] == {"type": "neuralese", "id": block}
-
-    prompt = render_messages([written], None,
-        lambda messages, tools: messages[0]["tool_calls"][0]["function"]["arguments"]["code"], [])
-    assert prompt.blocks == [block]
+    assert crisp["tool_calls"][0]["function"]["arguments"] == '{"code":"const prior = prior pass facts;"}'
 
 
 def test_handover_note_and_string_schema_writers_are_string_writes():
     import pytest
-    from natlang_neuralese.train.trajectories import write_value_type
+    from natlang_neuralese.data.trajectory_text import write_value_type
     def record(kind, schema):
         marker = {"$write": {"name": "handover:abc", "type": kind, "source": "Task: x. Findings: y."}}
         return {"messages": [], "tools": [{"type": "function", "function": {"name": "compact_history",

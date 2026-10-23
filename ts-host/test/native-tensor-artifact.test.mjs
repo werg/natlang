@@ -34,7 +34,8 @@ test('native tensor artifacts survive the shared persistent store lifecycle with
     await store.pin(saved.id);
     const restored = await store.getNativeTensorArtifact(saved.id);
     assert.equal(restored.id, saved.id);
-    assert.equal(await store.get(saved.id), undefined);
+    assert.equal(await store.hasNativeState(saved.id), false);
+    assert.equal(await store.hasNativeTensorArtifact(saved.id), true);
     assert.equal(store.peek(saved.id).native_tensor_artifact.kind, 'parameter-gradient');
     assert.deepEqual(await store.collect(new Set()), []);
     await store.unpin(saved.id);

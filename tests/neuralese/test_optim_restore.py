@@ -21,7 +21,7 @@ def tiny(extra=(), drop=(), seed=0):
 
 
 def build_port(named, vocab=VOCAB):
-    """Mirrors text_warmup: Muon + AdamW children, each split into a backbone-lr and a heads-lr group (4 groups)."""
+    """Build a split-rate optimizer over shared and task-specific parameter groups."""
     opt = PortMuonAdamW(list(named.items()), lr=1e-2, vocab_size=vocab)
     for child in (opt.muon, opt.auxiliary):
         if child is None:
@@ -335,48 +335,6 @@ def test_restore_from_an_mmap_checkpoint_keeps_no_view_of_the_file(tmp_path):
     restore_optimizer_state(fresh, saved, fresh_named, saved_names=['w', 'b'])
     kept = {v.untyped_storage().data_ptr() for state in fresh.state.values() for v in state.values() if torch.is_tensor(v)}
     assert kept and not (kept & mapped)  # AdamW's CPU 'step' and moments are owned copies: the mapping can close
-
-
-@needs_muon
-def test_a_removed_component_drops_its_slots_and_keeps_every_other_state_exact():
-    """The direct stage's NeuraleseProjection left the stage (owner 2026-10-13): a checkpoint whose Muon child held
-    only the projection's matrices restores into an optimizer without it (no Muon child), the AdamW and latent
-    states unchanged (drop_port_optimizer_slots)."""
-    from natlang_neuralese.train.optim_restore import drop_port_optimizer_slots
-    g = torch.Generator().manual_seed(0)
-    make = lambda *shape: torch.nn.Parameter(torch.randn(*shape, generator=g))
-    latent = [('backbone.attn', make(6, 6)), ('backbone.expert', make(6, 6))]
-    other = [('backbone.norm', make(6))]
-    head = [('neuralese_projection.up', make(8, 6)), ('neuralese_projection.bias', make(8))]
-
-    def build(with_head):
-        return PortMuonAdamW((head if with_head else []) + other, lr=1e-2, vocab_size=VOCAB,
-                             latent=[(n, p, 1e-2, 1) for n, p in latent], latent_optimizer='muonsr')
-    before = build(True)
-    for _, p in head + other + latent:
-        p.grad = torch.randn(p.shape, generator=g)
-    before.step()
-    names = {id(p): n for n, p in head + other + latent}
-    groups = [[names[id(p)] for p in group['params']] for group in before.param_groups]
-    saved = before.state_dict()
-    state, kept, dropped = drop_port_optimizer_slots(saved, groups, lambda n: n.startswith('neuralese_projection.'))
-    assert sorted(dropped) == ['neuralese_projection.bias', 'neuralese_projection.up'] and state['muon'] is None
-    after = build(False)
-    assert after.muon is None and state['schema'] == after.schema
-    assert kept == [[names[id(p)] for p in group['params']] for group in after.param_groups]
-    after.load_state_dict(state)
-    reference = before.state_dict()
-    for kind in ('adamw', 'muonsr'):
-        current = after.state_dict()[kind]['state']
-        old = {names[id(p)]: v for p, v in zip([p for grp in getattr(before, 'auxiliary' if kind == 'adamw' else
-                                                                       'latent').param_groups for p in grp['params']],
-                                                [reference[kind]['state'].get(i) for i in range(10)])}
-        new_params = [p for grp in getattr(after, 'auxiliary' if kind == 'adamw' else 'latent').param_groups
-                      for p in grp['params']]
-        for index, p in enumerate(new_params):
-            for key, value in current[index].items():
-                expected = old[names[id(p)]][key]
-                assert torch.equal(value, expected) if torch.is_tensor(value) else value == expected
 
 
 @needs_muon

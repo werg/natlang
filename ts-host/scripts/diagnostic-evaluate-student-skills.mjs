@@ -150,7 +150,6 @@ for (const arm of arms) for (const [collectionIndex, collection] of loadedCollec
     modelId: plan.model, systemPrompt, contextTokens: plan.context_tokens, rootSeed: plan.root_seed + index,
     temperature: 0, maxTurns: plan.max_turns, maxModelRequests: plan.max_requests_per_execution,
     modelConcurrency: 1, collectionRole: 'student',
-    textNeuraleseEmulation: plan.text_neuralese_emulation === true,
     executionPlans: plan.execution_plans === true, executionPlanTokens: plan.execution_plan_tokens,
     request: {max_tokens: plan.max_output_tokens}, jobs: join(caseDir,'jobs'), output: join(caseDir,'unused.jsonl'),
     workers: 1, transportRetries: 0,

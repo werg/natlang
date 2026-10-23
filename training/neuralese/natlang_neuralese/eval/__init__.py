@@ -1,3 +1,5 @@
-from .harness import cache_agreement, evaluate_records, evaluate_spans, latency, representation_monitors, run_harness
+"""Native model evaluation and task quality checks.
 
-__all__ = ["cache_agreement", "evaluate_records", "evaluate_spans", "latency", "representation_monitors", "run_harness"]
+Evaluation components are imported from their specific modules so importing
+the package does not load one particular runtime or model family.
+"""

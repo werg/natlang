@@ -470,7 +470,7 @@ test('tool-call markup in a reply is never taken as a string result', async () =
 });
 
 test('a plain final reply is materialized at a declared Neuralese<string> boundary', async () => {
-  const block = 'nz1_aaaaaaaaaaaaaaaaaaaa';
+  const block = 'nzs1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
   const writes = [];
   const meta = { id: block, type: 'Neuralese<string>', dialect: 'test', length: 2, truncated: false };
   const { lam, session } = open({ type: '() => Neuralese<string>', instructions: 'Return the answer.' }, {
@@ -1215,7 +1215,7 @@ test('a saved inline function without parameters takes whatever each call passes
 });
 
 test('a saved inline callable keeps its declared Neuralese scalar result for later text readout', async () => {
-  const readBody = 'nz1_bbbbbbbbbbbbbbbbbbbb';
+  const readBody = 'nzs1_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
   let childCalls = 0, readCalls = 0;
   const { lam, session } = open({ type: '() => string', instructions: 'Return the text read from the child.' }, {
     services: { neuralese: { dialect: 'test', width: 4, bodies: { read: readBody } } },
@@ -1223,7 +1223,7 @@ test('a saved inline callable keeps its declared Neuralese scalar result for lat
     agent: child => {
       if (child.lam.type.returns.kind === 'neuralese') {
         childCalls++;
-        child.lam.return = neuraleseRef('Neuralese<string>', 'nz1_aaaaaaaaaaaaaaaaaaaa');
+        child.lam.return = neuraleseRef('Neuralese<string>', 'nzs1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
       } else {
         readCalls++;
         child.lam.return = 'answer text';
@@ -1249,14 +1249,14 @@ test('a saved inline callable keeps its declared Neuralese scalar result for lat
 });
 
 test('iterateOn keeps its state type through eval lowering for same-eval Neuralese readout', async () => {
-  const readBody = 'nz1_bbbbbbbbbbbbbbbbbbbb';
+  const readBody = 'nzs1_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
   let readCalls = 0;
   const { lam, session } = open({ type: '() => string', instructions: 'Return the carried text.' }, {
     services: { neuralese: { dialect: 'test', width: 4, bodies: { read: readBody } } },
     neuralese: { store: { has: async id => id === readBody } },
     agent: child => {
       if (child.lam.type.returns.kind === 'neuralese') {
-        child.lam.return = neuraleseRef('Neuralese<string>', 'nz1_aaaaaaaaaaaaaaaaaaaa');
+        child.lam.return = neuraleseRef('Neuralese<string>', 'nzs1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
       } else {
         readCalls++;
         child.lam.return = 'carried answer map';

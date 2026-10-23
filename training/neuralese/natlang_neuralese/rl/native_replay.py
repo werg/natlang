@@ -801,7 +801,7 @@ class NativePolicyObjective:
         return {'external_blocks': blocks, 'external_identity': identities} if blocks else {}
 
     def __call__(self, model, result, context):
-        from .full_policy import clipped_token_loss
+        from .policy_math import clipped_token_loss
         from ..model.native_adapters import require_model_execution_actor
         if self.behavior_policy is None:
             require_model_execution_actor(model, self.evaluation_identity, self.evaluation_adapter_binding)
@@ -893,7 +893,7 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
     from ..data.native_graph import SCHEMA, parse_graph
     from ..common.hashing import canonical_json_sha256_hex
     from .episode_graph import whole_episode_turns
-    from .grpo import group_advantages
+    from .rollout_math import group_advantages
     from ..serve.store import native_state_id
     if behavior_policy is not None:
         validate_invocation_behavior_policy(behavior_policy,identity)

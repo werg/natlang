@@ -1,182 +1,43 @@
-"""Line parity (plans/neuralese/LINE_PARITY.md): the declared lines match the shared base up to declared differences."""
+"""Exact Mellum/LFM parity for native production SFT recipes."""
 import json
-import sys
+import shutil
 from pathlib import Path
 
 import pytest
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'training' / 'neuralese'))
-from natlang_neuralese.train import line_parity  # noqa: E402
-from natlang_neuralese.train.recipe import main as recipe_main  # noqa: E402
+from natlang_neuralese.train import line_parity
 
 RECIPES = Path(__file__).resolve().parents[2] / 'training' / 'neuralese' / 'recipes'
 
 
-def test_declared_lines_match_the_shared_base():
+def test_declared_native_lines_match_the_shared_base():
     assert line_parity.check() == []
 
 
-def test_an_undeclared_difference_fails():
+def test_undeclared_native_training_change_fails():
     parity = line_parity.load_parity()
-    kind, config = line_parity.effective_config({'recipe': 'neuralese-direct-lfm-v3'})
-    config = {**config, 'parameters.tokens': 8192}
-    errors, _ = line_parity.compare(parity, 'direct', 'lfm', kind, config)
-    assert len(errors) == 1 and 'parameters.tokens' in errors[0]
+    _, config = line_parity.effective_config({'recipe': 'native-state-production-lfm-20261015-v1'})
+    config = {**config, 'parameters.batch_tokens': 65536}
+    errors, _ = line_parity.compare(parity, 'lfm', config)
+    assert len(errors) == 1 and 'parameters.batch_tokens' in errors[0]
 
 
-def test_unequal_supervision_fails():
+def test_model_specific_graphs_require_the_shared_admitted_source_and_split():
     parity = line_parity.load_parity()
-    kind, config = line_parity.effective_config({'recipe': 'neuralese-direct-lfm-v3'})
-    config = {**config, 'stages.direct_sft.derived.supervision': '3.0 epochs'}
-    errors, _ = line_parity.compare(parity, 'direct', 'lfm', kind, config)
-    assert errors and 'supervision' in errors[0]
+    _, config = line_parity.effective_config({'recipe': 'native-state-production-mellum-20261015-v1'})
+    config = {**config, 'inputs.native_graphs': '0' * 64}
+    errors, _ = line_parity.compare(parity, 'mellum', config)
+    assert any('shared admitted source membership and exact train/held split' in error for error in errors)
 
 
-def test_direct_phases_are_compared_stage_by_stage_in_epochs():
-    kind, config = line_parity.effective_config({'recipe': 'neuralese-direct-mellum-v4'})
-    assert config['stages.direct_warmup.derived.supervision'] == '0.5 epochs'
-    assert config['stages.direct_sft.derived.supervision'] == '1.0 epochs'
-    assert config['stages.direct_trajectory.derived.supervision'] == '1.0 epochs'
-    assert 'stages.direct_sft.parameters.steps' not in config
+def test_both_native_production_lines_are_declared():
+    declaration = line_parity.load_parity()['stages']['native_state_sft']
+    assert set(declaration['lines']) == set(line_parity.LINES)
+    assert all(spec.get('recipe') for spec in declaration['lines'].values())
 
 
-def test_a_data_substitution_needs_a_registered_twin():
-    parity = line_parity.load_parity()
-    kind, config = line_parity.effective_config({'recipe': 'neuralese-direct-lfm-v3'})
-    errors, _ = line_parity.compare(parity, 'direct', 'mellum', kind, {**config, 'inputs.text_data': '0' * 64,
-                                                                         'parameters.monitor.gate.reference.gate_pass': 1})
-    assert any('tokenizer twin' in e for e in errors)
-
-
-def test_fresh_direct_stage_launch_requires_a_parity_declaration():
-    with pytest.raises(ValueError, match='parity'):
-        line_parity.check_declared_stage({'schema': 'natlang.neuralese-declared-direct-stage/1'})
-    line_parity.check_declared_stage({'parity': 'diagnostic'})
-
-
-def test_cli_cannot_replace_declared_data(tmp_path, capsys):
-    with pytest.raises(SystemExit):
-        recipe_main(['--recipe', str(RECIPES / 'neuralese-direct-lfm-v2.json'), '--heads', str(tmp_path / 'h.pt'),
-                     '--records', str(tmp_path / 'r.jsonl'), '--out', str(tmp_path / 'out')])
-    assert 'declares its data inputs' in capsys.readouterr().err
-
-
-def test_both_lines_progress_in_lockstep():
-    """Every declared production progression stage has recipes for both model lines."""
-    parity = line_parity.load_parity()
-    assert list(parity['stages']) == ['native_state_sft', 'direct', 'e2e']
-    for stage, declaration in parity['stages'].items():
-        assert set(declaration['lines']) == set(line_parity.LINES), stage
-        assert all(spec.get('recipe') for spec in declaration['lines'].values()), stage
-
-
-def test_e2e_lines_share_acceptance():
-    parity = line_parity.load_parity()
-    for line in line_parity.LINES:
-        kind, config = line_parity.effective_config(parity['stages']['e2e']['lines'][line])
-        assert kind == 'direct_runtime_qualification+raw_recurrence_training'
-        assert config['e2e_acceptance.paired_reader.max_v_minus_t_ce_nats'] == 0.0
-        assert not any(key.startswith('parent_readiness') for key in config)
-    kind, config = line_parity.effective_config({'recipe': 'neuralese-e2e-lfm-v1'})
-    config = {**config, 'e2e_acceptance.paired_reader.max_v_minus_t_ce_nats': 0.1}
-    errors, _ = line_parity.compare(parity, 'e2e', 'lfm', kind, config)
-    assert len(errors) == 1 and 'e2e_acceptance' in errors[0]
-
-
-def _repo_copy(tmp_path):
-    import shutil
-    repo = Path(__file__).resolve().parents[2]
-    (tmp_path / 'training' / 'neuralese').mkdir(parents=True)
-    shutil.copytree(RECIPES, tmp_path / 'training' / 'neuralese' / 'recipes')
-    shutil.copy(repo / 'training' / 'neuralese' / 'line-parity.json', tmp_path / 'training' / 'neuralese')
-    shutil.copy(repo / 'training' / 'neuralese_corpora.json', tmp_path / 'training')
-    return tmp_path
-
-
-def test_declared_running_chains_resolve_without_requiring_retired_runs():
-    parity = line_parity.load_parity()
-    for line in line_parity.LINES:
-        declaration = parity['stages']['direct']['lines'][line]
-        # A historical chain may be retired independently of the shared
-        # fresh-launch template. Any remaining active declaration is checked.
-        kind, config = line_parity.effective_config({
-            'recipe': declaration.get('active', declaration['recipe'])})
-        assert kind and config, line
-
-
-def test_a_key_added_to_one_running_chain_fails(tmp_path):
-    """Owner 2026-10-13: a setting Pop added only to its running LFM handoff chain (task_eval.identical_turn_limit)
-    went unnoticed because only next-launch recipes were compared. The running chains are checked too."""
-    repo = _repo_copy(tmp_path)
-    parity_file = repo / 'training' / 'neuralese' / 'line-parity.json'
-    parity = json.loads(parity_file.read_text())
-    # A historical production chain may already be retired. Construct a real
-    # active descendant in this fixture instead of depending on that history.
-    declaration = parity['stages']['direct']['lines']['lfm']
-    recipe = {'schema': 'natlang.neuralese-training-recipe/1',
-              'id': 'test-active-lfm-parity', 'extends': declaration['recipe'], 'overrides': {}}
-    declaration['active'] = recipe['id']
-    parity_file.write_text(json.dumps(parity))
-    leaf = repo / 'training' / 'neuralese' / 'recipes' / (recipe['id'] + '.json')
-    recipe['overrides'].setdefault('stage_parameter_defaults', {}).setdefault('neuralese_direct', {}).setdefault(
-        'task_eval', {})['identical_turn_limit'] = 3
-    leaf.write_text(json.dumps(recipe))
-    errors = line_parity.check(repo)
-    assert len(errors) == 1, errors
-    assert errors[0].startswith(recipe['id'] + ': direct: stages.*.parameters.task_eval.identical_turn_limit differs '
-                                'between lines (mellum=')
-    assert 'lfm=3' in errors[0] and 'move it to the shared recipe or declare it in line-parity' in errors[0]
-
-
-def test_every_leaf_setting_is_compared():
-    # Historical recipes retain their exact execution identity after retirement.
-    kind, config = line_parity.effective_config({
-        'recipe': 'neuralese-direct-lfm-qad-broad-20261013-v1-context-recovery-identity-fix'})
-    assert any(key.startswith('runtime.package_code.') for key in config)
-    assert 'outputs.directory' in config
-
-
-def test_line_specific_entries_expire(tmp_path):
-    import datetime
-    repo = _repo_copy(tmp_path)
-    parity_file = repo / 'training' / 'neuralese' / 'line-parity.json'
-    parity = json.loads(parity_file.read_text())
-    declaration = parity['stages']['direct']['lines']['lfm']
-    recipe = {'schema': 'natlang.neuralese-training-recipe/1',
-              'id': 'test-expiring-lfm-parity', 'extends': declaration['recipe'],
-              'overrides': {'stage_parameter_defaults': {'neuralese_direct': {'seed': 42}}}}
-    declaration['active'] = recipe['id']
-    parity['line_specific'].append({'stage': 'direct', 'lines': ['lfm'], 'key': 'parameters.seed',
-        'recipe': recipe['id'], 'date': '2026-10-20', 'expires': '2026-10-20', 'reason': 'test exception'})
-    parity_file.write_text(json.dumps(parity))
-    (repo / 'training' / 'neuralese' / 'recipes' / (recipe['id'] + '.json')).write_text(json.dumps(recipe))
-    errors = line_parity.check(repo, today=datetime.date(2099, 1, 1))
-    assert errors and all('expired on' in e for e in errors)
-
-
-def test_line_specific_entries_need_a_date_and_expiry(tmp_path):
-    repo = _repo_copy(tmp_path)
-    parity_file = repo / 'training' / 'neuralese' / 'line-parity.json'
-    parity = json.loads(parity_file.read_text())
-    parity['line_specific'].append({'stage': 'direct', 'lines': ['lfm'], 'key': 'parameters.seed', 'reason': 'x'})
-    parity_file.write_text(json.dumps(parity))
-    with pytest.raises(ValueError, match='expires'):
-        line_parity.load_parity(repo)
-
-
-def test_e2e_carries_the_direct_base_qat_on_both_lines():
-    """QAT in every stage, in lockstep: the e2e stage of both lines trains the direct base's shared points, held at
-    the parent's progress; a line drops or changes them only by a declared difference."""
-    from natlang_neuralese.train.recipe import resolve_recipe_data
-    direct = resolve_recipe_data(RECIPES / 'neuralese-direct-v3.json')['quantization']
-    shared = {p['name']: p for p in direct['points']}
-    for line in line_parity.LINES:
-        q = resolve_recipe_data(RECIPES / f'neuralese-e2e-{line}-v1.json')['quantization']
-        assert q['stage_progress'] == {'e2e': [1.0, 1.0]} and q['loss'] == direct['loss']
-        points = {p['name']: p for p in q['points']}
-        assert all(points.get(name) == point for name, point in shared.items()), line
-    parity = line_parity.load_parity()
-    kind, config = line_parity.effective_config({'recipe': 'neuralese-e2e-lfm-v1'})
-    errors, _ = line_parity.compare(parity, 'e2e', 'lfm', kind,
-                                    {k: v for k, v in config.items() if '.quantization.' not in k})
-    assert errors and all('quantization' in e for e in errors)
+def test_recipe_resolver_rejects_projected_stage_in_parity(tmp_path):
+    (tmp_path / 'training/neuralese/recipes').mkdir(parents=True)
+    shutil.copy(RECIPES / 'native-state-production-lfm-20261015-v1.json',
+                tmp_path / 'training/neuralese/recipes/native.json')
+    with pytest.raises(ValueError, match='native SFT stages only'):
+        line_parity._stage_view({'stages': [{'kind': 'neuralese_direct'}]})

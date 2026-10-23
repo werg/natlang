@@ -11,14 +11,14 @@
  *   the companion's shape (head and tail, or `shape.nl`'s exact lines and gist), which keeps every shown line exact and
  *   fits a budget, and nobody would read a second text form beside it;
  * - a Neuralese reader (the agent model's declared reader, natlang-provider.ts `AgentReader`) is sent view's Neuralese
- *   instance in its dialect in place of that part, followed by the note the harness bench trains with (records.py
+ *   instance in its representation in place of that part, followed by the note the harness bench trains with (records.py
  *   `recall_note`). `forceStoredViews` runs in the ai service's `turn` (ai.ts), for every request to such a model.
  *
  * The Neuralese instance is written by the agent model's own server (`POST /v1/neuralese/view`, ts-host
  * neuralese/view.ts `serverViewer`), the server that reads the block. Forcing is memoized durably per (call,
- * representation) in the conversation's `ViewForcings` documents (block ID, length, dialect), so a call is written once
+ * representation) in the conversation's `ViewForcings` documents (block ID, length, representation), so a call is written once
  * whatever the turns, retries or restarts. The block is archived in the runtime's Neuralese store and pinned on the
- * server under the conversation's owner ID (its provider session ID, `x-natlang-owner`); `collectViewBlocks` unpins
+ * server under the conversation's owner ID (its provider session ID, `x-natlang-owner`); `collectViewNativeStates` unpins
  * what left the context and collects the owner's blocks with the referenced set when the context's head changes
  * (the first request, and after each compaction or reset). A block the server lost is restored from the archive.
  *
@@ -28,7 +28,7 @@
  */
 import type { Context } from '@earendil-works/chord';
 import type { Api, Model, Models } from '@earendil-works/pi-ai';
-import { HttpNeuraleseStore, OWNER_HEADER, serverViewer, withRestoredBlocks, type NeuraleseStore } from 'natlang:runtime';
+import { HttpNeuraleseStore, OWNER_HEADER, serverViewer, withRestoredNativeArtifacts, type NeuraleseStore } from 'natlang:runtime';
 import { defineDoc, defineDocFamily } from '../vendor/durable/src/documents.ts';
 import type { ConversationId, DocumentReader, Tx } from '../vendor/durable/src/types.ts';
 import type { StoredCallRef } from '../types.ts';
@@ -53,8 +53,8 @@ export const ViewIntents = defineDocFamily<{ intent: string }, { intent: string 
   initial: seed => seed,
 });
 
-/** A forced view: the block, its length (context positions) and dialect. */
-export type ForcedView = { id: string; length: number; dialect: string };
+/** A forced view: the block, its length (context positions) and representation. */
+export type ForcedView = { id: string; length: number; representation: string };
 
 /** The forced results of one stored view call, by representation (`representationKey`). */
 export const ViewForcings = defineDocFamily<{ forced: Record<string, ForcedView> }, null>({
@@ -66,12 +66,12 @@ export const ViewForcings = defineDocFamily<{ forced: Record<string, ForcedView>
  * The view blocks the conversation pinned on its server (block ID → call ID), and the context head of its last
  * collection. A fork has a new owner, so it starts empty.
  */
-export const ViewBlocks = defineDoc<{ pinned: Record<string, string>; collectedHead?: number }>({
-  kind: 'pi.view.blocks', version: 1, scope: 'conversation', history: 'latest', fork: 'initial', initial: () => ({ pinned: {} }),
+export const ViewNativeStates = defineDoc<{ pinned: Record<string, string>; collectedHead?: number }>({
+  kind: 'pi.view.native-states', version: 1, scope: 'conversation', history: 'latest', fork: 'initial', initial: () => ({ pinned: {} }),
 });
 
 /** The memo key of a representation. */
-export const representationKey = (dialect: string) => `neuralese:${dialect}`;
+export const representationKey = (representation: string) => representation;
 
 /** What the agent wanted from a tool call when it made it: the call, then the turn's reasoning and text (records.py `intent`). */
 export function viewIntent(assistant: { content: readonly { type: string; thinking?: string; text?: string }[] },
@@ -136,28 +136,28 @@ async function serverAccess(reader: ViewReader): Promise<{ root: string; headers
 const inflight = new Map<string, Promise<ForcedView>>();
 
 /**
- * The stored view call `call` at `reader`'s Neuralese dialect: the memo when there is one, else written once (a
+ * The stored view call `call` at `reader`'s Neuralese representation: the memo when there is one, else written once (a
  * pre-force already running is joined), archived, pinned and memoized. Throws `ViewForcingError`.
  */
 export async function forceView(docs: ViewDocs, call: string, reader: ViewReader, context: Context): Promise<ForcedView> {
   const declared = modelReader(reader.model);
-  if (declared.kind !== 'neuralese') throw new Error(`forceView: ${reader.model.provider}/${reader.model.id} reads text, ` +
+  if (declared.kind !== 'native-state') throw new Error(`forceView: ${reader.model.provider}/${reader.model.id} reads text, ` +
     'and a text reader reads the stored call\'s text form, which the message holds');
-  const key = representationKey(declared.dialect);
+  const key = representationKey('native-state');
   const memo = (await docs.read.snapshot(ViewForcings, docs.conversationId, call, context))?.forced?.[key];
   if (memo) return { ...memo };
   const flight = `${reader.owner}\0${call}\0${key}`;
   let running = inflight.get(flight);
   if (!running) {
-    running = writeView(docs, call, declared.dialect, reader, context).finally(() => inflight.delete(flight));
+    running = writeView(docs, call, 'native-state', reader, context).finally(() => inflight.delete(flight));
     inflight.set(flight, running);
   }
   return running;
 }
 
-async function writeView(docs: ViewDocs, call: string, dialect: string, reader: ViewReader, context: Context): Promise<ForcedView> {
+async function writeView(docs: ViewDocs, call: string, representation: string, reader: ViewReader, context: Context): Promise<ForcedView> {
   const fail = (transient: boolean, cause: string) => new ViewForcingError(`${transient ? VIEW_UNAVAILABLE : VIEW_FAILED}: the ` +
-    `view of tool call ${call}'s output for the ${JSON.stringify(dialect)} reader of ${reader.model.provider}/${reader.model.id} ` +
+    `view of tool call ${call}'s output for the ${JSON.stringify(representation)} reader of ${reader.model.provider}/${reader.model.id} ` +
     `was not written: ${cause}`, transient);
   const output = await docs.read.snapshot(ToolOutputs, docs.conversationId, call, context);
   if (!output) throw fail(false, 'the conversation has no stored output for the call (pi.companion.output)');
@@ -177,24 +177,24 @@ async function writeView(docs: ViewDocs, call: string, dialect: string, reader: 
     const id = ref.$neuralese.id;
     const meta = store.peek?.(id) ?? await store.meta(id);
     if (!meta) throw fail(false, `the server wrote ${id}, but the runtime's store has no metadata for it`);
-    if (meta.dialect !== dialect) throw fail(false, `neuralese-dialect-mismatch: the server wrote ${id} in dialect ` +
-      `${JSON.stringify(meta.dialect)}; the model's declared reader is ${JSON.stringify(dialect)}`);
-    // Pinned under the owner until it leaves the context (collectViewBlocks); restored from the archive if it is gone.
-    await withRestoredBlocks(remote, store, [id], () => remote.pin(id));
-    forced = { id, length: meta.length, dialect };
+    if (!meta.native_state || !meta.native_state.architecture || !meta.native_state.checkpoint_sha256)
+      throw fail(false, `neuralese-native-state-integrity: the server wrote ${id} without exact native checkpoint metadata`);
+    // Pinned under the owner until it leaves the context (collectViewNativeStates); restored from the archive if it is gone.
+    await withRestoredNativeArtifacts(remote, store, [id], () => remote.pin(id));
+    forced = { id, length: meta.length, representation };
   } catch (error) {
     if (error instanceof ViewForcingError) throw error;
     const message = error instanceof Error ? error.message : String(error);
     throw fail(TRANSIENT.test(message) || TRANSIENT.test(String((error as { cause?: unknown })?.cause ?? '')), message);
   }
-  const key = representationKey(dialect);
+  const key = representationKey(representation);
   let winner = forced;
   await docs.commit(async tx => {
     const doc = await tx.doc(ViewForcings, docs.conversationId, call, null);
     const existing = doc.forced[key];
-    if (existing) { winner = { id: existing.id, length: existing.length, dialect: existing.dialect }; return; }
+    if (existing) { winner = { id: existing.id, length: existing.length, representation: existing.representation }; return; }
     doc.forced[key] = forced as never;
-    (await tx.doc(ViewBlocks, docs.conversationId)).pinned[forced.id] = call;
+    (await tx.doc(ViewNativeStates, docs.conversationId)).pinned[forced.id] = call;
   }, context);
   // Another process memoized the call first: its block is the call's result, and ours is not held for it.
   if (winner.id !== forced.id) await remote!.unpin(forced.id);
@@ -211,7 +211,7 @@ export function storedCalls(messages: readonly { content?: unknown }[]): string[
 
 /**
  * `messages` as `reader` reads them: each text part that is a stored view call becomes the call's block (forced once per
- * call and dialect) followed by the recall note. Messages without such parts are returned unchanged.
+ * call and representation) followed by the recall note. Messages without such parts are returned unchanged.
  */
 export async function forceStoredViews<M extends { content?: unknown }>(messages: readonly M[], docs: ViewDocs, reader: ViewReader,
     context: Context): Promise<M[]> {
@@ -226,7 +226,7 @@ export async function forceStoredViews<M extends { content?: unknown }>(messages
   return messages.map(message => !Array.isArray(message.content) || !message.content.some(part => storedCall(part)) ? message :
     { ...message, content: (message.content as unknown[]).flatMap(part => {
       const ref = storedCall(part);
-      return ref ? [{ type: 'neuralese', id: forced.get(ref.call)!.id }, { type: 'text', text: recallNote(ref.call) }] : [part];
+      return ref ? [{ type: 'native_state', id: forced.get(ref.call)!.id }, { type: 'text', text: recallNote(ref.call) }] : [part];
     }) });
 }
 
@@ -235,9 +235,9 @@ export async function forceStoredViews<M extends { content?: unknown }>(messages
  * collection: unpin the view blocks the context no longer references, and keep exactly `referenced` (the blocks of the
  * request about to be sent, which is the context) held by the owner. Pinned blocks of other calls stay.
  */
-export async function collectViewBlocks(docs: ViewDocs, reader: ViewReader, referenced: ReadonlySet<string>, head: number,
+export async function collectViewNativeStates(docs: ViewDocs, reader: ViewReader, referenced: ReadonlySet<string>, head: number,
     context: Context): Promise<void> {
-  const state = await docs.read.snapshot(ViewBlocks, docs.conversationId, context);
+  const state = await docs.read.snapshot(ViewNativeStates, docs.conversationId, context);
   if (state?.collectedHead === head) return;
   const { root, headers } = await serverAccess(reader);
   const remote = new HttpNeuraleseStore(root, headers);
@@ -245,7 +245,7 @@ export async function collectViewBlocks(docs: ViewDocs, reader: ViewReader, refe
   for (const id of released) await remote.unpin(id);
   await remote.collect(referenced);
   await docs.commit(async tx => {
-    const doc = await tx.doc(ViewBlocks, docs.conversationId);
+    const doc = await tx.doc(ViewNativeStates, docs.conversationId);
     for (const id of released) delete doc.pinned[id];
     doc.collectedHead = head;
   }, context);

@@ -9,6 +9,7 @@ text elsewhere.
 from __future__ import annotations
 
 import hashlib
+import base64
 import json
 import math
 import copy
@@ -84,24 +85,41 @@ def _template(tokenizer, turns, tools, *, generation):
                                          add_generation_prompt=generation)
 
 
+def _render_state_id(value) -> str:
+    """Make a syntactically valid, render-only native-state marker.
+
+    It is consumed by ``render_messages`` to locate a state slot in the exact
+    model template. The emitted graph replaces that slot with its local
+    producer edge, so this marker is never admitted or looked up as stored
+    state.
+    """
+    encoded = json.dumps(value, ensure_ascii=False, sort_keys=True,
+                         separators=(",", ":")).encode("utf-8")
+    return "nzs1_" + base64.b32encode(hashlib.sha256(encoded).digest()).decode("ascii").lower().rstrip("=")
+
+
 def _render_with_payload(tokenizer, messages, tools, payload_ids, role_open, role_close, *, generation=False):
-    """Render structured serving messages while replacing one explicit block part with a native span."""
+    """Render structured serving messages while replacing one native-state reference with a local span.
+
+    The temporary reference exists only to ask the shared serving renderer where
+    the state belongs in the model's chat template. The resulting graph binds
+    that position to its actual producer node in ``witnessed_pair_graph``; no
+    projected block or externally stored state is involved.
+    """
     from ..serve.chat import bind_history_reasoning, render_messages, split_escaped
 
     bound = getattr(tokenizer, 'natlang_history_reasoning', {})
     bind_history_reasoning(tokenizer, policy=bound.get('policy'))
     declared = [part.get("id") for message in messages
                 for part in (message.get("content") if isinstance(message.get("content"), list) else [])
-                if isinstance(part, Mapping) and part.get("type") == "neuralese"]
+                if isinstance(part, Mapping) and part.get("type") == "native_state"]
     if len(declared) != 1 or not isinstance(declared[0], str):
-        raise ValueError("one exact static neuralese payload part must be declared")
+        raise ValueError("one exact native-state position must be declared")
     block_id = declared[0]
-    specials = (*tokenizer.all_special_tokens, "<|neuralese|>", "<|/neuralese|>",
-                "<|neuralese_produce|>", "<|/neuralese_produce|>",
-                "<|neuralese_consume|>", "<|/neuralese_consume|>")
+    specials = tuple(tokenizer.all_special_tokens)
     rendered = render_messages(messages, tools, lambda turns, schemas: _template(
         tokenizer, turns, schemas, generation=generation), specials=specials)
-    if rendered.blocks != [block_id] or rendered.block_kinds != ["neuralese"]:
+    if rendered.blocks != [block_id]:
         raise ValueError("serving template dropped, duplicated or changed the declared static payload")
     ids = []
     container = None
@@ -193,9 +211,7 @@ def port_record_graph(row: PortRecordRow, *, source_tokenizer,
     writer_messages = _serving_messages(record.writer_context)
     writer_messages.append({"role": "user", "content": record.writer_instructions})
     writer_messages.append({"role": "assistant", "content": [
-        {"type": "neuralese", "id": "nz1_static_" + hashlib.sha256(
-            json.dumps(writer_messages, ensure_ascii=False, sort_keys=True,
-                       separators=(",", ":")).encode()).hexdigest()[:24]}]})
+        {"type": "native_state", "id": _render_state_id(writer_messages)}]})
     writer_ids, writer_container = _render_with_payload(
         source_tokenizer, writer_messages, None, source_ids, role_ids[0], role_ids[1])
     writer_container_start, writer_container_stop = writer_container
@@ -220,15 +236,14 @@ def port_record_graph(row: PortRecordRow, *, source_tokenizer,
         raise ValueError("native producer/consumer view requires a withheld source and an original user request")
     first = consumer_messages[first_user]
     old_content = first.get("content")
-    block_id = "nz1_static_" + hashlib.sha256(json.dumps(consumer_messages, ensure_ascii=False,
-        sort_keys=True, separators=(",", ":")).encode()).hexdigest()[:24]
+    block_id = _render_state_id(consumer_messages)
     if isinstance(old_content, str):
-        first["content"] = [{"type": "neuralese", "id": block_id},
+        first["content"] = [{"type": "native_state", "id": block_id},
                             {"type": "text", "text": "\n\n" + old_content}]
     elif old_content is None:
-        first["content"] = [{"type": "neuralese", "id": block_id}]
+        first["content"] = [{"type": "native_state", "id": block_id}]
     elif isinstance(old_content, list) and all(isinstance(part, dict) for part in old_content):
-        first["content"] = ([{"type": "neuralese", "id": block_id},
+        first["content"] = ([{"type": "native_state", "id": block_id},
                              {"type": "text", "text": "\n\n"}] + copy.deepcopy(old_content))
     else:
         raise ValueError("consumer request content cannot be preserved as serving text/parts")

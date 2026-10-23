@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { test } from 'node:test';
 import { neuraleseServerModelTurn } from '../dist/model/neuralese-server.js';
+import { MemoryNeuraleseStore } from '../dist/native/neuralese-store.js';
 
 async function fake(handler) {
   const posts = [];
@@ -60,18 +61,48 @@ test('a server without the score endpoint is asked per item through /v1/neurales
 
 test('a coalesced decision records its turn and applies its adapters in the caller\'s scope, not the flushing caller\'s', async () => {
   const { AsyncLocalStorage } = await import('node:async_hooks');
-  const { setRecorderSource, setAdapterSource } = await import('../dist/neuralese/recording.js');
+  const { setRecorderSource, setNativeAdapterSource } = await import('../dist/native/model-recording.js');
   const scope = new AsyncLocalStorage();
   setRecorderSource(() => scope.getStore()?.recorder);
-  setAdapterSource(() => scope.getStore()?.adapters);
+  setNativeAdapterSource(() => scope.getStore()?.adapters);
+  const store = new MemoryNeuraleseStore();
+  const identity = { architecture: 'fixture-native', checkpoint_sha256: '1'.repeat(64),
+    tokenizer_fingerprint: '2'.repeat(64), embedding_weight_sha256: '3'.repeat(64) };
+  const tensor = values => ({ dtype: 'F32', shape: [values.length], data: new Uint8Array(new Float32Array(values).buffer) });
+  const adapters = [];
+  const artifactMetadata = new Map();
+  const remember = async id => {
+    const artifact = await store.getNativeTensorArtifact(id);
+    artifactMetadata.set(id, { id: artifact.id, schema: artifact.metadata.schema, kind: artifact.metadata.kind,
+      native_identity: artifact.metadata.native_identity, source_artifact_id: artifact.metadata.source_artifact_id,
+      provenance: artifact.metadata.provenance, tensors: artifact.metadata.tensors });
+  };
+  for (let index = 0; index < 3; index++) {
+    const name = `layer.${index}.weight`;
+    const basis = await store.putNativeTensorArtifact({ metadata: { schema: 'natlang.neuralese-native-tensor-artifact/1', kind: 'adapter-basis',
+      native_identity: identity, source_artifact_id: null,
+      provenance: { adapter_spec: { kind: 'xs', rank: 1, dim: 4, parameter_names: [name] } },
+      tensors: [{ name: `left.${name}`, dtype: 'F32', shape: [1] }] }, tensors: { [`left.${name}`]: tensor([1]) } });
+    await remember(basis.id);
+    const adapter = await store.putNativeTensorArtifact({ metadata: { schema: 'natlang.neuralese-native-tensor-artifact/1', kind: 'adapter-coefficients',
+      native_identity: identity, source_artifact_id: basis.id,
+      provenance: { adapter_spec: { kind: 'xs', rank: 1, dim: 4, parameter_names: [name] } },
+      tensors: [{ name, dtype: 'F32', shape: [1] }] }, tensors: { [name]: tensor([0]) } });
+    await remember(adapter.id);
+    adapters.push({ id: adapter.id, scale: 1 });
+  }
   const server = await fake((path, body, response) => {
-    if (path.startsWith('/v1/neuralese/blocks/')) return json(response, 200, { id: path.split('/')[4] });
+    if (path.startsWith('/v1/neuralese/native-tensor-artifacts/') && path.endsWith('/meta')) {
+      const id = path.split('/')[4];
+      const metadata = artifactMetadata.get(id);
+      return metadata ? json(response, 200, metadata) : json(response, 404, {});
+    }
     if (path !== '/v1/natlang/score') return json(response, 404, {});
     json(response, 200, { results: body.items.map(item => ({ log_probs: item.continuations.map(() => -1), tokens: item.continuations.map(() => 1) })) });
   });
   try {
-    const { decide } = neuraleseServerModelTurn({ endpoint: server.endpoint, model: 'm' });
-    const callers = ['a', 'b', 'c'].map(name => ({ name, turns: [], adapters: [{ id: `nz1_adapter_${name}`, scale: 1 }] }));
+    const { decide } = neuraleseServerModelTurn({ endpoint: server.endpoint, model: 'm', store });
+    const callers = ['a', 'b', 'c'].map((name, index) => ({ name, turns: [], adapters: [adapters[index]] }));
     await Promise.all(callers.map(caller => scope.run({ recorder: { record: turn => caller.turns.push(turn) }, adapters: caller.adapters },
       () => decide({ messages: user(caller.name), options: ['x', 'y'] }))));
     const scores = server.posts.filter(post => post.path === '/v1/natlang/score');
@@ -85,7 +116,7 @@ test('a coalesced decision records its turn and applies its adapters in the call
     }
   } finally {
     setRecorderSource(() => undefined);
-    setAdapterSource(() => undefined);
+    setNativeAdapterSource(() => undefined);
     await server.close();
   }
 });

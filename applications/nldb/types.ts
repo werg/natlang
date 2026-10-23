@@ -27,7 +27,7 @@ export type Table = {
 
 export type Column = {
   name: string,
-  /** date is YYYY-MM-DD, timestamp is ISO 8601, neuralese is the ID of a stored neuralese block. */
+  /** date is YYYY-MM-DD, timestamp is ISO 8601, neuralese is the ID of a stored native state artifact. */
   type: 'integer' | 'real' | 'text' | 'boolean' | 'date' | 'timestamp' | 'neuralese',
   /** What the value means, with its unit when it has one. */
   description: string,
@@ -46,7 +46,7 @@ export type Kind = 'question' | 'change' | 'schema' | 'unclear';
 export type Outcome = { kind: 'question', answer: Answer } | { kind: 'change' | 'schema', report: Report } |
   { kind: 'unclear', clarification: string } | { kind: Kind, error: string };
 
-/** A stored value. Dates and timestamps are text; a neuralese column holds a block ID. */
+/** A stored value. Dates and timestamps are text; a neuralese column holds an nzs1 native-state ID. */
 export type Value = string | number | boolean | null;
 /** A table's row as stored: _id and a field per column, by plain column name. */
 export type Stored = Record<string, Value>;

@@ -70,10 +70,10 @@ test('without a scorer the call falls back to the tool loop; finite-returns appl
 
 test('a readout: template function forces its first reply to return_result, writing a Neuralese result', async () => {
   const requests = [];
-  const block = 'nz1_' + 'a'.repeat(52);
+  const block = 'nzs1_' + 'a'.repeat(52);
   const driver = Object.assign(async request => {
     requests.push(request);
-    return { calls: [['return_result', { status: 'success', value: [{ type: 'neuralese', id: block }] }]] };
+    return { calls: [['return_result', { status: 'success', value: [{ type: 'native_state', id: block }] }]] };
   }, { neuralese: true });
   const runtime = createNatlangRuntime({ model: { driver }, seed: { mode: 'backend' } });
   const fn = loadVirtualNatlang({ 'note.nl': '---\nargs: { text: string }\nreturns: Neuralese<string>\nreadout: template\n---\nNote it.\n' }, 'note.nl');

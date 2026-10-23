@@ -39,9 +39,9 @@ GROUPS = {
 
 
 def fork_gguf():
-    from natlang_neuralese.export import fork_root
+    from natlang_neuralese.common.gguf_tools import llama_cpp_root
 
-    sys.path.insert(0, str(fork_root() / "gguf-py"))
+    sys.path.insert(0, str(llama_cpp_root() / "gguf-py"))
     import gguf
 
     return gguf

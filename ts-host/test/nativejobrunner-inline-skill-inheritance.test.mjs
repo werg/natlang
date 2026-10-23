@@ -49,7 +49,7 @@ test('nativeJobRunner passes caller bound skills through nested inline nl.with c
       {status:200,headers:{'content-type':'application/json'}});
   });
   const options={endpoint,modelId:'mock-luna',systemPrompt:TOOLS_PROMPT,contextTokens:8192,rootSeed:42,temperature:0,maxTurns:10,maxModelRequests:12,
-    modelConcurrency:1,collectionRole:'teacher',textNeuraleseEmulation:false,executionPlans:true,request:{max_tokens:2048},jobs,output:join(root,'unused.jsonl'),workers:1,transportRetries:0};
+    modelConcurrency:1,collectionRole:'teacher',executionPlans:true,request:{max_tokens:2048},jobs,output:join(root,'unused.jsonl'),workers:1,transportRetries:0};
   const runner=nativeJobRunner(options);
   const row=await runner({index:0,record},expectedProvenance(record,options),AbortSignal.timeout(30000));
   assert.equal(row.outcome.accepted,true,JSON.stringify(row.outcome));
