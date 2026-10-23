@@ -169,6 +169,19 @@ def test_exact_stale_resident_plan_failure_is_zero_credit_and_source_bound(faile
             config=config,cursor=x['cursor'],state=x['state'],verified_checkpoint=(x['checkpoint'],x['saved']))
 
 
+def test_metadata_only_retry_reuses_exact_passed_memory_request(tmp_path):
+    passed=tmp_path/'passed-memory.json';write(passed,{'schema':'natlang.native-memory-qualification-request/1'})
+    same=binding(passed)
+    retry._validate_corrected_capacity_binding(retry.RESIDENT_PLAN_FAILURE_KIND,same,same)
+    altered=tmp_path/'altered-memory.json';write(altered,{'schema':'natlang.native-memory-qualification-request/1','packing':'changed'})
+    with pytest.raises(ValueError,match='previously passed memory qualification'):
+        retry._validate_corrected_capacity_binding(retry.RESIDENT_PLAN_FAILURE_KIND,same,binding(altered))
+    with pytest.raises(ValueError,match='distinct versioned request'):
+        retry._validate_corrected_capacity_binding(retry.MEMORY_FAILURE_KIND,same,same)
+    corrected=tmp_path/'corrected-memory.json';write(corrected,{'schema':'natlang.native-memory-qualification-request/1'})
+    retry._validate_corrected_capacity_binding(retry.MEMORY_FAILURE_KIND,same,binding(corrected))
+
+
 def test_stale_resident_plan_rejects_wrong_traceback_source_and_credit_artifacts(failed_operation):
     x=_as_stale_resident_plan_failure(failed_operation);config=json.loads(x['config'].read_text())
     log_path=Path(x['failure_log']['path']);original=log_path.read_bytes()

@@ -301,6 +301,19 @@ def _request_target(value):
     return None
 
 
+def _validate_corrected_capacity_binding(failure_kind, old_memory, corrected_request):
+    old_values=old_memory if isinstance(old_memory,list) else [old_memory]
+    new_target=_request_target(corrected_request)
+    old_targets={target for target in (_request_target(value) for value in old_values) if target}
+    if failure_kind==RESIDENT_PLAN_FAILURE_KIND:
+        corrected=_artifact_binding(corrected_request)
+        if not any(_artifact_binding(value)==corrected for value in old_values):
+            raise ValueError('metadata-only retry must retain its exact previously passed memory qualification')
+        return
+    if new_target is None or new_target in old_targets:
+        raise ValueError('corrected capacity input must be a distinct versioned request/descriptor')
+
+
 def prepare(config_path, plan_path, role, recipe_reference, failed_request,
             failed_result, failure_log, corrected_request, out, *, package, future_global_plan,
             controller, owner_census, verified_checkpoint, owned_controller_fd=None):
@@ -342,11 +355,7 @@ def prepare(config_path, plan_path, role, recipe_reference, failed_request,
         request,result,invocation,stage,old_memory,saved,failure_evidence=_verify_failure(
             failed_request,failed_result,failure_log,config=config,cursor=cursor,state=state,
             verified_checkpoint=verified_checkpoint)
-        old_targets={target for target in (_request_target(value) for value in
-            (old_memory if isinstance(old_memory,list) else [old_memory])) if target}
-        new_target=_request_target(corrected_request)
-        if new_target is None or new_target in old_targets:
-            raise ValueError('corrected capacity input must be a distinct versioned request/descriptor')
+        _validate_corrected_capacity_binding(failure_evidence['kind'],old_memory,corrected_request)
         future,lineage_proof,future_plan,started_stage_ids=_future(config,plan_path,role,recipe_reference,
             future_global_plan,package,verified_checkpoint)
         effective_plan=future_global_plan or binding(plan_path)
