@@ -295,8 +295,9 @@ def evaluator_inputs(out: Path, inputs: dict, actor: dict, previous_runtime: Pat
         new_runtime = local_runtime_binding(current_root)
         if old_runtime != previous_inputs.get('evaluator_runtime') or new_runtime != inputs.get('evaluator_runtime'):
             raise ValueError('evaluator continuation runtime roots do not match their exact input receipts')
-        if any(old_runtime.get(key) != new_runtime.get(key) for key in ('queue_worker_sha256', 'node_version', 'python_version')):
-            raise ValueError('evaluator continuation changed the queue worker or execution language runtime')
+        if any(old_runtime.get(key) != new_runtime.get(key) for key in
+               ('typescript_sha256', 'typescript_files', 'queue_worker_sha256', 'node_version', 'python_version')):
+            raise ValueError('evaluator continuation changed the compiled TypeScript runtime, queue worker or language runtime')
         old_semantics = _definition_bindings(previous_root)
         new_semantics = _definition_bindings(current_root)
         exact_keys = ('queue_worker', 'task_classifier', 'collector_cli', 'collector_core',

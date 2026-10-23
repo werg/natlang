@@ -421,9 +421,10 @@ def test_memetic_budget_capture_uses_exact_shared_prefix_verifier(tmp_path,monke
 def test_runtime_continuation_preserves_origin_and_requires_exact_nonruntime_inputs(tmp_path, monkeypatch):
     out = tmp_path / 'run'; old_root = tmp_path / 'old-runtime'; old_root.mkdir()
     actor = {'checkpoint_sha256': 'a' * 64}
-    old_runtime = {'schema': 'runtime', 'typescript_sha256': 'b' * 64,
-                   'queue_worker_sha256': 'c' * 64, 'node_version': 'v22', 'python_version': '3.12'}
-    new_runtime = {**old_runtime, 'typescript_sha256': 'd' * 64}
+    old_runtime = {'schema': 'runtime', 'typescript_sha256': 'b' * 64, 'typescript_files': 8,
+                   'python': {'sha256': 'c' * 64}, 'queue_worker_sha256': 'd' * 64,
+                   'node_version': 'v22', 'python_version': '3.12'}
+    new_runtime = {**old_runtime, 'python': {'sha256': 'e' * 64}}
     current_root = Path(memetic.__file__).resolve().parents[4]
     monkeypatch.setattr(memetic, 'local_runtime_binding',
         lambda root=None: new_runtime if root is None or Path(root) == current_root else old_runtime)
@@ -449,9 +450,10 @@ def test_runtime_continuation_preserves_origin_and_requires_exact_nonruntime_inp
 def test_runtime_continuation_rejects_changed_collector_semantics(tmp_path, monkeypatch):
     out = tmp_path / 'run'; old_root = tmp_path / 'old-runtime'; old_root.mkdir()
     actor = {'checkpoint_sha256': 'a' * 64}
-    old_runtime = {'schema': 'runtime', 'typescript_sha256': 'b' * 64,
-                   'queue_worker_sha256': 'c' * 64, 'node_version': 'v22', 'python_version': '3.12'}
-    new_runtime = {**old_runtime, 'typescript_sha256': 'd' * 64}
+    old_runtime = {'schema': 'runtime', 'typescript_sha256': 'b' * 64, 'typescript_files': 8,
+                   'python': {'sha256': 'c' * 64}, 'queue_worker_sha256': 'd' * 64,
+                   'node_version': 'v22', 'python_version': '3.12'}
+    new_runtime = {**old_runtime, 'python': {'sha256': 'e' * 64}}
     current_root = Path(memetic.__file__).resolve().parents[4]
     monkeypatch.setattr(memetic, 'local_runtime_binding',
         lambda root=None: new_runtime if root is None or Path(root) == current_root else old_runtime)
@@ -463,6 +465,14 @@ def test_runtime_continuation_rejects_changed_collector_semantics(tmp_path, monk
     updated = {**original, 'evaluator_runtime': new_runtime}
     with pytest.raises(ValueError, match='collector or policy-scoring mechanism'):
         memetic.evaluator_inputs(out, updated, actor, old_root)
+
+    monkeypatch.setattr(memetic, '_definition_bindings', lambda root: {'collector_core': 'exact'})
+    changed_ts_runtime = {**new_runtime, 'typescript_sha256': 'f' * 64}
+    monkeypatch.setattr(memetic, 'local_runtime_binding',
+        lambda root=None: changed_ts_runtime if root is None or Path(root) == current_root else old_runtime)
+    changed_ts = {**original, 'evaluator_runtime': changed_ts_runtime}
+    with pytest.raises(ValueError, match='compiled TypeScript runtime'):
+        memetic.evaluator_inputs(out, changed_ts, actor, old_root)
 
 
 def test_runtime_scorer_replay_uses_exact_saved_rows_without_rewriting_them(tmp_path):
@@ -516,9 +526,9 @@ def test_runtime_continuation_reuses_only_score_equivalent_exact_actor_fits(tmp_
     fit_path = out / 'unguided-dev-fit.json'
     fit_path.write_text(json.dumps({'evaluation_inputs_sha256': old_sha, 'actor_capture_reached_model': True,
                                     'scored': 2, 'successes': 2}) + '\n')
-    runtime_old = {'typescript_sha256': 'a' * 64, 'queue_worker_sha256': 'b' * 64,
-                   'node_version': 'v22', 'python_version': '3.12'}
-    runtime_new = {**runtime_old, 'typescript_sha256': 'c' * 64}
+    runtime_old = {'typescript_sha256': 'a' * 64, 'typescript_files': 8, 'python': {'sha256': 'b' * 64},
+                   'queue_worker_sha256': 'c' * 64, 'node_version': 'v22', 'python_version': '3.12'}
+    runtime_new = {**runtime_old, 'python': {'sha256': 'd' * 64}}
     monkeypatch.setattr(memetic, 'local_runtime_binding', lambda root=None: runtime_old if Path(root) == old_root else runtime_new)
     monkeypatch.setattr(memetic, '_definition_bindings', lambda root: {'collector_core': 'exact'})
     rows = memetic._verify_existing_fit_outputs(out, actor, old_root, source_root, {old_sha})
