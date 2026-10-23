@@ -145,7 +145,8 @@ def test_external_only_does_not_establish_participating_model_foundation(tmp_pat
     source = SimpleNamespace(entries=[{'id': 'external', 'binding': 'e', 'communication': True,
         'producer_consumer': False, 'external_state_consumption': True,
         'groups':['external'],'supervised_tokens':1}],
-        path=tmp_path/'external',file_sha256='external',kind='native-graphs',
+        path=tmp_path/'external',source_identity_path=tmp_path/'external',
+        file_sha256='external',kind='native-graphs',
         ordered_ids=lambda: ['external'])
     result = communication_foundation(source, {'external': 99}, epochs=1, trained_bindings={'external': 'e'})
     assert result['graphs'] == 0 and not result['complete']

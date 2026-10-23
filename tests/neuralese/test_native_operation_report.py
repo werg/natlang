@@ -19,13 +19,15 @@ def test_nested_source_receipt_preserves_totals_and_identities_with_linear_row_w
             visits.append(len(self))
             return super().__iter__()
     def leaf(index):
-        return SimpleNamespace(path=tmp_path/str(index),file_sha256=str(index),kind='native-graphs',
+        return SimpleNamespace(path=tmp_path/'staged'/str(index),source_identity_path=tmp_path/str(index),
+            file_sha256=str(index),kind='native-graphs',
             entries=CountedEntries([{'groups':['all',str(index)],'supervised_tokens':index+1,
                                     'communication':bool(index%2)}]))
     source=leaf(0)
     for index in range(1,65):
         child=leaf(index)
-        source=SimpleNamespace(path=tmp_path/f'manifest-{index}',file_sha256=f'm{index}',
+        source=SimpleNamespace(path=tmp_path/'staged'/f'manifest-{index}',
+            source_identity_path=tmp_path/f'manifest-{index}',file_sha256=f'm{index}',
             kind='manifest',children=[source,child],entries=CountedEntries(source.entries+child.entries))
     # Bind the genuine original method to this in-memory source tree.
     def original(node):
@@ -47,6 +49,28 @@ def test_nested_source_receipt_preserves_totals_and_identities_with_linear_row_w
     view=report.SourceIdentityView(source)
     assert view.entries is source.entries
     assert view.receipt()==identities(legacy)
+
+
+def test_actual_staged_manifest_keeps_original_identities_in_reports_and_classification(tmp_path,monkeypatch):
+    from natlang_neuralese.data.native_sources import NativeGraphSource
+    from natlang_neuralese.common.hashing import sha256_file_hex
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE',str(tmp_path/'cache'))
+    staged=tmp_path/'staged';staged.mkdir()
+    leaf=staged/'leaf.jsonl';manifest=staged/'manifest.json'
+    original_leaf=tmp_path/'original'/'leaf.jsonl';original_manifest=tmp_path/'original'/'manifest.json'
+    leaf.write_text(json.dumps({'schema':'natlang.neuralese-native-graph/1','id':'staged-row',
+        'split':'train','source_groups':['staged-group'],'tokenizer_fingerprint':'f'*64,
+        'nodes':[{'name':'answer','token_ids':[1,2,3],'target_weights':[0,1,1]}]})+'\n')
+    manifest.write_text(json.dumps({'schema':'natlang.native-graph-sources/1','sources':[
+        {'kind':'native-graphs','path':str(original_leaf),'sha256':sha256_file_hex(leaf)}]}))
+    (staged/'.natlang-source-map.json').write_text(json.dumps({'schema':'natlang.staged-source-map/1',
+        'paths':{str(original_leaf):str(leaf),str(original_manifest):str(manifest)}}))
+    source=NativeGraphSource(manifest,'f'*64,required_split='train')
+    compact=report.source_receipt(source);standard=source.receipt()
+    assert compact['path']==standard['path']==str(original_manifest)
+    assert compact['sources'][0]['path']==standard['sources'][0]['path']==str(original_leaf)
+    assert compact['by_source_group']==standard['by_source_group']
+    assert report.SourceIdentityView(source).receipt()['sources'][0]['path']==str(original_leaf)
 
 
 def fixture(tmp_path):

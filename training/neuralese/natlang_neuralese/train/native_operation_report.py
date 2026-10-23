@@ -12,7 +12,7 @@ DETAIL_SCHEMA='natlang.native-operation-detail/1'
 
 def source_identity_receipt(source):
     """Keep every source identity without repeated ancestor-wide group maps."""
-    result={'path':str(source.path.resolve()),'sha256':source.file_sha256,
+    result={'path':str(source.source_identity_path.resolve()),'sha256':source.file_sha256,
             'rows':len(source.entries)}
     if source.kind=='manifest':
         children=[source_identity_receipt(child) for child in source.children]
