@@ -193,6 +193,22 @@ test('actual runtime collection preserves a captured soft body through materiali
   assert.equal(convertedChild.native_source_conversion.occurrences.filter(item => item.role === 'consumer' &&
     item.reference === index.writers[0].writer_id && item.body === body).length, 1);
 
+  const alterBodyUse = field => {
+    const rows = structuredClone(materialized.turns);
+    const childRow = rows.find(turn => turn.id === child.id);
+    const user = childRow.messages.find(message => message.role === 'user');
+    const state = user.content.find(part => part.type === 'native_state' && part.id === index.reads[0].body_block_id);
+    assert.ok(state);
+    if (field === 'source_occurrence') state.source_occurrence = 'different-writer-occurrence';
+    else if (state.stop_gradient === true) delete state.stop_gradient;
+    else state.stop_gradient = true;
+    return buildInlineInstructionIndex(rows);
+  };
+  for (const field of ['source_occurrence', 'stop_gradient']) {
+    const tampered = alterBodyUse(field);
+    assert.equal(tampered.reads.length, 0, `same block ID with changed ${field} is not the attested import`);
+  }
+
   const wrongPayload = structuredClone(child);
   wrongPayload.messages.find(message => message.role === 'user').content[1].text = 'Different body payload';
   const rejectedPayload = convertTrajectory(wrongPayload, { inlineInstructions: index }).record;

@@ -17,9 +17,10 @@ import time
 from pathlib import Path
 
 from natlang_neuralese.common.jsonio import write_json_durable
+from natlang_neuralese.common.paths import resolve
 from scripts.coreweave.teacher_tranche_admission import Tranche, file_binding, read_bound
 
-_FROZEN_OPERATOR_ROOT = Path('/home/werg/natlang-teacher-drain-export-20261022')
+_FROZEN_OPERATOR_ROOT = resolve('data_nvme','natlang-teacher-drain-export-20261022')
 _FROZEN_OPERATOR_BINDINGS = {
     'teacher_tranche_recovery.py': ('7fc0d11b52fbc06cd94c777349f488f693b39138ca0cd5bbe916e377b8239dac', 3822),
     'teacher_source_operator.py': ('7d1deed55222410c26e22da6cf16fe839549f7acaf7a019248c04f31eca9fc2f', 13600),

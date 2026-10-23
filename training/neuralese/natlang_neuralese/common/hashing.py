@@ -41,6 +41,15 @@ def canonical_json_sha256_hex(value: Any) -> str:
     return sha256_hex(canonical_json_bytes(value))
 
 
+def sha256_reference(value: Any) -> str | None:
+    """Return a digest from a bound reference or a bare 64-character digest."""
+    if isinstance(value, dict):
+        return value.get("sha256")
+    if isinstance(value, str) and len(value) == 64:
+        return value
+    return None
+
+
 def _hash_cache_path():
     from pathlib import Path
     return Path(os.environ.get("NATLANG_HASH_CACHE") or Path.home() / ".cache" / "natlang" / "sha256-cache.jsonl")

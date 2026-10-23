@@ -2,10 +2,11 @@
 from __future__ import annotations
 import argparse, hashlib, json, shutil, subprocess, sys
 from pathlib import Path
+from natlang_neuralese.common.paths import resolve
 from scripts.coreweave.teacher_tranche_admission import file_binding, read_bound
 
-ROOT=Path('/home/werg/natlang')
-SPOOL=Path('/home/werg/data/natlang-internal-spool/teacher-qwen36-continuation-20261023')
+ROOT=resolve('repo')
+SPOOL=resolve('data_nvme','natlang-internal-spool','teacher-qwen36-continuation-20261023')
 PROTECTION_SHA='1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704'
 
 def _copy(source:Path,target:Path):
@@ -139,7 +140,7 @@ def publish(batch:int,number:int,conversion:Path,attempt:int=0,*,suffix:str='',s
     proc=subprocess.run(command,capture_output=True,text=True)
     if proc.returncode: raise RuntimeError(f'normal registry publication failed: {proc.stdout}\n{proc.stderr}')
     return {'corpus_id':corpus_id,'package':str(package),'entry':str(entry_path),'proof':file_binding(proof_path),
-        'registered':proc.stdout.strip(),'registration_lock':'/home/werg/.local/state/natlang/register-corpora.lock',
+        'registered':proc.stdout.strip(),'registration_lock':str(Path.home()/'.local/state/natlang/register-corpora.lock'),
         'training_exposure':False}
 
 def main():

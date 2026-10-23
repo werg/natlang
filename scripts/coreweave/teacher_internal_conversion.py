@@ -12,7 +12,8 @@ import time
 from pathlib import Path
 
 from natlang_neuralese.common.jsonio import write_json_durable
-from natlang_neuralese.common.hashing import sha256_file_hex, canonical_json_sha256_hex
+from natlang_neuralese.common.hashing import sha256_file_hex, canonical_json_sha256_hex, sha256_reference
+from natlang_neuralese.common.paths import resolve
 from scripts.coreweave.teacher_tranche_admission import (
     LEGACY_TEACHER_NAMESPACE, Tranche, admitted_predecessors, file_binding,
     preceding_tranches, read_bound,
@@ -125,21 +126,16 @@ def _same_actor_boundary_inputs(root: Path, ctx: Tranche, source_proof: dict,
                (source_sha, actor.get('sha256'), identity.get('sha256'))):
         raise ValueError('current source proof lacks exact source, actor, or runtime identity bindings')
     manifests_path = root / 'training/corpus-manifests'
+    internal_spool = resolve('data_nvme','natlang-internal-spool','teacher-qwen36-continuation-20261023')
     matched = []
     already = {str(path.resolve()) for rows in inputs.values() for path in rows}
-    def sha(value):
-        if isinstance(value, dict):
-            return value.get('sha256')
-        if isinstance(value, str) and len(value) == 64:
-            return value
-        return None
     for entry in registry.get('corpora', []):
         if entry.get('training_admission') is not True:
             continue
         binding = entry.get('source_binding') or {}
         raw = binding.get('raw_source') or binding.get('source') or {}
-        declared_actor = sha(binding.get('actor'))
-        declared_identity = sha(binding.get('execution_identity'))
+        declared_actor = sha256_reference(binding.get('actor'))
+        declared_identity = sha256_reference(binding.get('execution_identity'))
         corpus_root = root / entry['path']
         if raw.get('sha256') != source_sha:
             # Internal-spool registrations use a compact package proof rather
@@ -156,8 +152,7 @@ def _same_actor_boundary_inputs(root: Path, ctx: Tranche, source_proof: dict,
                 # binds an internal package ID; resolve that exact immutable
                 # package under the selected internal spool as a relocation.
                 package_id = entry.get('id', '')
-                proof_path = (Path('/home/werg/data/natlang-internal-spool/teacher-qwen36-continuation-20261023')
-                              / 'registered-packages' / package_id / 'evidence/registration-proof.json')
+                proof_path = internal_spool / 'registered-packages' / package_id / 'evidence/registration-proof.json'
             try:
                 proof_actual = file_binding(proof_path)
             except OSError:
@@ -171,13 +166,13 @@ def _same_actor_boundary_inputs(root: Path, ctx: Tranche, source_proof: dict,
                     or internal_proof.get('training_admission') is not True
                     or internal_proof.get('corpus_id') != entry.get('id')):
                 raise ValueError(f'internal registration proof identity differs from registry entry: {entry["id"]}')
-            if proof_actual['path'].startswith('/home/werg/data/natlang-internal-spool/'):
+            if Path(proof_actual['path']).is_relative_to(internal_spool):
                 corpus_root = proof_path.parents[1]
             source_ref = internal_proof.get('source_verification') or {}
             source_verification = read_bound(source_ref)
             raw_sha = (source_verification.get('source') or {}).get('sha256')
-            declared_actor = sha(source_verification.get('actor'))
-            declared_identity = sha(source_verification.get('execution_identity'))
+            declared_actor = sha256_reference(source_verification.get('actor'))
+            declared_identity = sha256_reference(source_verification.get('execution_identity'))
             if raw_sha != source_sha:
                 continue
         # Preserve exact teacher provenance where the entry declares it. Older
@@ -333,7 +328,7 @@ def _base_inventory_reference(model: str, model_dir: Path, output: Path,
         raise ValueError(f'{model} remotely read model config differs from its local metadata asset')
     inventory = config.get('base_inventory')
     if (not isinstance(inventory, dict) or not inventory
-            or sha256_json(inventory) != config.get('base_inventory_sha256')):
+            or canonical_json_sha256_hex(inventory) != config.get('base_inventory_sha256')):
         raise ValueError(f'{model} model config base inventory digest is invalid')
     tokenizer_ref = file_binding(tokenizer_manifest)
     tokenizer_data = read_bound(tokenizer_ref)
@@ -364,7 +359,7 @@ def _base_inventory_reference(model: str, model_dir: Path, output: Path,
         source_evidence = {'kind': 'mellum-actor-view', 'actor_view_manifest': actor_ref,
                            'actor_checkpoint': actor['source']}
     else:
-        verified_path = Path('/home/werg/data/dgxops/coreweave-provider-artifacts/'
+        verified_path = resolve('data_nvme','dgxops','coreweave-provider-artifacts',
             '7b79178c1d5275cc48c17f89d582f241e3912f4e84378c5f074085e09c219430-'
             '393f9b75-2666-456c-a850-1b46a8b7d147.verified.json')
         verified_ref = file_binding(verified_path)
@@ -396,10 +391,6 @@ def _base_inventory_reference(model: str, model_dir: Path, output: Path,
     path = output / f'base-inventory-{model}.json'
     write_json_durable(path, proof)
     return path
-
-
-def sha256_json(value) -> str:
-    return canonical_json_sha256_hex(value)
 
 
 def convert(*, root: Path, settings_path: Path, settings_sha256: str,
@@ -508,7 +499,7 @@ def convert(*, root: Path, settings_path: Path, settings_sha256: str,
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--repository', type=Path, default=Path('/home/werg/natlang'))
+    parser.add_argument('--repository', type=Path, default=resolve('repo'))
     parser.add_argument('--settings', type=Path, required=True)
     parser.add_argument('--settings-sha256', required=True)
     parser.add_argument('--tokenizer-manifest', type=Path, required=True)

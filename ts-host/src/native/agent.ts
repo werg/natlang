@@ -45,6 +45,7 @@ import { containsRefinement } from './types.js';
 import { DECISION_SYSTEM_PROMPT, decisionPrompt, decisionScorer, finiteValues, softmax } from './decision.js';
 import type { NeuraleseBlockMeta } from './neuralese-store.js';
 import {activeRecorder} from './model-recording.js';
+import { hexDigest } from './hash.js';
 import { activeSystemPrompts, softenMessages, renderPromptMessages, type PromptRendering } from './system-prompts.js';
 
 /** The code tools, as offered. Kept here so data collected under earlier wording can be migrated to it exactly. */
@@ -546,7 +547,10 @@ export class NativeToolAgent {
       const embeddings = artifact?.tensors.embeddings;
       if (!tokenIds || !embeddings) throw new Error(`native-state producer artifact ${id} lacks token/embedding tensors`);
       const node=graphNode(session.runtime.trace, 'block_write', { call_id: producer.call_id,
-        turn: turnNode ?? '', block: id, format: 'native-state', source_kind: 'native-state-producer',
+        turn: turnNode ?? '', block: id, format: 'native-state', producer: 'native-state-producer',
+        source_kind: 'native-state-producer', learned_vectors: false,
+        ...(typeof block.type === 'string' ? { result_type: block.type } : {}),
+        ...(typeof artifact.metadata.text === 'string' ? { text_body_sha256: hexDigest(artifact.metadata.text) } : {}),
         length: tokenIds.shape[0], width: embeddings.shape[1], truncated: false, stops: [],
         native_identity: { architecture: artifact.metadata.architecture,
           checkpoint_sha256: artifact.metadata.checkpoint_sha256,

@@ -24,6 +24,20 @@ function stateSentinel(id: string, stopGradient = false, sourceOccurrence?: stri
 function stateLiteralArguments(id: string, stopGradient = false, sourceOccurrence?: string): string {
   return id.startsWith('nzs1_') ? nativeLiteralArguments(id, stopGradient, sourceOccurrence) : JSON.stringify(id);
 }
+function stateUse(value: Dict | undefined): { stop_gradient?: true; source_occurrence?: string } | undefined {
+  if (!value) return;
+  return { ...(value.stop_gradient === true ? { stop_gradient: true as const } : {}),
+    ...(typeof value.source_occurrence === 'string' ? { source_occurrence: value.source_occurrence } : {}) };
+}
+function sameStateUse(left: Dict | undefined, right: Dict | undefined): boolean {
+  if (!left || !right) return left === right;
+  const valid = (value: Dict) => Object.keys(value).every(key =>
+    ['id', 'type', 'stop_gradient', 'source_occurrence'].includes(key)) &&
+    (value.stop_gradient === undefined || value.stop_gradient === true) &&
+    (value.source_occurrence === undefined || typeof value.source_occurrence === 'string' && !!value.source_occurrence);
+  if (!valid(left) || !valid(right)) return false;
+  return canonical(stateUse(left)) === canonical(stateUse(right));
+}
 
 export const NATIVE_TEACHER_TRAJECTORY_VERSION = 'natlang.teacher_trajectory.native/1';
 export const NATIVE_TEACHER_TURN_VERSION = 'natlang.teacher_training_turn.native/1';
@@ -473,8 +487,12 @@ function softReturnResultActionMatches(modelArguments: unknown, actionArguments:
     return nestedNeuraleseReturnMatches(model, action, row, invocationId, actionEvent);
   const markers = [...model.value.matchAll(/^<\|neuralese\|>([\s\S]*)<\|\/neuralese\|>$/g)];
   const sentinelMatch = typeof action.value === 'string' ?
-    /(?:^(nz1_[a-z2-7]{20,})$|^(nzs1_[a-z2-7]{52})(?:!)?(?:@[^]+)?$)/.exec(action.value) : null;
+    /(?:^(nz1_[a-z2-7]{20,})$|^(nzs1_[a-z2-7]{52})(!)?(?:@([^]+))?$)/.exec(action.value) : null;
   const blockId = structuredTransport ? stateValue!.id as string : sentinelMatch?.[1] ?? sentinelMatch?.[2];
+  const sentinelUse = sentinelMatch?.[2] ? { ...(sentinelMatch[3] ? { stop_gradient: true as const } : {}),
+    ...(sentinelMatch[4] ? { source_occurrence: decodeURIComponent(sentinelMatch[4]) } : {}) } : undefined;
+  const actionUse = nativeTransport ? stateUse(stateValue) : sentinelUse;
+  const nativeCustody = !!actionUse || nativeTransport || sentinelMatch?.[2] !== undefined;
   if (markers.length !== 1 || !blockId || /<\|neuralese\|>|<\|\/neuralese\|>/.test(markers[0]![1]!)) return false;
   const expectedAction: Dict = { ...model, value: action.value };
   if (canonical(expectedAction) !== canonical(action)) return false;
@@ -514,11 +532,21 @@ function softReturnResultActionMatches(modelArguments: unknown, actionArguments:
       event.text_body_sha256 === hexDigest(markers[0]![1]!) &&
       Number(event.seq) > Number(exactTurns[0]!.seq) && Number(event.seq) < Number(actionEvent.seq));
     if (writes.length !== 1) return false;
+    if (nativeCustody) {
+      const writer = writes[0]!;
+      const metadata = writer.metadata && typeof writer.metadata === 'object' && !Array.isArray(writer.metadata) ?
+        writer.metadata as Dict : undefined;
+      const writerUse = { ...(writer.stop_gradient === true || metadata?.stop_gradient === true ?
+        { stop_gradient: true as const } : {}), source_occurrence: writer.node };
+      if (!actionUse || !sameStateUse(actionUse, resultRef) || !sameStateUse(actionUse, writerUse) ||
+          typeof writer.node !== 'string' || !writer.node) return false;
+    }
   }
   if (hostResult?.kind !== 'host_capture' || hostResult.capture_kind !== 'invocation_output' ||
       hostResult.call_id !== invocationId || hostResult.complete !== true ||
       hostResult.result_type !== runtimeType || (!structuredTransport && runtimeType !== 'Neuralese<string>') ||
-      !resultRef || resultRef.type !== runtimeType || resultRef.id !== blockId) return false;
+      !resultRef || resultRef.type !== runtimeType || resultRef.id !== blockId ||
+      (nativeCustody && (!actionUse || !sameStateUse(actionUse, resultRef)))) return false;
   const actionLedger = Array.isArray(row.outcome.action_ledger) ? row.outcome.action_ledger as Dict[] : [];
   const returnAction = actionLedger.find((event: Dict) =>
     (event as Dict).call_id === invocationId && (event as Dict).name === 'return_result' &&
@@ -606,23 +634,29 @@ function nestedNeuraleseReturnMatches(modelArguments: Dict, actionArguments: Dic
   const sameValue = (type: Type, raw: unknown, action: unknown, capturedValue: unknown): boolean => {
     if (type.kind === 'neuralese' && type.element.kind === 'prim' && type.element.name === 'string') {
       const historicalMarker = exactNeuraleseTextMarker(raw);
-      const actionRef = neuraleseReference(action), hostRef = neuraleseReference(capturedValue);
+      const rawRef = neuraleseReference(raw), actionRef = neuraleseReference(action), hostRef = neuraleseReference(capturedValue);
       const typeText = formatType(type);
       const blockId = historicalMarker?.id ?? actionRef?.id;
       const body = historicalMarker?.body ?? (typeof raw === 'string' ? raw : undefined);
-      if (!body || !actionRef || !hostRef || actionRef.id !== blockId || actionRef.id !== hostRef.id ||
+      if (!body || typeof blockId !== 'string' || !actionRef || !hostRef || actionRef.id !== blockId || actionRef.id !== hostRef.id ||
           actionRef.type !== typeText || hostRef.type !== typeText ||
-          (historicalMarker && historicalMarker.type !== typeText))
+          (historicalMarker && historicalMarker.type !== typeText) ||
+          (blockId.startsWith('nzs1_') && (!sameStateUse(actionRef, hostRef) || rawRef && !sameStateUse(rawRef, actionRef))))
         return false;
+      const custody = blockId.startsWith('nzs1_') ? stateUse(actionRef) : undefined;
       const bodySha = hexDigest(body);
       const writers = graph.filter(event => event.kind === 'block_write' && typeof event.call_id === 'string' &&
         event.block === blockId &&
         event.truncated === false && event.result_type === typeText && event.text_body_sha256 === bodySha &&
         ['typed-text-result', 'typed-text-result-field'].includes(String(event.source_kind)) &&
         ['return_result', 'eval-return', 'eval-finish'].includes(String(event.source)) &&
-        event.marker_context === 'return-result' && typeof event.node === 'string');
+        event.marker_context === 'return-result' && typeof event.node === 'string' &&
+        (!custody?.source_occurrence || event.node === custody.source_occurrence));
       const reads = graph.filter(event => event.kind === 'block_read' && event.call_id === invocationId &&
-        event.block === blockId && event.turn === modelTurn.node && typeof event.node === 'string');
+        event.block === blockId && event.turn === modelTurn.node && typeof event.node === 'string' &&
+        (!custody || (event.stop_gradient === custody.stop_gradient && Array.isArray(event.inputs) &&
+          (event.inputs as Dict[]).some(input => input.block === blockId && input.port === 'block' &&
+            (!custody.source_occurrence || input.node === custody.source_occurrence)))));
       const authenticatedRead = reads.some(read => Array.isArray(read.inputs) &&
         (read.inputs as Dict[]).some(input => writers.some(writer => input.node === writer.node &&
           input.block === blockId && input.port === 'block')) &&
@@ -821,14 +855,25 @@ function typedResultActionProof(modelArguments: unknown, actionArguments: unknow
     if (!outputPath) continue;
     const capturedRef = neuraleseReference(valueAtPath(host.value, outputPath));
     if (!capturedRef || capturedRef.id !== block || capturedRef.type !== type) continue;
+    if (block.startsWith('nzs1_')) {
+      const writeMetadata = write.metadata && typeof write.metadata === 'object' && !Array.isArray(write.metadata) ?
+        write.metadata as Dict : undefined;
+      const writerUse = { ...(write.stop_gradient === true || writeMetadata?.stop_gradient === true ?
+        { stop_gradient: true as const } : {}), source_occurrence: node };
+      if (capturedRef.source_occurrence !== node || !sameStateUse(capturedRef, writerUse)) continue;
+    } else if (capturedRef.stop_gradient !== undefined || capturedRef.source_occurrence !== undefined) continue;
     const pathKey = JSON.stringify(outputPath);
     if (pathKeys.has(pathKey)) { refs.delete(pathKey); ambiguousPaths.add(pathKey); continue; }
     if (ambiguousPaths.has(pathKey)) continue;
     pathKeys.add(pathKey);
-    const ref = { $neuralese: { id: block, type } };
+    const ref = { $neuralese: { id: block, type,
+      ...(capturedRef.stop_gradient === true ? { stop_gradient: true as const } : {}),
+      ...(typeof capturedRef.source_occurrence === 'string' ? { source_occurrence: capturedRef.source_occurrence } : {}) } };
     refs.set(pathKey, { ref, receipt: { schema: 'natlang.typed-result-write/1', trajectory_id: row.id,
       source_row_sha256: nativeRowDigest(row), invocation_id: invocationId, writer_call_id: invocationId,
       writer_node: node, block_id: block, source_kind: write.source_kind,
+      ...(capturedRef.stop_gradient === true ? { stop_gradient: true } : {}),
+      ...(typeof capturedRef.source_occurrence === 'string' ? { source_occurrence: capturedRef.source_occurrence } : {}),
       source: write.source, result_type: type, result_path: write.result_path ?? ['return'],
       model_turn_node: sourceNodes[0], action_seq: actionEvent.seq, body_sha256: bodySha,
       request_sha256: typeof requestSha256 === 'string' ? requestSha256 : null,
@@ -1235,6 +1280,9 @@ function providerExpandedReadContexts(source: Dict, row: NativeRow, sourceRowSha
     const writerSourceClass = (event: Dict): string | undefined => {
       const legacy = legacyResultWitness(event);
       if (legacy) return legacy.writerSourceClass;
+      if (event.producer === 'native-state-producer' && event.format === 'native-state' &&
+          event.source_kind === 'native-state-producer' && event.learned_vectors === false &&
+          typeof event.native_identity === 'object') return 'native-positional-state-writer';
       const transportConfig = row.provenance.text_neuralese_transport;
       if (transportConfig && typeof transportConfig === 'object' &&
           (transportConfig as Dict).mode === 'text-marker-standin/2' &&
