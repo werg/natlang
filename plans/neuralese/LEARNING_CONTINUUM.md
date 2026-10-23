@@ -6,10 +6,16 @@ Draft, 2026-10-04. A cross-cutting plan that revises [S6](S6_META_LEARNING.md) a
 and projected adapter-code interfaces described in §6 and §8 are historical
 and retired from the reference runtime. Stored program guidance is positional
 native KV/hybrid state through `withNativeStates`; it changes call context and
-does not change model weights. Exact-checkpoint native actor coefficients are
-still supported by `withAdapters`, whole-graph native gradients and the native
-optimizer. The llama.cpp fork's generic externally supplied GGUF LoRA serving
-is a separate model-serving feature.
+does not change model weights. Exact-checkpoint native actor coefficients use
+named nnt1 artifacts through `learning.nativeAdapters`, `withNativeAdapters`,
+recorded whole-graph gradients, native Adam/SGD updates, and nnt1 save/load and
+delta arithmetic. The actual HTTP harness now carries exact actor bindings
+through producer and consumer captures. CPU fixtures for the tiny LFM and
+Mellum checkpoint families verify that Adam lowers the recorded log-likelihood
+objective and that the producer-to-consumer state occurrence remains in the
+gradient graph. These fixtures validate the mechanism, not task-level learning
+or capability lift. The llama.cpp fork's generic externally supplied GGUF LoRA
+serving is a separate model-serving feature.
 
 ## 1. Thesis
 
