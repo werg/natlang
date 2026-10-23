@@ -295,6 +295,8 @@ def native_source_dependencies(path, *, parents=()):
             raise ValueError('native graph manifest source kind must be explicit')
         child = Path(source['path'])
         child = child if child.is_absolute() else path.parent / child
+        from ..data.native_source_tree import _staged_path
+        child = _staged_path(path, child)
         child = child.resolve()
         digest = sha(child)
         if digest != source.get('sha256'):

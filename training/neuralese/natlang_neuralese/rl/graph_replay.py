@@ -40,7 +40,9 @@ def verified_bundle_path(manifest_path, block_id, *, policy_id, manifest=None):
     entry = manifest['blocks'].get(block_id)
     if entry is None:
         return None
-    path = (manifest_path.parent / entry['path']).resolve(strict=True)
+    path = manifest_path.parent / entry['path']
+    from ..data.native_source_tree import _staged_path
+    path = _staged_path(manifest_path, path).resolve(strict=True)
     if (path.parent != manifest_path.parent.resolve() or path.stat().st_size != entry['bytes']
             or sha256_file_hex_cached(path) != entry['sha256']):
         raise ValueError('RL archived block path/size/hash changed')

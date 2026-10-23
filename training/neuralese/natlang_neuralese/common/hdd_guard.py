@@ -187,6 +187,56 @@ def _manifest_refs(path: Path) -> list[dict]:
     return refs
 
 
+def _manifest_files(root: Path):
+    """Yield only JSON metadata files from an already-NVMe directory bundle."""
+    if root.is_file():
+        if root.suffix == '.json' or root.name == 'manifest.json':
+            yield root
+        return
+    if root.is_dir():
+        for path in root.rglob('*.json'):
+            if path.is_file():
+                yield path
+
+
+def _closure_touches_hdd(primary: Path, dependencies=None) -> bool:
+    """Census known manifest paths without hashing or reading corpus leaves."""
+    todo = []
+    if primary.is_dir():
+        todo.extend((item, _manifest_refs(item)) for item in _manifest_files(primary))
+        for reference in dependencies or []:
+            if isinstance(reference, dict) and isinstance(reference.get('path'), str):
+                child = Path(reference['path'])
+                if not child.is_absolute():
+                    child = primary / child
+                todo.append((child, _manifest_refs(child)))
+    else:
+        todo.append((primary, [*_manifest_refs(primary), *(dependencies or [])]))
+    visited = set()
+    while todo:
+        parent, references = todo.pop()
+        parent = Path(os.path.abspath(parent))
+        if parent in visited:
+            continue
+        visited.add(parent)
+        for reference in references:
+            if not isinstance(reference, dict) or not isinstance(reference.get('path'), str):
+                continue
+            child = Path(reference['path'])
+            if not child.is_absolute():
+                child = parent.parent / child
+            child = Path(os.path.abspath(child))
+            if on_hdd(child):
+                return True
+            if child.is_dir():
+                todo.extend((item, _manifest_refs(item)) for item in _manifest_files(child))
+            elif child.is_file():
+                nested = _manifest_refs(child)
+                if nested:
+                    todo.append((child, nested))
+    return False
+
+
 def _input_closure(path: Path, sha256: str | None, dependencies=None) -> tuple[list[dict], Path, str]:
     """Bind the primary file plus all manifest leaves, keeping source-relative paths unchanged."""
     primary = Path(os.path.abspath(path))
@@ -328,15 +378,11 @@ def stage_input(path, sha256: str | None = None, dependencies=None) -> str:
     """Stage a file, a directory bundle, or a manifest and its transitive relative-file closure."""
     logical = Path(os.path.abspath(path))
     refs = [] if logical.is_dir() else [*_manifest_refs(logical), *(dependencies or [])]
-    if not logical.is_dir() and not on_hdd(logical):
+    if not on_hdd(logical):
         # Inspect only the small manifest and declared paths before deciding to
         # hash any corpus leaves. NVMe-resident source trees stay on the fast path.
-        if not any(isinstance(ref, dict) and isinstance(ref.get('path'), str) and
-                   on_hdd(Path(ref['path']) if Path(ref['path']).is_absolute() else logical.parent / ref['path'])
-                   for ref in refs):
+        if not _closure_touches_hdd(logical, dependencies):
             return str(path)
-    elif logical.is_dir() and not on_hdd(logical):
-        return str(path)
     if logical.is_symlink() and not dependencies and not refs:
         logical = Path(os.path.realpath(logical))
     members, common, digest = _input_closure(logical, sha256, dependencies)
