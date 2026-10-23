@@ -409,14 +409,39 @@ def launch_feeder(folder, state, config, batch):
         env.update(teacher_environment(config))
         if config.get('source_sequence'):
             _source_sequence_helpers().verify_prepared_source(state,config,batch)
-        log = (folder/'feeder.log').open('ab')
-        child = subprocess.Popen(['nice', '-n', '10', 'python', '-u', config['feeder']],
-            env=env, stdout=log, stderr=log, start_new_session=True)
+        env.update(primary_collection_environment(folder,state,config,batch))
+        with (folder/'feeder.log').open('ab') as log:
+            child = subprocess.Popen(['nice', '-n', '10', 'python', '-u', config['feeder']],
+                env=env, stdout=log, stderr=log, start_new_session=True)
         identity = process(child.pid)
         if identity is None: raise ValueError('new feeder exited before process identity publication')
         state.update(owner=public_identity(identity), active_batch=batch, feeder=binding(config['feeder']),
             task_runtime=config['task_runtime']); state.pop('prepared_launch', None); write(target, state)
         if record_primary_phase(state,config):write(target,state)
+
+
+def primary_collection_environment(folder,state,config,batch):
+    """Bind a fresh primary to its declared context, without inherited launcher state."""
+    context={'NATLANG_TEACHER_GENERATION_ROOT':config['root'],
+        'NATLANG_REPO':config['collection_repo'],
+        'NATLANG_TEACHER_QUEUE_WORKER':config['collection_worker']['path'],
+        'NATLANG_TEACHER_NODE_BIN':config['node_bin'],
+        'NATLANG_TEACHER_GUARDIAN_MODULE_ROOT':str(folder),
+        'NATLANG_TEACHER_WORKER_COUNT':str(config.get('primary_worker_capacity',24))}
+    if binding(config['collection_worker']['path'])!=config['collection_worker']:
+        raise ValueError('primary collection queue worker changed')
+    if config.get('source_sequence'):
+        declaration=config['source_sequence'];pending=state['source_sequence'].get('pending')
+        if pending and pending['batch']==batch:
+            reference=_source_sequence_helpers()._json(pending['intent'],declaration)['new_configuration']
+        else:
+            reference=state['source_sequence']['configuration']
+        if binding(reference['path'])!=reference:
+            raise ValueError('primary source configuration changed')
+        context.update(NATLANG_TEACHER_SOURCE_CONFIGURATION=reference['path'],
+            NATLANG_TEACHER_SOURCE_CONFIGURATION_SHA256=reference['sha256'],
+            NATLANG_TEACHER_SOURCE_CONFIGURATION_BYTES=str(reference['bytes']))
+    return context
 
 def repair_outcomes(queue, journal):
     entries = [json.loads(line) for line in queue.read_text().splitlines() if line]
