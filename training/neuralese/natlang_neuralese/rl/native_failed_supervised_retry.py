@@ -398,13 +398,13 @@ def prepare(config_path, plan_path, role, recipe_reference, failed_request,
             raise ValueError('retry transaction worker-log snapshot lost its original source SHA')
         stale_resident_plan=None
         if failure_evidence['kind']==RESIDENT_PLAN_FAILURE_KIND:
-            stale=failure_evidence['stale_resident_plan'];plan_path=Path(stale['path']).resolve(strict=True)
-            if binding(plan_path)['sha256']!=stale['source']['sha256']:
+            stale=failure_evidence['stale_resident_plan'];stale_plan_path=Path(stale['path']).resolve(strict=True)
+            if binding(stale_plan_path)['sha256']!=stale['source']['sha256']:
                 raise ValueError('stale resident plan changed after failure verification')
             plan_snapshot_path=directory/'stale-resident-plan.json'
-            if plan_snapshot_path.exists() and plan_snapshot_path.read_bytes()!=plan_path.read_bytes():
+            if plan_snapshot_path.exists() and plan_snapshot_path.read_bytes()!=stale_plan_path.read_bytes():
                 raise ValueError('retry transaction resident-plan snapshot differs from its exact source')
-            if not plan_snapshot_path.exists():write_bytes_durable(plan_snapshot_path,plan_path.read_bytes())
+            if not plan_snapshot_path.exists():write_bytes_durable(plan_snapshot_path,stale_plan_path.read_bytes())
             initial_source=Path(stale['initial_path']).resolve(strict=True)
             initial_snapshot_path=directory/'stale-resident-initial.json'
             if (initial_snapshot_path.exists()

@@ -523,3 +523,28 @@ def test_raw_configure_dispatches_first_retry_before_runtime_handoff_without_mar
     result=raw.configure_model(plan,declaration,{'binding':'bootstrap'},root)
     assert result==config_path and len(calls)==1
     assert calls[0][0][0]==reference and calls[0][0][1]==plan
+
+
+def test_stale_plan_preparation_preserves_distinct_global_plan_binding(tmp_path,monkeypatch,failed_operation):
+    from contextlib import nullcontext
+    from natlang_neuralese.rl import native_completed_supervised as completed
+    x=_as_stale_resident_plan_failure(failed_operation)
+    config=json.loads(x['config'].read_text())
+    plan=tmp_path/'global-plan.json';write(plan,{'models':[{'model':'mellum'}]})
+    future=copy.deepcopy(config);future['trainer_parameters']={};future['seed_trainer_parameters']={}
+    recipe=json.loads(Path(config['production_recipe']).read_text())
+    monkeypatch.setattr(completed,'_completed_leases',lambda *a:nullcontext())
+    monkeypatch.setattr(completed,'_no_owner',lambda *a:None)
+    monkeypatch.setattr(completed,'_no_active_operation',lambda *a:None)
+    monkeypatch.setattr(retry,'_future',lambda *a:(future,{'recipe':'lineage'},{'recipe':recipe},[]))
+    monkeypatch.setattr(retry,'_corrected_request',lambda *a,**k:None)
+    invocation=json.loads(Path(bridge.read_request(x['request'])['config']['path']).read_text())
+    memory=invocation['trainer_parameters']['memory_qualification']
+    if isinstance(memory,list):memory=memory[0]
+    if isinstance(memory,str):memory=binding(memory)
+    out=tmp_path/'new-retry'/'retry.json'
+    retry.prepare(x['config'],plan,'mellum',binding(config['production_recipe']),binding(x['request']),binding(x['result']),x['failure_log'],memory,out,
+        package=tmp_path,future_global_plan=None,controller={'pid':99999999},owner_census=[{'pid':99999999}],verified_checkpoint=(x['checkpoint'],x['saved']))
+    receipt=json.loads(out.read_text());intent=json.loads(Path(receipt['intent']['path']).read_text())
+    assert intent['request']['plan']==binding(plan)
+    assert intent['request']['stale_resident_plan']['source']['path']!=str(plan)
