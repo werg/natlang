@@ -889,11 +889,19 @@ def _base_inventory_reference(model: str, model_dir: Path, output: Path,
         source_evidence = {'kind': 'lfm-verified-checkpoint', 'checkpoint_verification': verified_ref,
                            'checkpoint_sha256': binding['sha256'], 'checkpoint_bytes': binding['bytes']}
     readback_declaration = file_binding(model_dir / 'model-config-readback-v2.json')
+    declaration = read_bound(readback_declaration)
+    readers = [item['reader'] for item in declaration.get('models', []) if item.get('model') == model]
+    if len(readers) != 1:
+        raise ValueError('native model inventory lost its exact historical readback reader')
+    historical_reader = readers[0]
+    if (file_binding(historical_reader['path']) != historical_reader
+            or historical_reader['sha256'] != MODEL_CONFIG_READER_SHA256):
+        raise ValueError('native model inventory historical reader changed after readback')
     proof = {'schema': 'natlang.teacher-base-inventory-reference/1', 'model_key': model,
         'model_id': model_id, 'architecture': config['architecture'],
         'base_inventory': inventory, 'base_inventory_sha256': config['base_inventory_sha256'],
         'model_config': config_ref, 'metadata_readback': metadata_ref,
-        'metadata_reader': file_binding(Path(__file__).resolve().with_name('read_native_base_inventory.py')),
+        'metadata_reader': historical_reader,
         'readback_declaration': readback_declaration,
         'source_evidence': source_evidence, 'registered_receipt_identity': identity_ref,
         'tokenizer_relocation': tokenizer_ref,
