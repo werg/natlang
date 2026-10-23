@@ -172,7 +172,11 @@ def _definition_bindings(root: Path) -> dict[str, str]:
 
 
 def _score_on_runtime(runtime_root: Path, evaluation: Path) -> dict:
-    """Score exact saved rows in a disposable copy using one runtime; never rewrite evidence."""
+    """Replay task outcomes read-only; the caller verifies complete actor capture separately.
+
+    Empty result files are normal for verified request-budget prefixes. Their
+    journal outcome is still scored; this function grants no capture admission.
+    """
     import subprocess
     import sys
     code = r'''import json,shutil,sys,tempfile
@@ -186,7 +190,7 @@ with tempfile.TemporaryDirectory(prefix='natlang-score-replay-') as temp:
  queue=read_jsonl(source/'queue.jsonl'); copied=[]
  for index,entry in enumerate(queue):
   original=Path(entry['output'])
-  if not original.is_file() or not read_jsonl(original): raise RuntimeError('scorer replay requires complete saved result rows')
+  if not original.is_file(): raise RuntimeError('scorer replay requires saved result files')
   output=target/f'output-{index:06d}.jsonl'; shutil.copyfile(original,output)
   copied.append({**entry,'output':str(output),'jobs':str(target/f'jobs-{index:06d}')})
  (target/'queue.jsonl').write_text(''.join(json.dumps(row,sort_keys=True)+'\n' for row in copied),encoding='utf-8')

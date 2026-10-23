@@ -475,7 +475,8 @@ def test_runtime_continuation_rejects_changed_collector_semantics(tmp_path, monk
         memetic.evaluator_inputs(out, changed_ts, actor, old_root)
 
 
-def test_runtime_scorer_replay_uses_exact_saved_rows_without_rewriting_them(tmp_path):
+@pytest.mark.parametrize('budget_empty', [False, True])
+def test_runtime_scorer_replay_uses_exact_saved_rows_without_rewriting_them(tmp_path, budget_empty):
     from natlang_neuralese.rl.task_rollouts import authored_root_row, build_queue
     evaluation = tmp_path / 'eval'; evaluation.mkdir()
     packet = evaluation / 'packet.jsonl'
@@ -488,14 +489,15 @@ def test_runtime_scorer_replay_uses_exact_saved_rows_without_rewriting_them(tmp_
     finish_rows = []
     for entry in entries:
         output = Path(entry['output']); output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(json.dumps({'outcome': {'status': 'done', 'accepted': True}}) + '\n')
-        finish_rows.append({'event': 'finish', 'key': entry['key'], 'status': 'complete'})
+        output.write_text('' if budget_empty else json.dumps({'outcome': {'status': 'done', 'accepted': True}}) + '\n')
+        finish_rows.append({'event': 'finish', 'key': entry['key'], 'status': 'failed' if budget_empty else 'complete',
+                            **({'resource_limit_reason': 'model_request_budget'} if budget_empty else {})})
     (evaluation / 'queue.jsonl').write_text(''.join(json.dumps(row) + '\n' for row in entries))
     (evaluation / 'journal.jsonl').write_text(''.join(json.dumps(row) + '\n' for row in finish_rows))
     before = {path: path.read_bytes() for path in [packet, evaluation / 'queue.jsonl', *[Path(row['output']) for row in entries]]}
     root = Path(memetic.__file__).resolve().parents[4]
     report = memetic._score_on_runtime(root, evaluation)
-    assert report['scored'] == 2 and report['successes'] == 2
+    assert report['scored'] == 2 and report['successes'] == (0 if budget_empty else 2)
     assert all(path.read_bytes() == payload for path, payload in before.items())
     assert not (evaluation / 'score.json').exists() and not (evaluation / 'rewards.jsonl').exists()
 
