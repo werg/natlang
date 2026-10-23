@@ -9,6 +9,7 @@ import { hexDigest } from '../native/hash.js';
 import { HttpNeuraleseStore, restoreNativeStates, restoreBlocks } from '../model/neuralese-server.js';
 import { archiveNativeState } from '../model/native-state-client.js';
 import { archiveNativeTensorArtifact, restoreNativeTensorArtifacts } from './native-tensor-client.js';
+import type { RecordedTurn } from './recording.js';
 
 export type NativeGraphRow = Record<string, unknown> & { schema: 'natlang.neuralese-native-graph/1'; split: string };
 export type NativeGradientTarget = { kind: 'model-parameters'; names: string[] } |
@@ -16,6 +17,39 @@ export type NativeGradientTarget = { kind: 'model-parameters'; names: string[] }
 export type NativePolicyObjectiveBinding = { kind: 'native-policy'; path: string; sha256: string };
 export type NativeOptimizerSpec = { name: 'sgd' | 'adam'; learning_rate?: number; weight_decay?: number;
   beta1?: number; beta2?: number; eps?: number; momentum?: number };
+
+/** Differentiate public learning objectives against the exact native turns and occurrence graph they recorded. */
+export async function nativeRecordedGraphGradient(endpoint: string, store: NeuraleseStore, request: {
+  turns: readonly RecordedTurn[]; events: readonly Record<string, unknown>[]; terms: readonly Record<string, unknown>[];
+  target: NativeGradientTarget; nativeIdentity: NativeModelIdentity;
+  nativeStateModes?: Record<string, 'same-base-adapter-state'>; headers?: Record<string, string>;
+}): Promise<{ loss: number; stats: unknown; gradient: NativeTensorArtifact; native_identity: NativeModelIdentity; objective: string }> {
+  if (!request.turns.length || !request.events.length || !request.terms.length)
+    throw new RangeError('native recorded learning needs actual turns, graph events and objective terms');
+  if (!request.turns.some(turn => turn.native)) throw new RangeError('native recorded learning needs native turn receipts');
+  if (request.target.kind === 'adapter') {
+    const adapter = await store.getNativeTensorArtifact?.(request.target.id);
+    if (!adapter || adapter.metadata.kind !== 'adapter-coefficients' ||
+        !nativeModelIdentityEqual(adapter.metadata.native_identity, request.nativeIdentity))
+      throw new Error('neuralese-native-adapter-binding: recorded target must be an archived exact-base nnt1 coefficient artifact');
+    const names = request.target.names ?? Object.keys(adapter.tensors).sort();
+    if (!names.length || names.some(name => !Object.hasOwn(adapter.tensors, name)))
+      throw new RangeError('native adapter target names must select exact archived coefficient tensors');
+  }
+  const reply = await post<{ loss: number; stats: unknown; gradient: { id: string }; native_identity: NativeModelIdentity; objective: string }>(
+    endpoint, '/v1/neuralese/grad', { native_recorded_objective: {
+      schema: 'natlang.native-recorded-objective-request/1', turns: request.turns, events: request.events,
+      terms: request.terms, target: request.target, native_state_modes: request.nativeStateModes } }, request.headers);
+  if (!nativeModelIdentityEqual(reply.native_identity, request.nativeIdentity))
+    throw new Error('neuralese-native-identity: recorded gradient reply is bound to another checkpoint');
+  const gradient = await archiveNativeTensorArtifact(endpoint, store, reply.gradient.id, request.headers);
+  const expectedKind = request.target.kind === 'adapter' ? 'adapter-gradient' :
+    request.target.kind === 'native-state' ? 'state-gradient' : 'parameter-gradient';
+  if (gradient.metadata.kind !== expectedKind || !nativeModelIdentityEqual(gradient.metadata.native_identity, request.nativeIdentity) ||
+      (request.target.kind !== 'model-parameters' && gradient.metadata.source_artifact_id !== request.target.id))
+    throw new Error('neuralese-native-gradient-binding: recorded gradient differs from its exact target and actor');
+  return { ...reply, gradient };
+}
 
 async function post<T>(endpoint: string, path: string, body: unknown,
     headers: Record<string, string> = {}): Promise<T> {

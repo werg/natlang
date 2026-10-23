@@ -8,7 +8,7 @@ import {verifyNativeStateDerivationRecords} from './native-state-derivation.js';
  */
 import { decodeNativeTensorArtifact, encodeNativeTensorArtifact, nativeTensorArtifactBlockMeta, nativeTensorArtifactDependencies, nativeStateArtifactDependencies, importNativeArtifactBundle, type NativeTensorArtifact, decodeNativeState, encodeNativeState, nativeStateBlockMeta, type NativeStateArtifact, neuraleseContentId, type NeuraleseBlock, type NeuraleseBlockMeta, type NeuraleseDtype,
   type NeuraleseStore } from './neuralese-store.js';
-import { isNeuraleseRef, neuraleseRef, type NeuraleseRef } from './neuralese.js';
+import { isNativeAdapterRef, isNeuraleseRef, nativeAdapterRef, neuraleseRef, type NeuraleseRef } from './neuralese.js';
 import { readTypeAliases } from './type-aliases.js';
 import { formatType, parseType, TypeEnv, type Type } from './types.js';
 import { coerce, Reject } from './values.js';
@@ -317,6 +317,13 @@ export function loadNzSync(bytes: Uint8Array, resolve?: NzResolver): LoadedNz {
       }
       return neuraleseRef(String(body.type), id, body.stop_gradient === true,body.source_occurrence as string|undefined);
     }
+    if ('$nativeAdapter' in record && Object.keys(record).length === 1) {
+      const body = record.$nativeAdapter as { id?: unknown };
+      const id = String(body?.id);
+      if (!/^nnt1_[a-z2-7]{52}$/.test(id) || nativeTensors.get(id)?.metadata.kind !== 'adapter-coefficients')
+        throw new NzFileError('neuralese-file-format', `${where}: native adapter reference needs an archived coefficient artifact`);
+      return nativeAdapterRef(id);
+    }
     if ('$neuralese-fn' in record && Object.keys(record).length === 1) {
       const body = record['$neuralese-fn'] as { type?: unknown; body?: unknown; body_stop_gradient?: unknown; body_source_occurrence?:unknown; captures?: unknown };
       if (body.body_stop_gradient !== undefined && body.body_stop_gradient !== true) throw new NzFileError('neuralese-file-format', `${where}: invalid body constant-use metadata`);
@@ -417,6 +424,10 @@ export async function saveNz(exports: Record<string, NzSaveExport>, options: { s
       if (!distribution) return { $neuralese: { ...value.$neuralese } };
       await use(distribution.logScale, where);
       return { $neuralese: { type: value.$neuralese.type, id: value.$neuralese.id, distribution: 'gaussian-diag', logScale: distribution.logScale } };
+    }
+    if (isNativeAdapterRef(value)) {
+      await use(value.$nativeAdapter.id, where);
+      return { $nativeAdapter: { id: value.$nativeAdapter.id } };
     }
     if (isSoftFunctionSpec(value)) {
       await use(value.body, where);

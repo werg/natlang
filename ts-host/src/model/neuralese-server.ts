@@ -26,7 +26,7 @@ import { assembleChatCompletion, chatCompletionModelTurn, fetchModel, httpChatTr
   type HttpChatOptions } from './chat-completion.js';
 import { coalescingScorer, explicitBatchScoreMany } from './scoring.js';
 import type { DecisionScorer, DecisionScores, ModelTurn, ModelTurnDelta, ModelTurnOptions, ModelTurnRequest } from '../contracts.js';
-import { activeAdapters, activeNativeStates, activeRecorder, type AdapterBinding, type TurnRecorder } from '../neuralese/recording.js';
+import { activeNativeAdapters, activeNativeStates, activeRecorder, type NativeAdapterBinding, type TurnRecorder } from '../neuralese/recording.js';
 import { serves } from './neuralese-info.js';
 import {validateCoefficientRuntime,requireCoefficientAttestation,coefficientBindings,coefficientStateModes} from './native-coefficient-policy.js';
 import { isContentParts, nativeStateSentinel, nativeStateSentinelIds,
@@ -443,7 +443,7 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
   const whole = httpChatTransport({ ...http, stream: false });
   const streamed = httpChatTransport({ ...http, stream: true });
   // Exact native actor coefficients remain native model parameters, never GGUF LoRA transport.
-  const adapterParts = async (bound: readonly { id: string; scale: number }[] = [], active: readonly AdapterBinding[] = activeAdapters()) => {
+  const adapterParts = async (bound: readonly { id: string; scale: number }[] = [], active: readonly NativeAdapterBinding[] = activeNativeAdapters()) => {
     if(coefficientPolicy)requireCoefficientAttestation(coefficientPolicy,await serverInfo());
     const adapters = coefficientBindings(coefficientPolicy,active,bound);
     return adapters;
@@ -569,9 +569,9 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
   // A coalesced decision is scored in the batch's flush, whose asynchronous context is another caller's (or none): the
   // recorder and the dynamically scoped adapters are taken where the decision was asked for (`scope`), so concurrent
   // objectives each record their own turn and adapters do not leak between batched callers.
-  type Scope = { recorder: TurnRecorder | undefined; adapters: readonly AdapterBinding[]; nativeStates: readonly { id: string }[] };
+  type Scope = { recorder: TurnRecorder | undefined; adapters: readonly NativeAdapterBinding[]; nativeStates: readonly { id: string }[] };
   const scopes = new WeakMap<object, Scope>();
-  const here = (): Scope => ({ recorder: activeRecorder(), adapters: activeAdapters(), nativeStates: activeNativeStates() });
+  const here = (): Scope => ({ recorder: activeRecorder(), adapters: activeNativeAdapters(), nativeStates: activeNativeStates() });
   const scopeOf = (item: object): Scope => scopes.get(item) ?? here();
   const prepare = async (messages: unknown[], replies: readonly string[], bound: readonly { id: string; scale: number }[] | undefined,
       scope: Scope = here()):Promise<Item> => {

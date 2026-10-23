@@ -20,6 +20,15 @@ export const NEURALESE_CLOSE = '<|/neuralese|>';
 
 /** Reference form of a soft value. */
 export type NeuraleseRef = { readonly $neuralese: { readonly type: string; readonly id: string; readonly stop_gradient?: true; readonly source_occurrence?:string } };
+/** Opaque reference to a named native coefficient artifact, never a flat Neuralese value block. */
+export type NativeAdapterRef = { readonly $nativeAdapter: { readonly id: string } };
+export const isNativeAdapterRef = (value: unknown): value is NativeAdapterRef => !!value && typeof value === 'object' &&
+  Object.keys(value).length === 1 && '$nativeAdapter' in value &&
+  !!(value as NativeAdapterRef).$nativeAdapter && /^nnt1_[a-z2-7]{52}$/.test((value as NativeAdapterRef).$nativeAdapter.id);
+export function nativeAdapterRef(id: string): NativeAdapterRef {
+  if (!/^nnt1_[a-z2-7]{52}$/.test(id)) throw new RangeError('native adapter references require a named nnt1 artifact ID');
+  return Object.freeze({ $nativeAdapter: Object.freeze({ id }) });
+}
 export type NeuraleseTextPart = { type: 'text'; text: string };
 export type NeuraleseContentPart = { type: 'neuralese'; id: string };
 export type NativeStateContentPart = { type: 'native_state'; id: string; stop_gradient?: true; source_occurrence?:string };
@@ -103,7 +112,7 @@ export function isNeuraleseRef(value: unknown): value is NeuraleseRef {
 
 /** The conversation-text marker for a block. */
 export function neuraleseSentinel(id: string, stopGradient = false, sourceOccurrence?:string): string {
-  if (isNativeTensorArtifactId(id)) throw new Error('neuralese-native-tensor-as-state: bind native adapters with withAdapters; named tensor artifacts cannot be consumed as communication state');
+  if (isNativeTensorArtifactId(id)) throw new Error('neuralese-native-tensor-as-state: bind coefficient artifacts with withNativeAdapters; named tensor artifacts cannot be consumed as communication state');
   if (!isNeuraleseId(id)) throw new TypeError(`not a Neuralese block ID: ${JSON.stringify(id)}`);
   return isNativeStateId(id) ? nativeStateSentinel(id,stopGradient,sourceOccurrence) : `${SENTINEL_OPEN}${id}${SENTINEL_CLOSE}`;
 }

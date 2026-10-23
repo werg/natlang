@@ -225,6 +225,7 @@ declare module 'natlang:neuralese' {
   export function ask(v: N<unknown>, question: string): Promise<string>;
 }
 declare module 'natlang:learning' {
+  export interface NativeAdapter { readonly $nativeAdapter: { readonly id: string } }
   export interface Loss { readonly __natlangLoss: true; valueOf(): number }
   export interface Gradient<A> { readonly __natlangGradient: A }
   export interface Trajectory { readonly id: string }
@@ -237,6 +238,7 @@ declare module 'natlang:learning' {
   export function valueAndGrad<A>(f: (a: A) => Promise<Loss>, a: A, options?: { order?: 1 | 2 }): Promise<{ loss: Loss; grad: Gradient<A> }>;
   export function stopGradient<T>(v: T): T;
   export function withNativeStates<T>(states: string | readonly string[], fn: () => Promise<T> | T): Promise<T>;
+  export function withNativeAdapters<T>(adapters: NativeAdapter | readonly (NativeAdapter | { adapter: NativeAdapter; scale?: number })[], fn: () => Promise<T> | T): Promise<T>;
   export const nativeStates: {
     gradient(graph: { schema: 'natlang.neuralese-native-graph/1'; split: string }, id: string,
       nativeIdentity: { architecture: string; checkpoint_sha256: string; tokenizer_fingerprint: string; embedding_weight_sha256: string },
@@ -246,10 +248,17 @@ declare module 'natlang:learning' {
       optimizer: { name: 'sgd' | 'adam'; learning_rate?: number; weight_decay?: number; beta1?: number; beta2?: number; eps?: number; momentum?: number },
       optimizerStateId?: string): Promise<unknown>;
   };
+  export const nativeGraph: {
+    gradient(f: () => Promise<Loss>, target: { kind: 'model-parameters'; names: string[] } | { kind: 'native-state' | 'adapter'; id: string; names?: string[] },
+      nativeIdentity: { architecture: string; checkpoint_sha256: string; tokenizer_fingerprint: string; embedding_weight_sha256: string },
+      options?: { nativeStateModes?: Record<string, 'same-base-adapter-state'> }): Promise<unknown>;
+  };
   /** Run fn with soft forms of the runtime prompt pieces (piece ID → Neuralese<SystemPrompt>); differentiable like any soft value. */
   export function withSystemPrompts<T>(prompts: Record<string, Neuralese<string>>, fn: () => Promise<T> | T): Promise<T>;
-  export const adapters: {
-    create(options?: { kind?: 'xs' | 'tiny'; rank?: number; u?: number; layers?: number[]; targets?: Array<'out' | 'ffn_down' | 'ffn_up'>; seed?: number }): Promise<Adapter>;
+  export const nativeAdapters: {
+    create(nativeIdentity: { architecture: string; checkpoint_sha256: string; tokenizer_fingerprint: string; embedding_weight_sha256: string },
+      options: { parameterNames: string[]; kind?: 'xs' | 'tiny'; rank?: number; u?: number; seed?: number }): Promise<NativeAdapter>;
+    ref(id: string): NativeAdapter;
   };
   export function trajectory(run: Promise<unknown> | (() => Promise<unknown>)): Promise<Trajectory>;
   export const objectives: {

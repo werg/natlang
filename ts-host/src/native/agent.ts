@@ -36,7 +36,7 @@ async function pinNativeProgramGuidance(store: NeuraleseStore, id: string): Prom
 import { listingViewInstructions, viewNote } from './prompt.js';
 import { untrustedBlock, type UntrustedRegistry } from './untrusted.js';
 import { writtenReturnResult } from './pseudo-call.js';
-import { decodeTurnValue, encodeMessages, isContentParts, isNeuraleseRef, neuraleseSentinel, neuraleseRefSentinel, nativeStateSentinel, NeuraleseUnsupportedError, supportsNeuralese,
+import { decodeTurnValue, encodeMessages, isContentParts, isNativeAdapterRef, isNeuraleseRef, neuraleseSentinel, neuraleseRefSentinel, nativeStateSentinel, NeuraleseUnsupportedError, supportsNeuralese,
   nativeStateSentinelIds, runtimeTextToParts, type NeuraleseRuntimeOptions } from './neuralese.js';
 import type { NativeStateArtifact, NeuraleseStore } from './neuralese-store.js';
 import { resolveNeuralesePreviews } from './neuralese-preview.js';
@@ -270,15 +270,14 @@ export function renderValue(value: Value | unknown, options: { holder?: string; 
   return scopeExpression(value, options.root, options.holder, budget, { nodes: 0, depth: 0, untrusted: options.untrusted }) ?? previewValue(value as Value, options.holder, options.liveIdentity);
 }
 
-/** Whether a captured value is a weight adapter (`Adapter`): it acts on the model's weights for this call's turns and
- * is not shown in the scope (a block sentinel there would be read as text-space Neuralese). */
-const isAdapterValue = (value: unknown) => isNeuraleseRef(value) && value.$neuralese.type === 'Adapter';
+/** Native coefficient artifacts act on model weights and stay out of the text-space scope. */
+const isAdapterValue = isNativeAdapterRef;
 function adapterCells(lam: { captures?: Record<string, { get(): unknown }> }): { id: string; scale: number }[] {
   const out: { id: string; scale: number }[] = [];
   for (const cell of Object.values(lam.captures ?? {})) {
     let value: unknown;
     try { value = cell.get(); } catch { continue; }
-    if (isAdapterValue(value)) out.push({ id: (value as { $neuralese: { id: string } }).$neuralese.id, scale: 1 });
+    if (isAdapterValue(value)) out.push({ id: value.$nativeAdapter.id, scale: 1 });
   }
   return out;
 }

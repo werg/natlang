@@ -22,16 +22,16 @@ export type RecordedTurn = {
   readonly blocks: readonly Record<string, unknown>[];
   /** A decision readout instead of a generated reply: the options it scored (native/decision.ts). */
   readonly decision?: { readonly options: readonly string[] };
-  /** Weight adapters that were active for this turn (`withAdapters`); replay scores the same adapted model. */
-  readonly adapters?: readonly AdapterBinding[];
+  /** Exact named native coefficient actors and scales active for this recorded turn. */
+  readonly adapters?: readonly NativeAdapterBinding[];
   /** Explicit transport contract retained for exact native replay. */
   readonly native_state_modes?: Readonly<Record<string, 'same-base-adapter-state'>>;
   /** Exact native receipt and actual execution-graph occurrence binding. */
   readonly native?: NativeRecordedTurn;
 };
 
-/** An adapter block bound for a call, with its scale (serve/grad.py, model/tiny_adapters.py). */
-export type AdapterBinding = { readonly id: string; readonly scale: number; readonly stop_gradient?:true };
+/** A named native coefficient actor bound to a call, with its explicit scale. */
+export type NativeAdapterBinding = { readonly id: string; readonly scale: number; readonly stop_gradient?:true };
 /** A stored positional KV/hybrid-state value supplied as context to a model call. */
 export type NativeStateBinding = { readonly id: string; readonly stop_gradient?: true };
 
@@ -49,17 +49,17 @@ export function setRecorderSource(next: () => TurnRecorder | undefined): void { 
 /** The recorder of the current asynchronous context, if any. */
 export function activeRecorder(): TurnRecorder | undefined { return source(); }
 
-let adapterSource: () => readonly AdapterBinding[] | undefined = () => undefined;
+let nativeAdapterSource: () => readonly NativeAdapterBinding[] | undefined = () => undefined;
 let nativeStateSource: () => readonly NativeStateBinding[] | undefined = () => undefined;
 
-/** Install where the active adapters come from (the learning module's `withAdapters`). */
-export function setAdapterSource(next: () => readonly AdapterBinding[] | undefined): void { adapterSource = next; }
+/** Install where the active nnt1 actor bindings come from. */
+export function setNativeAdapterSource(next: () => readonly NativeAdapterBinding[] | undefined): void { nativeAdapterSource = next; }
 
 /** Install where active stored native-state context comes from. */
 export function setNativeStateSource(next: () => readonly NativeStateBinding[] | undefined): void { nativeStateSource = next; }
 
-/** Adapters active in the current asynchronous context; a Neuralese driver sends them with every request. */
-export function activeAdapters(): readonly AdapterBinding[] { return adapterSource() ?? []; }
+/** Native coefficient actors active in the current asynchronous context. */
+export function activeNativeAdapters(): readonly NativeAdapterBinding[] { return nativeAdapterSource() ?? []; }
 
 /** Stored positional state active in the current asynchronous context. */
 export function activeNativeStates(): readonly NativeStateBinding[] { return nativeStateSource() ?? []; }

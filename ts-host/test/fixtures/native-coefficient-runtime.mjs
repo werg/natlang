@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {neuraleseServerModelTurn,HttpNeuraleseStore} from '../../dist/model/neuralese-server.js';
 import {MemoryNeuraleseStore} from '../../dist/native/neuralese-store.js';
-import {withAdapters} from '../../dist/neuralese/learning.js';
-import {neuraleseRef} from '../../dist/native/neuralese.js';
+import {withNativeAdapters} from '../../dist/neuralese/learning.js';
+import {nativeAdapterRef} from '../../dist/native/neuralese.js';
 const [endpoint,path]=process.argv.slice(2),fixture=JSON.parse(await readFile(path,'utf8'));
 const request={messages:[{role:'user',content:'t4 t5'}],options:['t7','t8']};
 const direct=async adapters=>{
@@ -14,7 +14,7 @@ const store=new MemoryNeuraleseStore(),exchanges=[];
 const driver=neuraleseServerModelTurn({endpoint,model:'native-coefficient-runtime-fixture',store,onExchange:value=>exchanges.push(value),
  request:{x_natlang_native_coefficient_policy:fixture.runtime,x_natlang_rl_capture:true}});
 assert.deepEqual((await driver.decide(request)).log_probs,await direct(fixture.defaults));
-const scoped=await withAdapters(neuraleseRef('Adapter',fixture.handle),()=>driver.decide(request));
+const scoped=await withNativeAdapters(nativeAdapterRef(fixture.handle),()=>driver.decide(request));
 assert.deepEqual(scoped.log_probs,await direct([...fixture.defaults,{id:fixture.current,scale:1}]));
 const turn=await driver({messages:request.messages,tools:[],max_tokens:1,temperature:.8,seed:421});
 const capture=exchanges.at(-1)?.wireResponse.x_natlang_rl_capture;

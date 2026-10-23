@@ -16,7 +16,8 @@ export const REPLAY_RECORD_SCHEMA = 'natlang.replay-record/1';
 
 /** What `evaluate` hands to a sink. */
 export type ReplaySession = { arguments: string[]; terms: readonly Json[]; producers?: readonly Json[]; order: number;
-  derived?: readonly Json[]; loss: number };
+  derived?: readonly Json[]; native_turns?: readonly Json[]; native_graph_nodes?: readonly Json[];
+  native_gradient?: string; target?: Json; loss: number };
 
 export interface ReplayRecordSink { record(session: ReplaySession): Promise<void> }
 
@@ -41,7 +42,10 @@ export function replayRecordSink(options: { path: string; endpoint: string; head
       const annotations = options.annotate?.() ?? {};
       const record = { schema: REPLAY_RECORD_SCHEMA, id: `${path.basename(stem)}-${count}`, ...annotations,
         arguments: session.arguments, terms: session.terms, ...(session.producers?.length ? { producers: session.producers } : {}),
-        order: session.order, ...(session.derived?.length ? { derived: session.derived } : {}), loss: session.loss,
+        order: session.order, ...(session.derived?.length ? { derived: session.derived } : {}),
+        ...(session.native_turns?.length ? { native_turns: session.native_turns } : {}),
+        ...(session.native_graph_nodes?.length ? { native_graph_nodes: session.native_graph_nodes } : {}),
+        ...(session.native_gradient ? { native_gradient: session.native_gradient } : {}), ...(session.target ? { target: session.target } : {}), loss: session.loss,
         recorded_at: new Date().toISOString() };
       const text = JSON.stringify(record);
       for (const id of new Set(text.match(BLOCK_ID) ?? [])) {

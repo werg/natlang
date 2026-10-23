@@ -1,4 +1,4 @@
-import { checkHost, DEFAULT_DIALECT, fitsType, formatType, isAdapterType, parseType, TypeEnv } from './types.js';
+import { checkHost, DEFAULT_DIALECT, fitsType, formatType, parseType, TypeEnv } from './types.js';
 import type { Type } from './types.js';
 import { FileHandle, Folder, FolderHandle, type FolderTransaction } from './scoped-fs.js';
 import { isNeuraleseRef, neuraleseRef, soleSentinelUse, isContentParts, partsToText } from './neuralese.js';
@@ -187,8 +187,7 @@ export function coerce(raw: unknown, type: Type, env: TypeEnv, path = 'value', o
     let fits = false;
     try { fits = !!got && got.kind === 'neuralese' && fitsType(got, wanted, env); } catch { fits = false; }
     if (!fits) return reject(path, 'type-mismatch', formatType(wanted), raw.$neuralese.type);
-    // An adapter block's dialect is its spec (model/tiny_adapters.py), not a dialect a model reads.
-    if (!isAdapterType(got!)) checkBlockDialect(raw.$neuralese.id, wanted, env, path);
+    checkBlockDialect(raw.$neuralese.id, wanted, env, path);
     return raw as unknown as Value;
   }
   // A function-typed slot holds a live function (for example a natlang callable), never a pending node.

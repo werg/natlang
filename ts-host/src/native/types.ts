@@ -35,12 +35,9 @@ export const DEFAULT_DIALECT = 'DefaultDialect';
 export type DialectBinding = { readonly dialect: string | null; blockDialect?(id: string): string | undefined;
   nativeDefaultCompatible?(id: string, source: string, target: string): boolean };
 
-/** `Adapter`: a weight adapter value (a stored coefficient block whose dialect is its spec; model/tiny_adapters.py).
- * It is a soft value of a marker element, so it fits `Adapter` and `Neuralese<unknown>` slots and no other. */
-export const ADAPTER_TYPE: Type = { kind: 'neuralese', dialect: DEFAULT_DIALECT,
-  element: { kind: 'record', fields: [{ name: '$adapter', type: { kind: 'lit', value: 'adapter' }, optional: false }] } };
-export const isAdapterType = (type: Type) => type.kind === 'neuralese' && type.dialect === DEFAULT_DIALECT &&
-  type.element.kind === 'record' && type.element.fields.length === 1 && type.element.fields[0]!.name === '$adapter';
+/** `NativeAdapter` is an opaque reference to an archived nnt1 coefficient artifact. */
+export const NATIVE_ADAPTER_TYPE: Type = { kind: 'host', name: 'NativeAdapter',
+  contract: { kind: 'shape', members: ['$nativeAdapter'] } };
 
 /** Runtime check for a live host value. */
 export type HostCheck =
@@ -222,7 +219,7 @@ class Parser {
         throw new TypeSyntaxError('Record keys must be string');
       return { kind: 'dict', element: value! };
     }
-    if (token.value === 'Adapter') return ADAPTER_TYPE;
+    if (token.value === 'NativeAdapter') return NATIVE_ADAPTER_TYPE;
     if (token.value === 'Neuralese' && this.peek()?.value === '<') {
       // Neuralese<T> or Neuralese<T, D>; D is a dialect name or string literal.
       this.eat('<');
@@ -309,7 +306,7 @@ export function formatType(type: Type): string {
     case 'index': return `${type.base.kind === 'union' || type.base.kind === 'intersection' ? `(${formatType(type.base)})` : formatType(type.base)}[${JSON.stringify(type.key)}]`;
     case 'refined': return `Is<${formatType(type.base)}, ${JSON.stringify(type.predicate)}>`;
     case 'untrusted': return `Untrusted<${formatType(type.base)}>`;
-    case 'neuralese': return isAdapterType(type) ? 'Adapter' : `Neuralese<${formatType(type.element)}${type.dialect === DEFAULT_DIALECT ? '' :
+    case 'neuralese': return `Neuralese<${formatType(type.element)}${type.dialect === DEFAULT_DIALECT ? '' :
       `, ${JSON.stringify(type.dialect)}`}>`;
   }
 }

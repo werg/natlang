@@ -16,21 +16,22 @@
  * against the task's `learning` service (`learningService(...)`); host code calls `createLearning(service)`.
  */
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { currentFrame } from '../runtime/context.js';
-import { isNativeStateId, isNeuraleseRef, neuraleseRef, type NeuraleseRef } from '../native/neuralese.js';
+import { isNativeStateId, isNativeAdapterRef, isNeuraleseRef, nativeAdapterRef, neuraleseRef, type NativeAdapterRef, type NeuraleseRef } from '../native/neuralese.js';
 import { constantBlock, type NeuraleseBlock, type NeuraleseBlockMeta, type NeuraleseStore } from '../native/neuralese-store.js';
-import { distributionOf, saveNz, type NzSaveExport } from '../native/nz-file.js';
+import { distributionOf, loadNz, saveNz, type NzSaveExport } from '../native/nz-file.js';
 import { fetchModel } from '../model/chat-completion.js';
 import { HttpNeuraleseStore, restoreBlocks } from '../model/neuralese-server.js';
 import * as deltaOps from './deltas.js';
 import { setSystemPromptSource, systemPromptBank, type SystemPromptBank } from '../native/system-prompts.js';
-import { setAdapterSource, setNativeStateSource, setRecorderSource, type AdapterBinding, type NativeStateBinding, type RecordedTurn, ModelTurnRecorder } from './recording.js';
-import { archiveNativeTensorArtifact } from './native-tensor-client.js';
+import { setNativeAdapterSource, setNativeStateSource, setRecorderSource, type NativeAdapterBinding, type NativeStateBinding, type RecordedTurn, ModelTurnRecorder } from './recording.js';
+import { archiveNativeArtifactFrom } from '../native/neuralese-store.js';
 import { createNeuraleseLibrary, type StandardLibrary } from './combinators.js';
 import type { ReplayRecordSink } from './replay-records.js';
-import { nativeGraphGradient, nativeStateOptimizerStep, type NativeGraphRow, type NativeOptimizerSpec } from './native-learning-client.js';
-import type { NativeModelIdentity, NativeTensorArtifact } from '../native/neuralese-store.js';
+import { nativeGraphGradient, nativeRecordedGraphGradient, nativeStateOptimizerStep, nativeAdapterCreate, nativeAdapterOptimizerStep,
+  type NativeGraphRow, type NativeOptimizerSpec, type NativeGradientTarget } from './native-learning-client.js';
+import { nativeModelIdentityEqual, type NativeModelIdentity, type NativeTensorArtifact, type NativeTensorValue } from '../native/neuralese-store.js';
 
 type Json = Record<string, unknown>;
 
@@ -368,14 +369,10 @@ async function lawLoss(explicit: StandardLibrary | undefined, name: LawName, arg
 }
 
 // Adapters -------------------------------------------------------------------------------------------
-/** The type of an adapter value: `Adapter` (spec/SPEC.md; its structure is in the block's dialect). */
-export const ADAPTER_TYPE = 'Adapter';
-export type AdapterSpecOptions = { kind?: 'xs' | 'tiny'; rank?: number; u?: number; layers?: number[];
-  targets?: Array<'out' | 'ffn_down' | 'ffn_up'>; seed?: number; parameterNames?: string[] };
-type AdapterUse = NeuraleseRef | { adapter: NeuraleseRef; scale?: number };
+type NativeAdapterUse = NativeAdapterRef | { adapter: NativeAdapterRef; scale?: number };
 
-const adapterScope = new AsyncLocalStorage<readonly AdapterBinding[]>();
-setAdapterSource(() => adapterScope.getStore());
+const nativeAdapterScope = new AsyncLocalStorage<readonly NativeAdapterBinding[]>();
+setNativeAdapterSource(() => nativeAdapterScope.getStore());
 const nativeStateScope = new AsyncLocalStorage<readonly NativeStateBinding[]>();
 setNativeStateSource(() => nativeStateScope.getStore());
 
@@ -384,13 +381,23 @@ setNativeStateSource(() => nativeStateScope.getStore());
  * the adapted model, and turns recorded for `grad` replay with the same adapters. Adapters are values: inside
  * `valueAndGrad(f, adapter)` the adapter's coefficients get gradients like any soft value. Nested scopes add up.
  */
-export async function withAdapters<T>(adapters: AdapterUse | readonly AdapterUse[], fn: () => Promise<T> | T): Promise<T> {
-  const bindings = (Array.isArray(adapters) ? adapters : [adapters]).map((item: AdapterUse): AdapterBinding => {
-    const ref = isNeuraleseRef(item) ? item : item.adapter;
-    if (!isNeuraleseRef(ref)) throw new LearningError('learning-adapter', 'withAdapters takes adapter values');
-    return { id: ref.$neuralese.id, scale: isNeuraleseRef(item) ? 1 : item.scale ?? 1, ...(ref.$neuralese.stop_gradient ? {stop_gradient:true} : {}) };
+export async function withNativeAdapters<T>(adapters: NativeAdapterUse | readonly NativeAdapterUse[], fn: () => Promise<T> | T): Promise<T> {
+  const bindings = (Array.isArray(adapters) ? adapters : [adapters]).map((item: NativeAdapterUse): NativeAdapterBinding => {
+    const ref = isNativeAdapterRef(item) ? item : item.adapter;
+    if (!isNativeAdapterRef(ref)) throw new LearningError('learning-native-adapter', 'withNativeAdapters takes named native adapter references');
+    const scale = isNativeAdapterRef(item) ? 1 : item.scale ?? 1;
+    if (!Number.isFinite(scale)) throw new LearningError('learning-native-adapter', 'native adapter scales must be finite');
+    return { id: ref.$nativeAdapter.id, scale };
   });
-  return adapterScope.run([...(adapterScope.getStore() ?? []), ...bindings], fn);
+  const active = activeService('withNativeAdapters');
+  if (!active.store?.getNativeTensorArtifact)
+    throw new LearningError('learning-native-archive-unavailable', 'withNativeAdapters requires a named native tensor archive');
+  for (const binding of bindings) {
+    const artifact = await active.store.getNativeTensorArtifact(binding.id);
+    if (!artifact || artifact.metadata.kind !== 'adapter-coefficients')
+      throw new LearningError('learning-native-adapter', `${binding.id} is not an archived native adapter coefficient artifact`);
+  }
+  return nativeAdapterScope.run([...(nativeAdapterScope.getStore() ?? []), ...bindings], fn);
 }
 
 /**
@@ -462,6 +469,25 @@ function mapLeaves(a: unknown, replace: (ref: NeuraleseRef) => unknown): unknown
   return a;
 }
 
+function nativeAdapterLeaves(value: unknown): NativeAdapterRef[] {
+  const out: NativeAdapterRef[] = [];
+  const visit = (item: unknown) => {
+    if (isNativeAdapterRef(item)) { out.push(item); return; }
+    if (Array.isArray(item)) item.forEach(visit);
+    else if (item && typeof item === 'object' && Object.getPrototypeOf(item) === Object.prototype)
+      Object.values(item).forEach(visit);
+  };
+  visit(value); return out;
+}
+
+function mapNativeAdapterLeaves(value: unknown, replace: (ref: NativeAdapterRef) => unknown): unknown {
+  if (isNativeAdapterRef(value)) return replace(value);
+  if (Array.isArray(value)) return value.map(item => mapNativeAdapterLeaves(item, replace));
+  if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype)
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, mapNativeAdapterLeaves(item, replace)]));
+  return value;
+}
+
 /** An opaque gradient: the shape of `A` with gradient entries where `A` has differentiable Neuralese values. */
 export type Gradient<A> = { readonly $gradient: unknown; readonly __of?: A };
 type GradientEntry = { $gradientBlock: { id: string; of: string; type: string } } | null;
@@ -505,6 +531,7 @@ async function evaluate<A>(service: LearningService, f: (a: A) => Promise<Loss>,
     throw new LearningError('neuralese-grad-unavailable', 'gradients of order 1 or 2');
   const leaves = softLeaves(a).filter(ref => !stopped.has(ref)&&!ref.$neuralese.stop_gradient);
   const arguments_ = [...new Set(leaves.map(ref => ref.$neuralese.id))];
+  const nativeLeaves = nativeAdapterLeaves(a);
   const rec = new Recorder();
   // An inner first-order gradient's own inner computations are constants to it: they are not recorded.
   const derived: Derivation[] | undefined = order === 2 ? [] : undefined;
@@ -514,7 +541,36 @@ async function evaluate<A>(service: LearningService, f: (a: A) => Promise<Loss>,
   // A loss without terms (a policy gradient whose samples tied) is zero, with no gradient anywhere.
   if (!loss.terms.length) {
     loss.value = 0;
-    return { loss, grad: { $gradient: mapLeaves(a, (): GradientEntry => null) } as Gradient<A> };
+    const soft = mapLeaves(a, (): GradientEntry => null);
+    const native = mapNativeAdapterLeaves(soft, (): GradientEntry => null);
+    return { loss, grad: { $gradient: native } as Gradient<A> };
+  }
+  if (nativeLeaves.length) {
+    if (leaves.length || new Set(nativeLeaves.map(ref => ref.$nativeAdapter.id)).size !== 1)
+      throw new LearningError('learning-native-target', 'one exact native adapter target is required per valueAndGrad call');
+    if (!service.store?.getNativeTensorArtifact)
+      throw new LearningError('learning-native-archive-unavailable', 'native adapter gradients require a named tensor archive');
+    const adapterId = nativeLeaves[0]!.$nativeAdapter.id;
+    const adapter = await service.store.getNativeTensorArtifact(adapterId);
+    if (!adapter || adapter.metadata.kind !== 'adapter-coefficients')
+      throw new LearningError('learning-native-target', 'native differentiable arguments must be archived adapter coefficient artifacts');
+    const turns = [...rec.turns, ...rec.nested];
+    const nativeTurns = rec.nativeTurns();
+    const byId = new Map(nativeTurns.map(turn => [turn.native!.id, turn.native!]));
+    const exactTurns = turns.filter(turn => turn.native).map(turn => ({ ...structuredClone(turn), native: byId.get(turn.native!.id)! }));
+    const result = await nativeRecordedGraphGradient(service.endpoint, service.store, { turns: exactTurns,
+      events: structuredClone([...rec.graphNodes.values()]), terms: loss.terms,
+      target: { kind: 'adapter', id: adapter.id, names: Object.keys(adapter.tensors).sort() },
+      nativeIdentity: adapter.metadata.native_identity, headers: service.headers });
+    loss.value = Number(result.loss);
+    await service.replayRecords?.record({ arguments: [adapterId], terms: loss.terms, order: order ?? 1,
+      native_turns: exactTurns, native_graph_nodes: [...rec.graphNodes.values()], native_gradient: result.gradient.id,
+      target: { kind: 'adapter', id: adapter.id, names: Object.keys(adapter.tensors).sort() }, loss: loss.value });
+    outer?.push({ kind: 'grad', target: adapter.id, gradient: result.gradient.id,
+      native_turns: exactTurns, native_graph_nodes: [...rec.graphNodes.values()] });
+    const grad = mapNativeAdapterLeaves(a, ref => ref.$nativeAdapter.id === adapter.id ?
+      { $gradientBlock: { id: result.gradient.id, of: ref.$nativeAdapter.id, type: 'NativeAdapter' } } : null);
+    return { loss, grad: { $gradient: grad } as Gradient<A> };
   }
   await ensureOnServer(service, arguments_);
   // Every recorded turn that wrote blocks is a producer: a term that reads one of its blocks (a soft call's result,
@@ -548,6 +604,37 @@ function optimizer(service: () => LearningService, name: 'sgd' | 'adam', hyper: 
   return {
     init: a => { void a; return { $optimizer: { name, hyper, state: null } }; },
     async step(current, grad) {
+      const nativeEntries = nativeAdapterLeaves(current.value);
+      if (nativeEntries.length) {
+        const gradients: Exclude<GradientEntry, null>[] = [];
+        const collect = (value: unknown) => {
+          if (value && typeof value === 'object' && '$gradientBlock' in value) { gradients.push(value as Exclude<GradientEntry, null>); return; }
+          if (Array.isArray(value)) value.forEach(collect);
+          else if (value && typeof value === 'object') Object.values(value).forEach(collect);
+        };
+        collect(grad.$gradient);
+        if (nativeEntries.length !== 1 || softLeaves(current.value).length || gradients.length !== 1 ||
+            !service().store?.getNativeTensorArtifact)
+          throw new LearningError('learning-native-target', 'native adapter optimization requires one exact adapter and gradient');
+        const active = service(), store = active.store!;
+        const gradient = await store.getNativeTensorArtifact!(gradients[0]!.$gradientBlock.id);
+        if (!gradient || gradient.metadata.kind !== 'adapter-gradient')
+          throw new LearningError('learning-native-target', 'native optimizer needs an archived adapter-gradient artifact');
+        const betas = hyper.betas as [number, number] | undefined;
+        const spec: NativeOptimizerSpec = { name, ...(typeof hyper.lr === 'number' ? { learning_rate: hyper.lr } : {}),
+          ...(typeof hyper.weightDecay === 'number' ? { weight_decay: hyper.weightDecay } : {}),
+          ...(betas ? { beta1: betas[0], beta2: betas[1] } : {}) };
+        const previousState = current.opt.$optimizer.state?.native_optimizer_state_id;
+        const updated = await nativeAdapterOptimizerStep(active.endpoint, store, { gradient,
+          nativeIdentity: gradient.metadata.native_identity, optimizer: spec,
+          ...(typeof previousState === 'string' ? { optimizerStateId: previousState } : {}), headers: active.headers });
+        const oldId = nativeEntries[0]!.$nativeAdapter.id;
+        const value = mapNativeAdapterLeaves(current.value, ref => ref.$nativeAdapter.id === oldId ? nativeAdapterRef(updated.adapter.id) : ref) as typeof current.value;
+        const state = { native_optimizer_state_id: updated.optimizer_state_id, step: updated.step } as Json;
+        derivations.getStore()?.push({ kind: 'optim', optimizer: name, hyper, params: [oldId], grads: [gradient.id],
+          state: current.opt.$optimizer.state, results: { params: [updated.adapter.id], state } });
+        return { value, opt: { $optimizer: { name, hyper, state } } };
+      }
       const params: string[] = [], grads: string[] = [];
       const entries = softLeaves(current.value);
       const gradEntries: GradientEntry[] = [];
@@ -583,6 +670,73 @@ function deltaStores(service: LearningService): deltaOps.DeltaStores {
   return { read: async id => (await service.store?.get(id)) ?? (await remote.get(id)), write: service.store ?? remote };
 }
 
+function f32Values(value: NativeTensorValue): Float32Array {
+  if (value.dtype !== 'F32' || value.data.byteLength % 4) throw new LearningError('learning-native-delta', 'native adapter deltas currently require FP32 coefficient tensors');
+  return new Float32Array(value.data.buffer.slice(value.data.byteOffset, value.data.byteOffset + value.data.byteLength));
+}
+function f32Bytes(values: Float32Array): Uint8Array {
+  return new Uint8Array(values.buffer.slice(values.byteOffset, values.byteOffset + values.byteLength));
+}
+
+async function nativeAdapterArtifacts(active: LearningService, refs: readonly NativeAdapterRef[]) {
+  const store = active.store;
+  if (!store?.getNativeTensorArtifact || !store.putNativeTensorArtifact)
+    throw new LearningError('learning-native-archive-unavailable', 'native coefficient deltas require an archived tensor store');
+  const artifacts = await Promise.all(refs.map(ref => store.getNativeTensorArtifact!(ref.$nativeAdapter.id)));
+  if (artifacts.some(artifact => !artifact || artifact.metadata.kind !== 'adapter-coefficients'))
+    throw new LearningError('learning-native-delta', 'native deltas require named adapter coefficient artifacts');
+  const valid = artifacts as NativeTensorArtifact[];
+  const first = valid[0]!;
+  if (valid.some(artifact => artifact.metadata.source_artifact_id !== first.metadata.source_artifact_id ||
+      !nativeModelIdentityEqual(artifact.metadata.native_identity, first.metadata.native_identity) ||
+      JSON.stringify(artifact.metadata.tensors) !== JSON.stringify(first.metadata.tensors)))
+    throw new LearningError('learning-native-delta', 'native coefficient deltas need the same exact checkpoint, basis and named tensor geometry');
+  return valid;
+}
+
+async function nativeAdapterArithmetic(active: LearningService, refs: readonly { ref: NativeAdapterRef; scale: number }[],
+    operation: string): Promise<NativeAdapterRef> {
+  if (!refs.length || refs.some(item => !Number.isFinite(item.scale)))
+    throw new LearningError('learning-native-delta', 'native delta arithmetic needs finite scales and at least one coefficient artifact');
+  const artifacts = await nativeAdapterArtifacts(active, refs.map(item => item.ref));
+  const first = artifacts[0]!;
+  const tensors: Record<string, NativeTensorValue> = {};
+  for (const name of Object.keys(first.tensors).sort()) {
+    const values = new Float32Array(first.tensors[name]!.shape.reduce((count, size) => count * size, 1));
+    artifacts.forEach((artifact, index) => {
+      const part = f32Values(artifact.tensors[name]!);
+      for (let at = 0; at < values.length; at++) values[at]! += refs[index]!.scale * part[at]!;
+    });
+    tensors[name] = { dtype: 'F32', shape: [...first.tensors[name]!.shape], data: f32Bytes(values) };
+  }
+  const provenance = { ...first.metadata.provenance, native_delta_operation: operation };
+  const result = await active.store!.putNativeTensorArtifact!({ metadata: { ...first.metadata, provenance }, tensors });
+  return nativeAdapterRef(result.id);
+}
+
+async function evaluateRecordedNative(service: LearningService, f: () => Promise<Loss>, target: NativeGradientTarget,
+    nativeIdentity: NativeModelIdentity, options: { nativeStateModes?: Record<string, 'same-base-adapter-state'> } = {}) {
+  if (!service.store) throw new LearningError('learning-native-state-store', 'native recorded learning requires an archived artifact store');
+  const rec = new Recorder();
+  const loss = await recording.run(rec, () => boundService.run(service, f));
+  if (!(loss instanceof Loss)) throw new LearningError('learning-not-a-loss', 'native graph learning must return a Loss from objectives');
+  if (!loss.terms.length) return { loss: Object.assign(loss, { value: 0 }), gradient: null };
+  const nativeTurns = rec.nativeTurns();
+  const byId = new Map(nativeTurns.map(turn => [turn.native!.id, turn.native!]));
+  const turns = [...rec.turns, ...rec.nested].filter(turn => turn.native)
+    .map(turn => ({ ...structuredClone(turn), native: byId.get(turn.native!.id)! }));
+  if (!turns.length) throw new LearningError('learning-no-turns', 'native graph objective made no recorded native model turns');
+  if (loss.terms.some(term => typeof term.native_turn_id !== 'string'))
+    throw new LearningError('learning-native-objective', 'native graph objectives must score exact recorded native turns');
+  const result = await nativeRecordedGraphGradient(service.endpoint, service.store, { turns,
+    events: structuredClone([...rec.graphNodes.values()]), terms: loss.terms, target, nativeIdentity,
+    nativeStateModes: options.nativeStateModes, headers: service.headers });
+  loss.value = Number(result.loss);
+  await service.replayRecords?.record({ arguments: [], terms: loss.terms, order: 1, native_turns: turns,
+    native_graph_nodes: [...rec.graphNodes.values()], target, native_gradient: result.gradient.id, loss: loss.value });
+  return { loss, gradient: result.gradient, stats: result.stats, objective: result.objective };
+}
+
 /** The learning surface bound to a service (host code), or to the current task's service (natlang code). */
 export function createLearning(explicit?: LearningService, options: { library?: StandardLibrary } = {}) {
   const service = (where = 'natlang:learning') => activeService(where, explicit);
@@ -594,7 +748,8 @@ export function createLearning(explicit?: LearningService, options: { library?: 
       evaluate(service('valueAndGrad'), f, a, options.order),
     stopGradient,
     objectives: bound,
-    withAdapters,
+    withNativeAdapters: <T>(adapters: NativeAdapterUse | readonly NativeAdapterUse[], fn: () => Promise<T> | T) =>
+      boundService.run(service('withNativeAdapters'), () => withNativeAdapters(adapters, fn)),
     withNativeStates,
     withSystemPrompts,
     /** Native positional state learning. Updates return a new state artifact with immutable optimizer ancestry. */
@@ -614,11 +769,44 @@ export function createLearning(explicit?: LearningService, options: { library?: 
           optimizerStateId, headers: current.headers });
       },
     },
+    /** Native gradients through the exact recorded model and producer/consumer execution graph. */
+    nativeGraph: {
+      gradient: (f: () => Promise<Loss>, target: NativeGradientTarget, nativeIdentity: NativeModelIdentity,
+          options: { nativeStateModes?: Record<string, 'same-base-adapter-state'> } = {}) =>
+        evaluateRecordedNative(service('nativeGraph.gradient'), f, target, nativeIdentity, options),
+    },
+    /** Explicit constructors and optimizer updates for exact-base named native coefficient artifacts. */
+    nativeAdapters: {
+      create: async (nativeIdentity: NativeModelIdentity, options: { parameterNames: string[]; kind?: 'xs' | 'tiny';
+          rank?: number; u?: number; seed?: number }) => {
+        const active = service('nativeAdapters.create');
+        if (!active.store) throw new LearningError('learning-native-state-store', 'native adapter creation requires an archived tensor store');
+        const artifact = await nativeAdapterCreate(active.endpoint, active.store, { nativeIdentity, ...options, headers: active.headers });
+        return nativeAdapterRef(artifact.id);
+      },
+      ref: (id: string) => nativeAdapterRef(id),
+      optimize: async (gradient: NativeTensorArtifact, nativeIdentity: NativeModelIdentity, optimizer: NativeOptimizerSpec,
+          optimizerStateId?: string) => {
+        const active = service('nativeAdapters.optimize');
+        if (!active.store) throw new LearningError('learning-native-state-store', 'native adapter updates require an archived tensor store');
+        return nativeAdapterOptimizerStep(active.endpoint, active.store, { gradient, nativeIdentity, optimizer,
+          optimizerStateId, headers: active.headers });
+      },
+    },
     /** Residual updates (LEARNING_CONTINUUM §5): soft values and adapters by block arithmetic, crisp files by patch. */
     deltas: {
-      diff: (after: NeuraleseRef, base: NeuraleseRef) => deltaOps.diff(deltaStores(service('deltas.diff')), after, base),
-      apply: (base: NeuraleseRef, delta: NeuraleseRef, scale = 1) => deltaOps.apply(deltaStores(service('deltas.apply')), base, delta, scale),
-      compose: (deltas: Parameters<typeof deltaOps.compose>[1]) => deltaOps.compose(deltaStores(service('deltas.compose')), deltas),
+      diff: async (after: NeuraleseRef | NativeAdapterRef, base: NeuraleseRef | NativeAdapterRef) => isNativeAdapterRef(after) && isNativeAdapterRef(base) ?
+        nativeAdapterArithmetic(service('deltas.diff'), [{ ref: after, scale: 1 }, { ref: base, scale: -1 }], 'diff') :
+        deltaOps.diff(deltaStores(service('deltas.diff')), after as NeuraleseRef, base as NeuraleseRef),
+      apply: async (base: NeuraleseRef | NativeAdapterRef, delta: NeuraleseRef | NativeAdapterRef, scale = 1) => isNativeAdapterRef(base) && isNativeAdapterRef(delta) ?
+        nativeAdapterArithmetic(service('deltas.apply'), [{ ref: base, scale: 1 }, { ref: delta, scale }], 'apply') :
+        deltaOps.apply(deltaStores(service('deltas.apply')), base as NeuraleseRef, delta as NeuraleseRef, scale),
+      compose: async (deltas: Parameters<typeof deltaOps.compose>[1]) => {
+        const items = deltas.map(item => isNeuraleseRef(item) || isNativeAdapterRef(item) ? { ref: item, scale: 1 } : { ref: item.delta, scale: item.scale ?? 1 });
+        return items.length && items.every(item => isNativeAdapterRef(item.ref)) ?
+          nativeAdapterArithmetic(service('deltas.compose'), items as { ref: NativeAdapterRef; scale: number }[], 'compose') :
+          deltaOps.compose(deltaStores(service('deltas.compose')), deltas);
+      },
       diffFiles: deltaOps.diffFiles, applyPatch: deltaOps.applyPatch, composePatches: deltaOps.composePatches,
       /**
        * Interference of deltas trained separately from one base: each delta's gain alone, the gain of their sum, and
@@ -667,20 +855,6 @@ export function createLearning(explicit?: LearningService, options: { library?: 
         return { coefficients: [...c], value: await merge(), trace };
       },
     },
-    adapters: {
-      /** A zero adapter for the server's backbone (the identity until trained); see model/tiny_adapters.py. */
-      async create(options: AdapterSpecOptions = {}): Promise<NeuraleseRef> {
-        const active = service('adapters.create');
-        const { parameterNames, ...common } = options;
-        const meta = await post(active, '/v1/neuralese/adapters', { ...common,
-          ...(parameterNames ? { parameter_names: parameterNames } : {}), type: ADAPTER_TYPE });
-        if (String(meta.id).startsWith('nnt1_')) {
-          if (!active.store) throw new LearningError('neuralese-native-archive-unavailable', 'configure a named tensor archive before creating native adapters');
-          await archiveNativeTensorArtifact(active.endpoint, active.store, String(meta.id), active.headers);
-        }
-        return neuraleseRef(ADAPTER_TYPE, String(meta.id));
-      },
-    },
     /** Record the model turns of one execution as a trajectory (inside grad). */
     async trajectory<T>(run: Promise<T> | (() => Promise<T>)): Promise<Trajectory> {
       const rec = recorder('trajectory');
@@ -696,16 +870,42 @@ export function createLearning(explicit?: LearningService, options: { library?: 
     async save(path: string, exports: Record<string, unknown | NzSaveExport>): Promise<{ path: string; exports: string[] }> {
       const active = service('save');
       const remote = new HttpNeuraleseStore(active.endpoint, active.headers);
-      const store = { async get(id: string): Promise<NeuraleseBlock | undefined> {
-        return (await active.store?.get(id)) ?? (await remote.get(id)); } } as NeuraleseStore;
+      if (!active.store) throw new LearningError('neuralese-native-archive-unavailable', 'save requires a runtime artifact store');
       const entries: Record<string, NzSaveExport> = {};
       for (const [name, value] of Object.entries(exports)) {
         if (value && typeof value === 'object' && 'type' in value && 'value' in value) entries[name] = value as NzSaveExport;
+        else if (isNativeAdapterRef(value)) entries[name] = { type: 'NativeAdapter', value };
         else if (isNeuraleseRef(value)) entries[name] = { type: value.$neuralese.type, value };
         else throw new LearningError('learning-save-type', `export ${name} needs a declared type ({ type, value })`);
       }
+      const visit = async (value: unknown): Promise<void> => {
+        if (isNeuraleseRef(value) || isNativeAdapterRef(value)) {
+          const id = isNativeAdapterRef(value) ? value.$nativeAdapter.id : value.$neuralese.id;
+          if (id.startsWith('nzs1_') || id.startsWith('nnt1_'))
+            await archiveNativeArtifactFrom(remote, active.store!, id);
+          else if (!(await active.store!.get(id)) && !(await remote.get(id)))
+            throw new LearningError('neuralese-unknown-block', `${id} is neither in the runtime archive nor on the server`);
+        } else if (Array.isArray(value)) await Promise.all(value.map(visit));
+        else if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype)
+          await Promise.all(Object.values(value).map(visit));
+      };
+      for (const entry of Object.values(entries)) await visit(entry.value);
+      const store = { async get(id: string): Promise<NeuraleseBlock | undefined> {
+        return (await active.store!.get(id)) ?? (await remote.get(id));
+      }, async getNativeState(id: string) {
+        return (await active.store!.getNativeState?.(id)) ?? (await remote.getNativeState(id));
+      }, async getNativeTensorArtifact(id: string) {
+        return (await active.store!.getNativeTensorArtifact?.(id)) ?? (await remote.getNativeTensorArtifact(id));
+      } } as NeuraleseStore;
       writeFileSync(path, await saveNz(entries, { store, dialect: active.dialect ?? 'nd:natlang@1' }));
       return { path, exports: Object.keys(entries) };
+    },
+    /** Load a `.nz` artifact bundle into this task's verified native and block archive. */
+    async load(path: string): Promise<{ path: string; header: unknown; exports: Record<string, unknown>; types: Record<string, string> }> {
+      const active = service('load');
+      if (!active.store) throw new LearningError('neuralese-native-archive-unavailable', 'load requires a runtime artifact store');
+      const loaded = await loadNz(new Uint8Array(readFileSync(path)), { store: active.store });
+      return { path, header: loaded.header, exports: loaded.exports, types: loaded.types };
     },
   };
 }
