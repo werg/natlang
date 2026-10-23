@@ -80,7 +80,8 @@ def rollout_turns(result: dict[str, Any] | None) -> list[dict[str, Any]]:
     return turns
 
 
-def _budget_terminated_prefix(entry: dict[str, Any], task: dict[str, Any], finish: dict[str, Any] | None
+def _budget_terminated_prefix(entry: dict[str, Any], task: dict[str, Any], finish: dict[str, Any] | None,
+                              *, packet_source_path: Path, packet_source_sha256: str | None
                               ) -> dict[str, Any] | None:
     """Recover only a completely captured, exact model-request-budget prefix.
 
@@ -94,16 +95,25 @@ def _budget_terminated_prefix(entry: dict[str, Any], task: dict[str, Any], finis
     if task.get("split") != "train":
         return None
     accounting = finish.get("output_accounting")
-    if not isinstance(accounting, dict):
+    if not isinstance(accounting, dict) or packet_source_sha256 is None:
         return None
     job_index = entry.get("index")
     program_id = task.get("id")
     states = accounting.get("job_states")
-    state = next((row for row in states or [] if isinstance(row, dict) and row.get("index") == job_index), None)
+    matching_states = [row for row in states or [] if isinstance(row, dict) and
+                       type(row.get("index")) is int and row.get("index") == job_index]
+    state = matching_states[0] if len(matching_states) == 1 else None
     if (not isinstance(state, dict) or state.get("program_id") != program_id or
             state.get("state") != "failed" or state.get("resource_limit_reason") != "model_request_budget"):
         return None
     jobs = Path(entry["jobs"])
+    source_path = Path(entry.get("source", ""))
+    try:
+        if (source_path.is_symlink() or not source_path.is_file() or
+                source_path.resolve(strict=True) != packet_source_path.resolve(strict=True)):
+            return None
+    except OSError:
+        return None
     error_path = jobs / f"{int(job_index):06d}.error.json"
     digest = state.get("digest")
     if not isinstance(digest, str) or len(digest) != 64 or not all(c in "0123456789abcdef" for c in digest):
@@ -122,7 +132,10 @@ def _budget_terminated_prefix(entry: dict[str, Any], task: dict[str, Any], finis
             terminal_error.get("error") != str(error.get("error", "")) or
             error.get("index") != job_index or error.get("program_id") != program_id or
             error.get("code") != "NATLANG_MODEL_REQUEST_BUDGET" or
-            error.get("source_sha256") != source_sha or error.get("program_ir_sha256") != state.get("digest") or
+            source_sha != packet_source_sha256 or error.get("source_sha256") != packet_source_sha256 or
+            terminal_error.get("source_sha256") != packet_source_sha256 or
+            terminal_error.get("record_binding_verified") is not True or
+            error.get("program_ir_sha256") != state.get("digest") or
             (state.get("terminal_error") or {}).get("program_ir_sha256") != state.get("digest") or
             partial.get("version") != "natlang.teacher_partial.native/1" or partial.get("program_id") != program_id or
             (partial.get("provenance") or {}).get("program_ir_sha256") != state.get("digest") or
@@ -144,7 +157,7 @@ def _budget_terminated_prefix(entry: dict[str, Any], task: dict[str, Any], finis
         return None
     evidence_path = jobs / manifest["path"]
     try:
-        if evidence_path.is_symlink() or not evidence_path.is_file() or evidence_path.stat().st_size > 512 * 1024 * 1024:
+        if evidence_path.is_symlink() or not evidence_path.is_file():
             return None
         evidence_bytes = evidence_path.read_bytes()
     except OSError:
@@ -311,7 +324,9 @@ def score(run_dir: Path, emit: Path | None = None, round_: int = 0) -> dict[str,
     """Classify every rollout; with `emit`, also write `natlang.rollout/1` records for `grpo.py round`."""
     run_dir = run_dir.resolve()
     emitted: list[dict[str, Any]] = []
-    packet = read_jsonl(run_dir / "packet.jsonl")
+    packet_path = run_dir / "packet.jsonl"
+    packet = read_jsonl(packet_path)
+    packet_sha256 = hashlib.sha256(packet_path.read_bytes()).hexdigest()
     preparation_path = run_dir / "preparation.json"
     preparation = json.loads(preparation_path.read_text()) if preparation_path.exists() else {"root_mode": "authored"}
     root_mode = preparation["root_mode"]
@@ -334,7 +349,10 @@ def score(run_dir: Path, emit: Path | None = None, round_: int = 0) -> dict[str,
                     raise ValueError(f"student-root rollout {entry['key']} replayed an authored root")
         outcome = classify_case(result, finishes.get(entry["key"]))
         reward = reward_of(outcome, finishes.get(entry["key"]))
-        budget_prefix = _budget_terminated_prefix(entry, packet[entry["index"]], finishes.get(entry["key"])) \
+        expected_packet_sha256 = packet_sha256 if preparation.get("packet_sha256") == packet_sha256 else None
+        budget_prefix = _budget_terminated_prefix(
+            entry, packet[entry["index"]], finishes.get(entry["key"]),
+            packet_source_path=packet_path, packet_source_sha256=expected_packet_sha256) \
             if result is None and outcome == "budget_exhaustion" and \
             (finishes.get(entry["key"]) or {}).get("resource_limit_reason") == "model_request_budget" else None
         task = packet[entry["index"]]

@@ -75,12 +75,17 @@ def _budget_prefix_fixture(tmp_path, *, graph_turn="inv#turn1", pending=False, m
     task = {**authored_root_row(_row()), "id": "budget-prefix-task", "split": split}
     packet_path = tmp_path / "packet.jsonl"
     packet_path.write_text(json.dumps(task) + "\n")
+    packet_sha = hashlib.sha256(packet_path.read_bytes()).hexdigest()
+    (tmp_path / "preparation.json").write_text(json.dumps({
+        "schema": "natlang.task-rollout-preparation/1", "root_mode": "authored",
+        "packet_sha256": packet_sha,
+    }) + "\n")
     entries = build_queue(packet_path, 1, 2, tmp_path, temperature=0.7, case_seconds=60,
                           max_model_requests=4, max_turns=8, seed_base=3)
     entry = entries[0]
     jobs = Path(entry["jobs"])
     jobs.mkdir(parents=True, exist_ok=True)
-    source_sha, program_sha = hashlib.sha256(packet_path.read_bytes()).hexdigest(), "d" * 64
+    source_sha, program_sha = packet_sha, "d" * 64
     attempt, execution = "evidence-attempt", "execution-attempt"
     response_calls = [["eval", {"code": "return_result({status:'failed'});"}]]
     raw_calls = [{"id": "call-1", "type": "function", "function": {
@@ -147,7 +152,8 @@ def _budget_prefix_fixture(tmp_path, *, graph_turn="inv#turn1", pending=False, m
     error_path.write_bytes(error_bytes)
     state = {"index": 0, "program_id": task["id"], "digest": program_sha, "state": "failed",
              "resource_limit_reason": "model_request_budget",
-             "terminal_error": {"program_ir_sha256": program_sha, "record_binding_verified": False,
+             "terminal_error": {"program_ir_sha256": program_sha, "record_binding_verified": True,
+                                "source_sha256": source_sha,
                                 "sha256": hashlib.sha256(error_bytes).hexdigest(), "path": str(error_path),
                                 "error": error["error"]}}
     finish = {"event": "finish", "key": entry["key"], "status": "incomplete_export",
@@ -186,7 +192,7 @@ def test_budget_prefix_keeps_producer_and_consumer_as_one_graph(tmp_path):
     assert bound[1]["read_bindings"] == {"state": "writer"}
 
 
-@pytest.mark.parametrize("change", ["graph", "pending", "manifest", "error_code", "stale_attempt", "missing_frame", "held_split"])
+@pytest.mark.parametrize("change", ["graph", "pending", "manifest", "error_code", "stale_attempt", "missing_frame", "held_split", "duplicate_state"])
 def test_unverifiable_budget_prefix_is_never_emitted_as_trainable(tmp_path, change):
     task, entries, finish = _budget_prefix_fixture(tmp_path,
         graph_turn="other#turn1" if change == "graph" else "inv#turn1",
@@ -199,6 +205,25 @@ def test_unverifiable_budget_prefix_is_never_emitted_as_trainable(tmp_path, chan
         error_path = Path(entries[0]["jobs"]) / "000000.error.json"
         error = json.loads(error_path.read_text()); error["code"] = "SOME_OTHER_FAILURE"
         error_path.write_text(json.dumps(error) + "\n")
+    if change == "duplicate_state":
+        finish["output_accounting"]["job_states"].append(json.loads(json.dumps(finish["output_accounting"]["job_states"][0])))
+    (tmp_path / "journal.jsonl").write_text(json.dumps(finish) + "\n")
+    emitted = tmp_path / "native-rollouts.jsonl"
+    score(tmp_path, emit=emitted)
+    row = json.loads(emitted.read_text().splitlines()[0])
+    assert row["reward"] is None and row["unscored"] == "budget_prefix_capture_unavailable"
+    assert row["turns"] == [] and row["execution_graph"] == []
+
+
+def test_stale_self_consistent_terminal_is_rejected_when_current_packet_changes(tmp_path):
+    task, entries, finish = _budget_prefix_fixture(tmp_path)
+    packet_path = tmp_path / "packet.jsonl"
+    changed_task = {**task, "current_source_revision": "new packet content with same task identity"}
+    packet_path.write_text(json.dumps(changed_task) + "\n")
+    preparation = json.loads((tmp_path / "preparation.json").read_text())
+    preparation["packet_sha256"] = hashlib.sha256(packet_path.read_bytes()).hexdigest()
+    (tmp_path / "preparation.json").write_text(json.dumps(preparation) + "\n")
+    (tmp_path / "queue.jsonl").write_text("".join(json.dumps(row) + "\n" for row in entries))
     (tmp_path / "journal.jsonl").write_text(json.dumps(finish) + "\n")
     emitted = tmp_path / "native-rollouts.jsonl"
     score(tmp_path, emit=emitted)
