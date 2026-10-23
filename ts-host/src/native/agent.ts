@@ -666,6 +666,8 @@ export class NativeToolAgent {
     const trace = session.runtime.trace;
     const callId = session.runtime.options.runId;
     const turnId = `${callId}#turn${turn}`;
+    const scopedReads = response.raw_response?.__natlang_native_read_occurrences;
+    const preparedMessageOffset = Array.isArray(scopedReads) ? 1 : 0;
     const reads: { node: string; port: string; block: string }[] = [];
     const seen = new Set<string>();
     type Use={block:string;native:boolean;stop?:true;source?:string};
@@ -700,12 +702,14 @@ export class NativeToolAgent {
         if (value && typeof value === 'object') return Object.values(value).flatMap(argumentRefs);
         return [];
       };
-      const texts = [record.content];
+      const contentParts = typeof record.content === 'string' ? runtimeTextToParts(record.content) :
+        Array.isArray(record.content) ? record.content : record.content === undefined ? [] : [record.content];
+      const contentUses = contentParts.map(findRefs);
       const argumentUses = (record.tool_calls ?? []).map(call => {
         const value = call.function?.arguments;
         return argumentRefs(typeof value === 'string' ? value.trim() ? JSON.parse(value) : {} : value);
       });
-      for (const [part, uses] of [findRefs(texts[0]), ...argumentUses].entries()) {
+      for (const [part, uses] of [...contentUses, ...argumentUses].entries()) {
         for (const use of uses) {
           const block=use.block,isNative=use.native;
           const artifact = isNative ? await this.options.neuralese?.store.getNativeState?.(block) : undefined;
@@ -716,10 +720,35 @@ export class NativeToolAgent {
               architecture: artifact!.metadata.architecture, checkpoint_sha256: artifact!.metadata.checkpoint_sha256,
               tokenizer_fingerprint: artifact!.metadata.tokenizer_fingerprint,
               embedding_weight_sha256: artifact!.metadata.embedding_weight_sha256 } } : {}),
-            positions: [index, part] }, [blockInput(block, 'block',use.source)]);
+            positions: [index + preparedMessageOffset, part] }, [blockInput(block, 'block',
+              use.source ?? (isNative ? activeRecorder()?.nativeStateWriter?.(block) : undefined))]);
           if (node) reads.push({ node, port: 'read', block });
         }
       }
+    }
+    // `withNativeStates` adds exact archived-state parts in the transport
+    // after NativeToolAgent builds graphMessages. The server response carries
+    // their prepared request positions and resolved writer occurrence so the
+    // execution graph includes the very import the model consumed.
+    if (Array.isArray(scopedReads)) for (const raw of scopedReads) {
+      if (!raw || typeof raw !== 'object') throw new Error('neuralese-native-grad-invalid: scoped native read lost its request occurrence');
+      const item = raw as { id?: unknown; positions?: unknown; source_occurrence?: unknown; stop_gradient?: unknown };
+      if (typeof item.id !== 'string' || !Array.isArray(item.positions) || item.positions.length !== 1 ||
+          !Array.isArray(item.positions[0]) || item.positions[0].length !== 2 ||
+          !item.positions[0].every(Number.isSafeInteger) || item.positions[0].some((value: number) => value < 0) ||
+          item.source_occurrence !== undefined && typeof item.source_occurrence !== 'string' ||
+          item.stop_gradient !== undefined && item.stop_gradient !== true)
+        throw new Error('neuralese-native-grad-invalid: scoped native read has invalid prepared prompt positions');
+      const [messageIndex, partIndex] = item.positions[0] as [number, number];
+      const artifact = await this.options.neuralese?.store.getNativeState?.(item.id);
+      if (!artifact) throw new Error(`native-state consumer artifact ${item.id} is unavailable for provenance`);
+      const node = graphNode(trace, 'block_read', { call_id: callId, turn: turnId, block: item.id,
+        ...(item.stop_gradient === true ? { stop_gradient: true } : {}), format: 'native-state', native_identity: {
+          architecture: artifact.metadata.architecture, checkpoint_sha256: artifact.metadata.checkpoint_sha256,
+          tokenizer_fingerprint: artifact.metadata.tokenizer_fingerprint,
+          embedding_weight_sha256: artifact.metadata.embedding_weight_sha256 }, positions: [messageIndex, partIndex] },
+        [blockInput(item.id, 'block', typeof item.source_occurrence === 'string' ? item.source_occurrence : undefined)]);
+      if (node) reads.push({ node, port: 'read', block: item.id });
     }
     return graphNode(trace, 'model_turn', { call_id: callId, turn, ...(readout?{readout}:{}), temperature: readout?null:this.options.temperature ?? null,
       seed: readout || session.runtime.seedPolicy.mode === 'backend' ? null : deriveSeed(session.runtime.seedPolicy.root!,

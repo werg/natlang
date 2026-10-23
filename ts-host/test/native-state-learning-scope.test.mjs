@@ -4,7 +4,7 @@ import test from 'node:test';
 import { encodeNativeState, MemoryNeuraleseStore } from '../dist/native/neuralese-store.js';
 import { withNativeStates } from '../dist/neuralese/learning.js';
 import { neuraleseServerModelTurn } from '../dist/model/neuralese-server.js';
-import { ModelTurnRecorder, setRecorderSource } from '../dist/neuralese/recording.js';
+import { ModelTurnRecorder, setRecorderSource } from '../dist/native/model-recording.js';
 import { nativeStateFixture } from './fixtures/native-state.mjs';
 
 async function fixtureServer(state, identity = state.metadata) {
@@ -32,6 +32,7 @@ async function fixtureServer(state, identity = state.metadata) {
     if (request.url === '/v1/chat/completions') {
       requestBody = JSON.parse(body.toString());
       return send(200, { choices: [{ message: { role: 'assistant', content: 'done' }, finish_reason: 'stop' }],
+        native_state: { imports: [{ id: state.id, mode: 'exact-native-state', observed_native_state_id: state.id }] },
         x_natlang_rl_capture: { schema: 'natlang.native-rl-sampling/1', prompt: [{ kind: 'native_state', id: state.id }],
           samples: [], native_state_imports: [{ id: state.id, mode: 'exact-native-state', observed_native_state_id: state.id }] } });
     }

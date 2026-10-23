@@ -9,13 +9,19 @@ native KV/hybrid state through `withNativeStates`; it changes call context and
 does not change model weights. Exact-checkpoint native actor coefficients use
 named nnt1 artifacts through `learning.nativeAdapters`, `withNativeAdapters`,
 recorded whole-graph gradients, native Adam/SGD updates, and nnt1 save/load and
-delta arithmetic. The actual HTTP harness now carries exact actor bindings
-through producer and consumer captures. CPU fixtures for the tiny LFM and
-Mellum checkpoint families verify that Adam lowers the recorded log-likelihood
-objective and that the producer-to-consumer state occurrence remains in the
-gradient graph. These fixtures validate the mechanism, not task-level learning
-or capability lift. The llama.cpp fork's generic externally supplied GGUF LoRA
-serving is a separate model-serving feature.
+delta arithmetic. High-level `valueAndGrad` now covers nzs1 state-only,
+nnt1 actor-only, and joint state/coefficient targets, repeated aliases,
+separately scoped actors, and order-2 updates through the native derivative
+program. A scoped import binds to the exact in-trajectory writer when present;
+adapter-produced states carry their authenticated base actor and use the
+same-base state receipt. The actual HTTP harness checks the prepared import
+against the server prompt and import receipt. CPU fixtures against the tiny LFM
+and Mellum checkpoint families exercise objective reduction, producer-to-
+consumer gradient flow, scoped multi-actor learning, higher-order derivatives,
+optimizer updates, archive reload, and delta application. These fixtures
+validate mechanisms, not task-level learning or capability lift. The llama.cpp
+fork's generic externally supplied GGUF LoRA serving is a separate
+model-serving feature.
 
 ## 1. Thesis
 

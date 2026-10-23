@@ -9,7 +9,7 @@ import { hexDigest } from '../native/hash.js';
 import { HttpNeuraleseStore, restoreNativeStates, restoreBlocks } from '../model/neuralese-server.js';
 import { archiveNativeState } from '../model/native-state-client.js';
 import { archiveNativeTensorArtifact, restoreNativeTensorArtifacts } from './native-tensor-client.js';
-import type { RecordedTurn } from './recording.js';
+import type { RecordedTurn } from '../native/model-recording.js';
 
 export type NativeGraphRow = Record<string, unknown> & { schema: 'natlang.neuralese-native-graph/1'; split: string };
 export type NativeGradientTarget = { kind: 'model-parameters'; names: string[] } |

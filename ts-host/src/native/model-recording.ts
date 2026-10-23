@@ -33,12 +33,13 @@ export type RecordedTurn = {
 /** A named native coefficient actor bound to a call, with its explicit scale. */
 export type NativeAdapterBinding = { readonly id: string; readonly scale: number; readonly stop_gradient?:true };
 /** A stored positional KV/hybrid-state value supplied as context to a model call. */
-export type NativeStateBinding = { readonly id: string; readonly stop_gradient?: true };
+export type NativeStateBinding = { readonly id: string; readonly stop_gradient?: true; readonly source_occurrence?: string };
 
 export interface TurnRecorder {
   record(turn: RecordedTurn): void;
   linkNativeTurn?(id:string,graphTurn:string):void;
   recordGraphNode?(event:Record<string,unknown>):void;
+  nativeStateWriter?(id:string):string|undefined;
 }
 
 let source: () => TurnRecorder | undefined = () => undefined;
@@ -83,6 +84,12 @@ export class ModelTurnRecorder implements TurnRecorder {
       if(previous&&JSON.stringify(previous)!==JSON.stringify(event))this.graphConflicts.add(event.node);
       else this.graphNodes.set(event.node,structuredClone(event));
     }
+  }
+  nativeStateWriter(id:string):string|undefined{
+    const writers=[...this.graphNodes.values()].filter(event=>event.kind==='block_write'&&event.block===id&&
+      (event.format==='native-state'||event.native===true));
+    if(writers.length>1)throw Object.assign(new Error(`neuralese-native-grad-invalid: native state ${id} has multiple possible in-trajectory producers`),{code:'neuralese-native-grad-invalid'});
+    return typeof writers[0]?.node==='string'?writers[0].node:undefined;
   }
   linkNativeTurn(id:string,graphTurn:string):void{
     if(!this.turns.some(turn=>turn.native?.id===id))throw Object.assign(new Error('neuralese-native-grad-invalid: native graph link has no exact recorded model turn'),{code:'neuralese-native-grad-invalid'});
@@ -151,5 +158,9 @@ export function nativeCaptureGraphBinding(name:string,capture:Record<string,unkn
   return {graph_turn:name,written_nodes:Object.fromEntries(boundWrites.filter(item=>wc.get(item.id)===1).map(item=>[item.id,item.node])),
     read_bindings:Object.fromEntries(boundReads.filter(item=>rc.get(item.source_state_id)===1&&item.source!=='external').map(item=>[item.source_state_id,item.source])),
     ...([...wc.values()].some(value=>value>1)?{written_occurrences:boundWrites}:{}),
-    ...([...rc.values()].some(value=>value>1)?{read_occurrences:boundReads}:{})};
+    // External roots and repeated imports have no unique producer keyed by ID.
+    // Keep every actual occurrence so native-state objectives can bind exact
+    // targets and gradients without guessing from an ID-only map.
+    ...([...rc.values()].some(value=>value>1)||boundReads.some(item=>item.source==='external')?
+      {read_occurrences:boundReads}:{})};
 }

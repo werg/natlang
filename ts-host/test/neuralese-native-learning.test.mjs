@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { createLearning, learningService } from '../dist/neuralese/learning.js';
 import { nativeRecordedGraphGradient } from '../dist/neuralese/native-learning-client.js';
-import { activeNativeAdapters } from '../dist/neuralese/recording.js';
+import { activeNativeAdapters } from '../dist/native/model-recording.js';
 import { MemoryNeuraleseStore, encodeNativeTensorArtifact, decodeNativeTensorArtifact } from '../dist/native/neuralese-store.js';
 import { nativeAdapterRef } from '../dist/native/neuralese.js';
 

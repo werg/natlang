@@ -191,6 +191,10 @@ def render_messages(messages: list[dict], tools: list | None, apply_template, sp
                 block_source_occurrences.append(source)
         return "".join(out)
 
+    def is_native_marker(marker: str) -> bool:
+        match = input_pattern.fullmatch(marker)
+        return bool(match and block_kinds[int(match.group(1))] == "native_state")
+
     plain = []
     normalized_messages, _ = normalize_tool_call_arguments(messages)
     for message in normalized_messages:
@@ -230,12 +234,12 @@ def render_messages(messages: list[dict], tools: list | None, apply_template, sp
                         return value
                     value = flatten(value, escape=False)
                     marker = input_pattern.fullmatch(value)
-                    if marker and value_types.get(int(marker.group(1))) == "unknown":
+                    if marker and (is_native_marker(value) or value_types.get(int(marker.group(1))) == "unknown"):
                         native_values.add(value)
                     return value
                 if isinstance(value, str):
                     marker = input_pattern.fullmatch(value)
-                    if marker and value_types.get(int(marker.group(1))) == "unknown":
+                    if marker and (is_native_marker(value) or value_types.get(int(marker.group(1))) == "unknown"):
                         native_values.add(value)
                     return value
                 if isinstance(value, list):
@@ -252,6 +256,13 @@ def render_messages(messages: list[dict], tools: list | None, apply_template, sp
     text = apply_template(plain, tools)
     for marker in native_values:
         text = re.sub(r"([\"'])" + re.escape(marker) + r"\1", lambda match: marker, text)
+        # Templates commonly JSON-encode tool arguments. That escapes private
+        # placeholder codepoints (`\ue010...\ue011`), which would otherwise
+        # make a real block occurrence disappear before token-position restore.
+        escaped = marker
+        for _ in range(3):
+            escaped = json.dumps(escaped, ensure_ascii=True)[1:-1]
+            text = text.replace(escaped, marker)
     segments: list = []
     last = 0
     for match in input_pattern.finditer(text):
@@ -263,7 +274,7 @@ def render_messages(messages: list[dict], tools: list | None, apply_template, sp
         segments.append(text[last:])
     seen = sorted(s for s in segments if isinstance(s, int))
     if seen != list(range(len(blocks))):
-        raise RequestError("neuralese-render", "the chat template dropped or duplicated a block")
+        raise RequestError("neuralese-render", f"the chat template dropped or duplicated a block (expected={len(blocks)}, observed={seen})")
     return Rendered(segments, blocks, nonce, block_kinds,block_stop_gradients,block_source_occurrences)
 
 

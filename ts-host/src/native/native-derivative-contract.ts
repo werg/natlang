@@ -108,29 +108,78 @@ function finiteProgramDependencies(value:unknown):string[]{
   const objective=(item:unknown):void=>{
     if(!object(item)||keys(item)!=='bindings,request'||!object(item.bindings)||!object(item.request))return fail();
     for(const [name,current] of Object.entries(item.bindings))if(!kinds.has(name)||typeof current!=='string'||available.get(current)!==kinds.get(name))return fail();
-    const request=item.request,graph=request.graph;
-    if(request.schema!=='natlang.native-gradient-request/1'||['target','order','derived','create_graph'].some(key=>Object.hasOwn(request,key))||
-      !object(graph)||(object(request.objective)&&request.objective.kind!=='native-query'))return fail();
-    for(const id of nativeQueryReadoutDependencies(request.objective))deps.add(id);
-    const invocation=request.invocation_adapters;
-    if(invocation!==undefined&&(!object(invocation)))return fail();
-    for(const entries of [request.adapters??[],...Object.values((invocation??{}) as Obj)]){
-      if(!Array.isArray(entries))return fail();
-      for(const entry of entries){const id=typeof entry==='string'?entry:object(entry)?entry.id:undefined;
-        if(typeof id!=='string'||!TENSOR.test(id))return fail();deps.add(id);}
-    }
-    if(graph.external_states!==undefined&&!object(graph.external_states))return fail();
-    for(const state of Object.values((graph.external_states??{}) as Obj)){
-      if(!object(state)||typeof state.id!=='string'||!STATE.test(state.id))return fail();deps.add(state.id);
+    const request=item.request;
+    if(request.schema==='natlang.native-recorded-objective-request/1'){
+      if(keys(request)!=='events,native_state_modes,schema,targets,terms,turns'&&
+          keys(request)!=='events,schema,targets,terms,turns')return fail();
+      if(!Array.isArray(request.turns)||!Array.isArray(request.events)||!Array.isArray(request.terms)||
+          !Array.isArray(request.targets)||!request.targets.length||
+          (request.native_state_modes!==undefined&&!object(request.native_state_modes)))return fail();
+      const rootsForRequest=new Set<string>();
+      for(const target of request.targets){
+        if(!object(target)||Object.keys(target).some(key=>!['root','kind','id','names'].includes(key))||
+            typeof target.root!=='string'||rootsForRequest.has(target.root)||!kinds.has(target.root)||
+            kinds.get(target.root)!==target.kind||typeof target.id!=='string'||
+            target.id!==(roots[target.root] as Obj).id||
+            !(target.kind==='native-state'?STATE:TENSOR).test(target.id))return fail();
+        const current=(item.bindings as Obj)[target.root]??target.root;
+        if(typeof current!=='string'||available.get(current)!==target.kind)return fail();
+        if(target.names!==undefined&&(!Array.isArray(target.names)||!target.names.length||
+            target.names.some(name=>typeof name!=='string'||!name)||new Set(target.names).size!==target.names.length))return fail();
+        rootsForRequest.add(target.root);
+      }
+      const collect=(entry:unknown):void=>{
+        if(typeof entry==='string'){if(TENSOR.test(entry)||STATE.test(entry))deps.add(entry);}
+        else if(Array.isArray(entry))entry.forEach(collect);
+        else if(object(entry))Object.values(entry).forEach(collect);
+      };
+      collect(request);
+    }else{
+      const graph=request.graph;
+      if(request.schema!=='natlang.native-gradient-request/1'||['target','order','derived','create_graph'].some(key=>Object.hasOwn(request,key))||
+        !object(graph)||(object(request.objective)&&request.objective.kind!=='native-query'))return fail();
+      for(const id of nativeQueryReadoutDependencies(request.objective))deps.add(id);
+      const invocation=request.invocation_adapters;
+      if(invocation!==undefined&&(!object(invocation)))return fail();
+      for(const entries of [request.adapters??[],...Object.values((invocation??{}) as Obj)]){
+        if(!Array.isArray(entries))return fail();
+        for(const entry of entries){const id=typeof entry==='string'?entry:object(entry)?entry.id:undefined;
+          if(typeof id!=='string'||!TENSOR.test(id))return fail();deps.add(id);}
+      }
+      if(graph.external_states!==undefined&&!object(graph.external_states))return fail();
+      for(const state of Object.values((graph.external_states??{}) as Obj)){
+        if(!object(state)||typeof state.id!=='string'||!STATE.test(state.id))return fail();deps.add(state.id);
+      }
     }
   };
   for(const node of nodes){
     if(!object(node)||typeof node.name!=='string'||!node.name||names.has(node.name))return fail();
     if(node.kind==='gradient'){
-      if(keys(node)!=='bindings,kind,name,request,value'||typeof node.value!=='string'||!available.has(node.value))return fail();
+      const targets=node.targets;
+      if(keys(node)==='bindings,kind,name,request,value'){
+        if(typeof node.value!=='string'||!available.has(node.value))return fail();
+      }else if(keys(node)==='bindings,kind,name,request,targets'){
+        if(!Array.isArray(targets)||!targets.length||targets.some(target=>!object(target)||keys(target)!=='name,value'||
+            typeof target.name!=='string'||!target.name||typeof target.value!=='string'||!available.has(target.value)))return fail();
+      }else return fail();
       objective({request:node.request,bindings:node.bindings});
-      if(!Object.keys(roots).some(name=>((node.bindings as Obj)[name]??name)===node.value))return fail();
-      gradients.set(node.name,node.value);
+      const gradientTargets=Array.isArray(targets)?targets:[{name:node.name,value:node.value}];
+      const request=node.request as Obj;
+      if(request.schema==='natlang.native-recorded-objective-request/1'){
+        const objectiveTargets=(request.targets as Obj[]);
+        const aliases=new Set<string>(),covered=new Set<string>();
+        for(const target of gradientTargets){
+          if(names.has(target.name as string)||aliases.has(target.name as string))return fail();
+          const matches=objectiveTargets.filter(rootTarget=>((node.bindings as Obj)[rootTarget.root as string]??rootTarget.root)===target.value);
+          if(matches.length!==1||covered.has(matches[0]!.root as string))return fail();
+          aliases.add(target.name as string);covered.add(matches[0]!.root as string);gradients.set(target.name as string,target.value as string);
+        }
+        if(covered.size!==objectiveTargets.length)return fail();
+      }else{
+        if(gradientTargets.length!==1||!Object.keys(roots).some(name=>((node.bindings as Obj)[name]??name)===gradientTargets[0]!.value))return fail();
+        if(Array.isArray(targets))gradients.set(targets[0]!.name as string,targets[0]!.value as string);
+        else gradients.set(node.name,gradientTargets[0]!.value as string);
+      }
     }else if(node.kind==='optimizer'){
       if(keys(node)!=='gradient,kind,name,optimizer,optimizer_state,value'||typeof node.value!=='string'||!available.has(node.value)||
         typeof node.gradient!=='string'||gradients.get(node.gradient)!==node.value||!object(node.optimizer)||

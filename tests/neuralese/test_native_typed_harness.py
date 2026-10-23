@@ -81,7 +81,10 @@ def test_real_native_state_typed_child_archive_parent_import(tmp_path, monkeypat
     if mode=='recorded':
         tokenizer.chat_template=("{% for message in messages %}<|im_start|>{{ message['role'] }} "
             "{% if message['role'] == 'assistant' and message.get('reasoning_content')"+last_only+" %}"
-            "{{ message['reasoning_content'] }} {% endif %}{{ message['content'] }}<|im_end|>{% endfor %}"
+            "{{ message['reasoning_content'] }} {% endif %}{{ message['content'] }}"
+            "{% for tool in message.get('tool_calls', []) %}"
+            "{{ tool['function']['name'] }}({{ tool['function']['arguments'] | tojson }})"
+            "{% endfor %}<|im_end|>{% endfor %}"
             "{% if add_generation_prompt %}<|im_start|>assistant {% endif %}")
     config = {'architecture': port.config.model_type, 'tokenizer_fingerprint': tokenizer_fingerprint(tokenizer)}
     weights = tmp_path / 'weights.pt'
@@ -152,6 +155,11 @@ def test_real_native_state_typed_child_archive_parent_import(tmp_path, monkeypat
             assert progress['updated_loss'] < progress['initial_loss']
             assert progress['native_state_gradient'] is True
             assert progress['joint_gradient'] is True
+            assert progress['multi_target_scope'] is True
+            assert progress['higher_order'] is True
+            assert progress['scoped_state_writer'] is True
+            assert progress['mixed_import_positions'] is True
+            assert progress['repeated_scope_imports'] is True
         if mode not in {'handoff', 'recorded'}:
             assert receipt == {'forced': True, 'contextual': True, 'view_parts': 2}
             assert imports and all(item['mode'] == ('learned-semantic-state-deltas' if mode == 'compact' else 'exact-native-state') for item in imports)
@@ -241,7 +249,8 @@ def test_real_native_state_typed_child_archive_parent_import(tmp_path, monkeypat
                     {'kind':'selfDistill',**side(student),'target':student['reply'],
                         'native_turn_id':student['native']['id'],'teacher_native_turn_id':teacher['native']['id'],
                         'teacher_messages':teacher['messages'],
-                        **({'teacher_adapters':teacher['adapters']} if 'adapters' in teacher else {})},
+                            **({'teacher_adapters':teacher['adapters']} if 'adapters' in teacher else {}),
+                            **({'teacher_native_state_modes':teacher['native_state_modes']} if 'native_state_modes' in teacher else {})},
                     {'kind':'logLikelihood',**side(teacher),'target':teacher['reply'],
                         'native_turn_id':teacher['native']['id'],'likelihood_law':'model-conditional','weight':.2},
                     {'kind':'decision',**side(decisions[0]),'native_turn_id':decisions[0]['native']['id'],

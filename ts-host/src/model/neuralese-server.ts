@@ -26,7 +26,7 @@ import { assembleChatCompletion, chatCompletionModelTurn, fetchModel, httpChatTr
   type HttpChatOptions } from './chat-completion.js';
 import { coalescingScorer, explicitBatchScoreMany } from './scoring.js';
 import type { DecisionScorer, DecisionScores, ModelTurn, ModelTurnDelta, ModelTurnOptions, ModelTurnRequest } from '../contracts.js';
-import { activeNativeAdapters, activeNativeStates, activeRecorder, type NativeAdapterBinding, type TurnRecorder } from '../neuralese/recording.js';
+import { activeNativeAdapters, activeNativeStates, activeRecorder, type NativeAdapterBinding, type TurnRecorder } from '../native/model-recording.js';
 import { serves } from './neuralese-info.js';
 import {validateCoefficientRuntime,requireCoefficientAttestation,coefficientBindings,coefficientStateModes} from './native-coefficient-policy.js';
 import { isContentParts, nativeStateSentinel, nativeStateSentinelIds,
@@ -450,17 +450,20 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
   };
   const blockIds = (messages: unknown[], adapters: readonly { id: string }[]) =>
     [...requestBlockIds(messages), ...adapters.map(item => item.id)];
-  const bindNativeStateContext = async (messages: unknown[], states: readonly { id: string }[], capabilities: Json | null) => {
+  const bindNativeStateContext = async (messages: unknown[], states: readonly { id: string; source_occurrence?: string; stop_gradient?: true }[], capabilities: Json | null) => {
     if (!states.length) return messages;
     const consumer = capabilities ? nativeStateConsumerFromInfo(capabilities) : undefined;
     if (!consumer || !store?.getNativeState)
       throw Object.assign(new Error('neuralese-native-state-unavailable: withNativeStates requires a declared native reader and an archived state store'),
         { code: 'neuralese-native-state-unavailable' });
     const parts: RuntimeContentPart[] = [];
-    const seen = new Set<string>();
-    for (const { id } of states) {
-      if (seen.has(id)) continue;
-      seen.add(id);
+    const alreadyPresent = new Set(requestNativeStateIds(messages));
+    for (const binding of states) {
+      const { id } = binding;
+      // A caller may already have put this exact state in the request. Keep
+      // those explicit occurrences and do not implicitly reinsert that ID.
+      // Repeated scope entries remain repeated prepared imports.
+      if (alreadyPresent.has(id)) continue;
       const artifact = await store.getNativeState(id);
       if (!artifact)
         throw Object.assign(new Error(`neuralese-unknown-native-state: withNativeStates cannot resolve ${id} from its archive`),
@@ -473,31 +476,61 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
         checkpoint_sha256: consumer.checkpoint_sha256,
         tokenizer_fingerprint: consumer.tokenizer_fingerprint,
         embedding_weight_sha256: consumer.embedding_weight_sha256 };
-      if (!nativeModelIdentityEqual(identity, readerIdentity))
+      const sourceBaseIdentity = artifact.metadata.adapter_binding?.base_native_identity;
+      if (!nativeModelIdentityEqual(identity, readerIdentity) &&
+          (!sourceBaseIdentity || !nativeModelIdentityEqual(sourceBaseIdentity, readerIdentity)))
         throw Object.assign(new Error(`neuralese-native-state-identity: ${id} was written by another actor; write or semantically adapt it for the current exact reader`),
           { code: 'neuralese-native-state-identity' });
-      parts.push({ type: 'native_state', id });
+      const sourceOccurrence = binding.source_occurrence ?? activeRecorder()?.nativeStateWriter?.(id);
+      parts.push({ type: 'native_state', id, ...(sourceOccurrence ? { source_occurrence: sourceOccurrence } : {}),
+        ...(binding.stop_gradient ? { stop_gradient: true } : {}) });
     }
+    if (!parts.length) return messages;
     if (!Array.isArray(messages))
       throw Object.assign(new Error('neuralese-native-state-prompt: model call has no message list for stored state context'),
         { code: 'neuralese-native-state-prompt' });
     return [{ role: 'system', content: parts }, ...messages];
   };
-  const requireExactNativeImports = (capture: unknown, ids: readonly string[]) => {
+  const nativeStateModesFor = async (messages: readonly unknown[]) => {
+    const ids = requestNativeStateIds(messages);
+    const actualIds = new Set(ids);
+    const modes: Record<string, 'same-base-adapter-state'> = Object.fromEntries(
+      Object.entries(nativeStateModes ?? {}).filter(([id]) => actualIds.has(id)));
+    if (store?.getNativeState) for (const id of ids) {
+      const artifact = await store.getNativeState(id);
+      if (artifact?.metadata.adapter_binding) modes[id] = 'same-base-adapter-state';
+    }
+    return coefficientStateModes(coefficientPolicy, ids, Object.keys(modes).length ? modes : undefined);
+  };
+  const requireExactNativeImports = (capture: unknown, ids: readonly string[],
+      modes?: Readonly<Record<string, 'same-base-adapter-state'>>) => {
     const imports = (capture as { native_state_imports?: unknown } | undefined)?.native_state_imports;
     if (!Array.isArray(imports))
-      throw Object.assign(new Error('neuralese-native-state-import: server returned no actual native-state import receipt'),
+      throw Object.assign(new Error(`neuralese-native-state-import: server returned no actual native-state import receipt (capture=${
+        (capture as { schema?: unknown } | undefined)?.schema ?? 'missing'})`),
+        { code: 'neuralese-native-state-import' });
+    const prompt = (capture as { prompt?: unknown } | undefined)?.prompt;
+    if (!Array.isArray(prompt))
+      throw Object.assign(new Error('neuralese-native-state-import: server returned no exact native prompt occurrence list'),
         { code: 'neuralese-native-state-import' });
     for (const id of new Set(ids)) {
-      const receipt = imports.find(value => value && typeof value === 'object' && (value as Json).id === id) as Json | undefined;
-      if (!receipt || receipt.mode !== 'exact-native-state' || receipt.observed_native_state_id !== id)
-        throw Object.assign(new Error(`neuralese-native-state-import: server did not consume ${id} as exact native state`),
+      const expectedCount = prompt.filter(value => value && typeof value === 'object' &&
+        (value as Json).kind === 'native_state' && (value as Json).id === id).length;
+      const receipts = imports.filter(value => value && typeof value === 'object' && (value as Json).id === id) as Json[];
+      const expectedMode = modes?.[id] ?? 'exact-native-state';
+      if (!expectedCount || receipts.length !== expectedCount || receipts.some(receipt =>
+          receipt.mode !== expectedMode || receipt.observed_native_state_id !== id))
+        throw Object.assign(new Error(`neuralese-native-state-import: server did not consume ${id} with declared mode ${expectedMode} (imports=${
+          JSON.stringify(imports).slice(0, 1200)})`),
           { code: 'neuralese-native-state-import' });
     }
   };
   const transport: ChatTransport = async (body, signal, meta) => {
     const scopedNativeStates = activeNativeStates();
+    let implicitNativeReadOccurrences: Json[] = [];
     const capabilities = await serverInfo(scopedNativeStates.length > 0);
+    const preexistingStateIds = requestNativeStateIds(materializeNativeStateSentinels(body.messages as unknown[]) as unknown[]);
+    const implicitStateBindings = scopedNativeStates.filter(state => !preexistingStateIds.includes(state.id));
     if (scopedNativeStates.length) body = { ...body,
       messages: await bindNativeStateContext(body.messages as unknown[], scopedNativeStates, capabilities) };
     const recorder=activeRecorder();
@@ -514,7 +547,7 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
         throw Object.assign(new Error(`neuralese-${capability.replaceAll('.', '-')}-unavailable: use a server that implements this typed readout`),
           { code: `neuralese-${capability.replaceAll('.', '-')}-unavailable` });
     }
-    const consumptionModes=coefficientStateModes(coefficientPolicy,requestNativeStateIds(materializeNativeStateSentinels(body.messages) as unknown[]),nativeStateModes);
+    const consumptionModes=await nativeStateModesFor(materializeNativeStateSentinels(body.messages) as unknown[]);
     if (consumptionModes) body = { ...body, x_natlang_native_state_modes: consumptionModes };
     if(coefficientPolicy){body={...body};delete body.x_natlang_native_coefficient_policy;}
     const adapters = await adapterParts((body.x_natlang_adapters ?? []) as { id: string; scale: number }[]);
@@ -524,6 +557,27 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
     let emitted = false;
     const onDelta = meta?.onDelta && ((delta: ModelTurnDelta) => { emitted = true; meta.onDelta!(delta); });
     const preparedMessages = materializeNativeStateSentinels(body.messages) as unknown[];
+    if (implicitStateBindings.length) {
+      const first = preparedMessages[0] as { content?: unknown } | undefined;
+      const parts = Array.isArray(first?.content) ? first.content as Array<{ type?: string; id?: string; source_occurrence?: string; stop_gradient?: true }> : [];
+      const usedPartIndices = new Set<number>();
+      const occurrences = implicitStateBindings.flatMap(binding => {
+        const index = parts.findIndex((part, partIndex) => partIndex >= 0 && !usedPartIndices.has(partIndex) &&
+          part.type === 'native_state' && part.id === binding.id);
+        if (index < 0) return [];
+        usedPartIndices.add(index);
+        const part = parts[index]!;
+        return [{ id: binding.id, positions: [[0, index]],
+          ...(part.source_occurrence ? { source_occurrence: part.source_occurrence } : {}),
+          ...(part.stop_gradient ? { stop_gradient: true } : {}) }];
+      });
+      if (occurrences.length !== implicitStateBindings.length)
+        throw Object.assign(new Error('neuralese-native-state-import: scoped state was not present at its prepared prompt position'),
+          { code: 'neuralese-native-state-import' });
+      // This is local transport provenance for NativeToolAgent's graph recorder.
+      // It is derived from the exact request sent and does not come from a shim.
+      implicitNativeReadOccurrences = occurrences;
+    }
     const nativeIds = requestNativeStateIds(preparedMessages);
     const reply = await withRestoredBlocks(remote, store, blockIds(preparedMessages, adapters), async () =>
       await withRestoredNativeStates(remote, store, nativeIds, async () => {
@@ -533,15 +587,48 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
         const answer = await inner(requestBody, signal);
         return isStream(answer) ? await assembleChatCompletion(answer, onDelta) : answer;
       }, nativeUploaded), uploaded);
+    if (implicitNativeReadOccurrences.length)
+      (reply as Json).__natlang_native_read_occurrences = implicitNativeReadOccurrences;
+    const rawCapture = reply.x_natlang_rl_capture as Record<string, unknown> | undefined;
+    const nativeStateImports = (reply.native_state as { imports?: unknown } | undefined)?.imports;
+    if (scopedNativeStates.length && !Array.isArray(nativeStateImports))
+      throw Object.assign(new Error('neuralese-native-state-import: response lacks the authoritative native_state.imports receipt list'),
+        { code: 'neuralese-native-state-import' });
+    if (Array.isArray(nativeStateImports) && Array.isArray(rawCapture?.native_state_imports) &&
+        JSON.stringify(nativeStateImports) !== JSON.stringify(rawCapture.native_state_imports))
+      throw Object.assign(new Error('neuralese-native-state-import: capture and response native-state receipts disagree'),
+        { code: 'neuralese-native-state-import' });
+    // The engine carries actual import receipts alongside native_state
+    // artifacts; the sampling capture carries prompts, samples and writes.
+    // Combine those two server-owned pieces before validating or recording a
+    // turn so exact external imports remain available to learning and replay.
+    const capture = rawCapture && Array.isArray(nativeStateImports) ?
+      { ...rawCapture, native_state_imports: structuredClone(nativeStateImports) } : rawCapture;
     if (scopedNativeStates.length)
-      requireExactNativeImports(reply.x_natlang_rl_capture, scopedNativeStates.map(state => state.id));
+      requireExactNativeImports(capture, scopedNativeStates.map(state => state.id), consumptionModes);
+    const implicitById = new Map<string, Json[]>();
+    for (const expected of implicitNativeReadOccurrences) {
+      const id = expected.id as string;
+      implicitById.set(id, [...(implicitById.get(id) ?? []), expected]);
+    }
+    for (const [id, expected] of implicitById) {
+      const promptOccurrences = ((capture?.prompt ?? []) as Json[]).filter(segment => segment.kind === 'native_state' && segment.id === id);
+      const importReceipts = ((capture?.native_state_imports ?? []) as Json[]).filter(receipt => receipt.id === id);
+      // A scoped list is an occurrence list, not a set of IDs. Repeated IDs
+      // deliberately create repeated prompt parts and receipts, each sharing
+      // the same source node when they refer to the same produced state.
+      const sourcesMatch = (actual: Json[]) => actual.length === expected.length &&
+        actual.every((item, index) => item.source_occurrence === expected[index]!.source_occurrence);
+      if (!sourcesMatch(promptOccurrences) || !sourcesMatch(importReceipts))
+        throw Object.assign(new Error(`neuralese-native-state-import: ${expected.length} prepared occurrence(s) for ${id} differ from the server prompt and import receipts`),
+          { code: 'neuralese-native-state-import' });
+    }
     const archived = await archiveNeuraleseReplyArtifacts(reply, remote, store);
     for (const id of archived.blocks) uploaded.add(id);
     const archiveIds = archived.native;
     for (const id of archiveIds) nativeUploaded.add(id);
     if(recorder){
       const message=(reply.choices as Json[]|undefined)?.[0]?.message as Json|undefined;
-      const capture=reply.x_natlang_rl_capture as Record<string,unknown>|undefined;
       if(nativeRecording&&(!capture||!['natlang.native-rl-sampling/1','natlang.native-rl-sampling/2','natlang.native-rl-sampling/3','natlang.native-rl-sampling/4','natlang.native-structural-capture/1','natlang.native-structural-capture/2','natlang.native-teacher-forced-capture/1'].includes(String(capture.schema))||
           !Array.isArray(capture.prompt)||!Array.isArray(capture.samples)))
         throw Object.assign(new Error('neuralese-native-grad-invalid: native learning needs the actual server sampling receipt'),{code:'neuralese-native-grad-invalid'});
@@ -579,7 +666,7 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
     const info = await serverInfo(scope.nativeStates.length > 0);
     const native=info?.native_state as {enabled?:boolean}|undefined;
     const preparedMessages=materializeNativeStateSentinels(await bindNativeStateContext(messages,scope.nativeStates,info)) as unknown[];
-    const modes=coefficientStateModes(coefficientPolicy,requestNativeStateIds(preparedMessages),nativeStateModes);
+    const modes=await nativeStateModesFor(preparedMessages);
     if(!native?.enabled)scope.recorder?.record({messages:structuredClone(messages),reply:{role:'assistant',content:null},blocks:[],
       decision:{options:[...replies]},...(adapters.length?{adapters:[...adapters]}:{}),...(modes?{native_state_modes:modes}:{})});
     return {messages:preparedMessages,options:[...replies],...(adapters.length?{adapters:[...adapters]}:{}),
@@ -591,7 +678,7 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
     if(capture?.schema!=='natlang.native-decision-capture/1'||!Array.isArray(capture.prompt)||
         !Array.isArray(capture.continuations)||capture.continuations.length!==item.options.length)
       throw Object.assign(new Error('neuralese-native-grad-invalid: native decision learning needs its actual rendered continuation receipt'),{code:'neuralese-native-grad-invalid'});
-    if(scope.nativeStates.length)requireExactNativeImports(capture,scope.nativeStates.map(state=>state.id));
+    if(scope.nativeStates.length)requireExactNativeImports(capture,scope.nativeStates.map(state=>state.id),item.native_state_modes);
     if(!scope.recorder)return scores;
     const ids=new Set<string>(requestNativeStateIds(item.messages));
     for(const segment of capture.prompt as {kind?:string;id?:string;source_state_id?:string}[])if(segment.kind==='native_state')for(const id of [segment.id,segment.source_state_id])if(id)ids.add(id);

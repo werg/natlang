@@ -25,7 +25,7 @@ import { fetchModel } from '../model/chat-completion.js';
 import { HttpNeuraleseStore, restoreBlocks } from '../model/neuralese-server.js';
 import * as deltaOps from './deltas.js';
 import { setSystemPromptSource, systemPromptBank, type SystemPromptBank } from '../native/system-prompts.js';
-import { setNativeAdapterSource, setNativeStateSource, setRecorderSource, type NativeAdapterBinding, type NativeStateBinding, type RecordedTurn, ModelTurnRecorder } from './recording.js';
+import { setNativeAdapterSource, setNativeStateSource, setRecorderSource, type NativeAdapterBinding, type NativeStateBinding, type RecordedTurn, ModelTurnRecorder } from '../native/model-recording.js';
 import { archiveNativeArtifactFrom } from '../native/neuralese-store.js';
 import { createNeuraleseLibrary, type StandardLibrary } from './combinators.js';
 import type { ReplayRecordSink } from './replay-records.js';
@@ -86,7 +86,8 @@ export class Loss {
 }
 
 /** A recorded trajectory of one execution, for `logLikelihood`. */
-export type Trajectory = { readonly id: string; readonly turns: readonly RecordedTurn[] };
+export type Trajectory = { readonly id: string; readonly turns: readonly RecordedTurn[];
+  readonly failure?: { readonly name?: string; readonly code?: string; readonly message: string } };
 
 /** Run an output to its end. A failure is returned, not thrown: the turns it recorded still count. */
 const settle = async (output: unknown): Promise<unknown> => {
@@ -597,7 +598,7 @@ function registerNativeGradientDerivation(context: NativeDerivativeContext, targ
     nodeTargets.push({ name: alias, value }); context.gradientById.set(gradientId, alias);
   }
   const name = `native-grad-node-${context.next++}`;
-  return { kind: 'grad', name, request: { schema: 'natlang.native-recorded-objective-request/1',
+  return { kind: 'gradient', name, request: { schema: 'natlang.native-recorded-objective-request/1',
     turns: objective.turns, events: objective.events, terms: objective.terms, targets: requestTargets,
     ...(objective.nativeStateModes ? { native_state_modes: objective.nativeStateModes } : {}) },
     bindings, targets: nodeTargets };
@@ -637,7 +638,7 @@ async function ensureOnServer(service: LearningService, ids: readonly string[]):
  * Second order: the inner computations an order-2 loss runs (gradient sessions, optimiser steps), in order. The server
  * recomputes them differentiably before the outer terms, so the outer gradient passes through the inner updates.
  */
-type Derivation = Record<string, unknown> & { kind: 'grad' | 'optim' };
+type Derivation = Record<string, unknown> & { kind: 'grad' | 'optim' | 'gradient' | 'optimizer' };
 const derivations = new AsyncLocalStorage<DerivationTrace | undefined>();
 
 async function evaluate<A>(service: LearningService, f: (a: A) => Promise<Loss>, a: A, order?: number):
@@ -807,7 +808,7 @@ function optimizer(service: () => LearningService, name: 'sgd' | 'adam', hyper: 
             if (!value || !gradientName || !root)
               throw new LearningError('learning-native-order2', `native optimizer cannot bind update ancestry for ${oldId}`);
             const node = `native-optim-node-${trace.native.next++}`;
-            trace.nodes.push({ kind: 'optim', name: node, value, gradient: gradientName,
+            trace.nodes.push({ kind: 'optimizer', name: node, value, gradient: gradientName,
               optimizer: { name, ...(typeof hyper.lr === 'number' ? { learning_rate: hyper.lr } : {}),
                 ...(typeof hyper.weightDecay === 'number' ? { weight_decay: hyper.weightDecay } : {}),
                 ...(betas ? { beta1: betas[0], beta2: betas[1] } : {}) }, optimizer_state: previousState ?? null });
@@ -1048,13 +1049,20 @@ export function createLearning(explicit?: LearningService, options: { library?: 
     /** Record the model turns of one execution as a trajectory (inside grad). */
     async trajectory<T>(run: Promise<T> | (() => Promise<T>)): Promise<Trajectory> {
       const rec = recorder('trajectory');
-      await settle(run);
+      const failure = await settle(run);
       const claimed = rec.claim();
       // Preserve exact native execution-graph bindings alongside sampling
       // captures. Objectives consume this trajectory after the recorder closes.
       const native = new Map(rec.nativeTurns().map(turn => [turn.native!.id, turn]));
-      return { id: `trajectory-${++trajectories}`, turns: claimed.map(turn =>
-        turn.native ? native.get(turn.native.id) ?? turn : turn) };
+      const turns = claimed.map(turn => turn.native ? native.get(turn.native.id) ?? turn : turn);
+      if (failure !== undefined && !turns.length)
+        throw new LearningError('learning-trajectory-failed',
+          `trajectory produced no recorded turns before failing: ${failureNote(failure).replace(/^; the output failed: /, '')}`);
+      return { id: `trajectory-${++trajectories}`, turns, ...(failure === undefined ? {} : {
+        failure: { ...(failure instanceof Error ? { name: failure.name,
+          ...('code' in failure && typeof failure.code === 'string' ? { code: failure.code } : {}) } : {}),
+          message: failure instanceof Error ? failure.message : String(failure) },
+      }) };
     },
     optimizers: {
       sgd: (options: { lr: number; momentum?: number; weightDecay?: number }) => optimizer(() => service('optimizers.sgd'), 'sgd', options),

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { MemoryNeuraleseStore, validateNativeAdapterStateConsumption } from '../../dist/native/neuralese-store.js';
-import { setRecorderSource } from '../../dist/neuralese/recording.js';
+import { setRecorderSource } from '../../dist/native/model-recording.js';
 import { HttpNeuraleseStore, neuraleseServerModelTurn } from '../../dist/model/neuralese-server.js';
 import { nativeTextOperation, archiveNativeState } from '../../dist/model/native-state-client.js';
 import { saveNz, loadNz } from '../../dist/native/nz-file.js';
