@@ -16,7 +16,7 @@ if str(ROOT / 'training' / 'neuralese') not in sys.path:
 if str(ROOT / 'scripts' / 'coreweave') not in sys.path:
     sys.path.insert(0, str(ROOT / 'scripts' / 'coreweave'))
 import cwctl
-from natlang_neuralese.rl import memetic_teacher_ferry as protocol
+from natlang_neuralese.common import memetic_teacher_ferry as protocol
 
 PROTOCOL_REMOTE = {
     'teacher': '/work/generation/qwen36-35b-teacher-20261022/memetic-teacher-ferry.py',
