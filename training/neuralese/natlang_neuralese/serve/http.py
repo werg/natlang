@@ -542,6 +542,12 @@ def make_handler(engine: Engine):
         def _chat(self, body: dict):
             if 'x_natlang_native_protocol_recovery' in body and type(body['x_natlang_native_protocol_recovery']) is not bool:
                 raise RequestError('bad-request', 'x_natlang_native_protocol_recovery must be boolean')
+            if 'x_natlang_forced_message' in body and (not isinstance(body['x_natlang_forced_message'],dict)
+                    or body.get('x_natlang_native_recording') is not True):
+                raise RequestError('bad-request','x_natlang_forced_message requires a bound teacher turn and native structural recording')
+            if 'x_natlang_forced_message' in body and (not isinstance(body['x_natlang_forced_message'],dict)
+                    or body.get('x_natlang_native_recording') is not True):
+                raise RequestError('bad-request','x_natlang_forced_message requires an assistant message and native structural recording')
             request = GenerationRequest(
                 messages=body.get("messages") or [], tools=body.get("tools"),
                 max_tokens=completion_limit(body),
@@ -550,6 +556,7 @@ def make_handler(engine: Engine):
                 neuralese_max_length=body.get("neuralese_max_length"), forced=body.get("x_natlang_forced"),
                 neuralese_length=body.get("neuralese_length"), neuralese_passes=body.get("neuralese_passes"),
                 template=body.get("neuralese_template"), adapters=body.get("x_natlang_adapters"),
+                forced_message=body.get('x_natlang_forced_message'),
                 native_protocol_recovery=body.get('x_natlang_native_protocol_recovery') is True,
                 native_store_owner=self._owner,
                 rl_capture=bool(body.get('x_natlang_rl_capture', False) or body.get('x_natlang_native_recording', False)),

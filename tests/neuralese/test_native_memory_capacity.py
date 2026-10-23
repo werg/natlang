@@ -281,6 +281,35 @@ def test_preference_capacity_descriptor_resolves_from_live_source_and_objective(
     assert request['objective']==objective.binding()
 
 
+def test_failure_repair_dpo_capacity_descriptor_uses_complete_pair_geometry(tmp_path):
+    import json
+    from natlang_neuralese.data.native_failure_repair import _write_admitted_rows
+    from natlang_neuralese.data.native_sources import NativeGraphSource
+    from natlang_neuralese.eval import native_memory as memory
+    from natlang_neuralese.train.native_preference import NativePreferenceObjective
+    from test_native_failure_repair_dpo import record
+    from natlang_neuralese.train.native_resident import binding
+    out=tmp_path/'admission'
+    _write_admitted_rows([record(),record('7'*64)],out,tokenizer_fingerprint='tok',protected_groups=set())
+    objective=NativePreferenceObjective(out/'repair-objective.json')
+    source=NativeGraphSource(out/'repair-sources.json','tok',required_split='train')
+    first,second=list(source.iter_indices([0,1]))
+    geom=lambda example:{'forward_tokens':example.plan.token_count,'kv_slots':len(example.plan.slot_sources)}
+    descriptor={'schema':'natlang.native-preference-capacity-case/1','source':binding(source.path),
+        'objective':objective.binding(),
+        'case':{'id':first.id,'graph_sha256':objective.rows[first.id]['graph_sha256'],
+            'split':'train','geometry':geom(first)},
+        'numerical_reference':{'id':second.id,'graph_sha256':objective.rows[second.id]['graph_sha256'],
+            'split':'train','geometry':geom(second)}}
+    request_path=tmp_path/'requests'/'request.json'
+    bound=memory._materialize_preference_capacity_request(source,objective,descriptor,
+        identity={'checkpoint':'actual'},runtime_code_sha256='d'*64,request_path=request_path)
+    request=json.loads(request_path.read_text())
+    assert bound==binding(request_path)
+    assert request['objective']['kind']=='native-failure-repair-dpo'
+    assert request['cases'][0]['id']==first.id and request['reference']['id']==second.id
+
+
 @pytest.mark.parametrize('change',[
     {'source':{'path':'/elsewhere','sha256':'e'*64}},
     {'objective':{'kind':'native-offline-pairwise','sha256':'f'*64,'beta':0.1,'margin':0.0}},

@@ -250,7 +250,7 @@ def _budget_terminated_prefix(entry: dict[str, Any], task: dict[str, Any], finis
         validate_rollout_graph({"turns": turns, "execution_graph": graph})
     except (TypeError, ValueError):
         return None
-    return {"turns": turns, "execution_graph": graph,
+    return {"turns": turns, "trajectory": frames, "execution_graph": graph,
             "evidence": {"path": str(evidence_path), "sha256": manifest["sha256"],
                          "attempt_id": manifest["attempt_id"], "failure_reason": snapshot["failure_reason"]}}
 

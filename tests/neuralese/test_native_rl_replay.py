@@ -64,6 +64,8 @@ def test_graph_replay_matches_incremental_actor_including_write_and_terminal_act
     replay = compile_replay(turns, identity=identity, roles=roles, fetch_block=lambda key: block)
     assert [node.name for node in replay.plan.invocations] == ['producer', 'consumer']
     assert len(replay.actions) == 7  # both delimiters, payload, ordinary reply and BOTH sampled STOPs
+    assert len(replay.input_actions) == 7  # complete actual generated input inventory
+    assert sum(action['kind']=='sampled' for action in replay.input_actions)==len(replay.actions)
     logps, behavior = replay_logps(model, replay, chunk_tokens=2)
     torch.testing.assert_close(logps.detach(), behavior, rtol=2e-5, atol=2e-6)
     consumer = torch.tensor([i for i, action in enumerate(replay.actions) if action['turn'] == 'consumer'])
@@ -184,6 +186,8 @@ def test_v2_forced_template_inputs_are_replayed_without_invented_policy_actions(
     replay = compile_replay(turns, identity=identity, roles=roles, fetch_block=lambda key: block)
     logps, behavior = replay_logps(model, replay)
     torch.testing.assert_close(logps.detach(), behavior, rtol=2e-5, atol=2e-6)
+    assert len(replay.input_actions)==(6 if forced_only_writer else 7)
+    assert sum(action['kind']=='forced' for action in replay.input_actions)==(4 if forced_only_writer else 2)
     assert len(logps) == (2 if forced_only_writer else 5)
     consumer = torch.tensor([i for i, action in enumerate(replay.actions) if action['turn'] == 'consumer'])
     (-logps[consumer].mean()).backward()

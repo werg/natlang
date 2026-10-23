@@ -4,6 +4,7 @@
  * with the interpreter in the caller's task, and returns the checked value or throws `NatlangCallError`.
  */
 import { DECISION_SYSTEM_PROMPT } from '../native/decision.js';
+import { authoredTextGuidance } from '../adaptation/prompts.js';
 import { hexDigest } from '../native/hash.js';
 import { NativeToolAgent } from '../native/agent.js';
 import { NativeRuntime, inferValueType } from '../native/runtime.js';
@@ -554,6 +555,10 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     }
   }
   const callId = task.nextCallId();
+  const siblingOrdinal=task.reserveExecutionSiblingOrdinal(frame.parentCallId,definition.id);
+  const parentOccurrenceEvent=frame.parentCallId?traceFor(frame.parentCallId)?.events.find(event=>event.kind==='invocation'&&
+    event.phase==='start'&&event.call_id===frame.parentCallId):undefined;
+  const parentOccurrence=parentOccurrenceEvent?.native_occurrence;
   // A file-backed call owns the files from its own companion folder. Inline calls inherit their
   // caller's bound skill set unless one is explicitly supplied for that inline definition.
   const invocationSkillFiles = options.manifest?.inline ? (options.skillFiles ?? frame.skillFiles) : options.skillFiles;
@@ -602,10 +607,18 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
       [{ node: invocationNodeId(callId), port: 'caller' }])));
   // A stopping predicate of iterateOn runs under its own addition to the system prompt (runtime/iterate.ts).
   const addendum = [frame.systemAddendum, attempt?.guidance].filter(Boolean).join('\n\n') || undefined;
+  const nativeReader = !!(task.runtime.options.neuralese?.nativeStateConsumer ||
+    task.runtime.options.neuralese?.nativeStateConsumerForCall);
+  const boundGuidance = task.nativeProgramGuidance?.binding?.program_id === owner ? task.nativeProgramGuidance : undefined;
+  const selectedNativeGuidance = eligibleGuidance ? boundGuidance ??
+    (nativeReader ? view.nativeGuidance() : undefined) : undefined;
+  const selectedAuthoredGuidance = eligibleGuidance && !selectedNativeGuidance && !nativeReader && view.guidance() && view.program?.id ?
+    authoredTextGuidance(view.guidance(), view.program.id) : undefined;
   const agent = model ? new NativeToolAgent(model.driver, {
     systemPrompt: () => task.systemPrompt() + (addendum ? `\n\n${addendum}` : ''),
     neuralese: task.runtime.options.neuralese,
-    programGuidance: eligibleGuidance && (view.binding || view.guidance()) ? view.guidance() : undefined,
+    programGuidance: selectedNativeGuidance,
+    authoredTextGuidance: selectedAuthoredGuidance,
     maxTurns: model.maxTurns, maxTokens: model.maxTokens, turnTokens: model.turnTokens, temperature: model.temperature,
     maxSeconds: model.maxSeconds, contextTokens: model.contextTokens,
     maxFailureRepairs: model.maxFailureRepairs, review: model.review, decisionReadout: model.decisionReadout,
@@ -625,6 +638,8 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     frame: childFrame, services, declarations: task.serviceDeclarations, serviceScopes: task.serviceScopes,
     neuralese: task.runtime.options.neuralese,
     manifest: { definition_id: definition.id, definition_name: definition.name, task_id: task.id,
+      sibling_ordinal:siblingOrdinal,
+      ...(parentOccurrence&&typeof parentOccurrence==='object'?{parent_occurrence:structuredClone(parentOccurrence)}:{}),
       ...(definition.representation ? { representation: definition.representation } : {}),
       context_id: definition.contextId ?? FILE_CONTEXT,
       graph: graphManifest({ model: model ? { id: model.id ?? (model.driver as { model?: string }).model ?? (model.driver.name || null),

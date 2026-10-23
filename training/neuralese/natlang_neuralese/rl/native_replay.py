@@ -29,6 +29,7 @@ class NativeReplay:
     semantic_dependencies: tuple = ()
     written_sources: tuple = ()
     protocol_failures: dict | None = None
+    input_actions: tuple[dict, ...] = ()
 
 
 def _tokens(ids):
@@ -68,7 +69,8 @@ def _input_stream(capture, prompt_length):
                     or sample.get('token_id') != token or sample.get('input_role') != value['input_role']
                     or sample.get('terminal')):
                 raise ValueError('native RL sampled input/query coordinate differs from actual model inputs')
-            event = {**sample, 'forced': False, 'source_sample': sample_index}
+            forced=sample.get('forced') is True
+            event = {**sample, 'forced': forced, 'source_sample': None if forced else sample_index}
             consumed.add(sample_index)
         stream.append({**event, 'index': len(stream), 'fed':True})
     for sample_index, sample in enumerate(samples):
@@ -80,7 +82,8 @@ def _input_stream(capture, prompt_length):
             raise ValueError('native RL unconsumed action is not its actual final terminal sample')
         stream.append({**sample, 'index': len(stream), 'forced': False, 'source_sample': sample_index, 'fed':False})
     order = [event['source_sample'] for event in stream if not event['forced']]
-    if order != list(range(len(samples))):
+    expected=[index for index,sample in enumerate(samples) if sample.get('forced') is not True]
+    if order != expected:
         raise ValueError('native RL model inputs reorder the actual sampled action stream')
     writes = []
     for write in capture.get('writes') or []:
@@ -133,19 +136,23 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
             raise ValueError('native RL graph turn identities must be unique')
         capture = turn.get('sampling') or {}
         actor_identity=(invocation_actors['invocations'][name]['native_identity'] if invocation_actors is not None else identity)
+        forced_capture=capture.get('schema')=='natlang.native-teacher-forced-capture/1'
         greedy = capture.get('schema') in ('natlang.native-structural-capture/1','natlang.native-structural-capture/2')
         decision = capture.get('schema') == 'natlang.native-decision-capture/1'
         schemas = {'natlang.native-rl-sampling/1', 'natlang.native-rl-sampling/2', 'natlang.native-rl-sampling/3','natlang.native-rl-sampling/4'}
         if structural:
             schemas.update(('natlang.native-structural-capture/1','natlang.native-structural-capture/2'))
             schemas.add('natlang.native-decision-capture/1')
+            schemas.add('natlang.native-teacher-forced-capture/1')
         if (capture.get('schema') not in schemas
                 or capture.get('policy') != actor_identity
                 or not decision and capture.get('sample_range_convention') != 'half-open'):
             raise ValueError('native RL capture has a different policy or unsupported sampling schema')
         binding = capture.get('adapter_binding')
-        if (capture['schema'] == 'natlang.native-rl-sampling/3'
-                or (capture['schema']=='natlang.native-rl-sampling/4' or greedy or decision) and binding is not None):
+        if (capture['schema']=='natlang.native-rl-sampling/3'
+                or (capture['schema'] in ('natlang.native-rl-sampling/4','natlang.native-structural-capture/1',
+                    'natlang.native-structural-capture/2','natlang.native-decision-capture/1',
+                    'natlang.native-teacher-forced-capture/1') and binding is not None)):
             from types import SimpleNamespace
             from ..model.native_adapters import validate_state_binding
             validate_state_binding(binding, SimpleNamespace(**actor_identity))
@@ -159,6 +166,10 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
         if decision:
             if any(capture.get(key) for key in ('samples','generated_inputs','writes','sampling_law')):
                 raise ValueError('native decision capture cannot declare sampled actions or a sampling law')
+        elif forced_capture:
+            if law.get('probabilities')!='exact-forced-sequence' or any(sample.get('forced') is not True
+                    or sample.get('logp') is not None for sample in capture.get('samples') or []):
+                raise ValueError('native teacher-forced capture must retain exact input tokens without sampled log-probabilities')
         elif greedy:
             if (type(temperature) not in (int, float) or temperature != 0
                     or law.get('probabilities') != 'greedy-argmax'):
@@ -213,7 +224,7 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
         from ..serve.native_protocol import validate_failure,validate_failure_draw
         failure=validate_failure(capture,prompt_length)
         samples, writes = _input_stream(capture, prompt_length)
-        events, actual_writes, opened = [], [], None
+        events, input_actions, actual_writes, opened = [], [], [], None
         for index, sample in enumerate(samples):
             token = _tokens([sample.get('token_id')])[0]
             if (sample.get('index') != index or (not sample['forced'] and (
@@ -262,6 +273,10 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
                 events.append({'local_query': prompt_length + index - 1, 'token_id': token,
                     'behavior_logp': sample['logp'], 'temperature': float(temperature),
                     'allowed_token_ids': allowed, 'banned_token_ids': banned, 'turn': name, 'sample': sample['source_sample']})
+            input_actions.append({'local_query':prompt_length+index-1,'token_id':token,
+                'turn':name,'kind':'forced' if sample['forced'] else 'sampled',
+                'source_sample':sample.get('source_sample'),'input_index':index,
+                'input_role':sample['input_role'],'fed':sample.get('fed',True)})
             own.append(token); mask.append(sample['input_role'] == 'produce')
         if opened is not None and failure is None:
             raise ValueError('native RL capture ended inside a producer payload')
@@ -319,7 +334,7 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
                 occurrence=item['node']
             writers.setdefault(block_id, []).append((name, *span, occurrence))
         prepared[name] = {'protocol_failure':failure,'turn': turn, 'own': tuple(own), 'mask': mask, 'reads': reads, 'read_stops': read_stops, 'read_sources': read_sources, 'read_semantics':read_semantics,
-                          'events': events, 'spans': spans, 'actor_identity':actor_identity,'adapter_binding':binding}
+                          'events': events,'input_actions':input_actions, 'spans': spans, 'actor_identity':actor_identity,'adapter_binding':binding}
     if not prepared:
         raise ValueError('native RL graph has no captured turns')
     externals, nodes, ordered, external_receipts, external_invocations = {}, [], [], {}, {}
@@ -429,10 +444,13 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
     plan = compile_graph(nodes, external_sizes={name:len(block.token_ids) for name,block in externals.items() if name in used})
     actions = tuple({**event, 'query': offset + event['local_query']}
         for offset, item in zip(plan.offsets, ordered) for event in item['events'])
+    input_actions=tuple({**event,'query':offset+event['local_query']}
+        for offset,item in zip(plan.offsets,ordered) for event in item['input_actions'])
     written_sources=tuple({'state_id':ident,'invocation':name,'start':start,'stop':stop,'node':occurrence}
         for ident,values in writers.items() for name,start,stop,occurrence in values)
     return NativeReplay(plan, actions, externals, dict(identity), adapter_binding if invocation_actors is None else None, external_receipts, invocation_actors, external_invocations,tuple(semantic_dependencies),written_sources,
-        {name:value['protocol_failure'] for name,value in prepared.items() if value['protocol_failure']})
+        {name:value['protocol_failure'] for name,value in prepared.items() if value['protocol_failure']},
+        input_actions)
 
 
 def replay_logps(model, replay, *, checkpoint_layers=True, chunk_tokens=128,semantic_channel=None):

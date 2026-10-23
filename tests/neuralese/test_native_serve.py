@@ -2,6 +2,7 @@
 import torch
 import pytest
 import json
+import hashlib
 import threading
 import urllib.request
 from dataclasses import replace
@@ -76,6 +77,7 @@ def test_native_checkpoint_chat_produces_captures_and_consumes_exact_stored_stat
         assert binding['native_identity'] == engine.native_identity
         from natlang_neuralese.rl.production import validate_actor_receipts
         validate_actor_receipts({endpoint: binding}, policy_id=engine.checkpoint_sha256, neuralese_server=True)
+        native_token=engine._native_token
         produced = iter([(roles.produce_open, -.1), (5, -.2), (roles.produce_close, -.3), (2, -.4)])
         monkeypatch.setattr(engine, '_native_token', lambda _seq: next(produced))
         reply = post({'messages': [{'role': 'user', 'content': 'write'}],
@@ -111,6 +113,66 @@ def test_native_checkpoint_chat_produces_captures_and_consumes_exact_stored_stat
                 'embedding_weight_sha256': record.block.embedding_weight_sha256,
                 'architecture': record.block.architecture}}]
         assert capture['samples'][1]['input_role'] == 'produce'
+
+        teacher_prompt=[{'role':'user','content':'execute the recorded correction; t8 is already in this prompt'}]
+        source={'schema':'natlang.teacher-turn-source/1','source_path':'qwen-turns/row-001.jsonl',
+            'source_view':'privileged-hint','source_file_sha256':'f'*64,
+            'source_verification_path':'qwen-turns/source-verification.json','source_verification_sha256':'1'*64,
+            'transfer_receipt_path':'qwen-turns/transfer-receipt.json','transfer_receipt_sha256':'2'*64,
+            'invocation_id':'task/child-1','ordinal':0,'turn_sha256':'a'*64,'task_sha256':'b'*64,
+            'prompt_sha256':hashlib.sha256(json.dumps({'messages':teacher_prompt,'tools':[]},
+                ensure_ascii=False,sort_keys=True,separators=(',',':')).encode()).hexdigest(),
+            'actor':{'model':'nvidia/Qwen3.6-35B-A3B-NVFP4','revision':'1355db6a052410cfd62085d94b58866fd0f2c3c5',
+                'actor_source_path':'qwen-turns/actor.json','actor_source_sha256':'c'*64,
+                'execution_identity_path':'qwen-turns/execution.json','execution_identity_sha256':'e'*64}}
+        span_marker='NATLANGQWENSPAN0123456789END'
+        target={'schema':'natlang.native-teacher-forced-turn/1','source_receipt':source,
+            'native_text_spans':[{'path':['content'],'marker':span_marker,'text':'t5 t6 t7'}],
+            'assistant':{'role':'assistant','content':'t4 '+span_marker}}
+        previous_template=engine.tokenizer.apply_chat_template
+        def forced_template(messages,tools=None,tokenize=False,add_generation_prompt=False,**kwargs):
+            rendered=''.join(f"<{message['role']}>{''.join(part.get('text','') for part in message.get('content',[])) if isinstance(message.get('content'),list) else message.get('content','')}" +
+                ''.join(f"<toolcall>{call.get('function',{}).get('name','')}:{call.get('function',{}).get('arguments','')}</toolcall>" for call in message.get('tool_calls',[])) for message in messages)
+            if add_generation_prompt:rendered+='<assistant>'
+            if tokenize:return engine.tokenizer(rendered,add_special_tokens=False)['input_ids']
+            return rendered
+        monkeypatch.setattr(engine.tokenizer,'apply_chat_template',forced_template)
+        forced_plan=engine._forced_message_plan(target,None,opening=teacher_prompt)
+        assert forced_plan.count(roles.produce_open)==1 and forced_plan.count(roles.produce_close)==1, forced_plan
+        assert not any(token in engine.stop_ids for token in forced_plan[
+            forced_plan.index(roles.produce_open)+1:forced_plan.index(roles.produce_close)]), (forced_plan,engine.stop_ids)
+        arg_marker='NATLANGQWENSPANfedcba9876543210END'
+        arg_target={'schema':'natlang.native-teacher-forced-turn/1','source_receipt':source,
+            'native_text_spans':[{'path':['tool_calls',0,'arguments','code'],'marker':arg_marker,'text':'t5 t6 t7'}],
+            'assistant':{'role':'assistant','content':'','tool_calls':[{'type':'function','function':{
+                'name':'eval','arguments':json.dumps({'code':'const body="'+arg_marker+'";'})}}]}}
+        arg_plan=engine._forced_message_plan(arg_target,None,opening=teacher_prompt)
+        assert arg_plan.count(roles.produce_open)==1 and arg_plan.count(roles.produce_close)==1, arg_plan
+        monkeypatch.setattr(engine,'_native_token',native_token)
+        repaired=post({'messages':teacher_prompt,'max_tokens':64,'temperature':0.0,
+            'x_natlang_native_recording':True,'x_natlang_forced_message':target})
+        replay_capture=repaired['x_natlang_rl_capture']
+        assert replay_capture['schema']=='natlang.native-teacher-forced-capture/1'
+        assert replay_capture['teacher_source_receipt']==source and replay_capture['samples']
+        assert replay_capture['replay_prompt_sha256']==hashlib.sha256(json.dumps(
+            {'messages':teacher_prompt,'tools':[]},ensure_ascii=False,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+        assert all(sample.get('forced') is True and sample.get('logp') is None for sample in replay_capture['samples'])
+        assert any(item['input_role']=='produce' for item in replay_capture['generated_inputs']), (replay_capture['generated_inputs'],replay_capture['samples'])
+        forced_block=repaired['native_state']['blocks'][0]
+        consumer_prompt=[{'role':'user','content':[{'type':'native_state','id':forced_block['id']}]}]
+        consumer_target={'schema':'natlang.native-teacher-forced-turn/1','source_receipt':source,
+            'native_text_spans':[],'assistant':{'role':'assistant','content':'t4'}}
+        consumed=post({'messages':consumer_prompt,'max_tokens':8,'temperature':0.0,
+            'x_natlang_native_recording':True,'x_natlang_forced_message':consumer_target})
+        assert consumed['native_state']['imports'][0]['id']==forced_block['id']
+        assert consumed['x_natlang_rl_capture']['teacher_source_receipt']==source
+        assert len(replay_capture['writes'])==1
+        repaired_block=engine.store.get_native_state(replay_capture['writes'][0]['state_id'])
+        assert repaired_block.block.text=='t5 t6 t7'
+        assert any(part.get('type')=='native_state' and part.get('id')==repaired_block.id
+            for part in repaired['choices'][0]['message']['content'])
+        monkeypatch.setattr(engine.tokenizer,'apply_chat_template',previous_template)
+
         with urllib.request.urlopen(endpoint + f"/v1/neuralese/native-states/{record.id}", timeout=30) as response:
             restored, restored_id = decode_native_state(response.read())
         assert restored_id == record.id and restored.token_ids.tolist() == [5]

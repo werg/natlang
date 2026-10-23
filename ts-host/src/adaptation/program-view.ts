@@ -3,6 +3,7 @@ import type { ItemRecord, NatlangRecord } from '../runtime/loader.js';
 import { fingerprint } from './identity.js';
 import type { InlineLambdaPlan } from '../compiler/inline.js';
 import { inlineDescriptor } from './inventory.js';
+import { nativeProgramGuidance, type NativeProgramGuidance } from './prompts.js';
 /** Frontmatter is copied byte for byte. */
 export function replaceNamedBody(source: string, body: string): string {
   const match = /^(---\r?\n[\s\S]*?\r?\n---\r?\n?)/.exec(source);
@@ -44,6 +45,11 @@ export class ProgramView {
     const component = this.program?.components.find(item => item.kind === 'program.guidance');
     const value = component && (this.binding?.candidate[component.key] ?? component.baseline);
     return value?.kind === 'program.guidance' ? value.text : '';
+  }
+  /** Stored native guidance is encoded by the runtime for its exact current student checkpoint. */
+  nativeGuidance(): NativeProgramGuidance | undefined {
+    const text = this.guidance();
+    return text && this.program?.id ? nativeProgramGuidance(text, this.program.id) : undefined;
   }
   source(path: string, fallback: string): string {
     const revision = this.revisions.get(path); if (revision && revision.kind !== 'namespace') return revision.text;

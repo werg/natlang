@@ -524,7 +524,7 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
     if(recorder){
       const message=(reply.choices as Json[]|undefined)?.[0]?.message as Json|undefined;
       const capture=reply.x_natlang_rl_capture as Record<string,unknown>|undefined;
-      if(nativeRecording&&(!capture||!['natlang.native-rl-sampling/1','natlang.native-rl-sampling/2','natlang.native-rl-sampling/3','natlang.native-rl-sampling/4','natlang.native-structural-capture/1','natlang.native-structural-capture/2'].includes(String(capture.schema))||
+      if(nativeRecording&&(!capture||!['natlang.native-rl-sampling/1','natlang.native-rl-sampling/2','natlang.native-rl-sampling/3','natlang.native-rl-sampling/4','natlang.native-structural-capture/1','natlang.native-structural-capture/2','natlang.native-teacher-forced-capture/1'].includes(String(capture.schema))||
           !Array.isArray(capture.prompt)||!Array.isArray(capture.samples)))
         throw Object.assign(new Error('neuralese-native-grad-invalid: native learning needs the actual server sampling receipt'),{code:'neuralese-native-grad-invalid'});
       if(nativeRecording&&archiveIds.size&&!store)

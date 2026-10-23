@@ -18,7 +18,17 @@ export type ModelTurnRequest = { invocation_id?: string; messages: unknown[]; to
      * block-wise in that many parallel passes. Never required: without it the stop head decides. */
     length?: number; passes?: number };
   /** Guided generation (natlang's servers only): see the agent's `guidance` option. */
-  guidance?: boolean | Record<string, unknown> };
+  guidance?: boolean | Record<string, unknown>;
+  /** Host-side exact teacher target for native forced replay; sent only as transport metadata, never in messages. */
+  native_teacher_forced_turn?: { schema:'natlang.native-teacher-forced-turn/1'; assistant: Record<string,unknown>;
+    source_receipt: Record<string,unknown>; native_text_spans?: { path:(string|number)[]; marker:string; text:string }[] };
+  /** Structural call binding, host-only; never rendered into model messages. */
+  native_execution_occurrence?: NativeExecutionOccurrence };
+/** Source-graph occurrence identity; this is collected by the runtime and never rendered into model messages. */
+export type NativeExecutionOccurrence = { schema:'natlang.execution-occurrence/1'; definition_id:string; revision:string;
+  context:string; signature:string; parent_occurrence_sha256:string|null; sibling_ordinal:number;
+  argument_binding_sha256:string; occurrence_sha256:string };
+export type ModelTurnRequestWithOccurrence = ModelTurnRequest & { native_execution_occurrence?: NativeExecutionOccurrence };
 /**
  * Neuralese content (S0 §10, S4 §3). In a request, a message's `content` and a tool call's `function.arguments` may be
  * an array of parts instead of a string, where they carry soft values; in a reply, `text` and string call arguments

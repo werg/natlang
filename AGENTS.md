@@ -10,6 +10,46 @@ never training-data generation. New training data must continue to come from our
 self-hosted teacher in the CoreWeave generation sandbox. These instructions
 supersede earlier requests for parallel non-Luna implementation agents.
 
+## Core memetic learning and legacy removal (owner, 2026-10-23)
+
+Memetic learning and soft skills are a core training and user capability. Learn
+stored native Neuralese guidance from multiple specific invocations of the same
+program, measure actual task outcomes on distinct development and confirmation
+invocations, and keep iterating the guidance and training recipe for both models.
+Keep related worlds on one side of the split. Do not claim capability lift from
+stored artifacts, admission, source checks or gradient tests alone.
+
+Use the current positional KV and hybrid-state architecture in training and
+inference. Stored guidance must condition the real executing model. Training
+exports retain the actual producer and every consumer import at their recorded
+positions, with gradients through those dependencies. Retain text and tokenizer
+provenance for re-encoding when the executing checkpoint changes; reuse compatible
+state efficiently across repeated and concurrent calls. Generation and guidance
+authoring remain owned by the self-hosted teacher, with exact actor provenance.
+
+The system has no deployed-user backward-compatibility requirement. Remove legacy
+memetic adapters and flat soft-block fallbacks, migrate their current callers and
+supported functionality to the native path, and remove obsolete public entrypoints,
+docs, tests and discarded-run registry entries. A legacy adapter hiding missing
+functionality is work to implement, not a reason to retain the fallback. Preserve
+usable source data and protected evaluation data. Historical hashes and manifests
+alone do not justify retaining a current legacy entrypoint; actual frozen recovery
+and historical-reader dependencies retain their own exact sources as needed.
+
+Apply this default across the system: do not keep obsolete adapters or compatibility
+shims merely because an older API, test or recipe mentions them. Inventory current
+callers, implement their useful behavior in the native architecture, migrate those
+callers, and remove the obsolete entrypoints. Delegate concrete architectural gaps
+for implementation and independently review the integrated result. An explicit
+unsupported error is useful during migration but is not completion of missing
+functionality. Keep actual live recovery dependencies until their replacement is
+verified.
+
+The owner specifically requested a Sol subagent for this implementation and
+allowed it to delegate missing functionality. That is a task-specific exception
+to Luna-only engineering delegation; other helpers remain Luna, never generation.
+The primary supervisor reviews, integrates and deploys the complete mechanisms.
+
 ## Execution and generation ownership (owner, 2026-10-15)
 
 Pop is closed. The DGX supervisor now owns all remaining work and sandbox

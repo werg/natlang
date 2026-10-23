@@ -9,7 +9,8 @@ import { kernelHooks } from './runtime/hooks.js';
 import { NatlangRuntime, NatlangTask, type NatlangRuntimeOptions } from './runtime/runtime.js';
 import './runtime/node.js';
 
-export type NodeNativeRuntimeOptions = Partial<NativeRuntimeOptions> & Pick<NatlangRuntimeOptions, 'neuralese'> & {
+export type NodeNativeRuntimeOptions = Partial<NativeRuntimeOptions> & Pick<NatlangRuntimeOptions,
+  'neuralese' | 'nativeProgramGuidance' | 'program' | 'adaptation' | 'executorIdentity'> & {
   /** The call store the root run is recorded in: the machine's by default, `false` for none (§3.2). */
   calls?: CallStoreLike | false;
   /** The model the agent runs, for the root's call record (its children name their own). */
@@ -32,6 +33,8 @@ export class NodeNativeRuntime extends PlatformRuntime {
     // Calls this one makes run in the task, so the task holds what they are shown of the services too.
     const taskFrame = options.frame ?? new NatlangTask(new NatlangRuntime({ services: options.services, agent: options.agent,
       exactHostTraceCapture: options.exactHostTraceCapture, neuralese: options.neuralese,
+      nativeProgramGuidance: options.nativeProgramGuidance, program: options.program, adaptation: options.adaptation,
+      executorIdentity: options.executorIdentity,
       ...(options.calls !== undefined ? { calls: options.calls } : {}) }),
       { serviceDeclarations: options.declarations, serviceScopes: options.serviceScopes }).frame;
     // This standalone invocation is the caller of its kernel children. Without its

@@ -87,6 +87,36 @@ test('program guidance follows generated descendants through the depth limit and
   assert.ok(systems.every(system => !system.includes('<natlang_program_guidance>')));
 });
 
+test('authored guidance uses the native writer when the consumer identity is resolved per call', async () => {
+  const app = compile({ 'echo.nl': named('Return value.'), 'main.ts': "import echo from './echo.nl'; export default echo;" });
+  const program = app.manifest.adaptation;
+  const component = program.components.find(value => value.kind === 'program.guidance');
+  const guidance = 'Verify the return contract.';
+  const binding = host.bindAdaptation(overlay(program,
+    { [component.key]: { kind: 'program.guidance', text: guidance } }), program, identity);
+  const actor = { architecture: 'fixture-native', checkpoint_sha256: 'a'.repeat(64),
+    tokenizer_fingerprint: 'b'.repeat(64), embedding_weight_sha256: 'c'.repeat(64), consumption_modes: [] };
+  const stateId = 'nzs1_' + 'd'.repeat(52), states = new Map(), requests = [];
+  const store = { async pin() {}, async getNativeState(id) { return states.get(id); } };
+  const driver = async request => {
+    requests.push(request);
+    return { calls: [['return_result', { status: 'success', value: 'ok' }]] };
+  };
+  driver.neuralese = true;
+  const runtime = host.createNatlangRuntime({ program, adaptation: binding, executorIdentity: identity,
+    model: driver, neuralese: { store, nativeStateConsumerForCall: async () => actor,
+      port: { dialect: 'native-state/fixture-native', async write(text) {
+        assert.equal(text, guidance);
+        const native_state = { schema: 'neuralese.native-state/1', text, ...actor };
+        states.set(stateId, { id: stateId, metadata: native_state });
+        return { id: stateId, dialect: 'native-state/fixture-native', length: 1, width: 8,
+          dtype: 'f32', native_state };
+      } } } });
+  assert.equal(await runtime.run(() => app.require('main.ts').default('input')), 'ok');
+  assert.ok(requests[0].messages[0].content.some(part => part.type === 'native_state' && part.id === stateId));
+  assert.ok(!requests[0].messages[0].content.some(part => part.type === 'text' && part.text.includes(guidance)));
+});
+
 test('authored inline templates preserve slots, live captures, original expression evaluation and escaping', async () => {
   const files = { 'main.ts': `import { nl } from '@natlang/node';
 let tally = 2;

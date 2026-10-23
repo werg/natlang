@@ -12,11 +12,12 @@ import { GAME_POLICY_SOURCE } from '../../dist/self-play/policy.js';
 import { loadVirtualNatlang } from '../../dist/runtime/virtual-project.js';
 
 /** Per-run identifiers are not part of what the model reads, nor is `natlang_host_generated`, internal provenance that
- * the chat-completions driver strips before the wire (model/chat-completion.ts). */
+ * the chat-completions driver strips before the wire (model/chat-completion.ts). Structural
+ * native_execution_occurrence is also host capture metadata; it never enters model messages. */
 function normalize(value) {
   if (Array.isArray(value)) return value.map(normalize);
   if (value && typeof value === 'object')
-    return Object.fromEntries(Object.entries(value).filter(([key]) => key !== 'natlang_host_generated')
+    return Object.fromEntries(Object.entries(value).filter(([key]) => key !== 'natlang_host_generated' && key !== 'native_execution_occurrence')
       .map(([key, item]) => [key, key === 'invocation_id' ? '<invocation>' : normalize(item)]));
   return typeof value === 'string' ? value.replace(/iter-[a-z0-9]+/g, 'iter-<id>') : value;
 }

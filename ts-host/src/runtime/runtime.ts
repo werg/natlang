@@ -1,7 +1,9 @@
 import { ProgramView } from '../adaptation/program-view.js';
+import { nativeProgramGuidance as validateNativeProgramGuidance } from '../adaptation/prompts.js';
 import { isAdaptationBinding, bindAdaptation } from '../adaptation/compatibility.js';
 import { fingerprint } from '../adaptation/identity.js';
 import type { ProgramDescriptor, AdaptationBinding, ExecutorIdentity } from '../adaptation/types.js';
+import type { MemeticGuidanceBinding, NativeProgramGuidance } from '../adaptation/prompts.js';
 import { declarationNamespace } from '../native/external.js';
 import type { EvalEnvironment } from '../native/evaluator.js';
 import type { ModelTurn, ModelTurnDelta, ModelTurnOptions, ModelTurnRequest } from '../contracts.js';
@@ -67,6 +69,8 @@ export type NatlangRuntimeOptions = {
   onFolderProposal?: () => void;
   program?: ProgramDescriptor;
   adaptation?: AdaptationBinding | null;
+  /** Exact stored native guidance binding emitted by the memetic guidance exporter. */
+  nativeProgramGuidance?: MemeticGuidanceBinding;
   executorIdentity?: ExecutorIdentity;
   isolateModules?: boolean;
   signal?: AbortSignal;
@@ -140,6 +144,7 @@ export type NatlangRuntimeOptions = {
 };
 
 export type TaskOptions = { program?: ProgramDescriptor; adaptation?: AdaptationBinding | null; services?: Services; serviceDeclarations?: Record<string, string>;
+  nativeProgramGuidance?: MemeticGuidanceBinding;
   serviceScopes?: Record<string, string[]>; signal?: AbortSignal; trace?: TraceSink; name?: string;
   /** Live events of this task (`LiveEvent`), besides the runtime's `onLive`. */
   onLive?: LiveSink;
@@ -167,7 +172,9 @@ export class NatlangTask {
   readonly signal: AbortSignal;
   readonly episodeBudget: { limit?: number; used: number };
   readonly traces: InvocationTrace[] = [];
+  private readonly executionOccurrenceCounts = new Map<string, number>();
   readonly programView: ProgramView;
+  readonly nativeProgramGuidance?: NativeProgramGuidance;
   readonly specialization?: SpecializationMode;
   readonly auditOf?: string;
   /** The last failed call per caller and definition revision, so a retry can be recorded against it. */
@@ -217,6 +224,13 @@ export class NatlangTask {
   constructor(readonly runtime: NatlangRuntime, options: TaskOptions = {}) {
     let binding = options.adaptation === undefined ? runtime.options.adaptation : options.adaptation;
     const program = options.program ?? runtime.options.program ?? binding?.program;
+    const guidanceBinding = options.nativeProgramGuidance ?? runtime.options.nativeProgramGuidance;
+    if (guidanceBinding) {
+      if (!program) throw new Error('native program guidance requires its exact program descriptor');
+      if (guidanceBinding.program_id !== program.id)
+        throw new Error('native program guidance binding belongs to a different program');
+    }
+    this.nativeProgramGuidance = guidanceBinding ? validateNativeProgramGuidance(guidanceBinding) : undefined;
     if (binding) {
       const artifact = binding.artifact;
       // A package can be loaded through multiple module URLs. Revalidate foreign
@@ -291,6 +305,12 @@ export class NatlangTask {
 
   get frame(): Frame { return { task: this, chain: [], signal: this.signal }; }
   nextCallId(): string { return `${this.id}/${++this.callSequence}`; }
+  reserveExecutionSiblingOrdinal(parentCallId: string | undefined, definitionId: string): number {
+    const key = `${parentCallId ?? ''}\u0000${definitionId}`;
+    const ordinal = this.executionOccurrenceCounts.get(key) ?? 0;
+    this.executionOccurrenceCounts.set(key, ordinal + 1);
+    return ordinal;
+  }
   checkOpen(): void {
     if (this.closed) throw new Error('this natlang task has finished');
     if (this.signal.aborted) throw this.signal.reason instanceof Error ? this.signal.reason : new Error('natlang task aborted');

@@ -318,6 +318,21 @@ function typedTextPreflightType(value: unknown, type: Type, env: TypeEnv, path: 
   return resolved;
 }
 
+function stableBinding(value: unknown): string {
+  const normalize = (item: unknown): unknown => {
+    if (Array.isArray(item)) return item.map(normalize);
+    if (!item || typeof item !== 'object') return item;
+    const record = item as Record<string, unknown>;
+    if (record.$live && typeof record.$live === 'object') {
+      const live = record.$live as Record<string, unknown>;
+      return { $live: { type: live.type } };
+    }
+    if (record.$host && typeof record.$host === 'object') return { $host: normalize(record.$host) };
+    return Object.fromEntries(Object.keys(record).sort().map(key => [key, normalize(record[key])]));
+  };
+  return JSON.stringify(normalize(value));
+}
+
 /** Replace only planned leaves in an already-coerced preflight value, retaining every other value by identity. */
 function applyTypedTextRefs(value: Value, plans: PlannedTypedText[], refs: Value[]): Value {
   type Branch = { replacement?: Value; children: Map<string | number, Branch> };
@@ -738,9 +753,19 @@ export class NativeRuntime {
     const inputs = [...(parent ? [{ node: invocationNodeId(parent), port: 'caller' }] : []),
       ...Object.entries(node.args).flatMap(([name, value]) => valueInputs(value, `arg:${name}`)),
       ...Object.values(node.captures ?? {}).flatMap(cell => { try { return valueInputs(cell.get(), `capture:${cell.name}`); } catch { return []; } })];
+    const definitionId=String(manifest.definition_id ?? node.functionName), revision=String(manifest.source_revision ?? '');
+    const context=String(manifest.context_id ?? FILE_CONTEXT), signature=formatType(node.type);
+    const argumentBindingSha=hexDigest(stableBinding(dump(node.args,true)));
+    const parentOccurrence=manifest.parent_occurrence&&typeof manifest.parent_occurrence==='object'?
+      manifest.parent_occurrence as Record<string,unknown>:undefined;
+    const siblingOrdinal=Number.isSafeInteger(manifest.sibling_ordinal)?Number(manifest.sibling_ordinal):0;
+    const occurrenceBase={schema:'natlang.execution-occurrence/1',definition_id:definitionId,revision,context,signature,
+      parent_occurrence_sha256:typeof parentOccurrence?.occurrence_sha256==='string'?parentOccurrence.occurrence_sha256:null,
+      sibling_ordinal:siblingOrdinal,argument_binding_sha256:argumentBindingSha};
+    const occurrence={...occurrenceBase,occurrence_sha256:hexDigest(stableBinding(occurrenceBase))};
     return { node: invocationNodeId(callId), inputs,
-      definition: { id: String(manifest.definition_id ?? node.functionName), revision: String(manifest.source_revision ?? '') },
-      context: String(manifest.context_id ?? FILE_CONTEXT), signature: formatType(node.type),
+      definition: { id: definitionId, revision }, native_occurrence:occurrence,
+      context, signature,
       captures: Object.fromEntries(Object.values(node.captures ?? {}).map(cell => [cell.name,
         { mode: cell.mutable ? 'live' : 'snapshot', type: cell.type, ...(cell.skill ? { skill: cell.skill } : {}) }])) };
   }
@@ -1076,6 +1101,13 @@ export class NativeSession {
   private readonly offeredToolDocs = new Map<string, { description: string; parameters: unknown }>();
   private activeScopeLocals?: Map<string, [() => unknown, ((value: unknown) => void)?]>;
   constructor(readonly runtime: NativeRuntime, readonly lam: LambdaNode, readonly env: TypeEnv) { this.markUntrusted(); }
+
+  executionOccurrence(): import('../contracts.js').NativeExecutionOccurrence | undefined {
+    const event=this.runtime.trace.events.find(item=>item.kind==='invocation'&&item.phase==='start'&&
+      item.call_id===this.runtime.options.runId);
+    const occurrence=event?.native_occurrence;
+    return occurrence&&typeof occurrence==='object'?structuredClone(occurrence) as import('../contracts.js').NativeExecutionOccurrence:undefined;
+  }
 
   /**
    * Records where the strings of this call's `Untrusted<...>` arguments and captured variables came from, so the renderer

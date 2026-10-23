@@ -587,6 +587,8 @@ export function trajectoryTurn(request: ModelTurnRequest, response: ModelTurn): 
       raw_calls: structuredClone(response.raw_calls ?? []),
       ...(raw?.x_natlang_rl_capture && typeof raw.x_natlang_rl_capture === 'object' ?
         { rl_sampling: structuredClone(raw.x_natlang_rl_capture) } : {}),
+      ...(Array.isArray((raw?.native_state as {imports?:unknown}|undefined)?.imports) ?
+        { native_state_imports: structuredClone((raw?.native_state as {imports:unknown[]}).imports) } : {}),
       ...(raw?.pi_stream_observation && typeof raw.pi_stream_observation === 'object' ?
         { pi_stream_observation: structuredClone(raw.pi_stream_observation) } : {}),
       ...(raw?.pi_reply_diagnostic && typeof raw.pi_reply_diagnostic === 'object' ?
