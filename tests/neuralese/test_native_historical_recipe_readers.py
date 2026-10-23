@@ -97,3 +97,59 @@ def test_historical_replay_rejects_changed_inputs_and_runtime(historical_package
         monkeypatch.setattr(subprocess, 'run', run)
     with pytest.raises(ValueError):
         hand._package_recipe_plans(package, code, [reference], 'cuda')
+
+
+@pytest.mark.parametrize('mutation', [None, 'actor-command', 'held-input', 'schedule'])
+def test_completed_invocation_replays_exact_historical_factory(historical_package, tmp_path, mutation):
+    """An actual isolated old factory remains authoritative, never just its hash."""
+    package = historical_package
+    source = package / 'rl/native_completed_supervised.py'
+    with source.open('a') as stream:
+        stream.write('''\n_original_future_config = _future_config
+
+def _future_config(*args, **kwargs):
+    value = _original_future_config(*args, **kwargs)
+    value['actor_command'] = ['python', 'historical-actor-entry.py', '--native-state']
+    return value
+''')
+    work = tmp_path / 'earned-invocation'
+    work.mkdir()
+    program = '''import sys,json
+from pathlib import Path
+package,tests,work=map(Path,sys.argv[1:])
+sys.path[:0]=[str(package.parent),str(package.parents[2]),str(tests)]
+from test_native_completed_supervised import prepared
+_,_,_,proof=prepared(work,runtime_package=package)
+print(json.dumps(proof))
+'''
+    result = subprocess.run([sys.executable, '-c', program, str(package),
+        str(Path(__file__).parent), str(work)], capture_output=True, text=True,
+        env={**os.environ, 'CUDA_VISIBLE_DEVICES': '',
+             'PYTHONPATH': str(package.parent) + ':' + str(package.parents[2])})
+    assert result.returncode == 0, result.stderr
+    proof = json.loads(result.stdout.splitlines()[-1])
+    value = json.loads(Path(proof['path']).read_bytes())
+    path = Path(value['future_config']['path'])
+    future = json.loads(path.read_bytes())
+    assert future['actor_command'] == ['python', 'historical-actor-entry.py', '--native-state']
+    if mutation:
+        if mutation == 'actor-command':
+            future['actor_command'] = ['python', 'unauthorized-actor.py']
+        elif mutation == 'held-input':
+            future['held_native_graphs'] = '/invented/held.jsonl'
+        else:
+            future['supervised_stage_quantum_updates']['full'] += 1
+        # Rebind all JSON hashes: rejection must compare semantics with the
+        # authenticated factory, rather than only notice changed file bytes.
+        path.write_text(json.dumps(future))
+        value['future_config'] = hand.binding(path)
+        Path(proof['path']).write_text(json.dumps(value))
+        proof = hand.binding(proof['path'])
+        with pytest.raises(ValueError, match='declared future invocation'):
+            completed.verify(proof)
+    else:
+        verified = completed.verify(proof)
+        assert verified['checkpoint'] == value['checkpoint']
+        assert verified['global_step'] == 4
+        assert verified['new_sources_earned_visits'] == 0
+        assert json.loads(path.read_bytes()) == future
