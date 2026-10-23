@@ -4,15 +4,14 @@ import json
 import threading
 import urllib.error
 import urllib.request
+from types import SimpleNamespace
+
+import pytest
 import torch
 
 from natlang_neuralese.model.native_artifact import NativeTensorArtifact, encode_native_tensor_artifact
 from natlang_neuralese.model.state_block import NativeStateBlock
-from natlang_neuralese.serve.store import (
-    TensorStore,
-    encode_native_state,
-    native_state_id,
-)
+from natlang_neuralese.serve.store import TensorStore, encode_native_state, native_state_id
 
 IDENTITY = {
     "checkpoint_sha256": "2" * 64,
@@ -39,26 +38,27 @@ def _state(value: float, text="shared"):
 
 def _artifact(value: float):
     return NativeTensorArtifact(
-        "parameter-set", dict(IDENTITY), {"adapter.coefficients": torch.tensor([[value, value + 1]], dtype=torch.float32)},
+        "parameter-set", dict(IDENTITY),
+        {"adapter.coefficients": torch.tensor([[value, value + 1]], dtype=torch.float32)},
         provenance={"fixture": "native-store-test"},
     ).validate()
 
 
-def test_owner_collection_and_pins_preserve_native_artifact_closure():
+def test_owner_collection_and_pins_preserve_native_artifact_custody():
     store = TensorStore()
     first = store.put_native_state(_state(1), "actor-a")
     second = store.put_native_tensor_artifact(_artifact(1), "actor-b")
     shared = store.put_native_state(_state(2))
     store.hold("actor-b", [first.id])
 
-    assert store.collect(set(), "actor-a") == []  # another actor still owns first
+    assert store.collect(set(), "actor-a") == []
     assert store.get_native_state(first.id) is not None
     assert store.collect(set(), "actor-b") == sorted([first.id, second.id])
     assert store.get_native_state(first.id) is None
 
     store.pin(shared.id, "actor-a")
     assert store.collect(set(), "actor-a") == []
-    assert store.collect(set()) == []  # owner holds and pin protect it globally
+    assert store.collect(set()) == []
     store.unpin(shared.id, "actor-a")
     assert store.collect(set(), "actor-a") == [shared.id]
     assert store.get_native_state(shared.id) is None
@@ -92,9 +92,59 @@ def test_persistent_store_spills_and_reloads_native_state_and_tensor_artifact(tm
     store.close()
 
 
-class _FakeEngine:
-    """Only the store is used by native artifact HTTP routes."""
+def test_native_store_refuses_legacy_flat_rows_from_a_persisted_store(tmp_path):
+    legacy_id = "nz1_" + "a" * 52
+    store = TensorStore(tmp_path)
+    path = store._path(legacy_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"legacy flat payload")
+    store._db.execute("INSERT INTO blocks (id, bytes) VALUES (?, ?)", (legacy_id, 19))
+    store.close()
 
+    store = TensorStore(tmp_path)
+    with pytest.raises(ValueError, match="unsupported non-native artifact ID"):
+        store.get_native_state(legacy_id)
+    store.close()
+
+
+def test_value_harness_fetches_native_state_bytes_from_native_store():
+    from natlang_neuralese.rl.value_harness import native_artifact_bytes
+    from natlang_neuralese.serve.store import decode_native_state
+
+    block = _state(7)
+    store = TensorStore()
+    record = store.put_native_state(block)
+    raw = native_artifact_bytes(SimpleNamespace(store=store), record.id)
+    restored, actual_id = decode_native_state(raw)
+    assert actual_id == record.id
+    assert torch.equal(restored.embeddings, block.embeddings)
+    with pytest.raises(ValueError, match="omitted native state"):
+        native_artifact_bytes(SimpleNamespace(store=store), "nzs1_" + "a" * 52)
+    store.close()
+
+
+def test_value_harness_emits_native_role_markers_for_writer_spans():
+    from natlang_neuralese.rl.value_harness import _forced_native_reply_tokens
+
+    fixture = SimpleNamespace(role_tokens=SimpleNamespace(produce_open=91, produce_close=92),
+                              stop_ids=[99],
+                              _template_tokens=lambda text: [ord(character) for character in text],
+                              _tokens=lambda text: [ord(character) for character in text])
+    tokens = _forced_native_reply_tokens(fixture, [('text', 'before'), ('native-state', 'note'), ('text', 'after')])
+    assert tokens == [*map(ord, 'before'), 91, *map(ord, 'note'), 92, *map(ord, 'after'), 99]
+
+
+def test_rl_archive_id_scanner_rejects_flat_projected_references():
+    from natlang_neuralese.rl.graph_replay import block_ids
+
+    assert set(block_ids({"input": "nzs1_" + "a" * 52,
+                          "gradient": "nnt1_" + "b" * 52})) == {
+                              "nzs1_" + "a" * 52, "nnt1_" + "b" * 52}
+    with pytest.raises(ValueError, match="projected artifact"):
+        list(block_ids({"input": "nz1_" + "c" * 52}))
+
+
+class _FakeEngine:
     def __init__(self, store):
         self.store = store
 
@@ -111,11 +161,11 @@ def _call(base, method, path, body=None, owner=None):
 
 
 def test_http_native_artifact_routes_share_owner_custody_and_collection():
+    from natlang_neuralese.model.native_artifact import native_tensor_artifact_id
     from natlang_neuralese.serve.http import serve
 
     store = TensorStore()
-    engine = _FakeEngine(store)
-    httpd = serve(engine)
+    httpd = serve(_FakeEngine(store))
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)
     thread.start()
     base = f"http://127.0.0.1:{httpd.server_address[1]}"
@@ -130,7 +180,6 @@ def test_http_native_artifact_routes_share_owner_custody_and_collection():
         assert status == 200 and body == state_body
 
         artifact = _artifact(4)
-        from natlang_neuralese.model.native_artifact import native_tensor_artifact_id
         artifact_id = native_tensor_artifact_id(artifact)
         artifact_body = encode_native_tensor_artifact(artifact)
         status, metadata = _call(base, "PUT", f"/v1/neuralese/native-tensor-artifacts/{artifact_id}",

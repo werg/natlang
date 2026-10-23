@@ -44,14 +44,18 @@ def native_policy_trainer_args(parameters, expected_native):
 
 
 def validate_actor_receipts(receipts, *, policy_id, neuralese_server, expected_native=None, expected_coefficient=None):
-    """Attest native and legacy actors explicitly, without projected-head aliases."""
+    """Attest native-state or ordinary-text actors with their explicit current contract."""
     import re
     if not receipts or any(not receipt or receipt.get('checkpoint_sha256') != policy_id
                            for receipt in receipts.values()):
         raise ValueError('RL actor did not attest the requested immutable checkpoint')
     modes = set()
     for receipt in receipts.values():
-        mode = receipt.get('communication', 'legacy-projected' if receipt.get('neuralese') else 'text')
+        if 'neuralese' in receipt:
+            raise ValueError('RL actor uses the retired Neuralese communication alias')
+        mode = receipt.get('communication', 'text')
+        if mode not in {'native-state', 'text'}:
+            raise ValueError(f'RL actor declares unsupported communication mode {mode!r}')
         modes.add(mode)
         if mode == 'native-state':
             identity = receipt.get('native_identity') or {}
@@ -61,7 +65,7 @@ def validate_actor_receipts(receipts, *, policy_id, neuralese_server, expected_n
                            for key in ('checkpoint_sha256', 'tokenizer_fingerprint', 'embedding_weight_sha256'))
                     or not isinstance(identity.get('architecture'), str) or not identity['architecture']):
                 raise ValueError('native RL actor lacks exact checkpoint/tokenizer/embedding provenance')
-        elif neuralese_server and mode != 'legacy-projected':
+        elif neuralese_server:
             raise ValueError('RL actor did not restore the requested Neuralese communication interface')
     if len(modes) != 1:
         raise ValueError('RL replicas disagree on their communication interface')

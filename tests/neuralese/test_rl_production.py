@@ -26,6 +26,20 @@ def test_native_actor_replica_attestation_binds_actual_embedding_path():
         production.validate_actor_receipts({'b': different}, policy_id='1' * 64, neuralese_server=True)
 
 
+def test_actor_receipts_reject_retired_aliases_and_keep_ordinary_text_eligibility():
+    text = {'checkpoint_sha256': '1' * 64}
+    assert production.validate_actor_receipts({'text': text}, policy_id='1' * 64,
+                                               neuralese_server=False) == {'text': text}
+    with pytest.raises(ValueError, match='retired Neuralese communication alias'):
+        production.validate_actor_receipts({'old': {**text, 'neuralese': True}}, policy_id='1' * 64,
+                                            neuralese_server=True)
+    with pytest.raises(ValueError, match='unsupported communication mode'):
+        production.validate_actor_receipts({'old': {**text, 'communication': 'legacy-projected'}},
+                                            policy_id='1' * 64, neuralese_server=False)
+    with pytest.raises(ValueError, match='did not restore'):
+        production.validate_actor_receipts({'missing': text}, policy_id='1' * 64, neuralese_server=True)
+
+
 def test_collect_never_reuses_unbound_completed_results(tmp_path, monkeypatch):
     source = tmp_path / 'cases.jsonl'
     source.write_text(json.dumps({'id': 'train', 'split': 'train'}) + '\n')
