@@ -194,7 +194,7 @@ class GenerationRequest:
     guidance: object = None  # serve.guidance.Settings: envelope and line checks with backtracking, or None
     request_id: str = ""
     on_delta: object = None  # streaming listener: called with {"text": …} or {"neuralese": meta}
-    adapters: list | None = None  # [{"id": adapter block, "scale": 1.0}], active for every forward of the request
+    adapters: list | None = None  # exact native actor coefficient refs; consumed only by the native executor
     # Set by the transport when the client has gone (a streamed reply's connection closed): the engine drops the
     # sequence at its next round and fails its future with RequestError("cancelled").
     cancelled: bool = False
@@ -233,7 +233,6 @@ class Sequence:
     finish_reason: str = "stop"
     rng: torch.Generator | None = None
     pending: list = field(default_factory=list)  # undecoded token IDs while streaming
-    adapters: list = field(default_factory=list)  # resolved (spec, coefficients, scale) of the request's adapters
     started: float = field(default_factory=time.perf_counter)
     native_trace_enabled: bool = False
     native_protocol_failure: dict | None = None
@@ -315,7 +314,6 @@ class Engine:
         self._stopping = False
         self._ids = itertools.count()
         self._native_decoded_tokens = 0  # completed generated-token forwards, including private spans
-        self._adapter_bank = None
 
     def progress_metrics(self):
         """Host-only scheduler observations; never block on actor execution/GPU."""
@@ -454,52 +452,18 @@ class Engine:
             raise RequestError("neuralese-bad-block", f"{block_id} has width {block.width}, this server reads {self.width}")
         return block
 
-    # Adapters --------------------------------------------------------------------------------
     @property
-    def adapter_bank(self):
-        if self._adapter_bank is None:
+    def native_adapter_basis_bank(self):
+        """Pure basis/projection utilities for native actor coefficients; never installs legacy module hooks."""
+        if not hasattr(self, "_native_adapter_basis_bank"):
             from ..model.tiny_adapters import AdapterBank
-
-            self._adapter_bank = AdapterBank.of(self.backbone)
-        return self._adapter_bank
-
-    def lookup_adapter(self, block_id: str):
-        """(spec, coefficients) of a stored adapter block for this backbone; installs its hooks."""
-        from ..model.tiny_adapters import AdapterSpec, is_adapter_dialect
-
-        block = self.store.get(block_id)
-        if block is None:
-            raise RequestError("neuralese-unknown-block", f"{block_id} is not in this server's store; PUT it first")
-        if not is_adapter_dialect(block.dialect) or "#" in block.dialect:
-            raise RequestError("neuralese-adapter", f"{block_id} is a {block.dialect} block, not an adapter")
-        spec = AdapterSpec.parse(block.dialect)
-        try:
-            self.adapter_bank.check(spec, block.payload)
-        except ValueError as error:
-            raise RequestError("neuralese-adapter", str(error)) from error
-        self.adapter_bank.install(spec)
-        return spec, block.payload
-
-    def resolve_adapters(self, adapters, leaves: dict | None = None) -> list:
-        """[(spec, coefficients, scale)] for request entries `{"id", "scale"}` (or bare IDs); coefficient tensors are
-        taken from `leaves` when given (gradient sessions)."""
-        out = []
-        for entry in adapters or []:
-            if isinstance(entry, dict) and entry.get("code"):
-                raise RequestError("neuralese-native-state-required",
-                    "projected adapter codes are retired; bind a stored positional native state in the call prompt")
-            block_id, scale = (entry, 1.0) if isinstance(entry, str) else (entry.get("id"), float(entry.get("scale", 1.0)))
-            spec, coefficients = self.lookup_adapter(block_id)
-            if leaves and block_id in leaves:
-                coefficients = leaves[block_id]
-            out.append((spec, coefficients.to(self.device), scale))
-        return out
+            self._native_adapter_basis_bank = AdapterBank.of(self.backbone)
+        return self._native_adapter_basis_bank
 
     def using(self, seqs):
-        """Adapters of these sequences active for one batched forward (one row each, in order)."""
-        from ..model.tiny_adapters import active
-
-        return active([seq.adapters for seq in seqs])
+        """Legacy non-native forward scope; native actor coefficients use `_native_run` instead."""
+        from contextlib import nullcontext
+        return nullcontext()
 
     def _prompt_plan(self, messages, tools) -> list:
         """Render and tokenize on the caller's CPU thread; preserve segment boundaries."""
@@ -1513,7 +1477,6 @@ class Engine:
         ready = []
         for seq in seqs:
             try:
-                seq.adapters = self.resolve_adapters(seq.request.adapters)
                 if seq.request.rl_capture and seq.prompt_plan is None:
                     seq.prompt_plan = self._prompt_plan(seq.request.messages, seq.request.tools)
                 embeds = self.prompt_embeddings(seq.request.messages, seq.request.tools, prepared=seq.prompt_plan)

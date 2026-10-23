@@ -69,7 +69,7 @@ def _create_adapter(engine, options, owner=None):
                 from .tiny_adapters import AdapterBank, AdapterSpec
                 legacy = AdapterSpec(base='native', kind=kind, rank=rank, dim=dim,
                                      layers=(0,), targets=('out',), seed=seed)
-                tensors['projection.'+name] = AdapterBank.projections(engine.adapter_bank, legacy, index, 'cpu')
+                tensors['projection.'+name] = AdapterBank.projections(engine.native_adapter_basis_bank, legacy, index, 'cpu')
     basis = engine.store.put_native_tensor_artifact(NativeTensorArtifact(
         'adapter-basis', engine.native_identity, tensors, provenance={'adapter_spec': spec}), owner)
     return engine.store.put_native_tensor_artifact(NativeTensorArtifact(

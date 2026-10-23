@@ -60,7 +60,7 @@ export { probeBrowserGpu } from './gpu.js';
 export { startBrowserNeuralese, NeuraleseWasmService, chooseNeuraleseBuild } from './neuralese-wasm.js';
 export { cachedModelFile, startNeuraleseModel, type ModelFileRef, type NeuraleseModelManifest } from './model-files.js';
 export type { NeuraleseWasmOptions, NeuraleseWasmModule, NeuraleseWasmFactory, StartedNeuralese } from './neuralese-wasm.js';
-export { neuraleseServerModelTurn, HttpNeuraleseStore, referenceAdapterLoras, withRestoredBlocks, OWNER_HEADER } from '../model/neuralese-server.js';
+export { neuraleseServerModelTurn, HttpNeuraleseStore, withRestoredBlocks, OWNER_HEADER } from '../model/neuralese-server.js';
 export { MemoryNeuraleseStore, neuraleseContentId } from '../native/neuralese-store.js';
 export { OpfsNeuraleseStore, openBrowserNeuraleseStore, opfsAvailable, type OpfsNeuraleseStoreOptions, type OpfsStorage,
   type OpfsDirectoryHandle } from './neuralese-opfs-store.js';

@@ -2,6 +2,15 @@
 
 Draft, 2026-10-04. A cross-cutting plan that revises [S6](S6_META_LEARNING.md) and extends [S5](S5_PROGRAM_TRAINING.md) and [S7](S7_RL.md). It puts every way a natlang program can improve into one framework, so that improvement methods can be combined, compared at matched compute and distilled into one another. The design choices listed in §14 were accepted by the owner on 2026-10-04 as **defaults**, not rules: each is where work starts and what a run uses unless it says otherwise. Any of them may be overridden per experiment, artifact or program when evidence or a task calls for it, and the override is recorded with the run. Decision 37 (adapters as program artifacts) is the owner's direction of 2026-10-04.
 
+**Current implementation status (2026-10-23).** The generic tiny-adapter block
+and projected adapter-code interfaces described in §6 and §8 are historical
+and retired from the reference runtime. Stored program guidance is positional
+native KV/hybrid state through `withNativeStates`; it changes call context and
+does not change model weights. Exact-checkpoint native actor coefficients are
+still supported by `withAdapters`, whole-graph native gradients and the native
+optimizer. The llama.cpp fork's generic externally supplied GGUF LoRA serving
+is a separate model-serving feature.
+
 ## 1. Thesis
 
 Every improvement method we have or want is the same act: an **operator** reads a program's current **state** and some **evidence**, and proposes a new state. The methods differ along three axes:

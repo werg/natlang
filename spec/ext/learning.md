@@ -26,7 +26,17 @@ captured graph with `nativeStates.gradient(graph, stateId, identity)` and pass
 the returned gradient to `nativeStates.optimize`; that returns a new state
 artifact with verifiable parent, gradient and optimizer ancestry.
 
+**Native actor coefficients.** `adapters.create` creates an exact-checkpoint
+coefficient artifact over declared native model parameters. `withAdapters` binds
+that actor to calls. Native graph gradients preserve the producer/consumer
+execution graph, and `nativeAdapterOptimizerStep` returns a new coefficient
+artifact with optimizer ancestry. This changes model parameters during native
+execution and learning; it is distinct from native-state scope, which changes
+only the imported call context.
+
 This updates the prompt's state tensors for a call. It does not modify the
-model's weights or reproduce the old behavior of applying a low-rank weight
-adapter to every layer. The old weight-adapter and projected adapter-code
-interfaces are retired from the current runtime.
+model's weights. Native graph policy learning remains a separate operation:
+its exact-actor coefficient bindings receive gradients through the recorded
+whole graph and update through the native optimizer. Legacy projected adapter
+codes and generic tiny-adapter/LoRA transport are retired; they are not
+substitutes for either native-state learning or exact native actor learning.

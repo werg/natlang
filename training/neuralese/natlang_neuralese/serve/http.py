@@ -4,7 +4,7 @@
 | --- | --- |
 | `POST /v1/chat/completions` | OpenAI-style chat completion with Neuralese parts. With `"stream": true` (as the fork), answers server-sent `chat.completion.chunk` events: text deltas until a tool call opens (`<|tool_call_start|>` or `<tool_call>`; the markup is held back), a `[{"type": "neuralese", "id": …}]` content delta per written block (with `neuralese.block`, its metadata), the parsed calls as one `tool_calls` delta, and a final chunk whose `x_natlang_message` is the complete parsed message (with `usage`, `neuralese` and, with guidance, `x_natlang_guidance`). |
 | `GET /v1/models`, `GET /health`, `GET /v1/health` | Model listing and liveness. |
-| `GET /v1/neuralese/info` | `dialects`, `width`, `dtype`, `max_block_length`, `cutoff`, `grad` (true), `grad_order` (2), `adapters` (kinds applied directly), `prompt_rendering` and its content identity, and `stream` (true: chat completions stream; clients stream only to servers that declare it). |
+| `GET /v1/neuralese/info` | `dialects`, `width`, `dtype`, `max_block_length`, `cutoff`, `grad` (true), `grad_order` (2), `prompt_rendering` and its content identity, and `stream` (true: chat completions stream; clients stream only to servers that declare it). |
 | `PUT /v1/neuralese/blocks/{id}` | Store a block (safetensors body); the ID is checked against the content. |
 | `GET /v1/neuralese/blocks/{id}` | Fetch a block (safetensors body). |
 | `GET /v1/neuralese/blocks/{id}/meta` | Block metadata as JSON. |
@@ -17,8 +17,6 @@
 | `POST /v1/neuralese/decide` | Decision readout: `{"messages", "options", "tools"?, "adapters"?}` → `{"log_probs", "tokens"}`, each option scored as the whole assistant reply after one prompt pass. |
 | `POST /v1/neuralese/decide_many`, `POST /v1/natlang/score` | Batched decisions: `{"items": [{"messages", "options" or "continuations", "tools"?, "adapters"?}], "adapters"?}` → `{"results": [{"log_probs", "tokens"} or {"error"}]}`; each item as `decide` alone, a failing item fails alone. |
 | `POST /v1/neuralese/optim` | One SGD or Adam step on parameter blocks; returns new parameter and optimiser-state blocks. |
-| `POST /v1/neuralese/adapters` | A zero adapter block for this backbone (`{"kind", "rank", "u", "layers", "targets", "seed"}`) → block metadata; see `model/tiny_adapters.py`. |
-| `GET /v1/neuralese/adapters/{id}/lora` | A stored adapter exported as a GGUF LoRA, for the fork (which loads it with `PUT …/lora`). |
 | `POST /v1/neuralese/embed` | A block initialised from text (token embeddings): `{"text", "type"?}` → block metadata. |
 | `POST /v1/neuralese/guidance/check` | The first rejection of `{"reply", "guidance"}` checked prefix by prefix as during generation (serve/guidance.py), for conformance. |
 | `POST /v1/neuralese/render` | The rendered prompt of `{"messages", "tools"?}` (blocks as `<block>`), for conformance with the llama.cpp fork. |
@@ -34,16 +32,14 @@ and pins outlive restarts; a client that still gets `neuralese-unknown-block` re
 
 Request fields beyond OpenAI's: `neuralese_temperature` (default 0, deterministic), `neuralese_max_length` (capped
 by the server's hard maximum), `neuralese_length` (an optional size hint: write exactly that many vectors, no stop
-decision) and `neuralese_passes` (with a hint, write the block in that many parallel passes; exact when ≥ the length), `x_natlang_adapters` (`[{"id", "scale"}]`: adapter blocks active for the whole
-request. Projected adapter codes are retired; use positional native-state parts in the prompt), `neuralese_template` (template readout: the reply is forced to
+decision) and `neuralese_passes` (with a hint, write the block in that many parallel passes; exact when ≥ the length), `neuralese_template` (template readout: the reply is forced to
 a call, `{"call", "arguments"?, "argument"?, "value": "write" | "decode"}`, cut from the model's own rendering of that
 call; "write" makes the argument a written block and closes the call, "decode" decodes the value and the rest), and
 `guidance` (serve/guidance.py: `true` or `{"require_call"?, "repeat"?, "syntax"?, "retries"?}`: the reply opens a
 tool call, call names are checked, eval code is checked line by line for repetition and TypeScript syntax, and a
 rejected line is rolled back and resampled; the response reports `x_natlang_guidance.rejections`), and the test hook
 `x_natlang_forced`. `neuralese_template` also takes `value_type` (`"string"` or `"unknown"`: the written value sits
-unquoted, in native value syntax) and `argument_path` (keys into nested arguments), as the fork does. `decide`,
-`decide_many` and `grad` bodies take `adapters` in the same form.
+unquoted, in native value syntax) and `argument_path` (keys into nested arguments), as the fork does. Stored positional native-state parts are supplied through the prompt content.
 """
 
 from __future__ import annotations
@@ -57,7 +53,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from .chat import RequestError, arguments_text
 from .engine import Engine, GenerationRequest
 from .guidance import Settings
-from .grad import GradSession, decide, decide_many, embed_text, encode_text, new_adapter, optim_step
+from .grad import GradSession, decide, decide_many, embed_text, encode_text, optim_step
 from .store import decode_block, encode_block, decode_native_state, encode_native_state
 
 _BLOCK = re.compile(r"^/v1/neuralese/blocks/(nz1_[a-z2-7]+)(/meta|/pin|/unpin)?$")
@@ -76,44 +72,21 @@ def block_ids(value) -> set[str]:
     if isinstance(value, (list, tuple)):
         return set().union(*map(block_ids, value)) if value else set()
     return set()
-_LORA = re.compile(r"^/v1/neuralese/adapters/(nz1_[a-z2-7]+)/lora$")
 
 # What this server serves (spec/NEURALESE_PORT.md "Capabilities"): every runtime reports its list in
 # /v1/neuralese/info and answers a capability it lacks with 501 `neuralese-<capability>-unavailable`.
 CAPABILITIES = sorted([
-    "adapters.create", "adapters.direct", "adapters.lora-export", "chat", "chat.stream",
+    "chat", "chat.stream",
     "decide", "embed", "encode", "grad", "grad.order2", "guidance", "guidance.check", "init-body", "optim", "parts.value-type",
-    "native.text-write", "native.init-body", "render", "score", "store", "store.owners", "store.native-state", "template", "template.argument-path", "template.value-type", "view", "write"])
+    "render", "score", "store", "store.owners", "template", "template.argument-path", "template.value-type", "view", "write"])
 NATIVE_CAPABILITIES = sorted([
-    "chat", "chat.stream", "decide", "score", "grad", "optim", "guidance", "guidance.check", "native.text-write", "native.init-body", "parts.value-type", "render", "store", "store.native-state", "store.native-tensor-artifact",
+    "chat", "chat.stream", "decide", "score", "grad", "optim", "native.adapters", "guidance", "guidance.check", "native.text-write", "native.init-body", "parts.value-type", "render", "store", "store.native-state", "store.native-tensor-artifact",
     "native.protocol-recovery", "store.owners", "template", "template.argument-path", "template.value-type", "view"])
 NATIVE_CAPABILITY_GAPS = sorted(set(CAPABILITIES) - set(NATIVE_CAPABILITIES))
 
 
 def unavailable_code(capability: str) -> str:
     return "neuralese-" + capability.replace(".", "-") + "-unavailable"
-
-
-def adapter_lora(engine: Engine, block_id: str) -> bytes:
-    """A stored adapter as a GGUF LoRA (export/adapters.py), for servers that apply adapters as LoRAs (the fork)."""
-    import tempfile
-    from pathlib import Path
-
-    from ..export.adapters import export_lora_gguf, export_peft
-    from ..model.lfm2_port import resolve_base
-    from ..model.tiny_adapters import AdapterSpec, is_adapter_dialect
-
-    cache = engine.__dict__.setdefault("_loras", {})
-    if block_id not in cache:
-        block = engine.store.get(block_id)
-        if block is None or not is_adapter_dialect(block.dialect):
-            raise RequestError("neuralese-unknown-block", f"{block_id} is not a stored adapter")
-        spec = AdapterSpec.parse(block.dialect)
-        with tempfile.TemporaryDirectory() as tmp:
-            peft = export_peft(engine.adapter_bank, spec, block.payload.float(), Path(tmp) / "peft")
-            cache[block_id] = export_lora_gguf(peft, resolve_base(getattr(engine, "base_dir", None)),
-                                               Path(tmp) / "lora.gguf").read_bytes()
-    return cache[block_id]
 
 
 def completion_limit(body: dict) -> int:
@@ -188,7 +161,6 @@ def make_handler(engine: Engine):
                                         "max_block_length": engine.max_block, "context": engine.context,
                                         "grad": True, "grad_order": 2 if not native_enabled else 1, "stream": True,
                                         "cutoff": None if native_enabled else engine.heads.cutoff,
-                                        "adapters": ["xs", "tiny"],
                                         **({"native_state": {"enabled": True, "format":
                                                               ('neuralese.semantic-state/1' if getattr(engine, 'semantic_channel', None)
                                                                else 'neuralese.native-state/1'),
@@ -213,12 +185,6 @@ def make_handler(engine: Engine):
                                         "capabilities": [c for c in (NATIVE_CAPABILITIES if native_enabled else CAPABILITIES)
                                                          if c != "store.owners" or hasattr(engine.store, "hold")],
                                         **({"capability_gaps": NATIVE_CAPABILITY_GAPS} if native_enabled else {})})
-            lora = _LORA.match(self.path)
-            if lora:
-                try:
-                    return self._send(200, adapter_lora(engine, lora.group(1)), "application/octet-stream")
-                except RequestError as error:
-                    return self._error(404, error.code, str(error))
             match = _BLOCK.match(self.path)
             if match and match.group(2) in (None, "/meta"):
                 block = engine.store.get(match.group(1))
@@ -275,12 +241,12 @@ def make_handler(engine: Engine):
             body = json.loads(self._body() or b"{}")
             if not isinstance(body, dict):
                 raise json.JSONDecodeError("request body is not a JSON object", "", 0)
+            if (not getattr(engine, "native_state_enabled", False) and
+                    ("adapters" in body or "x_natlang_adapters" in body)):
+                raise RequestError("neuralese-adapters-retired", "weight-adapter request bindings are retired; use native-state spans or train the exact model parameters")
             return body
 
         def do_PUT(self):
-            if _LORA.match(self.path):
-                # Adapters apply directly here; loading a LoRA is the fork's way of applying them.
-                return self._unavailable("adapters.lora-load")
             native = _NATIVE_STATE.match(self.path)
             if native and native.group(2) is None:
                 return self._put_native_state(native.group(1))
@@ -379,16 +345,15 @@ def make_handler(engine: Engine):
                     with grad_lock:
                         return self._json(200, optim_step(engine, body))
                 if self.path == "/v1/neuralese/adapters":
+                    if not getattr(engine, 'native_state_enabled', False):
+                        raise RequestError('neuralese-adapters-retired', 'native actor coefficients require a native-state runtime')
                     body = self._object()
-                    with grad_lock:
-                        if getattr(engine, 'native_state_enabled', False):
-                            from ..model.native_adapters import create_adapter
-                            try:
-                                with engine.native_execution_lock:
-                                    return self._json(201, create_adapter(engine, body, self._owner).meta())
-                            except (ValueError, TypeError, RuntimeError) as error:
-                                raise RequestError('neuralese-native-adapter-invalid', str(error)) from error
-                        return self._json(201, new_adapter(engine, body).meta())
+                    with grad_lock, engine.native_execution_lock:
+                        from ..model.native_adapters import create_adapter
+                        try:
+                            return self._json(201, create_adapter(engine, body, self._owner).meta())
+                        except (ValueError, TypeError, RuntimeError) as error:
+                            raise RequestError('neuralese-native-adapter-invalid', str(error)) from error
                 if self.path == "/v1/neuralese/embed":
                     body = self._object()
                     return self._json(201, embed_text(engine, body.get("text") or "", body.get("type")).meta())
@@ -551,7 +516,7 @@ def make_handler(engine: Engine):
                 neuralese_temperature=float(body.get("neuralese_temperature") or 0.0),
                 neuralese_max_length=body.get("neuralese_max_length"), forced=body.get("x_natlang_forced"),
                 neuralese_length=body.get("neuralese_length"), neuralese_passes=body.get("neuralese_passes"),
-                template=body.get("neuralese_template"), adapters=body.get("x_natlang_adapters"),
+                template=body.get("neuralese_template"),
                 forced_message=body.get('x_natlang_forced_message'),
                 native_protocol_recovery=body.get('x_natlang_native_protocol_recovery') is True,
                 native_store_owner=self._owner,

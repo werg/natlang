@@ -17,11 +17,10 @@ Terms (`kind`):
 | `klPrior` | KL(N(μ, σ²) ‖ N(0, I)) of Gaussian blocks `{mean, log_sigma}` in normalised space (`heads.payload_kl`). |
 | `decision` | A proper scoring rule on the decision readout: `options` (assistant replies) are scored after `messages` as in `/v1/neuralese/decide`, normalised over the options, and compared with `target` probabilities, or with the readout of a `teacher` (`{messages, adapters}`: the same model given privileged context, scored without gradient; conditioned distillation) (`rule`: `logLoss`, the default, is cross-entropy against the target distribution; `brier` is the squared error; `rps` is the ranked probability score for ordered options; `expectedReward` takes `target.rewards`, one per option, and its loss is −Σ pᵢ rᵢ, the exact policy objective of a finite decision). |
 
-Adapters (`model/tiny_adapters.py`): a request's `adapters` (`[{"id", "scale"}]`, or a term's own `adapters`) are
-active in every forward of its terms, so a term scores the adapted model. Adapter blocks may be `arguments`: their
-coefficients are then leaves and get gradients like any other block (in the adapter's own `#grad` dialect). A
-`selfDistill` teacher runs without adapters unless the term names `teacher_adapters`: the teacher is the base model
-given the privileged context.
+This legacy soft-block replay path does not apply weight adapters. Native actor
+coefficients are differentiated through the exact recorded whole graph by
+`serve/native_grad.py`; they are not generic `#grad` blocks. Legacy tiny-adapter
+references fail with `neuralese-adapters-retired`.
 
 Every term has a `weight`; the session loss is the weighted sum. Constants (`stopGradient`, inner gradients of a
 first-order nested `grad`) are simply blocks that are not arguments.
@@ -36,7 +35,7 @@ differentiate through the inner updates (meta-learning through update steps, S6 
 (as for re-written producers), so the loss is the recorded one. Attention runs in its math kernel and the
 convolution without the fused kernel in these sessions (double backward).
 
-Producers (`producers`: recorded turns `{messages, tools, reply, adapters}` that wrote blocks; spec/NEURALESE_GRAPH.md,
+Producers (`producers`: recorded turns `{messages, tools, reply}` that wrote blocks; spec/NEURALESE_GRAPH.md,
 "Replay", step 4): a block a term reads (in its prompt, or written earlier in its target) that one of these turns
 wrote is re-written from that turn, differentiably, when the turn's context depends on an argument (directly, through
 an argument adapter, or through another re-written block): its prompt and the reply up to the block are prefilled
@@ -728,9 +727,11 @@ class GradSession:
         return loss
 
     def _adapted(self, adapters, leaves: dict):
-        from ..model.tiny_adapters import active
-
-        return active([self.engine.resolve_adapters(adapters, leaves)])
+        from contextlib import nullcontext
+        if adapters:
+            raise RequestError("neuralese-adapters-retired",
+                               "legacy tiny-adapter blocks are retired; native actor coefficients use native graph learning")
+        return nullcontext()
 
     # Producers ------------------------------------------------------------------------------
     def _index_producers(self, producers: list) -> dict:
@@ -943,7 +944,7 @@ def decide(engine, body: dict) -> dict:
 
 def decide_many(engine, body: dict) -> dict:
     """`POST /v1/natlang/score` and `/v1/neuralese/decide_many` (plans/BATCHED_EXECUTION.md, scoring contract):
-    many decisions in one request. Items are grouped by adapters and rendered prompt, so each distinct prompt is
+    many decisions in one request. Items are grouped by rendered prompt, so each distinct prompt is
     prefilled once (one cache alive at a time) and its options continue from that cache. Each result equals
     `decide` on that item alone; an item that fails returns {"error"} and fails alone."""
     items = body.get("items")
@@ -1077,31 +1078,8 @@ def second_order(backbone):
 
 
 def lookup_param(engine, block_id: str) -> Block:
-    """A block that may be a parameter: a value in the server's dialect or an adapter for its backbone."""
-    from ..model.tiny_adapters import is_adapter_dialect
-
-    block = engine.store.get(block_id)
-    if block is not None and is_adapter_dialect(block.dialect):
-        engine.lookup_adapter(block_id)
-        return block
+    """A soft parameter value in the server's declared dialect."""
     return engine.lookup(block_id)
-
-
-def new_adapter(engine, body: dict) -> Block:
-    """A zero adapter for this backbone (`POST /v1/neuralese/adapters`): `{"kind", "rank", "u", "layers",
-    "targets", "seed"}`; layers default to those from the sketch cutoff to the top."""
-    from ..model.tiny_adapters import AdapterSpec
-
-    bank = engine.adapter_bank
-    try:
-        spec = bank.spec(kind=body.get("kind") or "xs", rank=int(body.get("rank") or 8), dim=int(body.get("u") or 0),
-                         layers=body.get("layers"), targets=tuple(body.get("targets") or ("out", "ffn_down")),
-                         seed=int(body.get("seed") or 0), cutoff=engine.heads.cutoff)
-    except ValueError as error:
-        raise RequestError("neuralese-adapter", str(error)) from error
-    assert AdapterSpec.parse(spec.dialect()) == spec
-    return engine.store.put(make_block(bank.zeros(spec), spec.dialect(), type=body.get("type") or "Adapter",
-                                       producer={"kind": "adapter-init"}))
 
 
 def embed_text(engine, text: str, type: str | None = None) -> Block:
@@ -1148,4 +1126,4 @@ def encode_text(engine, text: str, type: str | None = None, context: list | None
                                        producer={"kind": "text-encode", "text": text}))
 
 
-__all__ = ["GradSession", "Unavailable", "optim_step", "embed_text", "encode_text", "new_adapter", "lookup_param", "grad_dialect", "math"]
+__all__ = ["GradSession", "Unavailable", "optim_step", "embed_text", "encode_text", "lookup_param", "grad_dialect", "math"]

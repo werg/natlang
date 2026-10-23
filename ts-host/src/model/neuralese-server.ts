@@ -266,24 +266,7 @@ export type NeuraleseServerOptions = Omit<HttpChatOptions, 'stream'> & Pick<Chat
   nativeStateModes?: Record<string, 'same-base-adapter-state'>;
   /** Extra request fields. */
   request?: Json;
-  /**
-   * Weight adapters as GGUF LoRAs, for servers that apply adapters as LoRAs (the llama.cpp fork, native or in the
-   * browser: capability `adapters.lora-load` in `/v1/neuralese/info`): the driver uploads each bound adapter's LoRA once
-   * (`PUT /v1/neuralese/adapters/{id}/lora`). `referenceAdapterLoras` exports them from a reference server; a browser
-   * runtime passes the files its model manifest ships. Without a LoRA the fork refuses the request (409).
-   */
-  adapterLoras?: (id: string) => Promise<Uint8Array | null>;
 };
-
-/** Adapter LoRAs exported by a reference server (`GET /v1/neuralese/adapters/{id}/lora`), for `adapterLoras`. */
-export function referenceAdapterLoras(endpoint: string, headers: Record<string, string> = {}): (id: string) => Promise<Uint8Array | null> {
-  return async id => {
-    const response = await fetchModel(`${endpoint.replace(/\/$/, '')}/v1/neuralese/adapters/${id}/lora`, { headers });
-    if (response.status === 404) return null;
-    if (!response.ok) throw new Error(`adapter LoRA ${id}: HTTP ${response.status}: ${(await response.text()).slice(0, 500)}`);
-    return new Uint8Array(await response.arrayBuffer());
-  };
-}
 
 /** Block IDs a request's messages carry as parts. */
 export function requestBlockIds(messages: readonly unknown[]): string[] {
@@ -443,7 +426,7 @@ export async function archiveNeuraleseReplyArtifacts(reply: Json, remote: Neural
 /** A model-turn driver for a Neuralese server. It advertises `neuralese: true`. */
 export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
     ((request: ModelTurnRequest, signal?: AbortSignal, options?: ModelTurnOptions) => Promise<ModelTurn>) & { neuralese: true; blocks: HttpNeuraleseStore; decide: DecisionScorer } {
-  const { store, neuraleseTemperature, neuraleseMaxLength, request: extra, onExchange, onTurn, adapterLoras, owner, nativeStateModes,
+  const { store, neuraleseTemperature, neuraleseMaxLength, request: extra, onExchange, onTurn, owner, nativeStateModes,
     ...connection } = options;
   const http = { ...connection, headers: { ...connection.headers,
     ...(connection.apiKey ? { authorization: 'Bearer ' + connection.apiKey } : {}),
@@ -452,34 +435,17 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
   const coefficientPolicy=extra?.x_natlang_native_coefficient_policy===undefined?undefined:validateCoefficientRuntime(extra.x_natlang_native_coefficient_policy);
   const uploaded = new Set<string>();
   const nativeUploaded = new Set<string>();
-  // What the server declares (`/v1/neuralese/info`), read once: whether it applies adapters as LoRAs, and whether it
-  // streams (`stream: true`; a server that does not declare it gets whole requests, never a streamed try first).
+  // What the server declares (`/v1/neuralese/info`), read once; a server that does not declare streaming gets whole requests.
   let info: Promise<Json | null> | undefined;
   const serverInfo = (refresh = false) => { if (refresh) info = undefined; return info ??= fetchModel(http.endpoint.replace(/\/$/, '') + '/v1/neuralese/info', { headers: http.headers })
     .then(async response => response.ok ? await response.json() as Json : null).catch(() => null);
   };
   const whole = httpChatTransport({ ...http, stream: false });
   const streamed = httpChatTransport({ ...http, stream: true });
-  // Adapter blocks are uploaded like message blocks; their IDs travel as request parts the server resolves.
-  // Adapters of the dynamic scope (`withAdapters`) and those the calling function's context binds (request field).
-  // A server that applies adapters as LoRAs (the fork) gets each adapter's LoRA once, from `adapterLoras`.
-  const loras = new Set<string>();
-  const uploadLoras = async (ids: readonly string[]) => {
-    if (!adapterLoras || !serves((await serverInfo()) ?? {}, 'adapters.lora-load')) return;
-    for (const id of ids) {
-      if (loras.has(id)) continue;
-      const bytes = await adapterLoras(id);
-      if (!bytes) continue;
-      const response = await fetchModel(`${http.endpoint.replace(/\/$/, '')}/v1/neuralese/adapters/${id}/lora`, { method: 'PUT',
-        headers: { 'content-type': 'application/octet-stream', ...http.headers }, body: bytes as unknown as BodyInit });
-      if (!response.ok) throw new Error(`adapter LoRA ${id}: HTTP ${response.status}: ${(await response.text()).slice(0, 500)}`);
-      loras.add(id);
-    }
-  };
+  // Exact native actor coefficients remain native model parameters, never GGUF LoRA transport.
   const adapterParts = async (bound: readonly { id: string; scale: number }[] = [], active: readonly AdapterBinding[] = activeAdapters()) => {
     if(coefficientPolicy)requireCoefficientAttestation(coefficientPolicy,await serverInfo());
     const adapters = coefficientBindings(coefficientPolicy,active,bound);
-    if (adapters.length) await uploadLoras(adapters.map(item => item.id));
     return adapters;
   };
   const blockIds = (messages: unknown[], adapters: readonly { id: string }[]) =>

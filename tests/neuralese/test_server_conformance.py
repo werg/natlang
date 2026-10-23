@@ -12,11 +12,9 @@ visible. Each check sends one request to both servers and compares what a client
 - text encoding (`/v1/neuralese/encode`, with and without a context), a write at a write site (`/write`) and the
   Neuralese instance of the builtin `view` (`/view`: the fixture's single site, faithful and instructed, and a value
   chunked at a small window);
-- weight adapters: an `xs` adapter exported as a GGUF LoRA (export/adapters.py) and loaded into the fork gives the
-  reference's decision log-probabilities and greedy reply;
-- capabilities the fork does not serve (gradient sessions, optimiser steps, adapter creation and export, adapters it
-  has no LoRA for or decoded through a projection) answer with an error, not silence (an adapter request must never be
-  answered by the base model);
+- the fork retains its standard GGUF LoRA loader, while the reference no longer creates legacy tiny-adapter blocks;
+- capabilities the fork does not serve (gradient sessions and optimiser steps) answer with an error; an unloaded generic
+  LoRA still fails rather than answering with the base model;
 - fork parity: text embedding, template value types and argument paths, parts typed "unknown", Qwen-style calls and
   thinking, info fields, batched item errors, the width check on read, and streamed replies (each assembled equals the
   non-streamed reply, and the two servers stream the same).
@@ -203,6 +201,17 @@ def test_info_agrees(servers):
     assert {k: got["reference"][1][k] for k in keys} == {k: got["fork"][1][k] for k in keys}
 
 
+def test_legacy_weight_adapter_and_lora_transport_are_retired(servers):
+    info_status, info = _request(f"{servers['reference']}/v1/neuralese/info")
+    assert info_status == 200
+    assert not any(capability.startswith("adapters.") for capability in info["capabilities"])
+    body = {"messages": [{"role": "user", "content": "hello"}], "x_natlang_adapters": []}
+    status, error = _request(f"{servers['reference']}/v1/chat/completions", "POST", body)
+    assert status == 400 and error["error"]["code"] == "neuralese-adapters-retired"
+    status, _ = _request(f"{servers['reference']}/v1/neuralese/adapters/nz1_" + "a" * 52 + "/lora")
+    assert status == 404
+
+
 def test_a_forced_write_agrees(servers):
     body = {"messages": [{"role": "user", "content": "Write the plan as a block, then say done."}],
             "x_natlang_forced": ["Plan: ", {"neuralese": "write"}, " done"], "max_tokens": 64}
@@ -314,21 +323,17 @@ def test_batched_decision_scoring_agrees_and_fails_per_item(servers):
 def test_capabilities_the_fork_does_not_serve_fail_loudly(servers):
     status, body = _json(servers["fork"] + "/v1/neuralese/grad", "POST", {"terms": []})
     assert status == 501 and body["error"]["code"] == "neuralese-grad-unavailable"
-    status, adapter = _json(servers["reference"] + "/v1/neuralese/adapters", "POST", {"kind": "xs", "rank": 2})
-    assert status == 201
-    # An adapter the fork has no LoRA for, and one decoded through a projection, fail; never the base model.
-    bound = [{"id": adapter["id"], "scale": 1.0}]
+    adapter_id = "nz1_" + "a" * 52
+    # A generic LoRA request the fork has not loaded must fail rather than use the base model.
     status, body = _json(servers["fork"] + "/v1/chat/completions", "POST",
-                         {"messages": [{"role": "user", "content": "hi"}], "max_tokens": 2, "x_natlang_adapters": bound})
+                         {"messages": [{"role": "user", "content": "hi"}], "max_tokens": 2,
+                          "x_natlang_adapters": [{"id": adapter_id, "scale": 1.0}]})
     assert status == 409 and body["error"]["code"] == "neuralese-adapter-not-loaded"
-    status, body = _json(servers["fork"] + "/v1/neuralese/decide", "POST",
-                         {"messages": [{"role": "user", "content": "hi"}], "options": ["a", "b"],
-                          "adapters": [{"code": adapter["id"], "projection": "p", "scale": 1.0}]})
-    assert status == 501 and body["error"]["code"] == "neuralese-adapters-projection-unavailable"
+    status, _ = _json(servers["reference"] + "/v1/neuralese/adapters", "POST", {"kind": "xs", "rank": 2})
+    assert status == 400
 
 
-REFERENCE_ONLY = {"adapters.create", "adapters.direct", "adapters.lora-export", "adapters.projection", "grad", "init-body",
-                  "grad.order2", "optim"}
+REFERENCE_ONLY = {"grad", "init-body", "grad.order2", "optim"}
 
 
 def _error_code(response):
@@ -352,16 +357,14 @@ def test_one_capability_model_on_every_runtime(servers):
     lacking = {  # capability -> a request needing it
         "grad": ("POST", "/v1/neuralese/grad", {"terms": []}),
         "optim": ("POST", "/v1/neuralese/optim", {"optimizer": "sgd", "params": [], "grads": []}),
-        "adapters.create": ("POST", "/v1/neuralese/adapters", {"kind": "xs", "rank": 2}),
         "init-body": ("POST", "/v1/neuralese/init_body", {"messages": [], "placeholder": "<block>", "text": "x"}),
-        "adapters.lora-export": ("GET", "/v1/neuralese/adapters/nz1_aaaa/lora", None),
     }
     for capability, (method, path, body) in lacking.items():
         assert capability not in fork["capabilities"]
         got = _error_code(_request(servers["fork"] + path, method, body))
         assert got == (501, "neuralese-" + capability.replace(".", "-") + "-unavailable"), (capability, got)
     got = _error_code(_request(servers["reference"] + "/v1/neuralese/adapters/nz1_aaaa/lora", "PUT", raw=b"x"))
-    assert got == (501, "neuralese-adapters-lora-load-unavailable"), got
+    assert got == (404, "not-found"), got
     for name in ("reference", "fork"):
         base = servers[name]
         for method in ("DELETE", "PATCH", "OPTIONS"):
@@ -388,54 +391,6 @@ def test_batched_scoring_shares_a_prefill_across_non_adjacent_items_in_request_o
         first, _, last = body["results"]
         assert first["tokens"] == last["tokens"][::-1], (name, body)
         assert all(abs(a - b) <= 1e-3 for a, b in zip(first["log_probs"], last["log_probs"][::-1])), (name, body)
-
-
-def test_a_weight_adapter_served_as_a_lora_agrees(servers):
-    """An xs adapter (coefficients on the reference server) exported as a GGUF LoRA for the fork: the same decision
-    log-probabilities and the same greedy reply, both different from the base model's."""
-    from natlang_neuralese.model.tiny_adapters import AdapterSpec
-    from natlang_neuralese.serve.store import encode_block, make_block
-
-    engine = servers["engine"]
-    bank = engine.adapter_bank
-    spec = bank.spec(kind="xs", rank=4, cutoff=engine.heads.cutoff)
-    torch.manual_seed(11)
-    coefficients = 1.5 * torch.randn(len(bank.matrices(spec)), spec.width)
-    block = make_block(coefficients, spec.dialect(), type="Adapter")
-    assert AdapterSpec.parse(block.dialect) == spec
-    status, _ = _request(f"{servers['reference']}/v1/neuralese/blocks/{block.id}", "PUT", raw=encode_block(block))
-    assert status == 201
-    # The reference server exports its adapter as a GGUF LoRA (what a runtime fetches for the fork).
-    status, gguf = _request(f"{servers['reference']}/v1/neuralese/adapters/{block.id}/lora")
-    assert status == 200 and gguf[:4] == b"GGUF"
-    status, loaded = _request(f"{servers['fork']}/v1/neuralese/adapters/{block.id}/lora", "PUT", raw=gguf)
-    assert status == 201, loaded
-    question = {"messages": [{"role": "user", "content": "Is Paris the capital of France? Reply with a JSON value."}],
-                "options": ["true", "false"]}
-    base = _both(servers, "/v1/neuralese/decide", "POST", question)
-    adapted = _both(servers, "/v1/neuralese/decide", "POST", {**question, "adapters": [{"id": block.id, "scale": 1.0}]})
-    for name in ("reference", "fork"):
-        assert adapted[name][0] == 200, adapted[name]
-    ref, fork = adapted["reference"][1]["log_probs"], adapted["fork"][1]["log_probs"]
-    print(f"adapted decide: reference {ref} fork {fork}; base {base['reference'][1]['log_probs']}")
-    assert max(abs(a - b) for a, b in zip(ref, base["reference"][1]["log_probs"])) > 10 * ATOL_LOGPROB
-    assert max(abs(a - b) for a, b in zip(ref, fork)) <= ATOL_LOGPROB, (ref, fork)
-    reply = {"messages": [{"role": "user", "content": "Name a city in France."}], "max_tokens": 8, "temperature": 0}
-    got = _both(servers, "/v1/chat/completions", "POST", {**reply, "x_natlang_adapters": [{"id": block.id, "scale": 0.5}]})
-    texts = {name: got[name][1]["choices"][0]["message"].get("content") for name in got}
-    assert texts["reference"] == texts["fork"], texts
-    # The binding is per request: the next request without adapters is the base model again.
-    again = _both(servers, "/v1/neuralese/decide", "POST", question)
-    assert again["fork"][1]["log_probs"] == base["fork"][1]["log_probs"]
-
-
-def _block_agrees(servers, got, atol=ATOL_PAYLOAD):
-    (rs, ref), (fs, fork) = got["reference"], got["fork"]
-    assert rs == fs == 201, (ref, fork)
-    assert ref["length"] == fork["length"] and bool(ref.get("truncated")) == bool(fork.get("truncated"))
-    diff = (_payload(servers["reference"], ref["id"]) - _payload(servers["fork"], fork["id"])).abs().max().item()
-    assert diff <= atol, f"payload differs by {diff:.3g}"
-    return ref, fork
 
 
 def test_encode_agrees(servers):
@@ -691,8 +646,9 @@ def test_info_fields_agree_in_shape(servers):
     """Both report the same fields with the same types; values say what each serves."""
     ref = _json(servers["reference"] + "/v1/neuralese/info")[1]
     fork = _json(servers["fork"] + "/v1/neuralese/info")[1]
-    assert set(ref) == set(fork), (sorted(ref), sorted(fork))
-    assert {k: type(v) for k, v in ref.items()} == {k: type(v) for k, v in fork.items()}
+    common = set(ref) & set(fork)
+    assert {k: type(ref[k]) for k in common} == {k: type(fork[k]) for k in common}
+    assert "adapters" not in ref and "projections" not in ref
     assert ref["stream"] is fork["stream"] is True and "chat.stream" in fork["capabilities"]
     assert ref["grad"] is True and fork["grad"] is False and ref["grad_order"] == 2 and fork["grad_order"] == 0
     assert fork["adapters"] == [] and fork["projections"] == {} and fork["store"] == {"owners": True, "persistent": False}

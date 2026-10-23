@@ -210,7 +210,7 @@ def test_adapted_real_dag_all_hidden_logits_and_coefficient_adjoints_match_refer
     from natlang_neuralese.model.tiny_adapters import AdapterBank
     engine=SimpleNamespace(shared_model=model,native_execution_lock=threading.RLock(),store=TensorStore(),
         native_identity={'checkpoint_sha256':'1'*64,'tokenizer_fingerprint':'2'*64,
-                         'embedding_weight_sha256':'3'*64,'architecture':family},adapter_bank=AdapterBank.of(port))
+                         'embedding_weight_sha256':'3'*64,'architecture':family},native_adapter_basis_bank=AdapterBank.of(port))
     adapter,name=nonzero_adapter(engine)
     coefficient=adapter.artifact.tensors[name].clone().requires_grad_(True)
     plan=graph()
@@ -275,7 +275,7 @@ def test_native_adapter_preserves_tied_parameters_and_rejects_incomplete_optimiz
     model=SharedStateModel(port,(60,61,62,63),rank=4)
     engine=SimpleNamespace(shared_model=model,native_execution_lock=threading.RLock(),store=TensorStore(),
         native_identity={'checkpoint_sha256':'1'*64,'tokenizer_fingerprint':'2'*64,
-                         'embedding_weight_sha256':'3'*64,'architecture':'lfm'},adapter_bank=AdapterBank.of(port))
+                         'embedding_weight_sha256':'3'*64,'architecture':'lfm'},native_adapter_basis_bank=AdapterBank.of(port))
     adapter,name=nonzero_adapter(engine)
     def inspect_ties():
         assert port.layers[1].self_attn.q_proj.weight is port.layers[3].self_attn.q_proj.weight

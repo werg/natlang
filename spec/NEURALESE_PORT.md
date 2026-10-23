@@ -133,10 +133,8 @@ become dashes, e.g. `neuralese-chat-stream-unavailable`).
 | `parts.value-type` | Content parts with `value_type: "unknown"`. | yes | yes |
 | `grad`, `grad.order2` | `POST /v1/neuralese/grad` (order 2: second-order). | yes | no |
 | `optim` | `POST /v1/neuralese/optim`. | yes | no |
-| `adapters.create` | `POST /v1/neuralese/adapters`. | yes | no |
-| `adapters.direct` | Adapter blocks applied directly (`tiny`, `xs`). | yes | no |
-| `adapters.lora-export` | `GET /v1/neuralese/adapters/{id}/lora`. | yes | no |
-| `adapters.lora-load` | `PUT /v1/neuralese/adapters/{id}/lora`: adapters apply as loaded LoRAs. | no | yes |
+| `native.adapters` | Exact-base actor coefficient artifacts and their native graph gradient/optimizer path. | native model mode | no |
+| `adapters.lora-load` | Load a caller-supplied GGUF LoRA for generic llama.cpp model serving. | no | yes |
 
 ### Conventions
 
@@ -188,7 +186,7 @@ OpenAI-style chat completion. Request fields beyond OpenAI's:
 | `neuralese_template` | Template readout: `{"call", "arguments"?, "argument"? (default "value"), "value": "write" \| "decode"}`. The reply is forced to the model's own rendering of that call, cut at the argument; `write` makes it a written block and closes the call, `decode` decodes the value and the rest. Errors: `neuralese-template`. | both |
 | `neuralese_template.value_type` | `"string"` (default) or `"unknown"`: the written value sits unquoted; the block is typed `Neuralese<unknown>` and its parts carry `value_type: "unknown"`. Another value is `neuralese-template`. | both (`template.value-type`) |
 | `neuralese_template.argument_path` | A list of string or integer keys addressing the value inside nested arguments; it starts at `argument`, and every key must exist in `arguments` (else `neuralese-template`). | both (`template.argument-path`) |
-| `x_natlang_adapters` | `[{"id", "scale"}]`: adapter blocks active for the whole request. | both; the fork needs a loaded LoRA per ID, else 409 `neuralese-adapter-not-loaded` |
+| `x_natlang_adapters` | Native model mode: exact actor coefficient references `[{"id", "scale"}]`, bound to the checkpoint's declared actor policy. The llama.cpp fork uses this field for its generic loaded-LoRA references. The legacy reference tiny-adapter path is retired. | native mode (`native.adapters`); fork (`adapters.lora-load`) |
 | `guidance` | `true` or `{"require_call"?, "tools"?, "repeat"?, "syntax"?, "retries"?, "run"?}` (`{}`: on, every default; absent, `null` or `false`: off): the reply opens a tool call (`require_call` defaults to `tool_choice == "required"`), call names are checked against `tools` (default: the offered tools), eval code is checked line by line for repetition and TypeScript syntax, and a rejected line is rolled back and resampled. | both; the reference may also apply a server default (`--guidance`) |
 | `seed` | Also seeds the payload noise of each written block (with the block's index). | both; the noise generators differ, so payloads at `τ > 0` differ between servers |
 | `x_natlang_forced` | Test hook: a plan of text strings and `{"neuralese": "write"}` items that replaces sampling. Errors: `forced-plan`. | both |
@@ -259,8 +257,8 @@ Each answers 201 with the new block's meta.
 
 | Endpoint | Meaning | Servers |
 | --- | --- | --- |
-| `POST /v1/neuralese/decide` | Decision readout: `{"messages", "options", "tools"?, "adapters"?}` → `{"log_probs", "tokens"}`. Each option is a reply text scored as the whole assistant reply after one prompt pass; `tokens[i]` counts the tokens where the options differ. Errors: `neuralese-decision`. `adapters` as `x_natlang_adapters`. | both |
-| `POST /v1/neuralese/decide_many`, `POST /v1/natlang/score` | Batched decisions (plans/BATCHED_EXECUTION.md): `{"items": [{"messages", "options" \| "continuations", "tools"?, "adapters"?}], "adapters"?}` → `{"results": [{"log_probs", "tokens"} \| {"error"}]}`, one per item in order. Each result equals `decide` on that item alone; items with the same adapters, messages and tools share one prefill wherever they sit in the request (servers group them and answer in request order); a failing item fails alone. Top-level `adapters` is the default for items. An item's `error` is `"<code>: <detail>"` for a request error (the same text on both servers) and `"internal: …"` otherwise. | both |
+| `POST /v1/neuralese/decide` | Decision readout: `{"messages", "options", "tools"?}` → `{"log_probs", "tokens"}`. Each option is a reply text scored as the whole assistant reply after one prompt pass; `tokens[i]` counts the tokens where the options differ. Native runtimes also accept exact actor coefficient references in `adapters`; legacy runtimes reject that field as retired. Errors: `neuralese-decision`. | both |
+| `POST /v1/neuralese/decide_many`, `POST /v1/natlang/score` | Batched decisions (plans/BATCHED_EXECUTION.md): `{"items": [{"messages", "options" \| "continuations", "tools"?}]}` → `{"results": [{"log_probs", "tokens"} \| {"error"}]}`, one per item in order. Each result equals `decide` on that item alone; items with the same messages and tools share one prefill wherever they sit in the request (servers group them and answer in request order); a failing item fails alone. An item's `error` is `"<code>: <detail>"` for a request error (the same text on both servers) and `"internal: …"` otherwise. | both |
 | `POST /v1/neuralese/render` | The rendered prompt of `{"messages", "tools"?}` with each block as `<block>` → `{"prompt"}` (201). For conformance. | both |
 | `POST /v1/neuralese/guidance/check` | `{"reply", "guidance": {"tools"?, "repeat"?, "syntax"?, "run"?}}` → the first rejection when `reply` is checked prefix by prefix as during generation, `{"reason", "offset", "end"}`, or `{"reason": null}` (201). For conformance. | both |
 
@@ -268,22 +266,22 @@ Each answers 201 with the new block's meta.
 
 | Endpoint | Meaning | Servers |
 | --- | --- | --- |
-| `POST /v1/neuralese/grad` | Gradient replay session: `{"arguments": [id…], "terms": [term…], "producers"?, "adapters"?, "order"? (1 or 2), "derived"?}` → `{"loss", "terms": [loss…], "gradients": {argument id: gradient id}}`. Term kinds: `crossEntropy`, `logLikelihood`, `decision`, `selfDistill`, `klPrior`. Gradient blocks are in dialect `{dialect}#grad`. Errors: `neuralese-grad-term`, `neuralese-grad-target`, `neuralese-grad-derived`, `neuralese-grad-unavailable`. | reference only (`grad`, `grad.order2`); the fork answers 501 `neuralese-grad-unavailable` |
+| `POST /v1/neuralese/grad` | Gradient replay session: `{"arguments": [id…], "terms": [term…], "producers"?, "order"? (1 or 2), "derived"?}` → `{"loss", "terms": [loss…], "gradients": {argument id: gradient id}}`. Term kinds: `crossEntropy`, `logLikelihood`, `decision`, `selfDistill`, `klPrior`. Gradient blocks are in dialect `{dialect}#grad`. Errors: `neuralese-grad-term`, `neuralese-grad-target`, `neuralese-grad-derived`, `neuralese-grad-unavailable`. | reference only (`grad`, `grad.order2`); the fork answers 501 `neuralese-grad-unavailable` |
 | `POST /v1/neuralese/optim` | One optimiser step: `{"optimizer": "sgd" \| "adam", "hyper", "params": [id…], "grads": [id…], "state"?: {"step", "m"?, "v"?}}` → `{"params": [id…], "state": {"step", "m"?, "v"?}}`. State blocks are in dialect `{dialect}#opt`. Errors: `neuralese-optim`. | reference only (`optim`); the fork answers 501 `neuralese-optim-unavailable` |
+| `POST /v1/neuralese/adapters` | Create an exact-base native actor coefficient artifact from named trainable parameters. The result is an immutable native tensor artifact, not a generic legacy block. | native runtime (`native.adapters`) |
 
 Gradient determinism (reference server setting): on a GPU the attention backward accumulates with atomics, so the same `grad` request can return different gradient bytes (and, after a learning-rate step, different losses). `NATLANG_NEURALESE_DETERMINISTIC=1` or `python -m natlang_neuralese.serve --deterministic-gradients` runs `GradSession.run` under strict `torch.use_deterministic_algorithms` with `CUBLAS_WORKSPACE_CONFIG=:4096:8` (`GradSession(engine, deterministic=…)` per session). Off by default: it is slower on long contexts and an op without a deterministic CUDA kernel fails the request, so trainers sharing `GradSession` enable it only when a recipe declares it. The learning tests and the conformance suite set it. Order 1 and order 2 use different kernels (order 2: math attention, unfused convolution), so under bf16 their losses for one request agree to a few percent, not exactly.
 
-### Weight adapters
+### Retired weight-adapter requests
 
-Adapter blocks (`model/tiny_adapters.py`) bind through `x_natlang_adapters` and
-`adapters`. The reference applies them directly; the fork applies each as a GGUF LoRA
-that a client loads first.
-
-| Endpoint | Meaning | Servers |
-| --- | --- | --- |
-| `POST /v1/neuralese/adapters` | A zero adapter for this backbone: `{"kind", "rank", "u", "layers", "targets", "seed", "type"?}` → meta (201). | reference only (`adapters.create`); the fork answers 501 `neuralese-adapters-create-unavailable` |
-| `GET /v1/neuralese/adapters/{id}/lora` | A stored adapter exported as a GGUF LoRA (octet stream). 404 for a block that is not a stored adapter. | reference only (`adapters.lora-export`); the fork answers 501 `neuralese-adapters-lora-export-unavailable` |
-| `PUT /v1/neuralese/adapters/{id}/lora` | Load a GGUF LoRA body as adapter `{id}` → `{"id", "loaded": true}` (201). 400 `neuralese-adapter-lora` if it is not a LoRA for this model. | fork only (`adapters.lora-load`); the reference applies adapters directly and answers 501 `neuralese-adapters-lora-load-unavailable` |
+The reference runtime's legacy tiny-adapter blocks and their GGUF LoRA export
+are retired. The llama.cpp fork retains its generic GGUF LoRA loader for
+caller-supplied model adapters. The native runtime retains exact-base actor coefficient artifacts for whole-graph policy
+learning; these artifacts have native tensor identities and exact actor
+bindings, and are not generic prompt adapters. Legacy runtimes return
+`400 neuralese-adapters-retired` when legacy block bindings are requested. For stored
+program guidance, use positional native-state spans. That changes the call's
+KV/hybrid-state context and does not modify model weights.
 
 ### Info and health
 
@@ -296,11 +294,10 @@ that a client loads first.
 | `context` | The served context in tokens: positions one request's prompt and reply may span. Fork: `min(n_ctx_train, -c)` (default `-c` 8192); reference: `min(max_position_embeddings, -c)` (default the model's `max_position_embeddings`). `view` plans its write sites against it. | both |
 | `grad` | Whether `grad` sessions are served: `true` (reference), `false` (fork). | both |
 | `grad_order` | Highest gradient order: 2 (reference), 0 (fork: none). | both |
-| `adapters` | Adapter kinds applied directly: `["xs", "tiny"]` (reference), `[]` (fork: adapters apply as LoRAs loaded with `PUT …/lora`, capability `adapters.lora-load`). | both |
 | `stream` | `true`: chat completions honour `"stream": true` (Streaming, above). Clients stream only to a server that declares it; absent means not streaming. | both |
 | `store` | `{"owners": true, "persistent": bool}`: owner-scoped holds, pins and collection; whether blocks outlive a restart. | both |
 | `server` | `"reference"` or `"llama.cpp"`. | both |
-| `capabilities` | The sorted list of capabilities served (Capabilities, above). Clients read this rather than inferring from `adapters` or `grad`. | both |
+| `capabilities` | The sorted list of capabilities served (Capabilities, above). Native model mode includes `native.adapters` for exact actor learning; llama.cpp retains `adapters.lora-load`. | both |
 
 `GET /health`, `GET /v1/health` (`{"status": "ok"}`) and `GET /v1/models` are served
 by both.
