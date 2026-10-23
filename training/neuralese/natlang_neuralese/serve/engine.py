@@ -452,19 +452,6 @@ class Engine:
             raise RequestError("neuralese-bad-block", f"{block_id} has width {block.width}, this server reads {self.width}")
         return block
 
-    @property
-    def native_adapter_basis_bank(self):
-        """Pure basis/projection utilities for native actor coefficients; never installs legacy module hooks."""
-        if not hasattr(self, "_native_adapter_basis_bank"):
-            from ..model.tiny_adapters import AdapterBank
-            self._native_adapter_basis_bank = AdapterBank.of(self.backbone)
-        return self._native_adapter_basis_bank
-
-    def using(self, seqs):
-        """Legacy non-native forward scope; native actor coefficients use `_native_run` instead."""
-        from contextlib import nullcontext
-        return nullcontext()
-
     def _prompt_plan(self, messages, tools) -> list:
         """Render and tokenize on the caller's CPU thread; preserve segment boundaries."""
         rendered = self.render_request(messages, tools)
@@ -1352,8 +1339,7 @@ class Engine:
                     if token is not None:
                         text_rows.append((seq, token))
                 elif phase == "sketch":
-                    with self.using([seq]):
-                        sketch = seq.writer.decide()
+                    sketch = seq.writer.decide()
                     if sketch is None:
                         self._close_block(seq)
                     else:
@@ -1390,19 +1376,17 @@ class Engine:
 
     def _text_batch(self, rows):
         ids = torch.tensor([[token] for _, token in rows], device=self.device)
-        with self.using([seq for seq, _ in rows]):
-            if self.heads.read_markers:
-                h, caches = step_rows(self.backbone, self.backbone.embed(ids), [seq.cache for seq, _ in rows],
-                                      range(0, self.backbone.num_layers))
-            else:
-                cut, caches = step_rows(self.backbone, self.backbone.embed(ids), [seq.cache for seq, _ in rows],
-                                        range(0, self.heads.cutoff))
-                h, caches = step_rows(self.backbone, cut, caches, range(self.heads.cutoff, self.backbone.num_layers))
-            logits = self.backbone.logits(h)[:, -1] if getattr(self, 'token_choice_projection', None) is None else None
+        if self.heads.read_markers:
+            h, caches = step_rows(self.backbone, self.backbone.embed(ids), [seq.cache for seq, _ in rows],
+                                  range(0, self.backbone.num_layers))
+        else:
+            cut, caches = step_rows(self.backbone, self.backbone.embed(ids), [seq.cache for seq, _ in rows],
+                                    range(0, self.heads.cutoff))
+            h, caches = step_rows(self.backbone, cut, caches, range(self.heads.cutoff, self.backbone.num_layers))
+        logits = self.backbone.logits(h)[:, -1] if getattr(self, 'token_choice_projection', None) is None else None
         for index, (seq, token) in enumerate(rows):
             if logits is None:
-                with self.using([seq]):
-                    score, seq.token_history = self.advance_token_readout(seq.token_history, h[index:index + 1], last_only=True)
+                score, seq.token_history = self.advance_token_readout(seq.token_history, h[index:index + 1], last_only=True)
                 seq.cache, seq.logits = caches[index], score[:, -1]
             else:
                 seq.cache, seq.logits = caches[index], logits[index:index + 1]
@@ -1445,13 +1429,11 @@ class Engine:
         seq.bans.setdefault(target, set()).add(seq.items[target])
         count, cache, logits, generated, cut_state, top_state, token_history = usable[-1]
         if between:
-            with self.using([seq]):
-                out = self.backbone.forward_ids(torch.tensor([between], device=self.device), cache=cache,
-                                                cutoff=self.heads.cutoff if not self.heads.read_markers else None)
+            out = self.backbone.forward_ids(torch.tensor([between], device=self.device), cache=cache,
+                                            cutoff=self.heads.cutoff if not self.heads.read_markers else None)
             cache, logits = out["cache"], out["logits"][:, -1]
             if getattr(self, 'token_choice_projection', None) is not None:
-                with self.using([seq]):
-                    score, token_history = self.advance_token_readout(token_history, out['h_final'], last_only=True)
+                score, token_history = self.advance_token_readout(token_history, out['h_final'], last_only=True)
                 logits = score[:, -1]
             if not self.heads.read_markers:
                 cut_state, top_state = out['h_cut'][:, -1], out['h_final'][:, -1]
@@ -1472,9 +1454,8 @@ class Engine:
         sketches = torch.cat([seq.writer.next_input(sketch) if hasattr(seq.writer, 'next_input') else sketch
                               for seq, sketch in rows], 0)[:, None]
         depth = self.backbone.num_layers if getattr(self, 'neuralese_projection', None) is not None else self.heads.cutoff
-        with self.using([seq for seq, _ in rows]):
-            h, caches = step_rows(self.backbone, sketches, [seq.writer.cache for seq, _ in rows],
-                                  range(0, depth))
+        h, caches = step_rows(self.backbone, sketches, [seq.writer.cache for seq, _ in rows],
+                              range(0, depth))
         for index, (seq, sketch) in enumerate(rows):
             seq.writer.advance(sketch, h[index:index + 1, 0], caches[index])
 
@@ -1511,11 +1492,10 @@ class Engine:
         if len(group) == 1:
             seq, embeds = group[0]
             try:
-                with self.using([seq]):
-                    out = self.backbone.forward_embeds(embeds, logits=False, cutoff=self.heads.cutoff if not self.heads.read_markers else None)
-                    start = out['h_final'].shape[1] - len(seq.prefilled_forced) - 1
-                    score, token_history = self.advance_token_readout(None, out['h_final'][:, start:], last_only=True)
-                    logits = score[:, -1]
+                out = self.backbone.forward_embeds(embeds, logits=False, cutoff=self.heads.cutoff if not self.heads.read_markers else None)
+                start = out['h_final'].shape[1] - len(seq.prefilled_forced) - 1
+                score, token_history = self.advance_token_readout(None, out['h_final'][:, start:], last_only=True)
+                logits = score[:, -1]
                 self._prefilled(seq, out["cache"], logits, int(embeds.shape[1]),
                                 out['h_cut'][:, -1] if not self.heads.read_markers else None,
                                 out['h_final'][:, -1] if not self.heads.read_markers else None, token_history)
@@ -1528,10 +1508,9 @@ class Engine:
             pad = torch.tensor(pad_lengths, device=self.device)
             embeds = torch.cat([torch.cat([e.new_zeros(1, width - e.shape[1], e.shape[2]), e], 1) for _, e in group], 0)
             padded = any(pad_lengths)
-            with self.using([seq for seq, _ in group]):
-                out = self.backbone.forward_embeds(embeds, left_pad=pad if padded else None, logits=False,
-                                                   cutoff=self.heads.cutoff if not self.heads.read_markers else None)
-                logits = self.backbone.logits(out["h_final"][:, -1:])[:, -1]
+            out = self.backbone.forward_embeds(embeds, left_pad=pad if padded else None, logits=False,
+                                               cutoff=self.heads.cutoff if not self.heads.read_markers else None)
+            logits = self.backbone.logits(out["h_final"][:, -1:])[:, -1]
             caches = split_rows(out["cache"], pad)
         except Exception:
             for row in group:  # isolate a failing request
@@ -1542,10 +1521,9 @@ class Engine:
                 token_history = None
                 score = logits[index:index + 1]
                 if getattr(self, 'token_choice_projection', None) is not None:
-                    with self.using([seq]):
-                        start = out['h_final'].shape[1] - len(seq.prefilled_forced) - 1
-                        scores, token_history = self.advance_token_readout(None, out['h_final'][index:index + 1, start:], last_only=True)
-                        score = scores[:, -1]
+                    start = out['h_final'].shape[1] - len(seq.prefilled_forced) - 1
+                    scores, token_history = self.advance_token_readout(None, out['h_final'][index:index + 1, start:], last_only=True)
+                    score = scores[:, -1]
                 self._prefilled(seq, caches[index], score, int(e.shape[1]),
                                 out['h_cut'][index:index + 1, -1] if not self.heads.read_markers else None,
                                 out['h_final'][index:index + 1, -1] if not self.heads.read_markers else None, token_history)
@@ -1668,8 +1646,7 @@ class Engine:
                 return None
             if self.heads.read_markers:
                 ids = torch.tensor([[token]], device=self.device)
-                with self.using([seq]):
-                    out = self.backbone.forward_ids(ids, cache=seq.cache, cutoff=self.heads.cutoff)
+                out = self.backbone.forward_ids(ids, cache=seq.cache, cutoff=self.heads.cutoff)
                 opened = Opened(cache=out["cache"], h_cut=out["h_cut"][:, -1], logits=out["logits"][:, -1])
             else:
                 if seq.cut_state is None:
@@ -1686,14 +1663,13 @@ class Engine:
                 seq.writer = StepWriter(self.backbone, self.heads, opened, min(limit, self.max_block, remaining - 2),
                                         length=request.neuralese_length)
             if request.neuralese_length and request.neuralese_passes:
-                with self.using([seq]):
-                    if direct is not None:
-                        # Direct v1 has no shallow sketch passes. The full-depth
-                        # writer remains the sole implementation for this artifact.
-                        while not seq.writer.step():
-                            pass
-                    else:
-                        seq.writer.blockwise(request.neuralese_passes)
+                if direct is not None:
+                    # Direct v1 has no shallow sketch passes. The full-depth
+                    # writer remains the sole implementation for this artifact.
+                    while not seq.writer.step():
+                        pass
+                else:
+                    seq.writer.blockwise(request.neuralese_passes)
             seq.generated_positions += 1
             seq.phase = "sketch"
             return None
@@ -1705,13 +1681,12 @@ class Engine:
         tau = float(request.neuralese_temperature or 0.0)
         seed = derive_seed("neuralese", request.seed if request.seed is not None else request.request_id, index)
         generator = torch.Generator().manual_seed(seed)
-        with self.using([seq]):
-            payload, mu, log_sigma = writer.complete(tau, generator)
-            back = read_back(self.backbone, self.heads, writer.opened.cache, payload, all_logits=False,
-                             final_states=getattr(self, 'token_choice_projection', None) is not None)
-            if getattr(self, 'token_choice_projection', None) is not None:
-                scores, seq.token_history = self.advance_token_readout(seq.token_history, back['final_states'], last_only=True)
-                back['logits'] = scores[:, -1]
+        payload, mu, log_sigma = writer.complete(tau, generator)
+        back = read_back(self.backbone, self.heads, writer.opened.cache, payload, all_logits=False,
+                         final_states=getattr(self, 'token_choice_projection', None) is not None)
+        if getattr(self, 'token_choice_projection', None) is not None:
+            scores, seq.token_history = self.advance_token_readout(seq.token_history, back['final_states'], last_only=True)
+            back['logits'] = scores[:, -1]
         seq.cache, seq.logits = back["cache"], back["logits"]
         if not self.heads.read_markers:
             seq.cut_state, seq.top_state = back['h_cut'], back['h_final']

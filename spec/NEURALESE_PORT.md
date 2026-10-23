@@ -186,7 +186,7 @@ OpenAI-style chat completion. Request fields beyond OpenAI's:
 | `neuralese_template` | Template readout: `{"call", "arguments"?, "argument"? (default "value"), "value": "write" \| "decode"}`. The reply is forced to the model's own rendering of that call, cut at the argument; `write` makes it a written block and closes the call, `decode` decodes the value and the rest. Errors: `neuralese-template`. | both |
 | `neuralese_template.value_type` | `"string"` (default) or `"unknown"`: the written value sits unquoted; the block is typed `Neuralese<unknown>` and its parts carry `value_type: "unknown"`. Another value is `neuralese-template`. | both (`template.value-type`) |
 | `neuralese_template.argument_path` | A list of string or integer keys addressing the value inside nested arguments; it starts at `argument`, and every key must exist in `arguments` (else `neuralese-template`). | both (`template.argument-path`) |
-| `x_natlang_adapters` | Native model mode: exact actor coefficient references `[{"id", "scale"}]`, bound to the checkpoint's declared actor policy. The llama.cpp fork uses this field for its generic loaded-LoRA references. The legacy reference tiny-adapter path is retired. | native mode (`native.adapters`); fork (`adapters.lora-load`) |
+| `x_natlang_adapters` | Native model mode: exact nnt1 actor coefficient references `[{"id", "scale"}]`, bound to the checkpoint's declared actor policy. The llama.cpp fork uses this field for its generic loaded-LoRA references. The former `nz1` projected/tiny-adapter blocks are not accepted. | native mode (`native.adapters`); fork (`adapters.lora-load`) |
 | `guidance` | `true` or `{"require_call"?, "tools"?, "repeat"?, "syntax"?, "retries"?, "run"?}` (`{}`: on, every default; absent, `null` or `false`: off): the reply opens a tool call (`require_call` defaults to `tool_choice == "required"`), call names are checked against `tools` (default: the offered tools), eval code is checked line by line for repetition and TypeScript syntax, and a rejected line is rolled back and resampled. | both; the reference may also apply a server default (`--guidance`) |
 | `seed` | Also seeds the payload noise of each written block (with the block's index). | both; the noise generators differ, so payloads at `τ > 0` differ between servers |
 | `x_natlang_forced` | Test hook: a plan of text strings and `{"neuralese": "write"}` items that replaces sampling. Errors: `forced-plan`. | both |
@@ -257,7 +257,7 @@ Each answers 201 with the new block's meta.
 
 | Endpoint | Meaning | Servers |
 | --- | --- | --- |
-| `POST /v1/neuralese/decide` | Decision readout: `{"messages", "options", "tools"?}` → `{"log_probs", "tokens"}`. Each option is a reply text scored as the whole assistant reply after one prompt pass; `tokens[i]` counts the tokens where the options differ. Native runtimes also accept exact actor coefficient references in `adapters`; legacy runtimes reject that field as retired. Errors: `neuralese-decision`. | both |
+| `POST /v1/neuralese/decide` | Decision readout: `{"messages", "options", "tools"?}` → `{"log_probs", "tokens"}`. Each option is a reply text scored as the whole assistant reply after one prompt pass; `tokens[i]` counts the tokens where the options differ. Native runtimes also accept exact nnt1 actor coefficient references in `adapters`. Other runtimes reject that field as an unsupported request field. Errors: `neuralese-decision`. | both |
 | `POST /v1/neuralese/decide_many`, `POST /v1/natlang/score` | Batched decisions (plans/BATCHED_EXECUTION.md): `{"items": [{"messages", "options" \| "continuations", "tools"?}]}` → `{"results": [{"log_probs", "tokens"} \| {"error"}]}`, one per item in order. Each result equals `decide` on that item alone; items with the same messages and tools share one prefill wherever they sit in the request (servers group them and answer in request order); a failing item fails alone. An item's `error` is `"<code>: <detail>"` for a request error (the same text on both servers) and `"internal: …"` otherwise. | both |
 | `POST /v1/neuralese/render` | The rendered prompt of `{"messages", "tools"?}` with each block as `<block>` → `{"prompt"}` (201). For conformance. | both |
 | `POST /v1/neuralese/guidance/check` | `{"reply", "guidance": {"tools"?, "repeat"?, "syntax"?, "run"?}}` → the first rejection when `reply` is checked prefix by prefix as during generation, `{"reason", "offset", "end"}`, or `{"reason": null}` (201). For conformance. | both |
@@ -274,14 +274,12 @@ Gradient determinism (reference server setting): on a GPU the attention backward
 
 ### Retired weight-adapter requests
 
-The reference runtime's legacy tiny-adapter blocks and their GGUF LoRA export
-are retired. The llama.cpp fork retains its generic GGUF LoRA loader for
-caller-supplied model adapters. The native runtime retains exact-base actor coefficient artifacts for whole-graph policy
-learning; these artifacts have native tensor identities and exact actor
-bindings, and are not generic prompt adapters. Legacy runtimes return
-`400 neuralese-adapters-retired` when legacy block bindings are requested. For stored
-program guidance, use positional native-state spans. That changes the call's
-KV/hybrid-state context and does not modify model weights.
+The `nz1` projected/tiny-adapter block channel and its reference GGUF exporter
+are removed. The llama.cpp fork retains its independent loader for caller-supplied
+GGUF LoRA models. Native model learning uses immutable nnt1 coefficient artifacts
+with exact checkpoint identity and whole-graph actor gradients. Those actor
+bindings are not stored program guidance. Guidance uses positional native-state
+spans, which condition call KV/hybrid state without changing model weights.
 
 ### Info and health
 

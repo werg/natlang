@@ -1,9 +1,4 @@
-"""Public objective terms lowered to one shared graph, without executing it.
-
-This internal compiler does not advertise or dispatch the unfinished public
-GradSession derivative/optimizer protocol. It uses the production renderer,
-actual captured source occurrences, native actor identities and query loss.
-"""
+"""Lower exact high-level native turns into one differentiable actor graph."""
 from __future__ import annotations
 
 import copy
@@ -192,3 +187,19 @@ def lower_recorded_objective(engine,turns,events,terms,*,owner=None):
             'graph_sha256':canonical_json_sha256_hex(graph),'terms':pending},
         'native_state_modes':{key:value for turn in turns for key,value in (turn.get('native_state_modes') or {}).items()
             if key in {binding['id'] for binding in graph['external_states'].values()}}}
+
+
+def native_recorded_gradient(engine, request, owner=None):
+    """Compile a recorded-objective request and differentiate its exact native actors."""
+    if (not isinstance(request,dict) or
+            set(request)!={'schema','turns','events','terms','target'} or
+            request.get('schema')!='natlang.native-recorded-objective-request/1' or
+            not isinstance(request.get('turns'),list) or not isinstance(request.get('events'),list)):
+        raise ValueError('native recorded gradient requires exact turns, events, terms and target under its versioned schema')
+    target=request['target']
+    if not isinstance(target,dict) or target.get('kind') not in ('adapter','model-parameters','native-state'):
+        raise ValueError('native recorded gradient target must select actual adapter coefficients, model parameters or imported state')
+    body=lower_recorded_objective(engine,request['turns'],request['events'],request['terms'],owner=owner)
+    body['target']=target
+    from .native_grad import native_graph_gradient
+    return native_graph_gradient(engine,body,owner)

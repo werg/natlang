@@ -14,9 +14,10 @@
 | `POST /v1/neuralese/native-states/init-body` | Render a call with one native placeholder replaced by text, capture the text span at its actual causal position, and return the state plus ordered source segments. |
 | `POST /v1/neuralese/collect` | `{"referenced": […]}`: with an owner, the owner now holds exactly the referenced blocks (and its pinned ones); blocks it released are dropped unless another owner holds or pins them. Without an owner, drops the blocks no owner holds or pins that are not referenced. Answers `{"removed": […]}`. |
 | `POST /v1/neuralese/grad` | Gradient replay session (`grad.GradSession`): loss, per-term losses, gradient block IDs. |
-| `POST /v1/neuralese/decide` | Decision readout: `{"messages", "options", "tools"?, "adapters"?}` → `{"log_probs", "tokens"}`, each option scored as the whole assistant reply after one prompt pass. |
-| `POST /v1/neuralese/decide_many`, `POST /v1/natlang/score` | Batched decisions: `{"items": [{"messages", "options" or "continuations", "tools"?, "adapters"?}], "adapters"?}` → `{"results": [{"log_probs", "tokens"} or {"error"}]}`; each item as `decide` alone, a failing item fails alone. |
+| `POST /v1/neuralese/decide` | Decision readout: `{"messages", "options", "tools"?}` → `{"log_probs", "tokens"}`, each option scored as the whole assistant reply after one prompt pass. Native servers also accept exact nnt1 coefficient actor bindings. |
+| `POST /v1/neuralese/decide_many`, `POST /v1/natlang/score` | Batched decisions: `{"items": [{"messages", "options" or "continuations", "tools"?}]}` → `{"results": [{"log_probs", "tokens"} or {"error"}]}`; each item as `decide` alone, a failing item fails alone. Native servers also accept exact nnt1 coefficient actor bindings. |
 | `POST /v1/neuralese/optim` | One SGD or Adam step on parameter blocks; returns new parameter and optimiser-state blocks. |
+| `POST /v1/neuralese/adapters` | Native servers create an exact nnt1 modelLoRA actor from `{"kind":"xs", "rank"?, "seed"?, "parameter_names", "native_identity"}` and archive its frozen SVD bases. |
 | `POST /v1/neuralese/embed` | A block initialised from text (token embeddings): `{"text", "type"?}` → block metadata. |
 | `POST /v1/neuralese/guidance/check` | The first rejection of `{"reply", "guidance"}` checked prefix by prefix as during generation (serve/guidance.py), for conformance. |
 | `POST /v1/neuralese/render` | The rendered prompt of `{"messages", "tools"?}` (blocks as `<block>`), for conformance with the llama.cpp fork. |
@@ -32,7 +33,7 @@ and pins outlive restarts; a client that still gets `neuralese-unknown-block` re
 
 Request fields beyond OpenAI's: `neuralese_temperature` (default 0, deterministic), `neuralese_max_length` (capped
 by the server's hard maximum), `neuralese_length` (an optional size hint: write exactly that many vectors, no stop
-decision) and `neuralese_passes` (with a hint, write the block in that many parallel passes; exact when ≥ the length), `neuralese_template` (template readout: the reply is forced to
+decision) and `neuralese_passes` (with a hint, write the block in that many parallel passes; exact when ≥ the length), native servers accept `x_natlang_adapters` only for exact nnt1 actor coefficient bindings. `neuralese_template` (template readout: the reply is forced to
 a call, `{"call", "arguments"?, "argument"?, "value": "write" | "decode"}`, cut from the model's own rendering of that
 call; "write" makes the argument a written block and closes the call, "decode" decodes the value and the rest), and
 `guidance` (serve/guidance.py: `true` or `{"require_call"?, "repeat"?, "syntax"?, "retries"?}`: the reply opens a
@@ -243,7 +244,7 @@ def make_handler(engine: Engine):
                 raise json.JSONDecodeError("request body is not a JSON object", "", 0)
             if (not getattr(engine, "native_state_enabled", False) and
                     ("adapters" in body or "x_natlang_adapters" in body)):
-                raise RequestError("neuralese-adapters-retired", "weight-adapter request bindings are retired; use native-state spans or train the exact model parameters")
+                raise RequestError("bad-request-field", "adapter actor bindings require a native-state server")
             return body
 
         def do_PUT(self):
@@ -317,6 +318,11 @@ def make_handler(engine: Engine):
                 if self.path == "/v1/neuralese/grad":
                     body = self._object()
                     if getattr(engine, "native_state_enabled", False):
+                        if 'native_recorded_objective' in body:
+                            from .native_recorded_objective import native_recorded_gradient
+                            with grad_lock:
+                                return self._json(200, native_recorded_gradient(
+                                    engine, body['native_recorded_objective'], self._owner))
                         from .native_grad import native_graph_gradient
                         with grad_lock:
                             return self._json(200, native_graph_gradient(engine, body, self._owner))
@@ -346,7 +352,7 @@ def make_handler(engine: Engine):
                         return self._json(200, optim_step(engine, body))
                 if self.path == "/v1/neuralese/adapters":
                     if not getattr(engine, 'native_state_enabled', False):
-                        raise RequestError('neuralese-adapters-retired', 'native actor coefficients require a native-state runtime')
+                        return self._unavailable('native.adapters')
                     body = self._object()
                     with grad_lock, engine.native_execution_lock:
                         from ..model.native_adapters import create_adapter

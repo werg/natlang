@@ -15,12 +15,7 @@ Terms (`kind`):
 | `logLikelihood` | Negative log-probability of the whole recorded output: text tokens, each written block's stop decisions, and, for blocks written at Neuralese temperature > 0, the Gaussian log-density of the recorded payload under the recomputed mean and scale (`heads.payload_log_prob`). |
 | `selfDistill` | KL(teacher ‖ student) over the target's text positions; the teacher is the same model given `teacher_messages` (the full source), without gradient. The reference server has no separately trained deltas, so "deltas off" is the same weights. |
 | `klPrior` | KL(N(μ, σ²) ‖ N(0, I)) of Gaussian blocks `{mean, log_sigma}` in normalised space (`heads.payload_kl`). |
-| `decision` | A proper scoring rule on the decision readout: `options` (assistant replies) are scored after `messages` as in `/v1/neuralese/decide`, normalised over the options, and compared with `target` probabilities, or with the readout of a `teacher` (`{messages, adapters}`: the same model given privileged context, scored without gradient; conditioned distillation) (`rule`: `logLoss`, the default, is cross-entropy against the target distribution; `brier` is the squared error; `rps` is the ranked probability score for ordered options; `expectedReward` takes `target.rewards`, one per option, and its loss is −Σ pᵢ rᵢ, the exact policy objective of a finite decision). |
-
-This legacy soft-block replay path does not apply weight adapters. Native actor
-coefficients are differentiated through the exact recorded whole graph by
-`serve/native_grad.py`; they are not generic `#grad` blocks. Legacy tiny-adapter
-references fail with `neuralese-adapters-retired`.
+| `decision` | A proper scoring rule on the decision readout: `options` (assistant replies) are scored after `messages` as in `/v1/neuralese/decide`, normalised over the options, and compared with `target` probabilities, or with the readout of a `teacher` (`{messages}`: the same model given privileged context, scored without gradient; conditioned distillation) (`rule`: `logLoss`, the default, is cross-entropy against the target distribution; `brier` is the squared error; `rps` is the ranked probability score for ordered options; `expectedReward` takes `target.rewards`, one per option, and its loss is −Σ pᵢ rᵢ, the exact policy objective of a finite decision). |
 
 Every term has a `weight`; the session loss is the weighted sum. Constants (`stopGradient`, inner gradients of a
 first-order nested `grad`) are simply blocks that are not arguments.
@@ -566,8 +561,8 @@ class GradSession:
         probabilities = target.get("probabilities") if isinstance(target, dict) else None
         if probabilities is None and isinstance(teacher, dict):
             # Conditioned distillation: the target is the same model's readout given the teacher's messages (its
-            # privileged context), with the teacher's adapters (none by default), without gradient.
-            with torch.no_grad(), self._adapted(teacher.get("adapters"), {}):
+            # privileged context), without gradient.
+            with torch.no_grad():
                 teacher_scores, _ = self.decision_logprobs(teacher.get("messages") or [], teacher.get("tools"), options, {})
             probabilities = torch.softmax(teacher_scores.float(), 0).tolist()
         if not isinstance(probabilities, list) or len(probabilities) != len(options):
@@ -608,7 +603,7 @@ class GradSession:
             if not teacher_messages:
                 raise RequestError("neuralese-grad-term", "selfDistill needs teacher_messages")
             student = self._score(prompt, rest, leaves, write_terms=False)["token_logits"]
-            with torch.no_grad(), self._adapted(term.get("teacher_adapters"), {}), _bf16_teacher():
+            with torch.no_grad(), _bf16_teacher():
                 t_prompt, t_rest = self._target_items(teacher_messages, tools, target)
                 teacher = self._score(t_prompt, t_rest, {}, write_terms=False)["token_logits"]
             if student is None or teacher is None or student.shape != teacher.shape:
@@ -686,7 +681,7 @@ class GradSession:
             if not teacher_messages:
                 raise RequestError('neuralese-grad-term', 'distillation needs teacher_messages')
             # The teacher runs at BF16 (no recipe precision point; train/quantization.py).
-            with torch.no_grad(), self._adapted(term.get('teacher_adapters'), {}), _bf16_teacher():
+            with torch.no_grad(), _bf16_teacher():
                 tp, tr = self._target_items(teacher_messages, tools, target)
                 teacher = self._score(tp, tr, {}, write_terms=False)['token_logits']
         prompt, rest = self._target_items(messages, tools, target)
@@ -726,13 +721,6 @@ class GradSession:
             loss = loss + distill_weight * (t.exp() * (t - s)).sum(-1).mean()
         return loss
 
-    def _adapted(self, adapters, leaves: dict):
-        from contextlib import nullcontext
-        if adapters:
-            raise RequestError("neuralese-adapters-retired",
-                               "legacy tiny-adapter blocks are retired; native actor coefficients use native graph learning")
-        return nullcontext()
-
     # Producers ------------------------------------------------------------------------------
     def _index_producers(self, producers: list) -> dict:
         """Block ID → (producer turn, its prompt items, its reply items, the block's index in the reply)."""
@@ -771,31 +759,29 @@ class GradSession:
                 value = self._rewritten(inner, leaves, dependencies, memo, visiting + (memo_key,))
                 if value is not None:
                     local[inner] = value
-        adapters = producer.get("adapters") or []
         # Full-policy RL also differentiates the model/projection weights.
-        depends = getattr(self, 'model_gradients', False) or bool(local) or any(b in leaves for b in self._block_ids(context)) or \
-            any(a.get("id") in leaves for a in adapters if isinstance(a, dict))
+        depends = (getattr(self, 'model_gradients', False) or bool(local)
+                   or any(b in leaves for b in self._block_ids(context)))
         if not depends:
             memo[memo_key] = None
             return None
         backbone, heads = self.backbone, self.heads
         stored = self.engine.lookup(block_id)
-        with self._adapted(adapters, leaves):
-            from ..train.execution import prefill_write_context
-            pre = prefill_write_context(backbone, heads, self._embed_items(context, {**leaves, **local}))
-            direct = getattr(self.engine, 'neuralese_projection', None)
-            if direct is not None:
-                from .direct_write import write_direct
-                from ..write import Opened
-                opened = Opened(pre.cache, pre.state, backbone.logits(pre.top[:, None])[:, -1], pre.top)
-                writer = write_direct(backbone, direct, opened, max(1, stored.length), self.engine.stop_ids,
-                                      length=max(1, stored.length),
-                                      token_choice_projection=getattr(self.engine, 'token_choice_projection', None))
-                payload, _, _ = writer.complete()
-                rewritten = payload[0, :stored.length].float()
-            else:
-                written = unroll_write(backbone, heads, pre, length=max(1, stored.length))
-                rewritten = written.payload[0, :stored.length].float()
+        from ..train.execution import prefill_write_context
+        pre = prefill_write_context(backbone, heads, self._embed_items(context, {**leaves, **local}))
+        direct = getattr(self.engine, 'neuralese_projection', None)
+        if direct is not None:
+            from .direct_write import write_direct
+            from ..write import Opened
+            opened = Opened(pre.cache, pre.state, backbone.logits(pre.top[:, None])[:, -1], pre.top)
+            writer = write_direct(backbone, direct, opened, max(1, stored.length), self.engine.stop_ids,
+                                  length=max(1, stored.length),
+                                  token_choice_projection=getattr(self.engine, 'token_choice_projection', None))
+            payload, _, _ = writer.complete()
+            rewritten = payload[0, :stored.length].float()
+        else:
+            written = unroll_write(backbone, heads, pre, length=max(1, stored.length))
+            rewritten = written.payload[0, :stored.length].float()
         recorded = stored.payload.clone().to(rewritten.device, rewritten.dtype)
         memo[memo_key] = recorded + (rewritten - rewritten.detach())
         return memo[memo_key]
@@ -814,7 +800,7 @@ class GradSession:
             found.extend(self._block_ids(reply))
         return list(dict.fromkeys(found))
 
-    def _term_value(self, term: dict, leaves: dict, produced: dict, adapters) -> torch.Tensor:
+    def _term_value(self, term: dict, leaves: dict, produced: dict) -> torch.Tensor:
         """One weighted term; blocks it reads that a recorded turn wrote from an argument-dependent context are
         re-written with gradient for it."""
         term_leaves, memo = leaves, {}
@@ -822,8 +808,7 @@ class GradSession:
             rewritten = {b: self._rewritten(b, leaves, produced, memo)
                          for b in self._term_blocks(term) if b in produced and b not in leaves}
             term_leaves = {**leaves, **{b: v for b, v in rewritten.items() if v is not None}}
-        with self._adapted(term.get("adapters", adapters), leaves):
-            return float(term.get("weight", 1.0)) * self._term(term, term_leaves).float().reshape(())
+        return float(term.get("weight", 1.0)) * self._term(term, term_leaves).float().reshape(())
 
     def _derive(self, derived: list, values: dict) -> dict:
         """Second order: each inner computation recomputed as a function of `values` (the arguments, then every
@@ -854,7 +839,7 @@ class GradSession:
                                 .clone().float().requires_grad_(True) for b in inner}
                 scope = {**values, **inner_leaves}
                 produced = self._index_producers(step.get("producers"))
-                loss = sum(self._term_value(t, scope, produced, step.get("adapters")) for t in step.get("terms") or [])
+                loss = sum(self._term_value(t, scope, produced) for t in step.get("terms") or [])
                 if not torch.is_tensor(loss) or not loss.requires_grad:
                     continue
                 parts = torch.autograd.grad(loss, list(inner_leaves.values()), create_graph=True, allow_unused=True)
@@ -914,7 +899,7 @@ class GradSession:
             for index, term in enumerate(terms):
                 # Blocks this term reads that a recorded turn wrote from an argument-dependent context: re-written
                 # with gradient for this term (each term's graph is freed after its backward pass).
-                value = self._term_value(term, leaves, produced, body.get("adapters"))
+                value = self._term_value(term, leaves, produced)
                 if arguments_only and value.requires_grad:
                     parts = torch.autograd.grad(value, list(arguments_only.values()), allow_unused=True,
                                                 retain_graph=bool(derived) and index < len(terms) - 1)
@@ -936,7 +921,7 @@ class GradSession:
 def decide(engine, body: dict) -> dict:
     """`POST /v1/neuralese/decide`: log-probabilities of finite replies (the runtime's decision readout)."""
     session = GradSession(engine)
-    with torch.no_grad(), session._adapted(body.get("adapters"), {}):
+    with torch.no_grad():
         scores, tokens = session.decision_logprobs(body.get("messages") or [], body.get("tools"),
                                                                body.get("options") or [], {})
     return {"log_probs": [float(v) for v in scores], "tokens": tokens}
@@ -964,22 +949,20 @@ def decide_many(engine, body: dict) -> dict:
                 raise RequestError("neuralese-decision", "an item is an object")
             options = item.get("continuations", item.get("options"))
             prompt, rests = session.decision_render(item.get("messages") or [], item.get("tools"), options or [])
-            adapters = item.get("adapters", body.get("adapters"))
-            rendered.append((json.dumps(adapters, sort_keys=True), json.dumps(prompt), index, adapters, prompt, rests))
+            rendered.append((json.dumps(prompt), index, prompt, rests))
         except Exception as error:  # noqa: BLE001 — per-item failure is part of the contract
             results[index] = item_error(error)
-    rendered.sort(key=lambda r: (r[0], r[1], r[2]))
+    rendered.sort(key=lambda r: (r[0], r[1]))
     current, prefill = None, None
     with torch.no_grad():
-        for adapter_key, prompt_key, index, adapters, prompt, rests in rendered:
+        for prompt_key, index, prompt, rests in rendered:
             try:
-                with session._adapted(adapters, {}):
-                    if current != (adapter_key, prompt_key):
-                        current, prefill = None, None
-                        prefill = session.decision_prefill(prompt, {})
-                        current = (adapter_key, prompt_key)
-                    cache, last, owns = session.decision_continue(*prefill, rests)
-                    scores = [float(session.option_logprob(cache, last, own)) for own in owns]
+                if current != prompt_key:
+                    current, prefill = None, None
+                    prefill = session.decision_prefill(prompt, {})
+                    current = prompt_key
+                cache, last, owns = session.decision_continue(*prefill, rests)
+                scores = [float(session.option_logprob(cache, last, own)) for own in owns]
                 results[index] = {"log_probs": scores, "tokens": [len(own) for own in owns]}
             except Exception as error:  # noqa: BLE001
                 current, prefill = None, None

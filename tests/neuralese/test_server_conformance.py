@@ -12,7 +12,7 @@ visible. Each check sends one request to both servers and compares what a client
 - text encoding (`/v1/neuralese/encode`, with and without a context), a write at a write site (`/write`) and the
   Neuralese instance of the builtin `view` (`/view`: the fixture's single site, faithful and instructed, and a value
   chunked at a small window);
-- the fork retains its standard GGUF LoRA loader, while the reference no longer creates legacy tiny-adapter blocks;
+- the fork retains its standard GGUF LoRA loader; the reference serves exact actors only on the native runtime;
 - capabilities the fork does not serve (gradient sessions and optimiser steps) answer with an error; an unloaded generic
   LoRA still fails rather than answering with the base model;
 - fork parity: text embedding, template value types and argument paths, parts typed "unknown", Qwen-style calls and
@@ -201,13 +201,13 @@ def test_info_agrees(servers):
     assert {k: got["reference"][1][k] for k in keys} == {k: got["fork"][1][k] for k in keys}
 
 
-def test_legacy_weight_adapter_and_lora_transport_are_retired(servers):
+def test_projected_actor_bindings_are_absent_from_the_reference_runtime(servers):
     info_status, info = _request(f"{servers['reference']}/v1/neuralese/info")
     assert info_status == 200
     assert not any(capability.startswith("adapters.") for capability in info["capabilities"])
     body = {"messages": [{"role": "user", "content": "hello"}], "x_natlang_adapters": []}
     status, error = _request(f"{servers['reference']}/v1/chat/completions", "POST", body)
-    assert status == 400 and error["error"]["code"] == "neuralese-adapters-retired"
+    assert status == 400 and error["error"]["code"] == "bad-request-field"
     status, _ = _request(f"{servers['reference']}/v1/neuralese/adapters/nz1_" + "a" * 52 + "/lora")
     assert status == 404
 
@@ -329,8 +329,8 @@ def test_capabilities_the_fork_does_not_serve_fail_loudly(servers):
                          {"messages": [{"role": "user", "content": "hi"}], "max_tokens": 2,
                           "x_natlang_adapters": [{"id": adapter_id, "scale": 1.0}]})
     assert status == 409 and body["error"]["code"] == "neuralese-adapter-not-loaded"
-    status, _ = _json(servers["reference"] + "/v1/neuralese/adapters", "POST", {"kind": "xs", "rank": 2})
-    assert status == 400
+    status, body = _json(servers["reference"] + "/v1/neuralese/adapters", "POST", {"kind": "xs", "rank": 2})
+    assert status == 501 and body["error"]["code"] == "neuralese-native-adapters-unavailable"
 
 
 REFERENCE_ONLY = {"grad", "init-body", "grad.order2", "optim"}

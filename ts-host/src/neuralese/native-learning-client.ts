@@ -117,11 +117,11 @@ export async function nativeOptimizerStep(endpoint: string, store: NeuraleseStor
 
 /** Create one immutable exact-base native adapter and archive its frozen bases. */
 export async function nativeAdapterCreate(endpoint: string, store: NeuraleseStore, request: {
-  nativeIdentity: NativeModelIdentity; parameterNames: string[]; kind?: 'xs' | 'tiny';
-  rank?: number; u?: number; seed?: number; headers?: Record<string, string>;
+  nativeIdentity: NativeModelIdentity; parameterNames: string[]; kind?: 'xs';
+  rank?: number; seed?: number; headers?: Record<string, string>;
 }): Promise<NativeTensorArtifact> {
   const reply = await post<{ id: string }>(endpoint, '/v1/neuralese/adapters', {
-    kind: request.kind ?? 'xs', rank: request.rank ?? 8, u: request.u ?? 0, seed: request.seed ?? 0,
+    kind: request.kind ?? 'xs', rank: request.rank ?? 8, seed: request.seed ?? 0,
     parameter_names: request.parameterNames, native_identity: request.nativeIdentity }, request.headers);
   const adapter = await archiveNativeTensorArtifact(endpoint, store, reply.id, request.headers);
   if (adapter.metadata.kind !== 'adapter-coefficients' ||

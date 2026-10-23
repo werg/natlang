@@ -15,7 +15,7 @@ reference server's `x_natlang_forced`), for tests and template readout. Response
 (`choices[0].message` with block parts, `neuralese.blocks`).
 
 This backend serves the unadapted checkpoint. Exact native actor coefficients require the native PyTorch runtime;
-legacy tiny-adapter and GGUF LoRA request fields fail explicitly. Run inside the DGX's vLLM image (`vllm-node`), with
+per-request model actor bindings are not accepted here. Run inside the DGX's vLLM image (`vllm-node`), with
 this package on the path.
 """
 
@@ -94,7 +94,7 @@ class VllmNeuralese:
         states = []
         for request in requests:
             if request.get("adapters") or request.get("x_natlang_adapters"):
-                raise ValueError("neuralese-adapters-retired: use native actor execution on the native PyTorch runtime")
+                raise ValueError("vLLM rollout does not accept per-request model actor bindings")
             request_id = request.get("id") or f"chatcmpl-{uuid.uuid4().hex[:12]}"
             items = self._prompt_items(request)
             state = {"request": request, "id": request_id, "items": items, "prompt": len(items), "out": [],
