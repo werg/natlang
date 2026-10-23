@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import errno
 import fcntl
 import hashlib
 import json
@@ -768,11 +769,12 @@ def reviewed_guided_decision_authority(record, *, review_bound):
             'assistant_history_input_sha256': digest}
 
 
-def teacher_decision_admissions(source, source_sha256, *, decision_review=None):
+def teacher_decision_admissions(source, source_sha256, *, decision_review=None, materializer_root=None):
     """Reuse the native materializer, once per exact source/runtime for both ports."""
     if sha256_file(source) != source_sha256:
         raise ValueError('teacher decision source differs from its immutable SHA-256')
-    repo = Path(__file__).resolve().parents[2]
+    repo = (Path(materializer_root).resolve(strict=True) if materializer_root is not None
+            else Path(__file__).resolve().parents[2])
     cli = repo / 'ts-host/scripts/materialize-native-teacher.mjs'
     assets = [cli, repo / 'ts-host/scripts/jsonl-stream.mjs',
               *sorted((repo / 'ts-host/dist').rglob('*.js'))]
@@ -1181,7 +1183,173 @@ def _check_content_continuation_witness(value):
                 _check_content_continuation_witness(item)
 
 
-def seed_content_fingerprints(paths, fingerprint, *, classification_migrations=()):
+def registered_cached_content_index(root, corpus_id, model_key, fingerprint, policy, *,
+                                    registry_ref=None, registry_entry=None,
+                                    manifest_ref=None, manifest=None, verify_bindings=True):
+    """Resolve a cache-only dedup source through its admitted registry/manifest identity."""
+    from natlang_neuralese.common import row_index
+    from scripts.coreweave.teacher_tranche_admission import file_binding, read_bound
+    root = Path(root)
+    if model_key not in ('lfm25', 'mellum21'):
+        raise ValueError('cache-only dedup requires the exact model view')
+    registry_path = root / 'training/neuralese_corpora.json'
+    if registry_ref is None or registry_entry is None:
+        registry_ref = file_binding(registry_path)
+        registry = read_bound(registry_ref)
+        matches = [entry for entry in registry['corpora'] if entry.get('id') == corpus_id]
+        if len(matches) != 1 or matches[0].get('training_admission') is not True:
+            raise ValueError('cache-only dedup corpus is not uniquely registered as admitted')
+        entry = matches[0]
+    else:
+        entry = registry_entry
+    manifest_path = root / 'training/corpus-manifests' / (corpus_id + '.json')
+    if manifest_ref is None:
+        manifest_ref = file_binding(manifest_path)
+    if manifest is None:
+        manifest = read_bound(manifest_ref)
+    if manifest.get('id') != corpus_id or manifest.get('path') != entry.get('path'):
+        raise ValueError('cache-only dedup corpus manifest differs from its registry binding')
+    relative = model_key + '/train/native-graphs.jsonl.zst'
+    refs = [item for item in manifest.get('files', []) if item.get('path') == relative]
+    if len(refs) != 1:
+        raise ValueError('cache-only dedup corpus manifest lacks one exact model train graph')
+    source = refs[0]
+    graph_path = root / entry['path'] / relative
+    try:
+        graph_path.stat()
+    except OSError as error:
+        if error.errno not in (errno.ENOENT, errno.EIO):
+            raise
+    else:
+        raise ValueError('cache-only dedup source is present and must be read directly')
+    key = {'source_sha256': source['sha256'], 'tokenizer_fingerprint': fingerprint,
+           'policy_sha256': policy, 'kind': 'teacher-content-fingerprints-v1'}
+    cache_path = row_index.entry_path('teacher-content', canonical_json_sha256_hex(key))
+    cached = row_index.load(cache_path)
+    if not _valid_content_index(cached, key):
+        raise ValueError('unavailable registered dedup graph has no valid exact current-law content index')
+    if verify_bindings and (file_binding(registry_path) != registry_ref or file_binding(manifest_path) != manifest_ref):
+        raise ValueError('cache-only dedup registration or manifest changed during resolution')
+    return {'corpus_id': corpus_id, 'manifest': manifest_ref,
+            'path': f'registered-cache:{corpus_id}/{relative}',
+            'sha256': source['sha256'], 'bytes': source['bytes'], 'rows': cached['rows'],
+            'content_index_cache': file_binding(cache_path), 'content_index_key': key,
+            'cache_only_source': True}, cached['fingerprints']
+
+
+def registered_base_inventory_reference(reference_path, model_key, *, tokenizer_dir,
+                                        source_fingerprint, expanded_fingerprint):
+    """Validate an exact remote model inventory without moving its weights."""
+    from scripts.coreweave.teacher_tranche_admission import file_binding, read_bound
+    ref = file_binding(reference_path)
+    proof = read_bound(ref)
+    if (proof.get('schema') != 'natlang.teacher-base-inventory-reference/1'
+            or proof.get('training_admission') is not False or proof.get('model_key') != model_key
+            or proof.get('source_fingerprint') != source_fingerprint
+            or proof.get('expanded_fingerprint') != expanded_fingerprint):
+        raise ValueError('base inventory reference has different model/tokenizer authority')
+    inventory = proof.get('base_inventory')
+    digest = canonical_json_sha256_hex(inventory)
+    model_id = proof.get('architecture') + ':' + digest
+    if (digest != proof.get('base_inventory_sha256') or model_id != proof.get('model_id')):
+        raise ValueError('remote base inventory does not reproduce its exact model identity')
+    config_ref = proof.get('model_config') or {}
+    config = read_bound(config_ref)
+    if (config.get('architecture') != proof.get('architecture')
+            or config.get('base_inventory') != inventory
+            or config.get('base_inventory_sha256') != digest
+            or config.get('tokenizer_fingerprint') != expanded_fingerprint):
+        raise ValueError('model config differs from its exact remote base inventory')
+    readback_ref = proof.get('metadata_readback') or {}
+    readback = read_bound(readback_ref)
+    if readback.get('model_config') != config:
+        raise ValueError('remote model metadata readback differs from the bound model config')
+    declaration = read_bound(proof.get('readback_declaration') or {})
+    reader_ref = proof.get('metadata_reader') or {}
+    reader_actual = file_binding(reader_ref.get('path', ''))
+    if (declaration.get('schema') != 'natlang.teacher-base-model-config-readbacks/1'
+            or declaration.get('training_admission') is not False
+            or reader_actual != reader_ref
+            or reader_ref.get('sha256') != 'ff2031ded1225ded550b8ff97a90145a401d798477601120e5cbaf0c88c13a88'):
+        raise ValueError('native model metadata readback lacks its exact bounded reader source')
+    rows = [row for row in declaration.get('models', []) if row.get('model') == model_key]
+    if (len(rows) != 1 or rows[0].get('metadata_readback') != readback_ref
+            or rows[0].get('model_config') != config_ref or rows[0].get('reader') != reader_ref):
+        raise ValueError('native model readback declaration differs from bound inputs')
+    source = proof.get('source_evidence') or {}
+    if source.get('kind') == 'mellum-actor-view':
+        actor_ref = source.get('actor_view_manifest') or {}
+        actor = read_bound(actor_ref)
+        if (actor.get('schema') != 'natlang.native-actor-view/1'
+                or actor.get('model_config') != config
+                or actor.get('source') != source.get('actor_checkpoint')):
+            raise ValueError('Mellum model inventory is not bound to its exact actor-view manifest')
+        if rows[0].get('evidence', {}).get('binding') != actor_ref:
+            raise ValueError('Mellum readback declaration omits the exact actor-view file')
+    elif source.get('kind') == 'lfm-verified-checkpoint':
+        verified_ref = source.get('checkpoint_verification') or {}
+        verified = read_bound(verified_ref)
+        binding = verified.get('binding') or {}
+        if (binding.get('sha256') != source.get('checkpoint_sha256')
+                or binding.get('bytes') != source.get('checkpoint_bytes')
+                or verified.get('target_id') != '393f9b75-2666-456c-a850-1b46a8b7d147'
+                or verified.get('target_verification', {}).get('sha256') != binding.get('sha256')
+                or verified.get('target_verification', {}).get('bytes') != binding.get('bytes')):
+            raise ValueError('LFM model inventory checkpoint lacks its exact verified artifact binding')
+        evidence = rows[0].get('evidence') or {}
+        if (evidence.get('verification') != verified_ref or evidence.get('source') != binding
+                or evidence.get('target') != verified.get('target_verification')):
+            raise ValueError('LFM readback declaration omits exact checkpoint verification evidence')
+    else:
+        raise ValueError('base inventory reference has no supported authenticated model source')
+    identity_ref = proof.get('registered_receipt_identity') or {}
+    identity = read_bound(identity_ref)
+    if identity.get('model_id') != model_id or identity.get('model_key') != model_key:
+        raise ValueError('remote base inventory identity differs from admitted native model receipts')
+    identity_registry_ref = identity.get('registry') or {}
+    identity_registry = read_bound(identity_registry_ref)
+    identity_seen = set()
+    for item in identity.get('sources', []):
+        ident = item.get('corpus_id')
+        if not isinstance(ident, str) or ident in identity_seen:
+            raise ValueError('registered identity repeats or omits a source corpus id')
+        identity_seen.add(ident)
+        entries = [entry for entry in identity_registry.get('corpora', []) if entry.get('id') == ident]
+        if (len(entries) != 1 or entries[0].get('training_admission') is not True
+                or canonical_json_sha256_hex(entries[0]) != item.get('registry_entry_sha256')):
+            raise ValueError('registered identity source differs from exact admitted registry entry')
+        manifest_ref = item.get('manifest') or {}
+        manifest = read_bound(manifest_ref)
+        if manifest.get('id') != ident or manifest.get('path') != entries[0].get('path'):
+            raise ValueError('registered identity source manifest differs from registry binding')
+        receipt_ref = item.get('receipt') or {}
+        receipt = read_bound(receipt_ref)
+        receipt_relative = f'{model_key}/receipt.json'
+        receipt_members = [member for member in manifest.get('files', [])
+                           if member.get('path') == receipt_relative]
+        expected_receipt_path = Path(identity_registry_ref['path']).parent.parent / entries[0]['path'] / receipt_relative
+        if (receipt_ref.get('path') != str(expected_receipt_path) or len(receipt_members) != 1
+                or any(receipt_members[0].get(key) != receipt_ref.get(key) for key in ('sha256', 'bytes'))
+                or receipt.get('status') != 'passed' or receipt.get('model_key') != model_key
+                or receipt.get('model_id') != model_id):
+            raise ValueError('registered identity receipt differs from its exact admitted manifest member')
+    if not identity_seen or file_binding(identity_registry_ref['path']) != identity_registry_ref:
+        raise ValueError('registered model identity has no stable admitted receipt evidence')
+    tokenizer_ref = proof.get('tokenizer_relocation') or {}
+    tokenizer_manifest = read_bound(tokenizer_ref)
+    rows = [row for row in tokenizer_manifest.get('models', []) if row.get('model') == model_key]
+    if len(rows) != 1 or rows[0].get('tokenizer_contract', {}).get('expanded_fingerprint') != expanded_fingerprint:
+        raise ValueError('model inventory and exact tokenizer relocation differ')
+    for item in proof.get('tokenizer_files', []):
+        actual = file_binding(item.get('path', ''))
+        if actual != item.get('binding') or inventory.get(item.get('name')) != actual.get('sha256'):
+            raise ValueError('local tokenizer/config asset differs from its remote model inventory')
+    if file_binding(reference_path) != ref:
+        raise ValueError('base inventory reference changed during validation')
+    return model_id, ref
+
+
+def seed_content_fingerprints(paths, fingerprint, *, model_key=None, classification_migrations=(), cached_corpus_sources=()):
     from natlang_neuralese.common import row_index
     from natlang_neuralese.train import native_source_classification as migration
     proofs = []
@@ -1243,6 +1411,19 @@ def seed_content_fingerprints(paths, fingerprint, *, classification_migrations=(
         if evidence is not None:
             item['content_cache_continuation'] = evidence
         inputs.append(item)
+    # A registered predecessor may have an exact source hash and a previously
+    # computed shared content index while its original graph file is temporarily
+    # unavailable. Reuse only the ordinary current-law cache keyed by the
+    # manifest's exact source hash and this exact tokenizer/policy fingerprint.
+    # This is the same cache validation used for present files; it grants no
+    # corpus admission and never substitutes an unbound or older policy index.
+    for corpus_id in cached_corpus_sources:
+        item, contents = registered_cached_content_index(
+            Path(__file__).resolve().parents[2], corpus_id, model_key, fingerprint, policy)
+        count = item['rows']
+        for content, identifier in contents.items():
+            seen.setdefault(content, {'path': item['path'], 'id': identifier})
+        inputs.append(item)
     if any(migration._binding(ref['path']) != ref for ref, _ in proofs):
         raise ValueError('content continuation classification proof changed during validation')
     return seen, inputs
@@ -1269,6 +1450,10 @@ def main():
     parser.add_argument('--scaffold-harvest', type=Path,
                         help='authenticate a separately harvested scaffold batch; never treats it as a standard Qwen batch')
     parser.add_argument('--decision-review', type=Path, help='exact reviewed decisions; never promotes a held parent')
+    parser.add_argument('--materializer-root', type=Path,
+                        help='explicit checkout containing the bound native teacher materializer runtime')
+    parser.add_argument('--base-inventory-reference', type=Path,
+                        help='exact remotely verified native base inventory when weights stay remote')
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--base-tokenizer", type=Path, required=True)
     parser.add_argument('--history-reasoning-policy', choices=('keep', 'last_turn_only'),
@@ -1279,6 +1464,8 @@ def main():
     parser.add_argument('--deduplicate-against', type=Path, action='append', default=[])
     parser.add_argument('--content-index-classification-migration', type=Path, action='append', default=[],
                         help='authenticate class-only parser/index continuation of historical content caches')
+    parser.add_argument('--deduplicate-against-registered-cache', action='append', default=[],
+                        help='reuse an exact current-law content index for an admitted registered graph whose bytes are temporarily unavailable')
     parser.add_argument("--model-key", choices=("lfm25", "mellum21"), required=True)
     args = parser.parse_args()
     if args.scaffold_harvest is not None and not args.source.exists():
@@ -1286,7 +1473,8 @@ def main():
     if args.output.exists() and any(args.output.iterdir()):
         raise ValueError(f"refusing to overwrite nonempty output: {args.output}")
     binding = source_binding(args)
-    decisions, decision_proof = teacher_decision_admissions(args.source, binding['source_sha256'], decision_review=args.decision_review)
+    decisions, decision_proof = teacher_decision_admissions(args.source, binding['source_sha256'],
+        decision_review=args.decision_review, materializer_root=args.materializer_root)
     tokenizer = AutoTokenizer.from_pretrained(str(args.base_tokenizer), trust_remote_code=False,
                                                local_files_only=True)
     from natlang_neuralese.serve.chat import bind_history_reasoning
@@ -1296,11 +1484,19 @@ def main():
     source_fingerprint = tokenizer_fingerprint(tokenizer)
     role_ids = provision(tokenizer)
     expanded_fingerprint = tokenizer_fingerprint(tokenizer)
-    inventory = base_inventory(args.base_tokenizer)
-    model_type = json.loads((args.base_tokenizer / "config.json").read_text())["model_type"]
-    model_id = model_type + ":" + canonical_json_sha256_hex(inventory)
+    if args.base_inventory_reference is not None:
+        model_id, base_inventory_reference = registered_base_inventory_reference(
+            args.base_inventory_reference, args.model_key, tokenizer_dir=args.base_tokenizer,
+            source_fingerprint=source_fingerprint, expanded_fingerprint=expanded_fingerprint)
+    else:
+        inventory = base_inventory(args.base_tokenizer)
+        model_type = json.loads((args.base_tokenizer / "config.json").read_text())["model_type"]
+        model_id = model_type + ":" + canonical_json_sha256_hex(inventory)
+        base_inventory_reference = None
     seen_contents, dedup_inputs = seed_content_fingerprints(args.deduplicate_against, expanded_fingerprint,
-        classification_migrations=args.content_index_classification_migration)
+        classification_migrations=args.content_index_classification_migration,
+        model_key=args.model_key,
+        cached_corpus_sources=args.deduplicate_against_registered_cache)
     duplicate_omissions = []
     writer = GraphWriter(args.output / "train" / "native-graphs.jsonl.zst")
     held = GraphWriter(args.output / "test" / "native-graphs.jsonl.zst")
@@ -1421,6 +1617,8 @@ def main():
         **({'failed_assistant_history_policy': args.failed_assistant_history_policy}
            if args.failed_assistant_history_policy != 'preserve' else {}),
         "model_key": args.model_key, "model_id": model_id,
+        **({'base_inventory_reference': base_inventory_reference}
+           if base_inventory_reference is not None else {}),
         "source": {"path": str(args.source), "sha256": binding["source_sha256"],
                    "rows": len(row_hashes), "row_bindings": row_hashes},
         "proofs": {name: {"path": str(path), "sha256": binding["proof_sha256"][name]}
