@@ -165,7 +165,7 @@ export function view(at?: number): Promise<ContextView>;
 export function planSystem(view: ContextView, desired: { key: string, text: string }[], tools: AgentTool[], now: number): { message: SystemMessage, edits?: ContextEdit[] }[];
 /**
  * pi-durable's context estimate (what harness/estimate computes when planning is crisp), each message estimated as
- * ai.estimateTokens does: it throws neuralese-unknown-block-length for a block whose length ai.blockMeta has not made known.
+ * ai.estimateTokens does: it throws neuralese-unknown-block-length for a block whose length ai.nativeStateMeta has not made known.
  */
 export function estimate(view: ContextView, extra: Message[]): number;
 /** The raw active range through at: the newest head marker (null when none) and every entry from its head through at. */

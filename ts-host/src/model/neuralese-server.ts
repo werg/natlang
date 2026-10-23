@@ -2,25 +2,20 @@
  * Transport to a Neuralese-capable model server (spec/NEURALESE_PORT.md, "Wire protocol"; S4 §3–4).
  *
  * The reference server is `python -m natlang_neuralese.serve` (training/neuralese). Requests are ordinary chat
- * completions whose message content and tool-call arguments may be arrays of `{ type: "text" }` and
- * `{ type: "neuralese", id }` parts; the server writes blocks while decoding and returns them the same way, plus a
- * `neuralese.blocks` list with each written block's metadata and write record (temperature, seed, IDs of the payload
- * mean and log-scale, stop logits).
+ * completions whose message content and tool-call arguments carry native positional state references. The server
+ * returns exact native-state artifacts and import receipts; projected value blocks are not a transport format.
  *
  * Replies stream when the server declares `stream: true` in `/v1/neuralese/info` (plans/STREAMING.md §1.2): text and
  * each written block arrive as the turn's deltas (`ModelTurnOptions.onDelta`), and the final `x_natlang_message` is the
  * reply. A server that does not declare it (the llama.cpp fork until it serves SSE) gets whole requests.
  *
- * The driver keeps the runtime's store and the server's store in step: before a request it uploads any block the
- * conversation refers to that the server lacks, and after a reply it downloads the blocks the server wrote, so that
- * references the runtime holds resolve locally (for `.nz` files, saving, re-sending). Content IDs are computed the same
- * way on both sides, so a downloaded block lands under the ID the server reported.
+ * The driver keeps native state and named tensor custody in step across the runtime archive and model server.
  *
- * The runtime's store is also the archive that makes blocks outlive the server (plans/neuralese/DECISIONS.md,
- * "representation chosen by use"): `withRestoredBlocks` is the one place blocks move runtime → server, and when the
- * server answers `neuralese-unknown-block` (it restarted, or collected them) it re-uploads them from the archive and
+ * The runtime's store is also the archive that makes native artifacts outlive the server: `withRestoredNativeArtifacts` moves
+ * exact native states and tensor artifacts runtime → server, and when the server reports an unknown native artifact it
+ * re-uploads it from the archive and
  * retries once. A client names itself with `owner` (the `x-natlang-owner` header), so its pins and collections never
- * touch other sessions' blocks.
+ * touch other sessions' artifacts.
  */
 import { assembleChatCompletion, chatCompletionModelTurn, fetchModel, httpChatTransport, isStream, type ChatCompletionOptions, type ChatTransport,
   type HttpChatOptions } from './chat-completion.js';
@@ -32,59 +27,29 @@ import {validateCoefficientRuntime,requireCoefficientAttestation,coefficientBind
 import { isContentParts, nativeStateSentinel, nativeStateSentinelIds,
   isNativeStateId, runtimeTextToParts, type RuntimeContentPart } from '../native/neuralese.js';
 import { nativeStateConsumerFromInfo } from '../native/neuralese.js';
-import { constantBlock, decodeNativeState, encodeNativeState, nativeStateContentId, nativeStateBlockMeta,
+import { decodeNativeState, encodeNativeState, nativeStateContentId, nativeStateBlockMeta,
   decodeNativeTensorArtifact, encodeNativeTensorArtifact, nativeTensorArtifactContentId, nativeTensorArtifactDependencies, nativeStateArtifactDependencies, archiveNativeArtifactFrom, archiveNativeTensorFrom,
   nativeTensorArtifactBlockMeta, neuraleseContentId, nativeModelIdentityEqual, type NeuraleseBlock, type NeuraleseBlockMeta, type NeuraleseBlockInput,
-  type NativeStateArtifact, type NativeTensorArtifact, type NeuraleseDtype, type NeuraleseStore } from '../native/neuralese-store.js';
+  type NativeStateArtifact, type NativeTensorArtifact, type NeuraleseStore } from '../native/neuralese-store.js';
 
 type Json = Record<string, unknown>;
-
-const SAFETENSORS_DTYPE: Record<NeuraleseDtype, string> = { f32: 'F32', f16: 'F16', bf16: 'BF16' };
-const FROM_SAFETENSORS: Record<string, NeuraleseDtype> = { F32: 'f32', F16: 'f16', BF16: 'bf16' };
-
-/** One block as a safetensors body: a `payload` tensor and the metadata under `natlang.block`. */
-export function encodeBlockBody(meta: NeuraleseBlockMeta, data: Uint8Array): Uint8Array {
-  const header: Json = { __metadata__: { 'natlang.block': JSON.stringify(meta) },
-    payload: { dtype: SAFETENSORS_DTYPE[meta.dtype], shape: [meta.length, meta.width], data_offsets: [0, data.length] } };
-  const json = JSON.stringify(header);
-  const length = new TextEncoder().encode(json).length;
-  const raw = new TextEncoder().encode(json + ' '.repeat((8 - length % 8) % 8));
-  const out = new Uint8Array(8 + raw.length + data.length);
-  new DataView(out.buffer).setBigUint64(0, BigInt(raw.length), true);
-  out.set(raw, 8); out.set(data, 8 + raw.length);
-  return out;
-}
-
-export function decodeBlockBody(body: Uint8Array): NeuraleseBlock {
-  if (body.length < 8) throw new Error('neuralese-bad-block: not a safetensors body');
-  const size = Number(new DataView(body.buffer, body.byteOffset, body.byteLength).getBigUint64(0, true));
-  const header = JSON.parse(new TextDecoder().decode(body.subarray(8, 8 + size))) as Json;
-  const meta = JSON.parse(String((header.__metadata__ as Json | undefined)?.['natlang.block'] ?? '{}')) as NeuraleseBlockMeta;
-  const entry = header.payload as { dtype: string; shape: [number, number]; data_offsets: [number, number] } | undefined;
-  if (!entry) throw new Error('neuralese-bad-block: no payload tensor');
-  const dtype = FROM_SAFETENSORS[entry.dtype];
-  if (!dtype) throw new Error(`neuralese-bad-block: unsupported dtype ${entry.dtype}`);
-  const data = body.slice(8 + size + entry.data_offsets[0], 8 + size + entry.data_offsets[1]);
-  return { meta: { ...meta, length: entry.shape[0], width: entry.shape[1], dtype }, data };
-}
 
 /** Header naming the owner of requests (a session or runtime ID): its pins and collections are its own (serve/store.py). */
 export const OWNER_HEADER = 'x-natlang-owner';
 
-/** Whether `error` is a server's `neuralese-unknown-block`: the server lacks a block a request names. */
-export function isUnknownBlockError(error: unknown): boolean {
+/** Whether `error` says the native server lost a named state or tensor artifact. */
+export function isUnknownNativeArtifactError(error: unknown): boolean {
   const found = error as { providerCode?: unknown; code?: unknown; message?: unknown } | null;
-  return found?.providerCode === 'neuralese-unknown-block' || found?.code === 'neuralese-unknown-block' ||
-    found?.providerCode === 'neuralese-unknown-native-state' || found?.code === 'neuralese-unknown-native-state' ||
+  return found?.providerCode === 'neuralese-unknown-native-state' || found?.code === 'neuralese-unknown-native-state' ||
     found?.providerCode === 'neuralese-unknown-native-artifact' || found?.code === 'neuralese-unknown-native-artifact' ||
-    (typeof found?.message === 'string' && /neuralese-unknown-(?:block|native-state|native-artifact)/.test(found.message));
+    (typeof found?.message === 'string' && /neuralese-unknown-native-(?:state|artifact)/.test(found.message));
 }
 
 /**
- * Upload to the server every block of `ids` it lacks, from `archive` (the runtime's content-addressed store) or the
+ * Upload to the server every native artifact of `ids` it lacks, from `archive` (the runtime's content-addressed store) or the
  * registered constants. Returns the IDs that neither has; the caller reports them in its own terms.
  */
-export async function restoreBlocks(remote: NeuraleseStore, archive: NeuraleseStore | undefined,
+export async function restoreNativeArtifacts(remote: NeuraleseStore, archive: NeuraleseStore | undefined,
     ids: Iterable<string>): Promise<string[]> {
   const missing: string[] = [], visited = new Set<string>();
   const restore = async (id: string): Promise<void> => {
@@ -112,28 +77,26 @@ export async function restoreBlocks(remote: NeuraleseStore, archive: NeuraleseSt
       }
       return;
     }
-    if (await remote.has(id)) return;
-    const block = (archive && await archive.get(id)) ?? constantBlock(id);
-    if (!block) { missing.push(id); return; }
-    const { id: _, ...rest } = block.meta;
-    await remote.put({ ...rest, data: block.data });
+    // nz1 projected blocks are local historical data only. They cannot be
+    // uploaded to the native server or interpreted as positional state.
+    missing.push(id);
   };
   for (const id of new Set(ids)) await restore(id);
   return missing;
 }
 
 /**
- * Run a server request that reads `ids`, with those blocks on the server first. `known` caches IDs already uploaded
- * (they are not checked again); when the server still answers `neuralese-unknown-block` (it restarted or collected
+ * Run a server request that reads `ids`, with those native artifacts on the server first. `known` caches IDs already uploaded
+ * (they are not checked again); when the server still answers `neuralese-unknown-native-*` (it restarted or collected
  * them since), every block is checked and restored from `archive`, and the request runs once more.
  */
-export async function withRestoredBlocks<T>(remote: NeuraleseStore, archive: NeuraleseStore | undefined,
+export async function withRestoredNativeArtifacts<T>(remote: NeuraleseStore, archive: NeuraleseStore | undefined,
     ids: readonly string[], run: () => Promise<T>, known?: Set<string>): Promise<T> {
   const restore = async (all: boolean) => {
     if (all) for (const id of ids) known?.delete(id);
     const pending = known ? ids.filter(id => !known.has(id)) : ids;
-    const missing = await restoreBlocks(remote, archive, pending);
-    if (missing.length) throw new Error(`neuralese-unknown-block: ${missing.join(', ')} ${missing.length === 1 ? 'is' : 'are'} ` +
+    const missing = await restoreNativeArtifacts(remote, archive, pending);
+    if (missing.length) throw new Error(`neuralese-unknown-native-artifact: ${missing.join(', ')} ${missing.length === 1 ? 'is' : 'are'} ` +
       `neither on the server nor in the runtime's store`);
     for (const id of pending) known?.add(id);
   };
@@ -141,13 +104,13 @@ export async function withRestoredBlocks<T>(remote: NeuraleseStore, archive: Neu
   try {
     return await run();
   } catch (error) {
-    if (!isUnknownBlockError(error)) throw error;
+    if (!isUnknownNativeArtifactError(error)) throw error;
     await restore(true);
     return await run();
   }
 }
 
-/** The server's block endpoints as a `NeuraleseStore`. */
+/** Native artifact endpoints as a store. The server has no projected block API. */
 export class HttpNeuraleseStore implements NeuraleseStore {
   private readonly base: string;
   constructor(endpoint: string, private readonly headers: Record<string, string> = {}) {
@@ -157,18 +120,11 @@ export class HttpNeuraleseStore implements NeuraleseStore {
     return fetchModel(this.base + path, { ...init, headers: { ...this.headers, ...(init.headers as Record<string, string> ?? {}) } });
   }
   async put(block: NeuraleseBlockInput): Promise<NeuraleseBlockMeta> {
-    const { data, ...rest } = block;
-    const id = neuraleseContentId(block);
-    const response = await this.request(`/blocks/${id}`, { method: 'PUT', body: encodeBlockBody({ id, ...rest }, data) as BodyInit,
-      headers: { 'content-type': 'application/octet-stream' } });
-    if (!response.ok) throw new Error(`neuralese block upload failed (${response.status}): ${(await response.text()).slice(0, 500)}`);
-    return await response.json() as NeuraleseBlockMeta;
+    throw new Error(`neuralese-projected-api-retired: cannot upload flat block ${neuraleseContentId(block)}; write native state through native.text-write`);
   }
   async get(id: string): Promise<NeuraleseBlock | undefined> {
-    const response = await this.request(`/blocks/${id}`);
-    if (response.status === 404) return undefined;
-    if (!response.ok) throw new Error(`neuralese block fetch failed (${response.status})`);
-    return decodeBlockBody(new Uint8Array(await response.arrayBuffer()));
+    if (id.startsWith('nz1_')) throw new Error(`neuralese-projected-api-retired: flat block ${id} is local historical data, not a server artifact`);
+    throw new Error(`neuralese-native-archive-api: use getNativeState or getNativeTensorArtifact for ${id}`);
   }
   async putNativeState(artifact: Omit<NativeStateArtifact, 'id'>): Promise<NativeStateArtifact> {
     const id = nativeStateContentId(artifact.metadata, artifact.tensors);
@@ -229,19 +185,18 @@ export class HttpNeuraleseStore implements NeuraleseStore {
         native_identity: record.native_identity, source_artifact_id: record.source_artifact_id,
         provenance: record.provenance, tensors: record.tensors } });
     }
-    const response = await this.request(`/blocks/${id}/meta`);
-    if (response.status === 404) return undefined;
-    if (!response.ok) throw new Error(`neuralese block metadata failed (${response.status})`);
-    return await response.json() as NeuraleseBlockMeta;
+    return undefined;
   }
   async has(id: string): Promise<boolean> { return (await this.meta(id)) !== undefined; }
   async pin(id: string): Promise<void> {
-    const family = id.startsWith('nzs1_') ? 'native-states' : id.startsWith('nnt1_') ? 'native-tensor-artifacts' : 'blocks';
+    const family = id.startsWith('nzs1_') ? 'native-states' : id.startsWith('nnt1_') ? 'native-tensor-artifacts' : undefined;
+    if (!family) throw new Error(`neuralese-native-archive-api: only native states and tensor artifacts can be pinned (${id})`);
     const response = await this.request(`/${family}/${id}/pin`, { method: 'POST' });
-    if (!response.ok) throw new Error(`neuralese-unknown-block: ${id}`);
+    if (!response.ok) throw new Error(`neuralese-unknown-native-artifact: ${id}`);
   }
   async unpin(id: string): Promise<void> {
-    const family = id.startsWith('nzs1_') ? 'native-states' : id.startsWith('nnt1_') ? 'native-tensor-artifacts' : 'blocks';
+    const family = id.startsWith('nzs1_') ? 'native-states' : id.startsWith('nnt1_') ? 'native-tensor-artifacts' : undefined;
+    if (!family) throw new Error(`neuralese-native-archive-api: only native states and tensor artifacts can be unpinned (${id})`);
     await this.request(`/${family}/${id}/unpin`, { method: 'POST' });
   }
   async collect(referenced: ReadonlySet<string>): Promise<string[]> {
@@ -252,33 +207,15 @@ export class HttpNeuraleseStore implements NeuraleseStore {
 }
 
 export type NeuraleseServerOptions = Omit<HttpChatOptions, 'stream'> & Pick<ChatCompletionOptions, 'onExchange' | 'onTurn'> & {
-  /** The runtime's store: blocks are uploaded (and restored after a server restart) from it and written blocks are
-   * downloaded into it. */
+  /** The runtime's store: native state and tensor artifacts are uploaded and restored after a server restart. */
   store?: NeuraleseStore;
-  /** This session's or runtime's ID on the server (`x-natlang-owner`): it holds the blocks it uploads or is sent, and
-   * its pins and collections (`blocks.pin`, `blocks.collect`) leave other owners' blocks alone. */
+  /** This session's or runtime's ID on the server (`x-natlang-owner`): native artifact pins and collections are scoped to it. */
   owner?: string;
-  /** Neuralese temperature for written payloads (spec/NEURALESE_PORT.md, "Temperature"); 0, the default, is deterministic. */
-  neuraleseTemperature?: number;
-  /** Requested maximum block length; the server caps it by its hard maximum. */
-  neuraleseMaxLength?: number;
   /** Explicit raw-state exchange between actors of the exact same native base. */
   nativeStateModes?: Record<string, 'same-base-adapter-state'>;
   /** Extra request fields. */
   request?: Json;
 };
-
-/** Block IDs a request's messages carry as parts. */
-export function requestBlockIds(messages: readonly unknown[]): string[] {
-  const ids = new Set<string>();
-  const visit = (value: unknown) => {
-    if (isContentParts(value)) { for (const part of value) if (part.type === 'neuralese') ids.add(part.id); return; }
-    if (Array.isArray(value)) value.forEach(visit);
-    else if (value && typeof value === 'object') Object.values(value).forEach(visit);
-  };
-  visit(messages);
-  return [...ids];
-}
 
 function malformedNativePartList(value: unknown): boolean {
   return Array.isArray(value) && value.length > 0 && value.every(part => part && typeof part === 'object' &&
@@ -320,17 +257,24 @@ function materializeNativeStateSentinels(value: unknown, key?: string): unknown 
     catch { return value; } // preserve malformed input for the server's existing argument error path
   }
   if (malformedNativePartList(value)) return value;
-  if (typeof value === 'string') return nativeStateSentinelIds(value).length ? runtimeTextToParts(value) : value;
+  if (typeof value === 'string') {
+    if (/nz1_[a-z2-7]+/.test(value)) throw new Error('neuralese-projected-api-retired: request contains a flat nz1 sentinel');
+    return nativeStateSentinelIds(value).length ? runtimeTextToParts(value) : value;
+  }
   if (Array.isArray(value) && value.length && value.every(part => part && typeof part === 'object' &&
       (part.type === 'text' && typeof part.text === 'string' ||
-       part.type === 'neuralese' && typeof part.id === 'string' ||
+        part.type === 'neuralese' && typeof part.id === 'string' ||
        part.type === 'native_state' && isNativeStateId(part.id))))
-    return value.flatMap(part => part.type === 'text' ? runtimeTextToParts(part.text) : [part]);
+    return value.flatMap(part => {
+      if (part.type === 'neuralese') throw new Error(`neuralese-projected-api-retired: request contains flat block ${part.id}`);
+      return part.type === 'text' ? runtimeTextToParts(part.text) : [part];
+    });
   if (Array.isArray(value)) return value.map(item => materializeNativeStateSentinels(item));
   if (value && typeof value === 'object') {
     const part = value as { type?: unknown; id?: unknown;stop_gradient?:unknown;source_occurrence?:unknown };
     if (part.type === 'native_state' && part.source_occurrence !== undefined && (typeof part.source_occurrence!=='string'||!part.source_occurrence)) throw new TypeError('native source occurrence must be a nonempty actual writer reference');
     if (part.type === 'native_state' && part.stop_gradient !== undefined && part.stop_gradient !== true) throw new TypeError('native state constant-use metadata must be true or absent');
+    if (part.type === 'neuralese') throw new Error(`neuralese-projected-api-retired: request contains flat block ${String(part.id)}`);
     if (part.type === 'native_state' && isNativeStateId(part.id)) return [{ type: 'native_state', id: part.id,
       ...(part.stop_gradient===true?{stop_gradient:true}:{}),...(typeof part.source_occurrence==='string'?{source_occurrence:part.source_occurrence}:{}) }];
     return Object.fromEntries(Object.entries(value).map(([name, item]) =>
@@ -346,7 +290,7 @@ export async function restoreNativeStates(remote: HttpNeuraleseStore, archive: N
   for (const id of ids) {
     const local = await archive?.getNativeState?.(id);
     if (local) {
-      const absent = await restoreBlocks(remote, archive, nativeStateArtifactDependencies(local));
+      const absent = await restoreNativeArtifacts(remote, archive, nativeStateArtifactDependencies(local));
       if (absent.length) throw new Error(`neuralese-unknown-native-artifact: restore source adapter coefficients and bases ${absent.join(', ')}`);
     }
     if (known?.has(id)) continue;
@@ -392,19 +336,10 @@ function normalizeReply(body: Json): Json {
 /** Archive the same exact reply closure for live turns and saved-turn replay. */
 export async function archiveNeuraleseReplyArtifacts(reply: Json, remote: NeuraleseStore,
     store: NeuraleseStore | undefined, references: readonly unknown[] = []):
-    Promise<{ blocks: Set<string>; native: Set<string> }> {
-  const blocks = new Set<string>();
-  if (store) for (const meta of ((reply.neuralese as Json | undefined)?.blocks ?? []) as NeuraleseBlockMeta[]) {
-    if (!(await store.has(meta.id))) {
-      const block = await remote.get(meta.id);
-      if (!block) throw new Error(`neuralese-unknown-block: the server reported ${meta.id} but does not have it`);
-      const { id: _, ...rest } = meta;
-      const local = await store.put({ ...rest, dtype: block.meta.dtype, length: block.meta.length,
-        width: block.meta.width, data: block.data });
-      if (local.id !== meta.id) throw new Error(`neuralese block ${meta.id} arrived as ${local.id}: content IDs disagree`);
-    }
-    blocks.add(meta.id);
-  }
+    Promise<{ native: Set<string> }> {
+  const projectedBlocks = (reply.neuralese as { blocks?: unknown } | undefined)?.blocks;
+  if (Array.isArray(projectedBlocks) && projectedBlocks.length)
+    throw new Error('neuralese-projected-api-retired: server returned flat neuralese blocks');
   const nativeBlocks = ((reply.native_state as Json | undefined)?.blocks ?? []) as Array<{ id: string }>;
   const sampling = reply.x_natlang_rl_capture as { prompt?: Array<{ kind?: string; id?: string; source_state_id?: string }>;
     writes?: Array<{ state_id?: string; raw_state_id?: string }> } | undefined;
@@ -420,13 +355,13 @@ export async function archiveNeuraleseReplyArtifacts(reply: Json, remote: Neural
       throw new Error('neuralese-native-archive-unavailable: configure a store that preserves native-state artifacts');
     await archiveNativeArtifactFrom(remote, store, id);
   }
-  return { blocks, native };
+  return { native };
 }
 
 /** A model-turn driver for a Neuralese server. It advertises `neuralese: true`. */
 export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
-    ((request: ModelTurnRequest, signal?: AbortSignal, options?: ModelTurnOptions) => Promise<ModelTurn>) & { neuralese: true; blocks: HttpNeuraleseStore; decide: DecisionScorer } {
-  const { store, neuraleseTemperature, neuraleseMaxLength, request: extra, onExchange, onTurn, owner, nativeStateModes,
+    ((request: ModelTurnRequest, signal?: AbortSignal, options?: ModelTurnOptions) => Promise<ModelTurn>) & { neuralese: true; artifacts: HttpNeuraleseStore; decide: DecisionScorer } {
+  const { store, request: extra, onExchange, onTurn, owner, nativeStateModes,
     ...connection } = options;
   const http = { ...connection, headers: { ...connection.headers,
     ...(connection.apiKey ? { authorization: 'Bearer ' + connection.apiKey } : {}),
@@ -448,8 +383,7 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
     const adapters = coefficientBindings(coefficientPolicy,active,bound);
     return adapters;
   };
-  const blockIds = (messages: unknown[], adapters: readonly { id: string }[]) =>
-    [...requestBlockIds(messages), ...adapters.map(item => item.id)];
+  const adapterArtifactIds = (adapters: readonly { id: string }[]) => adapters.map(item => item.id);
   const bindNativeStateContext = async (messages: unknown[], states: readonly { id: string; source_occurrence?: string; stop_gradient?: true }[], capabilities: Json | null) => {
     if (!states.length) return messages;
     const consumer = capabilities ? nativeStateConsumerFromInfo(capabilities) : undefined;
@@ -553,7 +487,7 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
     const adapters = await adapterParts((body.x_natlang_adapters ?? []) as { id: string; scale: number }[]);
     const inner = (await serverInfo())?.stream === true ? streamed : whole;
     // A streamed reply is assembled here, where its body is post-processed; its deltas go to the turn's observer, and a
-    // request re-sent after restoring blocks first voids what the failed attempt streamed.
+    // request re-sent after restoring native artifacts first voids what the failed attempt streamed.
     let emitted = false;
     const onDelta = meta?.onDelta && ((delta: ModelTurnDelta) => { emitted = true; meta.onDelta!(delta); });
     const preparedMessages = materializeNativeStateSentinels(body.messages) as unknown[];
@@ -579,7 +513,7 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
       implicitNativeReadOccurrences = occurrences;
     }
     const nativeIds = requestNativeStateIds(preparedMessages);
-    const reply = await withRestoredBlocks(remote, store, blockIds(preparedMessages, adapters), async () =>
+    const reply = await withRestoredNativeArtifacts(remote, store, adapterArtifactIds(adapters), async () =>
       await withRestoredNativeStates(remote, store, nativeIds, async () => {
         if (onDelta && emitted) { onDelta({ type: 'reset' }); emitted = false; }
         const requestBody = adapters.length ? { ...body, messages: preparedMessages, x_natlang_adapters: adapters } :
@@ -624,7 +558,6 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
           { code: 'neuralese-native-state-import' });
     }
     const archived = await archiveNeuraleseReplyArtifacts(reply, remote, store);
-    for (const id of archived.blocks) uploaded.add(id);
     const archiveIds = archived.native;
     for (const id of archiveIds) nativeUploaded.add(id);
     if(recorder){
@@ -639,16 +572,13 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
       if(native)reply.x_natlang_native_recorded_turn=native.id;
       if(message)recorder.record({messages:structuredClone((nativeRecording?preparedMessages:body.messages) as unknown[]),
         tools:body.tools?structuredClone(body.tools as unknown[]):undefined,reply:structuredClone(message),
-        blocks:structuredClone([...(((reply.neuralese as Json|undefined)?.blocks??[]) as Json[]),
-          ...(((reply.native_state as Json|undefined)?.blocks??[]) as Json[])]),
+        blocks:structuredClone((((reply.native_state as Json|undefined)?.blocks??[]) as Json[])),
         ...(adapters.length?{adapters:[...adapters]}:{}),
         ...(consumptionModes?{native_state_modes:{...consumptionModes}}:{}),...(native?{native}:{})});
     }
     return normalizeReply(reply);
   };
-  const request: Json = { ...extra,
-    ...(neuraleseTemperature === undefined ? {} : { neuralese_temperature: neuraleseTemperature }),
-    ...(neuraleseMaxLength === undefined ? {} : { neuralese_max_length: neuraleseMaxLength }) };
+  const request: Json = { ...extra };
   const driver = chatCompletionModelTurn(transport, { request, onExchange, onTurn });
   // Decision readout: one prompt pass, every option scored from its cache (serve/grad.py `decide`).
   type Item = Parameters<DecisionScorer>[0];
@@ -694,7 +624,7 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
     return {...scores,x_natlang_native_recorded_turn:native.id};
   };
   const restore = async (item:Item,run:()=>Promise<DecisionScores>):Promise<DecisionScores> =>
-    withRestoredBlocks(remote,store,blockIds(item.messages,item.adapters??[]),()=>
+    withRestoredNativeArtifacts(remote,store,adapterArtifactIds(item.adapters??[]),()=>
       withRestoredNativeStates(remote,store,requestNativeStateIds(item.messages),run,nativeUploaded),uploaded);
   const issue = async (item:Item,signal?:AbortSignal):Promise<DecisionScores> => restore(item,async()=>{
     const response=await fetchModel(http.endpoint.replace(/\/$/,'')+'/v1/neuralese/decide',{method:'POST',signal,
@@ -733,5 +663,5 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
     scopes.set(request, here());
     return coalesced(request, signal);
   }, { scoreMany: coalesced.scoreMany });
-  return Object.assign(driver, { neuralese: true as const, blocks: remote, decide: scoped });
+  return Object.assign(driver, { neuralese: true as const, artifacts: remote, decide: scoped });
 }

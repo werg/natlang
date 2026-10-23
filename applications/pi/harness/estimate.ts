@@ -11,7 +11,7 @@ import type { ContextView, Message } from '../types.js';
 /** Whether a message holds a Neuralese block or a stored call (as in harness/context.ts). */
 const holdsBlock = (message: { content?: unknown }) => Array.isArray(message.content) && message.content.some(part => {
   const found = part as { type?: unknown; stored?: unknown } | null;
-  return found?.type === 'neuralese' || (found?.type === 'text' && found.stored !== undefined);
+  return found?.type === 'native_state' || (found?.type === 'text' && found.stored !== undefined);
 });
 
 export default async function estimate(view: ContextView, extra: Message[]): Promise<number> {
@@ -19,7 +19,7 @@ export default async function estimate(view: ContextView, extra: Message[]): Pro
   // synchronously: make every block and stored call of view and extra known first (a no-op for a view from
   // harness/context, which already did).
   const messages = [...view.messages, ...extra];
-  if (messages.some(holdsBlock)) await ai.blockMeta(messages as never);
+  if (messages.some(holdsBlock)) await ai.nativeStateMeta(messages as never);
   return pluggable({ crisp: () => durable.estimate(view, extra), nl: () => rules(view, extra) }, await durable.implementation('planning'),
     { default: 'crisp', name: 'pi.estimate' })();
 }

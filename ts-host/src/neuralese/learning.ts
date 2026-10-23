@@ -19,14 +19,13 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { currentFrame } from '../runtime/context.js';
 import { isNativeStateId, isNativeAdapterRef, isNeuraleseRef, nativeAdapterRef, neuraleseRef, type NativeAdapterRef, type NeuraleseRef } from '../native/neuralese.js';
-import { constantBlock, type NeuraleseBlock, type NeuraleseBlockMeta, type NeuraleseStore } from '../native/neuralese-store.js';
+import { type NeuraleseBlockMeta, type NeuraleseStore } from '../native/neuralese-store.js';
 import { distributionOf, loadNz, saveNz, type NzSaveExport } from '../native/nz-file.js';
-import { fetchModel } from '../model/chat-completion.js';
-import { HttpNeuraleseStore, restoreBlocks } from '../model/neuralese-server.js';
+import { HttpNeuraleseStore } from '../model/neuralese-server.js';
 import * as deltaOps from './deltas.js';
 import { setSystemPromptSource, systemPromptBank, type SystemPromptBank } from '../native/system-prompts.js';
 import { setNativeAdapterSource, setNativeStateSource, setRecorderSource, type NativeAdapterBinding, type NativeStateBinding, type RecordedTurn, ModelTurnRecorder } from '../native/model-recording.js';
-import { archiveNativeArtifactFrom } from '../native/neuralese-store.js';
+import { archiveNativeArtifactFrom, importNativeArtifactBundle } from '../native/neuralese-store.js';
 import { createNeuraleseLibrary, type StandardLibrary } from './combinators.js';
 import type { ReplayRecordSink } from './replay-records.js';
 import { nativeGraphGradient, nativeRecordedGraphGradient, nativeStateOptimizerStep, nativeAdapterCreate, nativeAdapterOptimizerStep,
@@ -617,23 +616,6 @@ function activeService(where: string, explicit?: LearningService): LearningServi
 }
 const boundService = new AsyncLocalStorage<LearningService>();
 
-async function post(service: LearningService, path: string, body: unknown): Promise<Json> {
-  const response = await fetchModel(service.endpoint.replace(/\/$/, '') + path, { method: 'POST',
-    headers: { 'content-type': 'application/json', ...(service.headers ?? {}) }, body: JSON.stringify(body) });
-  const text = await response.text();
-  if (!response.ok) {
-    let code = 'learning-server', message = text.slice(0, 1000);
-    try { const error = (JSON.parse(text) as { error?: { code?: string; message?: string } }).error; code = error?.code ?? code; message = error?.message ?? message; } catch { /* plain text */ }
-    throw new LearningError(code, message);
-  }
-  return JSON.parse(text) as Json;
-}
-
-async function ensureOnServer(service: LearningService, ids: readonly string[]): Promise<void> {
-  const missing = await restoreBlocks(new HttpNeuraleseStore(service.endpoint, service.headers), service.store, ids);
-  if (missing.length) throw new LearningError('neuralese-unknown-block', `${missing[0]} is neither on the server nor in the runtime's store`);
-}
-
 /**
  * Second order: the inner computations an order-2 loss runs (gradient sessions, optimiser steps), in order. The server
  * recomputes them differentiably before the outer terms, so the outer gradient passes through the inner updates.
@@ -646,8 +628,11 @@ async function evaluate<A>(service: LearningService, f: (a: A) => Promise<Loss>,
   if (order !== undefined && order !== 1 && order !== 2)
     throw new LearningError('neuralese-grad-unavailable', 'gradients of order 1 or 2');
   const leaves = softLeaves(a).filter(ref => !stopped.has(ref)&&!ref.$neuralese.stop_gradient);
-  const arguments_ = [...new Set(leaves.map(ref => ref.$neuralese.id))];
   const nativeLeaves = nativeLearningLeaves(a);
+  if (leaves.length)
+    throw new LearningError('learning-native-target', 'projected nz1 values are not differentiable targets; pass archived nzs1 state or nnt1 coefficient artifacts');
+  if (!nativeLeaves.length)
+    throw new LearningError('learning-native-target', 'recorded gradients need at least one archived native state or coefficient target');
   const targetInfo = nativeLeaves.length ? await nativeLearningTargets(service, nativeLeaves) : undefined;
   const rec = new Recorder();
   // An inner first-order gradient's own inner computations are constants to it: they are not recorded.
@@ -720,28 +705,7 @@ async function evaluate<A>(service: LearningService, f: (a: A) => Promise<Loss>,
     });
     return { loss, grad: { $gradient: grad } as Gradient<A> };
   }
-  if (outer?.native && leaves.length)
-    throw new LearningError('learning-native-target', 'native derivative programs cannot mix native checkpoint roots with projected nz1 value coordinates');
-  await ensureOnServer(service, arguments_);
-  // Every recorded turn that wrote blocks is a producer: a term that reads one of its blocks (a soft call's result,
-  // spliced into its caller's turns) replays the write from that turn with gradient, so the loss reaches the
-  // arguments in the producing call's context (spec/NEURALESE_GRAPH.md, "Replay", step 4).
-  const producers = [...rec.turns, ...rec.nested].filter(turn => !turn.decision && turn.blocks.length)
-    .map(turn => ({ messages: turn.messages, ...(turn.tools ? { tools: turn.tools } : {}), reply: turn.reply, ...adapted(turn) }));
-  const nativeTurns=rec.nativeTurns(),nativeGraphNodes=structuredClone([...rec.graphNodes.values()]);
-  const result = await post(service, '/v1/neuralese/grad', { arguments: arguments_, terms: loss.terms,
-    ...(nativeTurns.length?{native_turns:nativeTurns,native_graph_nodes:nativeGraphNodes}:{}),
-    ...(producers.length ? { producers } : {}), ...(derived ? { order: 2, derived: derived.nodes } : {}) });
-  loss.value = Number(result.loss);
-  await service.replayRecords?.record({ arguments: arguments_, terms: loss.terms, producers, order: order ?? 1,
-    ...(nativeTurns.length?{native_turns:nativeTurns,native_graph_nodes:nativeGraphNodes}:{}),
-    ...(derived ? { derived: derived.nodes } : {}), loss: loss.value });
-  const gradients = (result.gradients ?? {}) as Record<string, string>;
-  outer?.nodes.push({ kind: 'grad', arguments: arguments_, terms: loss.terms, ...(producers.length ? { producers } : {}), gradients,
-    ...(nativeTurns.length?{native_turns:nativeTurns,native_graph_nodes:nativeGraphNodes}:{}) });
-  const grad = mapLeaves(a, (ref): GradientEntry => stopped.has(ref) || ref.$neuralese.stop_gradient || !gradients[ref.$neuralese.id] ? null :
-    { $gradientBlock: { id: gradients[ref.$neuralese.id]!, of: ref.$neuralese.id, type: ref.$neuralese.type } });
-  return { loss, grad: { $gradient: grad } as Gradient<A> };
+  throw new LearningError('learning-native-target', 'native gradient dispatch requires exact native target references');
 }
 
 export type Optimizer = {
@@ -824,41 +788,9 @@ function optimizer(service: () => LearningService, name: 'sgd' | 'adam', hyper: 
         const state = { native_optimizer_state_ids: nextHistories, step: latestStep } as Json;
         return { value, opt: { $optimizer: { name, hyper, state } } };
       }
-      const params: string[] = [], grads: string[] = [];
-      const entries = softLeaves(current.value);
-      if (derivations.getStore()?.native && entries.length)
-        throw new LearningError('learning-native-target', 'native derivative programs cannot mix projected nz1 optimizer values with native checkpoint roots');
-      const gradEntries: GradientEntry[] = [];
-      const visit = (value: unknown) => {
-        if (value && typeof value === 'object' && '$gradientBlock' in value) { gradEntries.push(value as GradientEntry); return; }
-        if (value === null) { gradEntries.push(null); return; }
-        if (Array.isArray(value)) value.forEach(visit);
-        else if (value && typeof value === 'object') Object.values(value).forEach(visit);
-      };
-      visit(grad.$gradient);
-      if (gradEntries.length !== entries.length)
-        throw new LearningError('learning-gradient-shape', 'the gradient does not have the shape of the value');
-      entries.forEach((ref, index) => {
-        const entry = gradEntries[index];
-        if (entry) { params.push(ref.$neuralese.id); grads.push(entry.$gradientBlock.id); }
-      });
-      const result = await post(service(), '/v1/neuralese/optim', { optimizer: name, hyper, params, grads,
-        state: current.opt.$optimizer.state });
-      derivations.getStore()?.nodes.push({ kind: 'optim', optimizer: name, hyper, params, grads, state: current.opt.$optimizer.state,
-        results: { params: result.params, state: result.state } });
-      const updated = new Map(params.map((id, index) => [id, (result.params as string[])[index]!]));
-      const value = mapLeaves(current.value, ref => updated.has(ref.$neuralese.id) ?
-        neuraleseRef(ref.$neuralese.type, updated.get(ref.$neuralese.id)!) : ref) as typeof current.value;
-      return { value, opt: { $optimizer: { name, hyper, state: result.state as Json } } };
+      throw new LearningError('learning-native-target', 'optimizers require archived native state or named coefficient targets');
     },
   };
-}
-
-/** Delta blocks are read from the runtime's store or the server and written to the runtime's store (uploaded to the
- * server when a call or a gradient session needs them). */
-function deltaStores(service: LearningService): deltaOps.DeltaStores {
-  const remote = new HttpNeuraleseStore(service.endpoint, service.headers);
-  return { read: async id => (await service.store?.get(id)) ?? (await remote.get(id)), write: service.store ?? remote };
 }
 
 function f32Values(value: NativeTensorValue): Float32Array {
@@ -984,19 +916,18 @@ export function createLearning(explicit?: LearningService, options: { library?: 
           optimizerStateId, headers: active.headers });
       },
     },
-    /** Residual updates (LEARNING_CONTINUUM §5): soft values and adapters by block arithmetic, crisp files by patch. */
+    /** Named native coefficient deltas plus ordinary file patches. */
     deltas: {
-      diff: async (after: NeuraleseRef | NativeAdapterRef, base: NeuraleseRef | NativeAdapterRef) => isNativeAdapterRef(after) && isNativeAdapterRef(base) ?
-        nativeAdapterArithmetic(service('deltas.diff'), [{ ref: after, scale: 1 }, { ref: base, scale: -1 }], 'diff') :
-        deltaOps.diff(deltaStores(service('deltas.diff')), after as NeuraleseRef, base as NeuraleseRef),
-      apply: async (base: NeuraleseRef | NativeAdapterRef, delta: NeuraleseRef | NativeAdapterRef, scale = 1) => isNativeAdapterRef(base) && isNativeAdapterRef(delta) ?
-        nativeAdapterArithmetic(service('deltas.apply'), [{ ref: base, scale: 1 }, { ref: delta, scale }], 'apply') :
-        deltaOps.apply(deltaStores(service('deltas.apply')), base as NeuraleseRef, delta as NeuraleseRef, scale),
-      compose: async (deltas: Parameters<typeof deltaOps.compose>[1]) => {
-        const items = deltas.map(item => isNeuraleseRef(item) || isNativeAdapterRef(item) ? { ref: item, scale: 1 } : { ref: item.delta, scale: item.scale ?? 1 });
-        return items.length && items.every(item => isNativeAdapterRef(item.ref)) ?
-          nativeAdapterArithmetic(service('deltas.compose'), items as { ref: NativeAdapterRef; scale: number }[], 'compose') :
-          deltaOps.compose(deltaStores(service('deltas.compose')), deltas);
+      diff: async (after: NativeAdapterRef, base: NativeAdapterRef) =>
+        nativeAdapterArithmetic(service('deltas.diff'), [{ ref: after, scale: 1 }, { ref: base, scale: -1 }], 'diff'),
+      apply: async (base: NativeAdapterRef, delta: NativeAdapterRef, scale = 1) =>
+        nativeAdapterArithmetic(service('deltas.apply'), [{ ref: base, scale: 1 }, { ref: delta, scale }], 'apply'),
+      compose: async (deltas: readonly (NativeAdapterRef | { delta: NativeAdapterRef; scale?: number })[]) => {
+        if (!deltas.length) throw new LearningError('learning-native-delta', 'compose needs at least one native adapter delta');
+        const items = deltas.map(item => isNativeAdapterRef(item) ? { ref: item, scale: 1 } : { ref: item.delta, scale: item.scale ?? 1 });
+        if (items.some(item => !isNativeAdapterRef(item.ref)))
+          throw new LearningError('learning-native-delta', 'coefficient composition accepts only exact nnt1 artifacts');
+        return nativeAdapterArithmetic(service('deltas.compose'), items, 'compose');
       },
       diffFiles: deltaOps.diffFiles, applyPatch: deltaOps.applyPatch, composePatches: deltaOps.composePatches,
       /**
@@ -1004,41 +935,47 @@ export function createLearning(explicit?: LearningService, options: { library?: 
        * Σ gains alone − gain of the sum (positive: the updates get in each other's way). `measure` is a loss (lower
        * is better) of a value, e.g. a held-out evaluation.
        */
-      async interference(base: NeuraleseRef, deltas: readonly NeuraleseRef[], measure: (value: NeuraleseRef) => Promise<number>) {
-        const stores = deltaStores(service('deltas.interference'));
+      async interference(base: NativeAdapterRef, deltas: readonly NativeAdapterRef[], measure: (value: NativeAdapterRef) => Promise<number>) {
+        if (!isNativeAdapterRef(base) || deltas.some(delta => !isNativeAdapterRef(delta)))
+          throw new LearningError('learning-native-delta', 'interference requires named native coefficient artifacts');
+        const active = service('deltas.interference');
         const reference = await measure(base);
         const alone = [];
-        for (const delta of deltas) alone.push(reference - await measure(await deltaOps.apply(stores, base, delta)));
-        const joint = reference - await measure(await deltaOps.apply(stores, base, await deltaOps.compose(stores, deltas)));
+        for (const delta of deltas) alone.push(reference - await measure(await nativeAdapterArithmetic(active,
+          [{ ref: base, scale: 1 }, { ref: delta, scale: 1 }], 'interference-alone')));
+        const jointValue = await nativeAdapterArithmetic(active, [{ ref: base, scale: 1 }, ...deltas.map(ref => ({ ref, scale: 1 }))], 'interference-joint');
+        const joint = reference - await measure(jointValue);
         return { base: reference, alone, joint, interference: alone.reduce((sum, gain) => sum + gain, 0) - joint };
       },
       /**
        * Learned merge coefficients (LoRAHub-style, first order): `base + Σ cᵢ·deltaᵢ` with the cᵢ trained by Adam on
        * `loss`. The merge is linear, so ∂L/∂cᵢ = ⟨∇L(merged), deltaᵢ⟩: one gradient session per step.
        */
-      async learnMerge(base: NeuraleseRef, deltas: readonly NeuraleseRef[], loss: (value: NeuraleseRef) => Promise<Loss>,
+      async learnMerge(base: NativeAdapterRef, deltas: readonly NativeAdapterRef[], loss: (value: NativeAdapterRef) => Promise<Loss>,
           options: { steps?: number; lr?: number; init?: number | number[] } = {}) {
-        const active = service('deltas.learnMerge'), stores = deltaStores(active);
-        const parts = await Promise.all(deltas.map(async delta => {
-          const block = await stores.read(delta.$neuralese.id);
-          if (!block) throw new LearningError('neuralese-unknown-block', `delta ${delta.$neuralese.id} not found`);
-          return deltaOps.blockFloats(block);
-        }));
+        if (!isNativeAdapterRef(base) || deltas.some(delta => !isNativeAdapterRef(delta)))
+          throw new LearningError('learning-native-delta', 'learnMerge requires named native coefficient artifacts');
+        if (!deltas.length) throw new LearningError('learning-native-delta', 'learnMerge needs at least one native adapter delta');
+        const active = service('deltas.learnMerge');
+        const parts = await nativeAdapterArtifacts(active, deltas);
         const c = deltas.map((_, i) => Array.isArray(options.init) ? options.init[i] ?? 1 : options.init ?? 1);
         const m = c.map(() => 0), v = c.map(() => 0), lr = options.lr ?? 0.1, trace: { loss: number; coefficients: number[] }[] = [];
-        const merge = async () => deltaOps.apply(stores, base, await deltaOps.compose(stores, deltas.map((delta, i) => ({ delta, scale: c[i]! }))));
+        const merge = async () => nativeAdapterArithmetic(active, [{ ref: base, scale: 1 }, ...deltas.map((ref, i) => ({ ref, scale: c[i]! }))], 'learn-merge');
         for (let step = 1; step <= (options.steps ?? 8); step++) {
           const merged = await merge();
-          const result = await evaluate(active, loss, merged);
+          const result = await evaluate(active, value => withNativeAdapters(value, () => loss(value)), merged);
           trace.push({ loss: +result.loss, coefficients: [...c] });
           const entry = (result.grad as { $gradient: GradientEntry }).$gradient;
           if (!entry) break;
-          const block = await stores.read(entry.$gradientBlock.id);
-          if (!block) throw new LearningError('neuralese-unknown-block', `gradient ${entry.$gradientBlock.id} not found`);
-          const g = deltaOps.blockFloats(block);
+          const gradient = await active.store?.getNativeTensorArtifact?.(entry.$gradientBlock.id);
+          if (!gradient || gradient.metadata.kind !== 'adapter-gradient' || gradient.metadata.source_artifact_id !== merged.$nativeAdapter.id)
+            throw new LearningError('learning-native-delta', 'learnMerge needs the actual named coefficient gradient for its merged actor');
           parts.forEach((part, i) => {
             let dot = 0;
-            for (let k = 0; k < part.length; k++) dot += g[k]! * part[k]!;
+            for (const [name, tensor] of Object.entries(part.tensors)) {
+              const g = f32Values(gradient.tensors[name]!); const d = f32Values(tensor);
+              for (let k = 0; k < d.length; k++) dot += g[k]! * d[k]!;
+            }
             m[i] = 0.9 * m[i]! + 0.1 * dot; v[i] = 0.999 * v[i]! + 0.001 * dot * dot;
             c[i]! -= lr * (m[i]! / (1 - 0.9 ** step)) / (Math.sqrt(v[i]! / (1 - 0.999 ** step)) + 1e-8);
           });
@@ -1069,7 +1006,7 @@ export function createLearning(explicit?: LearningService, options: { library?: 
       adam: (options: { lr: number; betas?: [number, number]; weightDecay?: number }) =>
         optimizer(() => service('optimizers.adam'), 'adam', options),
     },
-    /** Write values to a `.nz` file. Blocks are fetched from the runtime's store or the server. */
+    /** Save archived native states and named coefficient artifacts to a `.nz` bundle. */
     async save(path: string, exports: Record<string, unknown | NzSaveExport>): Promise<{ path: string; exports: string[] }> {
       const active = service('save');
       const remote = new HttpNeuraleseStore(active.endpoint, active.headers);
@@ -1084,30 +1021,27 @@ export function createLearning(explicit?: LearningService, options: { library?: 
       const visit = async (value: unknown): Promise<void> => {
         if (isNeuraleseRef(value) || isNativeAdapterRef(value)) {
           const id = isNativeAdapterRef(value) ? value.$nativeAdapter.id : value.$neuralese.id;
-          if (id.startsWith('nzs1_') || id.startsWith('nnt1_'))
-            await archiveNativeArtifactFrom(remote, active.store!, id);
-          else if (!(await active.store!.get(id)) && !(await remote.get(id)))
-            throw new LearningError('neuralese-unknown-block', `${id} is neither in the runtime archive nor on the server`);
+          if (!id.startsWith('nzs1_') && !id.startsWith('nnt1_'))
+            throw new LearningError('neuralese-projected-api-retired', `${id} is a flat nz1 value; save only native state or named tensor artifacts`);
+          await archiveNativeArtifactFrom(remote, active.store!, id);
         } else if (Array.isArray(value)) await Promise.all(value.map(visit));
         else if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype)
           await Promise.all(Object.values(value).map(visit));
       };
       for (const entry of Object.values(entries)) await visit(entry.value);
-      const store = { async get(id: string): Promise<NeuraleseBlock | undefined> {
-        return (await active.store!.get(id)) ?? (await remote.get(id));
-      }, async getNativeState(id: string) {
-        return (await active.store!.getNativeState?.(id)) ?? (await remote.getNativeState(id));
-      }, async getNativeTensorArtifact(id: string) {
-        return (await active.store!.getNativeTensorArtifact?.(id)) ?? (await remote.getNativeTensorArtifact(id));
-      } } as NeuraleseStore;
-      writeFileSync(path, await saveNz(entries, { store, dialect: active.dialect ?? 'nd:natlang@1' }));
+      writeFileSync(path, await saveNz(entries, { store: active.store, dialect: active.dialect ?? 'native-state/unknown' }));
       return { path, exports: Object.keys(entries) };
     },
-    /** Load a `.nz` artifact bundle into this task's verified native and block archive. */
+    /** Load a native `.nz` bundle into this task's typed artifact archive. */
     async load(path: string): Promise<{ path: string; header: unknown; exports: Record<string, unknown>; types: Record<string, string> }> {
       const active = service('load');
       if (!active.store) throw new LearningError('neuralese-native-archive-unavailable', 'load requires a runtime artifact store');
-      const loaded = await loadNz(new Uint8Array(readFileSync(path)), { store: active.store });
+      const loaded = await loadNz(new Uint8Array(readFileSync(path)));
+      if (loaded.blocks.size)
+        throw new LearningError('neuralese-projected-api-retired', 'this bundle contains flat nz1 values; convert them to native states before loading');
+      if ((loaded.nativeStates.size || loaded.nativeTensors.size) && (!active.store.putNativeState || !active.store.putNativeTensorArtifact))
+        throw new LearningError('neuralese-native-archive-unavailable', 'native bundle import needs a state and tensor capable archive');
+      await importNativeArtifactBundle(active.store, loaded.nativeStates, loaded.nativeTensors);
       return { path, header: loaded.header, exports: loaded.exports, types: loaded.types };
     },
   };

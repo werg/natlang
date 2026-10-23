@@ -252,8 +252,8 @@ export interface NeuraleseStore {
    */
   peek?(id: string): NeuraleseBlockMeta | undefined;
   /**
-   * Remember the metadata of a block held elsewhere (a model server's `GET /v1/neuralese/blocks/{id}/meta`), so that
-   * `peek` answers for it. It does not make the block present: `has`, `get` and `meta` still answer for held blocks only.
+   * Remember metadata of a native artifact held elsewhere, so `peek` can answer without I/O. It does not make the
+   * artifact present: `has`, `getNativeState`, `getNativeTensorArtifact` and `meta` still answer for held artifacts only.
    */
   note?(meta: NeuraleseBlockMeta): void;
   /** Keep a block through garbage collection (for example while a file or a running call refers to it). */

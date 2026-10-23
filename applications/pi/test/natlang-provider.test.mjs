@@ -12,16 +12,19 @@ import { test, before, after } from 'node:test';
 import { createServer } from 'node:http';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { join } from 'node:path';
+import { nativeStateFixture } from '../../../ts-host/test/fixtures/native-state.mjs';
+import { encodeNativeState } from '../../../ts-host/dist/native/neuralese-store.js';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const hostDist = fileURLToPath(new URL('../../../ts-host/dist/', import.meta.url));
 const outDir = join(root, '.natlang', 'test-build-provider');
-const BLOCK = 'nz1_' + 'a'.repeat(24);
+const BLOCK = 'nzs1_' + 'a'.repeat(52);
+const artifacts = new Map();
 let m, server, endpoint;
 /** What the fake server was sent, by path, and what it answers next to a chat request. */
 const seen = [];
 let reply = () => ({ status: 200, body: { choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }] } });
-let info = { status: 200, body: { dialects: ['d1'], width: 8, dtype: 'f32', max_block_length: 32 } };
+let info = { status: 200, body: { dialects: ['native-state/fixture'], native_state: { enabled: true }, capabilities: ['native-state.consume'] } };
 
 before(async () => {
   const natlang = await import(pathToFileURL(join(hostDist, 'index.js')).href);
@@ -33,18 +36,24 @@ before(async () => {
   m = { natlang, provider: await load('host/natlang-provider.js'), main: await load('main.js'), ai: await import('@earendil-works/pi-ai'),
     aiHost: await load('host/ai.js'), durableHost: await load('host/durable.js'), chord: await import('@earendil-works/chord/context') };
   server = createServer((request, response) => {
-    let data = '';
-    request.on('data', chunk => { data += chunk; });
+    const chunks = [];
+    request.on('data', chunk => { chunks.push(chunk); });
     request.on('end', () => {
-      const body = data ? JSON.parse(data) : undefined;
+      const raw = Buffer.concat(chunks);
+      const body = raw.length && (request.headers['content-type'] ?? '').includes('json') ? JSON.parse(raw.toString()) : undefined;
       seen.push({ method: request.method, path: request.url, body });
       const send = ({ status, body }) => { response.writeHead(status, { 'content-type': 'application/json' }); response.end(JSON.stringify(body)); };
       if (request.url === '/v1/neuralese/info') return send(info);
-      if (request.url.startsWith('/v1/neuralese/blocks/') && request.url.endsWith('/meta')) {
-        const id = request.url.split('/')[4];
-        // A block whose ID starts nz1_lost is one the server does not have.
-        if (id.startsWith('nz1_lost')) return send({ status: 404, body: { error: { message: 'neuralese-unknown-block' } } });
-        return send({ status: 200, body: { id, dialect: 'd1', length: 4, width: 8, dtype: 'f32' } });
+      const nativeState = request.url.match(/^\/v1\/neuralese\/native-states\/([^/]+)$/);
+      if (nativeState && request.method === 'PUT') {
+        artifacts.set(nativeState[1], new Uint8Array(raw));
+        return send({ status: 200, body: { id: nativeState[1] } });
+      }
+      if (nativeState && request.method === 'GET') {
+        const bytes = artifacts.get(nativeState[1]);
+        if (!bytes) return send({ status: 404, body: { error: { message: 'neuralese-unknown-native-state' } } });
+        response.writeHead(200, { 'content-type': 'application/octet-stream' });
+        return response.end(Buffer.from(bytes));
       }
       if (request.url === '/v1/chat/completions') {
         const answer = reply(body);
@@ -74,7 +83,10 @@ const usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0
 
 test('native state streams as a reference and the next turn sends a native import', async () => {
   const id = 'nzs1_' + 'a'.repeat(52);
-  const { models, ref } = await agent('--agent-reader', 'd1');
+  const store = new m.natlang.MemoryNeuraleseStore();
+  const stateId = await storedBlock(store);
+  const { models, ref } = await m.main.agentModels(['--agent-endpoint', endpoint, '--agent-model', 'fake', '--agent-transport', 'natlang',
+    '--agent-reader', 'native-state'], undefined, store);
   const model = models.getModel(ref.provider, ref.modelId);
   let request;
   const driver = Object.assign(async (input, _signal, options) => {
@@ -84,15 +96,15 @@ test('native state streams as a reference and the next turn sends a native impor
   }, { neuralese: true });
   const api = m.provider.natlangApi(() => driver);
   const stream = api.streamSimple(model, { messages: [{ role: 'user',
-    content: [{ type: 'text', text: 'Use this: ' }, { type: 'neuralese', id }], timestamp: 1 }] });
+    content: [{ type: 'text', text: 'Use this: ' }, { type: 'native_state', id }], timestamp: 1 }] });
   const events = [];
   for await (const event of stream) events.push(event);
   const message = await stream.result();
   assert.equal(message.stopReason, 'stop');
   assert.deepEqual(request.messages[0].content,
     [{ type: 'text', text: 'Use this: ' }, { type: 'native_state', id }]);
-  assert.deepEqual(message.content, [{ type: 'neuralese', id }]);
-  assert.equal(events.filter(event => event.type === 'neuralese').length, 1);
+  assert.deepEqual(message.content, [{ type: 'native_state', id }]);
+  assert.equal(events.filter(event => event.type === 'native_state').length, 1);
   assert.equal(events.some(event => event.type === 'toolcall_start'), false);
 });
 
@@ -163,27 +175,30 @@ test('server errors keep their text, so pi-ai classifies overflow and retries', 
 
 test('a Neuralese part reaches a Neuralese reader unchanged, and a written block comes back as a part', async () => {
   seen.length = 0;
-  const { models, ref } = await agent('--agent-reader', 'd1');
+  const store = new m.natlang.MemoryNeuraleseStore();
+  const stateId = await storedBlock(store);
+  const { models, ref } = await m.main.agentModels(['--agent-endpoint', endpoint, '--agent-model', 'fake', '--agent-transport', 'natlang',
+    '--agent-reader', 'native-state'], undefined, store);
   const model = models.getModel(ref.provider, ref.modelId);
-  assert.deepEqual(model.reader, { kind: 'neuralese', dialect: 'd1', maxBlockLength: 32 });
+  assert.deepEqual(model.reader, { kind: 'native-state' });
   reply = () => ({ status: 200, body: { choices: [{ finish_reason: 'stop', message: { content: [{ type: 'text', text: 'Noted: ' },
-    { type: 'neuralese', id: BLOCK }] } }] } });
-  const content = [{ type: 'text', text: 'Read this: ' }, { type: 'neuralese', id: BLOCK, value_type: 'string' }];
+    { type: 'native_state', id: stateId }] } }] } });
+  const content = [{ type: 'text', text: 'Read this: ' }, { type: 'native_state', id: stateId }];
   const message = await models.completeSimple(model, { messages: [{ role: 'user', content, timestamp: 1 }] });
   assert.equal(message.stopReason, 'stop', message.errorMessage);
   assert.deepEqual(chats()[0].body.messages, [{ role: 'user', content }]);
-  assert.deepEqual(message.content, [{ type: 'text', text: 'Noted: ' }, { type: 'neuralese', id: BLOCK }]);
+  assert.deepEqual(message.content, [{ type: 'text', text: 'Noted: ' }, { type: 'native_state', id: stateId }]);
   // The reply's block is sent back as it came when the conversation goes on.
   await models.completeSimple(model, { messages: [{ role: 'user', content, timestamp: 1 }, message,
     { role: 'user', content: 'And?', timestamp: 3 }] });
-  assert.deepEqual(chats().at(-1).body.messages[1], { role: 'assistant', content: [{ type: 'text', text: 'Noted: ' }, { type: 'neuralese', id: BLOCK }] });
+  assert.deepEqual(chats().at(-1).body.messages[1], { role: 'assistant', content: [{ type: 'text', text: 'Noted: ' }, { type: 'native_state', id: stateId }] });
 });
 
 test('a text reader refuses a Neuralese part loudly, before any request', async () => {
   seen.length = 0;
   const { models, ref } = await agent();
   const model = models.getModel(ref.provider, ref.modelId);
-  const messages = [{ role: 'toolResult', toolCallId: 'c', toolName: 'read', content: [{ type: 'neuralese', id: BLOCK }], isError: false, timestamp: 1 }];
+  const messages = [{ role: 'toolResult', toolCallId: 'c', toolName: 'read', content: [{ type: 'native_state', id: BLOCK }], isError: false, timestamp: 1 }];
   const message = await models.completeSimple(model, { messages: [{ role: 'user', content: 'go', timestamp: 0 },
     { role: 'assistant', content: [{ type: 'toolCall', id: 'c', name: 'read', arguments: {} }], api: model.api, provider: 'agent', model: 'fake',
       usage, stopReason: 'toolUse', timestamp: 1 }, ...messages] });
@@ -197,29 +212,30 @@ test('a text reader refuses a Neuralese part loudly, before any request', async 
   assert.match(refused.errorMessage, /^neuralese-unsupported-backend: /);
 });
 
-/** A stored block of `length` vectors of width 8, and its ID. */
-async function storedBlock(store, length, seed = 1) {
-  const data = new Float32Array(length * 8).map((_, i) => seed + i);
-  return (await store.put({ dialect: 'd1', length, width: 8, dtype: 'f32', data: new Uint8Array(data.buffer) })).id;
+/** A captured native state and its exact native artifact bytes, available to the remote mock. */
+async function storedBlock(store, architecture = 'fixture') {
+  const artifact = await store.putNativeState(nativeStateFixture(architecture));
+  artifacts.set(artifact.id, encodeNativeState(artifact));
+  return artifact.id;
 }
-const blockMessage = ids => ({ role: 'user', content: [{ type: 'text', text: 'Read: ' }, ...ids.map(id => ({ type: 'neuralese', id }))], timestamp: 1 });
+const blockMessage = ids => ({ role: 'user', content: [{ type: 'text', text: 'Read: ' }, ...ids.map(id => ({ type: 'native_state', id }))], timestamp: 1 });
 
 test('a token estimate counts each Neuralese block at its real length, from the runtime\'s store', async () => {
-  const { models } = await agent('--agent-reader', 'd1');
+  const { models } = await agent('--agent-reader', 'native-state');
   const store = new m.natlang.MemoryNeuraleseStore();
-  const [short, long] = [await storedBlock(store, 3), await storedBlock(store, 17, 2)];
+  const [short, long] = [await storedBlock(store), await storedBlock(store, 'fixture-2')];
   const service = m.aiHost.aiService({ models, signal: undefined }, m.chord.BACKGROUND_CONTEXT, undefined, {}, store);
   const [none, one, both] = service.estimateTokens([blockMessage([]), blockMessage([short]), blockMessage([short, long])]);
-  assert.equal(one - none, 3);
-  assert.equal(both - none, 20);
+  assert.equal(one - none, 2);
+  assert.equal(both - none, 4);
   // The part stays a pure reference: the length is never written into it.
-  assert.deepEqual(blockMessage([short]).content[1], { type: 'neuralese', id: short });
+  assert.deepEqual(blockMessage([short]).content[1], { type: 'native_state', id: short });
 });
 
 test('the crisp context estimate (pi-durable\'s, through durable.estimate) counts blocks as ai.estimateTokens does', async () => {
-  const { models } = await agent('--agent-reader', 'd1');
+  const { models } = await agent('--agent-reader', 'native-state');
   const store = new m.natlang.MemoryNeuraleseStore();
-  const [short, long] = [await storedBlock(store, 3), await storedBlock(store, 17, 2)];
+  const [short, long] = [await storedBlock(store), await storedBlock(store, 'fixture-2')];
   const ai = m.aiHost.aiService({ models, signal: undefined }, m.chord.BACKGROUND_CONTEXT, undefined, {}, store);
   const runtime = { conversationId: 1, taskId: 1, now: () => 0 };
   const durable = m.durableHost.durableService(runtime, m.chord.BACKGROUND_CONTEXT, {}, {}, {}, ai.estimateTokens);
@@ -227,8 +243,8 @@ test('the crisp context estimate (pi-durable\'s, through durable.estimate) count
   const view = messages => ({ head: null, entries: [], contributions: [], messages, sections: [], tools: [] });
   const text = blockMessage([]);
   // Crisp: the text estimate plus each block's real length, in the view and in extra alike.
-  assert.equal(durable.estimate(view([blockMessage([short, long])]), []), durable.estimate(view([text]), []) + 20);
-  assert.equal(durable.estimate(view([text]), [blockMessage([long])]), 2 * durable.estimate(view([text]), []) + 17);
+  assert.equal(durable.estimate(view([blockMessage([short, long])]), []), durable.estimate(view([text]), []) + 4);
+  assert.equal(durable.estimate(view([text]), [blockMessage([long])]), 2 * durable.estimate(view([text]), []) + 2);
   assert.equal(durable.estimate(view([blockMessage([short])]), []), ai.estimateTokens([blockMessage([short])])[0]);
   // An image part is pi-ai's estimate, unchanged.
   const image = { role: 'user', content: [{ type: 'text', text: 'see' }, { type: 'image', data: 'AAAA', mimeType: 'image/png' }], timestamp: 1 };
@@ -239,43 +255,45 @@ test('the crisp context estimate (pi-durable\'s, through durable.estimate) count
 });
 
 test('metadata the store lacks is fetched once from the agent model\'s server and kept in the store', async () => {
-  const { models, ref } = await agent('--agent-reader', 'd1');
+  const { models, ref } = await agent('--agent-reader', 'native-state');
   const store = new m.natlang.MemoryNeuraleseStore();
   const service = m.aiHost.aiService({ models, signal: undefined }, m.chord.BACKGROUND_CONTEXT, undefined, {}, store);
   const messages = [blockMessage([BLOCK]), blockMessage([BLOCK])];
-  assert.throws(() => service.estimateTokens(messages), new RegExp(`^Error: neuralese-unknown-block-length: .*${BLOCK}.*ai\\.blockMeta`));
+  assert.throws(() => service.estimateTokens(messages), new RegExp(`^Error: neuralese-unknown-block-length: .*${BLOCK}.*ai\\.nativeStateMeta`));
   seen.length = 0;
-  assert.deepEqual(await Promise.all([service.blockMeta(messages, ref), service.blockMeta(messages, ref)]), [[], []]);
-  assert.deepEqual(await service.blockMeta(messages, ref), []);
-  assert.deepEqual(seen.map(item => item.path), [`/v1/neuralese/blocks/${BLOCK}/meta`]);
-  assert.equal(store.peek(BLOCK).length, 4);
-  assert.equal(await store.has(BLOCK), false, 'noted metadata does not make the block present');
-  const [withBlock, without] = service.estimateTokens([messages[0], blockMessage([])]);
-  assert.equal(withBlock - without, 4);
+  const external = await storedBlock(new m.natlang.MemoryNeuraleseStore(), 'external');
+  const externalMessages = [blockMessage([external]), blockMessage([external])];
+  assert.deepEqual(await Promise.all([service.nativeStateMeta(externalMessages, ref), service.nativeStateMeta(externalMessages, ref)]), [[], []]);
+  assert.deepEqual(await service.nativeStateMeta(externalMessages, ref), []);
+  assert.deepEqual(seen.map(item => item.path), [`/v1/neuralese/native-states/${external}`]);
+  assert.equal(store.peek(external).length, 2);
+  assert.equal(await store.has(external), false, 'noted metadata does not make the artifact present');
+  const [withBlock, without] = service.estimateTokens([externalMessages[0], blockMessage([])]);
+  assert.equal(withBlock - without, 2);
 });
 
 test('a block whose length stays unknown is an error naming it, never a guess', async () => {
-  const { models, ref } = await agent('--agent-reader', 'd1');
+  const { models, ref } = await agent('--agent-reader', 'native-state');
   const store = new m.natlang.MemoryNeuraleseStore();
-  const lost = 'nz1_lost' + 'b'.repeat(20);
+  const lost = 'nzs1_' + 'b'.repeat(52);
   const service = m.aiHost.aiService({ models, signal: undefined }, m.chord.BACKGROUND_CONTEXT, undefined, {}, store);
-  assert.deepEqual(await service.blockMeta([blockMessage([lost])], ref), [lost]);
+  assert.deepEqual(await service.nativeStateMeta([blockMessage([lost])], ref), [lost]);
   assert.throws(() => service.estimateTokens([blockMessage([lost])]),
-    new RegExp(`^Error: neuralese-unknown-block-length: .*${lost}.*GET /v1/neuralese/blocks/${lost}/meta.*it is lost`));
+    new RegExp(`^Error: neuralese-unknown-block-length: .*${lost}.*native-states/${lost}.*it is lost`));
   // Without a store there is nowhere to read lengths from: the error says so.
   const bare = m.aiHost.aiService({ models, signal: undefined }, m.chord.BACKGROUND_CONTEXT);
-  assert.throws(() => bare.estimateTokens([blockMessage([BLOCK])]), /^Error: neuralese-unknown-block-length: block nz1_a+ .*no process-local Neuralese store/);
+  assert.throws(() => bare.estimateTokens([blockMessage([BLOCK])]), /^Error: neuralese-unknown-block-length: block nzs1_a+ .*no process-local Neuralese store/);
 });
 
 test('the declared reader is checked against the server at startup', async () => {
-  await assert.rejects(agent('--agent-reader', 'd2'), /^Error: neuralese-dialect-mismatch: .*"d2".*"d1"/);
+  await assert.rejects(agent('--agent-reader', 'not-native'), /unsupported reader "not-native"/);
   info = { status: 404, body: { error: { message: 'not found' } } };
   try {
-    await assert.rejects(agent('--agent-reader', 'd1'), /neuralese-unsupported-backend: .*HTTP 404/);
+    await assert.rejects(agent('--agent-reader', 'native-state'), /neuralese-unsupported-backend: .*HTTP 404/);
     // A text reader needs no Neuralese server.
     assert.deepEqual((await agent()).models.getModel('agent', 'fake').reader, { kind: 'text' });
-  } finally { info = { status: 200, body: { dialects: ['d1'], width: 8, dtype: 'f32', max_block_length: 32 } }; }
-  await assert.rejects(m.main.agentModels(['--agent-endpoint', endpoint, '--agent-model', 'fake', '--agent-reader', 'd1']),
+  } finally { info = { status: 200, body: { dialects: ['native-state/fixture'], native_state: { enabled: true }, capabilities: ['native-state.consume'] } }; }
+  await assert.rejects(m.main.agentModels(['--agent-endpoint', endpoint, '--agent-model', 'fake', '--agent-reader', 'native-state']),
     /--agent-reader needs --agent-transport natlang/);
 });
 
@@ -343,48 +361,50 @@ test('a written Neuralese block streams as one block-reference event, and the fi
   try {
     seen.length = 0;
     const store = new m.natlang.MemoryNeuraleseStore();
+    const stateId = await storedBlock(store);
+    const stateMeta = store.peek(stateId);
     const { models, ref } = await m.main.agentModels(['--agent-endpoint', endpoint, '--agent-model', 'fake', '--agent-transport', 'natlang',
-      '--agent-reader', 'd1'], undefined, store);
+      '--agent-reader', 'native-state'], undefined, store);
     const model = models.getModel(ref.provider, ref.modelId);
     const context = { messages: [{ role: 'user', content: 'Note it.', timestamp: 1 }] };
-    const final = { role: 'assistant', content: [{ type: 'text', text: 'Noted: ' }, { type: 'neuralese', id: BLOCK }] };
+    const final = { role: 'assistant', content: [{ type: 'text', text: 'Noted: ' }, { type: 'native_state', id: stateId }] };
     reply = () => ({ chunks: [chunk({ role: 'assistant', content: 'Noted: ' }),
-      chunk({ content: [{ type: 'neuralese', id: BLOCK }] }, null, { neuralese: { block: { id: BLOCK, dialect: 'd1', length: 4 } } }),
+      chunk({ content: [{ type: 'native_state', id: stateId }] }, null, { native_state: { block: stateMeta } }),
       chunk({}, 'stop', { x_natlang_message: final })] });
     const streamed = await collect(models.streamSimple(model, context));
     assert.equal(chats()[0].body.stream, true);
-    assert.deepEqual(streamed.types, ['start', 'text_start', 'text_delta', 'text_end', 'neuralese', 'done']);
-    const block = streamed.events.find(event => event.type === 'neuralese');
+    assert.deepEqual(streamed.types, ['start', 'text_start', 'text_delta', 'text_end', 'native_state', 'done']);
+    const block = streamed.events.find(event => event.type === 'native_state');
     assert.equal(block.contentIndex, 1);
-    assert.deepEqual(block.content, { type: 'neuralese', id: BLOCK });
-    assert.deepEqual(block.partial.content[1], { type: 'neuralese', id: BLOCK });
+    assert.deepEqual(block.content, { type: 'native_state', id: stateId });
+    assert.deepEqual(block.partial.content[1], { type: 'native_state', id: stateId });
     // The metadata the block streamed with is in the runtime's store, where estimates read its length.
-    assert.equal(store.peek(BLOCK).length, 4);
+    assert.equal(store.peek(stateId).length, 2);
     // The same reply sent whole gives the same message.
     info = { status: 200, body: { ...info.body, stream: false } };
     reply = () => ({ status: 200, body: { id: 'r2', choices: [{ finish_reason: 'stop', message: final }] } });
-    const whole = await collect((await agent('--agent-reader', 'd1')).models.streamSimple(model, context));
-    assert.deepEqual(whole.types, ['start', 'text_start', 'text_delta', 'text_end', 'neuralese', 'done']);
+    const whole = await collect((await agent('--agent-reader', 'native-state')).models.streamSimple(model, context));
+    assert.deepEqual(whole.types, ['start', 'text_start', 'text_delta', 'text_end', 'native_state', 'done']);
     assert.deepEqual(settled(streamed.message), settled(whole.message));
-    assert.deepEqual(streamed.message.content, [{ type: 'text', text: 'Noted: ' }, { type: 'neuralese', id: BLOCK }]);
+    assert.deepEqual(streamed.message.content, [{ type: 'text', text: 'Noted: ' }, { type: 'native_state', id: stateId }]);
 
     // The final message wins where the stream said otherwise: an open part it extends is finished with the rest, a
     // part it contradicts ends as streamed, and the final parts follow whole.
     info = { status: 200, body: { ...info.body, stream: true } };
-    const streamedModel = (await agent('--agent-reader', 'd1')).models;
+    const streamedModel = (await agent('--agent-reader', 'native-state')).models;
     reply = () => ({ chunks: [chunk({ content: 'Fin' }), chunk({}, 'stop', { x_natlang_message: { role: 'assistant', content: 'Final.' } })] });
     const extended = await collect(streamedModel.streamSimple(model, context));
     assert.deepEqual(extended.events.filter(event => event.type === 'text_delta').map(event => event.delta), ['Fin', 'al.']);
     assert.deepEqual(extended.types, ['start', 'text_start', 'text_delta', 'text_delta', 'text_end', 'done']);
     assert.deepEqual(extended.message.content, [{ type: 'text', text: 'Final.' }]);
-    reply = () => ({ chunks: [chunk({ content: 'Draft' }), chunk({ content: [{ type: 'neuralese', id: BLOCK }] }),
+    reply = () => ({ chunks: [chunk({ content: 'Draft' }), chunk({ content: [{ type: 'native_state', id: stateId }] }),
       chunk({}, 'stop', { x_natlang_message: { role: 'assistant', content: 'Answer.' } })] });
     const replaced = await collect(streamedModel.streamSimple(model, context));
-    assert.deepEqual(replaced.types, ['start', 'text_start', 'text_delta', 'text_end', 'neuralese', 'text_start', 'text_delta', 'text_end', 'done']);
+    assert.deepEqual(replaced.types, ['start', 'text_start', 'text_delta', 'text_end', 'native_state', 'text_start', 'text_delta', 'text_end', 'done']);
     assert.deepEqual(replaced.events.filter(event => event.type === 'text_start').map(event => event.contentIndex), [0, 0]);
     assert.deepEqual(replaced.events.at(-2).content, 'Answer.');
     assert.deepEqual(replaced.message.content, [{ type: 'text', text: 'Answer.' }]);
-  } finally { info = { status: 200, body: { dialects: ['d1'], width: 8, dtype: 'f32', max_block_length: 32 } }; }
+  } finally { info = { status: 200, body: { dialects: ['native-state/fixture'], native_state: { enabled: true }, capabilities: ['native-state.consume'] } }; }
 });
 
 test('a re-sent request replaces the abandoned attempt in the partial; only the final reply is the message', async () => {

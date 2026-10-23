@@ -5,10 +5,9 @@
  * programs do. pi-ai keeps its transcript hygiene (`transformMessages`, the replayed system prompt and tools); the
  * request, the content parts, tool-call decoding and token accounting are natlang's.
  *
- * Representation is chosen by use (plans/neuralese/DECISIONS.md 2026-10-09): the agent model declares its reader at
- * startup (`declareReader`: text, or a Neuralese dialect the server's `/v1/neuralese/info` confirms) on the model
- * object as `reader`, so code that produces a value for the agent picks its representation before making it. A
- * Neuralese part (types.ts `NeuraleseContent`) goes to the wire unchanged; sent to a driver that does not carry parts
+ * The agent model declares its reader at startup (`declareReader`: text or native state, checked against the server's
+ * `native_state.enabled` identity) on the model object as `reader`. A native-state part (types.ts `NativeStateContent`)
+ * goes to the wire unchanged; sent to a driver that does not carry parts
  * it fails the request with neuralese-unsupported-backend. There is no text fallback.
  */
 import { AssistantMessageEventStream, calculateCost, collapseSystemMessages, getCurrentTools, getSystemMessageText,
@@ -16,11 +15,11 @@ import { AssistantMessageEventStream, calculateCost, collapseSystemMessages, get
 import type { Api, AssistantMessage, AssistantMessageEvent, Message, Model, ProviderStreams, SimpleStreamOptions,
   StreamOptions, TranscriptContext, ToolCall } from '@earendil-works/pi-ai';
 import { transformMessages } from '@earendil-works/pi-ai/api/transform-messages';
-import { checkNeuraleseReader, NeuraleseUnsupportedError, supportsNeuralese, textToParts, hasNeuraleseSentinel,
+import { HttpNeuraleseStore, neuraleseServerInfo, NeuraleseUnsupportedError, supportsNeuralese, textToParts, hasNeuraleseSentinel,
   type ModelContentPart, type ModelTurn, type ModelTurnDelta, type ModelTurnOptions, type ModelTurnRequest,
   type NeuraleseBlockMeta, type NeuraleseStore } from 'natlang:runtime';
 import { parseStreamingJson } from '@earendil-works/pi-ai/utils/json-parse';
-import type { NeuraleseContent } from '../types.ts';
+import type { NativeStateContent } from '../types.ts';
 
 /**
  * A natlang model-turn driver; one that carries content parts sets `neuralese: true` (ts-host contracts.ts). Its
@@ -29,8 +28,8 @@ import type { NeuraleseContent } from '../types.ts';
 export type ModelDriver = ((request: ModelTurnRequest, signal?: AbortSignal, options?: ModelTurnOptions) => Promise<ModelTurn>) &
   { neuralese?: boolean };
 
-/** What the agent model reads: text, or the blocks of one Neuralese dialect (at most `maxBlockLength` positions each). */
-export type AgentReader = { kind: 'text' } | { kind: 'neuralese'; dialect: string; maxBlockLength?: number };
+/** What the agent model reads: text, or content-addressed native state. */
+export type AgentReader = { kind: 'text' } | { kind: 'native-state' };
 
 /**
  * The driver for a model; `reasoning`: the request asks for thinking (pi's thinking level is not "off"); `owner`: the
@@ -39,30 +38,30 @@ export type AgentReader = { kind: 'text' } | { kind: 'neuralese'; dialect: strin
  */
 export type NatlangDrivers = (model: Model<Api>, options: { reasoning: boolean; owner?: string }) => ModelDriver;
 
-/** Whether a content part is a Neuralese block. */
-export function isNeuraleseContent(part: unknown): part is NeuraleseContent {
+/** Whether a content part is a valid native-state artifact reference. */
+export function isNativeStateContent(part: unknown): part is NativeStateContent {
   const found = part as { type?: unknown; id?: unknown } | null;
-  return found?.type === 'neuralese' && typeof found.id === 'string';
+  return found?.type === 'native_state' && typeof found.id === 'string' && /^nzs1_[a-z2-7]{52}$/.test(found.id);
 }
 
-/** The Neuralese blocks a message carries. */
-export function neuraleseBlocks(message: { content?: unknown }): number {
-  return Array.isArray(message.content) ? message.content.filter(isNeuraleseContent).length : 0;
+/** The native-state artifacts a message carries. */
+export function nativeStateParts(message: { content?: unknown }): number {
+  return Array.isArray(message.content) ? message.content.filter(isNativeStateContent).length : 0;
 }
 
-/** The IDs of the Neuralese blocks the messages carry, each once, in order. */
-export function neuraleseBlockIds(messages: readonly { content?: unknown }[]): string[] {
+/** The IDs of the native states the messages carry, each once, in order. */
+export function nativeStateIds(messages: readonly { content?: unknown }[]): string[] {
   const ids = new Set<string>();
   for (const message of messages) if (Array.isArray(message.content))
-    for (const part of message.content) if (isNeuraleseContent(part)) ids.add(part.id);
+    for (const part of message.content) if (isNativeStateContent(part)) ids.add(part.id);
   return [...ids];
 }
 
 /**
- * The context positions a Neuralese block occupies: its length (the number of vectors), from its metadata in the
+ * The context positions a native state occupies: its token length, from metadata in the
  * runtime's store (`peek`, no I/O). Metadata that is not there is an error naming the block and the fix, never a guess.
  */
-export function blockLength(id: string, store: NeuraleseStore | undefined): number {
+export function nativeStateLength(id: string, store: NeuraleseStore | undefined): number {
   if (!store?.peek) throw new Error(`neuralese-unknown-block-length: block ${id} cannot be measured: the runtime has no ` +
     'process-local Neuralese store to hold block metadata. Give the natlang runtime a Neuralese store (its neuralese.store ' +
     'option) so the blocks the agent model writes, and the metadata fetched for others, are recorded there.');
@@ -71,28 +70,28 @@ export function blockLength(id: string, store: NeuraleseStore | undefined): numb
   throw new Error(`neuralese-unknown-block-length: the runtime's Neuralese store has no metadata for block ${id}, so the ` +
     'context positions it occupies are unknown. Blocks the agent model writes are recorded as they arrive, and context() ' +
     'fetches the metadata of the others from the agent model\'s server; for messages that did not come from context(), ' +
-    'call await ai.blockMeta(messages) before estimating them. When ai.blockMeta returns this ID, neither the store nor ' +
-    `the server (GET /v1/neuralese/blocks/${id}/meta) has the block: it is lost, and the message holding it must leave the ` +
+    'call await ai.nativeStateMeta(messages) before estimating them. When ai.nativeStateMeta returns this ID, neither the store nor ' +
+    `the server (GET /v1/neuralese/native-states/${id}) has the state: it is lost, and the message holding it must leave the ` +
     'conversation.');
 }
 
-/** The context positions of every Neuralese block a message carries (`blockLength` of each). */
-export function blockPositions(message: { content?: unknown }, store: NeuraleseStore | undefined): number {
+/** The context positions of every Neuralese block a message carries (`nativeStateLength` of each). */
+export function nativeStatePositions(message: { content?: unknown }, store: NeuraleseStore | undefined): number {
   if (!Array.isArray(message.content)) return 0;
   let positions = 0;
-  for (const part of message.content) if (isNeuraleseContent(part)) positions += blockLength(part.id, store);
+  for (const part of message.content) if (isNativeStateContent(part)) positions += nativeStateLength(part.id, store);
   return positions;
 }
 
-/** Metadata requests in flight, by server and block: concurrent callers share one request. */
+/** Native-state metadata requests in flight, keyed by server and artifact. */
 const fetching = new Map<string, Promise<NeuraleseBlockMeta | undefined>>();
 
 /**
- * Note in `store` the metadata of each block of `ids` it cannot `peek`, fetched once from the Neuralese server at
- * `root` (`GET /v1/neuralese/blocks/{id}/meta`, spec/NEURALESE_PORT.md). Returns the IDs the server does not have
+ * Note in `store` metadata for each native state of `ids` it cannot `peek`, fetched once from the native artifact
+ * archive at `root` (`GET /v1/neuralese/native-states/{id}`). Returns the IDs the server does not have
  * either. A store that cannot note metadata (no `note`) is left as it is, and every block it lacks is returned.
  */
-export async function noteBlockMeta(root: string, ids: readonly string[], store: NeuraleseStore,
+export async function noteNativeStateMeta(root: string, ids: readonly string[], store: NeuraleseStore,
     options: { signal?: AbortSignal; headers?: Record<string, string> } = {}): Promise<string[]> {
   const base = root.replace(/\/+$/, '').replace(/\/v1$/, '');
   const missing: string[] = [];
@@ -102,14 +101,7 @@ export async function noteBlockMeta(root: string, ids: readonly string[], store:
     const key = `${base}\0${id}`;
     let request = fetching.get(key);
     if (!request) {
-      request = (async () => {
-        const response = await fetch(`${base}/v1/neuralese/blocks/${encodeURIComponent(id)}/meta`,
-          { headers: options.headers, signal: options.signal });
-        if (response.status === 404) return undefined;
-        if (!response.ok) throw new Error(`neuralese block metadata for ${id} failed (HTTP ${response.status}): ` +
-          (await response.text()).slice(0, 500));
-        return await response.json() as NeuraleseBlockMeta;
-      })().finally(() => fetching.delete(key));
+      request = new HttpNeuraleseStore(base, options.headers).meta(id).finally(() => fetching.delete(key));
       fetching.set(key, request);
     }
     const meta = await request;
@@ -120,7 +112,7 @@ export async function noteBlockMeta(root: string, ids: readonly string[], store:
 
 /** A content part in a transcript for a text reader: a block is named, never paraphrased. */
 export function transcriptText(part: { type: string; text?: string; id?: string }): string {
-  return part.type === 'text' ? part.text ?? '' : isNeuraleseContent(part) ? `[Neuralese block ${part.id}]` : `[${part.type}]`;
+  return part.type === 'text' ? part.text ?? '' : isNativeStateContent(part) ? `[native state ${part.id}]` : `[${part.type}]`;
 }
 
 /** The reader a model declares; a model without a declaration reads text. */
@@ -135,9 +127,11 @@ export function modelReader(model: Model<Api> | undefined): AgentReader {
  */
 export async function declareReader(spec: string, endpoint: string, options: { apiKey?: string } = {}): Promise<AgentReader> {
   if (spec === 'text') return { kind: 'text' };
-  const info = await checkNeuraleseReader(endpoint, spec, options);
-  return { kind: 'neuralese', dialect: spec,
-    ...(typeof info.max_block_length === 'number' ? { maxBlockLength: info.max_block_length } : {}) };
+  if (spec !== 'native-state') throw new Error(`unsupported reader ${JSON.stringify(spec)}; choose text or native-state`);
+  const info = await neuraleseServerInfo(endpoint, options);
+  if ((info.native_state as { enabled?: unknown } | undefined)?.enabled !== true)
+    throw new Error(`neuralese-unsupported-backend: ${endpoint} does not enable native-state consumption`);
+  return { kind: 'native-state' };
 }
 
 type WireContent = string | ModelContentPart[];
@@ -149,11 +143,11 @@ type Part = { type: string; text?: string; thinking?: string; redacted?: boolean
  */
 function wireContent(content: string | readonly Part[], separator: string): WireContent {
   if (typeof content === 'string') return content;
-  for (const part of content) if (part.type !== 'text' && !isNeuraleseContent(part))
+  for (const part of content) if (part.type !== 'text' && !isNativeStateContent(part))
     throw new Error(`the natlang transport carries text and Neuralese content, not ${part.type} parts`);
-  if (!content.some(isNeuraleseContent)) return content.map(part => part.text ?? '').join(separator);
-  return content.flatMap((part): ModelContentPart[] => isNeuraleseContent(part) ?
-    [part.id.startsWith('nzs1_') ? { ...part, type: 'native_state' } : part] :
+  if (!content.some(isNativeStateContent)) return content.map(part => part.text ?? '').join(separator);
+  return content.flatMap((part): ModelContentPart[] => isNativeStateContent(part) ?
+    [part] :
     part.text ? [{ type: 'text', text: part.text }] : []);
 }
 
@@ -169,7 +163,7 @@ export function modelTurnRequest(model: Model<Api>, context: TranscriptContext, 
   const messages: Record<string, unknown>[] = [];
   let carriesBlocks = false;
   for (const message of transformMessages(collapsed.messages, model) as Message[]) {
-    if (neuraleseBlocks(message)) carriesBlocks = true;
+    if (nativeStateParts(message)) carriesBlocks = true;
     if (message.role === 'system') {
       const text = getSystemMessageText(message);
       if (text) messages.push({ role: 'system', content: text });
@@ -181,7 +175,7 @@ export function modelTurnRequest(model: Model<Api>, context: TranscriptContext, 
       const reasoning = parts.flatMap(part => part.type === 'thinking' && !(part as Part).redacted &&
         (part as Part).thinking?.trim() ? [(part as Part).thinking!] : []).join('\n');
       const calls = parts.filter((part): part is ToolCall => part.type === 'toolCall');
-      const content = wireContent(parts.filter(part => part.type === 'text' || isNeuraleseContent(part)) as Part[], '');
+      const content = wireContent(parts.filter(part => part.type !== 'thinking' && part.type !== 'toolCall') as Part[], '');
       if (isEmpty(content) && !calls.length) continue;
       messages.push({ role: 'assistant', content, ...(reasoning ? { reasoning_content: reasoning } : {}),
         ...(calls.length ? { tool_calls: calls.map(call => ({ id: call.id, type: 'function',
@@ -197,23 +191,25 @@ export function modelTurnRequest(model: Model<Api>, context: TranscriptContext, 
 }
 
 /** A reply's text as pi content: text, with each block a Neuralese part where the server wrote one. */
-function replyContent(text: string): (AssistantMessage['content'][number] | NeuraleseContent)[] {
+function replyContent(text: string): (AssistantMessage['content'][number] | NativeStateContent)[] {
   if (!hasNeuraleseSentinel(text)) return text ? [{ type: 'text', text }] : [];
-  return textToParts(text).filter(part => part.type !== 'text' || part.text)
-    .map((part): AssistantMessage['content'][number] | NeuraleseContent =>
-      part.type !== 'text' ? { type: 'neuralese', id: part.id } : { type: 'text', text: part.text });
+  return textToParts(text).flatMap((part): (AssistantMessage['content'][number] | NativeStateContent)[] => {
+    if (part.type === 'native_state') return [{ type: 'native_state', id: part.id }];
+    if (part.type === 'text') return part.text ? [{ type: 'text', text: part.text }] : [];
+    throw new Error(`neuralese-projected-api-retired: model response contains flat block ${part.id}`);
+  });
 }
 
-type Content = AssistantMessage['content'][number] | NeuraleseContent;
+type Content = AssistantMessage['content'][number] | NativeStateContent;
 
 /**
  * The event a Neuralese part streams as: pi-ai's event union has no part type for it, so the transport adds one. The
  * block arrives whole, once the server has written it, and shows as a block reference (plans/STREAMING.md §1.5); a
  * consumer that does not know the event still finds the part in `partial` at `contentIndex`.
  */
-export type NeuraleseEvent = { type: 'neuralese'; contentIndex: number; content: NeuraleseContent; partial: AssistantMessage };
+export type NativeStateEvent = { type: 'native_state'; contentIndex: number; content: NativeStateContent; partial: AssistantMessage };
 /** What the natlang transport streams: pi-ai's events and the Neuralese part event. */
-export type NatlangEvent = AssistantMessageEvent | NeuraleseEvent;
+export type NatlangEvent = AssistantMessageEvent | NativeStateEvent;
 
 /** A turn's content as pi parts, in the order the final message holds them: thinking, the reply, the calls. */
 function turnContent(turn: ModelTurn, streamedIds: (string | undefined)[]): Content[] {
@@ -289,7 +285,7 @@ function streamedTurn(output: AssistantMessage, store?: NeuraleseStore) {
       { type: 'thinking_delta', contentIndex: index, delta: part.thinking, partial: output }, ended(index)];
     if (part.type === 'toolCall') return [{ type: 'toolcall_start', contentIndex: index, partial: output },
       { type: 'toolcall_delta', contentIndex: index, delta: JSON.stringify(part.arguments), partial: output }, ended(index)];
-    return [{ type: 'neuralese', contentIndex: index, content: part as NeuraleseContent, partial: output }];
+    return [{ type: 'native_state', contentIndex: index, content: part as NativeStateContent, partial: output }];
   };
   /** The next piece of a text or thinking part. */
   const piece = (kind: 'text' | 'thinking', text: string): NatlangEvent[] => {
@@ -314,20 +310,20 @@ function streamedTurn(output: AssistantMessage, store?: NeuraleseStore) {
       return open ? wanted.startsWith(streamed) : wanted === streamed;
     }
     if (part.type === 'toolCall') return part.name === (final as ToolCall).name;
-    return (part as NeuraleseContent).id === (final as NeuraleseContent).id;
+    return (part as NativeStateContent).id === (final as NativeStateContent).id;
   };
   return {
     delta(delta: ModelTurnDelta): NatlangEvent[] {
       if (delta.type === 'text') return piece('text', delta.text);
       if (delta.type === 'reasoning') return piece('thinking', delta.text);
       if (delta.type === 'reset') return clear();
-      if (delta.type === 'neuralese' || delta.type === 'native_state') {
+      if (delta.type === 'neuralese') throw new Error(`neuralese-projected-api-retired: streamed flat block ${delta.part.id}`);
+      if (delta.type === 'native_state') {
         // The block's metadata, when the server sends it, is recorded at once: the part stays a pure reference, and
         // its length (context positions) is read from the store.
         const meta = delta.block as NeuraleseBlockMeta | undefined;
         if (meta?.id === delta.part.id && Number.isSafeInteger(meta.length) && !store?.peek?.(meta.id)) store?.note?.(meta);
-        return [...endCurrent(), ...whole(delta.type === 'native_state' ?
-          { type: 'neuralese', id: delta.part.id } : { ...delta.part })];
+        return [...endCurrent(), ...whole({ type: 'native_state', id: delta.part.id })];
       }
       const events = endCurrent();
       let index = calls.get(delta.index);
@@ -361,7 +357,7 @@ function streamedTurn(output: AssistantMessage, store?: NeuraleseStore) {
           if (text.length > streamed.length) events.push(...piece(part.type, text.slice(streamed.length)));
         }
         // The final part replaces the streamed one's fields: a call's id and decoded arguments, a block's metadata.
-        if (part.type === 'toolCall' || part.type === 'neuralese') {
+        if (part.type === 'toolCall' || part.type === 'native_state') {
           for (const key of Object.keys(part)) delete (part as Record<string, unknown>)[key];
           Object.assign(part, wanted);
         }

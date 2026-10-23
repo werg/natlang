@@ -6,7 +6,7 @@
 import { nativeCanonicalJson, validateNativeInvocationActorReceipt, type NativeInvocationActorReceipt, validateNativeAdapterBinding, type NativeAdapterBinding, nativeModelIdentityEqual, type NativeModelIdentity, type NativeTensorArtifact, type NativeStateArtifact, type NeuraleseStore } from '../native/neuralese-store.js';
 import { providerErrorBody } from '../model/chat-completion.js';
 import { hexDigest } from '../native/hash.js';
-import { HttpNeuraleseStore, restoreNativeStates, restoreBlocks } from '../model/neuralese-server.js';
+import { HttpNeuraleseStore, restoreNativeStates, restoreNativeArtifacts } from '../model/neuralese-server.js';
 import { archiveNativeState } from '../model/native-state-client.js';
 import { archiveNativeTensorArtifact, restoreNativeTensorArtifacts } from './native-tensor-client.js';
 import type { RecordedTurn } from '../native/model-recording.js';
@@ -330,7 +330,7 @@ export async function nativeStateOptimizerStep(endpoint:string,store:NeuraleseSt
   const {id:_,...input}=request.gradient;
   if((await store.putNativeTensorArtifact(input)).id!==request.gradient.id)throw new Error('neuralese-native-gradient-binding: state gradient changed before upload');
   const remote=new HttpNeuraleseStore(endpoint,request.headers);
-  const missing=await restoreBlocks(remote,store,[request.gradient.id,...(request.optimizerStateId?[request.optimizerStateId]:[])]);
+  const missing=await restoreNativeArtifacts(remote,store,[request.gradient.id,...(request.optimizerStateId?[request.optimizerStateId]:[])]);
   if(missing.length)throw new Error(`neuralese-unknown-native-artifact: restore exact state update dependencies ${missing.join(', ')}`);
   const reply=await post<{native_state_id:string;optimizer_state_id:string;update_artifact_id:string;step:number;native_identity:NativeModelIdentity}>(
     endpoint,'/v1/neuralese/optim',{schema:'natlang.native-optimizer-request/1',native_identity:request.nativeIdentity,

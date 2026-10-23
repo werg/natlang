@@ -37,7 +37,7 @@ export { ONCE_EFFECTS } from './native/effects.js';
 export { natlangVitePlugin } from './vite-plugin.js';
 export type { Type as NatlangType } from './native/types.js';
 export type { ModelTurn, ModelTurnRequest, ModelTurnDelta, ModelTurnOptions, ModelContentPart } from './contracts.js';
-export { neuraleseServerModelTurn, HttpNeuraleseStore, withRestoredBlocks, OWNER_HEADER } from './model/neuralese-server.js';
+export { neuraleseServerModelTurn, HttpNeuraleseStore, restoreNativeArtifacts, withRestoredNativeArtifacts, OWNER_HEADER } from './model/neuralese-server.js';
 export type { NeuraleseServerOptions } from './model/neuralese-server.js';
 export { neuraleseServerInfo, checkNeuraleseReader, type NeuraleseServerInfo } from './model/neuralese-info.js';
 export { supportsNeuralese, NeuraleseUnsupportedError, textToParts, hasNeuraleseSentinel, nativeStateConsumerFromInfo,
@@ -75,7 +75,7 @@ export type { LearningService, Gradient, Optimizer, OptimizerState, Trajectory }
 export { nativeAdapterRef, isNativeAdapterRef, type NativeAdapterRef } from './native/neuralese.js';
 export { COMBINATORS, createNeuraleseLibrary } from './neuralese/combinators.js';
 export { buildStandardLibrary, loadStandardLibrary } from './neuralese/node-files.js';
-export { initBodyInContext, captureCallRequest, TextInitGateError, type TextInitResult, type TextInitGate } from './neuralese/text-init.js';
+export { initBodyInContext, captureCallRequest, type TextInitResult } from './neuralese/text-init.js';
 export { FileNeuraleseStore, type FileNeuraleseStoreOptions } from './neuralese/node-block-store.js';
 export { MemoryNeuraleseStore, neuraleseContentId } from './native/neuralese-store.js';
 export type { NeuraleseStore, NeuraleseBlock, NeuraleseBlockMeta, NeuraleseBlockInput, NeuraleseDtype } from './native/neuralese-store.js';

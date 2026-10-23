@@ -1,30 +1,28 @@
 import {verifyNativeDerivativeGradientOrigin} from '../native/native-derivative-origin.js';
 import { verifyNativeStateDerivation } from '../native/native-state-derivation.js';
 /**
- * Node: a persistent Neuralese block archive in a directory (the Node twin of the browser's `OpfsNeuraleseStore`,
- * browser/neuralese-opfs-store.ts). Blocks are content-addressed: one file per block, named by its ID, holding the block
- * as a safetensors body (`encodeBlockBody`, the block endpoints' codec). It is the archive behind block restore
- * (`withRestoredBlocks`): a model server keeps its blocks in memory and loses them when it restarts; the runtime uploads
- * them again from here, also after the host process itself restarted.
+ * Node: a persistent native artifact archive in a directory (the Node twin of the browser's `OpfsNeuraleseStore`,
+ * browser/neuralese-opfs-store.ts). Positional/hybrid states and named tensor artifacts are content-addressed and
+ * stored as their typed safetensors wire format. It is the archive behind native artifact restore: the runtime can
+ * upload exact artifacts again after a model server or host process restarts.
  *
- * Metadata of every block is read from the files' headers when the store opens and kept in memory, so `peek`, `meta`
- * and `has` need no I/O. Payloads are read on demand, checked against their ID (a block whose bytes do not hash to its
- * name is removed and reported as `neuralese-block-integrity`), and kept resident within a byte budget, least recently
+ * Metadata of every artifact is read from the files' headers when the store opens and kept in memory, so `peek`, `meta`
+ * and `has` need no I/O. Payloads are read on demand, checked against their ID (an artifact whose bytes do not hash to
+ * its name is removed and reported as `neuralese-block-integrity`), and kept resident within a byte budget, least recently
  * used first out. `note` remembers metadata of blocks held elsewhere (a server's), for `peek` only.
  *
  * Several processes may share a directory: writes go to a temporary file renamed into place (equal IDs are equal bytes),
- * and a block another process wrote is found on a lookup miss. Pins are this store object's own, and `collect` deletes
+ * and an artifact another process wrote is found on a lookup miss. Pins are this store object's own, and `collect` deletes
  * files for every process: collect only with every user's references.
  *
  * Node-only (node:fs): exported from the Node entry point, never part of the browser graph.
  */
 import { mkdir, open, readFile, readdir, rename, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { nativeArtifactDependencyClosure, checkBlockShape, neuraleseContentId, decodeNativeState, encodeNativeState, nativeStateBlockMeta,
+import { nativeArtifactDependencyClosure, neuraleseContentId, decodeNativeState, encodeNativeState, nativeStateBlockMeta,
   decodeNativeTensorArtifact, encodeNativeTensorArtifact, nativeTensorArtifactBlockMeta,
   type NativeStateArtifact, type NativeTensorArtifact, type NeuraleseBlock, type NeuraleseBlockInput,
   type NeuraleseBlockMeta, type NeuraleseStore } from '../native/neuralese-store.js';
-import { decodeBlockBody, encodeBlockBody } from '../model/neuralese-server.js';
 import { NzFileError } from '../native/nz-file.js';
 
 export type FileNeuraleseStoreOptions = {
@@ -32,7 +30,7 @@ export type FileNeuraleseStoreOptions = {
   residentBytes?: number;
 };
 
-const ID = /^(?:nz1|nzs1|nnt1)_[a-z2-7]{52}$/;
+const ID = /^(?:nzs1|nnt1)_[a-z2-7]{52}$/;
 
 /** A block file's metadata from its safetensors header alone, without reading the payload. */
 async function readMeta(path: string): Promise<NeuraleseBlockMeta> {
@@ -47,13 +45,11 @@ async function readMeta(path: string): Promise<NeuraleseBlockMeta> {
     const header = Buffer.alloc(size);
     await file.read(header, 0, size, 8);
     const parsed = JSON.parse(header.toString('utf8')) as Record<string, any>;
-    const meta = JSON.parse(String(parsed.__metadata__?.['natlang.block'] ?? 'null')) as NeuraleseBlockMeta | null;
-    if (meta?.id) return meta;
     const native = JSON.parse(String(parsed.__metadata__?.['natlang.native_state'] ?? 'null'));
     if (native?.id) return nativeStateBlockMeta({ id: native.id, metadata: native, tensors: parsed as never });
     const tensor = JSON.parse(String(parsed.__metadata__?.['natlang.native_tensor_artifact'] ?? 'null'));
     if (tensor?.id) return nativeTensorArtifactBlockMeta({ id: tensor.id, metadata: tensor });
-    throw new Error('no native or legacy block metadata');
+    throw new Error('no native artifact metadata');
   } finally { await file.close(); }
 }
 
@@ -61,7 +57,7 @@ const missing = (error: unknown) => (error as { code?: string } | null)?.code ==
 
 export class FileNeuraleseStore implements NeuraleseStore {
   private readonly index = new Map<string, NeuraleseBlockMeta>();
-  /** Metadata of blocks held elsewhere (`note`). */
+  /** Metadata of native artifacts held elsewhere (`note`). */
   private readonly noted = new Map<string, NeuraleseBlockMeta>();
   /** Resident payloads, least recently used first (Map order). */
   private readonly resident = new Map<string, Uint8Array>();
@@ -71,7 +67,7 @@ export class FileNeuraleseStore implements NeuraleseStore {
   private readonly writes = new Map<string, Promise<unknown>>();
 
   private constructor(readonly directory: string, readonly residentBytes: number,
-    /** Files at open that were not readable blocks (left in place, not indexed). */
+    /** Files at open that were not readable native artifacts (left in place, not indexed). */
     readonly unreadable: readonly string[]) {}
 
   /** Open (creating) the archive at `directory` and index the metadata of every block it holds. */
@@ -118,11 +114,6 @@ export class FileNeuraleseStore implements NeuraleseStore {
     return next;
   }
 
-  /** Write a block's file whole: a temporary file renamed into place, so a reader never sees a partial block. */
-  private async writeBlock(meta: NeuraleseBlockMeta, data: Uint8Array): Promise<void> {
-    return this.writeWire(meta.id, encodeBlockBody(meta, data));
-  }
-
   private async writeWire(id: string, data: Uint8Array): Promise<void> {
     const temporary = `${this.path(id)}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`;
     try {
@@ -137,7 +128,7 @@ export class FileNeuraleseStore implements NeuraleseStore {
     }
   }
 
-  /** Metadata of a block on disk that is not indexed (another process wrote it), indexed from now on. */
+  /** Metadata of a native artifact on disk that is not indexed (another process wrote it), indexed from now on. */
   private async discover(id: string): Promise<NeuraleseBlockMeta | undefined> {
     if (!ID.test(id)) return undefined;
     try {
@@ -150,62 +141,13 @@ export class FileNeuraleseStore implements NeuraleseStore {
   }
 
   async put(block: NeuraleseBlockInput): Promise<NeuraleseBlockMeta> {
-    checkBlockShape(block);
     const id = neuraleseContentId(block);
-    return this.serialized(id, async () => {
-      const found = this.index.get(id) ?? await this.discover(id);
-      if (found) {
-        // Same bytes: keep the first producer; learn a type the first writer did not know (and keep it on disk).
-        if (!found.type && block.type) {
-          const meta = { ...found, type: block.type };
-          const data = this.resident.get(id) ?? (await this.read(id)).data;
-          await this.writeBlock(meta, data);
-          this.index.set(id, meta);
-        }
-        return { ...this.index.get(id)! };
-      }
-      const { data, ...rest } = block;
-      const meta: NeuraleseBlockMeta = { id, ...rest };
-      const copy = data.slice();
-      await this.writeBlock(meta, copy);
-      this.index.set(id, meta);
-      this.noted.delete(id);
-      this.remember(id, copy);
-      return { ...meta };
-    });
-  }
-
-  /** Read and verify a block's file. A block whose bytes do not hash to its ID is removed. */
-  private async read(id: string): Promise<NeuraleseBlock> {
-    const bytes = await readFile(this.path(id));
-    let block: NeuraleseBlock | undefined, actual: string | undefined;
-    try {
-      block = decodeBlockBody(new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength));
-      actual = neuraleseContentId({ ...block.meta, data: block.data });
-    } catch { /* unreadable: reported below */ }
-    if (!block || actual !== id || block.meta.id !== id) {
-      this.forget(id);
-      await rm(this.path(id), { force: true }).catch(() => undefined);
-      throw new NzFileError('neuralese-block-integrity', `block ${id} in the store at ${this.directory} ${actual ? `hashes to ${actual}` :
-        'is unreadable'}; it was removed`);
-    }
-    return block;
+    throw new Error(`neuralese-projected-api-retired: file archives store only native state or named tensor artifacts, not ${id}`);
   }
 
   async get(id: string): Promise<NeuraleseBlock | undefined> {
-    if (id.startsWith('nzs1_') || id.startsWith('nnt1_')) return undefined; // Native tensors are never flat value payloads.
-    const meta = this.index.get(id) ?? await this.discover(id);
-    if (!meta) return undefined;
-    const cached = this.resident.get(id);
-    if (cached) { this.remember(id, cached); return { meta: { ...meta }, data: cached.slice() }; }
-    let block: NeuraleseBlock;
-    try { block = await this.read(id); }
-    catch (error) {
-      if (missing(error)) { this.forget(id); return undefined; } // deleted by another process
-      throw error;
-    }
-    this.remember(id, block.data);
-    return { meta: { ...meta }, data: block.data.slice() };
+    if (id.startsWith('nz1_')) throw new Error(`neuralese-projected-api-retired: file archives have no flat block reader for ${id}`);
+    return undefined;
   }
 
   async putNativeState(input: Omit<NativeStateArtifact, 'id'>): Promise<NativeStateArtifact> {
@@ -298,7 +240,7 @@ export class FileNeuraleseStore implements NeuraleseStore {
   }
 
   async pin(id: string): Promise<void> {
-    if (!(await this.has(id))) throw new Error(`neuralese-unknown-block: ${id}`);
+    if (!(await this.has(id))) throw new Error(`neuralese-unknown-native-artifact: ${id}`);
     this.pins.set(id, (this.pins.get(id) ?? 0) + 1);
   }
 
@@ -322,7 +264,7 @@ export class FileNeuraleseStore implements NeuraleseStore {
     return removed;
   }
 
-  /** IDs of the blocks this store holds (as indexed). */
+  /** IDs of the native artifacts this store holds (as indexed). */
   ids(): string[] { return [...this.index.keys()]; }
   get size(): number { return this.index.size; }
   /** Payload bytes currently held in memory. */

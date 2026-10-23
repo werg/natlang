@@ -29,8 +29,8 @@ test('serveLocally: a streamed reply is answered at its first event and carries 
     let rest = '';
     for (let chunk = await reader.read(); !chunk.done; chunk = await reader.read()) rest += new TextDecoder().decode(chunk.value);
     assert.equal(rest, 'data: {"n":2}\n\ndata: [DONE]\n\n');
-    const plain = await fetchModel('http://neuralese.stream.test/v1/neuralese/encode', { method: 'POST', body: '{"text":"x"}' });
+    const plain = await fetchModel('http://neuralese.stream.test/v1/custom-operation', { method: 'POST', body: '{"text":"x"}' });
     assert.equal(plain.status, 201);
-    assert.deepEqual(await plain.json(), { method: 'POST', path: '/v1/neuralese/encode', body: '{"text":"x"}' });
+    assert.deepEqual(await plain.json(), { method: 'POST', path: '/v1/custom-operation', body: '{"text":"x"}' });
   } finally { stop(); }
 });

@@ -8,7 +8,9 @@
  *
  * Node only (it writes files). Pass the sink as `learningService({ ..., replayRecords })`.
  */
-import { fetchModel } from '../model/chat-completion.js';
+import { HttpNeuraleseStore } from '../model/neuralese-server.js';
+import { MemoryNeuraleseStore, archiveNativeArtifactFrom, nativeArtifactDependencyClosure,
+  encodeNativeState, encodeNativeTensorArtifact } from '../native/neuralese-store.js';
 
 type Json = Record<string, unknown>;
 
@@ -23,10 +25,10 @@ export type ReplaySession = { arguments: string[]; terms: readonly Json[]; produ
 
 export interface ReplayRecordSink { record(session: ReplaySession): Promise<void> }
 
-const BLOCK_ID = /nz1_[a-z2-7]+/g;
+const ARTIFACT_ID = /(?:nzs1|nnt1)_[a-z2-7]{52}/g;
 
 /**
- * A sink writing `<path>` (JSONL) and `<path without .jsonl>.blocks/<id>.safetensors`. `annotate` returns fields
+ * A sink writing `<path>` (JSONL) and `<path without .jsonl>.native/<id>.bin`. `annotate` returns fields
  * merged into each record (operator, family, split, group, case, expected); `id` defaults to `<file stem>-<n>`.
  */
 export function replayRecordSink(options: { path: string; endpoint: string; headers?: Record<string, string>;
@@ -39,8 +41,8 @@ export function replayRecordSink(options: { path: string; endpoint: string; head
       const { default: fs } = await import('node:fs');
       const { default: path } = await import('node:path');
       const stem = options.path.replace(/\.jsonl$/, '');
-      const blocks = `${stem}.blocks`;
-      fs.mkdirSync(blocks, { recursive: true });
+      const native = `${stem}.native`;
+      fs.mkdirSync(native, { recursive: true });
       const annotations = options.annotate?.() ?? {};
       const record = { schema: REPLAY_RECORD_SCHEMA, id: `${path.basename(stem)}-${count}`, ...annotations,
         arguments: session.arguments, terms: session.terms, ...(session.producers?.length ? { producers: session.producers } : {}),
@@ -50,12 +52,19 @@ export function replayRecordSink(options: { path: string; endpoint: string; head
         ...(session.native_gradient ? { native_gradient: session.native_gradient } : {}), ...(session.target ? { target: session.target } : {}), loss: session.loss,
         recorded_at: new Date().toISOString() };
       const text = JSON.stringify(record);
-      for (const id of new Set(text.match(BLOCK_ID) ?? [])) {
-        const file = path.join(blocks, `${id}.safetensors`);
+      if (/nz1_[a-z2-7]{20,}/.test(text))
+        throw new Error('neuralese-projected-api-retired: replay records cannot capture flat nz1 values');
+      const remote = new HttpNeuraleseStore(base, options.headers), archive = new MemoryNeuraleseStore();
+      const roots = new Set(text.match(ARTIFACT_ID) ?? []);
+      for (const id of roots) await archiveNativeArtifactFrom(remote, archive, id);
+      const closure = await nativeArtifactDependencyClosure(archive, roots);
+      for (const id of closure) {
+        const file = path.join(native, `${id}.bin`);
         if (fs.existsSync(file)) continue;
-        const response = await fetchModel(`${base}/v1/neuralese/blocks/${id}`, { headers: options.headers });
-        if (!response.ok) throw new Error(`replay record: block ${id} is not on the server (${response.status})`);
-        fs.writeFileSync(file, new Uint8Array(await response.arrayBuffer()));
+        const state = await archive.getNativeState(id);
+        const tensor = state ? undefined : await archive.getNativeTensorArtifact(id);
+        if (!state && !tensor) throw new Error(`replay record: native dependency ${id} was not archived`);
+        fs.writeFileSync(file, state ? encodeNativeState(state) : encodeNativeTensorArtifact(tensor!));
       }
       fs.appendFileSync(options.path, text + '\n');
       count++;

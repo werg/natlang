@@ -32,7 +32,7 @@ export type ModelInfo = {
 };
 
 /**
- * `stored`: this text is the text form of a stored call (StoredCallRef); a model whose reader is a Neuralese dialect is
+ * `stored`: this text is the text form of a stored call (StoredCallRef); a native-state reader is
  * sent the call's Neuralese result in its place. Keep the field when copying the part.
  */
 export type TextContent = { type: "text"; text: string; textSignature?: string; stored?: StoredCallRef };
@@ -40,17 +40,16 @@ export type TextContent = { type: "text"; text: string; textSignature?: string; 
  * A call stored instead of a produced value (plans/neuralese/DECISIONS.md 2026-10-09, "representation chosen by use"):
  * a long tool output is stored as a call of `view` (its inputs: the whole output, and the agent's intent when it made the
  * tool call), keyed by the tool call's ID. Text readers read the text part that carries the reference; a Neuralese
- * reader forces the call at its own dialect (host/views.ts), once per call and dialect.
+ * reader forces the call into native state (host/views.ts), once per call.
  */
 export type StoredCallRef = { function: "view"; call: string };
 export type ThinkingContent = { type: "thinking"; thinking: string; thinkingSignature?: string; redacted?: boolean };
 export type ImageContent = { type: "image"; data: string; mimeType: string };
 /**
- * A Neuralese block in a message: the standard content part (ts-host contracts.ts `ModelContentPart`), not in pi-ai's
- * own content union. It reaches the model as the block itself, never as text, so only an agent model whose declared
- * reader is a Neuralese dialect can be sent it; any other model fails the request with neuralese-unsupported-backend.
+ * A native positional/hybrid state in a message. It reaches a native-state reader as an exact `nzs1` reference, never
+ * as a text gloss; a text reader cannot consume it.
  */
-export type NeuraleseContent = { type: "neuralese"; id: string; value_type?: "string" | "unknown" };
+export type NativeStateContent = { type: "native_state"; id: string };
 /** A call the model makes. `id` is unique within its assistant message. */
 export type ToolCall = { type: "toolCall"; id: string; name: string; arguments: JsonObject; thoughtSignature?: string };
 
@@ -84,8 +83,8 @@ export type SystemMessage = {
   toolsRemoved?: { name: string }[];
   timestamp: number;
 };
-/** User content: a string, or text, image and Neuralese items. */
-export type UserContent = string | (TextContent | ImageContent | NeuraleseContent)[];
+/** User content: a string, or text, image and native-state items. */
+export type UserContent = string | (TextContent | ImageContent | NativeStateContent)[];
 export type UserMessage = { role: "user"; content: UserContent; timestamp: number };
 /**
  * A provider response. Store it exactly as returned: it carries provider fields not listed here (responseId,
@@ -96,7 +95,7 @@ export type UserMessage = { role: "user"; content: UserContent; timestamp: numbe
  */
 export type AssistantMessage = {
   role: "assistant";
-  content: (TextContent | ThinkingContent | ToolCall | NeuraleseContent)[];
+  content: (TextContent | ThinkingContent | ToolCall | NativeStateContent)[];
   api: string;
   provider: string;
   model: string;
@@ -110,7 +109,7 @@ export type ToolResultMessage = {
   role: "toolResult";
   toolCallId: string;
   toolName: string;
-  content: (TextContent | ImageContent | NeuraleseContent)[];
+  content: (TextContent | ImageContent | NativeStateContent)[];
   details?: JsonValue;
   usage?: Usage;
   isError: boolean;
@@ -188,7 +187,7 @@ export type ToolControl = { addTools?: string[]; terminate?: boolean; handoff?: 
  * rendered for the model after the content. `usage` is the spend of the execution itself.
  */
 export type ToolExecutionResult = {
-  content?: (TextContent | ImageContent | NeuraleseContent)[];
+  content?: (TextContent | ImageContent | NativeStateContent)[];
   isError?: boolean;
   details?: JsonValue;
   diagnostics?: ToolDiagnostic[];
