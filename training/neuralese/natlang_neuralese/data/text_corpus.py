@@ -1455,7 +1455,6 @@ def _static_context_replacements(record, replacements, bodies, read_bodies, sour
         writer_binding=item.get("writer_source")
         writer_body=None
         if writer_binding is not None:
-            from ..train.write_sites import extract_write_sites
             writer=(source_records or {}).get(writer_binding.get("record_id"))
             if (not isinstance(writer,dict) or (writer.get("training_admission") or {}).get("approved") is not True
                     or _sha(_canonical(writer).encode())!=writer_binding.get("record_sha256")
@@ -1465,24 +1464,49 @@ def _static_context_replacements(record, replacements, bodies, read_bodies, sour
                             and (writer.get("source_ref") or {}).get("source_row_sha256")
                             and (writer.get("source_ref") or {}).get("source_row_sha256")==
                                 (record.get("source_ref") or {}).get("source_row_sha256")))):
-                raise ValueError("static read derivation writer lacks exact approved same-split source binding")
-            sites=[site for site in extract_write_sites(writer) if site.name==writer_binding.get("write_name")]
-            if len(sites)!=1:raise ValueError("static read derivation needs one exact named original writer")
-            site=sites[0];writer_body=site.source
-            if ((old.get("type")=="read" and old.get("name")!=site.name)
-                    or (old.get("type")=="neuralese" and (not site.name.startswith("soft-state:")
-                        or old.get("id")!=site.name.removeprefix("soft-state:")))
-                    or _sha(writer_body.encode())!=item["payload_sha256"]):
-                raise ValueError("static read derivation writer identity/body differs from exact typed reference")
-        if old.get("type")=="neuralese":
+                raise ValueError("static native read derivation writer lacks exact approved same-split source binding")
+            metadata=writer.get("native_source_conversion") or {}
+            candidates=[occ for occ in metadata.get("occurrences", [])
+                if occ.get("id")==writer_binding.get("occurrence_id") and occ.get("role")=="producer"
+                and occ.get("reference")==writer_binding.get("write_name")]
+            if len(candidates)!=1:raise ValueError("static native read derivation needs one exact producer occurrence")
+            writer_body=candidates[0].get("body")
+            if not isinstance(writer_body,str) or _sha(writer_body.encode())!=item["payload_sha256"]:
+                raise ValueError("static native read derivation body differs from exact producer occurrence")
+        if old.get("type")=="text" and isinstance(old.get("text"),str):
+            body=old["text"]
+            if body!=writer_body and _sha(body.encode())!=item["payload_sha256"]:
+                raise ValueError("static native read derivation lacks an authenticated exact occurrence body")
+        # Frozen admitted source rows can still contain the exact historical
+        # typed reference. This path only reads source receipts for conversion;
+        # current converters emit plain text plus native occurrence metadata.
+        elif old.get("type")=="neuralese" and isinstance(old.get("id"),str):
+            if isinstance(record.get("native_source_conversion"),dict):
+                raise ValueError("current native source rows cannot contain historical typed parts")
             body=bodies.get(old.get("id"))
-        elif old.get("type")=="read":
+            if not isinstance(body,str) or _sha(body.encode())!=item["payload_sha256"]:
+                raise ValueError("historical static derivation lacks its exact authenticated typed source body")
+        elif old.get("type")=="read" and isinstance(old.get("name"),str):
+            if isinstance(record.get("native_source_conversion"),dict):
+                raise ValueError("current native source rows cannot contain historical read parts")
             body=old.get("source")
             if body not in read_bodies.get(old.get("name"),set()) and body!=writer_body:
-                raise ValueError("static read derivation lacks an authenticated exact writer body")
-        else:raise ValueError("static context derivation requires an authenticated typed read")
+                raise ValueError("historical static derivation lacks its exact authenticated read source")
+        else:raise ValueError("static native context derivation requires an exact text occurrence")
         if not isinstance(body,str) or _sha(body.encode())!=item["payload_sha256"]:
             raise ValueError("static context derivation body differs from authenticated payload")
+        if isinstance(record.get("native_source_conversion"),dict):
+            native_occurrences=(record["native_source_conversion"].get("occurrences") or [])
+            consumers=[occ for occ in native_occurrences
+                if occ.get("id")==item.get("occurrence_id") and occ.get("role")=="consumer"]
+            if len(consumers)!=1:
+                raise ValueError("static native context derivation needs its exact consumer occurrence")
+            consumer=consumers[0]
+            occurrence_pointer="/"+"/".join(str(part).replace("~","~0").replace("/","~1")
+                for part in consumer.get("path", []))
+            if (occurrence_pointer!=pointer or consumer.get("body")!=body or
+                    (writer_binding is not None and consumer.get("reference")!=writer_binding.get("write_name"))):
+                raise ValueError("static native context derivation consumer occurrence differs from its source path")
         replacement=item["replacement"]
         if (not isinstance(replacement,dict) or set(replacement)!={"type","text"}
                 or replacement["type"]!="text" or not isinstance(replacement["text"],str)):
@@ -1499,18 +1523,39 @@ def authenticated_crisp_context_messages(record, piece_map, writer_sources, *, s
     from .trajectory_text import (authenticated_capture_context_augmentation, crisp_messages,
                                   handover_notes, write_sites)
 
+    authentication_record=record
+    if isinstance(record.get("native_source_conversion"),dict):
+        # Revalidate the model-neutral occurrence paths and source-row receipt,
+        # then authenticate historical provider receipts against the exact
+        # pre-conversion messages retained in that receipt. This reads source
+        # evidence only; rendering and training consume the current plain-text
+        # record and native graph compiler.
+        from .trajectory_text import authenticated_recurrence_context_view
+        authenticated_recurrence_context_view([record],piece_map)
+        meta=record["native_source_conversion"]
+        authentication_record=copy.deepcopy(record)
+        authentication_record["messages"]=copy.deepcopy(meta["source_messages"])
+        if meta.get("source_target_present") is True:
+            authentication_record["target"]=copy.deepcopy(meta["source_target"])
+        else:
+            authentication_record.pop("target",None)
+        if meta.get("source_neuralese_conversion_present") is True:
+            authentication_record["neuralese_conversion"]=copy.deepcopy(meta.get("source_neuralese_conversion"))
+        else:
+            authentication_record.pop("neuralese_conversion",None)
+
     split = record.get("split")
     groups = sorted(set(g for g in (record.get("source_groups") or []) if isinstance(g, str) and g))
     if split not in ("train", "test") or not groups:
         raise ValueError("context record lacks an eligible split or factual source groups")
     notes = handover_notes(record)
     provider_attestations = _attested_provider_expanded_reads(
-        record, writer_sources, split=split, source_groups=groups)
+        authentication_record, writer_sources, split=split, source_groups=groups)
     provider_bodies = {item["block_id"]: item for item in provider_attestations
                        if isinstance(item.get("body"), str)}
     neuralese_source_bodies={}
     neuralese_bodies, context_attestations = _attested_neuralese_message_bodies(
-        record, writer_sources, split=split, source_groups=groups,
+        authentication_record, writer_sources, split=split, source_groups=groups,
         authenticated_context_bodies=provider_bodies,raw_bodies=neuralese_source_bodies)
     provider_ids = {item.get("block_id") for item in provider_attestations}
     context_attestations = [item for item in context_attestations
@@ -1533,8 +1578,8 @@ def authenticated_crisp_context_messages(record, piece_map, writer_sources, *, s
     messages = crisp_messages(message_inputs, piece_map, notes, neuralese_bodies=neuralese_bodies)
 
     by_digest = {}
-    for _, _, _, writer_name in write_sites(record):
-        augmentation, digest = authenticated_capture_context_augmentation(record, writer_name)
+    for _, _, _, writer_name in write_sites(authentication_record):
+        augmentation, digest = authenticated_capture_context_augmentation(authentication_record, writer_name)
         if augmentation is None:
             continue
         if not isinstance(digest, str):

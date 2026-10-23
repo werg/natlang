@@ -245,16 +245,17 @@ def derive(stem, records, pieces, conversion, omissions, tokenizer):
     unresolved = unresolved_authentication_trajectories(records, omissions)
     edges = [e for e in edges_from_authenticated_decisions(records, review['decisions'])
              if e['trajectory'] not in unresolved]
-    chains = {e['trajectory'] for e in edges}
-    kept = [r for r in records if trajectory_of(r) in chains]
-    without_edges = set(groups) - chains
+    chains = set(groups)
+    # Keep every approved teacher turn for ordinary native SFT. Paired native
+    # graphs are an additional view for trajectories with exact communication.
+    kept = [record for record in records if trajectory_of(record) not in unresolved]
+    without_edges = set(groups) - {e['trajectory'] for e in edges}
     accounted_ids = {item.get('id') for item in omissions}
     for r in records:
-        if trajectory_of(r) in without_edges and r.get('id') not in accounted_ids:
-            omissions.append({'id': r.get('id'), 'stage': 'select_edge',
+        if trajectory_of(r) in unresolved and r.get('id') not in accounted_ids:
+            omissions.append({'id': r.get('id'), 'stage': 'authenticate',
                               'trajectory': trajectory_of(r),
-                              'reason': ('trajectory_requires_authentication_repair' if trajectory_of(r) in unresolved else
-                                         'trajectory_has_no_authenticated_producer_consumer_edge')})
+                              'reason': 'trajectory_requires_authentication_repair'})
     used = set()
 
     def walk(v):
@@ -345,7 +346,7 @@ def content_key(row):
 
 
 def edges_from_authenticated_decisions(records, decisions):
-    """One exact edge schema for authenticated read and Neuralese references."""
+    """One exact static native edge per authenticated producer/import occurrence."""
     by_id = {row['id']: row for row in records}
     edges, seen = [], set()
     for decision in decisions:
@@ -355,15 +356,19 @@ def edges_from_authenticated_decisions(records, decisions):
             name = ref.get('name') or ref.get('writer_name')
             body = ref.get('body_sha256') or ref.get('source_sha256')
             writer, reader = ref.get('writer_record_id'), decision['id']
+            writer_occurrence, reader_occurrence = ref.get('writer_occurrence_id'), ref.get('reader_occurrence_id')
             if (writer not in by_id or reader not in by_id or not isinstance(name, str)
-                    or not name or not isinstance(body, str) or len(body) != 64):
-                raise ValueError('authenticated gradient edge lacks exact local writer/name/body identity')
-            key = (writer, reader, name, body)
+                    or not name or not isinstance(body, str) or len(body) != 64 or
+                    not isinstance(writer_occurrence, str) or not isinstance(reader_occurrence, str)):
+                raise ValueError('authenticated native edge lacks exact producer/import occurrence identity')
+            key = (writer, reader, name, body, writer_occurrence, reader_occurrence)
             if key in seen:
                 continue
             seen.add(key)
             edges.append({'writer_record_id': writer, 'reader_record_id': reader,
                           'write_name': name, 'body_sha256': body, 'kind': name.split(':')[0],
+                          'writer_occurrence_id': writer_occurrence,
+                          'reader_occurrence_id': reader_occurrence,
                           'trajectory': trajectory_of(by_id[reader]), 'family': family_of(by_id[reader]),
                           'split': by_id[reader].get('split'), 'writer_split': by_id[writer].get('split')})
     return edges
@@ -500,6 +505,11 @@ def cmd_assemble(a):
             kept_edges.append(e)
         chains = collections.defaultdict(list)
         for e in kept_edges: chains[e['trajectory']].append(e)
+        # A trajectory is useful native teacher data even when it has no
+        # authenticated communication edge.  Keep it for ordinary native
+        # graph SFT; edges are an additional occurrence-bound supervision view.
+        for rid in keep_ids:
+            chains.setdefault(trajectory_of(records[rid]), [])
         for rid, why in drop.items():
             groups = (quarantined if why == 'source_quality_quarantine_chain' else
                       reviewed if why == 'source_review_pending_chain' else
@@ -519,13 +529,15 @@ def cmd_assemble(a):
                 rec_out.write(json.dumps(r, ensure_ascii=False) + '\n')
             for e in ces: edge_out.write(json.dumps({**e, 'source': source}, sort_keys=True) + '\n')
             f = family_of(records[ids[0]]) if ids else 'unknown'
-            chains_out.write(json.dumps({'trajectory': traj, 'source': source, 'family': f, 'split': ces[0]['split'],
+            split = records[ids[0]].get('split') if ids else None
+            chains_out.write(json.dumps({'trajectory': traj, 'source': source, 'family': f, 'split': split,
                                          'records': ids, 'edges': len(ces)}) + '\n')
             fam[f]['chains'] += 1; fam[f]['records'] += len(ids); fam[f]['edges'] += len(ces)
             for e in ces: fam_kinds[f][e['kind']] += 1
             by_source[source]['chains'] += 1; by_source[source]['records'] += len(ids); by_source[source]['edges'] += len(ces)
             totals['chains'] += 1; totals['records'] += len(ids); totals['edges'] += len(ces)
-            totals['edges_' + ces[0]['split']] += len(ces)
+            for split_name, split_edges in collections.Counter(e['split'] for e in ces).items():
+                totals['edges_' + str(split_name)] += split_edges
         for h in (rec_out, edge_out):  # written pages count against the unit's budget too: flush and drop them
             h.flush(); os.fdatasync(h.fileno()); os.posix_fadvise(h.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
     for h in (omissions, rec_out, edge_out, chains_out): h.close()
@@ -538,7 +550,7 @@ def cmd_assemble(a):
     receipt = {
         'schema': 'natlang.neuralese-e2e-cohort/2', 'id': a.id,
         'format': 'natlang.teacher_training_turn.native/1 records (whole trajectories of every chain) + pieces + edges + chains, consumed by train/trajectories.py --records/--pieces; tokenizer-agnostic',
-        'selection': 'every gradient_edge reference of authenticated_recurrence_context_view over every converted native-turn source (conversion /15 with --admit-host-results: host-computed child returns are producers, kind result/host_result marked in conversion receipts); records = whole trajectories of chains',
+        'selection': 'every exact producer/import occurrence pair authenticated by the native-source-conversion/1 ledger; records retain every eligible full teacher trajectory for ordinary native SFT, with positional communication graphs as an additional view',
         'exclusions': 'cross-split edges; train edges sharing a source group with a held document of the held union; duplicate ids (first source wins), exact duplicate content, piece version conflicts, conversion/authentication failures, all registered in omissions.jsonl',
         'held_union': a.held_union, 'held_groups': len(held_groups), 'held_union_bindings': held_bindings,
         'piece_conflicts': sorted(piece_conflicts),

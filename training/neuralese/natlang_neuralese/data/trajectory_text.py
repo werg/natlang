@@ -287,163 +287,164 @@ def handover_notes(record: dict) -> dict[str, str]:
     return notes
 
 def authenticated_recurrence_context_view(records, pieces):
-    """Resolve captured context parts against admitted writers or exact context receipts.
+    """Authenticate model-neutral occurrence ledgers before graph compilation.
 
-    Writer-backed parts become `read` parts so the ordinary written-value path
-    retains their differentiable producer edge. Attested context-only bodies
-    become uniquely named reads without a producer. Unresolved rows are held
-    with source identity and a concrete reason.
+    New conversion rows contain plain text and exact path-bound source
+    occurrences. This reader binds each consumer occurrence to one producer in
+    the same trajectory; the tokenizer-specific graph compiler later replaces
+    every exact consumer span with positional imports.
     """
     import copy
-    from ..data.text_corpus import (
-        _attested_neuralese_message_bodies, _attested_provider_expanded_reads,
-        _canonical, _sha, _soft_writer_sources, authenticated_crisp_context_messages,
-    )
+    import hashlib
+    import re
+    from ..common.jsonio import canonical_json_str
+
+    def digest(value):
+        return hashlib.sha256(canonical_json_str(value).encode("utf-8")).hexdigest()
+
+    def occurrence_path(row, path):
+        current = row
+        for part in path:
+            if part == "arguments<json>":
+                if not isinstance(current, str):
+                    return None
+                try: current = json.loads(current)
+                except json.JSONDecodeError: return None
+            elif isinstance(current, list) and part.isdigit():
+                index = int(part)
+                if index >= len(current): return None
+                current = current[index]
+            elif isinstance(current, dict):
+                if part not in current: return None
+                current = current[part]
+            else:
+                return None
+        return current
+
     rows = list(records)
-    source_hashes = {r.get("id", ""): (r.get("_source_record_sha256") or
-                     _sha(_canonical(dict(r)).encode("utf-8"))) for r in rows}
-    writer_sources = _soft_writer_sources(rows, source_hashes)
     producers = {}
+    metadata_by_id = {}
+    source_hashes = {}
     for row in rows:
-        for name in target_writes(row):
-            if name in producers:
-                raise ValueError("duplicate recurrence writer: " + name)
-            producers[name] = row
-    prepared, excluded, decisions = [], [], []
+        rid = row.get("id")
+        meta = row.get("native_source_conversion")
+        if not isinstance(meta, dict) or meta.get("schema") != "natlang.native-source-conversion/1":
+            raise ValueError(f"source row {rid} lacks the current native occurrence conversion")
+        if (meta.get("row_id") != rid or not isinstance(meta.get("source_record_sha256"), str) or
+                not re.fullmatch(r"[0-9a-f]{64}", meta["source_record_sha256"]) or
+                not isinstance(meta.get("source_messages_sha256"), str) or
+                not re.fullmatch(r"[0-9a-f]{64}", meta["source_messages_sha256"]) or
+                meta.get("source_messages_sha256") != digest(meta.get("source_messages")) or
+                meta.get("source_target_sha256") != digest(meta.get("source_target")) or
+                meta.get("native_target_sha256") != digest(row.get("target"))):
+            raise ValueError(f"native source conversion hash binding is malformed for {rid}")
+        original = dict(row)
+        original.pop("native_source_conversion", None)
+        original["messages"] = meta["source_messages"]
+        if meta.get("source_target_present") is True:
+            original["target"] = meta["source_target"]
+        else:
+            original.pop("target", None)
+        if meta.get("source_neuralese_conversion_present") is True:
+            original["neuralese_conversion"] = meta.get("source_neuralese_conversion")
+        else:
+            original.pop("neuralese_conversion", None)
+        if digest(original) != meta["source_record_sha256"]:
+            raise ValueError(f"native source conversion does not reconstruct its exact source record for {rid}")
+        source_ref = row.get("source_ref") or {}
+        if (meta.get("source_ref") != source_ref or
+                meta.get("trajectory_id") != source_ref.get("trajectory_id") or
+                meta.get("invocation_id") != source_ref.get("invocation_id") or
+                meta.get("source_trajectory_row_sha256") != source_ref.get("source_row_sha256") or
+                meta.get("source_provenance") != row.get("provenance", {}) or
+                meta.get("training_admission") != row.get("training_admission") or
+                meta.get("split") != row.get("split") or
+                meta.get("source_groups") != row.get("source_groups")):
+            raise ValueError(f"native source conversion actor/partition/admission binding changed for {rid}")
+        occurrences = meta.get("occurrences")
+        if not isinstance(occurrences, list):
+            raise ValueError(f"native source conversion occurrences are missing for {rid}")
+        unresolved = meta.get("unresolved_references")
+        if not isinstance(unresolved, list):
+            raise ValueError(f"native source conversion unresolved-reference ledger is malformed for {rid}")
+        if unresolved:
+            raise ValueError(f"native source conversion has unresolved exact source references for {rid}")
+        seen = set()
+        for occurrence in occurrences:
+            if (not isinstance(occurrence, dict) or occurrence.get("schema") != "natlang.native-source-occurrence/1" or
+                    occurrence.get("role") not in {"producer", "consumer"} or
+                    not isinstance(occurrence.get("id"), str) or not re.fullmatch(r"nso_[0-9a-f]{64}", occurrence["id"]) or
+                    occurrence["id"] in seen or not isinstance(occurrence.get("reference"), str) or
+                    not occurrence["reference"] or not isinstance(occurrence.get("path"), list) or
+                    any(not isinstance(part, str) for part in occurrence["path"]) or
+                    not isinstance(occurrence.get("body"), str) or
+                    occurrence.get("body_sha256") != hashlib.sha256(occurrence["body"].encode("utf-8")).hexdigest() or
+                    occurrence.get("trajectory_id") != meta.get("trajectory_id") or
+                    occurrence.get("invocation_id") != meta.get("invocation_id")):
+                raise ValueError(f"native source occurrence is malformed for {rid}")
+            seen.add(occurrence["id"])
+            if occurrence["role"] == "consumer":
+                value = occurrence_path(row, occurrence["path"])
+                if not isinstance(value, dict) or value.get("type") != "text" or value.get("text") != occurrence["body"]:
+                    raise ValueError(f"native consumer source path/body mismatch for {rid}:{occurrence['id']}")
+            else:
+                if not occurrence["path"] or occurrence["path"][0] not in {"target", "source_target", "source_receipts"}:
+                    raise ValueError(f"native producer occurrence is outside its exact target/source receipt for {rid}")
+                root = (row if occurrence["path"][0] == "target" else
+                        {"source_target": meta.get("source_target")} if occurrence["path"][0] == "source_target" else
+                        {"source_receipts": meta.get("source_receipts")})
+                value = occurrence_path(root, occurrence["path"])
+                exact = value == occurrence["body"]
+                if not exact and isinstance(value, (dict, list)):
+                    try:
+                        exact = json.loads(occurrence["body"]) == value
+                    except json.JSONDecodeError:
+                        exact = False
+                if not exact:
+                    raise ValueError(f"native producer source path/body mismatch for {rid}:{occurrence['id']}")
+                prior = producers.get(occurrence["reference"])
+                if prior is not None:
+                    raise ValueError("duplicate native source producer reference: " + occurrence["reference"])
+                producers[occurrence["reference"]] = (row, occurrence)
+        metadata_by_id[rid] = (meta, occurrences)
+        source_hashes[rid] = meta["source_record_sha256"]
 
-    def walk(value):
-        if isinstance(value, dict):
-            yield value
-            for child in value.values():
-                yield from walk(child)
-        elif isinstance(value, list):
-            for child in value:
-                yield from walk(child)
-
-    for source in rows:
-        record = copy.deepcopy(source)
-        parts = [p for p in walk(record.get("messages") or [])
-                 if p.get("type") in ("read", "neuralese")]
-        if not parts:
-            prepared.append(record)
-            continue
-        rid = source.get("id")
-        row_decisions = []
-        try:
-            split = source.get("split")
-            groups = sorted(set(g for g in (source.get("source_groups") or [])
-                                if isinstance(g, str) and g))
-            if split not in ("train", "test") or not groups:
-                raise ValueError("context row lacks eligible split/source groups")
-            # This shared renderer authenticates every neuralese body, provider
-            # read, capture augmentation, and nested tool-argument reference.
-            authenticated_crisp_context_messages(source, pieces, writer_sources)
-            provider_reads = _attested_provider_expanded_reads(
-                source, writer_sources, split=split, source_groups=groups)
-            bodies, body_attestations = _attested_neuralese_message_bodies(
-                source, writer_sources, split=split, source_groups=groups,
-                authenticated_context_bodies={a["block_id"]: a for a in provider_reads
-                                              if isinstance(a.get("body"), str)})
-            body_by_id = {a["block_id"]: a for a in body_attestations}
-            provider_by_name = {}
-            for item in provider_reads:
-                name = item.get("write_name")
-                if isinstance(name, str): provider_by_name.setdefault(name, []).append(item)
-                block_id = item.get("block_id")
-                if isinstance(block_id, str):
-                    provider_by_name.setdefault("soft-state:" + block_id, []).append(item)
-            inline_site = ((source.get("source_ref") or {}).get("inline_instruction_site") or {})
-            inline_site_data = inline_site.get("site") if isinstance(inline_site, dict) else None
-            inline_site_valid = (isinstance(inline_site_data, dict)
-                and (inline_site.get("validation") or {}).get("valid") is True
-                and not (inline_site.get("validation") or {}).get("reasons")
-                and isinstance(inline_site_data.get("template_segments"), list)
-                and all(isinstance(x, str) for x in inline_site_data["template_segments"]))
-            inline_site_text = ("".join(inline_site_data["template_segments"])
-                                if inline_site_valid else None)
-
-            def replace_parts(value):
-                if isinstance(value, dict):
-                    if value.get("type") == "neuralese":
-                        block_id = value.get("id")
-                        att = body_by_id.get(block_id)
-                        wrapped = bodies.get(block_id)
-                        if att is None or not isinstance(wrapped, str) or not wrapped.startswith("<|neuralese|>") or not wrapped.endswith("<|/neuralese|>"):
-                            row_decisions.append({"kind": "neuralese", "block_id": block_id,
-                                "status": "held", "body_sha256": None,
-                                "reason": "neuralese context lacks an exact body attestation"})
-                            raise ValueError("neuralese context lacks an exact body attestation")
-                        body = wrapped[len("<|neuralese|>"):-len("<|/neuralese|>")]
-                        writer_name = att.get("write_name")
-                        local_writer = att.get("source_kind") == "approved_writer_target_source" and writer_name in producers
-                        name = writer_name if local_writer else "context-only:" + block_id
-                        row_decisions.append({"kind": "neuralese", "block_id": block_id,
-                            "source_sha256": att.get("body_sha256"), "source_kind": att.get("source_kind"),
-                            "writer_record_id": att.get("writer_record_id"), "writer_name": writer_name,
-                            "gradient_edge": bool(local_writer)})
-                        return {"type": "read", "name": name, "source": body}
-                    if value.get("type") == "read":
-                        name, body = value.get("name"), value.get("source")
-                        source_name = name
-                        if not isinstance(name, str) or not isinstance(body, str):
-                            row_decisions.append({"kind": "read", "name": name if isinstance(name, str) else None,
-                                "status": "held", "body_sha256": None,
-                                "reason": "read context lacks exact name/source"})
-                            raise ValueError("read context lacks exact name/source")
-                        if name in producers:
-                            expected = handover_notes(producers[name]).get(name)
-                            if expected is None or expected != body:
-                                row_decisions.append({"kind": "read", "name": name, "status": "held",
-                                    "body_sha256": _sha(body.encode("utf-8")),
-                                    "reason": "read body differs from exact selected writer source"})
-                                raise ValueError("read body differs from exact selected writer source")
-                            evidence = {"source_kind": "exact-target-writer-source",
-                                        "writer_record_id": producers[name].get("id"),
-                                        "body_sha256": _sha(body.encode("utf-8"))}
-                            edge = True
-                        else:
-                            candidates = [a for a in provider_by_name.get(name, [])
-                                          if a.get("body") == body and a.get("body_sha256") == _sha(body.encode("utf-8"))]
-                            if (not candidates and name.startswith("inline-site:")
-                                    and inline_site_valid and inline_site_text == body):
-                                row_decisions.append({"kind": "read", "name": name,
-                                    "source_kind": "validated-inline-site-template-source",
-                                    "status": "resolved-context-only",
-                                    "body_sha256": _sha(body.encode("utf-8")),
-                                    "gradient_edge": False})
-                                return {**value, "name": "context-only:inline-site:" + name.partition(":")[2]}
-                            if not candidates:
-                                row_decisions.append({"kind": "read", "name": name, "status": "held",
-                                    "body_sha256": _sha(body.encode("utf-8")),
-                                    "reason": "read body has no exact writer or provider receipt"})
-                                raise ValueError("read body has no exact writer or provider receipt")
-                            evidence = {"source_kind": candidates[0].get("source_kind"),
-                                        "writer_record_id": candidates[0].get("writer_record_id"),
-                                        "body_sha256": candidates[0].get("body_sha256"),
-                                        "block_id": candidates[0].get("block_id")}
-                            edge = candidates[0].get("writer_target_selected") is True and name in producers
-                            name = name if edge else "context-only:" + (candidates[0].get("block_id") or _sha(name.encode())[:24])
-                        row_decisions.append({"kind": "read", "name": name, "source_name": source_name, **evidence,
-                                              "gradient_edge": bool(edge)})
-                        return {**value, "name": name}
-                    return {key: replace_parts(child) for key, child in value.items()}
-                if isinstance(value, list):
-                    return [replace_parts(child) for child in value]
-                return value
-            record["messages"] = replace_parts(record.get("messages") or [])
-            prepared.append(record)
-            decisions.append({"id": rid, "source_record_sha256": source_hashes.get(rid),
-                              "split": split, "source_groups": groups, "status": "eligible",
-                              "references": row_decisions})
-        except (KeyError, TypeError, ValueError, IndexError) as exc:
-            excluded.append({"id": rid, "source_record_sha256": source_hashes.get(rid),
-                             "split": source.get("split"),
-                             "source_groups": sorted(set(g for g in (source.get("source_groups") or [])
-                                                         if isinstance(g, str) and g)),
-                             "reason": str(exc)[:300], "references": row_decisions})
-            decisions.append({"id": rid, "source_record_sha256": source_hashes.get(rid),
-                              "split": source.get("split"), "status": "held", "reason": str(exc)[:300],
-                              "references": row_decisions})
+    prepared, decisions, excluded = [], [], []
+    for row in rows:
+        rid = row.get("id")
+        meta, occurrences = metadata_by_id[rid]
+        split = row.get("split")
+        groups = sorted(set(group for group in row.get("source_groups", []) if isinstance(group, str) and group))
+        refs = []
+        for consumer in (item for item in occurrences if item["role"] == "consumer"):
+            writer_pair = producers.get(consumer["reference"])
+            body = consumer["body"]
+            ref = {"kind": "native-positional-state", "name": consumer["reference"],
+                   "body_sha256": consumer["body_sha256"], "reader_occurrence_id": consumer["id"],
+                   "reader_path": consumer["path"], "gradient_edge": False}
+            if writer_pair:
+                writer_row, writer = writer_pair
+                writer_groups = set(writer_row.get("source_groups") or [])
+                same_source = ((writer_row.get("source_ref") or {}).get("source_row_sha256") and
+                               (writer_row.get("source_ref") or {}).get("source_row_sha256") ==
+                               (row.get("source_ref") or {}).get("source_row_sha256"))
+                approved = ((writer_row.get("training_admission") or {}).get("approved") is True and
+                            (row.get("training_admission") or {}).get("approved") is True)
+                exact = (writer["body"] == body and writer["body_sha256"] == consumer["body_sha256"] and
+                         writer_row.get("split") == split and
+                         (writer_groups == set(row.get("source_groups") or []) or same_source) and approved)
+                if exact:
+                    ref.update(writer_record_id=writer_row.get("id"), writer_occurrence_id=writer["id"],
+                               writer_path=writer["path"], source_kind=writer["source_kind"], gradient_edge=True)
+                else:
+                    ref["reason"] = "writer body, split, source-group or admission binding differs"
+            else:
+                ref["reason"] = "no exact selected producer occurrence in this trajectory"
+            refs.append(ref)
+        prepared.append(copy.deepcopy(row))
+        decisions.append({"id": rid, "source_record_sha256": source_hashes[rid], "split": split,
+                          "source_groups": groups, "status": "eligible", "references": refs,
+                          "unresolved_references": meta.get("unresolved_references", [])})
     summary = {"schema": "natlang.recurrence-context-review/1",
                "source_records": len(rows), "prepared_records": len(prepared),
                "excluded_context_records": len(excluded),

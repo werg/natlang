@@ -1,9 +1,83 @@
-"""Completed zero-edge conversions must still account for their source rows."""
+"""Completed zero-edge conversions retain ordinary source trajectories."""
 import importlib.util
+import hashlib
 import json
 from pathlib import Path
 
 import pytest
+
+
+def native_row(row):
+    canonical = lambda value: json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=False)
+    row.setdefault('source_groups', ['fixture-source'])
+    row.setdefault('provenance', {})
+    row.setdefault('training_admission', {'approved': True})
+    source_ref = row.setdefault('source_ref', {})
+    source_ref.setdefault('trajectory_id', 'run')
+    source_ref.setdefault('invocation_id', row['id'])
+    source_record = dict(row)
+    row['native_source_conversion'] = {
+        'schema': 'natlang.native-source-conversion/1', 'row_id': row['id'],
+        'source_record_sha256': hashlib.sha256(canonical(source_record).encode()).hexdigest(),
+        'source_target_sha256': hashlib.sha256(canonical(row.get('target')).encode()).hexdigest(),
+        'source_target': row.get('target'),
+        'source_target_present': 'target' in row,
+        'source_neuralese_conversion_present': 'neuralese_conversion' in row,
+        'source_neuralese_conversion': row.get('neuralese_conversion'),
+        'native_target_sha256': hashlib.sha256(canonical(row.get('target')).encode()).hexdigest(),
+        'source_messages': row.get('messages', []),
+        'source_messages_sha256': hashlib.sha256(canonical(row.get('messages', [])).encode()).hexdigest(),
+        'trajectory_id': source_ref['trajectory_id'], 'invocation_id': source_ref['invocation_id'],
+        **({'source_trajectory_row_sha256': source_ref['source_row_sha256']}
+           if source_ref.get('source_row_sha256') else {}),
+        'source_ref': dict(source_ref), 'source_provenance': row['provenance'],
+        'training_admission': row['training_admission'], 'split': row.get('split'),
+        'source_groups': row['source_groups'], 'occurrences': [], 'unresolved_references': []}
+    return row
+
+
+def test_native_occurrence_reader_binds_exact_paths_and_builds_per_occurrence_edges():
+    import sys
+    sys.path.insert(0, str(Path(__file__).parents[1] / 'training/neuralese'))
+    from natlang_neuralese.data.trajectory_text import authenticated_recurrence_context_view
+    body = 'one exact retained value'
+    body_sha = hashlib.sha256(body.encode()).hexdigest()
+    event = 'teacher-event:42'
+    writer = native_row({'id': 'writer', 'split': 'train',
+        'source_ref': {'trajectory_id': 'run', 'invocation_id': 'writer', 'source_row_sha256': 'c' * 64},
+        'messages': [], 'target': {'role': 'assistant', 'content': body}})
+    writer['native_source_conversion']['occurrences'] = [{
+        'schema': 'natlang.native-source-occurrence/1', 'id': 'nso_' + '1' * 64,
+        'role': 'producer', 'reference': event, 'path': ['target', 'content'], 'body': body,
+        'body_sha256': body_sha, 'source_kind': 'typed-result', 'trajectory_id': 'run',
+        'invocation_id': 'writer'}]
+    reader = native_row({'id': 'reader', 'split': 'train',
+        'source_ref': {'trajectory_id': 'run', 'invocation_id': 'reader', 'source_row_sha256': 'c' * 64},
+        'messages': [{'role': 'user', 'content': [{'type': 'text', 'text': body}]}],
+        'target': {'role': 'assistant', 'content': 'used'}})
+    reader['native_source_conversion']['occurrences'] = [{
+        'schema': 'natlang.native-source-occurrence/1', 'id': 'nso_' + '2' * 64,
+        'role': 'consumer', 'reference': event, 'path': ['messages', '0', 'content', '0'],
+        'body': body, 'body_sha256': body_sha, 'source_kind': 'authenticated-static-read',
+        'trajectory_id': 'run', 'invocation_id': 'reader'}]
+    _, review = authenticated_recurrence_context_view([writer, reader], {})
+    edge = review['decisions'][1]['references'][0]
+    assert edge['gradient_edge'] is True
+    assert edge['writer_occurrence_id'] == 'nso_' + '1' * 64
+    assert edge['reader_occurrence_id'] == 'nso_' + '2' * 64
+    changed = json.loads(json.dumps(reader))
+    changed['messages'][0]['content'][0]['text'] = 'altered'
+    with pytest.raises(ValueError, match='source path/body mismatch'):
+        authenticated_recurrence_context_view([writer, changed], {})
+    legacy = json.loads(json.dumps(reader))
+    legacy.pop('native_source_conversion')
+    with pytest.raises(ValueError, match='lacks the current native occurrence conversion'):
+        authenticated_recurrence_context_view([legacy], {})
+    unbound = json.loads(json.dumps(reader))
+    unbound['native_source_conversion']['unresolved_references'] = [{
+        'id': 'unavailable', 'reason': 'source bytes not present'}]
+    with pytest.raises(ValueError, match='unresolved exact source references'):
+        authenticated_recurrence_context_view([unbound], {})
 
 
 def test_assemble_requires_restoration_of_archived_sources_before_creating_output(tmp_path):
@@ -65,28 +139,28 @@ def test_zero_edge_trajectory_has_row_level_omissions(tmp_path, prior_failure):
     spec = importlib.util.spec_from_file_location('e2e_mine_under_test', path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    rows = [{'id': f'run:decision:{i:04d}', 'split': 'train',
+    source_rows = [native_row({'id': f'run:decision:{i:04d}', 'split': 'train',
              'source_ref': {'trajectory_id': 'run'},
              'messages': [{'role': 'user', 'content': 'Return the supplied text.'}],
-             'target': {'role': 'assistant', 'content': 'plain text'}} for i in range(2)]
-    omissions = ([{'id': rows[0]['id'], 'stage': 'convert', 'reason': 'specific_source_failure'}]
+             'target': {'role': 'assistant', 'content': 'plain text'}}) for i in range(2)]
+    omissions = ([{'id': source_rows[0]['id'], 'stage': 'convert', 'reason': 'specific_source_failure'}]
                  if prior_failure else [])
+    rows = source_rows[1:] if prior_failure else source_rows
 
-    def unused_tokenizer(*args, **kwargs):
-        raise AssertionError('a zero-edge trajectory has no kept targets to tokenize')
+    def tokenizer(text, **kwargs):
+        return {'input_ids': list(text)}
 
     stem = tmp_path / 'shard-0000'
-    module.derive(stem, rows, {}, {'sites': {}}, omissions, unused_tokenizer)
+    module.derive(stem, rows, {}, {'sites': {}}, omissions, tokenizer)
     recorded = [json.loads(line) for line in stem.with_suffix('.omissions.jsonl').read_text().splitlines()]
-    assert {row['id'] for row in recorded} == {row['id'] for row in rows}
-    assert len(recorded) == len(rows)
+    assert {row['id'] for row in recorded} == ({source_rows[0]['id']} if prior_failure else set())
     if prior_failure:
         assert recorded[0]['reason'] == 'specific_source_failure'
-    assert recorded[-1]['reason'] == 'trajectory_has_no_authenticated_producer_consumer_edge'
     stats = json.loads(stem.with_suffix('.stats.json').read_text())
-    assert (stats['trajectories_without_edges'], stats['records_without_edges']) == (1, 2)
-    assert stats['edges'] == stats['kept_records'] == 0
-    assert stem.with_suffix('.records.jsonl').read_text() == ''
+    assert (stats['trajectories_without_edges'], stats['records_without_edges']) == (1, len(rows))
+    assert stats['edges'] == 0 and stats['kept_records'] == len(rows)
+    assert {json.loads(line)['id'] for line in stem.with_suffix('.records.jsonl').read_text().splitlines()} == {
+        row['id'] for row in rows}
 
 
 @pytest.mark.parametrize('keep_valid', [False, True])
@@ -96,9 +170,9 @@ def test_unreadable_converter_input_is_accounted_and_empty_conversion_fails(monk
     spec = importlib.util.spec_from_file_location('e2e_mine_unreadable_test', path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    valid = {'id': 'valid', 'source_ref': {'trajectory_id': 'run'},
+    valid = native_row({'id': 'valid', 'source_ref': {'trajectory_id': 'run'},
              'messages': [{'role': 'user', 'content': 'Return text.'}],
-             'target': {'role': 'assistant', 'content': 'plain text'}, 'split': 'train'}
+             'target': {'role': 'assistant', 'content': 'plain text'}, 'split': 'train'})
     shard = tmp_path / 'shard-0001.jsonl'
     # Python accepts this ancillary NaN literal; the Node JSON converter rejects it.
     shard.write_text((json.dumps(valid) + '\n' if keep_valid else '') + '{"id":"bad","metric":NaN}\n')
@@ -110,10 +184,10 @@ def test_unreadable_converter_input_is_accounted_and_empty_conversion_fails(monk
         return SimpleNamespace(returncode=0, stdout='', stderr='')
 
     monkeypatch.setattr(module.subprocess, 'run', converter)
-    module.convert_shard(shard, lambda *args, **kwargs: pytest.fail('no kept targets to tokenize'))
+    module.convert_shard(shard, lambda text, **kwargs: {'input_ids': list(text)})
     stem = shard.with_suffix('')
     omitted = [json.loads(line) for line in stem.with_suffix('.omissions.jsonl').read_text().splitlines()]
-    assert {r['id'] for r in omitted} == ({'bad', 'valid'} if keep_valid else {'bad'})
+    assert {r['id'] for r in omitted} == {'bad'}
     assert next(r for r in omitted if r['id'] == 'bad')['reason'] == 'conversion_unreadable_source_json'
     stats = json.loads(stem.with_suffix('.stats.json').read_text())
     assert stats['input_records'] == 1 + keep_valid and stats['unreadable_input_records'] == 1
@@ -290,6 +364,9 @@ def test_assemble_quarantine_removes_whole_train_chain_and_preserves_held(tmp_pa
         edges.append({'trajectory': name, 'split': split, 'writer_split': split,
                       'writer_record_id': ids[0], 'reader_record_id': ids[1],
                       'write_name': name, 'body_sha256': 'c' * 64, 'kind': 'result'})
+    records.append({'id': 'zero:0', 'split': 'train', 'source_ref': {'trajectory_id': 'zero'},
+                    'source_groups': ['zero'], 'target': {'role': 'assistant', 'content': 'ordinary native SFT'},
+                    'family': 'fixture'})
     stem = source / 'shard-0000'
     for suffix, rows in [('records', records), ('edges', edges), ('pieces', []), ('omissions', ([{'id': 'bad:2', 'stage': 'authenticate', 'reason': 'missing producer receipt'}]
                                                            if hold_kind == 'authentication' else []))]:
@@ -306,7 +383,10 @@ def test_assemble_quarantine_removes_whole_train_chain_and_preserves_held(tmp_pa
                                        decision_hold_ids=[decision_witness] if hold_kind == 'decision' else []))
     out = tmp_path / 'assembled'
     assert {json.loads(l)['id'] for l in (out / 'records.jsonl').open()} == {
-        'good:0', 'good:1', 'good:2', 'held:0', 'held:1', 'held:2'}
+        'good:0', 'good:1', 'good:2', 'held:0', 'held:1', 'held:2', 'zero:0'}
+    zero_chain = next(json.loads(l) for l in (out / 'chains.jsonl').open()
+                      if json.loads(l)['trajectory'] == 'zero')
+    assert zero_chain['records'] == ['zero:0'] and zero_chain['edges'] == 0
     omissions = [json.loads(l) for l in (out / 'omissions.jsonl').open()]
     assert {r['id'] for r in omissions} == {'bad:0', 'bad:1', 'bad:2'}
     reason = {'quality': 'source_quality_quarantine_chain', 'decision': 'native_decision_hold_chain',
@@ -338,18 +418,21 @@ def test_native_decision_hold_files_reject_unreviewed_ids(tmp_path):
 def test_neuralese_reference_metadata_retains_two_edges_between_same_records(monkeypatch):
     spec = importlib.util.spec_from_file_location('e2e_edge_identity', Path(__file__).parents[1] / 'scripts/neuralese_data/e2e_mine.py')
     module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
-    rows = [{'id': rid, 'split': 'train', 'source_ref': {'trajectory_id': 'chain'}}
+    rows = [native_row({'id': rid, 'split': 'train', 'source_ref': {'trajectory_id': 'chain'}})
             for rid in ['writer', 'reader']]
-    refs = [{'kind': 'neuralese', 'writer_record_id': 'writer', 'writer_name': 'result:a',
-             'source_sha256': 'a' * 64, 'gradient_edge': True},
-            {'kind': 'neuralese', 'writer_record_id': 'writer', 'writer_name': 'result:b',
-             'source_sha256': 'b' * 64, 'gradient_edge': True},
-            {'kind': 'read', 'writer_record_id': 'writer', 'name': 'result:a',
-             'body_sha256': 'a' * 64, 'gradient_edge': True}]
+    refs = [{'kind': 'native-positional-state', 'writer_record_id': 'writer', 'name': 'result:a',
+             'body_sha256': 'a' * 64, 'writer_occurrence_id': 'nso_' + '1' * 64,
+             'reader_occurrence_id': 'nso_' + '2' * 64, 'gradient_edge': True},
+            {'kind': 'native-positional-state', 'writer_record_id': 'writer', 'name': 'result:b',
+             'body_sha256': 'b' * 64, 'writer_occurrence_id': 'nso_' + '3' * 64,
+             'reader_occurrence_id': 'nso_' + '4' * 64, 'gradient_edge': True},
+            {'kind': 'native-positional-state', 'writer_record_id': 'writer', 'name': 'result:a',
+             'body_sha256': 'a' * 64, 'writer_occurrence_id': 'nso_' + '1' * 64,
+             'reader_occurrence_id': 'nso_' + '5' * 64, 'gradient_edge': True}]
     review = {'decisions': [{'id': 'reader', 'references': refs}], 'excluded': []}
     actual = module.edges_from_authenticated_decisions(rows, review['decisions'])
     assert [(edge['write_name'], edge['body_sha256']) for edge in actual] == [
-        ('result:a', 'a' * 64), ('result:b', 'b' * 64)]
+        ('result:a', 'a' * 64), ('result:b', 'b' * 64), ('result:a', 'a' * 64)]
     from natlang_neuralese.data import trajectory_text as trajectories
     calls = []
     def authenticate(records, pieces):
@@ -359,14 +442,14 @@ def test_neuralese_reference_metadata_retains_two_edges_between_same_records(mon
     legacy = [{**actual[0], 'write_name': None, 'body_sha256': None}]
     repaired, receipt = module.repair_legacy_edge_metadata(rows, {}, legacy)
     assert repaired == actual and len(calls) == 1
-    assert receipt['trajectories'] == 1 and receipt['prior_edges'] == 1 and receipt['reconstructed_edges'] == 2
+    assert receipt['trajectories'] == 1 and receipt['prior_edges'] == 1 and receipt['reconstructed_edges'] == 3
     # Complete sidecars do not need a second authentication pass.
     assert module.repair_legacy_edge_metadata(rows, {}, actual) == (actual, None)
     assert len(calls) == 1
     # A concrete historical identity must not be silently replaced by a different body.
     with pytest.raises(ValueError, match='contradicts prior sidecar'):
         module.repair_legacy_edge_metadata(rows, {}, legacy + [{**actual[0], 'body_sha256': 'c' * 64}])
-    with pytest.raises(ValueError, match='lacks exact local writer'):
+    with pytest.raises(ValueError, match='lacks exact producer/import occurrence'):
         module.edges_from_authenticated_decisions(rows, [{'id': 'reader', 'references': [
             {**refs[0], 'writer_record_id': 'missing'}]}])
     review['excluded'] = [{'id': 'reader', 'reason': 'body authentication failed'}]
@@ -378,11 +461,13 @@ def test_derive_does_not_keep_a_known_unresolved_writer_because_it_has_a_valid_o
     spec = importlib.util.spec_from_file_location('e2e_unresolved_writer', Path(__file__).parents[1] / 'scripts/neuralese_data/e2e_mine.py')
     module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
     from natlang_neuralese.data import trajectory_text as trajectories
-    rows = [{'id': rid, 'split': 'train', 'source_ref': {'trajectory_id': 'chain'},
-             'target': {'role': 'assistant', 'content': rid}} for rid in ['writer', 'reader']]
+    rows = [native_row({'id': rid, 'split': 'train', 'source_ref': {'trajectory_id': 'chain'},
+             'target': {'role': 'assistant', 'content': rid}}) for rid in ['writer', 'reader']]
     review = {'excluded': [{'id': 'writer', 'reason': 'missing producer receipt'}],
-              'decisions': [{'id': 'reader', 'references': [{'kind': 'read', 'writer_record_id': 'writer',
-                 'name': 'result:body', 'body_sha256': 'a' * 64, 'gradient_edge': True}]}]}
+              'decisions': [{'id': 'reader', 'references': [{'kind': 'native-positional-state',
+                 'writer_record_id': 'writer', 'name': 'result:body', 'body_sha256': 'a' * 64,
+                 'writer_occurrence_id': 'nso_' + '1' * 64, 'reader_occurrence_id': 'nso_' + '2' * 64,
+                 'gradient_edge': True}]}]}
     monkeypatch.setattr(trajectories, 'authenticated_recurrence_context_view', lambda *args: ([], review))
     stem = tmp_path / 'shard-0000'
     module.derive(stem, rows, {}, {}, [], lambda *args, **kwargs: pytest.fail('unresolved chain is not trained'))
