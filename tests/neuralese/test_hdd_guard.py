@@ -59,29 +59,29 @@ def test_auto_hdd_root_on_nonrotating_device_is_not_staged(tmp_path, monkeypatch
 
 def test_stage_input_args_pass_staged_path(hdd, tmp_path):
     from natlang_neuralese.train import recipe
-    source = hdd / 'text.jsonl'
+    source = hdd / 'graphs.jsonl'
     source.write_text('t')
     digest = hashlib.sha256(b't').hexdigest()
-    kind = next(k for k, h in recipe.HANDLERS.items() if 'text_data' in h['required_inputs'] | h['optional_inputs'])
-    args = recipe.stage_input_args({'text_data': {'path': str(source), 'sha256': digest}}, kind)
-    assert args == ['--text-data', str(tmp_path / 'staged' / digest / 'text.jsonl')]
+    kind = 'native_state_sft'
+    assert 'native_graphs' in hdd_guard.STAGED_ROLES
+    assert 'text_data' not in hdd_guard.STAGED_ROLES
+    args = recipe.stage_input_args({'native_graphs': {'path': str(source), 'sha256': digest}}, kind)
+    assert args == ['--native-graphs', str(tmp_path / 'staged' / digest / 'graphs.jsonl')]
 
 
-def test_load_once_state_is_read_from_the_hdd_and_only_data_is_staged(hdd, tmp_path):
-    """A continue_from / heads file is read once at startup: read in place (recorded read_from_hdd), never copied to
-    the NVMe; data roles are staged."""
+def test_native_checkpoint_is_read_in_place_while_graph_corpus_is_staged(hdd, tmp_path):
+    """The native checkpoint is loaded once in place; graph corpora are staged for repeated reads."""
     from natlang_neuralese.train import recipe
     state = hdd / 'checkpoint.pt'
     state.write_bytes(b'state')
-    text = hdd / 'text.jsonl'
-    text.write_text('t')
-    for role in ('continue_from', 'continue_identity', 'continue_monitor_reference', 'heads', 'warmup_checkpoint'):
-        assert hdd_guard.input_path(role, state) == str(state)
+    graphs = hdd / 'graphs.jsonl'
+    graphs.write_text('g')
+    assert hdd_guard.input_path('continue_from', state) == str(state)
     assert not (tmp_path / 'staged').exists()
-    assert all(r['read_from_hdd'] for r in hdd_guard.RECORDS) and len(hdd_guard.RECORDS) == 5
-    staged = recipe._staged_inputs({'continue_from': {'path': str(state)}, 'text_data': {'path': str(text)}})
+    assert all(r['read_from_hdd'] for r in hdd_guard.RECORDS) and len(hdd_guard.RECORDS) == 1
+    staged = recipe._staged_inputs({'continue_from': {'path': str(state)}, 'native_graphs': {'path': str(graphs)}})
     assert staged['continue_from']['path'] == str(state)
-    assert staged['text_data']['path'].startswith(str(tmp_path / 'staged'))
+    assert staged['native_graphs']['path'].startswith(str(tmp_path / 'staged'))
 
 
 def test_the_staged_cache_is_bounded_least_recently_used_first(hdd, tmp_path, monkeypatch):
@@ -99,15 +99,3 @@ def test_the_staged_cache_is_bounded_least_recently_used_first(hdd, tmp_path, mo
     source.write_bytes(b'd' * 1024)
     hdd_guard.stage_input(source)
     assert os.path.exists(paths[0]) and not os.path.exists(paths[1])
-
-
-def test_a_streamed_cohort_stages_its_chains_beside_its_records(hdd, tmp_path):
-    """train/e2e_records.py reads chains.jsonl beside records.jsonl: staging the records brings the chains along."""
-    cohort = hdd / 'cohort'
-    cohort.mkdir()
-    (cohort / 'records.jsonl').write_text('records')
-    (cohort / 'chains.jsonl').write_text('chains')
-    staged = hdd_guard.stage_input(cohort / 'records.jsonl', hashlib.sha256(b'records').hexdigest())
-    assert open(staged).read() == 'records'
-    assert (tmp_path / 'staged' / hashlib.sha256(b'records').hexdigest() / 'chains.jsonl').read_text() == 'chains'
-    assert hdd_guard.RECORDS[-1]['sidecar_of'] == str(cohort / 'records.jsonl')

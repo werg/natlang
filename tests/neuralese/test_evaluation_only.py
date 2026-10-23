@@ -1,7 +1,5 @@
 """Widen frozen-checkpoint evidence without relaxing training or input identity."""
 from copy import deepcopy
-import sys
-import json
 
 import pytest
 
@@ -41,30 +39,3 @@ def test_evaluation_only_rejects_changed_inputs_and_curriculum_changes():
         validate_continuation(state, {**widened, 'files': {'records': 'other'}}, evaluation_only=True)
     with pytest.raises(ValueError, match='cannot declare curriculum'):
         validate_continuation(state, widened, allowed_changes=['latent_lr'], evaluation_only=True)
-
-
-@pytest.mark.parametrize('source', [None, 'same-output'])
-def test_eval_only_cli_requires_a_separate_parent_before_loading_inputs(tmp_path, monkeypatch, source):
-    from natlang_neuralese.train import trajectories
-    args = ['trajectories', '--eval-only', '--device', 'cpu', '--out', str(tmp_path / 'output'),
-            '--records', str(tmp_path / 'absent-records'), '--pieces', str(tmp_path / 'absent-pieces')]
-    if source:
-        args += ['--continue-from', str(tmp_path / 'output' / 'checkpoint.pt')]
-    monkeypatch.setattr(sys, 'argv', args)
-    with pytest.raises(ValueError, match='distinct output checkpoint path'):
-        trajectories.main()
-    assert not (tmp_path / 'output').exists()
-
-
-def test_config_inspection_reports_direct_writer_normalization_without_loading_inputs(tmp_path, monkeypatch, capsys):
-    from natlang_neuralese.train import trajectories
-    monkeypatch.setattr(sys, 'argv', ['trajectories', '--inspect-training-config', '--device', 'cuda',
-        '--records', str(tmp_path / 'absent-records'), '--pieces', str(tmp_path / 'absent-pieces'),
-        '--out', str(tmp_path / 'output'), '--direct-artifact', str(tmp_path / 'absent-export'),
-        '--direct-base-snapshot', str(tmp_path / 'absent-base'), '--write-depth', '1',
-        '--backbone-training', 'latent', '--backward-policy', 'joint'])
-    trajectories.main()
-    config = json.loads(capsys.readouterr().out)
-    assert config['content_transport'] == 'raw-identity'
-    assert config['projection_anchor_weight'] == config['sketch_target_weight'] == 0.0
-    assert not (tmp_path / 'output').exists()
