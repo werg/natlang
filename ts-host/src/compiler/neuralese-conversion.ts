@@ -225,7 +225,9 @@ function nativeOccurrenceId(trajectoryId: string, rowId: string, invocationId: s
 function nativeSourceView(record: Record<string, unknown>, messages: Message[], target: Message | undefined,
   sourceTarget: Message | undefined, pieces: ReadonlyMap<string, SoftPiece>,
   sourceMessagesSha256: string, sourceTargetSha256: string,
-  externalSources: ReadonlyMap<string, { body: string; reference: string; sourceKind: string }>) {
+  externalSources: ReadonlyMap<string, { body: string; reference: string; sourceKind: string }>,
+  selectedRuntimeResultWrites: readonly Record<string, unknown>[] = [],
+  inlineInstructionRead?: { writer_id: string; body_source: string }) {
   const rowId = String(record.id ?? '');
   const sourceRef = record.source_ref && typeof record.source_ref === 'object' ? record.source_ref as Record<string, unknown> : {};
   const trajectoryId = typeof sourceRef.trajectory_id === 'string' ? sourceRef.trajectory_id : rowId;
@@ -244,6 +246,18 @@ function nativeSourceView(record: Record<string, unknown>, messages: Message[], 
       ...(typeof sourceRef.source_row_sha256 === 'string' ? { source_row_sha256: sourceRef.source_row_sha256 } : {}),
       invocation_id: invocationId, ...(Number.isSafeInteger(decision.index) ? { decision_index: Number(decision.index) } : {}) });
   };
+  for (const [index, write] of selectedRuntimeResultWrites.entries()) {
+    if (typeof write.target_write_name !== 'string' || typeof write.body_source !== 'string' ||
+        typeof write.source_row_sha256 !== 'string')
+      throw new Error('selected native runtime writer lacks its exact source body and occurrence identity');
+    add('producer', write.target_write_name, write.body_source,
+      typeof write.source_kind === 'string' ? write.source_kind : 'typed-text-result',
+      ['selected_runtime_result_writes', String(index), 'body_source']);
+  }
+  if (inlineInstructionRead && !occurrences.some(item => item.role === 'consumer' &&
+      item.reference === inlineInstructionRead.writer_id && item.body === inlineInstructionRead.body_source))
+    add('consumer', inlineInstructionRead.writer_id, inlineInstructionRead.body_source,
+      'inline-instruction', ['messages', 'user', 'inline-instruction']);
   const rewrite = (value: unknown, path: string[]): unknown => {
     if (Array.isArray(value)) return value.map((item, index) => rewrite(item, [...path, String(index)]));
     if (!value || typeof value !== 'object') return value;
@@ -251,6 +265,10 @@ function nativeSourceView(record: Record<string, unknown>, messages: Message[], 
     if (item.type === 'soft') {
       const piece = typeof item.name === 'string' ? pieces.get(item.name) : undefined;
       if (!piece) throw new Error(`native source conversion lacks exact text for soft source ${String(item.name)}`);
+      // A registered soft piece is an actual imported source occurrence. Keep
+      // its identity and exact text in the tokenizer-neutral ledger even though
+      // the materialized target is ordinary text.
+      add('consumer', piece.name, piece.text, piece.kind, path);
       return { type: 'text', text: piece.text };
     }
     if (item.type === 'read') {
@@ -310,6 +328,16 @@ function nativeSourceView(record: Record<string, unknown>, messages: Message[], 
   let plainTarget: Message | undefined;
   if (target) {
     plainTarget = rewrite(target, ['target']) as Message;
+    const sourceCalls = Array.isArray(target.tool_calls) ? target.tool_calls : [];
+    const targetCalls = Array.isArray(plainTarget.tool_calls) ? plainTarget.tool_calls : [];
+    for (let index = 0; index < sourceCalls.length; index++) {
+      const sourceCall = sourceCalls[index] as Record<string, unknown> | undefined;
+      const targetCall = targetCalls[index] as Record<string, unknown> | undefined;
+      if (!sourceCall || !targetCall || !Object.hasOwn(sourceCall, 'neuralese_code')) continue;
+      sourceReceipts.push({ schema: 'natlang.native-inline-instruction-source-receipt/1',
+        call_id: sourceCall.id ?? null, sidecar: structuredClone(sourceCall.neuralese_code) });
+      delete targetCall.neuralese_code;
+    }
     const proof = (target as Record<string, unknown>).assistant_text_result;
     if (proof && typeof proof === 'object' && !Array.isArray(proof)) {
       const item = proof as Record<string, unknown>;
@@ -326,7 +354,8 @@ function nativeSourceView(record: Record<string, unknown>, messages: Message[], 
   if (plainTarget && Object.hasOwn(plainTarget, 'assistant_text_result'))
     delete (plainTarget as Record<string, unknown>).assistant_text_result;
   return { messages: plainMessages, target: plainTarget,
-    conversion: { schema: 'natlang.native-source-conversion/1', source_record_sha256: sha256Text(canonical(record)),
+    conversion: { schema: 'natlang.native-source-conversion/1',
+      source_record_sha256: sha256Text(canonical(JSON.parse(JSON.stringify(record)))),
       source_messages_sha256: sourceMessagesSha256, source_target_sha256: sourceTargetSha256,
       source_messages: structuredClone(record.messages), source_target: structuredClone(sourceTarget ?? null),
       source_target_present: sourceTarget !== undefined,
@@ -1399,7 +1428,8 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
               for (const writer of sorted) {
               const start = writer.code_span.start + 1, end = writer.code_span.end - 1;
               parts.push({type:'text',text:args.code.slice(cursor,start)});
-                parts.push({$write:{name:writer.writer_id,type:'Neuralese<string>',source:writer.body_source ?? args.code.slice(start,end),
+                parts.push({$write:{name:writer.writer_id,type:'Neuralese<string>',source_kind:'inline-instruction',
+                  source:writer.body_source ?? args.code.slice(start,end),
                   ...(writer.body_source !== undefined ? { code_source: writer.body_code_source } : {})}});
                 cursor=end; count('inline-instruction-write'); count('nl-literal');
               }
@@ -1431,7 +1461,8 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
               code_sha256: createHash('sha256').update(code).digest('hex'),
               parts: [
                 { type: 'text', text: code.slice(0, parsed.markerStart) },
-                { $write: { name, type: edge.expected_type, source: parsed.body, code_source: marker } },
+                { $write: { name, type: edge.expected_type, source_kind: 'runtime-soft-state-writer',
+                  source: parsed.body, code_source: marker } },
                 { type: 'text', text: code.slice(parsed.markerEnd) },
               ],
               sites: [{ name, purpose: 'validated-runtime-soft-state-writer', block_id: edge.block_id,
@@ -1500,7 +1531,8 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
             if (receipt.schema !== 'natlang.typed-result-write/1' || receipt.invocation_id !== invocation ||
                 receipt.writer_call_id !== invocation || receipt.source_row_sha256 !== sourceSha ||
                 !['typed-text-result', 'typed-text-result-field', 'typed-json-result'].includes(String(receipt.source_kind)) ||
-                typeof receipt.block_id !== 'string' || !/^nz1_[a-z2-7]{20,}$/.test(receipt.block_id) ||
+                typeof receipt.block_id !== 'string' ||
+                !(/^nzs1_[a-z2-7]{52}$/.test(receipt.block_id) || /^nz1_[a-z2-7]{20,}$/.test(receipt.block_id)) ||
                 typeof receipt.writer_node !== 'string' || typeof receipt.result_type !== 'string' ||
                 !receipt.result_type.startsWith('Neuralese<') || typeof receipt.body_sha256 !== 'string' ||
                 !/^[0-9a-f]{64}$/.test(receipt.body_sha256) || typeof receipt.body_source !== 'string' ||
@@ -1543,6 +1575,7 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
                   receipt.writer_node as string) : selectedEdge ? blockName(edge!) :
                 `typed-result:${receipt.block_id}:${sha12(JSON.stringify([receipt.writer_node, resultPath]))}`;
               const write = { $write: { name, block_id: receipt.block_id, type: receipt.result_type,
+                source_kind: receipt.source_kind,
                 source: receipt.body_source, ...(receipt.source_kind === 'typed-json-result' ? { source_encoding: 'json' } : {}) } };
               if (directSemanticText) selectedRuntimeResultWrites.push({
                 schema: 'natlang.selected-runtime-result-write/1',
@@ -1557,6 +1590,8 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
                 action_arguments_sha256: createHash('sha256').update(stableJson(args) ?? '').digest('hex'),
                 target_write_name: name,
                 target_write_sha256: createHash('sha256').update(stableJson(write) ?? '').digest('hex'),
+                source_kind: receipt.source_kind,
+                body_source: receipt.body_source,
                 body_source_basis: receipt.body_source_basis,
                 learned_vectors: false, qualification_certificate: false, training_admission: false,
               });
@@ -1772,7 +1807,9 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
       sourceKind: receipt.origin === 'same-run-producer' ? 'authenticated-provider-context' : 'external-provider-context' });
   }
   const native = nativeSourceView(record as Record<string, unknown>, messages, target, sourceTarget,
-    pieces, sourceMessagesSha256, sourceTargetSha256, externalSources);
+    pieces, sourceMessagesSha256, sourceTargetSha256, externalSources, selectedRuntimeResultWrites,
+    inlineRead && plainInline && inlineBody !== undefined ?
+      { writer_id: inlineRead.writer_id, body_source: inlineRead.body_source ?? inlineBody } : undefined);
   return { record: { ...record, messages: native.messages, ...(native.target ? { target: native.target } : {}),
     native_source_conversion: native.conversion,
     neuralese_conversion: { version: NEURALESE_CONVERSION_VERSION, sites,

@@ -143,15 +143,30 @@ test('the converter selects a modern result receipt but excludes the same action
 
   const selected = convertTrajectory(makeRow(resultReceipt)).record;
   const selectedArgs = JSON.parse(selected.target.tool_calls[0].function.arguments);
-  assert.equal(selectedArgs.value.$write.block_id, resultReceipt.block_id);
-  assert.equal(selectedArgs.value.$write.type, 'Neuralese<string>');
-  assert.equal(selectedArgs.value.$write.source, body);
-  assert.match(selectedArgs.value.$write.name, /^(?:typed-result:|soft-state:)/);
+  assert.equal(selectedArgs.value, body, 'the source action remains ordinary text in the target');
+  assert.equal(selected.target.neuralese_code, undefined);
+  const occurrence = selected.native_source_conversion.occurrences.find(item => item.role === 'producer');
+  assert.ok(occurrence);
+  assert.equal(occurrence.reference, `soft-state:${resultReceipt.block_id}@` +
+    createHash('sha256').update(JSON.stringify(['boundary-run', 'call-1', 'call-1#9'])).digest('hex').slice(0, 12));
+  assert.equal(occurrence.body, body);
+  assert.equal(occurrence.source_kind, 'typed-text-result');
+  assert.equal(selected.neuralese_conversion.selected_runtime_result_writes[0].block_id, resultReceipt.block_id);
+
+  const historicalReceipt = { ...resultReceipt, block_id: `nz1_${'h'.repeat(32)}` };
+  const historical = convertTrajectory(makeRow(historicalReceipt)).record;
+  const historicalOccurrence = historical.native_source_conversion.occurrences.find(item => item.role === 'producer');
+  assert.ok(historicalOccurrence, 'the exact frozen source reader remains usable during current conversion');
+  assert.equal(historicalOccurrence.reference, `soft-state:${historicalReceipt.block_id}@` +
+    createHash('sha256').update(JSON.stringify(['boundary-run', 'call-1', 'call-1#9'])).digest('hex').slice(0, 12));
+  assert.equal(historicalOccurrence.body, body);
+  assert.equal(historical.native_source_conversion.source_ref.source_row_sha256, 'row-sha');
 
   const argumentReceipt = { ...resultReceipt, source_kind: 'typed-text-argument', argument_type: 'Neuralese<string>' };
   delete argumentReceipt.result_type;
   const excluded = convertTrajectory(makeRow(argumentReceipt)).record;
   const excludedArgs = JSON.parse(excluded.target.tool_calls[0].function.arguments);
   assert.equal(excludedArgs.value, body, 'argument provenance does not become a return-result write');
+  assert.equal(excluded.native_source_conversion.occurrences.filter(item => item.role === 'producer').length, 0);
   assert.equal(excluded.neuralese_conversion.sites['typed-result-write']?.converted ?? 0, 0);
 });

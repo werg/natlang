@@ -254,9 +254,13 @@ test('a real materialized no-interpolation inline site yields one writer and its
   assert.equal(index.reads[0].writer_id, writer.writer_id);
   const converted=turns.map(turn=>convertTrajectory(turn,{inlineInstructions:index}).record);
   const parent=converted.find(turn=>turn.id===writer.decision_id);
-  assert.equal(parent.target.tool_calls[0].neuralese_code.parts.filter(part=>part.$write).length,1);
+  assert.equal(parent.target.tool_calls[0].neuralese_code, undefined);
+  assert.equal(parent.native_source_conversion.occurrences.filter(item => item.role === 'producer').length, 1);
+  assert.equal(parent.native_source_conversion.source_receipts.filter(item =>
+    item.schema === 'natlang.native-inline-instruction-source-receipt/1').length, 1);
   const child=converted.find(turn=>turn.id===index.reads[0].decision_id);
-  assert.ok(child.messages.some(message=>Array.isArray(message.content) && message.content.some(part=>part.type==='read'&&part.name===writer.writer_id)));
+  assert.ok(child.native_source_conversion.occurrences.some(item => item.role === 'consumer' &&
+    item.reference === writer.writer_id), 'the indexed child import is retained in native occurrence IR');
 });
 
 test('host-attested nl.with aliases and primitive literal captures preserve child bindings', async () => {
@@ -334,17 +338,20 @@ test('conversion preserves exact eval arguments and links multiple code writers 
   const written=convertTrajectory(parent,{inlineInstructions}).record;
   const call=written.target.tool_calls[0];
   assert.equal(call.function.arguments,parent.target.tool_calls[0].function.arguments);
-  assert.equal(call.neuralese_code.schema,'natlang.inline-instruction-code/1');
-  assert.equal(call.neuralese_code.parts.map(part=>part.type==='text'?part.text:part.$write.source).join(''),code);
-  assert.equal(call.neuralese_code.parts.filter(part=>part.$write).length,2);
+  assert.equal(call.neuralese_code, undefined);
+  const sidecarReceipt = written.native_source_conversion.source_receipts.find(item =>
+    item.schema === 'natlang.native-inline-instruction-source-receipt/1');
+  assert.equal(sidecarReceipt.sidecar.schema,'natlang.inline-instruction-code/1');
+  assert.equal(sidecarReceipt.sidecar.parts.map(part=>part.type==='text'?part.text:part.$write.source).join(''),code);
+  assert.equal(written.native_source_conversion.occurrences.filter(item=>item.role==='producer').length,2);
   for (const child of [a,b]) {
     const converted=convertTrajectory(child,{inlineInstructions,instructionsShare:1}).record;
     const opening=converted.messages[0].content;
     assert.ok(Array.isArray(opening));
-    const read=opening.find(part=>part.type==='read');
-    assert.equal(read.name,inlineInstructions.reads.find(item=>item.invocation_id===child.source_ref.invocation_id).writer_id);
-    assert.equal(opening.map(part=>part.type==='text'?part.text:part.source).join(''),child.messages[0].content);
-    assert.equal(opening.some(part=>part.type==='soft'),false,'no detached shared instructions compete with the read');
+    assert.equal(opening.every(part=>part.type==='text'),true);
+    assert.equal(opening.map(part=>part.text).join(''),child.messages[0].content);
+    assert.equal(converted.native_source_conversion.occurrences.filter(item => item.role === 'consumer' &&
+      item.source_kind === 'inline-instruction').length, 1);
   }
 });
 

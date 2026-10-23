@@ -25,7 +25,7 @@ const body = 'Return the supplied policySnapshot exactly as written.';
 const policy = 'Only use details stated in the note.';
 
 function fixture({ childPolicy = policy, capture = {}, codeOverride, shadowed = false } = {}) {
-  const sentinel = `\uE000${block}\uE001`;
+  const sentinel = `\uE002${block}\uE003`;
   const parameter = shadowed ? 'policy' : 'note';
   const code = codeOverride ?? `const checker: Neuralese<(${parameter}: string) => Promise<boolean>> = nl.with({ policy })\`${sentinel}\`; return await checker(${parameter});`;
   const rawSpanStart = code.indexOf(`\`${sentinel}\``);
@@ -69,7 +69,7 @@ test('indexes a compiler-checked soft body with an explicit primitive snapshot c
   assert.equal(result.writers.length, 1);
   assert.equal(result.reads.length, 1);
   assert.equal(result.writers[0].body_source, body);
-  assert.equal(result.writers[0].body_code_source, `\uE000${block}\uE001`);
+  assert.equal(result.writers[0].body_code_source, `\uE002${block}\uE003`);
   assert.equal(result.writers[0].plan.capture_binding_plan.captures[0].value, policy);
   assert.match(result.reads[0].capture_binding_plan.parent_scope_sha256, /^[a-f0-9]{64}$/);
 });
@@ -172,20 +172,26 @@ test('actual runtime collection preserves a captured soft body through materiali
   const parent = materialized.turns.find(turn => turn.id === index.writers[0].decision_id);
   const converted = convertTrajectory(parent, { inlineInstructions: index }).record;
   assert.equal(converted.target.tool_calls[0].function.arguments, parent.target.tool_calls[0].function.arguments);
-  const sidecar = converted.target.tool_calls[0].neuralese_code;
-  assert.ok(sidecar);
-  assert.equal(sidecar.parts.find(part => part.$write).$write.code_source, `<|neuralese|>${body}<|/neuralese|>`);
+  assert.equal(converted.target.tool_calls[0].neuralese_code, undefined);
+  const writerOccurrence = converted.native_source_conversion.occurrences.find(item => item.role === 'producer');
+  assert.equal(writerOccurrence.body, body);
+  assert.equal(writerOccurrence.source_kind, 'inline-instruction');
+  const sourceReceipt = converted.native_source_conversion.source_receipts.find(item =>
+    item.schema === 'natlang.native-inline-instruction-source-receipt/1');
+  assert.ok(sourceReceipt);
+  assert.equal(sourceReceipt.sidecar?.schema, 'natlang.inline-instruction-code/1');
   assert.equal(index.writers[0].code_sha256, sha(JSON.parse(parent.target.tool_calls[0].function.arguments).code));
 
   const convertedChild = convertTrajectory(child, { inlineInstructions: index }).record;
   const childOpening = convertedChild.messages.find(message => message.role === 'user');
   assert.ok(Array.isArray(childOpening.content));
   const childReads = childOpening.content.filter(part => part.type === 'read');
-  assert.equal(childReads.length, 1, 'the actual multipart child opening reads the creator\'s attested body');
-  assert.equal(childReads[0].name, index.writers[0].writer_id);
-  assert.equal(childReads[0].source, body);
-  assert.deepEqual(childOpening.content.map(part => part.type), ['text', 'read', 'text'], 'all surrounding opening parts stay in order');
-  assert.equal(convertedChild.neuralese_conversion.sites['inline-instruction-read'].converted, 1);
+  assert.equal(childReads.length, 0, 'native source conversion emits no projected read part');
+  assert.ok(convertedChild.native_source_conversion.occurrences.some(item => item.role === 'consumer' &&
+    item.reference === index.writers[0].writer_id && item.body === body));
+  assert.deepEqual(childOpening.content.map(part => part.type), ['text', 'text', 'text'], 'all opening text stays in order');
+  assert.equal(convertedChild.native_source_conversion.occurrences.filter(item => item.role === 'consumer' &&
+    item.reference === index.writers[0].writer_id && item.body === body).length, 1);
 
   const wrongPayload = structuredClone(child);
   wrongPayload.messages.find(message => message.role === 'user').content[1].text = 'Different body payload';
@@ -254,9 +260,9 @@ test('actual runtime collection preserves a captured soft body through materiali
     assert.deepEqual(cliSummary.inline_instruction_index, { writers: 12, reads: 48, holds: 0, hold_reasons: {} },
       'the CLI must preserve actual opening/scope_0 evidence so snapshot captures produce all causal writer/read links');
     const convertedCliRows = readFileSync(outputPath, 'utf8').trim().split('\n').map(line => JSON.parse(line));
-    const emittedInlineReads = convertedCliRows.flatMap(row => row.messages.flatMap(message =>
-      Array.isArray(message.content) ? message.content.filter(part => part.type === 'read' &&
-        typeof part.name === 'string' && part.name.startsWith('inline-site:')) : []));
+    const emittedInlineReads = convertedCliRows.flatMap(row =>
+      row.native_source_conversion.occurrences.filter(item => item.role === 'consumer' &&
+        item.source_kind === 'inline-instruction'));
     assert.equal(emittedInlineReads.length, 48, 'the converter emits each proven multipart child-body read');
   } finally {
     rmSync(cliDir, { recursive: true, force: true });
@@ -327,7 +333,7 @@ function attestedFixture({ literal = false, source = 'local', instruction = body
   site.source_span = { file: 'eval', start: 0, end: JSON.parse(rows.parent.target.tool_calls[0].function.arguments).code.length };
   if (literal) {
     const old = JSON.parse(rows.parent.target.tool_calls[0].function.arguments).code;
-    const code = old.replace(`\uE000${block}\uE001`, instruction);
+    const code = old.replace(`\uE002${block}\uE003`, instruction);
     rows.parent.target.tool_calls[0].function.arguments = JSON.stringify({ code });
     rows.parent.decision.assistant.calls[0].arguments.code = code;
     const start = code.indexOf(`\`${instruction}\``);
@@ -367,7 +373,7 @@ test('creation-attested local snapshots index crisp and soft bodies without pare
     assert.equal(binding.captures[0].source, 'local');
     assert.equal(binding.captures[0].value, policy);
     assert.deepEqual(binding.creation, binding.captures[0].host_snapshot.creation);
-    assert.equal(result.writers[0].body_code_source, literal ? body : `\uE000${block}\uE001`);
+    assert.equal(result.writers[0].body_code_source, literal ? body : `\uE002${block}\uE003`);
   }
 });
 

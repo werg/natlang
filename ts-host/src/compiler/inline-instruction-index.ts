@@ -612,7 +612,8 @@ function bodyInChildInstructions(row: Row, id: string): boolean {
   const content = opening.content;
   const parts = Array.isArray(content) ? content.map(part => {
     const value = asDict(part);
-    return value?.type === 'native_state' && typeof value.id === 'string' ? `${value.id}` :
+    return value?.type === 'native_state' && typeof value.id === 'string' ? neuraleseSentinel(value.id,
+      value.stop_gradient === true, typeof value.source_occurrence === 'string' ? value.source_occurrence : undefined) :
       value?.type === 'text' && typeof value.text === 'string' ? value.text : '';
   }).join('') : typeof content === 'string' ? content : '';
   const marker = parts.indexOf('Instructions:\n');
@@ -620,8 +621,9 @@ function bodyInChildInstructions(row: Row, id: string): boolean {
   const tail = parts.slice(marker + 'Instructions:\n'.length);
   const boundary = /\n\n(?:In eval\b|Eval also\b)/.exec(tail);
   const section = boundary ? tail.slice(0, boundary.index + 1) : '';
-  const needle = `${id}`;
-  return !!section && section.split(needle).length === 2;
+  const occurrences = !!section ? [...section.matchAll(/(nzs1_[a-z2-7]{52})(?:!)?(?:@[^]+)?/g)]
+    .filter(match => match[1] === id) : [];
+  return occurrences.length === 1;
 }
 
 function openingText(row: Row): string | undefined {
