@@ -1,6 +1,7 @@
 /** Bind a self-hosted Qwen correction turn to an exact no-hint task replay. */
 import { createHash } from 'node:crypto';
 import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
+import { executeProgram, type ExecuteOptions, type ProgramRecord, type ProgramRun } from './collector.js';
 
 type TeacherTurn = { phase?: unknown; invocation_id?: unknown; context?: unknown; tools_offered?: unknown;
   assistant?: { content?: unknown; reasoning?: unknown; calls?: { tool: string; arguments: Record<string, unknown> }[] } };
@@ -76,4 +77,14 @@ export function qwenTeacherForcedDriver(row: TeacherRow, binding: SourceBinding,
     return send({ ...request, native_teacher_forced_turn: { schema: 'natlang.native-teacher-forced-turn/1',
       assistant: target, source_receipt: receipt } });
   } };
+}
+
+/** Execute the same source program with its original task prompt and exact Qwen source invocation identities. */
+export async function executeQwenTeacherReplay(row: TeacherRow, binding: SourceBinding, record: ProgramRecord,
+    options: Omit<ExecuteOptions, 'runId'>, send: (request: ModelTurnRequest) => Promise<ModelTurn>): Promise<ProgramRun> {
+  const sourceRecord = (row.task as { program_ir?: unknown } | undefined)?.program_ir;
+  if (!sourceRecord || canonical(sourceRecord) !== canonical(record))
+    throw new Error('Qwen teacher source and failure case do not bind the exact same original task program');
+  const forced = qwenTeacherForcedDriver(row, binding, send);
+  return executeProgram(record, forced.driver, { ...options, runId: forced.runId });
 }
