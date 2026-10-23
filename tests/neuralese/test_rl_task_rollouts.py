@@ -5,7 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from natlang_neuralese.rl.task_rollouts import authored_root_row, build_queue, reward_of, score, student_root_row
+from natlang_neuralese.rl.task_rollouts import (_budget_terminated_prefix, authored_root_row, build_queue,
+                                               reward_of, score, student_root_row)
 
 
 def _row(split="train", code="return await f(task);"):
@@ -70,7 +71,8 @@ def test_score_routes_groups_by_spread(tmp_path):
 
 
 def _budget_prefix_fixture(tmp_path, *, graph_turn="inv#turn1", pending=False, manifest_tamper=False,
-                           native_pair=False, stale_attempt=False, missing_frame=False, split="train"):
+                           native_pair=False, stale_attempt=False, missing_frame=False, split="train",
+                           saved_raw_calls=False, mismatched_saved_raw_calls=False, root_dependency=False):
     from natlang_neuralese.rl.task_rollouts import build_queue
     task = {**authored_root_row(_row()), "id": "budget-prefix-task", "split": split}
     packet_path = tmp_path / "packet.jsonl"
@@ -114,17 +116,54 @@ def _budget_prefix_fixture(tmp_path, *, graph_turn="inv#turn1", pending=False, m
                  "model_response": {"calls": response_calls, "raw_calls": raw_calls,
                                     **({"rl_sampling": sampling} if sampling else {})}}
         frames.append((invocation_id, frame))
+    root_invocation = f"root/execution-{execution}"
+    root_frame = {"phase": "action", "invocation_id": root_invocation,
+                  "context": [{"role": "user", "content": "reference"}],
+                  "tools_offered": [], "assistant": {"content": "", "calls": []},
+                  "model_response": {"calls": [], "raw_calls": []}}
+    child_events = graph_events
+    root_call_node = f"call:{root_invocation}"
+    root_events = [
+        {"kind": "invocation", "node": root_call_node, "call_id": root_invocation, "inputs": []},
+        {"kind": "model_turn", "node": f"{root_invocation}#turn1", "call_id": root_invocation,
+         "inputs": [{"node": root_call_node, "port": "invocation"}]},
+    ]
+    if root_dependency:
+        root_events.append({"kind": "block_write", "node": "root-writer", "turn": f"{root_invocation}#turn1",
+                            "block": "reference", "inputs": []})
+        child_events.append({"kind": "block_read", "node": "child-reader", "turn": f"{frames[0][0]}#turn1",
+                             "block": "reference", "inputs": [{"node": "root-writer", "block": "reference"}]})
+    child_events = [*({"kind": "invocation", "node": f"call:{invocation}", "call_id": invocation,
+                       "inputs": [{"node": root_call_node, "port": "caller"}]}
+                      for invocation, _ in frames),
+                    *[{**event, "inputs": [{"node": f"call:{event['call_id']}", "port": "invocation"}]}
+                      if event.get("kind") == "model_turn" else event for event in child_events]]
+    trace_rows = [{"kind": "trace_event", "trace_role": "root", "invocation_id": f"root/execution-{execution}",
+                   "event": event} for event in root_events]
+    child_counts = {}
+    for event in child_events:
+        invocation = event.get("call_id") or str(event.get("turn", "")).split("#turn", 1)[0]
+        if not invocation:
+            invocation = frames[0][0]
+        trace_rows.append({"kind": "trace_event", "trace_role": "child", "invocation_id": invocation,
+                           "event": event})
+        child_counts[invocation] = child_counts.get(invocation, 0) + 1
     payloads = [
         {"kind": "execution_snapshot", "schema": "natlang.partial_execution_snapshot/1",
-         "run_id": f"root/execution-{execution}", "logical_run_id": "root",
+         "run_id": root_invocation, "logical_run_id": "root",
          "execution_attempt_id": execution, "status": "interrupted",
          "failure_reason": "whole-case model request budget exceeded (4)", "pending_children": pending,
-         "root_event_count": len(graph_events), "invocation_count": 0},
-        *[{"kind": "trace_event", "trace_role": "root", "invocation_id": f"root/execution-{execution}", "event": event}
-          for event in graph_events],
-        *([] if missing_frame else [{"kind": "teacher_action_frame", "source": "live_provider", "request_sha256": f"{index + 10:064x}",
-           "invocation_id": invocation, "response_frame": frame, "saved_turn_index": index}
-          for index, (invocation, frame) in enumerate(frames)]),
+         "root_event_count": len(root_events), "invocation_count": len(frames)},
+        *trace_rows,
+        *[{"kind": "invocation_snapshot", "call_id": invocation, "event_count": child_counts.get(invocation, 0)}
+          for invocation, _ in frames],
+        *([] if missing_frame else [
+            {"kind": "teacher_action_frame", "source": "authored_reference_root", "request_sha256": f"{8:064x}",
+             "invocation_id": root_invocation, "response_frame": root_frame, "saved_turn_index": 0},
+            *[{"kind": "teacher_action_frame", "source": "live_provider", "request_sha256": f"{index + 10:064x}",
+               "invocation_id": invocation, "response_frame": frame, "saved_turn_index": index + 1}
+              for index, (invocation, frame) in enumerate(frames)]
+        ]),
     ]
     records = [json.dumps({"version": "natlang.teacher_partial_evidence_record/1", "attempt_id": attempt,
                            "sequence": index, "payload": payload}, separators=(",", ":"))
@@ -135,10 +174,15 @@ def _budget_prefix_fixture(tmp_path, *, graph_turn="inv#turn1", pending=False, m
     (jobs / f"000000-{program_sha[:16]}.partial.json").write_text(json.dumps({
         "version": "natlang.teacher_partial.native/1", "program_id": task["id"],
         "provenance": {"program_ir_sha256": program_sha}, "execution_attempt_id": execution,
-        "turns": [{"request_sha256": f"{index + 10:064x}", "invocation_id": invocation,
-                   "response": {"calls": response_calls, "raw_calls": frame["model_response"]["raw_calls"],
-                                "text": ""}}
-                  for index, (invocation, frame) in enumerate(frames)],
+        "turns": [{"request_sha256": f"{8:064x}", "invocation_id": root_invocation,
+                   "response": {"calls": [], "raw_response": {"transport": "native-collector"}, "text": ""}},
+                  *[{"request_sha256": f"{index + 10:064x}", "invocation_id": invocation,
+                     "response": {"calls": response_calls,
+                                  **({"raw_calls": [] if mismatched_saved_raw_calls else frame["model_response"]["raw_calls"]}
+                                     if saved_raw_calls or mismatched_saved_raw_calls else
+                                     {"raw_response": {"transport": "native-collector"}}),
+                                  "text": ""}}
+                    for index, (invocation, frame) in enumerate(frames)]],
         "request_attempt_ids": [attempt, "newer-attempt"] if stale_attempt else [attempt], "evidence_snapshots": [{
             "schema": "natlang.teacher_partial_evidence/1", "path": evidence_path.name,
             "attempt_id": attempt, "status": "execution_interrupted", "records": len(payloads),
@@ -173,7 +217,12 @@ def test_scored_model_budget_prefix_reconstructs_exact_whole_graph(tmp_path):
     assert row["outcome"] == "budget_exhaustion"
     assert row["reward"] == {"quality": 0.0}
     assert len(row["turns"]) == 1 and row["turns"][0]["replay"]["raw_calls_retained"]
-    assert row["execution_graph"][0]["kind"] == "model_turn"
+    assert row["turns"][0]["target"]["tool_calls"] == [{"id": "call-1", "type": "function", "function": {
+        "name": "eval", "arguments": json.dumps({"code": "return_result({status:'failed'});"})}}]
+    assert any(event["kind"] == "model_turn" for event in row["execution_graph"])
+    assert [event["node"] for event in row["execution_graph"] if event.get("kind") == "model_turn"] == ["inv#turn1"]
+    assert any(event.get("kind") == "invocation" and event.get("node", "").startswith("call:root/")
+               for event in row["execution_graph"])
     assert row["budget_termination_evidence"]["attempt_id"] == "evidence-attempt"
 
 
@@ -186,10 +235,32 @@ def test_budget_prefix_keeps_producer_and_consumer_as_one_graph(tmp_path):
     score(tmp_path, emit=emitted)
     row = json.loads(emitted.read_text().splitlines()[0])
     assert [turn["invocation_id"] for turn in row["turns"]] == ["producer", "consumer"]
-    assert {event["kind"] for event in row["execution_graph"]} == {"model_turn", "block_write", "block_read"}
+    assert {event["kind"] for event in row["execution_graph"]} == {
+        "invocation", "model_turn", "block_write", "block_read"}
     from natlang_neuralese.rl.episode_graph import whole_episode_turns
     bound = whole_episode_turns(row)
     assert bound[1]["read_bindings"] == {"state": "writer"}
+
+
+def test_budget_prefix_checks_raw_calls_when_collector_persists_them(tmp_path):
+    task, entries, finish = _budget_prefix_fixture(tmp_path, saved_raw_calls=True)
+    row = _budget_terminated_prefix(entries[0], task, finish, packet_source_path=tmp_path / "packet.jsonl",
+                                    packet_source_sha256=hashlib.sha256((tmp_path / "packet.jsonl").read_bytes()).hexdigest())
+    assert row is not None
+
+    tmp_path2 = tmp_path / "mismatch"
+    tmp_path2.mkdir()
+    task, entries, finish = _budget_prefix_fixture(tmp_path2, saved_raw_calls=True, mismatched_saved_raw_calls=True)
+    row = _budget_terminated_prefix(entries[0], task, finish, packet_source_path=tmp_path2 / "packet.jsonl",
+                                    packet_source_sha256=hashlib.sha256((tmp_path2 / "packet.jsonl").read_bytes()).hexdigest())
+    assert row is None
+
+
+def test_budget_prefix_rejects_authored_root_state_dependency_instead_of_detaching_it(tmp_path):
+    task, entries, finish = _budget_prefix_fixture(tmp_path, root_dependency=True)
+    row = _budget_terminated_prefix(entries[0], task, finish, packet_source_path=tmp_path / "packet.jsonl",
+                                    packet_source_sha256=hashlib.sha256((tmp_path / "packet.jsonl").read_bytes()).hexdigest())
+    assert row is None
 
 
 @pytest.mark.parametrize("change", ["graph", "pending", "manifest", "error_code", "stale_attempt", "missing_frame", "held_split", "duplicate_state"])
