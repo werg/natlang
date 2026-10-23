@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { Context, createNatlangRuntime, softFunction, iterateOn, decodeNz, buildProject,
   learningService, createLearning, buildStandardLibrary, loadStandardLibrary, createNeuraleseLibrary, Loss, LearningError } from '../dist/index.js';
 import { MemoryNeuraleseStore } from '../dist/native/neuralese-store.js';
-import { isNeuraleseRef } from '../dist/native/neuralese.js';
+import { isNeuraleseRef, neuraleseRef } from '../dist/native/neuralese.js';
 import { neuraleseServerModelTurn } from '../dist/model/neuralese-server.js';
 import { RewriteGate } from '../dist/compiler/rewrites.js';
 
@@ -227,52 +227,11 @@ test('concurrent objectives: functions keep their own turns, overlapping promise
     objectives.crossEntropy(runtime.run(() => ask(h)(q)), 'Paris')))), hint), /learning-concurrent-objectives/);
 });
 
-test('a weight adapter is a value: withAdapters binds it to calls, valueAndGrad tunes it, and its type is Adapter', { skip, timeout: 900_000 }, async () => {
-  const { parseType, formatType } = await import('../dist/native/types.js');
-  assert.equal(formatType(parseType('Adapter')), 'Adapter');
+test('legacy projected adapter creation is explicitly retired on the non-native server', { skip, timeout: 900_000 }, async () => {
   const store = new MemoryNeuraleseStore();
-  const driver = neuraleseServerModelTurn({ endpoint, model: 'natlang-neuralese', store });
-  const runtime = createNatlangRuntime({ model: { driver, decisionReadout: 'finite-returns' }, neuralese: { store } });
-  const { valueAndGrad, objectives, optimizers, adapters, withAdapters, save, deltas } = createLearning(learningService({ endpoint, store }));
-  const body = await embed('Answer the question with a city.', 'Neuralese<(q: string) => string>');
-  const ask = softFunction({ type: '(q: string) => "Paris" | "Lyon" | "Rome"', body });
-  const adapter0 = await adapters.create({ kind: 'xs', rank: 4 });
-  assert.equal(adapter0.$neuralese.type, 'Adapter');
-  const target = { Paris: 0.1, Lyon: 0.8, Rome: 0.1 };
-  let terms;
-  const loss = async adapter => {
-    const value = await objectives.decision(() => withAdapters(adapter, () => runtime.run(() => ask('Which city?'))), target);
-    terms = value.terms;
-    return value;
-  };
-  const first = await valueAndGrad(loss, adapter0);
-  assert.deepEqual(terms[0].adapters, [{ id: adapter0.$neuralese.id, scale: 1 }]);
-  assert.match(first.grad.$gradient.$gradientBlock.id, /^nz1_/);
-  const adam = optimizers.adam({ lr: 0.02 });
-  let state = { value: adapter0, opt: adam.init(adapter0) }, grad = first.grad;
-  for (let i = 0; i < 3; i++) {
-    state = await adam.step(state, grad);
-    grad = (await valueAndGrad(loss, state.value)).grad;
-  }
-  assert.equal(state.value.$neuralese.type, 'Adapter');
-  const after = +(await valueAndGrad(loss, state.value)).loss;
-  assert.ok(after < +first.loss, `adapter loss should move down: ${+first.loss} → ${after}`);
-  // Outside the scope the base model answers: the zero adapter and no adapter score alike.
-  const base = +(await valueAndGrad(async () => objectives.decision(() => runtime.run(() => ask('Which city?')), target), {})).loss;
-  assert.ok(Math.abs(base - +first.loss) < 1e-3, `zero adapter ${+first.loss} vs base ${base}`);
-  // An adapter ships in a .nz file: its block keeps its own dialect (the spec), and it loads back as an Adapter.
-  const path = join(mkdtempSync(join(tmpdir(), 'natlang-adapter-')), 'adapter.nz');
-  await save(path, { adapter: state.value });
-  const decoded = decodeNz(new Uint8Array(readFileSync(path)));
-  assert.equal(decoded.header.exports.adapter.type, 'Adapter');
-  assert.match(decoded.blocks.get(state.value.$neuralese.id).meta.dialect, /^adapter\/2;base=/);
-  // The training run as a residual update: diff(tuned, zero) applied to zero is the tuned adapter; a delta is not
-  // an adapter and cannot be bound.
-  const update = await deltas.diff(state.value, adapter0);
-  assert.equal((await deltas.apply(adapter0, update)).$neuralese.id, state.value.$neuralese.id);
-  const half = await deltas.apply(adapter0, update, 0.5);
-  assert.ok(Number.isFinite(+(await valueAndGrad(loss, half)).loss), "a half-scale update is an adapter that runs");
-  await assert.rejects(() => valueAndGrad(loss, update), /neuralese-adapter|not an adapter/);
+  const { adapters } = createLearning(learningService({ endpoint, store }));
+  await assert.rejects(() => adapters.create({ kind: 'xs', rank: 4 }), error =>
+    /neuralese-adapters-retired/.test(`${error?.code ?? ''} ${error?.message ?? ''}`));
 });
 
 test('conditionedDistill: a soft hint learns the readout of a teacher told the answer; leaks and unconditioned teachers are refused', { skip, timeout: 900_000 }, async () => {
@@ -380,29 +339,14 @@ test('deltas: interference of separately trained updates, and learned merge coef
   assert.ok(merged.trace.at(-1).loss < merged.trace[0].loss, JSON.stringify(merged.trace));
 });
 
-test('an adapter bound in a function\'s context applies to that function\'s turns only and is not shown in its scope', { skip, timeout: 900_000 }, async () => {
+test('legacy projected adapter context bindings are rejected by the non-native server', { skip, timeout: 900_000 }, async () => {
   const store = new MemoryNeuraleseStore();
   const driver = neuraleseServerModelTurn({ endpoint, model: 'natlang-neuralese', store });
-  const runtime = createNatlangRuntime({ model: { driver, decisionReadout: 'finite-returns' }, neuralese: { store } });
-  const { valueAndGrad, objectives, optimizers, adapters } = createLearning(learningService({ endpoint, store }));
-  const body = await embed('Answer the question with a city.', 'Neuralese<(q: string) => string>');
-  const type = '(q: string) => "Paris" | "Lyon" | "Rome"';
-  const bound = adapter => softFunction({ type, body, context: Context.empty().with({ adapter }) });
-  const plain = softFunction({ type, body });
-  const target = { Paris: 0.1, Lyon: 0.8, Rome: 0.1 };
-  let terms;
-  const loss = async adapter => { const value = await objectives.decision(() => runtime.run(() => bound(adapter)('Which city?')), target); terms = value.terms; return value; };
-  const adapter0 = await adapters.create({ kind: 'xs', rank: 4 });
-  const first = await valueAndGrad(loss, adapter0);
-  assert.deepEqual(terms[0].adapters, [{ id: adapter0.$neuralese.id, scale: 1 }]);
-  assert.doesNotMatch(JSON.stringify(terms[0].messages), new RegExp(adapter0.$neuralese.id), 'the adapter is not rendered into the scope');
-  const adam = optimizers.adam({ lr: 0.05 });
-  let state = { value: adapter0, opt: adam.init(adapter0) }, grad = first.grad;
-  for (let i = 0; i < 3; i++) { state = await adam.step(state, grad); grad = (await valueAndGrad(loss, state.value)).grad; }
-  const after = +(await valueAndGrad(loss, state.value)).loss;
-  assert.ok(after < +first.loss, `context-bound adapter loss should move down: ${+first.loss} → ${after}`);
-  const unbound = +(await valueAndGrad(async () => objectives.decision(() => runtime.run(() => plain('Which city?')), target), {})).loss;
-  assert.ok(Math.abs(unbound - +first.loss) < 1e-3, 'a function that does not bind the adapter runs the base model');
+  const { withAdapters } = createLearning(learningService({ endpoint, store }));
+  const legacy = neuraleseRef('Adapter', await embed('legacy adapter binding', 'Adapter'));
+  await assert.rejects(() => withAdapters(legacy, () => driver.decide({
+    messages: [{ role: 'user', content: 't4 t5' }], options: ['t7', 't8']
+  })), error => /neuralese-adapters-retired/.test(`${error?.code ?? ''} ${error?.message ?? ''}`));
 });
 
 test('call recurrence: a soft call\'s Neuralese result read by its caller trains the soft call\'s context through the write', { skip, timeout: 900_000 }, async () => {

@@ -571,9 +571,7 @@ class Engine:
         # resolved defaults explicitly; local callers inherit them here.
         from ..model.native_adapters import execution_binding
         if adapters is None and not execution_binding(self):
-            runtime = getattr(self, 'native_coefficient_policy_runtime', None)
-            if runtime is not None:
-                adapters = runtime['defaults']
+            adapters = getattr(self, 'native_default_adapters', None)
         try:
             return run_native(self, callback, adapters)
         except NativeAdapterError as error:
