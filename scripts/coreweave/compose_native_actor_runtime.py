@@ -24,7 +24,7 @@ from natlang_neuralese.train.native_resident import code_inventory
 
 PREFIX = 'training/neuralese/natlang_neuralese/'
 RENDERING_ASSETS = tuple('training/prompt-pieces/' + name for name in (
-    'pieces.json', 'rendering-contract-fixtures.json', 'rendering-identity-equivalence.json'))
+    'pieces.json', 'rendering-contract-fixtures.json'))
 COMMITS = ('e97599138', 'f63c8b05b', '8b4e3bf42', 'fd4b71cbf', 'cb46b28de', 'd1ef19931', '810e496c1', '5fd55d0c7')
 NATIVE_ACTOR_COMMIT = '62187e585'
 ALLOWED = {'model/shared_state.py', 'model/native_adapters.py', 'maple/fused_moe.py',

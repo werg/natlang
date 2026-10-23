@@ -12,10 +12,17 @@ def setup(tmp_path,monkeypatch):
            {'split':'train','id':'second','nested':{'q':2,'b':'other'}}]
     source=tmp_path/'source.jsonl';source.write_text(''.join(json.dumps(row)+'\n' for row in cases))
     parent=tmp_path/'parent';parent.write_bytes(b'exact actor checkpoint')
+    base=tmp_path/'base';base.mkdir()
     config=tmp_path/'config.json';out=tmp_path/'production'
-    write_json_durable(config,{'out':str(out),'cases':str(source),'checkpoint':str(parent),
-        'after_update':['unused'],'endpoints':['unused'],'neuralese_server':False})
+    write_json_durable(config,{'native_state':True,'base':str(base),'out':str(out),'cases':str(source),
+        'checkpoint':str(parent),'after_update':['unused'],'endpoints':['unused']})
     monkeypatch.setattr(production,'select_tasks',lambda *args,**kw:[{'row':i,'samples':4}for i in range(2)])
+    from natlang_neuralese.rl import native_raw_policy
+    def raw_policy(checkpoint, **kwargs):
+        return {'native_identity':{'checkpoint_sha256':sha256_file_hex(checkpoint),
+            'tokenizer_fingerprint':'a'*64,'embedding_weight_sha256':'b'*64,'architecture':'lfm2'},
+            'history_reasoning':None,'history_reasoning_binding':None,'tokenizer':str(tmp_path/'tokenizer')}
+    monkeypatch.setattr(native_raw_policy,'prepare_raw_policy',raw_policy)
     calls=[]
     def collect(config,values,**kw):
         path=kw['cases'];calls.append(path.read_bytes());binding=kw['out']/'collection-binding.json'
