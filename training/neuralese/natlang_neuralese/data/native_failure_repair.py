@@ -256,7 +256,7 @@ def _run_member(run_dir, task_id, sample):
     import copy
     from ..common.hashing import sha256_file_hex_cached
     from ..eval.task_packet import classify_case,read_jsonl
-    from ..rl.task_rollouts import reward_of,rollout_turns
+    from ..rl.task_rollouts import reward_of,rollout_turns,_budget_terminated_prefix
     run_dir=Path(run_dir).resolve(strict=True)
     preparation=json.loads((run_dir/'preparation.json').read_text())
     packet_path=run_dir/'packet.jsonl';packet=read_jsonl(packet_path)
@@ -273,10 +273,22 @@ def _run_member(run_dir, task_id, sample):
         if type(index)is int and 0<=index<len(packet) and packet[index].get('id')==task_id and entry.get('sample')==sample:
             candidates.append((entry,packet[index]))
     if len(candidates)!=1:raise ValueError('collector run must contain exactly one requested task/sample')
-    entry,task=candidates[0];result_path=Path(entry['output']).resolve(strict=True)
-    results=read_jsonl(result_path)
-    if len(results)!=1:raise ValueError('requested task run must retain exactly one complete result row')
-    result=results[0];finish=finishes.get(entry['key'])
+    entry,task=candidates[0];result_path=Path(entry['output']).resolve()
+    results=read_jsonl(result_path) if result_path.is_file() else []
+    finish=finishes.get(entry['key']);partial_evidence=None
+    if len(results)==1:
+        result=results[0]
+    elif not results:
+        prefix=_budget_terminated_prefix(entry,task,finish,packet_source_path=packet_path,
+            packet_source_sha256=packet_sha)
+        if prefix is None:
+            reason=(finish or {}).get('resource_limit_reason') or (finish or {}).get('status') or 'missing terminal receipt'
+            raise ValueError(f'zero-result failed task is not a complete task_rollouts model-budget prefix ({reason})')
+        partial_evidence=prefix['evidence']
+        result={'version':'natlang.teacher_trajectory.native/1','task':{'program_ir':task},
+            'outcome':{'status':'failed','accepted':False,'detail':partial_evidence['failure_reason'],
+                'execution_graph':prefix['execution_graph']},'trajectory':prefix['trajectory']}
+    else:raise ValueError('requested task run has multiple result rows')
     if (result.get('task',{}).get('program_ir')!=task or finish is None
             or result.get('outcome',{}).get('status') not in ('done','failed','quiesced')):
         raise ValueError('collector result, terminal journal and exact task packet disagree')
@@ -310,11 +322,15 @@ def _run_member(run_dir, task_id, sample):
             value.get('checkpoint_sha256')!=preparation.get('policy_checkpoint_sha256')
             for value in captured_policies):
         raise ValueError('actual captured actor identity differs from the exact run preparation checkpoint')
+    result_sha=(canonical_json_sha256_hex({'schema':'natlang.task-rollout-budget-prefix-result/1',
+        'partial_evidence':partial_evidence,'finish':finish}) if partial_evidence is not None else
+        sha256_file_hex_cached(result_path))
     evidence={'outcome':outcome,'task_sha256':canonical_json_sha256_hex(task),
         'world_sha256':canonical_json_sha256_hex(task.get('world',task.get('environment',task))),
         'oracle_sha256':canonical_json_sha256_hex(task.get('oracle',task.get('semantics',task))),
         'source_groups':sorted(set(task.get('source_groups') or [])),'packet_sha256':packet_sha,
-        'result_sha256':sha256_file_hex_cached(result_path),'result_path':str(result_path),
+        'result_sha256':result_sha,**({'result_path':str(result_path)} if partial_evidence is None else
+            {'partial_evidence':partial_evidence}),
         'finish_sha256':canonical_json_sha256_hex(finish),
         'collection_binding_sha256':sha256_file_hex_cached(binding_path),
         'actor_runtime_sha256':runtime_sha,'collector_runtime_inventory_sha256':collector_runtime_sha}
@@ -484,7 +500,7 @@ def _verify_teacher_turn_source(receipt):
 
 
 def admit_run_pair(*,failed_run_dir,repaired_run_dir,task_id,failed_sample,repaired_sample,reference_checkpoint,
-                   base,held_native_graphs,block_bundle,output_dir,continue_from,stage_id,
+                   base,held_native_graphs,failed_block_bundle=None,repaired_block_bundle=None,output_dir,continue_from,stage_id,
                    requires=(),device='cpu',beta=.1,_context=None):
     """Build DPO data from actual result files, replay captures and current held-source manifests."""
     import torch
@@ -529,18 +545,22 @@ def admit_run_pair(*,failed_run_dir,repaired_run_dir,task_id,failed_sample,repai
     captured_policies=[turn['sampling']['policy'] for rollout in (failed,repaired) for turn in rollout['turns']]
     if not captured_policies or any(value['tokenizer_fingerprint']!=fingerprint for value in captured_policies):
         raise ValueError('both complete captures must be explicitly replayable in the reference tokenizer')
+    architectures={value.get('architecture') for value in captured_policies}
+    if len(architectures)!=1 or None in architectures:
+        raise ValueError('failed and repaired captures must use the same declared native model architecture')
     # The capture runtime actor can differ from the fixed DPO reference policy;
     # replay is bound to the exact actual invocation identity in each capture.
-    capture_base=captured_policies[0]
-    bundle=NativeBundleStore(block_bundle,policy_id=capture_base['checkpoint_sha256']) if block_bundle else None
-    if any(value.get('checkpoint_sha256')!=capture_base['checkpoint_sha256'] for value in captured_policies):
-        raise ValueError('one complete actor bundle is required per graph-capture policy; mixed actor bundles need explicit per-turn custody')
-    def fetch_block(block_id):
-        if bundle is None:raise ValueError('captured native state requires its exact collection block bundle')
-        return bundle.state(block_id)
+    bundles={
+        'failed':NativeBundleStore(failed_block_bundle,policy_id=failed['turns'][0]['sampling']['policy']['checkpoint_sha256']) if failed_block_bundle else None,
+        'repaired':NativeBundleStore(repaired_block_bundle,policy_id=repaired['turns'][0]['sampling']['policy']['checkpoint_sha256']) if repaired_block_bundle else None,
+    }
     replays=[]
-    for rollout in (failed,repaired):
+    for label,rollout in (('failed',failed),('repaired',repaired)):
         identity=rollout['turns'][0]['sampling']['policy']
+        bundle=bundles[label]
+        def fetch_block(block_id,bundle=bundle,role=label):
+            if bundle is None:raise ValueError(f'{role} native graph requires its exact actor block bundle')
+            return bundle.state(block_id)
         replay,actors=_replay_rollout(rollout,identity=identity,roles=roles,fetch_block=fetch_block)
         if replay.external_blocks:
             raise ValueError('failure repair capture is incomplete: every imported producer must be in the captured graph')
@@ -635,9 +655,8 @@ def admit_run_pairs(*,pairs,reference_checkpoint,base,held_native_graphs,output_
     with tempfile.TemporaryDirectory(prefix='failure-repair-batch-') as temp:
         for index,pair in enumerate(pairs):
             options=dict(pair)
-            block_bundle=options.pop('block_bundle',None)
             result=admit_run_pair(**options,reference_checkpoint=reference_checkpoint,base=base,
-                held_native_graphs=held_native_graphs,block_bundle=block_bundle,output_dir=Path(temp)/str(index),
+                held_native_graphs=held_native_graphs,output_dir=Path(temp)/str(index),
                 continue_from=continue_from,stage_id=stage_id,requires=requires,device=device,beta=beta,_context=context)
             new_graphs=read_jsonl(result['graphs']);new_objective=json.loads(Path(result['objective']).read_text())
             for graph in new_graphs:
@@ -672,11 +691,135 @@ def admit_run_pairs(*,pairs,reference_checkpoint,base,held_native_graphs,output_
         'reference_tokenizer_fingerprint':fingerprint}
 
 
+def materialize_qwen_repair_run(*,failed_run_dir,task_id,failed_sample,repaired_sample,capture_path,
+                                output_dir,endpoint):
+    """Turn an actual executeProgram Qwen replay capture into the normal collector-run contract.
+
+    The actor binding and task packet are inherited byte-for-byte from the failed collection. The exact endpoint is
+    checked against both that binding and its live native identity before its retained state artifacts are used.
+    """
+    import urllib.request
+    from ..common.hashing import sha256_file_hex_cached,canonical_json_sha256_hex
+    from ..common.jsonio import write_json_durable,write_canonical_jsonl
+    from ..eval.task_packet import read_jsonl
+    from ..rl.task_rollouts import rollout_turns
+    from ..rl.graph_replay import NativeBundleStore,save_bundle,verified_bundle_bytes
+    from ..rl.grpo import Server
+    failed_dir=Path(failed_run_dir).resolve(strict=True);capture=json.loads(Path(capture_path).read_text())
+    output=Path(output_dir).resolve();output.mkdir(parents=True,exist_ok=True)
+    if any(output.iterdir()):raise ValueError('Qwen repair materialization output must be an empty immutable directory')
+    if capture.get('schema')!='natlang.qwen-teacher-repair-execution/1':
+        raise ValueError('Qwen replay did not produce the exact execution-capture schema')
+    preparation=json.loads((failed_dir/'preparation.json').read_text())
+    binding=json.loads((failed_dir/'collection-binding.json').read_text())
+    packet_path=failed_dir/'packet.jsonl';packet=read_jsonl(packet_path);packet_sha=sha256_file_hex_cached(packet_path)
+    if preparation.get('schema')!='natlang.task-rollout-preparation/1' or preparation.get('packet_sha256')!=packet_sha:
+        raise ValueError('failed run lost its exact task packet preparation binding')
+    queue=read_jsonl(failed_dir/'queue.jsonl')
+    candidates=[(index,row) for index,row in enumerate(packet) if row.get('id')==task_id]
+    if len(candidates)!=1:raise ValueError('failed task packet id is missing or ambiguous')
+    packet_index,task=candidates[0]
+    record=(capture.get('row') or {}).get('task',{}).get('program_ir')
+    if record!=task.get('program_ir') or task.get('split')!='train':
+        raise ValueError('teacher replay did not execute the exact original train task packet')
+    selected=[entry for entry in queue if entry.get('index')==packet_index and entry.get('sample')==failed_sample]
+    if len(selected)!=1:raise ValueError('source run queue does not uniquely bind the failed task/sample')
+    if (binding.get('schema')!='natlang.rl-collection-binding/1' or
+            preparation.get('policy_checkpoint_sha256')!=binding.get('policy_id')):
+        raise ValueError('failed run collection and checkpoint bindings disagree')
+    with urllib.request.urlopen(endpoint.rstrip('/')+'/v1/neuralese/info',timeout=30) as response:
+        info=json.loads(response.read())
+    live=(info.get('rl_policy_binding') or {}).get('native_identity')
+    old_identity=(binding.get('expected_native_actor') or {}).get('native_identity')
+    live_runtime=(info.get('rl_policy_binding') or {}).get('python_runtime')
+    target_actor=capture.get('target_actor') or {}
+    if (target_actor.get('endpoint','').rstrip('/')!=endpoint.rstrip('/') or
+            target_actor.get('binding_sha256')!=canonical_json_sha256_hex(info.get('rl_policy_binding')) or
+            target_actor.get('native_identity')!=live or target_actor.get('python_runtime')!=live_runtime):
+        raise ValueError('repair endpoint actor/runtime changed between forced capture and artifact materialization')
+    if (not isinstance(old_identity,dict) or not isinstance(live,dict) or
+            live.get('architecture')!=old_identity.get('architecture') or
+            live.get('tokenizer_fingerprint')!=old_identity.get('tokenizer_fingerprint') or
+            not isinstance(live.get('checkpoint_sha256'),str) or len(live['checkpoint_sha256'])!=64 or
+            not isinstance(live.get('embedding_weight_sha256'),str) or len(live['embedding_weight_sha256'])!=64):
+        raise ValueError('live repair actor must have an exact identity in the failed model architecture and tokenizer family')
+    if not isinstance(live_runtime,dict) or live_runtime.get('schema')!='natlang.python-runtime/1':
+        raise ValueError('live repair endpoint has no authenticated Python runtime inventory')
+    run=capture.get('run');trajectory=capture.get('trajectory')
+    if not isinstance(run,dict) or not isinstance(run.get('outcome'),dict) or not isinstance(trajectory,list) or not trajectory:
+        raise ValueError('Qwen replay artifact lacks complete actual trajectory, outcome, or execution graph')
+    source_rows=[turn for turn in trajectory if ((turn.get('model_response') or {}).get('rl_sampling') or {}).get('schema')==
+        'natlang.native-teacher-forced-capture/1']
+    if not source_rows:raise ValueError('Qwen replay produced no actual native forced-turn capture')
+    for turn in source_rows:
+        capture_receipt=turn['model_response']['rl_sampling']
+        if capture_receipt.get('replay_prompt_sha256')!=canonical_json_sha256_hex(
+                {'messages':turn.get('context'),'tools':turn.get('tools_offered') or []}):
+            raise ValueError('Qwen replay target was not forced under the exact unhinted execution prompt')
+    result={'version':'natlang.teacher_trajectory.native/1','id':f'qwen-repair:{capture.get("run_id")}',
+        'task':{'program_ir':task['program_ir']},'provenance':{'model':str(live.get('architecture','native-student')),
+            'checkpoint_sha256':live['checkpoint_sha256'],'native_identity':live},
+        'execution_identity':{'schema':'natlang.qwen-teacher-repair-execution/1','run_id':capture.get('run_id')},
+        'outcome':run['outcome'],'trajectory':trajectory,'capture_limits':[]}
+    result_path=output/'results'/'repaired.jsonl';result_path.parent.mkdir(parents=True)
+    write_canonical_jsonl(result_path,[result])
+    queue_entry=dict(selected[0]);queue_entry['sample']=repaired_sample
+    queue_entry['key']=f'qwen-repair:{task_id}:{repaired_sample}:{capture.get("run_id")}'
+    queue_entry['output']=str(result_path.resolve())
+    write_canonical_jsonl(output/'queue.jsonl',[queue_entry])
+    preparation=dict(preparation);preparation['policy_checkpoint_sha256']=live['checkpoint_sha256']
+    preparation['capture_mode']='offline-teacher-forced-repair'
+    write_json_durable(output/'preparation.json',preparation)
+    (output/'packet.jsonl').write_bytes(packet_path.read_bytes())
+    repository=Path(__file__).resolve().parents[4];ts_root=repository/'ts-host'
+    runtime_inventory={str(path.relative_to(ts_root)):sha256_file_hex_cached(path)
+        for path in sorted((ts_root/'dist').rglob('*.js'))}
+    if not runtime_inventory:raise ValueError('exact TypeScript collector runtime inventory is empty')
+    replay_binding={'schema':'natlang.rl-collection-binding/1','cases_sha256':binding.get('cases_sha256'),
+        'policy_id':live['checkpoint_sha256'],'rows':1,'offset':packet_index,'group':queue_entry.get('group'),
+        'root_mode':'teacher-forced-offline-repair','seed_base':None,'temperature':0.,'guided':False,
+        'case_seconds':None,'max_model_requests':None,'max_turns':None,'endpoints':[endpoint],
+        'neuralese_server':True,'runtime':runtime_inventory,
+        'collector_sha256':sha256_file_hex_cached(repository/'scripts/run_bonsai_queue.py'),
+        'expected_native_actor':{'native_identity':live,'python_runtime':live_runtime},
+        'capture_executor':{'schema':'natlang.qwen-teacher-replay-executor/1',
+            'source_collection_binding_sha256':sha256_file_hex_cached(failed_dir/'collection-binding.json'),
+            'source_task_sha256':canonical_json_sha256_hex(task),
+            'sampling_semantics':'exact-forced-sequence; behavior-log-probabilities-absent'}}
+    write_json_durable(output/'collection-binding.json',replay_binding)
+    finish={'event':'finish','key':queue_entry['key'],'status':'complete','exit_code':0,
+        'resource_limit_reason':None,'time':0,'output_accounting':{'complete':True,'expected_jobs':1,
+            'completed_jobs':1,'missing_jobs':0}}
+    workers=output/'workers';workers.mkdir()
+    write_canonical_jsonl(workers/'journal-0.jsonl',[finish])
+    repaired_rollout={'schema':'natlang.rollout/1','task_id':task_id,'split':task['split'],
+        'group':queue_entry.get('group',task_id),'sample':repaired_sample,
+        'policy':{'checkpoint_sha256':preparation['policy_checkpoint_sha256']},
+        'turns':rollout_turns(result),'execution_graph':run['outcome'].get('execution_graph') or [],
+        'outcome':'task_success' if run['outcome'].get('accepted') is True else 'unresolved',
+        'reward':{'quality':1. if run['outcome'].get('accepted') is True else None}}
+    failed_task,failed_rollout,_=_run_member(failed_dir,task_id,failed_sample)
+    if canonical_json_sha256_hex(failed_task)!=canonical_json_sha256_hex(task):
+        raise ValueError('source failed rollout changed while preparing the repaired result')
+    bundle_dir=output/'blocks';bundle_dir.mkdir()
+    old_manifest=failed_dir/'blocks'/'manifest.json'
+    repaired_policy_id=live['checkpoint_sha256'];server=Server(endpoint)
+    def fetch(block_id):
+        kind='native-states' if block_id.startswith('nzs1_') else 'native-tensor-artifacts' if block_id.startswith('nnt1_') else 'blocks'
+        return server.get_bytes('/v1/neuralese/'+kind+'/'+block_id)
+    manifest=save_bundle([repaired_rollout],bundle_dir,policy_id=repaired_policy_id,fetch=fetch,
+        manifest_fields={'collection_binding':replay_binding})
+    return {'run_dir':str(output),'result':str(result_path),'block_bundle':str(bundle_dir/'manifest.json'),
+        'failed_block_bundle':str(old_manifest) if old_manifest.is_file() else None,
+        'task_id':task_id,'sample':repaired_sample,'outcome':repaired_rollout['outcome'],
+        'native_blocks':len(manifest['blocks']),'collection_binding_sha256':sha256_file_hex_cached(output/'collection-binding.json')}
+
+
 def main(argv=None):
     import argparse
     parser = argparse.ArgumentParser(description='Build failure-repair DPO from actual collector results and native captures')
     parser.add_argument('--pairs-json',type=Path,
-        help='JSON array of exact run-pair objects; each names failed_run_dir, repaired_run_dir, task_id and samples')
+        help='JSON array of exact run-pair objects; each names failed_run_dir, repaired_run_dir, task_id and samples; optional teacher_replay runs authenticated Qwen capture and materializes the repaired run')
     parser.add_argument('--prior-admission-dir',type=Path)
     parser.add_argument('--failed-run-dir', type=Path)
     parser.add_argument('--repaired-run-dir', type=Path)
@@ -686,8 +829,10 @@ def main(argv=None):
     parser.add_argument('--reference-checkpoint',required=True,type=Path)
     parser.add_argument('--base',required=True,type=Path)
     parser.add_argument('--held-native-graphs',required=True,type=Path)
-    parser.add_argument('--block-bundle',type=Path,
-        help='exact actor state archive; optional only when both captures have no imported native states')
+    parser.add_argument('--failed-block-bundle',type=Path,
+        help='exact native artifact bundle for the failed capture actor')
+    parser.add_argument('--repaired-block-bundle',type=Path,
+        help='exact native artifact bundle for the repaired capture actor')
     parser.add_argument('--output-dir', required=True, type=Path)
     parser.add_argument('--continue-from',required=True,type=Path)
     parser.add_argument('--stage-id',required=True)
@@ -699,6 +844,30 @@ def main(argv=None):
         jobs=json.loads(args.pairs_json.read_text())
         if not isinstance(jobs,list) or any(not isinstance(job,dict) for job in jobs):
             parser.error('--pairs-json must contain a JSON array of pair objects')
+        if any('teacher_replay' in job for job in jobs):
+            import os,subprocess,tempfile
+            from ..common.jsonio import write_json_durable
+            node=os.environ.get('NATLANG_NODE','/home/werg/.local/share/natlang-dev/node-v24.0.1-linux-arm64/bin/node')
+            cli=Path(__file__).resolve().parents[4]/'ts-host'/'dist'/'teacher'/'native-forced-replay-cli.js'
+            if not cli.is_file():parser.error(f'Qwen replay CLI is missing; build ts-host first: {cli}')
+            with tempfile.TemporaryDirectory(prefix='qwen-repair-admission-') as temp_root:
+                temp=Path(temp_root)
+                for index,job in enumerate(jobs):
+                    replay=job.pop('teacher_replay',None)
+                    if replay is None:continue
+                    if not isinstance(replay,dict):parser.error('teacher_replay must be a JSON object per pair')
+                    capture_path=temp/f'capture-{index}.json';repaired_dir=temp/f'repaired-{index}'
+                    spec={**replay,'schema':'natlang.qwen-teacher-repair-job/1',
+                        'failed_run_dir':job['failed_run_dir'],'task_id':job['task_id'],
+                        'failed_sample':job['failed_sample'],'output_capture_path':str(capture_path)}
+                    spec_path=temp/f'replay-{index}.json';write_json_durable(spec_path,spec)
+                    subprocess.run([node,str(cli),'--spec',str(spec_path)],check=True)
+                    materialized=materialize_qwen_repair_run(failed_run_dir=job['failed_run_dir'],task_id=job['task_id'],
+                        failed_sample=job['failed_sample'],repaired_sample=job['repaired_sample'],capture_path=capture_path,
+                        output_dir=repaired_dir,endpoint=spec['target_endpoint'])
+                    job['repaired_run_dir']=materialized['run_dir'];job['repaired_block_bundle']=materialized['block_bundle']
+                    if materialized['failed_block_bundle'] is not None:
+                        job['failed_block_bundle']=materialized['failed_block_bundle']
         result=admit_run_pairs(pairs=jobs,reference_checkpoint=args.reference_checkpoint,base=args.base,
             held_native_graphs=args.held_native_graphs,output_dir=args.output_dir,continue_from=args.continue_from,
             stage_id=args.stage_id,prior_admission_dir=args.prior_admission_dir,requires=args.requires,
@@ -709,7 +878,8 @@ def main(argv=None):
         result=admit_run_pair(failed_run_dir=args.failed_run_dir,repaired_run_dir=args.repaired_run_dir,
             task_id=args.task_id,failed_sample=args.failed_sample,repaired_sample=args.repaired_sample,
             reference_checkpoint=args.reference_checkpoint,base=args.base,held_native_graphs=args.held_native_graphs,
-            block_bundle=args.block_bundle,output_dir=args.output_dir,continue_from=args.continue_from,
+            failed_block_bundle=args.failed_block_bundle,repaired_block_bundle=args.repaired_block_bundle,
+            output_dir=args.output_dir,continue_from=args.continue_from,
             stage_id=args.stage_id,requires=args.requires,device=args.device,beta=args.beta)
     print(json.dumps(result,sort_keys=True))
 

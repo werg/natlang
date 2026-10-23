@@ -1021,17 +1021,19 @@ class Engine:
             raise RequestError('forced-message','teacher turn source binding is incomplete or has the wrong teacher actor')
         if not isinstance(message,dict) or message.get('role')!='assistant':
             raise RequestError('forced-message','the replay target must be one assistant message')
-        import copy,secrets,re
+        import copy,re
         target=copy.deepcopy(message);markers={}
         vocab=getattr(self.tokenizer,'get_vocab',lambda:{})()
         def marker_for(body):
-            body_ids=self.tokenizer(body,add_special_tokens=False,split_special_tokens=True)['input_ids']
-            supplied=json.dumps({'target':target,'opening':opening},ensure_ascii=False,sort_keys=True)
-            for attempt in range(64):
-                token='NATLANGFORCEDNATIVE'+secrets.token_hex(24)+'END'
-                ids=self._tokens(token)
-                if (token not in supplied and token not in body and ids and
-                        not any(body_ids[index:index+len(ids)]==ids for index in range(len(body_ids)-len(ids)+1))):
+            supplied=json.dumps({'target':target,'opening':opening,'tools':tools},ensure_ascii=False,sort_keys=True)
+            special_ids=set(getattr(self.tokenizer,'all_special_ids',()))
+            candidates=sorted(vocab.items(),key=lambda item:(item[1],item[0]))
+            for token,token_id in candidates:
+                if (not isinstance(token,str) or not re.fullmatch(r'[A-Za-z0-9_]{2,}',token) or
+                        token in self.specials or token_id in special_ids or token_id in self.stop_ids or
+                        token in supplied or token in body or token in markers):continue
+                ids=self.tokenizer(token,add_special_tokens=False,split_special_tokens=True)['input_ids']
+                if ids==[token_id]:
                     markers[token]=body
                     return token
             raise RequestError('forced-message','could not allocate a collision-free exact teacher-span marker')

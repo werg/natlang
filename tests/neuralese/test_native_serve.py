@@ -114,7 +114,7 @@ def test_native_checkpoint_chat_produces_captures_and_consumes_exact_stored_stat
                 'architecture': record.block.architecture}}]
         assert capture['samples'][1]['input_role'] == 'produce'
 
-        teacher_prompt=[{'role':'user','content':'execute the recorded correction'}]
+        teacher_prompt=[{'role':'user','content':'execute the recorded correction; t8 is already in this prompt'}]
         source={'schema':'natlang.teacher-turn-source/1','source_path':'qwen-turns/row-001.jsonl',
             'source_view':'privileged-hint','source_file_sha256':'f'*64,
             'source_verification_path':'qwen-turns/source-verification.json','source_verification_sha256':'1'*64,

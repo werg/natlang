@@ -4,7 +4,8 @@ import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
-import { createVerifiedQwenTeacherForcedDriver, executeVerifiedQwenTeacherReplay, loadVerifiedQwenSource } from '../dist/teacher/native-forced-replay.js';
+import { canonical as sharedCanonical } from '../dist/native/canonical-data.js';
+import { createVerifiedQwenTeacherForcedDriver, executeVerifiedQwenTeacherReplayCapture, loadVerifiedQwenSource } from '../dist/teacher/native-forced-replay.js';
 import { executeProgram } from '../dist/teacher/collector.js';
 
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -14,6 +15,12 @@ const canonical = value => value === null || typeof value !== 'object' ? JSON.st
 const occurrenceBase={schema:'natlang.execution-occurrence/1',definition_id:'task',revision:'1',context:'ctx:files',
   signature:'() => string',parent_occurrence_sha256:null,sibling_ordinal:0,argument_binding_sha256:'f'.repeat(64)};
 const occurrence={...occurrenceBase,occurrence_sha256:hash(canonical(occurrenceBase))};
+
+test('teacher source canonical hashes match Python key ordering without Unicode normalization', () => {
+  const mixed={'A':'upper','a':'lower','a_':'underscore','_a':'leading','é':'composed','e\u0301':'decomposed'};
+  assert.equal(hash(sharedCanonical(mixed)),'b39afc344efacd7067ecf1891b116fb7ef1a3032797b2fce8e1ce35ce0af5379');
+  assert.equal(sharedCanonical(mixed),'{"A":"upper","_a":"leading","a":"lower","a_":"underscore","é":"decomposed","é":"composed"}');
+});
 
 function teacherRow() {
   const evalBody='writer body';
@@ -114,12 +121,19 @@ test('executeProgram maps a fresh invocation UUID to the exact source graph occu
   const fixture=await sourceFixture(rowValue);
   try {
     let replayRequest;
-    const repaired=await executeVerifiedQwenTeacherReplay(fixture.root,rowValue.id,'privileged-hint',record,options,
+    const repaired=await executeVerifiedQwenTeacherReplayCapture(fixture.root,rowValue.id,'privileged-hint',record,options,
       async request=>{replayRequest=structuredClone(request);return sourceReply;});
-    assert.equal(repaired.outcome.accepted,true);
+    assert.equal(repaired.run.outcome.accepted,true);
+    assert.equal(repaired.schema,'natlang.qwen-teacher-repair-execution/1');
+    assert.equal(repaired.trajectory.length,1);
+    assert.equal(repaired.trajectory[0].context instanceof Array,true);
+    assert.ok(repaired.run.outcome.execution_graph.some(event=>event.kind==='invocation'&&event.phase==='start'&&
+      event.native_occurrence?.occurrence_sha256===sourceInvocation.native_occurrence.occurrence_sha256));
     assert.notEqual(replayRequest.invocation_id,sourceRequest.invocation_id,'each replay has a fresh execution UUID');
     assert.deepEqual(replayRequest.native_execution_occurrence,sourceRequest.native_execution_occurrence);
     assert.doesNotMatch(JSON.stringify(replayRequest.messages),/privileged repair hint/);
     assert.equal(replayRequest.native_teacher_forced_turn.source_receipt.invocation_id,sourceInvocation.call_id);
+    assert.equal(repaired.trajectory[0].invocation_id,replayRequest.invocation_id);
+    assert.doesNotMatch(JSON.stringify(repaired.trajectory[0].context),/privileged repair hint/);
   } finally { await rm(fixture.root,{recursive:true,force:true}); }
 });

@@ -35,7 +35,8 @@ def record(task_sha='a'*64):
              'normalization':'token-mean-v1'}
         receipt={'schema':'natlang.native-fixed-reference-scores/1',**ref,'actions':actions}
         ref.update(receipt=receipt,receipt_sha256=canonical_json_sha256_hex(receipt))
-        actor={'checkpoint_sha256':'e'*64,'runtime_sha256':'f'*64,'actor_id':'student'}
+        actor={'checkpoint_sha256':('e' if label=='failed' else 'a')*64,
+               'runtime_sha256':('f' if label=='failed' else 'b')*64,'actor_id':f'student-{label}'}
         capture={'schema':'natlang.native-failure-execution-capture/1',
             'task_sha256':original['task_sha256'],'world_sha256':original['world_sha256'],
             'prompt_sha256':original['prompt_sha256'],'actions':[
@@ -96,6 +97,8 @@ class Tiny(nn.Module):
 
 def test_admission_retains_complete_internal_graph_and_reference_dpo_updates_producer(tmp_path):
     pair=record();graph,specrow=_merge_graphs(pair,'tok')
+    assert pair['alternatives']['failed']['actor']['checkpoint_sha256']!=\
+        pair['alternatives']['repaired']['actor']['checkpoint_sha256']
     example=parse_graph(graph,tokenizer_fingerprint='tok')
     assert len(example.plan.invocations)==4
     assert any(edge.source=='failed/writer' for node in example.plan.invocations for edge in node.imports)
@@ -252,6 +255,99 @@ def test_actual_collector_binding_rejects_malformed_runtime_inventories(tmp_path
     path.write_text(json.dumps(value))
     with pytest.raises(ValueError,match='collector binding'):
         _collector_actor_binding(tmp_path,{'policy_checkpoint_sha256':checkpoint})
+
+
+def test_materialized_qwen_capture_uses_exact_live_actor_and_normal_collector_layout(tmp_path,monkeypatch):
+    from natlang_neuralese.data.native_failure_repair import materialize_qwen_repair_run
+    failed=tmp_path/'failed';failed.mkdir();checkpoint='1'*64
+    identity={'architecture':'lfm2','checkpoint_sha256':checkpoint,'embedding_weight_sha256':'2'*64,
+        'tokenizer_fingerprint':'3'*64}
+    runtime={'schema':'natlang.python-runtime/1','files':3,'sha256':'4'*64}
+    task={'id':'task-1','split':'train','source_groups':['family-1'],'program_ir':{'id':'program-1'}}
+    packet=(json.dumps(task)+'\n').encode();(failed/'packet.jsonl').write_bytes(packet)
+    from natlang_neuralese.common.hashing import sha256_file_hex
+    (failed/'preparation.json').write_text(json.dumps({'schema':'natlang.task-rollout-preparation/1',
+        'packet_sha256':sha256_file_hex(failed/'packet.jsonl'),'policy_checkpoint_sha256':checkpoint}))
+    (failed/'collection-binding.json').write_text(json.dumps({'schema':'natlang.rl-collection-binding/1',
+        'policy_id':checkpoint,'endpoints':['http://student.test'],'expected_native_actor':{
+            'native_identity':identity,'python_runtime':runtime},'collector_sha256':'5'*64,
+        'runtime':{'dist/collector.js':'6'*64}}))
+    old_results=failed/'old.jsonl';old_results.write_text('{}\n')
+    (failed/'queue.jsonl').write_text(json.dumps({'index':0,'sample':0,'group':'family-1',
+        'key':'failed-key','output':str(old_results)})+'\n')
+    failed_rollout={'schema':'natlang.rollout/1','task_id':'task-1','split':'train','group':'family-1','sample':0,
+        'policy':{'checkpoint_sha256':checkpoint},'turns':[],'execution_graph':[],'outcome':'semantic_mismatch',
+        'reward':{'quality':0.}}
+    monkeypatch.setattr(repair,'_run_member',lambda *_args:(task,failed_rollout,{'outcome':'semantic_mismatch'}))
+    live_binding={'native_identity':identity,'python_runtime':runtime}
+    class Response:
+        def __enter__(self):return self
+        def __exit__(self,*_args):return None
+        def read(self):return json.dumps({'rl_policy_binding':live_binding}).encode()
+    monkeypatch.setattr('urllib.request.urlopen',lambda *_args,**_kwargs:Response())
+    def save(_rollouts,out,**kwargs):
+        path=out/'manifest.json';path.write_text(json.dumps({'schema':'natlang.rl-block-bundle/1',
+            'policy_id':kwargs['policy_id'],'blocks':{},**kwargs['manifest_fields']}));return json.loads(path.read_text())
+    monkeypatch.setattr('natlang_neuralese.rl.graph_replay.save_bundle',save)
+    messages=[{'role':'system','content':'original prompt'}];tools=[]
+    prompt_sha=canonical_json_sha256_hex({'messages':messages,'tools':tools})
+    capture={'schema':'natlang.qwen-teacher-repair-execution/1','run_id':'fresh-replay',
+        'target_actor':{'endpoint':'http://student.test','native_identity':identity,'python_runtime':runtime,
+            'binding_sha256':canonical_json_sha256_hex(live_binding)},
+        'row':{'task':{'program_ir':task['program_ir']}},'run':{'outcome':{'status':'done','accepted':True,
+            'execution_graph':[{'kind':'invocation','phase':'start'}]}},'trajectory':[{'phase':'action',
+                'context':messages,'tools_offered':tools,'model_response':{'calls':[],'text':'done','raw_calls':[],
+                    'rl_sampling':{'schema':'natlang.native-teacher-forced-capture/1',
+                        'replay_prompt_sha256':prompt_sha,'policy':identity}},'assistant':{'content':'done','calls':[]}}]}
+    capture_path=tmp_path/'capture.json';capture_path.write_text(json.dumps(capture))
+    result=materialize_qwen_repair_run(failed_run_dir=failed,task_id='task-1',failed_sample=0,
+        repaired_sample=1,capture_path=capture_path,output_dir=tmp_path/'repaired',endpoint='http://student.test')
+    assert result['outcome']=='task_success' and result['block_bundle'].endswith('blocks/manifest.json')
+    materialized=tmp_path/'repaired';rows=[json.loads(line) for line in (materialized/'results/repaired.jsonl').read_text().splitlines()]
+    assert rows[0]['task']=={'program_ir':task['program_ir']} and rows[0]['trajectory'][0]['model_response']['rl_sampling']['schema']==\
+        'natlang.native-teacher-forced-capture/1'
+    assert json.loads((materialized/'queue.jsonl').read_text().splitlines()[0])['sample']==1
+
+
+def test_zero_result_model_budget_failure_uses_existing_complete_prefix_verifier(tmp_path,monkeypatch):
+    from natlang_neuralese.common.hashing import sha256_file_hex
+    run=tmp_path/'partial';run.mkdir();checkpoint='1'*64
+    identity={'architecture':'lfm2','checkpoint_sha256':checkpoint,'embedding_weight_sha256':'2'*64,
+        'tokenizer_fingerprint':'3'*64}
+    runtime={'schema':'natlang.python-runtime/1','files':1,'sha256':'4'*64}
+    task={'id':'partial-task','split':'train','source_groups':['source-1'],'program_ir':{'id':'program-1'}}
+    packet=run/'packet.jsonl';packet.write_text(json.dumps(task)+'\n')
+    packet_sha=sha256_file_hex(packet)
+    (run/'preparation.json').write_text(json.dumps({'schema':'natlang.task-rollout-preparation/1',
+        'packet_sha256':packet_sha,'policy_checkpoint_sha256':checkpoint}))
+    (run/'collection-binding.json').write_text(json.dumps({'schema':'natlang.rl-collection-binding/1',
+        'policy_id':checkpoint,'expected_native_actor':{'native_identity':identity,'python_runtime':runtime},
+        'collector_sha256':'5'*64,'runtime':{'dist/collector.js':'6'*64}}))
+    missing=run/'result.jsonl';entry={'index':0,'sample':0,'group':'source-1','key':'job-key','output':str(missing)}
+    (run/'queue.jsonl').write_text(json.dumps(entry)+'\n')
+    finish={'event':'finish','key':'job-key','status':'complete','resource_limit_reason':'model_request_budget',
+        'output_accounting':{'job_states':[{'index':0,'state':'failed','program_id':'partial-task',
+            'resource_limit_reason':'model_request_budget'}]}}
+    (run/'journal.jsonl').write_text(json.dumps(finish)+'\n')
+    context=[{'role':'system','content':'exact prompt'}]
+    frame={'phase':'action','invocation_id':'run/execution-1','context':context,'tools_offered':[],
+        'model_response':{'calls':[],'raw_calls':[],'text':'','rl_sampling':{'schema':'natlang.native-rl-sampling/2',
+            'policy':identity,'samples':[{'token_id':9,'forced':False,'logp':-.1,'input_role':'ordinary',
+                'terminal':False,'query_own_position':1}]}},'assistant':{'content':'','calls':[]}}
+    prefix={'turns':[{'messages':context,'tools':None,'target':{'role':'assistant','content':''},
+        'invocation_id':'run/execution-1','sampling':frame['model_response']['rl_sampling']}],
+        'trajectory':[frame],'execution_graph':[{'kind':'invocation','phase':'start','call_id':'run/execution-1'}],
+        'evidence':{'path':'partial.jsonl','sha256':'7'*64,'attempt_id':'attempt-1',
+            'failure_reason':'whole-case model request budget exceeded (2)'}}
+    calls=[]
+    def recover(entry_arg,task_arg,finish_arg,*,packet_source_path,packet_source_sha256):
+        calls.append((entry_arg,task_arg,finish_arg,packet_source_path,packet_source_sha256));return prefix
+    monkeypatch.setattr('natlang_neuralese.rl.task_rollouts._budget_terminated_prefix',recover)
+    _,rollout,evidence=repair._run_member(run,'partial-task',0)
+    assert len(calls)==1 and calls[0][-1]==packet_sha
+    assert rollout['outcome']=='budget_exhaustion' and rollout['reward']['quality']==0.
+    assert rollout['execution_graph']==prefix['execution_graph'] and evidence['partial_evidence']==prefix['evidence']
+    assert not missing.exists()
 
 
 def test_teacher_forced_capture_replays_actual_tokens_without_behavior_logps():

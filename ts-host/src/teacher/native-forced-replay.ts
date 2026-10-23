@@ -3,7 +3,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
-import { executeProgram, type ExecuteOptions, type ProgramRecord, type ProgramRun } from './collector.js';
+import { canonical } from '../native/canonical-data.js';
+import { executeProgram, trajectoryTurn, type ExecuteOptions, type ProgramRecord, type ProgramRun } from './collector.js';
 
 type TeacherTurn = { phase?: unknown; invocation_id?: unknown; context?: unknown; tools_offered?: unknown;
   assistant?: { content?: unknown; reasoning?: unknown; calls?: { tool: string; arguments: Record<string, unknown> }[] } };
@@ -14,12 +15,6 @@ type SourceBinding = { sourcePath: string; sourceFileSha256: string; sourceView:
   revision: '1355db6a052410cfd62085d94b58866fd0f2c3c5'; actorSourcePath:string; executionIdentityPath:string;
   sourceVerificationPath:string; sourceVerificationSha256:string; transferReceiptPath:string; transferReceiptSha256:string };
 
-function canonical(value: unknown): string {
-  if (value === null || typeof value !== 'object') return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
-  return `{${Object.entries(value as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b))
-    .map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`).join(',')}}`;
-}
 function sha(value: string): string { return createHash('sha256').update(value).digest('hex'); }
 function shaBytes(value: Uint8Array): string { return createHash('sha256').update(value).digest('hex'); }
 
@@ -126,7 +121,8 @@ function teacherAssistant(row: TeacherRow, turn: TeacherTurn, ordinal: number): 
  * It supplies targets as transport metadata; task messages are never copied or edited here.
  */
 function qwenTeacherForcedDriver(row: TeacherRow, binding: SourceBinding,
-    send: (request: ModelTurnRequest) => Promise<ModelTurn>): { driver: (request: ModelTurnRequest) => Promise<ModelTurn>; runId: string } {
+    send: (request: ModelTurnRequest) => Promise<ModelTurn>, onTurn?:(turn:Record<string,unknown>)=>void):
+    { driver: (request: ModelTurnRequest) => Promise<ModelTurn>; runId: string; assertComplete:()=>void } {
   if (row.version !== 'natlang.teacher_trajectory.native/1' || !Array.isArray(row.trajectory) || !row.task ||
       !row.id || typeof row.id !== 'string' || !/^[0-9a-f]{64}$/.test(binding.sourceFileSha256) ||
       !/^[0-9a-f]{64}$/.test(binding.actorSourceSha256) || !/^[0-9a-f]{64}$/.test(binding.executionIdentitySha256) ||
@@ -195,7 +191,10 @@ function qwenTeacherForcedDriver(row: TeacherRow, binding: SourceBinding,
   }
   const matched = new Map<string, number>();
   const runId = `qwen-forced-${randomUUID()}`;
-  return { runId, driver: async request => {
+  return { runId, assertComplete:()=>{
+    for(const [sourceId,entries] of turns)if((matched.get(sourceId)??0)!==entries.length)
+      throw new Error(`Qwen source execution left ${entries.length-(matched.get(sourceId)??0)} action turns unconsumed for ${sourceId}`);
+  }, driver: async request => {
     const occurrence=request.native_execution_occurrence;
     if (!occurrence || occurrence.schema!=='natlang.execution-occurrence/1' ||
         occurrence.occurrence_sha256!==createHash('sha256').update(canonical({schema:occurrence.schema,
@@ -228,8 +227,10 @@ function qwenTeacherForcedDriver(row: TeacherRow, binding: SourceBinding,
       actor: { model: binding.model, revision: binding.revision, actor_source_sha256: binding.actorSourceSha256,
         actor_source_path:binding.actorSourcePath,execution_identity_sha256: binding.executionIdentitySha256,
         execution_identity_path:binding.executionIdentityPath } };
-    return send({ ...request, native_teacher_forced_turn: { schema: 'natlang.native-teacher-forced-turn/1',
+    const response=await send({ ...request, native_teacher_forced_turn: { schema: 'natlang.native-teacher-forced-turn/1',
       assistant: target.assistant, native_text_spans:target.spans, source_receipt: receipt } });
+    onTurn?.(trajectoryTurn(request,response));
+    return response;
   } };
 }
 
@@ -244,9 +245,21 @@ export async function createVerifiedQwenTeacherForcedDriver(trancheDirectory:str
 export async function executeVerifiedQwenTeacherReplay(trancheDirectory:string,rowId:string,
     sourceView:SourceBinding['sourceView'],record:ProgramRecord,options:Omit<ExecuteOptions,'runId'>,
     send:(request:ModelTurnRequest)=>Promise<ModelTurn>):Promise<ProgramRun> {
-  const {row,binding,driver,runId}=await createVerifiedQwenTeacherForcedDriver(trancheDirectory,rowId,sourceView,send);
+  return (await executeVerifiedQwenTeacherReplayCapture(trancheDirectory,rowId,sourceView,record,options,send)).run;
+}
+
+/** Execute and retain the exact actual task trajectory, forced-source receipts, native captures, graph, and oracle. */
+export async function executeVerifiedQwenTeacherReplayCapture(trancheDirectory:string,rowId:string,
+    sourceView:SourceBinding['sourceView'],record:ProgramRecord,options:Omit<ExecuteOptions,'runId'>,
+    send:(request:ModelTurnRequest)=>Promise<ModelTurn>):Promise<{schema:'natlang.qwen-teacher-repair-execution/1';
+      row:TeacherRow;binding:SourceBinding;run_id:string;trajectory:Record<string,unknown>[];run:ProgramRun}> {
+  const {row,binding}=await loadVerifiedQwenSource(trancheDirectory,rowId,sourceView);
+  const trajectory:Record<string,unknown>[]=[];
+  const {driver,runId,assertComplete}=qwenTeacherForcedDriver(row,binding,send,turn=>trajectory.push(turn));
   const sourceRecord = (row.task as { program_ir?: unknown } | undefined)?.program_ir;
   if (!sourceRecord || canonical(sourceRecord) !== canonical(record))
     throw new Error('Qwen teacher source and failure case do not bind the exact same original task program');
-  return executeProgram(record, driver, { ...options, runId });
+  const run=await executeProgram(record, driver, { ...options, runId });
+  assertComplete();
+  return {schema:'natlang.qwen-teacher-repair-execution/1',row,binding,run_id:runId,trajectory,run};
 }
