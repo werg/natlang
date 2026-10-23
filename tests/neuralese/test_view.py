@@ -44,8 +44,8 @@ def test_plans_chunk_long_values_and_combine_part_views():
     assert plan(Words(), value, 100).chunks == [value]
     chunks = plan(Words(), value, 10).chunks
     assert len(chunks) == 3 and " ".join(chunks) == value
-    site = combine_site("sys", "Decide.", ["nz1_" + "a" * 52, "nz1_" + "b" * 52])
-    assert [p["id"] for p in site[1]["content"] if p["type"] == "neuralese"] == ["nz1_" + "a" * 52, "nz1_" + "b" * 52]
+    site = combine_site("sys", "Decide.", ["nzs1_" + "a" * 52, "nzs1_" + "b" * 52])
+    assert [p["id"] for p in site[1]["content"] if p["type"] == "native_state"] == ["nzs1_" + "a" * 52, "nzs1_" + "b" * 52]
     writes = []
     block, parts = view.write_view(lambda messages: writes.append(messages) or f"b{len(writes)}", "sys", value, None,
                                    Words(), 10)
@@ -130,7 +130,7 @@ def test_chunked_views_reduce_multiple_combine_levels_with_actual_context_fit():
         return f'view{len(writes)}'
     def fits(messages):
         content = messages[1]['content']
-        return sum(part.get('type') == 'neuralese' for part in content) <= 2
+        return sum(part.get('type') == 'native_state' for part in content) <= 2
     final, count = view.write_view(write, 'sys', ' '.join(f'w{i}' for i in range(9)), None, Words(), 1, fits=fits)
     assert count == 9 and final == f'view{len(writes)}'
     combines = writes[9:]
@@ -138,6 +138,6 @@ def test_chunked_views_reduce_multiple_combine_levels_with_actual_context_fit():
     assert all(fits(messages) for messages in combines)
     previous = {f'view{i}' for i in range(1, 10)}
     for index, messages in enumerate(combines, 10):
-        imports = [part['id'] for part in messages[1]['content'] if part['type'] == 'neuralese']
+        imports = [part['id'] for part in messages[1]['content'] if part['type'] == 'native_state']
         assert len(imports) == 2 and set(imports) <= previous
         previous.add(f'view{index}')

@@ -14,7 +14,7 @@ const fixture=JSON.parse(await readFile(fixturePath,'utf8'));
 const info=await (await fetch(endpoint+'/v1/neuralese/info')).json();
 assert.ok(info.capabilities.includes('native.adapters'));
 assert.equal(info.adapters,undefined);
-assert.equal(info.grad_order,1);
+assert.equal(info.grad_order,2);
 assert.ok(info.native_state.consumption_modes.includes('same-base-adapter-state'));
 assert.equal(info.projections,undefined);
 const store=await FileNeuraleseStore.open(archive,{residentBytes:0});

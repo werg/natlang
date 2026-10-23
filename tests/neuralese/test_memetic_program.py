@@ -260,7 +260,7 @@ def test_real_collector_imports_written_state_from_tiny_shared_http_server(tmp_p
     weights = tmp_path / 'weights.pt'; torch.save(model_state(model), weights)
     config = {'architecture': port.config.model_type, 'tokenizer_fingerprint': tokenizer_fingerprint(tokenizer)}
     identity = native_identity(model, config, checkpoint_sha256=sha256_file_hex(weights))
-    engine = Engine(port, None, tokenizer, TensorStore(), 'native-state/' + port.config.model_type, shared_model=model,
+    engine = Engine(port, tokenizer, TensorStore(), 'native-state/' + port.config.model_type, shared_model=model,
         role_tokens=RoleTokens(*model.marker_ids), model_config=config,
         checkpoint_sha256=identity['checkpoint_sha256'],
         embedding_weight_sha256=identity['embedding_weight_sha256'], device='cpu')

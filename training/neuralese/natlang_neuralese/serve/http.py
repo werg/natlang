@@ -1,46 +1,9 @@
-"""HTTP surface of the reference server (spec/NEURALESE_PORT.md, "Wire protocol").
+"""HTTP surface for native shared-state serving.
 
-| Endpoint | Meaning |
-| --- | --- |
-| `POST /v1/chat/completions` | OpenAI-style chat completion with Neuralese parts. With `"stream": true` (as the fork), answers server-sent `chat.completion.chunk` events: text deltas until a tool call opens (`<|tool_call_start|>` or `<tool_call>`; the markup is held back), a `[{"type": "neuralese", "id": …}]` content delta per written block (with `neuralese.block`, its metadata), the parsed calls as one `tool_calls` delta, and a final chunk whose `x_natlang_message` is the complete parsed message (with `usage`, `neuralese` and, with guidance, `x_natlang_guidance`). |
-| `GET /v1/models`, `GET /health`, `GET /v1/health` | Model listing and liveness. |
-| `GET /v1/neuralese/info` | `dialects`, `width`, `dtype`, `max_block_length`, `cutoff`, `grad` (true), `grad_order` (2), `prompt_rendering` and its content identity, and `stream` (true: chat completions stream; clients stream only to servers that declare it). |
-| `PUT /v1/neuralese/blocks/{id}` | Store a block (safetensors body); the ID is checked against the content. |
-| `GET /v1/neuralese/blocks/{id}` | Fetch a block (safetensors body). |
-| `GET /v1/neuralese/blocks/{id}/meta` | Block metadata as JSON. |
-| `POST /v1/neuralese/blocks/{id}/pin`, `…/unpin` | Keep or release a block through every collection (pins count per owner). |
-| `PUT`, `GET /v1/neuralese/native-states/{nzs1_id}`, `GET …/meta`, `POST …/pin`, `…/unpin` | Versioned multi-tensor NativeStateBlock safetensors artifact; the ID binds provenance, tensor inventory, dtypes, shapes and bytes. Uses the same durable store and owner holds as legacy blocks. |
-| `POST /v1/neuralese/native-states/write-text` | Force supplied text through the native producer transform and store its exact positional/hybrid state; returns source token and policy bindings. |
-| `POST /v1/neuralese/native-states/init-body` | Render a call with one native placeholder replaced by text, capture the text span at its actual causal position, and return the state plus ordered source segments. |
-| `POST /v1/neuralese/collect` | `{"referenced": […]}`: with an owner, the owner now holds exactly the referenced blocks (and its pinned ones); blocks it released are dropped unless another owner holds or pins them. Without an owner, drops the blocks no owner holds or pins that are not referenced. Answers `{"removed": […]}`. |
-| `POST /v1/neuralese/grad` | Gradient replay session (`grad.GradSession`): loss, per-term losses, gradient block IDs. |
-| `POST /v1/neuralese/decide` | Decision readout: `{"messages", "options", "tools"?}` → `{"log_probs", "tokens"}`, each option scored as the whole assistant reply after one prompt pass. Native servers also accept exact nnt1 coefficient actor bindings. |
-| `POST /v1/neuralese/decide_many`, `POST /v1/natlang/score` | Batched decisions: `{"items": [{"messages", "options" or "continuations", "tools"?}]}` → `{"results": [{"log_probs", "tokens"} or {"error"}]}`; each item as `decide` alone, a failing item fails alone. Native servers also accept exact nnt1 coefficient actor bindings. |
-| `POST /v1/neuralese/optim` | One SGD or Adam step on parameter blocks; returns new parameter and optimiser-state blocks. |
-| `POST /v1/neuralese/adapters` | Native servers create an exact nnt1 modelLoRA actor from `{"kind":"xs", "rank"?, "seed"?, "parameter_names", "native_identity"}` and archive its frozen SVD bases. |
-| `POST /v1/neuralese/embed` | A block initialised from text (token embeddings): `{"text", "type"?}` → block metadata. |
-| `POST /v1/neuralese/guidance/check` | The first rejection of `{"reply", "guidance"}` checked prefix by prefix as during generation (serve/guidance.py), for conformance. |
-| `POST /v1/neuralese/render` | The rendered prompt of `{"messages", "tools"?}` (blocks as `<block>`), for conformance with the llama.cpp fork. |
-| `POST /v1/neuralese/encode` | A block encoding text in one forward pass through the port (supplied-input write, one vector per token): `{"text", "type"?, "context"?}` → block metadata. |
-| `POST /v1/neuralese/init_body` | In-context text initialisation of a soft body (text_init.py): `{"messages", "tools"?, "placeholder", "text", "type"?, "gate"?}`, where `messages` is the soft call as the runtime renders it with `placeholder` (any stored block) at the body's position → `{"block", "init", "gate"}`; `gate` (default true) checks that the soft call with the new body reproduces the text-instructed call. |
-| `POST /v1/neuralese/write` | The write procedure at a write site: `{"messages", "prefix"?, "tools"?, "neuralese_temperature"?, "length"?, "passes"?}` → the written block's metadata. The reply is forced to `prefix` and then the open marker; the stop head decides the length unless `length` hints it (`passes`: write it block-wise). |
-| `POST /v1/neuralese/view` | The Neuralese instance of the builtin `view(value, instructions?)` (`view.py`): `{"value", "instructions"?, "system"?, "window"?}` → the view block's metadata, `parts` (1 unless the value exceeds the write site's window, by default the model's context, and is viewed in chunks) and `window`. Every write is the template write of view's body (the reply forced to `return_result`, its value written). Without `instructions` the view is faithful. `system` is view's body, as text or parts (its soft form). |
-
-Owners (serve/store.py `TensorStore`): a client names itself (a session or runtime ID) in the `x-natlang-owner`
-header. That owner holds every block it uploads and every block ID the server names to it in a response, and its pins
-and collections are its own: one session's collection never drops another's blocks. With `--store-dir` blocks, holds
-and pins outlive restarts; a client that still gets `neuralese-unknown-block` re-uploads the block from its archive.
-
-Request fields beyond OpenAI's: `neuralese_temperature` (default 0, deterministic), `neuralese_max_length` (capped
-by the server's hard maximum), `neuralese_length` (an optional size hint: write exactly that many vectors, no stop
-decision) and `neuralese_passes` (with a hint, write the block in that many parallel passes; exact when ≥ the length), native servers accept `x_natlang_adapters` only for exact nnt1 actor coefficient bindings. `neuralese_template` (template readout: the reply is forced to
-a call, `{"call", "arguments"?, "argument"?, "value": "write" | "decode"}`, cut from the model's own rendering of that
-call; "write" makes the argument a written block and closes the call, "decode" decodes the value and the rest), and
-`guidance` (serve/guidance.py: `true` or `{"require_call"?, "repeat"?, "syntax"?, "retries"?}`: the reply opens a
-tool call, call names are checked, eval code is checked line by line for repetition and TypeScript syntax, and a
-rejected line is rolled back and resampled; the response reports `x_natlang_guidance.rejections`), and the test hook
-`x_natlang_forced`. `neuralese_template` also takes `value_type` (`"string"` or `"unknown"`: the written value sits
-unquoted, in native value syntax) and `argument_path` (keys into nested arguments), as the fork does. Stored positional native-state parts are supplied through the prompt content.
+Supported operations are ordinary text chat over a native checkpoint, typed
+native-state writes and imports, authenticated graph gradients, decision
+scoring, optimizer steps, adapter creation, guidance, view, and native artifact
+custody. The former projected-block routes and GradSession API are retired.
 """
 
 from __future__ import annotations
@@ -54,12 +17,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from .chat import RequestError, arguments_text
 from .engine import Engine, GenerationRequest
 from .guidance import Settings
-from .store import decode_block, encode_block, decode_native_state, encode_native_state
+from .store import decode_native_state, encode_native_state
 
-_BLOCK = re.compile(r"^/v1/neuralese/blocks/(nz1_[a-z2-7]+)(/meta|/pin|/unpin)?$")
 _NATIVE_STATE = re.compile(r"^/v1/neuralese/native-states/(nzs1_[a-z2-7]+)(/meta|/pin|/unpin)?$")
 _NATIVE_TENSOR = re.compile(r"^/v1/neuralese/native-tensor-artifacts/(nnt1_[a-z2-7]+)(/meta|/pin|/unpin)?$")
-_BLOCK_ID = re.compile(r"^(?:nz1_|nzs1_|nnt1_)[a-z2-7]+$")
+_BLOCK_ID = re.compile(r"^(?:nzs1_|nnt1_)[a-z2-7]+$")
 OWNER_HEADER = "x-natlang-owner"
 
 
@@ -75,18 +37,9 @@ def block_ids(value) -> set[str]:
 
 # What this server serves (spec/NEURALESE_PORT.md "Capabilities"): every runtime reports its list in
 # /v1/neuralese/info and answers a capability it lacks with 501 `neuralese-<capability>-unavailable`.
-CAPABILITIES = sorted([
-    "chat", "chat.stream",
-    "decide", "embed", "encode", "grad", "grad.order2", "guidance", "guidance.check", "init-body", "optim", "parts.value-type",
-    "render", "score", "store", "store.owners", "template", "template.argument-path", "template.value-type", "view", "write"])
 NATIVE_CAPABILITIES = sorted([
-    "chat", "chat.stream", "decide", "score", "grad", "optim", "native.adapters", "adapters.create", "guidance", "guidance.check", "native.text-write", "native.init-body", "parts.value-type", "render", "store", "store.native-state", "store.native-tensor-artifact",
+    "chat", "chat.stream", "decide", "score", "grad", "grad.order2", "optim", "native.adapters", "adapters.create", "guidance", "guidance.check", "native.text-write", "native.init-body", "parts.value-type", "render", "store", "store.native-state", "store.native-tensor-artifact",
     "native.protocol-recovery", "store.owners", "template", "template.argument-path", "template.value-type", "view"])
-NATIVE_CAPABILITY_GAPS = sorted(set(CAPABILITIES) - set(NATIVE_CAPABILITIES))
-
-
-def unavailable_code(capability: str) -> str:
-    return "neuralese-" + capability.replace(".", "-") + "-unavailable"
 
 
 def completion_limit(body: dict) -> int:
@@ -153,15 +106,12 @@ def make_handler(engine: Engine):
             if self.path == "/v1/neuralese/info":
                 from ..data.prompt_rendering import prompt_rendering_identity
                 prompt_identity = prompt_rendering_identity(engine.prompt_rendering)
-                native_enabled = bool(getattr(engine, "native_state_enabled", False))
                 return self._json(200, {"dialects": [engine.dialect], "width": engine.width,
-                                        "dtype": (str(engine.backbone.embedding_weight.dtype).replace("torch.", "")
-                                                  if native_enabled else "f32"),
+                                        "dtype": str(engine.backbone.embedding_weight.dtype).replace("torch.", ""),
                                         "store": {"owners": True, "persistent": engine.store.directory is not None},
                                         "max_block_length": engine.max_block, "context": engine.context,
                                         "grad": True, "grad_order": 2, "stream": True,
-                                        "cutoff": None if native_enabled else engine.heads.cutoff,
-                                        **({"native_state": {"enabled": True, "format":
+                                        "native_state": {"enabled": True, "format":
                                                               ('neuralese.semantic-state/1' if getattr(engine, 'semantic_channel', None)
                                                                else 'neuralese.native-state/1'),
                                                               **({'semantic_adapter_sha256': engine.semantic_channel.adapter_sha256}
@@ -174,26 +124,14 @@ def make_handler(engine: Engine):
                                                               "checkpoint_sha256": engine.checkpoint_sha256,
                                                               "tokenizer_fingerprint": engine.model_config.get("tokenizer_fingerprint"),
                                                               "embedding_weight_sha256": engine.embedding_weight_sha256,
-                                                              "role_marker_ids": list(engine.role_tokens.ids)}}
-                                           if native_enabled else {}),
+                                                              "role_marker_ids": list(engine.role_tokens.ids)},
                                         "server": "reference",
                                         **({"rl_policy_binding": engine.rl_policy_binding}
                                            if getattr(engine, "rl_policy_binding", None) else {}),
                                         "prompt_rendering": engine.prompt_rendering,
                                         "prompt_rendering_identity_sha256": prompt_identity["identity_sha256"],
-                                        # Owner-scoped holds only once the store implements them.
-                                        "capabilities": [c for c in (NATIVE_CAPABILITIES if native_enabled else CAPABILITIES)
-                                                         if c != "store.owners" or hasattr(engine.store, "hold")],
-                                        **({"capability_gaps": NATIVE_CAPABILITY_GAPS} if native_enabled else {})})
-            match = _BLOCK.match(self.path)
-            if match and match.group(2) in (None, "/meta"):
-                block = engine.store.get(match.group(1))
-                if block is None:
-                    return self._error(404, "neuralese-unknown-block", match.group(1))
-                if match.group(2) == "/meta":
-                    return self._json(200, block.meta())
-                self._hold(block.id)
-                return self._send(200, encode_block(block), "application/octet-stream")
+                                        "capabilities": [c for c in NATIVE_CAPABILITIES
+                                                         if c != "store.owners" or hasattr(engine.store, "hold")]})
             native = _NATIVE_STATE.match(self.path)
             if native and native.group(2) in (None, "/meta"):
                 try:
@@ -221,10 +159,6 @@ def make_handler(engine: Engine):
                 return self._send(200, encode_native_tensor_artifact(record.artifact), "application/octet-stream")
             self._error(404, "not-found", self.path)
 
-        def _unavailable(self, capability: str):
-            self._error(501, unavailable_code(capability),
-                        f"{capability} is not served by this server (see capabilities in /v1/neuralese/info)")
-
         def _method_not_allowed(self):
             self._error(405, "method-not-allowed", self.command)
 
@@ -241,9 +175,6 @@ def make_handler(engine: Engine):
             body = json.loads(self._body() or b"{}")
             if not isinstance(body, dict):
                 raise json.JSONDecodeError("request body is not a JSON object", "", 0)
-            if (not getattr(engine, "native_state_enabled", False) and
-                    ("adapters" in body or "x_natlang_adapters" in body)):
-                raise RequestError("bad-request-field", "adapter actor bindings require a native-state server")
             return body
 
         def do_PUT(self):
@@ -253,17 +184,7 @@ def make_handler(engine: Engine):
             tensor = _NATIVE_TENSOR.match(self.path)
             if tensor and tensor.group(2) is None:
                 return self._put_native_tensor_artifact(tensor.group(1))
-            match = _BLOCK.match(self.path)
-            if not match or match.group(2):
-                return self._error(404, "not-found", self.path)
-            try:
-                block = decode_block(self._body())
-            except ValueError as error:
-                return self._error(400, "neuralese-bad-block", str(error))
-            if block.id != match.group(1):
-                return self._error(400, "neuralese-id-mismatch", f"content hashes to {block.id}")
-            stored = engine.store.put(block, self._owner)
-            return self._json(201, stored.meta())
+            return self._error(404, "not-found", self.path)
 
         def _put_native_state(self, expected_id):
             try:
@@ -288,14 +209,6 @@ def make_handler(engine: Engine):
 
         def do_POST(self):
             try:
-                if getattr(engine, "native_state_enabled", False):
-                    unavailable = {
-                        "/v1/neuralese/embed": "embed",
-                        "/v1/neuralese/write": "write",
-                        "/v1/neuralese/init_body": "init-body", "/v1/neuralese/encode": "encode",
-                    }.get(self.path)
-                    if unavailable:
-                        return self._unavailable(unavailable)
                 if self.path == "/v1/neuralese/native-states/write-text":
                     body = self._object()
                     return self._json(201, engine.native_write_text(body.get("text"), value_type=body.get("type"), adapters=body.get('adapters')))
@@ -316,51 +229,33 @@ def make_handler(engine: Engine):
                     return self._send(200, json.dumps({"removed": engine.store.collect(referenced, self._owner)}).encode())
                 if self.path == "/v1/neuralese/grad":
                     body = self._object()
-                    if getattr(engine, "native_state_enabled", False):
-                        from .native_grad import native_graph_gradient,native_recorded_gradient
-                        with grad_lock:
-                            if 'native_recorded_objective' in body:
-                                return self._json(200,native_recorded_gradient(engine,body['native_recorded_objective'],self._owner))
-                            if body.get('schema')=='natlang.native-recorded-objective-request/1':
-                                return self._json(200,native_recorded_gradient(engine,body,self._owner))
-                            if body.get('schema')=='natlang.native-derivative-program/1':
-                                from .native_derivative import execute_derivative_program
-                                return self._json(200,execute_derivative_program(engine,body,self._owner))
-                            if isinstance(body.get('native_derivative_program'),dict):
-                                from .native_derivative import execute_derivative_program
-                                return self._json(200,execute_derivative_program(engine,body['native_derivative_program'],self._owner))
-                            return self._json(200, native_graph_gradient(engine, body, self._owner))
-                    from .grad import GradSession
+                    from .native_grad import native_graph_gradient, native_recorded_gradient
                     with grad_lock:
-                        return self._json(200, GradSession(engine).run(body))
+                        if 'native_recorded_objective' in body:
+                            return self._json(200, native_recorded_gradient(engine, body['native_recorded_objective'], self._owner))
+                        if body.get('schema') == 'natlang.native-recorded-objective-request/1':
+                            return self._json(200, native_recorded_gradient(engine, body, self._owner))
+                        if body.get('schema') == 'natlang.native-derivative-program/1':
+                            from .native_derivative import execute_derivative_program
+                            return self._json(200, execute_derivative_program(engine, body, self._owner))
+                        if isinstance(body.get('native_derivative_program'), dict):
+                            from .native_derivative import execute_derivative_program
+                            return self._json(200, execute_derivative_program(engine, body['native_derivative_program'], self._owner))
+                        return self._json(200, native_graph_gradient(engine, body, self._owner))
                 if self.path == "/v1/neuralese/decide":
                     body = self._object()
-                    if getattr(engine, "native_state_enabled", False):
-                        from .native_learning import decide_native
-                        return self._json(200, decide_native(engine, body))
-                    from .grad import decide
-                    with grad_lock:
-                        return self._json(200, decide(engine, body))
+                    from .native_learning import decide_native
+                    return self._json(200, decide_native(engine, body))
                 if self.path in ("/v1/natlang/score", "/v1/neuralese/decide_many"):
                     body = self._object()
-                    if getattr(engine, "native_state_enabled", False):
-                        from .native_learning import decide_many_native
-                        return self._json(200, decide_many_native(engine, body))
-                    from .grad import decide_many
-                    with grad_lock:
-                        return self._json(200, decide_many(engine, body))
+                    from .native_learning import decide_many_native
+                    return self._json(200, decide_many_native(engine, body))
                 if self.path == "/v1/neuralese/optim":
                     body = self._object()
-                    if getattr(engine, "native_state_enabled", False):
-                        from .native_optim import native_optimizer_step
-                        with grad_lock:
-                            return self._json(200, native_optimizer_step(engine, body, self._owner))
-                    from .grad import optim_step
+                    from .native_optim import native_optimizer_step
                     with grad_lock:
-                        return self._json(200, optim_step(engine, body))
+                        return self._json(200, native_optimizer_step(engine, body, self._owner))
                 if self.path == "/v1/neuralese/adapters":
-                    if not getattr(engine, 'native_state_enabled', False):
-                        return self._unavailable('native.adapters')
                     body = self._object()
                     with grad_lock, engine.native_execution_lock:
                         from ..model.native_adapters import create_adapter
@@ -368,86 +263,54 @@ def make_handler(engine: Engine):
                             return self._json(201, create_adapter(engine, body, self._owner).meta())
                         except (ValueError, TypeError, RuntimeError) as error:
                             raise RequestError('neuralese-native-adapter-invalid', str(error)) from error
-                if self.path == "/v1/neuralese/embed":
-                    body = self._object()
-                    from .grad import embed_text
-                    return self._json(201, embed_text(engine, body.get("text") or "", body.get("type")).meta())
-                if self.path == "/v1/neuralese/write":
-                    body = self._object()
-                    prefix = body.get("prefix") or ""
-                    request = GenerationRequest(messages=body.get("messages") or [], tools=body.get("tools"),
-                                                max_tokens=engine.max_block + len(engine._tokens(prefix)) + 8,
-                                                neuralese_temperature=float(body.get("neuralese_temperature") or 0.0),
-                                                neuralese_length=body.get("length"), neuralese_passes=body.get("passes"),
-                                                forced=([prefix] if prefix else []) + [{"neuralese": "write"}])
-                    blocks = (engine.submit(request).result().get("neuralese") or {}).get("blocks") or []
-                    if not blocks:
-                        return self._error(500, "neuralese-write", "the write produced no block")
-                    return self._json(201, blocks[0])
                 if self.path == "/v1/neuralese/view":
-                    from ..view import INSTRUCTIONS, REPLY_TOKENS, PART_MARGIN, TEMPLATE, TOOLS, view_site, window_of, write_view
+                    from ..view import INSTRUCTIONS, REPLY_TOKENS, PART_MARGIN, TEMPLATE, TOOLS, view_site, write_view
 
                     body = self._object()
 
                     class ViewModelFailure(Exception):
                         pass
                     source_turns = []
-                    native = bool(getattr(engine, "native_state_enabled", False))
                     def write(messages):
-                        if native:
-                            messages = [{**message, "content": [
-                                {**part, "type": "native_state"} if isinstance(part, dict) and part.get("type") == "neuralese" and str(part.get("id", "")).startswith("nzs1_") else part
-                                for part in message["content"]]} if isinstance(message.get("content"), list) else message
-                                for message in messages]
                         # The template write of view's body: the reply forced to return_result, its value written.
                         request = GenerationRequest(messages=messages, tools=TOOLS, template=dict(TEMPLATE),
                                                     max_tokens=engine.max_block + REPLY_TOKENS,
-                                                    temperature=1.0 if native else 0.0, rl_capture=native,
-                                                    native_protocol_recovery=native and body.get('x_natlang_native_protocol_recovery') is True,
+                                                    temperature=1.0, rl_capture=True,
+                                                    native_protocol_recovery=body.get('x_natlang_native_protocol_recovery') is True,
                                                     native_store_owner=self._owner)
                         response = engine.submit(request).result()
-                        if native:
-                            receipt = response.get("x_natlang_rl_capture")
-                            if not isinstance(receipt, dict) or receipt.get("schema") not in {"natlang.native-rl-sampling/2", "natlang.native-rl-sampling/3", "natlang.native-rl-sampling/4"}:
-                                raise RequestError("neuralese-view-source", "native view must retain its actual template sampling receipt")
-                            source_turns.append({"messages": messages, "tools": TOOLS, "template": dict(TEMPLATE),
-                                                 "response": response})
-                            if response.get("x_natlang_native_failure") is not None:
-                                raise ViewModelFailure()
-                        blocks = (response.get("native_state" if native else "neuralese") or {}).get("blocks") or []
+                        receipt = response.get("x_natlang_rl_capture")
+                        if not isinstance(receipt, dict) or receipt.get("schema") not in {"natlang.native-rl-sampling/2", "natlang.native-rl-sampling/3", "natlang.native-rl-sampling/4"}:
+                            raise RequestError("neuralese-view-source", "native view must retain its actual template sampling receipt")
+                        source_turns.append({"messages": messages, "tools": TOOLS, "template": dict(TEMPLATE),
+                                             "response": response})
+                        if response.get("x_natlang_native_failure") is not None:
+                            raise ViewModelFailure()
+                        blocks = (response.get("native_state") or {}).get("blocks") or []
                         if not blocks:
                             raise RequestError("neuralese-view", "a view write produced no block")
                         return blocks[0]["id"]
 
                     instructions = body.get("instructions") or None
                     system = body.get("system") or INSTRUCTIONS
-                    fits = None
-                    if native:
-                        def native_messages(messages):
-                            return [{**message, "content": [
-                                {**part, "type": "native_state"} if isinstance(part, dict) and part.get("type") == "neuralese" and str(part.get("id", "")).startswith("nzs1_") else part
-                                for part in message["content"]]} if isinstance(message.get("content"), list) else message
-                                for message in messages]
-                        reserve = engine.max_block + REPLY_TOKENS + PART_MARGIN
-                        available = engine.context - engine.prompt_positions(view_site(system, "", instructions), TOOLS) - reserve
-                        requested = body.get("window")
-                        if requested is not None and (type(requested) is not int or requested <= 0):
-                            raise RequestError("neuralese-view-window", "view window must be a positive token count")
-                        if available < 1:
-                            raise RequestError("context-length", "view site and output reserve do not fit this model context")
-                        window = min(available, requested) if requested is not None else available
-                        fits = lambda messages: engine.prompt_positions(native_messages(messages), TOOLS) + reserve < engine.context
-                    else:
-                        window = window_of(engine, instructions, body.get("window"), system)
+                    reserve = engine.max_block + REPLY_TOKENS + PART_MARGIN
+                    available = engine.context - engine.prompt_positions(view_site(system, "", instructions), TOOLS) - reserve
+                    requested = body.get("window")
+                    if requested is not None and (type(requested) is not int or requested <= 0):
+                        raise RequestError("neuralese-view-window", "view window must be a positive token count")
+                    if available < 1:
+                        raise RequestError("context-length", "view site and output reserve do not fit this model context")
+                    window = min(available, requested) if requested is not None else available
+                    fits = lambda messages: engine.prompt_positions(messages, TOOLS) + reserve < engine.context
                     try:
                         block, parts = write_view(write, system, body.get("value") or "", instructions, engine.tokenizer,
                                                   window, fits=fits)
                     except ViewModelFailure:
                         return self._json(200, {'x_natlang_native_failure':source_turns[-1]['response']['x_natlang_native_failure'],
                             'source_turns':source_turns,'window':window})
-                    record = engine.store.get_native_state(block) if native else engine.lookup(block)
+                    record = engine.store.get_native_state(block)
                     return self._json(201, {**record.meta(), "parts": parts, "window": window,
-                                           **({"source_turns": source_turns} if native else {})})
+                                           "source_turns": source_turns})
                 if self.path == "/v1/neuralese/guidance/check":
                     from .guidance import Guide
 
@@ -471,35 +334,9 @@ def make_handler(engine: Engine):
                                      "".join(run for run, _ in split_escaped(segment, rendered.escape_nonce))
                                      for segment in rendered.segments)
                     return self._json(201, {"prompt": prompt})
-                if self.path == "/v1/neuralese/init_body":
-                    from ..text_init import init_gate, instruction_body
-
-                    body = self._object()
-                    placeholder, text = body.get("placeholder"), body.get("text")
-                    if not isinstance(placeholder, str) or not isinstance(text, str) or not text:
-                        raise RequestError("neuralese-init-body", "init_body needs a placeholder block ID and the text")
-                    with grad_lock:
-                        try:
-                            block, info = instruction_body(engine, body.get("messages") or [], body.get("tools"),
-                                                           placeholder, text, body.get("type"))
-                        except ValueError as error:
-                            raise RequestError("neuralese-init-body", str(error)) from error
-                        gate = None
-                        if body.get("gate", True):
-                            swapped = json.loads(json.dumps(body.get("messages") or []).replace(placeholder, block.id))
-                            gate = init_gate(engine, swapped, body.get("tools"), block.id, text,
-                                             reply_tokens=int(body.get("reply_tokens") or 24))
-                    return self._json(201, {"block": block.meta(), "init": info, "gate": gate})
-                if self.path == "/v1/neuralese/encode":
-                    body = self._object()
-                    from .grad import encode_text
-                    with grad_lock:
-                        block = encode_text(engine, body.get("text") or "", body.get("type"), body.get("context"))
-                    return self._json(201, block.meta())
-                match = _BLOCK.match(self.path)
                 native = _NATIVE_STATE.match(self.path)
                 tensor = _NATIVE_TENSOR.match(self.path)
-                pin_match = match or native or tensor
+                pin_match = native or tensor
                 if pin_match and pin_match.group(2) in ("/pin", "/unpin"):
                     if pin_match.group(2) == "/pin":
                         engine.store.pin(pin_match.group(1), self._owner)
@@ -517,21 +354,21 @@ def make_handler(engine: Engine):
                 self._error(500, "internal", f"{type(error).__name__}: {error}")
 
         def _chat(self, body: dict):
+            retired_fields = {'x_natlang_forced', 'neuralese_temperature', 'neuralese_max_length',
+                              'neuralese_length', 'neuralese_passes'}
+            supplied = retired_fields.intersection(body)
+            if supplied:
+                raise RequestError('unsupported-request-field',
+                    'remove retired projected-write fields: ' + ', '.join(sorted(supplied)))
             if 'x_natlang_native_protocol_recovery' in body and type(body['x_natlang_native_protocol_recovery']) is not bool:
                 raise RequestError('bad-request', 'x_natlang_native_protocol_recovery must be boolean')
             if 'x_natlang_forced_message' in body and (not isinstance(body['x_natlang_forced_message'],dict)
                     or body.get('x_natlang_native_recording') is not True):
                 raise RequestError('bad-request','x_natlang_forced_message requires a bound teacher turn and native structural recording')
-            if 'x_natlang_forced_message' in body and (not isinstance(body['x_natlang_forced_message'],dict)
-                    or body.get('x_natlang_native_recording') is not True):
-                raise RequestError('bad-request','x_natlang_forced_message requires an assistant message and native structural recording')
             request = GenerationRequest(
                 messages=body.get("messages") or [], tools=body.get("tools"),
                 max_tokens=completion_limit(body),
                 temperature=float(body.get("temperature") or 0.0), seed=body.get("seed"),
-                neuralese_temperature=float(body.get("neuralese_temperature") or 0.0),
-                neuralese_max_length=body.get("neuralese_max_length"), forced=body.get("x_natlang_forced"),
-                neuralese_length=body.get("neuralese_length"), neuralese_passes=body.get("neuralese_passes"),
                 template=body.get("neuralese_template"),
                 forced_message=body.get('x_natlang_forced_message'),
                 native_protocol_recovery=body.get('x_natlang_native_protocol_recovery') is True,
@@ -630,13 +467,9 @@ def make_handler(engine: Engine):
                         streamed += out
                         self._event(chunk({"content": out}))
                 else:
-                    if "native_state" in item:
-                        block = item["native_state"]
-                        self._event(chunk({"content": [{"type": "native_state", "id": block["id"]}]},
-                                          extra={"native_state": {"block": block}}))
-                    else:
-                        self._event(chunk({"content": [{"type": "neuralese", "id": item["neuralese"]["id"]}]},
-                                          extra={"neuralese": {"block": item["neuralese"]}}))
+                    block = item["native_state"]
+                    self._event(chunk({"content": [{"type": "native_state", "id": block["id"]}]},
+                                      extra={"native_state": {"block": block}}))
             try:
                 response = future.result()
                 choice = response["choices"][0]
@@ -659,8 +492,6 @@ def make_handler(engine: Engine):
                     extra['x_natlang_native_failure']=response['x_natlang_native_failure']
                 if "native_state" in response:
                     extra["native_state"] = response["native_state"]
-                if "neuralese" in response:
-                    extra["neuralese"] = response["neuralese"]
                 self._event(chunk({}, choice["finish_reason"], {**extra,
                                                                 **({'x_natlang_rl_capture': response['x_natlang_rl_capture']}
                                                                    if 'x_natlang_rl_capture' in response else {}),

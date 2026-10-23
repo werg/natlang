@@ -1,7 +1,6 @@
 import pytest
 import torch
 
-from natlang_neuralese.model.heads import PortHeads
 from natlang_neuralese.model.hf_port import QwenPortBackbone
 from natlang_neuralese.model.lfm2_port import ControlTokens, PortCache
 
@@ -57,9 +56,6 @@ def test_markers_use_their_own_rows():
     logits = port.logits(h)
     normed = port.final_norm(h)
     assert torch.allclose(logits[0, 0, 63], normed[0, 0] @ port.control_head_rows[1], atol=1e-5)
-    heads = PortHeads(port, cutoff=2, max_length=8)
-    assert torch.allclose(heads.feedback.readout.weight, model.lm_head.weight)
-    assert torch.equal(heads.feedback.embedding, model.model.embed_tokens.weight)
 
 
 def test_cache_lengths_per_range():

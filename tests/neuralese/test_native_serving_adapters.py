@@ -39,10 +39,10 @@ def engine_fixture(tmp_path, family, *, service_template=False, context=None):
     return load_native_engine(str(checkpoint), device=device, dtype=dtype)
 
 
-def nonzero_adapter(engine, kind='xs'):
+def nonzero_adapter(engine, kind='xs', seed=0):
     available = target_parameters(engine.shared_model)
     name = next(name for name in available if name.endswith('q_proj.weight'))
-    record = create_adapter(engine, {'kind':kind,'rank':2,'parameter_names':[name]})
+    record = create_adapter(engine, {'kind':kind,'rank':2,'seed':seed,'parameter_names':[name]})
     artifact = record.artifact
     values = {name:torch.ones_like(value)*.04 for name,value in artifact.tensors.items()}
     return engine.store.put_native_tensor_artifact(replace(artifact,tensors=values)), name

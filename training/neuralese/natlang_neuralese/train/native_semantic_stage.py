@@ -535,7 +535,7 @@ def measure_tasks(participants, export, config, out, step, device, vae=None, sto
                 mode = participant.model.training
                 participant.model.eval()
                 try:
-                    engine = Engine(participant.model.port, None, participant.tokenizer, TensorStore(),
+                    engine = Engine(participant.model.port, participant.tokenizer, TensorStore(),
                         'native-state/' + participant.config['architecture'], model_name='native-' + name,
                         device=device, prompt_rendering=spec.get('prompt_rendering', 'full'),
                         shared_model=participant.model, role_tokens=RoleTokens(*participant.model.marker_ids),

@@ -1,20 +1,20 @@
-"""Chat requests to model input, and model output to chat messages, with Neuralese blocks (S4 §3–4).
+"""Chat requests to model input, and model output to chat messages, with native shared state (S4 §3–4).
 
-Requests are OpenAI-style. Wherever the runtime carries a soft value, a message's `content` or a tool call's
-`function.arguments` is an array of parts, `{"type": "text", "text": …}` and `{"type": "neuralese", "id": …}`
-(ts-host/src/contracts.ts). Tool-call arguments travel as JSON text, so their parts are pieces of that text.
+Requests are OpenAI-style. Wherever the runtime carries shared state, a message's `content` or a tool call's
+`function.arguments` is an array of parts, `{"type": "text", "text": …}` and `{"type": "native_state", "id": …}`.
+Tool-call arguments travel as JSON text, so their parts are pieces of that text.
 
 Rendering replaces every block with a private-use placeholder, applies the backbone's native chat template (LFM2.5
 renders tool calls in its Pythonic form, `<|tool_call_start|>[eval(code='…')]<|tool_call_end|>`, so a literal sits
-inside the quoted code string), then cuts the rendered text at the placeholders: text runs are tokenized, blocks
-become `<|neuralese|>` + one position per vector + `<|/neuralese|>` for the read port.
+inside the quoted code string), then cuts the rendered text at the placeholders: text runs are tokenized and
+native-state references become position-preserving imports.
 
 Escaping (spec §3.3): control-token text inside message content or tool-call arguments is ordinary text. Rendering
 wraps every occurrence of a special-token string in content between two private-use escape marks; the engine
 tokenizes the wrapped text with special-token splitting, so only structure the template itself inserted becomes
 special tokens.
 
-Parsing does the reverse on what the model produced: blocks are placeholders while the Pythonic tool calls are
+Parsing does the reverse on what the model produced: state references are placeholders while the Pythonic tool calls are
 parsed, then every string that holds a placeholder becomes a part array again.
 """
 
@@ -51,15 +51,25 @@ def placeholder(index: int) -> str:
 
 def _is_parts(value) -> bool:
     return isinstance(value, list) and value and all(
-        isinstance(p, dict) and p.get("type") in ("text", "neuralese", "native_state") for p in value)
+        isinstance(p, dict) and p.get("type") in ("text", "native_state") for p in value)
+
+
+def _reject_projected_parts(value) -> None:
+    if isinstance(value, dict):
+        if value.get("type") == "neuralese":
+            raise RequestError("neuralese-retired-part", "projected neuralese parts are retired; use native_state references")
+        for nested in value.values():
+            _reject_projected_parts(nested)
+    elif isinstance(value, (list, tuple)):
+        for nested in value:
+            _reject_projected_parts(nested)
 
 
 @dataclass
 class Rendered:
     segments: list  # str (template text) or int (index into `blocks`)
-    blocks: list[str]  # legacy or native state IDs in order of appearance
+    blocks: list[str]  # native state IDs in order of appearance
     escape_nonce: str = ""
-    block_kinds: list[str] | None = None
     block_stop_gradients: list[bool] | None = None
     block_source_occurrences: list[str | None] | None = None
 
@@ -144,18 +154,16 @@ def normalize_tool_call_arguments(messages: list[dict]) -> tuple[list[dict], lis
     return normalized, conversions
 
 
-def render_messages(messages: list[dict], tools: list | None, apply_template, specials=(), block_type=None,
-                    native_state: bool = False) -> Rendered:
-    """Messages with block parts → template text cut into text runs and block references.
+def render_messages(messages: list[dict], tools: list | None, apply_template, specials=()) -> Rendered:
+    """Messages with native-state parts → template text cut into text runs and state references.
 
     `apply_template(messages, tools)` renders plain messages with the model's chat template and the generation prompt.
     `specials` are the tokenizer's special-token strings; occurrences inside content are escaped (spec §3.3).
     """
     blocks: list[str] = []
-    block_kinds: list[str] = []
     block_stop_gradients: list[bool] = []
     block_source_occurrences = []
-    value_types, native_values = {}, set()
+    native_values = set()
     # An input cannot manufacture our internal placeholders. Choose a nonce
     # absent from every supplied string; private-use characters remain ordinary text.
     supplied = json.dumps([messages, tools], ensure_ascii=False)
@@ -172,33 +180,28 @@ def render_messages(messages: list[dict], tools: list | None, apply_template, sp
                 out.append(escape_specials(part.get("text") or "", specials, nonce) if escape else (part.get("text") or ""))
             else:
                 block_id = part.get("id")
-                kind = part["type"]
-                prefix = "nzs1_" if kind == "native_state" else "nz1_"
-                if kind == "native_state" and not native_state:
-                    raise RequestError("neuralese-native-state-unavailable", "this server is not serving native shared state")
-                if not isinstance(block_id, str) or not block_id.startswith(prefix):
-                    raise RequestError("neuralese-bad-part", f"invalid {kind} part {part!r}")
-                if 'stop_gradient' in part and (kind!='native_state' or part['stop_gradient'] is not True):
+                if not isinstance(block_id, str) or not re.fullmatch(r"nzs1_[a-z2-7]{52}", block_id):
+                    raise RequestError("neuralese-bad-part", f"invalid native_state part {part!r}")
+                if 'stop_gradient' in part and part['stop_gradient'] is not True:
                     raise RequestError('neuralese-bad-part','stop_gradient must be true on an actual native-state reference use')
                 out.append(f"{input_prefix}{len(blocks)}{_PH_CLOSE}")
-                value_types[len(blocks)] = part.get("value_type") or (block_type(block_id) if block_type and kind == "neuralese" else None)
                 blocks.append(block_id)
-                block_kinds.append(kind)
                 block_stop_gradients.append(part.get('stop_gradient',False))
                 source=part.get('source_occurrence')
-                if 'source_occurrence' in part and (kind!='native_state' or not isinstance(source,str) or not source):
+                if 'source_occurrence' in part and (not isinstance(source,str) or not source):
                     raise RequestError('neuralese-bad-part','native source occurrence must be its nonempty actual producer reference')
                 block_source_occurrences.append(source)
         return "".join(out)
 
     def is_native_marker(marker: str) -> bool:
         match = input_pattern.fullmatch(marker)
-        return bool(match and block_kinds[int(match.group(1))] == "native_state")
+        return bool(match and int(match.group(1)) < len(blocks))
 
     plain = []
     normalized_messages, _ = normalize_tool_call_arguments(messages)
     for message in normalized_messages:
         message = dict(message)
+        _reject_projected_parts(message.get("content"))
         if _is_parts(message.get("content")):
             message["content"] = flatten(message["content"])
         elif isinstance(message.get("content"), str):
@@ -208,6 +211,7 @@ def render_messages(messages: list[dict], tools: list | None, apply_template, sp
             call = json.loads(json.dumps(call))
             fn = call.get("function", call)
             arguments = fn.get("arguments")
+            _reject_projected_parts(arguments)
             if _is_parts(arguments):
                 # The initial message normalization above already decodes
                 # OpenAI JSON-text arguments. Only a content-part list needs
@@ -217,29 +221,27 @@ def render_messages(messages: list[dict], tools: list | None, apply_template, sp
                 # as fresh JSON text.
                 arguments = normalize_tool_arguments(flatten(arguments, escape=False))
             def inline(value):
-                # An argument value that is a part list holding a block (as replies return a written value:
-                # `"value": [{"type": "neuralese", "id": …}]`) renders as that block inside the value's string.
-                if _is_parts(value) and any(part["type"] in ("neuralese", "native_state") for part in value):
+                # An argument value that is a part list holding state renders as an imported value in the string.
+                if _is_parts(value) and any(part["type"] == "native_state" for part in value):
                     # Only a complete content-addressed native-state ID denotes
                     # an imported state. A short lookalike inside JSON tool
                     # arguments remains ordinary data for runtime validation.
-                    if any(part["type"] == "native_state" for part in value) and any(
-                            part["type"] == "native_state" and
-                            (not isinstance(part.get("id"), str) or
-                             not re.fullmatch(r"nzs1_[a-z2-7]{52}", part["id"]))
-                            for part in value):
+                    if any(part["type"] == "native_state" and
+                           (not isinstance(part.get("id"), str) or
+                            not re.fullmatch(r"nzs1_[a-z2-7]{52}", part["id"]))
+                           for part in value):
                         # Keep the whole heterogeneous part-list as ordinary
                         # argument data if any state reference is malformed;
                         # partially importing it would change the value shape.
                         return value
                     value = flatten(value, escape=False)
                     marker = input_pattern.fullmatch(value)
-                    if marker and (is_native_marker(value) or value_types.get(int(marker.group(1))) == "unknown"):
+                    if marker and is_native_marker(value):
                         native_values.add(value)
                     return value
                 if isinstance(value, str):
                     marker = input_pattern.fullmatch(value)
-                    if marker and (is_native_marker(value) or value_types.get(int(marker.group(1))) == "unknown"):
+                    if marker and is_native_marker(value):
                         native_values.add(value)
                     return value
                 if isinstance(value, list):
@@ -275,7 +277,7 @@ def render_messages(messages: list[dict], tools: list | None, apply_template, sp
     seen = sorted(s for s in segments if isinstance(s, int))
     if seen != list(range(len(blocks))):
         raise RequestError("neuralese-render", f"the chat template dropped or duplicated a block (expected={len(blocks)}, observed={seen})")
-    return Rendered(segments, blocks, nonce, block_kinds,block_stop_gradients,block_source_occurrences)
+    return Rendered(segments, blocks, nonce, block_stop_gradients, block_source_occurrences)
 
 
 _VALUE = "natlangValue7f3a9c"  # printable, so no template escapes it; stands for a call argument's value while the template renders the call
@@ -572,7 +574,7 @@ def _to_parts(text: str, block_ids: list[str]):
             continue  # Literal/model-written private-use text is not a block reference.
         if match.start() > last:
             parts.append({"type": "text", "text": text[last:match.start()]})
-        parts.append({"type": "neuralese", "id": block_ids[int(match.group(1))]})
+        parts.append({"type": "native_state", "id": block_ids[int(match.group(1))]})
         last = match.end()
     if last < len(text):
         parts.append({"type": "text", "text": text[last:]})

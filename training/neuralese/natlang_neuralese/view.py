@@ -68,7 +68,7 @@ def combine_site(system, instructions: str | None, parts: list[str]) -> list[dic
     """The write site of the final view of a chunked value: the part views (block IDs), in order."""
     content = [{"type": "text", "text": f"{_purpose(instructions)}Views of the {len(parts)} parts of value, in order:\n"}]
     for index, block in enumerate(parts):
-        content += [{"type": "text", "text": f"Part {index + 1}: "}, {"type": "neuralese", "id": block},
+        content += [{"type": "text", "text": f"Part {index + 1}: "}, {"type": "native_state", "id": block},
                     {"type": "text", "text": "\n"}]
     return [{"role": "system", "content": system}, {"role": "user", "content": content}]
 

@@ -1,21 +1,10 @@
-"""Decoding with the Neuralese ports, one state machine per sequence (S4 §4.2).
+"""Serving for native shared-state checkpoints.
 
-A sequence alternates between ordinary text decoding and writing blocks. When the LM head picks `<|neuralese|>`,
-the sequence runs the single write procedure (S3 §3.1; `write.write_block`) one step at a time: the stop head
-decides before each new vector (masked before the first), the feedback projection gives the next sketch input, the
-shallow layers advance, and the runtime's hard maximum forces closure and records truncation. On closure the upper
-layers complete the block from the block-start cache, the content projection gives the payload distribution, the
-payload is sampled at the Neuralese temperature (deterministic at 0), and read back: every layer is restored to the
-block start and the payload plus `<|/neuralese|>` are prefilled before text decoding resumes.
-
-The scheduler runs rounds: in each round every active sequence advances one position. Text steps of all sequences
-run as one batched forward, and so do the shallow sketch steps of all sequences inside a block (`batch.step_rows`:
-projections, convolutions and feed-forward batched, attention per row against each row's own cache, so rows of
-different lengths need no padding). Prefill, block opening, completion and readback run per sequence.
-
-`StepWriter` mirrors `write.write_block` exactly; tests check they agree.
+The scheduler generates ordinary text with the model's native token head and
+captures typed producer spans as positional KV and hybrid state. Imported
+native-state parts are spliced with their exact source identity and recorded
+positions. There is no projected Neuralese serving path in this module.
 """
-
 from __future__ import annotations
 
 import hashlib
@@ -27,148 +16,16 @@ import time
 from concurrent.futures import Future
 from dataclasses import dataclass, field
 
-
-def decode_prefix_tokens(tokenize, prefix: str) -> list[int]:
-    """Force only the token prefix shared with JSON continuations.
-
-    Cutting text at ``value=`` can manufacture an out-of-distribution token: the
-    trained continuation starts with a merged ``=[`` or ``={``. Leave that final
-    boundary token (and any differing suffix) to normal decoding instead.
-    """
-    tokens = tokenize(prefix)
-    continuations = ['[]', '{}', '\"x\"', "'x'", 'true', 'false', 'null', '-1'] + list('0123456789')
-    for continuation in continuations:
-        other = tokenize(prefix + continuation)
-        n = 0
-        while n < min(len(tokens), len(other)) and tokens[n] == other[n]:
-            n += 1
-        tokens = tokens[:n]
-    if not tokens:
-        raise ValueError('chat template has no stable decode prefix')
-    return tokens
-
 import torch
 
-from ..model.lfm2_port import PortBackbone, PortCache
-from .batch import split_rows, step_rows
 from .chat import RequestError, build_message, placeholder, render_messages, split_escaped
-from .store import Block, TensorStore, make_block
 from .native_protocol import capture_enabled
-
-WRITE = object()  # a forced-plan item: run the write procedure here
+from .store import TensorStore
 
 
 def derive_seed(*parts) -> int:
     digest = hashlib.sha256(repr(parts).encode()).digest()
     return int.from_bytes(digest[:8], "little") % (2**31)
-
-
-class StepWriter:
-    """`write.write_block` for one row, advanced one decision at a time."""
-
-    def __init__(self, backbone: PortBackbone, heads: PortHeads, opened: Opened, max_length: int,
-                 allow_empty: bool = False, lookahead: int = 4, length: int | None = None):
-        self.backbone, self.heads, self.opened = backbone, heads, opened
-        # Final stop source: decide every `lookahead` positions on completed states (see write.write_block).
-        self.lookahead, self.upper, self.checked = max(1, lookahead), opened.cache, 0
-        self.max_length = min(max_length, heads.max_length)
-        self.allow_empty = allow_empty
-        self.cache = opened.cache
-        self.state = opened.h_cut
-        self.count = 0
-        self.sketches, self.shallow, self.stop_logits = [], [], []
-        self.done = False
-        self.truncated = False
-        # A length hint: write exactly this many vectors, no stop decisions (never required; the stop head decides
-        # without one).
-        self.length = None if length is None else max(1, min(length, self.max_length))
-        self.passes = 0  # block-wise passes run (0: written position by position)
-
-    def decide(self) -> torch.Tensor | None:
-        """The next decision: None once the block is closed, else the next sketch input ([1, d])."""
-        if self.done:
-            return None
-        device = self.state.device
-        if self.length is not None:
-            if self.count == self.length:
-                self.done = True
-                return None
-            return self.heads.feedback(self.state)
-        if self.heads.stop_source == "final":
-            return self._decide_lookahead()
-        if self.count > 0 or self.allow_empty:
-            logit = self.heads.stop(self.state, torch.full((1,), self.count, device=device, dtype=torch.long))
-            if self.count > 0:
-                self.stop_logits.append(float(logit[0]))
-            if bool(logit[0] > 0):
-                self.done = True
-                return None
-        if self.count == self.max_length:
-            self.done, self.truncated = True, True
-            return None
-        return self.heads.feedback(self.state)
-
-    def _decide_lookahead(self) -> torch.Tensor | None:
-        if self.count and (self.count - self.checked >= self.lookahead or self.count == self.max_length):
-            pending = torch.stack(self.shallow[self.checked:self.count], 1)
-            final, self.upper = self.backbone.run_layers(pending, range(self.heads.cutoff, self.backbone.num_layers),
-                                                         self.upper)
-            counts = torch.arange(self.checked + 1, self.count + 1, device=pending.device)[None]
-            logits = self.heads.stop(final, counts)[0]
-            for j, c in enumerate(range(self.checked + 1, self.count + 1)):
-                if c == self.max_length:
-                    break
-                self.stop_logits.append(float(logits[j]))
-                if bool(logits[j] > 0):  # stop after c vectors: drop the positions written ahead
-                    self.sketches, self.shallow, self.count = self.sketches[:c], self.shallow[:c], c
-                    self.done = True
-                    return None
-            self.checked = self.count
-        if self.count == self.max_length:
-            self.done, self.truncated = True, True
-            return None
-        return self.heads.feedback(self.state)
-
-    def blockwise(self, passes: int | None = None, tol: float = 0.0):
-        """Write the hinted length at once (execution.blockwise_sketch) instead of position by position."""
-        from ..train.execution import blockwise_sketch
-
-        inputs, shallow, self.passes = blockwise_sketch(self.backbone, self.heads, self.opened.h_cut, self.opened.cache,
-                                                        self.length, passes, tol)
-        self.sketches = list(inputs.unbind(1))
-        self.shallow = list(shallow.unbind(1))
-        self.count, self.done = self.length, True
-
-    def advance(self, sketch: torch.Tensor, shallow: torch.Tensor, cache: PortCache):
-        """Record one sketch position after its shallow layers ran (`shallow` is [1, d])."""
-        self.sketches.append(sketch)
-        self.shallow.append(shallow)
-        self.state = shallow
-        self.cache = cache
-        self.count += 1
-
-    def step(self) -> bool:
-        """One decision; True once the block is closed."""
-        sketch = self.decide()
-        if sketch is None:
-            return True
-        h, cache = self.backbone.run_layers(sketch[:, None], range(0, self.heads.cutoff), self.cache)
-        self.advance(sketch, h[:, 0], cache)
-        return False
-
-    def complete(self, temperature: float, generator: torch.Generator | None):
-        """Upper layers, content distribution, payload sample. Returns (payload, mu, log_sigma) as [1, L, d]."""
-        if not self.count:
-            empty = self.opened.h_cut.new_zeros(1, 0, self.opened.h_cut.shape[-1])
-            return empty, empty, empty.float()
-        sketches = torch.stack(self.sketches, 1)
-        shallow = torch.stack(self.shallow, 1)
-        final, _ = self.backbone.run_layers(shallow, range(self.heads.cutoff, self.backbone.num_layers),
-                                            self.opened.cache)
-        mu, log_sigma = self.heads.content.distribution(sketches, self.heads.payload_states(final, self.opened.top))
-        from ..model.heads import sample_payload
-        sampled = sample_payload(mu, log_sigma, temperature, generator)
-        return sampled.payload, mu, log_sigma
 
 
 @dataclass
@@ -178,60 +35,40 @@ class GenerationRequest:
     max_tokens: int = 512
     temperature: float = 0.0
     seed: int | None = None
-    neuralese_temperature: float = 0.0
-    neuralese_max_length: int | None = None
-    # Optional size hint: write exactly this many vectors (capped by the maximum). With `neuralese_passes` the block is
-    # written block-wise in that many parallel passes (exact when passes >= length) instead of position by position.
-    neuralese_length: int | None = None
-    neuralese_passes: int | None = None
-    forced: list | None = None  # test hook: text strings and {"neuralese": "write"} items
-    forced_message: dict | None = None  # exact assistant target from an authenticated teacher turn
-    # Template readout: the reply is forced to a call of `call` with `arguments`, up to `argument` (default
-    # "value") or its nested `argument_path`; with "value": "write" that exact value is a written block, with
-    # "decode" the value and the rest of the reply are decoded.
+    forced_message: dict | None = None
     template: dict | None = None
-    guidance: object = None  # serve.guidance.Settings: envelope and line checks with backtracking, or None
+    guidance: object = None
     request_id: str = ""
-    on_delta: object = None  # streaming listener: called with {"text": …} or {"neuralese": meta}
-    adapters: list | None = None  # exact native actor coefficient refs; consumed only by the native executor
-    # Set by the transport when the client has gone (a streamed reply's connection closed): the engine drops the
-    # sequence at its next round and fails its future with RequestError("cancelled").
+    on_delta: object = None
+    adapters: list | None = None
     cancelled: bool = False
-    native_protocol_recovery: bool = False  # negotiated typed failed-turn response
-    native_store_owner: str | None = None  # existing HTTP owner protects trace dependencies before reply
-    rl_capture: bool = False  # optional exact rollout sampling receipt
-    native_recording: bool = False  # structural receipt also permits greedy, without a sampled density
-    native_state_modes: dict | None = None  # explicit input-ID keyed transport declarations
+    native_protocol_recovery: bool = False
+    native_store_owner: str | None = None
+    rl_capture: bool = False
+    native_recording: bool = False
+    native_state_modes: dict | None = None
 
 
 @dataclass
 class Sequence:
     request: GenerationRequest
-    future: Future
+    future: Future | None
     phase: str = "prefill"
-    prompt_plan: list | None = None  # host-only token IDs/block IDs, prepared before queueing
-    cache: PortCache | None = None
+    prompt_plan: list | None = None
+    cache: object = None
     logits: torch.Tensor | None = None
-    cut_state: torch.Tensor | None = None
-    token_history: torch.Tensor | None = None  # current target segment, bounded TCP receptive field
-    top_state: torch.Tensor | None = None  # top-layer state at the last position (raw writes: autoregressive payload 0)
-    items: list = field(default_factory=list)  # generated token IDs and Block objects
-    writer: StepWriter | None = None
-    blocks: list = field(default_factory=list)  # written blocks with their write records
+    items: list = field(default_factory=list)
+    blocks: list = field(default_factory=list)
     prompt_positions: int = 0
     generated_positions: int = 0
-    forced: list | None = None
-    prefilled_forced: list = field(default_factory=list)  # the forced plan's leading tokens, prefilled with the prompt
-    free_after_forced: bool = False  # template readout that decodes the value: sample once the forced plan is spent
-    guide: object = None  # serve.guidance.Guide over this reply
-    pieces: list = field(default_factory=list)  # decoded text of each item ("__nz" for a block), for the guide
-    snapshots: list = field(default_factory=list)  # (item count, cache, logits, generated positions, cut state, top state)
-    bans: dict = field(default_factory=dict)  # item index -> tokens rejected there
+    guide: object = None
+    pieces: list = field(default_factory=list)
+    bans: dict = field(default_factory=dict)
     rl_samples: list = field(default_factory=list)
-    retries: dict = field(default_factory=dict)  # reply offset -> rollbacks to it
+    retries: dict = field(default_factory=dict)
     finish_reason: str = "stop"
     rng: torch.Generator | None = None
-    pending: list = field(default_factory=list)  # undecoded token IDs while streaming
+    pending: list = field(default_factory=list)
     started: float = field(default_factory=time.perf_counter)
     native_trace_enabled: bool = False
     native_protocol_failure: dict | None = None
@@ -262,47 +99,34 @@ class Sequence:
 
 
 class Engine:
-    def __init__(self, backbone: PortBackbone, heads: PortHeads | None, tokenizer, store: TensorStore, dialect: str,
-                 max_block: int = 64, model_name: str = "natlang-neuralese", device: str = "cpu",
+    def __init__(self, backbone, tokenizer, store: TensorStore, dialect: str,
+                 max_block: int = 64, model_name: str = "natlang-native", device: str = "cpu",
                  prefill_tokens: int = 8192, prefill_padding: bool = False, context: int | None = None,
-                 prompt_rendering: str = "full", *, shared_model=None, role_tokens=None, model_config=None,
-                 checkpoint_sha256: str | None = None, embedding_weight_sha256: str | None = None):
+                 prompt_rendering: str = "full", *, shared_model, role_tokens, model_config,
+                 checkpoint_sha256: str, embedding_weight_sha256: str):
         from .chat import bind_history_reasoning
-        self.model_config = dict(model_config or {})
-        # Explicit checkpoint profiles override the backbone default; old
-        # checkpoints without this field retain their historical rendering.
-        tokenizer = bind_history_reasoning(tokenizer,
-            policy=self.model_config.get('history_reasoning_policy'),
+        from ..data.prompt_rendering import PROMPT_RENDERINGS
+        if shared_model is None or role_tokens is None or not checkpoint_sha256 or not embedding_weight_sha256:
+            raise ValueError("native serving requires a shared-state model and exact checkpoint/embedding identities")
+        if prompt_rendering not in PROMPT_RENDERINGS:
+            raise ValueError(f"unknown prompt_rendering {prompt_rendering!r}; expected one of {PROMPT_RENDERINGS}")
+        self.model_config = dict(model_config)
+        tokenizer = bind_history_reasoning(tokenizer, policy=self.model_config.get('history_reasoning_policy'),
             model_type=getattr(getattr(backbone, "config", None), "model_type", None))
-        self.backbone, self.heads, self.tokenizer, self.store = backbone, heads, tokenizer, store
+        self.backbone, self.tokenizer, self.store = backbone, tokenizer, store
         self.shared_model, self.role_tokens = shared_model, role_tokens
-        self.native_state_enabled = shared_model is not None
+        self.native_state_enabled = True
         self.native_execution_lock = threading.RLock()
         self.checkpoint_sha256 = checkpoint_sha256
         self.embedding_weight_sha256 = embedding_weight_sha256
-        if self.native_state_enabled:
-            self.native_identity = {'checkpoint_sha256': checkpoint_sha256,
-                'tokenizer_fingerprint': self.model_config.get('tokenizer_fingerprint'),
-                'embedding_weight_sha256': embedding_weight_sha256,
-                'architecture': self.model_config.get('architecture') or self.backbone.config.model_type}
-        if self.native_state_enabled:
-            if heads is not None or role_tokens is None or not checkpoint_sha256 or not embedding_weight_sha256:
-                raise ValueError("native serving requires role tokens and exact checkpoint/embedding identities, with no PortHeads")
-        # Padded-token budget of one batched prefill (new requests that arrive in the same round).
-        self.prefill_tokens = prefill_tokens
-        # Equal-length prompts share positions. Different matrix batch shapes can
-        # change low bits and content IDs; compare payloads numerically. Left-padded
-        # packing additionally changes mask layout and remains opt-in.
-        self.prefill_padding = prefill_padding
+        self.native_identity = {'checkpoint_sha256': checkpoint_sha256,
+            'tokenizer_fingerprint': self.model_config.get('tokenizer_fingerprint'),
+            'embedding_weight_sha256': embedding_weight_sha256,
+            'architecture': self.model_config.get('architecture') or self.backbone.config.model_type}
+        self.prefill_tokens, self.prefill_padding = prefill_tokens, prefill_padding
         self.dialect, self.max_block, self.model_name, self.device = dialect, max_block, model_name, device
-        from ..data.prompt_rendering import PROMPT_RENDERINGS
-        if prompt_rendering not in PROMPT_RENDERINGS:
-            raise ValueError(f"unknown prompt_rendering {prompt_rendering!r}; expected one of {PROMPT_RENDERINGS}")
         self.prompt_rendering = prompt_rendering
         self.width = backbone.config.hidden_size
-        # The served context (spec: info `context`): positions one request's prompt and reply may span. Default the
-        # model's training context (max_position_embeddings); the fork's equivalent is min(n_ctx_train, -c). View plans
-        # its write sites against it.
         config = getattr(getattr(backbone, "hf", None), "config", None) or backbone.config
         trained = int(getattr(config, "max_position_embeddings", None) or 32768)
         self.context = min(trained, int(context)) if context else trained
@@ -312,7 +136,7 @@ class Engine:
         self._thread: threading.Thread | None = None
         self._stopping = False
         self._ids = itertools.count()
-        self._native_decoded_tokens = 0  # completed generated-token forwards, including private spans
+        self._native_decoded_tokens = 0
 
     def progress_metrics(self):
         """Host-only scheduler observations; never block on actor execution/GPU."""
@@ -323,29 +147,6 @@ class Engine:
                     seq.phase != 'done' and seq.native_capture_open for seq in active),
                 'natlang_queued_requests': self._incoming.qsize()}
 
-    def token_logits(self, hidden, segments=None, *, last_only=False):
-        from ..model.neuralese_projection import token_choice_logits
-        return token_choice_logits(self.backbone, hidden, getattr(self, 'token_choice_projection', None),
-                                   segments, last_only=last_only)
-
-    def advance_token_readout(self, history, hidden, *, last_only=False):
-        """Score new target states and retain only the current segment's causal suffix.
-
-        A new reply seeds this with its last prefix state. Caller contexts are
-        never silently included in the token-choice convolution's history.
-        """
-        projection = getattr(self, 'token_choice_projection', None)
-        if projection is None:
-            return self.token_logits(hidden, last_only=last_only), None
-        from ..model.neuralese_projection import causal_conv_receptive_field
-        states = hidden if history is None else torch.cat([history, hidden], 1)
-        segments = torch.zeros(states.shape[:2], dtype=torch.long, device=states.device)
-        logits = self.token_logits(states, segments, last_only=last_only)
-        if not last_only:
-            logits = logits[:, -hidden.shape[1]:]
-        return logits, states[:, -causal_conv_receptive_field(projection):]
-
-    # Lifecycle -----------------------------------------------------------------------------
     def start(self):
         self._thread = threading.Thread(target=self._loop, name="neuralese-engine", daemon=True)
         self._thread.start()
@@ -396,13 +197,12 @@ class Engine:
                 self._round(list(self._active))
                 self._active = [s for s in self._active if not s.future.done()]
 
-    # Input ---------------------------------------------------------------------------------
     def _template(self, messages, tools):
         return self.tokenizer.apply_chat_template(messages, tools=tools or None, tokenize=False,
                                                   add_generation_prompt=True)
 
     def render_request(self, messages, tools=None, template=None):
-        """Render one request with the same generic/program header policy used by direct SFT."""
+        """Render an ordinary text or native-state prompt under the declared chat-template policy."""
         from ..data.prompt_rendering import apply_prompt_rendering
         from .chat import render_messages
 
@@ -410,9 +210,7 @@ class Engine:
         # client (for example an app or harness) can still supply its own tool schemas.
         messages, tools = apply_prompt_rendering(messages, tools, self.prompt_rendering,
                                                  keep_supplied_tools=True)
-        return render_messages(messages, tools, template or self._template, self.specials,
-                               block_type=self.block_value_type,
-                               native_state=getattr(self, "native_state_enabled", False))
+        return render_messages(messages, tools, template or self._template, self.specials)
 
     def _tokens(self, text: str) -> list[int]:
         cache = getattr(self, '_token_cache', None)
@@ -435,21 +233,8 @@ class Engine:
         if found is None:
             names = set(self.tokenizer.all_special_tokens)
             names.update(t.content for t in self.tokenizer.added_tokens_decoder.values() if t.special)
-            names.update(("<|neuralese|>", "<|/neuralese|>"))
             found = self._specials = tuple(sorted(n for n in names if n))
         return found
-
-    def lookup(self, block_id: str) -> Block:
-        block = self.store.get(block_id)
-        if block is None:
-            raise RequestError("neuralese-unknown-block", f"{block_id} is not in this server's store; PUT it first")
-        if block.dialect != self.dialect:
-            raise RequestError("neuralese-dialect-mismatch",
-                               f"{block_id} is in {block.dialect}, this server speaks {self.dialect}")
-        if block.width != self.width:
-            # As the fork: a block of another width cannot be read (or decoded, or differentiated) here.
-            raise RequestError("neuralese-bad-block", f"{block_id} has width {block.width}, this server reads {self.width}")
-        return block
 
     def _prompt_plan(self, messages, tools) -> list:
         """Render and tokenize on the caller's CPU thread; preserve segment boundaries."""
@@ -459,96 +244,28 @@ class Engine:
             if isinstance(segment, str):
                 plan.append(("tokens", self._template_tokens(segment, rendered.escape_nonce)))
             else:
-                kind = (getattr(rendered, 'block_kinds', None) or
-                        ["neuralese"] * len(rendered.blocks))[segment]
-                if kind=='native_state' and rendered.block_stop_gradients and rendered.block_stop_gradients[segment]:
+                kind = 'native_state'
+                if rendered.block_stop_gradients and rendered.block_stop_gradients[segment]:
                     kind='native_state_constant'
                 value = rendered.blocks[segment]
-                if kind in ('native_state','native_state_constant') and rendered.block_source_occurrences and rendered.block_source_occurrences[segment]:
+                if rendered.block_source_occurrences and rendered.block_source_occurrences[segment]:
                     value = {'id': value, 'source_occurrence': rendered.block_source_occurrences[segment]}
-                plan.append((kind if kind in ('native_state','native_state_constant') else 'block', value))
+                plan.append((kind, value))
         return plan
 
     def prompt_positions(self, messages, tools) -> int:
-        """Positions the rendered prompt takes in the cache (its `usage.prompt_tokens`), without running the model:
-        text tokens, and per block its vectors (with the read markers when the heads add them)."""
-        if getattr(self, 'native_state_enabled', False):
-            positions = 0
-            for kind, value in self._prompt_plan(messages, tools):
-                if kind == 'tokens':
-                    positions += len(value)
-                elif kind in ('native_state','native_state_constant'):
-                    record = self.store.get_native_state(value['id'] if isinstance(value,dict) else value)
-                    if record is None:
-                        raise RequestError('neuralese-unknown-native-state', f'{value} is not in this server store; restore it first')
-                    positions += 2 + (len(record.block.token_ids) if self._native_exact(record.block)
-                                      else len(self._tokens(record.block.text)))
-                else:
-                    raise RequestError('neuralese-native-state-unavailable', 'native prompts cannot consume projected blocks')
-            return positions
-        markers = 2 if self.heads.read_markers else 0
-        return sum(len(value) if kind == "tokens" else int(self.lookup(value).length) + markers
-                   for kind, value in self._prompt_plan(messages, tools))
-
-    def prompt_embeddings(self, messages, tools, *, block_mode="port", prepared=None) -> torch.Tensor:
-        if block_mode not in {"port", "transparent"}:
-            raise RequestError("neuralese-read-mode", "block mode must be port or transparent")
-        plan = self._prompt_plan(messages, tools) if prepared is None else prepared
-        # Resolve every block before doing any GPU work, as in the unprepared path.
-        blocks = {value: self.lookup(value) for kind, value in plan if kind == "block"}
-        dtype = self.backbone.embedding_weight.dtype
-        pieces = []
-        for kind, value in plan:
-            if kind == "tokens":
-                if value:
-                    pieces.append(self.backbone.embed(torch.tensor([value], device=self.device)))
+        """Count text tokens and native-state spans without executing the model."""
+        positions = 0
+        for kind, value in self._prompt_plan(messages, tools):
+            if kind == 'tokens':
+                positions += len(value)
             else:
-                payload = blocks[value].payload.to(self.device, dtype)
-                if block_mode == "transparent":
-                    pieces.append(payload[None].to(dtype))
-                else:
-                    pieces.append(self.heads.read_embeddings(self.backbone, payload[None]))
-        return torch.cat(pieces, 1)
-
-    def block_value_type(self, block_id):
-        block = self.store.get(block_id)
-        if block is not None and block.type == "Neuralese<unknown>":
-            return "unknown"
-        return None
-
-    def _template_plan(self, template: dict) -> tuple[list, bool]:
-        """A template readout's forced plan (chat.call_reply), and whether decoding follows it."""
-        from .chat import call_reply, write_reply
-
-        mode = template.get("value")
-        if not isinstance(template.get("call"), str) or mode not in ("write", "decode"):
-            raise RequestError("neuralese-template", "a template needs a call name and value 'write' or 'decode'")
-        apply = lambda messages, generation: self.tokenizer.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=generation)
-        argument_path = template.get("argument_path")
-        if argument_path is not None and (not isinstance(argument_path, list) or
-                any(not isinstance(part, str) and type(part) is not int for part in argument_path)):
-            raise RequestError("neuralese-template", "argument_path must be a list of string or integer keys")
-        prefix, suffix = call_reply(apply, template["call"], template.get("arguments") or {},
-                                    template.get("argument") or "value", quoted=mode == "write",
-                                    argument_path=argument_path)
-        if mode == "decode":
-            return decode_prefix_tokens(self._tokens, prefix), True
-        prefix, suffix = write_reply(apply, template["call"], template.get("arguments") or {},
-                                     template.get("argument") or "value", template.get("value_type", "string"),
-                                     argument_path=argument_path)
-        return self._forced_plan([prefix, {"neuralese": "write"}, suffix]), False
-
-    def _forced_plan(self, forced) -> list:
-        plan = []
-        for item in forced:
-            if isinstance(item, str):
-                plan.extend(self._tokens(item))
-            elif isinstance(item, dict) and item.get("neuralese") == "write":
-                plan.append(WRITE)
-            else:
-                raise RequestError("forced-plan", f"unsupported forced item {item!r}")
-        return plan
+                record = self.store.get_native_state(value['id'] if isinstance(value,dict) else value)
+                if record is None:
+                    raise RequestError('neuralese-unknown-native-state', f'{value} is not in this server store; restore it first')
+                positions += 2 + (len(record.block.token_ids) if self._native_exact(record.block)
+                                  else len(self._tokens(record.block.text)))
+        return positions
 
     def _native_run(self, callback, adapters=None):
         from ..model.native_adapters import run_native, NativeAdapterError
@@ -759,10 +476,6 @@ class Engine:
             bindings = execution_binding(self)
             seq.native_rl_adapter_binding = ({'schema': SCHEMA, 'base_native_identity': dict(self.native_identity),
                 'adapters': bindings} if bindings else None)
-        if seq.request.forced or seq.request.neuralese_length is not None or seq.request.neuralese_passes is not None:
-            raise RequestError("native-write-controls-unsupported", "native shared-state serving uses sampled role markers, not legacy forced writes")
-        if seq.request.neuralese_max_length is not None or seq.request.neuralese_temperature:
-            raise RequestError("native-write-controls-unsupported", "native shared-state spans have no legacy write length or temperature control")
         if seq.request.rl_capture and seq.request.temperature <= 0 and not seq.request.native_recording:
             raise RequestError("native-rl-sampling-law", "native rollout capture requires positive temperature")
         seq.cache = None
@@ -808,7 +521,7 @@ class Engine:
                 self._native_consume(seq, value['id'] if isinstance(value,dict) else value,stop_gradient=kind=='native_state_constant',
                     source_occurrence=value.get('source_occurrence') if isinstance(value,dict) else None)
             else:
-                raise RequestError("neuralese-native-state-unavailable", "native serving accepts native_state parts, not projected blocks")
+                raise ValueError(f"unsupported native prompt segment {kind!r}")
         if seq.cache is None or seq.logits is None:
             raise RequestError("empty-prompt", "native serving needs at least one prompt token")
         seq.prompt_positions = seq.cache.lengths[0]
@@ -1114,8 +827,7 @@ class Engine:
                 return json.dumps(replaced, ensure_ascii=False, separators=(",", ":")) if found != before else value
             return value
         rendered = self.render_request(replace(messages), tools)
-        self._validate_native_state_modes(native_state_modes, {block_id for block_id, kind in
-            zip(rendered.blocks, rendered.block_kinds or ['neuralese'] * len(rendered.blocks)) if kind == 'native_state'})
+        self._validate_native_state_modes(native_state_modes, set(rendered.blocks))
         if (placeholder_occurrence is None and found != 1) or (placeholder_occurrence is not None and found <= placeholder_occurrence):
             raise RequestError("neuralese-native-state-placeholder", f"found {found} matching parts; pass placeholder_occurrence to select the exact body occurrence when its content ID is also imported")
         matches = [(index, segment) for index, segment in enumerate(rendered.segments)
@@ -1148,10 +860,7 @@ class Engine:
         with torch.inference_mode():
             for index, segment in enumerate(rendered.segments):
                 if isinstance(segment, int):
-                    kinds = rendered.block_kinds or ["neuralese"] * len(rendered.blocks)
                     block_id = rendered.blocks[segment]
-                    if kinds[segment] != "native_state":
-                        raise RequestError("neuralese-native-state-text", "legacy projected blocks cannot initialize native state")
                     temp = Sequence(GenerationRequest(messages=[], rl_capture=True, native_state_modes=native_state_modes), Future(), cache=cache)
                     self._native_consume(temp, block_id,stop_gradient=bool(rendered.block_stop_gradients and rendered.block_stop_gradients[segment]),
                         source_occurrence=rendered.block_source_occurrences[segment] if rendered.block_source_occurrences else None)
@@ -1316,40 +1025,8 @@ class Engine:
             except Exception as error:  # one malformed sequence must not stop other requests
                 self._native_protocol_fail(seq, error)
 
-    # Decoding ------------------------------------------------------------------------------
-    def _round(self, sequences: list[Sequence]):
-        """One scheduler round: every sequence advances one position; text and sketch steps run batched."""
-        if getattr(self, 'native_state_enabled', False):
-            return self._native_round(sequences)
-        for seq in sequences:
-            if seq.request.cancelled:
-                self._fail(seq, RequestError("cancelled", "the client went away"))
-        sequences = [seq for seq in sequences if seq.phase != "done"]
-        phases = [(seq, seq.phase) for seq in sequences]
-        text_rows, sketch_rows = [], []
-        fresh = [seq for seq, phase in phases if phase == "prefill"]
-        if fresh:
-            self._prefill_all(fresh)
-        for seq, phase in phases:
-            try:
-                if phase == "prefill":
-                    continue
-                elif phase == "text":
-                    token = self._choose(seq)
-                    if token is not None:
-                        text_rows.append((seq, token))
-                elif phase == "sketch":
-                    sketch = seq.writer.decide()
-                    if sketch is None:
-                        self._close_block(seq)
-                    else:
-                        sketch_rows.append((seq, sketch))
-            except Exception as error:  # a failing request must not stop the others
-                self._fail(seq, error)
-        if text_rows:
-            self._batched(text_rows, self._text_batch)
-        if sketch_rows:
-            self._batched(sketch_rows, self._sketch_batch)
+    def _round(self, sequences):
+        self._native_round(sequences)
 
     def _native_protocol_fail(self, seq, error):
         from .native_protocol import FAILURE_CODES,failure_descriptor
@@ -1365,255 +1042,8 @@ class Engine:
         if not seq.future.done():
             seq.future.set_exception(error)
 
-    def _batched(self, rows, run):
-        try:
-            run(rows)
-        except Exception as error:
-            if len(rows) == 1:
-                return self._fail(rows[0][0], error)
-            for row in rows:  # isolate the failing request
-                self._batched([row], run)
-
-    def _text_batch(self, rows):
-        ids = torch.tensor([[token] for _, token in rows], device=self.device)
-        if self.heads.read_markers:
-            h, caches = step_rows(self.backbone, self.backbone.embed(ids), [seq.cache for seq, _ in rows],
-                                  range(0, self.backbone.num_layers))
-        else:
-            cut, caches = step_rows(self.backbone, self.backbone.embed(ids), [seq.cache for seq, _ in rows],
-                                    range(0, self.heads.cutoff))
-            h, caches = step_rows(self.backbone, cut, caches, range(self.heads.cutoff, self.backbone.num_layers))
-        logits = self.backbone.logits(h)[:, -1] if getattr(self, 'token_choice_projection', None) is None else None
-        for index, (seq, token) in enumerate(rows):
-            if logits is None:
-                score, seq.token_history = self.advance_token_readout(seq.token_history, h[index:index + 1], last_only=True)
-                seq.cache, seq.logits = caches[index], score[:, -1]
-            else:
-                seq.cache, seq.logits = caches[index], logits[index:index + 1]
-            if not self.heads.read_markers:
-                seq.cut_state = cut[index:index + 1, -1]
-                seq.top_state = h[index:index + 1, -1]
-            seq.items.append(token)
-            seq.generated_positions += 1
-            if seq.guide is not None:
-                seq.pieces.append(self.tokenizer.decode([token], skip_special_tokens=False))
-                self._guide(seq)
-            self._emit(seq, token=token)
-
-    def _guide(self, seq: Sequence):
-        """Run the reply checks after a token; on a rejection roll back to the offending line and ban its first token.
-        Snapshots are kept at line starts (the last few); the tokens between a snapshot and the rollback point are
-        recomputed."""
-        reply = "".join(seq.pieces)
-        verdict = seq.guide.check(reply)
-        starts, offset = [], 0
-        for piece in seq.pieces:
-            starts.append(offset)
-            offset += len(piece)
-        if verdict is None:
-            # A line that starts where the reply now ends: snapshot here (cheap restore for the next rejection).
-            if reply.endswith("\\n") or reply.endswith("\n") or reply.endswith("["):
-                seq.snapshots = (seq.snapshots + [(len(seq.items), seq.cache, seq.logits, seq.generated_positions, seq.cut_state, seq.top_state, seq.token_history)])[-4:]
-            return
-        reason, at = verdict
-        target = max(i for i, start in enumerate(starts) if start <= at)  # the item holding the line's first character
-        tries = seq.retries.get(at, 0)
-        usable = [snap for snap in seq.snapshots if snap[0] <= target]
-        between = seq.items[usable[-1][0]:target] if usable else []
-        if tries >= seq.guide.settings.retries or not usable or any(not isinstance(i, int) for i in between):
-            seq.guide.accept(at)
-            seq.guide.rejections.append({"reason": reason, "offset": at, "accepted": True})
-            return
-        seq.retries[at] = tries + 1
-        seq.guide.rejections.append({"reason": reason, "offset": at})
-        seq.bans.setdefault(target, set()).add(seq.items[target])
-        count, cache, logits, generated, cut_state, top_state, token_history = usable[-1]
-        if between:
-            out = self.backbone.forward_ids(torch.tensor([between], device=self.device), cache=cache,
-                                            cutoff=self.heads.cutoff if not self.heads.read_markers else None)
-            cache, logits = out["cache"], out["logits"][:, -1]
-            if getattr(self, 'token_choice_projection', None) is not None:
-                score, token_history = self.advance_token_readout(token_history, out['h_final'], last_only=True)
-                logits = score[:, -1]
-            if not self.heads.read_markers:
-                cut_state, top_state = out['h_cut'][:, -1], out['h_final'][:, -1]
-            generated += len(between)
-        seq.cache, seq.logits, seq.generated_positions = cache, logits, generated
-        seq.cut_state, seq.top_state, seq.token_history = cut_state, top_state, token_history
-        if seq.request.rl_capture:
-            seq.rl_samples = [sample for sample in seq.rl_samples if sample['item'] < target]
-        seq.guide.rewind(starts[target])
-        del seq.items[target:], seq.pieces[target:]
-        seq.snapshots = [snap for snap in seq.snapshots if snap[0] <= target]
-        for index in [i for i in seq.bans if i > target]:
-            del seq.bans[index]
-
-    def _sketch_batch(self, rows):
-        # A direct writer reads its next input as its feedback says (token embeddings under direct v1); a sketch
-        # writer reads its sketch.
-        sketches = torch.cat([seq.writer.next_input(sketch) if hasattr(seq.writer, 'next_input') else sketch
-                              for seq, sketch in rows], 0)[:, None]
-        depth = self.backbone.num_layers if getattr(self, 'neuralese_projection', None) is not None else self.heads.cutoff
-        h, caches = step_rows(self.backbone, sketches, [seq.writer.cache for seq, _ in rows],
-                              range(0, depth))
-        for index, (seq, sketch) in enumerate(rows):
-            seq.writer.advance(sketch, h[index:index + 1, 0], caches[index])
-
-    def _prefill_all(self, seqs: list[Sequence]):
-        """Prefill new requests together: left-padded batches by length under a padded-token budget."""
-        ready = []
-        for seq in seqs:
-            try:
-                if seq.request.rl_capture and seq.prompt_plan is None:
-                    seq.prompt_plan = self._prompt_plan(seq.request.messages, seq.request.tools)
-                embeds = self.prompt_embeddings(seq.request.messages, seq.request.tools, prepared=seq.prompt_plan)
-                self._plan(seq)
-                if seq.prefilled_forced:
-                    # The forced reply's leading tokens are prefilled with the prompt, as training and the causal
-                    # reference run them: one pass, not one decode step per token (a BF16 near-tie can flip there).
-                    embeds = torch.cat([embeds, self.backbone.embed(
-                        torch.tensor([seq.prefilled_forced], device=self.device)).to(embeds)], 1)
-                ready.append((seq, embeds))
-            except Exception as error:
-                self._fail(seq, error)
-        ready.sort(key=lambda row: row[1].shape[1])
-        group: list = []
-        for row in ready:
-            width = max([row[1].shape[1]] + [e.shape[1] for _, e in group])
-            mixed = bool(group) and not self.prefill_padding and row[1].shape[1] != group[0][1].shape[1]
-            if group and (mixed or width * (len(group) + 1) > self.prefill_tokens):
-                self._prefill_group(group)
-                group = []
-            group.append(row)
-        if group:
-            self._prefill_group(group)
-
-    def _prefill_group(self, group):
-        if len(group) == 1:
-            seq, embeds = group[0]
-            try:
-                out = self.backbone.forward_embeds(embeds, logits=False, cutoff=self.heads.cutoff if not self.heads.read_markers else None)
-                start = out['h_final'].shape[1] - len(seq.prefilled_forced) - 1
-                score, token_history = self.advance_token_readout(None, out['h_final'][:, start:], last_only=True)
-                logits = score[:, -1]
-                self._prefilled(seq, out["cache"], logits, int(embeds.shape[1]),
-                                out['h_cut'][:, -1] if not self.heads.read_markers else None,
-                                out['h_final'][:, -1] if not self.heads.read_markers else None, token_history)
-            except Exception as error:
-                self._fail(seq, error)
-            return
-        try:
-            width = max(e.shape[1] for _, e in group)
-            pad_lengths = [width - e.shape[1] for _, e in group]
-            pad = torch.tensor(pad_lengths, device=self.device)
-            embeds = torch.cat([torch.cat([e.new_zeros(1, width - e.shape[1], e.shape[2]), e], 1) for _, e in group], 0)
-            padded = any(pad_lengths)
-            out = self.backbone.forward_embeds(embeds, left_pad=pad if padded else None, logits=False,
-                                               cutoff=self.heads.cutoff if not self.heads.read_markers else None)
-            logits = self.backbone.logits(out["h_final"][:, -1:])[:, -1]
-            caches = split_rows(out["cache"], pad)
-        except Exception:
-            for row in group:  # isolate a failing request
-                self._prefill_group([row])
-            return
-        for index, (seq, e) in enumerate(group):
-            try:
-                token_history = None
-                score = logits[index:index + 1]
-                if getattr(self, 'token_choice_projection', None) is not None:
-                    start = out['h_final'].shape[1] - len(seq.prefilled_forced) - 1
-                    scores, token_history = self.advance_token_readout(None, out['h_final'][index:index + 1, start:], last_only=True)
-                    score = scores[:, -1]
-                self._prefilled(seq, caches[index], score, int(e.shape[1]),
-                                out['h_cut'][index:index + 1, -1] if not self.heads.read_markers else None,
-                                out['h_final'][index:index + 1, -1] if not self.heads.read_markers else None, token_history)
-            except Exception as error:
-                self._fail(seq, error)
-
-    def _prefill(self, seq: Sequence):
-        self._prefill_all([seq])
-
-    def _plan(self, seq: Sequence):
-        """The request's forced plan, and its leading text tokens that prefill with the prompt (not under guidance,
-        whose backtracking snapshots start after the prompt)."""
-        request = seq.request
-        seq.forced = self._forced_plan(request.forced) if request.forced is not None else None
-        if request.template is not None and request.forced is None:  # the test hook's plan replaces the template
-            seq.forced, seq.free_after_forced = self._template_plan(request.template)
-        lead = []
-        if seq.forced and request.guidance is None:
-            # Only what the decode steps would have fed: within max_tokens, up to a stop or block opening.
-            while (len(lead) < min(len(seq.forced), request.max_tokens) and type(seq.forced[len(lead)]) is int
-                   and seq.forced[len(lead)] not in self.stop_ids
-                   and seq.forced[len(lead)] != self.backbone.controls.open_id):
-                lead.append(seq.forced[len(lead)])
-            del seq.forced[:len(lead)]
-        seq.prefilled_forced = lead
-
-    def _prefilled(self, seq: Sequence, cache, logits, positions: int, cut_state=None, top_state=None, token_history=None):
-        request = seq.request
-        seq.cache, seq.logits = cache, logits
-        seq.cut_state, seq.top_state, seq.token_history = cut_state, top_state, token_history
-        lead = seq.prefilled_forced
-        seq.prompt_positions = positions - len(lead)
-        if request.guidance is not None:
-            from .guidance import Guide
-
-            seq.guide = Guide(request.guidance)
-            prefix = seq.guide.forced_prefix()
-            if prefix and seq.forced is None:
-                seq.forced, seq.free_after_forced = self._tokens(prefix), True
-            seq.snapshots = [(0, seq.cache, seq.logits, 0, seq.cut_state, seq.top_state, seq.token_history)]
-        for token in lead:  # already in the cache: emitted as the decode steps would have
-            seq.items.append(token)
-            seq.generated_positions += 1
-            self._emit(seq, token)
-        seq.rng = torch.Generator().manual_seed(
-            derive_seed("text", request.seed if request.seed is not None else request.request_id))
-        seq.phase = "text"
-
-    def _emit(self, seq: Sequence, token: int | None = None, block: Block | None = None):
-        """Streaming: hand new output to the request's listener, if any."""
-        if getattr(self, 'native_state_enabled', False) and seq.guide is not None and not seq.native_guidance_flushing:
-            return
-        listener = seq.request.on_delta
-        if listener is None:
-            return
-        if token is not None:
-            text = self.tokenizer.decode(seq.pending + [token], skip_special_tokens=False)
-            if "\ufffd" in text:  # an incomplete UTF-8 sequence; wait for the next token
-                seq.pending.append(token)
-                return
-            seq.pending = []
-            listener({"text": text})
-        elif block is not None:
-            listener({"neuralese": block.meta()})
-
-    def _next_token(self, seq: Sequence):
-        if seq.forced is not None and not seq.forced and seq.free_after_forced:
-            seq.forced = None
-        if seq.forced is not None:
-            if not seq.forced:
-                return None
-            item = seq.forced.pop(0)
-            return self.backbone.controls.open_id if item is WRITE else item
-        logits = seq.logits[0].float()
-        banned = seq.bans.get(len(seq.items))
-        if banned:
-            logits = logits.clone()
-            logits[list(banned)] = float("-inf")
-        if seq.request.temperature and seq.request.temperature > 0:
-            probs = torch.softmax(logits / seq.request.temperature, -1).cpu()
-            token = int(torch.multinomial(probs, 1, generator=seq.rng))
-            if seq.request.rl_capture:
-                seq.rl_samples.append({'item': len(seq.items), 'token': token,
-                    'logp': float(torch.log_softmax(logits / seq.request.temperature, -1)[token]),
-                    'banned': sorted(banned or [])})
-            return token
-        return int(logits.argmax())
-
     def _finish(self, seq: Sequence, reason: str):
-        if getattr(self, 'native_state_enabled', False) and seq.guide is not None:
+        if seq.guide is not None:
             from .native_guidance import flush
             flush(self, seq)
         if seq.request.on_delta is not None and seq.pending:
@@ -1621,169 +1051,22 @@ class Engine:
             seq.pending = []
         seq.finish_reason = reason
         seq.phase = "done"
-        seq.future.set_result(self._response(seq))
+        if not seq.future.done():
+            seq.future.set_result(self._native_response(seq))
 
-    def _choose(self, seq: Sequence) -> int | None:
-        """Pick the next text token. Returns it for the batched forward, or None if the sequence finished or opened
-        a block (opening runs here, on its own)."""
-        request = seq.request
-        if seq.generated_positions >= request.max_tokens:
-            self._finish(seq, "length")
-            return None
-        token = self._next_token(seq)
-        # The close control is trained as the boundary of a text/document span.
-        # A generated close outside a write cannot close a Neuralese block: the
-        # writer closes its own block in _close_block. Never expose it as text.
-        if token is None or token in self.stop_ids or token == self.backbone.controls.close_id:
-            self._finish(seq, "stop")
-            return None
-        if token == self.backbone.controls.open_id:
-            remaining = request.max_tokens - seq.generated_positions
-            # A nonempty block needs open + at least one vector + close. Do not
-            # emit a dangling opener when the completion allowance cannot fit it.
-            if remaining < 3:
-                self._finish(seq, "length")
-                return None
-            if self.heads.read_markers:
-                ids = torch.tensor([[token]], device=self.device)
-                out = self.backbone.forward_ids(ids, cache=seq.cache, cutoff=self.heads.cutoff)
-                from ..write import Opened
-                opened = Opened(cache=out["cache"], h_cut=out["h_cut"][:, -1], logits=out["logits"][:, -1])
-            else:
-                if seq.cut_state is None:
-                    raise RuntimeError('raw write missing causal prefix state')
-                from ..write import Opened
-                opened = Opened(cache=seq.cache, h_cut=seq.cut_state, logits=seq.logits, top=seq.top_state)
-            limit = request.neuralese_max_length or self.max_block
-            direct = getattr(self, 'neuralese_projection', None)
-            if direct is not None:
-                from .direct_write import DirectWriter
-                seq.writer = DirectWriter(self.backbone, direct, opened, min(limit, self.max_block, remaining - 2),
-                                          self.stop_ids, length=request.neuralese_length,
-                                          token_choice_projection=getattr(self, 'token_choice_projection', None))
-            else:
-                seq.writer = StepWriter(self.backbone, self.heads, opened, min(limit, self.max_block, remaining - 2),
-                                        length=request.neuralese_length)
-            if request.neuralese_length and request.neuralese_passes:
-                if direct is not None:
-                    # Direct v1 has no shallow sketch passes. The full-depth
-                    # writer remains the sole implementation for this artifact.
-                    while not seq.writer.step():
-                        pass
-                else:
-                    seq.writer.blockwise(request.neuralese_passes)
-            seq.generated_positions += 1
-            seq.phase = "sketch"
-            return None
-        return token
-
-    def _close_block(self, seq: Sequence):
-        writer, request = seq.writer, seq.request
-        index = len(seq.blocks)
-        tau = float(request.neuralese_temperature or 0.0)
-        seed = derive_seed("neuralese", request.seed if request.seed is not None else request.request_id, index)
-        generator = torch.Generator().manual_seed(seed)
-        payload, mu, log_sigma = writer.complete(tau, generator)
-        from ..write import read_back
-        back = read_back(self.backbone, self.heads, writer.opened.cache, payload, all_logits=False,
-                         final_states=getattr(self, 'token_choice_projection', None) is not None)
-        if getattr(self, 'token_choice_projection', None) is not None:
-            scores, seq.token_history = self.advance_token_readout(seq.token_history, back['final_states'], last_only=True)
-            back['logits'] = scores[:, -1]
-        seq.cache, seq.logits = back["cache"], back["logits"]
-        if not self.heads.read_markers:
-            seq.cut_state, seq.top_state = back['h_cut'], back['h_final']
-        record = {"kind": "write", "request": request.request_id, "index": index, "cutoff": self.heads.cutoff,
-                  "temperature": tau, "seed": seed, "stop_logits": writer.stop_logits}
-        if getattr(self, 'neuralese_projection', None) is not None:
-            record.update(algorithm='neuralese-direct-v1', cutoff=self.backbone.num_layers)
-        if writer.length is not None:
-            record.update(length_hint=writer.length, passes=writer.passes)
-        parts = []
-        if writer.count:
-            mean = make_block(mu[0], self.dialect, producer={"kind": "payload-mean"})
-            scale = make_block(log_sigma[0], self.dialect, producer={"kind": "payload-log-sigma"})
-            record.update(mean=mean.id, log_sigma=scale.id)
-            parts = [mean, scale]
-        # The payload first: at temperature 0 it is its mean, and the store keeps the first block of an ID, which must
-        # be the one carrying the write record.
-        value_type = (seq.request.template or {}).get("value_type")
-        block = self.store.put(make_block(payload[0], self.dialect,
-            type="Neuralese<unknown>" if value_type == "unknown" else None, producer=record, truncated=writer.truncated))
-        for part in parts:
-            self.store.put(part)
-        seq.blocks.append(block)
-        seq.items.append(block)
-        if seq.guide is not None:
-            seq.pieces.append("__nz")
-        self._emit(seq, block=block)
-        seq.generated_positions += writer.count + 1
-        seq.writer = None
-        seq.phase = "text"
-        # A forced plan's own close marker, if any, is written by the procedure instead.
-        if seq.forced and seq.forced[0] == self.backbone.controls.close_id:
-            seq.forced.pop(0)
-
-    # Output --------------------------------------------------------------------------------
-    def _response(self, seq: Sequence) -> dict:
-        if getattr(self, 'native_state_enabled', False):
-            return self._native_response(seq)
-        text, run, ids = [], [], []
-        for item in seq.items:
-            if isinstance(item, Block):
-                if run:
-                    text.append(self.tokenizer.decode(run, skip_special_tokens=False))
-                    run = []
-                wire = placeholder(len(ids))
-                template = seq.request.template or {}
-                if template.get("value") == "write" and template.get("value_type") == "unknown":
-                    import json
-                    wire = json.dumps(wire)
-                text.append(wire)
-                ids.append(item.id)
-            else:
-                run.append(item)
-        if run:
-            text.append(self.tokenizer.decode(run, skip_special_tokens=False))
-        message = build_message("".join(text), ids, call_prefix=seq.request.request_id)
-        template = seq.request.template or {}
-        if template.get("value") == "write" and template.get("value_type") == "unknown":
-            import json
-            from .chat import _at_value_path, arguments_text
-            def mark_unknown(value):
-                if isinstance(value, list):
-                    for item in value:mark_unknown(item)
-                elif isinstance(value, dict):
-                    if value.get("type") == "neuralese":value["value_type"] = "unknown"
-                    else:
-                        for item in value.values():mark_unknown(item)
-            for call in message.get("tool_calls") or []:
-                arguments = json.loads(call["function"]["arguments"])
-                argument = template.get("argument") or "value"
-                path = template.get("argument_path")
-                value = arguments.get(argument) if path is None else _at_value_path(arguments, path)
-                mark_unknown(value)
-                call["function"]["arguments"] = arguments_text(arguments)
-        finish = seq.finish_reason
-        if finish == "stop" and message.get("tool_calls"):
-            finish = "tool_calls"
-        return {
-            "id": seq.request.request_id, "object": "chat.completion", "created": int(time.time()),
-            "model": self.model_name,
-            "choices": [{"index": 0, "message": message, "finish_reason": finish}],
-            "usage": {"prompt_tokens": seq.prompt_positions, "completion_tokens": seq.generated_positions,
-                      "total_tokens": seq.prompt_positions + seq.generated_positions},
-            "neuralese": {"dialect": self.dialect, "blocks": [b.meta() for b in seq.blocks]},
-            **({'x_natlang_rl_capture': {
-                'schema': 'natlang.rl-sampling/1', 'temperature': seq.request.temperature,
-                'guided': seq.request.guidance is not None,
-                'prompt': seq.prompt_plan,
-                'items': [('block', item.id) if isinstance(item, Block) else ('tok', item) for item in seq.items],
-                'samples': seq.rl_samples,
-                'finish_reason': seq.finish_reason,
-            }} if seq.request.rl_capture else {}),
-            **({"x_natlang_guidance": {"rejections": seq.guide.rejections}} if seq.guide is not None else {}),
-        }
+    def _emit(self, seq: Sequence, token: int):
+        """Streaming: hand new output to the request's listener, if any."""
+        if seq.guide is not None and not seq.native_guidance_flushing:
+            return
+        listener = seq.request.on_delta
+        if listener is None:
+            return
+        text = self.tokenizer.decode(seq.pending + [token], skip_special_tokens=False)
+        if "\ufffd" in text:  # an incomplete UTF-8 sequence; wait for the next token
+            seq.pending.append(token)
+            return
+        seq.pending = []
+        listener({"text": text})
 
     def _native_response(self, seq: Sequence) -> dict:
         from .chat import arguments_text, build_message
@@ -1801,20 +1084,10 @@ class Engine:
             text.append(self.tokenizer.decode(run, skip_special_tokens=False))
         message = build_message("".join(text), block_ids, call_prefix=seq.request.request_id)
 
-        def native_parts(value):
-            if isinstance(value, list):
-                return [native_parts(item) for item in value]
-            if isinstance(value, dict):
-                if value.get("type") == "neuralese" and value.get("id", "").startswith("nzs1_"):
-                    return {"type": "native_state", "id": value["id"]}
-                return {key: native_parts(item) for key, item in value.items()}
-            return value
-
-        message = native_parts(message)
         for call in message.get("tool_calls") or []:
             try:
                 args = json.loads(call["function"]["arguments"])
-                call["function"]["arguments"] = arguments_text(native_parts(args))
+                call["function"]["arguments"] = arguments_text(args)
             except (KeyError, json.JSONDecodeError):
                 continue
         if seq.native_template_value_type is not None:

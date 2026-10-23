@@ -90,7 +90,7 @@ def test_real_native_state_typed_child_archive_parent_import(tmp_path, monkeypat
     weights = tmp_path / 'weights.pt'
     torch.save(model_state(model), weights)
     identity = native_identity(model, config, checkpoint_sha256=sha256_file_hex(weights))
-    engine = Engine(port, None, tokenizer, TensorStore(), f"native-state/{config['architecture']}",
+    engine = Engine(port, tokenizer, TensorStore(), f"native-state/{config['architecture']}",
         shared_model=model, role_tokens=RoleTokens(*model.marker_ids), model_config=config,
         checkpoint_sha256=identity['checkpoint_sha256'], embedding_weight_sha256=identity['embedding_weight_sha256'],device=device)
     engine.native_identity = identity

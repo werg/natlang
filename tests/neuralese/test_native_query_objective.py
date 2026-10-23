@@ -107,12 +107,6 @@ def test_signed_query_decision_and_stopped_teacher_exact_manual_oracle(rule):
             ((p-goal)**2).sum() if rule=='brier' else
             ((p.cumsum(0)-goal.cumsum(0))[:-1]**2).sum() if rule=='rps' else
             -(p*p.new_tensor([-1.,2.])).sum())
-    from natlang_neuralese.serve.grad import GradSession
-    legacy=object.__new__(GradSession)
-    legacy.decision_logprobs=lambda *_args:(scores, None)
-    legacy_value=legacy._decision_term({'options':['a','b'],'rule':rule,
-        'target':{'probabilities':[.3,.7],'rewards':[-1.,2.]}},{})
-    torch.testing.assert_close(legacy_value,proper,rtol=0,atol=0)
     teacher=log[[3,4]].detach()
     kl=(teacher.exp()*(teacher-log[[0,1]])).sum(-1).mean()
     expected=-.4*proper+.8*kl-.2*(log[0,1]+log[1,2])
@@ -283,7 +277,7 @@ def test_program_origin_rejects_jointly_rehashed_objective_and_other_root_rebind
     from natlang_neuralese.model.native_derivative_contract import verify_derivative_gradient_origin
     engine=engine_fixture(tmp_path,family)
     adapter,_=nonzero_adapter(engine)
-    other,_=nonzero_adapter(engine,'tiny')
+    other,_=nonzero_adapter(engine,seed=1)
     source=program(engine,adapter)
     source['inputs']['b']={'kind':'adapter','id':other.id}
     for objective in [source['outer'],*(node for node in source['nodes'] if node['kind']=='gradient')]:
