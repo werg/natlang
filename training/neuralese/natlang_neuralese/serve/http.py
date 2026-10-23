@@ -80,7 +80,7 @@ CAPABILITIES = sorted([
     "decide", "embed", "encode", "grad", "grad.order2", "guidance", "guidance.check", "init-body", "optim", "parts.value-type",
     "render", "score", "store", "store.owners", "template", "template.argument-path", "template.value-type", "view", "write"])
 NATIVE_CAPABILITIES = sorted([
-    "chat", "chat.stream", "decide", "score", "grad", "optim", "native.adapters", "guidance", "guidance.check", "native.text-write", "native.init-body", "parts.value-type", "render", "store", "store.native-state", "store.native-tensor-artifact",
+    "chat", "chat.stream", "decide", "score", "grad", "optim", "native.adapters", "adapters.create", "guidance", "guidance.check", "native.text-write", "native.init-body", "parts.value-type", "render", "store", "store.native-state", "store.native-tensor-artifact",
     "native.protocol-recovery", "store.owners", "template", "template.argument-path", "template.value-type", "view"])
 NATIVE_CAPABILITY_GAPS = sorted(set(CAPABILITIES) - set(NATIVE_CAPABILITIES))
 

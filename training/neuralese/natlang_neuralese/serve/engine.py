@@ -566,6 +566,14 @@ class Engine:
 
     def _native_run(self, callback, adapters=None):
         from ..model.native_adapters import run_native, NativeAdapterError
+        # In-process task evaluation and guided serving share the same declared
+        # actor policy as the HTTP client.  HTTP requests already carry their
+        # resolved defaults explicitly; local callers inherit them here.
+        from ..model.native_adapters import execution_binding
+        if adapters is None and not execution_binding(self):
+            runtime = getattr(self, 'native_coefficient_policy_runtime', None)
+            if runtime is not None:
+                adapters = runtime['defaults']
         try:
             return run_native(self, callback, adapters)
         except NativeAdapterError as error:

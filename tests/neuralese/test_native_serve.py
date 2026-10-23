@@ -206,7 +206,8 @@ def test_native_checkpoint_chat_produces_captures_and_consumes_exact_stored_stat
         assert 'guidance' not in info['capability_gaps']
         assert info['native_state']['consumption_modes'] == [
             'exact-native-state', 'same-base-adapter-state', 'best-effort-text-retokenization']
-        assert info['adapters'] == ['xs', 'tiny']
+        assert 'adapters' not in info, 'legacy projected-adapter inventory is retired'
+        assert 'native.adapters' in info['capabilities'], 'native modelLoRA remains available'
         assert {'native.text-write', 'native.init-body'} <= set(info['capabilities'])
         assert {'decide', 'score'} <= set(info['capabilities'])
         assert 'store.native-tensor-artifact' in info['capabilities']
