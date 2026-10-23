@@ -5,6 +5,33 @@ import pytest
 from scripts.coreweave import teacher_generation_guardian as guardian
 
 
+def test_fresh_primary_context_binds_packet_without_inherited_launcher_environment(tmp_path,monkeypatch):
+    worker=tmp_path/'queue.py';worker.write_text('pass\n')
+    packet=tmp_path/'packet.json';packet.write_text('{"cases":"current"}\n')
+    intent=tmp_path/'intent.json';guardian.write(intent,{'new_configuration':guardian.binding(packet)})
+    class Sources:
+        @staticmethod
+        def _json(reference,declaration):
+            assert guardian.binding(reference['path'])==reference
+            return json.loads(Path(reference['path']).read_text())
+    monkeypatch.setattr(guardian,'_source_sequence_helpers',lambda:Sources)
+    for key in ['NATLANG_REPO','NATLANG_TEACHER_GENERATION_ROOT','NATLANG_TEACHER_SOURCE_CONFIGURATION']:
+        monkeypatch.setenv(key,'incorrect inherited context')
+    config={'root':str(tmp_path/'generation'),'collection_repo':str(tmp_path/'repo'),
+        'collection_worker':guardian.binding(worker),'node_bin':'/work/node/bin',
+        'primary_worker_capacity':24,'source_sequence':{'exact':'declaration'}}
+    state={'source_sequence':{'pending':{'batch':82,'intent':guardian.binding(intent)}}}
+    env=guardian.primary_collection_environment(tmp_path,state,config,82)
+    assert env['NATLANG_REPO']==config['collection_repo']
+    assert env['NATLANG_TEACHER_GENERATION_ROOT']==config['root']
+    assert env['NATLANG_TEACHER_QUEUE_WORKER']==str(worker)
+    assert env['NATLANG_TEACHER_SOURCE_CONFIGURATION']==str(packet)
+    assert env['NATLANG_TEACHER_SOURCE_CONFIGURATION_SHA256']==guardian.binding(packet)['sha256']
+    packet.write_text('{"cases":"changed"}\n')
+    with pytest.raises(ValueError,match='source configuration changed'):
+        guardian.primary_collection_environment(tmp_path,state,config,82)
+
+
 def example(tmp_path):
     entry = {'key':'case-0','source':str(tmp_path/'source.jsonl'),'index':0,'seed':91,
         'jobs':str(tmp_path/'original/jobs'),'output':str(tmp_path/'original/results.jsonl'),
