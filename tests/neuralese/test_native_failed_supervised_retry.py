@@ -393,7 +393,8 @@ def test_configure_replays_exact_candidate_with_inherited_lease_and_recovers_par
         before[name]=binding(path)
         snapshot=tmp_path/f'original-{name}.json';snapshot.write_bytes(path.read_bytes());snapshots[name]=binding(snapshot)
         candidate=tmp_path/f'candidate-{name}.json';write(candidate,value);candidates[name]=binding(candidate)
-    failed_request=binding(x['request']);failed_result=binding(x['result']);corrected={}
+    failed_request=binding(x['request']);failed_result=binding(x['result'])
+    corrected=original_config['trainer_parameters']['memory_qualification']
     controller={'pid':99999999};census=[{'pid':99999998}]
     source_log=x['failure_log'];source_log_path=Path(source_log['path'])
     failure_log={'source':source_log,'snapshot':binding(source_log_path)}
