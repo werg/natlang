@@ -69,7 +69,8 @@ def _input_stream(capture, prompt_length):
                     or sample.get('token_id') != token or sample.get('input_role') != value['input_role']
                     or sample.get('terminal')):
                 raise ValueError('native RL sampled input/query coordinate differs from actual model inputs')
-            event = {**sample, 'forced': False, 'source_sample': sample_index}
+            forced=sample.get('forced') is True
+            event = {**sample, 'forced': forced, 'source_sample': None if forced else sample_index}
             consumed.add(sample_index)
         stream.append({**event, 'index': len(stream), 'fed':True})
     for sample_index, sample in enumerate(samples):
@@ -81,7 +82,8 @@ def _input_stream(capture, prompt_length):
             raise ValueError('native RL unconsumed action is not its actual final terminal sample')
         stream.append({**sample, 'index': len(stream), 'forced': False, 'source_sample': sample_index, 'fed':False})
     order = [event['source_sample'] for event in stream if not event['forced']]
-    if order != list(range(len(samples))):
+    expected=[index for index,sample in enumerate(samples) if sample.get('forced') is not True]
+    if order != expected:
         raise ValueError('native RL model inputs reorder the actual sampled action stream')
     writes = []
     for write in capture.get('writes') or []:
@@ -134,19 +136,23 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
             raise ValueError('native RL graph turn identities must be unique')
         capture = turn.get('sampling') or {}
         actor_identity=(invocation_actors['invocations'][name]['native_identity'] if invocation_actors is not None else identity)
+        forced_capture=capture.get('schema')=='natlang.native-teacher-forced-capture/1'
         greedy = capture.get('schema') in ('natlang.native-structural-capture/1','natlang.native-structural-capture/2')
         decision = capture.get('schema') == 'natlang.native-decision-capture/1'
         schemas = {'natlang.native-rl-sampling/1', 'natlang.native-rl-sampling/2', 'natlang.native-rl-sampling/3','natlang.native-rl-sampling/4'}
         if structural:
             schemas.update(('natlang.native-structural-capture/1','natlang.native-structural-capture/2'))
             schemas.add('natlang.native-decision-capture/1')
+            schemas.add('natlang.native-teacher-forced-capture/1')
         if (capture.get('schema') not in schemas
                 or capture.get('policy') != actor_identity
                 or not decision and capture.get('sample_range_convention') != 'half-open'):
             raise ValueError('native RL capture has a different policy or unsupported sampling schema')
         binding = capture.get('adapter_binding')
-        if (capture['schema'] == 'natlang.native-rl-sampling/3'
-                or (capture['schema']=='natlang.native-rl-sampling/4' or greedy or decision) and binding is not None):
+        if (capture['schema']=='natlang.native-rl-sampling/3'
+                or (capture['schema'] in ('natlang.native-rl-sampling/4','natlang.native-structural-capture/1',
+                    'natlang.native-structural-capture/2','natlang.native-decision-capture/1',
+                    'natlang.native-teacher-forced-capture/1') and binding is not None)):
             from types import SimpleNamespace
             from ..model.native_adapters import validate_state_binding
             validate_state_binding(binding, SimpleNamespace(**actor_identity))
@@ -160,6 +166,10 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
         if decision:
             if any(capture.get(key) for key in ('samples','generated_inputs','writes','sampling_law')):
                 raise ValueError('native decision capture cannot declare sampled actions or a sampling law')
+        elif forced_capture:
+            if law.get('probabilities')!='exact-forced-sequence' or any(sample.get('forced') is not True
+                    or sample.get('logp') is not None for sample in capture.get('samples') or []):
+                raise ValueError('native teacher-forced capture must retain exact input tokens without sampled log-probabilities')
         elif greedy:
             if (type(temperature) not in (int, float) or temperature != 0
                     or law.get('probabilities') != 'greedy-argmax'):

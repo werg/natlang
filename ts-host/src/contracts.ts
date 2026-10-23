@@ -18,7 +18,10 @@ export type ModelTurnRequest = { invocation_id?: string; messages: unknown[]; to
      * block-wise in that many parallel passes. Never required: without it the stop head decides. */
     length?: number; passes?: number };
   /** Guided generation (natlang's servers only): see the agent's `guidance` option. */
-  guidance?: boolean | Record<string, unknown> };
+  guidance?: boolean | Record<string, unknown>;
+  /** Host-side exact teacher target for native forced replay; sent only as transport metadata, never in messages. */
+  native_teacher_forced_turn?: { schema:'natlang.native-teacher-forced-turn/1'; assistant: Record<string,unknown>;
+    source_receipt: Record<string,unknown> } };
 /**
  * Neuralese content (S0 §10, S4 §3). In a request, a message's `content` and a tool call's `function.arguments` may be
  * an array of parts instead of a string, where they carry soft values; in a reply, `text` and string call arguments

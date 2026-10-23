@@ -252,3 +252,21 @@ def test_actual_collector_binding_rejects_malformed_runtime_inventories(tmp_path
     path.write_text(json.dumps(value))
     with pytest.raises(ValueError,match='collector binding'):
         _collector_actor_binding(tmp_path,{'policy_checkpoint_sha256':checkpoint})
+
+
+def test_teacher_forced_capture_replays_actual_tokens_without_behavior_logps():
+    from natlang_neuralese.rl.native_replay import _input_stream
+    capture={'schema':'natlang.native-teacher-forced-capture/1','samples':[
+        {'index':0,'token_id':4,'logp':None,'forced':True,'input_role':'ordinary','terminal':False,'query_own_position':3},
+        {'index':1,'token_id':64,'logp':None,'forced':True,'input_role':'ordinary','terminal':False,'query_own_position':4},
+        {'index':2,'token_id':8,'logp':None,'forced':True,'input_role':'produce','terminal':False,'query_own_position':5},
+        {'index':3,'token_id':65,'logp':None,'forced':True,'input_role':'ordinary','terminal':False,'query_own_position':6}],
+        'generated_inputs':[{'token_id':value['token_id'],'input_role':value['input_role'],'sample_index':index}
+            for index,value in enumerate([
+                {'token_id':4,'input_role':'ordinary'},{'token_id':64,'input_role':'ordinary'},
+                {'token_id':8,'input_role':'produce'},{'token_id':65,'input_role':'ordinary'}])],
+        'writes':[{'begin_sample':1,'end_sample':4,'payload_begin':2,'payload_end':3,
+            'own_begin':5,'own_end':8,'payload_own_begin':6,'payload_own_end':7}]}
+    stream,writes=_input_stream(capture,4)
+    assert len(stream)==4 and all(item['forced'] and item['source_sample'] is None for item in stream)
+    assert all(item['logp'] is None for item in stream) and writes==capture['writes']

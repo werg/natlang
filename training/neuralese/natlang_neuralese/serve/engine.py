@@ -186,6 +186,7 @@ class GenerationRequest:
     neuralese_length: int | None = None
     neuralese_passes: int | None = None
     forced: list | None = None  # test hook: text strings and {"neuralese": "write"} items
+    forced_message: dict | None = None  # exact assistant target from an authenticated teacher turn
     # Template readout: the reply is forced to a call of `call` with `arguments`, up to `argument` (default
     # "value") or its nested `argument_path`; with "value": "write" that exact value is a written block, with
     # "decode" the value and the rest of the reply are decoded.
@@ -252,6 +253,9 @@ class Sequence:
     native_own_position: int = 0
     native_sampling_seed: int | None = None
     native_forced_tokens: list[int] = field(default_factory=list)
+    native_forced_replay: bool = False
+    native_forced_source: dict | None = None
+    native_forced_replay_prompt_sha256: str | None = None
     native_template_suffix: list[int] = field(default_factory=list)
     native_template_value_type: str | None = None
     native_item_positions: list[int] = field(default_factory=list)
@@ -900,6 +904,19 @@ class Engine:
         if seq.request.guidance is not None:
             from .native_guidance import initialize
             initialize(self, seq)
+        if seq.request.forced_message is not None:
+            if not capture_enabled(seq) or seq.request.native_recording is not True:
+                raise RequestError('forced-message','forced teacher replay requires native structural recording')
+            seq.native_forced_tokens=self._forced_message_plan(seq.request.forced_message,seq.request.tools,
+                opening=seq.request.messages)
+            if len(seq.native_forced_tokens)>seq.request.max_tokens:
+                raise RequestError('forced-message','exact teacher reply exceeds the request token allowance')
+            seq.native_forced_replay=True
+            import copy
+            seq.native_forced_source=copy.deepcopy(seq.request.forced_message['source_receipt'])
+            seq.native_forced_replay_prompt_sha256=hashlib.sha256(json.dumps(
+                {'messages':seq.request.messages,'tools':seq.request.tools or []},ensure_ascii=False,
+                sort_keys=True,separators=(',',':')).encode('utf-8')).hexdigest()
         seq.phase = "text"
 
     def _native_token(self, seq):
@@ -980,6 +997,70 @@ class Engine:
 
     def native_write_text(self, text: str, *, value_type: str | None = None, adapters=None):
         return self._native_run(lambda: self._native_write_text_impl(text, value_type=value_type), adapters)
+
+    def _forced_message_plan(self,forced,tools,*,opening):
+        """Render an exact assistant response against its actual prompt, forcing text spans through native roles."""
+        if (not isinstance(forced,dict) or forced.get('schema')!='natlang.native-teacher-forced-turn/1'
+                or not isinstance(forced.get('assistant'),dict) or not isinstance(forced.get('source_receipt'),dict)):
+            raise RequestError('forced-message','forced replay needs the bound teacher-turn source receipt and assistant target')
+        message=forced['assistant'];source=forced['source_receipt'];actor=source.get('actor')
+        valid_hash=lambda value:isinstance(value,str) and len(value)==64 and all(c in '0123456789abcdef' for c in value)
+        if (source.get('schema')!='natlang.teacher-turn-source/1' or not isinstance(actor,dict)
+                or not isinstance(source.get('source_path'),str) or not source['source_path']
+                or not isinstance(source.get('source_view'),str) or source['source_view'] not in {'unhinted','privileged-hint'}
+                or not isinstance(source.get('invocation_id'),str) or not source['invocation_id']
+                or type(source.get('ordinal')) is not int or source['ordinal']<0
+                or any(not valid_hash(source.get(key)) for key in ('turn_sha256','prompt_sha256','task_sha256','source_file_sha256'))
+                or actor.get('model')!='nvidia/Qwen3.6-35B-A3B-NVFP4'
+                or actor.get('revision')!='1355db6a052410cfd62085d94b58866fd0f2c3c5'
+                or any(not valid_hash(actor.get(key)) for key in ('actor_source_sha256','execution_identity_sha256'))):
+            raise RequestError('forced-message','teacher turn source binding is incomplete or has the wrong teacher actor')
+        if not isinstance(message,dict) or message.get('role')!='assistant':
+            raise RequestError('forced-message','the replay target must be one assistant message')
+        import copy,secrets,re
+        target=copy.deepcopy(message);markers={}
+        vocab=getattr(self.tokenizer,'get_vocab',lambda:{})()
+        candidates=[token for token,_ in sorted(vocab.items(),key=lambda item:item[1])
+            if isinstance(token,str) and re.fullmatch(r'[A-Za-z0-9_]{2,}',token)
+            and token not in getattr(self,'specials',())]
+        def marker_for(body):
+            body_ids=self.tokenizer(body,add_special_tokens=False,split_special_tokens=True)['input_ids']
+            for token in candidates:
+                ids=self._tokens(token)
+                if token not in body and ids and not any(body_ids[index:index+len(ids)]==ids
+                        for index in range(len(body_ids)-len(ids)+1)) and token not in markers:
+                    markers[token]=body
+                    return token
+            token='NATLANGFORCEDNATIVE'+secrets.token_hex(16)+'END';markers[token]=body;return token
+        def mark_parts(value):
+            if isinstance(value,list):return [mark_parts(item) for item in value]
+            if isinstance(value,dict):
+                if value.get('type')=='teacher_native_text':
+                    body=value.get('text')
+                    if not isinstance(body,str) or not body:raise RequestError('forced-message','native teacher text must be nonempty')
+                    return {'type':'text','text':marker_for(body)}
+                return {key:mark_parts(item) for key,item in value.items()}
+            return value
+        target['content']=mark_parts(target.get('content'))
+        from .chat import assistant_reply_segments,normalize_tool_call_arguments
+        target=normalize_tool_call_arguments([target])[0][0]
+        apply=lambda messages,generation:self.tokenizer.apply_chat_template(messages,tools=tools or None,
+            tokenize=False,add_generation_prompt=generation)
+        segments=assistant_reply_segments(apply,target,self.specials,opening=opening)
+        if segments is None:raise RequestError('forced-message','assistant response does not continue this exact actual prompt')
+        plan=[]
+        for text,escaped in segments:
+            if text:plan.extend(self.tokenizer(text,add_special_tokens=False,split_special_tokens=True)['input_ids']
+                if escaped else self._template_tokens(text))
+        for marker,body in markers.items():
+            needle=self._tokens(marker);body_ids=self.tokenizer(body,add_special_tokens=False,split_special_tokens=True)['input_ids']
+            matches=[index for index in range(len(plan)-len(needle)+1) if plan[index:index+len(needle)]==needle]
+            if not needle or not body_ids or len(matches)!=1:
+                raise RequestError('forced-message','native teacher text occurrence is absent, ambiguous, or tokenized empty')
+            if any(token in self.stop_ids for token in body_ids):
+                raise RequestError('forced-message','native teacher text contains an exact model stop token and cannot be forced safely')
+            index=matches[0];plan[index:index+len(needle)]=[self.role_tokens.produce_open,*body_ids,self.role_tokens.produce_close]
+        return plan
 
     def _native_write_text_impl(self, text: str, *, value_type: str | None = None):
         """Force supplied text through this model's actual producer transform and archive its native state."""
@@ -1160,7 +1241,7 @@ class Engine:
                 if seq.phase == "prefill":
                     self._native_prefill(seq)
                     continue
-                if seq.native_forced_tokens:
+                if seq.native_forced_tokens and not seq.native_forced_replay:
                     token = seq.native_forced_tokens.pop(0)
                     if token in self.stop_ids:
                         self._finish(seq, 'stop')
@@ -1177,12 +1258,18 @@ class Engine:
                     if not self._native_guide(seq):
                         self._emit(seq, token=token)
                     continue
+                if seq.native_forced_replay and not seq.native_forced_tokens:
+                    if seq.native_capture_open:
+                        raise RequestError('neuralese-native-state-open','forced teacher reply ended inside a producer span')
+                    self._finish(seq,'stop')
+                    continue
                 if seq.generated_positions >= seq.request.max_tokens:
                     if seq.native_capture_open:
                         raise RequestError("neuralese-native-state-open", "generation ended inside a produce span")
                     self._finish(seq, "length")
                     continue
-                token, sampled_logp = self._native_token(seq)
+                forced=seq.native_forced_replay
+                token, sampled_logp = ((seq.native_forced_tokens.pop(0),None) if forced else self._native_token(seq))
                 sample_index = len(seq.rl_samples)
                 # The next-token query is the output position of the last own
                 # input; imported KV slots do not contribute to this index.
@@ -1192,6 +1279,7 @@ class Engine:
                     self.role_tokens.produce_open, self.role_tokens.produce_close)
                 if capture_enabled(seq) or seq.guide is not None:
                     seq.rl_samples.append({"index": sample_index, "token_id": token, "logp": sampled_logp,
+                                           **({'forced':True} if forced else {}),
                                            **({'banned_token_ids': sorted(seq.bans.get(seq.native_own_position, ()))}
                                               if seq.guide is not None else {}),
                                            "input_role": "produce" if producing_input else "ordinary",
@@ -1789,17 +1877,21 @@ class Engine:
         if seq.guide is not None:
             response['x_natlang_guidance'] = {'rejections': seq.guide.rejections}
         if seq.request.rl_capture or seq.native_protocol_failure is not None:
-            response["x_natlang_rl_capture"] = {"schema": ("natlang.native-structural-capture/1"
+            response["x_natlang_rl_capture"] = {"schema": ("natlang.native-teacher-forced-capture/1"
+                    if seq.native_forced_replay else "natlang.native-structural-capture/1"
                     if seq.request.temperature <= 0 else "natlang.native-rl-sampling/3"
                     if seq.native_rl_adapter_binding else "natlang.native-rl-sampling/2"),
                 "policy": dict(seq.native_rl_policy),
+                **({'teacher_source_receipt':seq.native_forced_source} if seq.native_forced_source is not None else {}),
+                **({'replay_prompt_sha256':seq.native_forced_replay_prompt_sha256} if seq.native_forced_replay_prompt_sha256 else {}),
                 **({'adapter_binding': seq.native_rl_adapter_binding} if seq.native_rl_adapter_binding else {}),
                 "prompt": seq.native_rl_prompt, "samples": seq.rl_samples,
                 "generated_inputs": seq.native_rl_inputs, "writes": seq.native_rl_writes,
                 "finish_reason": seq.finish_reason,
                 "sample_range_convention": "half-open",
                 "sampling_law": {"temperature": seq.request.temperature, "seed": seq.native_sampling_seed,
-                                 "guidance": seq.guide is not None, "probabilities": ("greedy-argmax"
+                                 "guidance": seq.guide is not None, "probabilities": ("exact-forced-sequence"
+                                     if seq.native_forced_replay else "greedy-argmax"
                                      if seq.request.temperature <= 0 else "post-processing-normalized")}}
         if seq.native_protocol_failure is not None:
             failure=seq.native_protocol_failure

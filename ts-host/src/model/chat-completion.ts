@@ -264,6 +264,10 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
       // Weight adapters bound by the calling function's context; only Neuralese transports send them.
       if (request.adapters?.length) wireRequest.x_natlang_adapters = request.adapters;
       if (request.guidance) wireRequest.guidance = request.guidance;
+      if (request.native_teacher_forced_turn) {
+        wireRequest.x_natlang_forced_message = request.native_teacher_forced_turn;
+        wireRequest.x_natlang_native_recording = true;
+      }
       if (request.template) {
         const { length, passes, ...template } = request.template;
         wireRequest.neuralese_template = { ...template, call: forward[template.call] ?? template.call };

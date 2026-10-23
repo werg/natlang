@@ -398,11 +398,11 @@ def bind_history_reasoning(tokenizer, policy: str | None = None, *, model_type: 
     return tokenizer
 
 
-def assistant_reply(apply_template, message: dict) -> str | None:
+def assistant_reply(apply_template, message: dict, opening=None) -> str | None:
     """The text a model generates for assistant `message` after the generation prompt of a one-turn conversation, or
     None when the template's rendering of the turn does not continue that prompt. Thinking templates get the empty
     think block a reasoning-free reply closes on policy (`render_with_empty_thought`)."""
-    opening = [{"role": "user", "content": "x"}]
+    opening = [{"role": "user", "content": "x"}] if opening is None else opening
     prompt = apply_template(opening, True)
     full = apply_template(opening + [message], False)
     if not full.startswith(prompt) and opens_thinking(prompt):
@@ -410,7 +410,7 @@ def assistant_reply(apply_template, message: dict) -> str | None:
     return full[len(prompt):] if full.startswith(prompt) else None
 
 
-def assistant_reply_segments(apply_template, message: dict, specials=()) -> list[tuple[str, bool]] | None:
+def assistant_reply_segments(apply_template, message: dict, specials=(), opening=None) -> list[tuple[str, bool]] | None:
     """Render an assistant reply after its serving generation prompt.
 
     Special-token spellings in assistant-authored content are escaped before
@@ -420,7 +420,7 @@ def assistant_reply_segments(apply_template, message: dict, specials=()) -> list
     :func:`assistant_reply`.
     """
     if not specials:
-        reply = assistant_reply(apply_template, message)
+        reply = assistant_reply(apply_template, message, opening)
         return None if reply is None else [(reply, False)]
 
     supplied = json.dumps(message, ensure_ascii=False)
@@ -457,7 +457,7 @@ def assistant_reply_segments(apply_template, message: dict, specials=()) -> list
     if calls:
         prepared["tool_calls"] = calls
 
-    reply = assistant_reply(apply_template, prepared)
+    reply = assistant_reply(apply_template, prepared, opening)
     return None if reply is None else split_escaped(reply, nonce)
 
 

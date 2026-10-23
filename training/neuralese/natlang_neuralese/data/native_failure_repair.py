@@ -345,7 +345,8 @@ def _replay_rollout(rollout, *, identity, roles, fetch_block):
     from ..rl.native_replay import compile_replay,capture_invocation_actors
     turns=whole_episode_turns(rollout)
     schemas={turn['sampling'].get('schema') for turn in turns}
-    structural=bool(schemas & {'natlang.native-structural-capture/1','natlang.native-structural-capture/2'})
+    structural=bool(schemas & {'natlang.native-structural-capture/1','natlang.native-structural-capture/2',
+        'natlang.native-teacher-forced-capture/1'})
     actors=capture_invocation_actors(turns,identity)
     replay=compile_replay(turns,identity=identity,roles=roles,fetch_block=fetch_block,
         invocation_actors=actors,structural=structural)
