@@ -38,5 +38,8 @@ dev = ["pytest==9.1.1"]
 package-dir = { "" = "training/neuralese" }
 packages = ["natlang_neuralese", "natlang_neuralese.common", "natlang_neuralese.model", "natlang_neuralese.data", "natlang_neuralese.train", "natlang_neuralese.eval", "natlang_neuralese.serve"]
 
+[tool.setuptools.package-data]
+"natlang_neuralese.common" = ["memetic_teacher_ferry_deployments.json"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

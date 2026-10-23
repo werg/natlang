@@ -15,7 +15,7 @@ import urllib.request
 from pathlib import Path
 from ..eval.task_packet import read_jsonl
 from .task_rollouts import build_queue, score
-from .memetic_teacher_ferry import TEACHER_SERVE_ALIAS
+from ..common.memetic_teacher_ferry import TEACHER_SERVE_ALIAS
 ROOT = Path(__file__).resolve().parents[4]
 GUIDANCE_WORDS = 120
 PROPOSE_GUIDANCE = "You write guidance for a small language model that runs natural-language programs: it reads a call's\ninputs, uses tools (eval for exact computation, return_result to finish) and returns a typed result. The guidance is\nadded to its system prompt for every call of these tasks.\n\nCurrent guidance:\n{guidance}\n\nTask rows it ran and how they ended (outcome class, the checks that failed, the value it returned, errors):\n{digest}\n\nWrite revised guidance that fixes the failures without naming these tasks or their answers:\n1. Find the most common failure class above and what the model did wrong in it.\n2. State, as short numbered steps, what the model should do instead.\n3. Keep anything from the current guidance that is not contradicted by the failures.\n4. Use at most {words} words.\nReply with the guidance inside <guidance>...</guidance>."
