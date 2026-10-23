@@ -462,15 +462,27 @@ class _EvaluatorHandler(http.server.BaseHTTPRequestHandler):
             self._reply(400, canonical_bytes({'error': {'code': 'memetic-author-request', 'detail': str(error)}}))
 
 
+def served_native_identity(info):
+    """Validate the actual HTTP native policy/state contract, without legacy fields."""
+    keys = ('checkpoint_sha256', 'tokenizer_fingerprint', 'embedding_weight_sha256', 'architecture')
+    state = info.get('native_state') or {}
+    binding = info.get('rl_policy_binding') or {}
+    identity = binding.get('native_identity') or {}
+    if (state.get('enabled') is not True or binding.get('schema') != 'natlang.rl-policy-binding/2'
+            or binding.get('communication') not in ('native-state', 'semantic-state')
+            or any(not isinstance(identity.get(key), str) or not identity[key] or
+                   state.get(key) != identity[key] for key in keys)
+            or binding.get('checkpoint_sha256') != identity.get('checkpoint_sha256')):
+        raise ValueError('memetic guidance requires a consistent native RL policy and state identity')
+    return {key: identity[key] for key in keys}
+
+
 def evaluator_native_identity(student='lfm'):
     request = urllib.request.Request('http://127.0.0.1:8765/v1/neuralese/info', method='GET')
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     with opener.open(request, timeout=20) as response:
         raw = response.read(1024 * 1024)
-    info = json.loads(raw)
-    if not (info.get('native_state') or {}).get('enabled'):
-        raise ValueError('native evaluator state is not enabled')
-    identity = info.get('native_identity')
+    identity = served_native_identity(json.loads(raw))
     profile = evaluator_profile(student)
     if identity != profile['native_identity']:
         raise ValueError('active evaluator checkpoint/tokenizer/embedding identity differs from the pinned native actor')

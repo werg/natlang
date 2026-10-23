@@ -426,3 +426,17 @@ def test_host_entry_resolves_credentials_before_opening_allowlisted_sandboxes(mo
         events.append((evaluator,teacher,student,once)))
     sdk_ferry.main(['--student','lfm','--once'])
     assert events[-1]==(ferry.EVALUATOR_IDS['lfm'],ferry.TEACHER_SANDBOX_ID,'lfm',True)
+
+
+def test_served_native_identity_uses_actual_policy_binding():
+    identity = dict(ferry.EVALUATOR_NATIVE_IDENTITY)
+    info = {'native_state': {'enabled': True, **identity},
+            'rl_policy_binding': {'schema': 'natlang.rl-policy-binding/2',
+                'communication': 'native-state', 'native_identity': identity,
+                'checkpoint_sha256': identity['checkpoint_sha256']}}
+    assert ferry.served_native_identity(info) == identity
+    with pytest.raises(ValueError, match='consistent native'):
+        ferry.served_native_identity({'native_state': info['native_state'], 'native_identity': identity})
+    info['native_state']['checkpoint_sha256'] = 'contradictory'
+    with pytest.raises(ValueError, match='consistent native'):
+        ferry.served_native_identity(info)

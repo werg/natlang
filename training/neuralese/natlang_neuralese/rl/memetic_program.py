@@ -112,16 +112,7 @@ def archive_state(server: str, out: Path, written: dict):
 
 def actor_identity(server: str, info=None):
     info = info if info is not None else request_json(server, '/v1/neuralese/info')
-    state = info.get('native_state') or {}
-    binding = info.get('rl_policy_binding') or {}
-    identity = binding.get('native_identity') or {}
-    if (state.get('enabled') is not True or binding.get('schema') != 'natlang.rl-policy-binding/2'
-            or binding.get('communication') not in ('native-state', 'semantic-state')
-            or any(not isinstance(identity.get(key), str) or not identity[key] or
-                   state.get(key) != identity[key] for key in IDENTITY)
-            or binding.get('checkpoint_sha256') != identity.get('checkpoint_sha256')):
-        raise ValueError('memetic guidance requires a consistent native RL policy and state identity')
-    return {key: identity[key] for key in IDENTITY}
+    return teacher_ferry.served_native_identity(info)
 
 
 def local_runtime_binding() -> dict:
