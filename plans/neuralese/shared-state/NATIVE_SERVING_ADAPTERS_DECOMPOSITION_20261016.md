@@ -1,5 +1,13 @@
 # Native serving adapters
 
+**Current status (2026-10-23):** The legacy tiny/xs `nz1` block adapter and
+its PEFT/GGUF export path described by the historical implementation below
+have been retired. The current native actor coefficient implementation
+remains active: exact-base `nnt1` artifacts, native graph gradients, optimizer
+updates and whole-graph execution. Generic caller-supplied llama.cpp GGUF LoRA
+serving remains a separate model-serving feature. The material below records
+the implementation history and qualification evidence for the native path.
+
 ## Natural-language service policy
 
 1. A caller creates an Adapter for the exact live native model, chooses its
@@ -106,11 +114,12 @@ LFM fixture and exceeded a3GB claim: that unit is OOM/INCOMPLETE, not green.
 The rerun excludes that expensive fixture; direct shared legacy algebra and the
 standing full suite cover its changed helper.
 
-Direct native adapter capabilities are independently reviewed by root;
-current HTTP info advertises `xs`/`tiny` after the integrated checks below. Adapted-policy RL, higher order, legacy projection decoders and GGUF
-LoRA export remain separate explicit unsupported paths. This is not full
-learning-continuum or production cutover completion. The existing production
-models, recipes and unadapted kernel arithmetic are unchanged.
+Direct native adapter capabilities are independently reviewed by root. The
+current HTTP info advertises `native.adapters` for exact actor coefficients.
+Adapted-policy RL and higher order remain separate explicit unsupported paths;
+legacy tiny/xs PEFT/GGUF export is retired. This is not full learning-continuum
+or production cutover completion. The existing production models, recipes and
+unadapted kernel arithmetic are unchanged.
 
 ### Coefficient identity at numeric convergence
 
