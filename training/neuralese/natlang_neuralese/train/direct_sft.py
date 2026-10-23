@@ -44,7 +44,7 @@ from ..common.hashing import canonical_json_sha256_hex
 from ..common.jsonio import open_jsonl_text
 from ..common.profiling import UpdateProfiler, backward_phase, region as profile_region, scope as profile_scope
 from .checkpoint_policy import CheckpointPolicy
-from .text_supervision import target_bearing_window as target_bearing
+from .text_supervision import context_only_mask, target_bearing_window as target_bearing
 
 SCHEMA = 'natlang.neuralese-direct/1'
 DIRECT_MEMORY_GEOMETRY_VERSION = 'direct-sft-window-v2:fp32-rmsnorm-casts'
@@ -475,17 +475,6 @@ def merged_context_only_spans(declared, added):
         else:
             merged.append([begin, end])
     return merged
-
-
-def context_only_mask(source, labels, declared, decode):
-    """1 at every position of a framed document (``source``: open token, the row's token_ids, close token) that is
-    context only: assistant turns answered by a runtime failure (needs role ``labels``) and the declared spans."""
-    from .text_supervision import failed_assistant_mask
-    mask = failed_assistant_mask(source, labels, decode) if labels is not None else array('B', bytes(len(source)))
-    for begin, end in declared:
-        for position in range(begin + 1, min(end + 1, len(mask))):  # +1: the leading open token
-            mask[position] = 1
-    return mask
 
 
 def segment_ids(roles: torch.Tensor | None, span_start: int, length: int, batch: int, device) -> torch.Tensor:

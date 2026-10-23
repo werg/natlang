@@ -79,6 +79,19 @@ def failed_feedback(body):
     return any(pattern.search(body) for pattern in FAILED_TOOL_FEEDBACK)
 
 
+def context_only_mask(source, labels, declared, decode):
+    """Mark failed-assistant turns and declared spans as context rather than positive targets.
+
+    ``source`` is framed by one leading open token and one trailing close token;
+    declared spans are half-open offsets into the unframed document.
+    """
+    mask = failed_assistant_mask(source, labels, decode) if labels is not None else array('B', bytes(len(source)))
+    for begin, end in declared:
+        for position in range(begin + 1, min(end + 1, len(mask))):
+            mask[position] = 1
+    return mask
+
+
 def failed_assistant_mask(ids, labels, decode, *, evidence=None):
     """Per-token 1 on assistant turns (reasoning and reply) whose following tool response(s) are a runtime failure
     (``FAILED_TOOL_FEEDBACK``), else 0; ``ids`` and ``labels`` (``chat_roles`` codes) are aligned, ``decode`` maps token

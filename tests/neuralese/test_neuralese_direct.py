@@ -271,7 +271,8 @@ def test_declared_json_stage_components_serialize_as_json():
 def test_declared_context_only_spans_are_masked_with_the_failed_turns():
     """A producer's ``context_only_spans`` (excluded bad assistant targets kept in a retained history) are context
     only, in the row's token_ids coordinates, on top of the runtime-failure mask; malformed spans are refused."""
-    from natlang_neuralese.train.direct_sft import context_only_mask, context_only_spans
+    from natlang_neuralese.train.direct_sft import context_only_spans
+    from natlang_neuralese.train.text_supervision import context_only_mask
     from natlang_neuralese.train.text_supervision import ROLE_CODES
     A, O, U = (ROLE_CODES.index(n) for n in ('assistant_reply', 'other', 'user'))
     row = {'token_ids': list(range(10)), 'context_only_spans': [[2, 4], [7, 9]]}
