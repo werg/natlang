@@ -103,7 +103,62 @@ def _rewrite_request(request,bindings,values,roots):
     return body,selected
 
 
-def _evaluate(engine,request,bindings,values,roots,target_name,finish,owner):
+def _evaluate(engine,request,bindings,values,roots,target_name,finish,owner,*,target_aliases=None):
+    if isinstance(request,dict) and request.get('schema')=='natlang.native-recorded-objective-request/1':
+        from ..model.native_derivative_contract import validate_recorded_objective_request
+        from .native_recorded_objective import lower_recorded_objective_request
+        validate_recorded_objective_request(request)
+        if not isinstance(bindings,dict) or any(key not in roots or value not in values for key,value in bindings.items()):
+            raise ValueError('recorded derivative bindings must select exact available root values')
+        selected={name:values[bindings.get(name,name)] for name in roots}
+        declared={item['root']:item for item in request['targets']}
+        aliases=({item['root']:item['root'] for item in request['targets']} if target_aliases is None
+            else dict(target_aliases))
+        if set(aliases.values())-set(declared):
+            raise ValueError('recorded derivative target aliases must map to declared objective roots')
+        specs={}
+        for alias,root_name in aliases.items():
+            target=declared[root_name];value=selected[root_name]
+            if target['kind']!=value.kind or target['id']!=roots[root_name].ident:
+                raise ValueError('recorded objective target differs from its exact declared derivative root')
+            if values.get(bindings.get(root_name,root_name)) is not value:
+                raise ValueError('recorded objective target differs from its actual derivative value binding')
+            names=target.get('names',value.names)
+            if sorted(names)!=sorted(value.names):
+                raise ValueError('recorded objective target names differ from its exact differentiable value')
+            specs[alias]={'kind':value.kind,'id':value.ident,'names':list(names),
+                'tensors':{name:value.tensors[name] for name in names}}
+        lowered=lower_recorded_objective_request(engine,request,owner=owner)
+        body,selected=_rewrite_request(lowered,bindings,values,roots)
+        from ..common.native_higher_order import active_reference_arithmetic
+        def observe_recorded(loss,target_groups,metadata):
+            provenance=metadata['provenance']
+            overlays=sorted({value.ident:{'id':value.ident,'names':sorted(value.tensors)} for value in selected.values()
+                    if value.kind=='model-parameters'}.values(),key=lambda item:item['id'])
+            receipt=provenance.get('invocation_actors')
+            actor={'schema':'natlang.native-functional-actor/1','base_native_identity':engine.native_identity,
+                'parameter_values':overlays,
+                'uniform_adapters':(provenance.get('adapter_binding') or {}).get('adapters',[]),
+                'invocation_adapters':({name:(value.get('adapter_binding') or {}).get('adapters',[])
+                    for name,value in receipt['invocations'].items()} if receipt is not None else None),
+                'arithmetic':active_reference_arithmetic().binding()}
+            if overlays:
+                provenance={key:value for key,value in provenance.items() if key not in
+                    {'effective_native_identity','adapter_binding','invocation_actors','actor_graph_sha256'}}
+                if provenance.get('external_adapter_state_contracts'):
+                    provenance['external_adapter_reference_contracts']=provenance.pop('external_adapter_state_contracts')
+            metadata={**metadata,'provenance':{**provenance,'functional_actor':actor,
+                'functional_actor_sha256':canonical_json_sha256_hex(actor),
+                'evaluation_inputs':{key:{'kind':value.kind,'value_id':value.ident,'names':value.names}
+                    for key,value in selected.items()}}}
+            grouped={alias:{'value':selected[aliases[alias]],'tensors':group['tensors']}
+                for alias,group in target_groups.items()}
+            return finish(loss,grouped,metadata)
+        return native_graph_gradient(engine,body,owner,evaluation_callback=observe_recorded,
+            adapter_leaves_override={value.ident:value.tensors for value in selected.values() if value.kind=='adapter'},
+            native_state_overrides={value.ident:replace_state_values(value.source,value.tensors)
+                for value in selected.values() if value.kind=='native-state'},
+            evaluation_target_specs=specs)
     body,selected=_rewrite_request(request,bindings,values,roots)
     target=selected[target_name]
     declaration={'kind':target.kind,'names':target.names}
@@ -175,26 +230,67 @@ def execute_derivative_program(engine,program,owner=None):
             if not isinstance(name,str) or not name or name in values or name in gradients:raise ValueError('native derivative nodes require unique ordered names')
             kind=node.get('kind')
             if kind=='gradient':
-                if set(node)!={'kind','name','value','request','bindings'} or node['value'] not in values:raise ValueError('native derivative gradient references an unavailable earlier value')
-                value=values[node['value']]
+                targets=(node.get('targets') if 'targets' in node else [{'name':name,'value':node.get('value')}])
+                if not isinstance(targets,list) or not targets or any(item['value'] not in values for item in targets):
+                    raise ValueError('native derivative gradient references an unavailable earlier value')
                 if not isinstance(node['bindings'],dict) or any(key not in roots or item not in values for key,item in node['bindings'].items()):
                     raise ValueError('native derivative bindings must select available values for exact declared roots')
-                root_name=next((key for key in roots if node['bindings'].get(key,key)==node['value']),None)
-                if root_name is None:raise ValueError('native derivative gradient value must be bound in the actual objective')
-                def finish(loss,selected,metadata):
-                    tensors=(torch.autograd.grad(loss,tuple(selected.values()),create_graph=True,retain_graph=True,allow_unused=True)
-                        if loss.requires_grad else (None,)*len(selected))
-                    live={key:gradient if gradient is not None else selected[key]*0 for key,gradient in zip(selected,tensors)}
-                    record=engine.store.put_native_tensor_artifact(NativeTensorArtifact(metadata['artifact_kind'],engine.native_identity,live,
-                        metadata['source_artifact_id'],{**metadata['provenance'],'derivative_program_id':declaration.id,'node':name,
-                            'arithmetic':arithmetic.binding(),'graph_sha256':metadata['graph_sha256'],'loss':float(loss.detach()),
-                            'native_derivative_target':{'schema':'natlang.native-derivative-target/1','stage':'inner','variable':node['value'],
-                                'value_id':value.ident,'kind':value.kind,'names':sorted(live)},
-                            **({'parameter_value_id':value.ident} if value.kind=='model-parameters' else {})}),owner)
-                    return record,live
-                record,live=_evaluate(engine,node['request'],node['bindings'],values,roots,root_name,finish,owner)
-                gradients[name]=(record,live,value.ident)
-                outputs[name]=record.id
+                root_for_alias={}
+                for target in targets:
+                    matches=[root for root in roots if node['bindings'].get(root,root)==target['value']]
+                    if len(matches)!=1:raise ValueError('each recorded gradient alias must bind one exact original root')
+                    root_for_alias[target['name']]=matches[0]
+                def finish(loss,groups,metadata):
+                    if metadata.get('target_groups') is None:
+                        alias=targets[0]['name'];target_value=values[targets[0]['value']]
+                        selected=groups
+                        tensors=(torch.autograd.grad(loss,tuple(selected.values()),create_graph=True,retain_graph=True,allow_unused=True)
+                            if loss.requires_grad else (None,)*len(selected))
+                        live={key:gradient if gradient is not None else selected[key]*0 for key,gradient in zip(selected,tensors)}
+                        record=engine.store.put_native_tensor_artifact(NativeTensorArtifact(
+                            {'adapter':'adapter-gradient','native-state':'state-gradient','model-parameters':'parameter-gradient'}[target_value.kind],
+                            engine.native_identity,live,target_value.ident if target_value.kind!='model-parameters' else None,
+                            {**metadata['provenance'],'derivative_program_id':declaration.id,'node':alias,'gradient_node':name,
+                             'arithmetic':arithmetic.binding(),'graph_sha256':metadata['graph_sha256'],'loss':float(loss.detach()),
+                             'native_derivative_target':{'schema':'natlang.native-derivative-target/1','stage':'inner',
+                                'variable':targets[0]['value'],'value_id':target_value.ident,'kind':target_value.kind,'names':sorted(live)},
+                             **({'parameter_value_id':target_value.ident} if target_value.kind=='model-parameters' else {})}),owner)
+                        return record,live
+                    entries=[(alias,key,tensor,groups[alias]['value']) for alias in root_for_alias
+                        for key,tensor in groups[alias]['tensors'].items()]
+                    raw=(torch.autograd.grad(loss,tuple(item[2] for item in entries),create_graph=True,
+                        retain_graph=True,allow_unused=True) if loss.requires_grad else (None,)*len(entries))
+                    live_by_alias={alias:{} for alias in root_for_alias}
+                    for (alias,key,tensor,_),gradient in zip(entries,raw):
+                        live_by_alias[alias][key]=gradient if gradient is not None else tensor*0
+                    records={}
+                    for alias,root_name in root_for_alias.items():
+                        target_value=groups[alias]['value'];live=live_by_alias[alias]
+                        record=engine.store.put_native_tensor_artifact(NativeTensorArtifact(
+                            {'adapter':'adapter-gradient','native-state':'state-gradient','model-parameters':'parameter-gradient'}[target_value.kind],
+                            engine.native_identity,live,target_value.ident if target_value.kind!='model-parameters' else None,
+                            {**metadata['provenance'],'derivative_program_id':declaration.id,'node':alias,'gradient_node':name,
+                             'arithmetic':arithmetic.binding(),'graph_sha256':metadata['graph_sha256'],'loss':float(loss.detach()),
+                             'target_kind':target_value.kind,'target_names':sorted(live),
+                             'native_derivative_target':{'schema':'natlang.native-derivative-target/1','stage':'inner',
+                                'variable':targets[[item['name'] for item in targets].index(alias)]['value'],
+                                'value_id':target_value.ident,'kind':target_value.kind,'names':sorted(live)},
+                             **({'parameter_value_id':target_value.ident} if target_value.kind=='model-parameters' else {})}),owner)
+                        records[alias]=(record,live,target_value.ident)
+                    return records
+                if node['request'].get('schema')=='natlang.native-recorded-objective-request/1':
+                    alias_map={target['name']:root_for_alias[target['name']] for target in targets}
+                else:alias_map=None
+                evaluated=_evaluate(engine,node['request'],node['bindings'],values,roots,root_for_alias[targets[0]['name']],finish,owner,
+                    target_aliases=alias_map)
+                if isinstance(evaluated,dict) and all(alias in evaluated for alias in root_for_alias):
+                    for alias,record_live in evaluated.items():
+                        gradients[alias]=record_live;outputs[alias]=record_live[0].id
+                    record_ids={alias:record.id for alias,(record,_,_) in evaluated.items()}
+                else:
+                    alias=targets[0]['name'];record,live=evaluated
+                    value=values[targets[0]['value']]
+                    gradients[alias]=(record,live,value.ident);outputs[alias]=record.id;record_ids={alias:record.id}
             elif kind=='optimizer':
                 if set(node)!={'kind','name','value','gradient','optimizer','optimizer_state'} or node['value'] not in values or node['gradient'] not in gradients:
                     raise ValueError('native derivative update references unavailable earlier values or gradients')
@@ -231,7 +327,9 @@ def execute_derivative_program(engine,program,owner=None):
                     value=Value(previous.kind,tensors,saved.id,previous.names,artifact,moments,state.id)
                 values[name]=value;outputs[name]=value.ident;optimizer_states[name]=value.history_id
             else:raise ValueError('native derivative node kind must be gradient or optimizer')
-            receipts.append({'name':name,'kind':kind,'artifact_id':outputs[name]})
+            receipts.append({'name':name,'kind':kind,'artifact_id':outputs.get(name),
+                **({'gradients':record_ids} if kind=='gradient' and 'record_ids' in locals() else {})})
+            if kind=='gradient' and 'record_ids' in locals():del record_ids
         outer=program['outer']
         if not isinstance(outer,dict) or set(outer)!={'request','bindings'}:raise ValueError('native derivative outer objective needs its exact request and input bindings')
         def finish_outer(loss,selected,metadata):

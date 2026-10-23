@@ -189,17 +189,17 @@ def lower_recorded_objective(engine,turns,events,terms,*,owner=None):
             if key in {binding['id'] for binding in graph['external_states'].values()}}}
 
 
-def native_recorded_gradient(engine, request, owner=None):
-    """Compile a recorded-objective request and differentiate its exact native actors."""
-    if (not isinstance(request,dict) or
-            set(request)!={'schema','turns','events','terms','target'} or
-            request.get('schema')!='natlang.native-recorded-objective-request/1' or
-            not isinstance(request.get('turns'),list) or not isinstance(request.get('events'),list)):
-        raise ValueError('native recorded gradient requires exact turns, events, terms and target under its versioned schema')
-    target=request['target']
-    if not isinstance(target,dict) or target.get('kind') not in ('adapter','model-parameters','native-state'):
-        raise ValueError('native recorded gradient target must select actual adapter coefficients, model parameters or imported state')
-    body=lower_recorded_objective(engine,request['turns'],request['events'],request['terms'],owner=owner)
-    body['target']=target
-    from .native_grad import native_graph_gradient
-    return native_graph_gradient(engine,body,owner)
+def lower_recorded_objective_request(engine,request,*,owner=None):
+    """Lower one versioned recorded objective while retaining its exact target roots."""
+    from ..model.native_derivative_contract import validate_recorded_objective_request
+    validate_recorded_objective_request(request)
+    lowered=lower_recorded_objective(engine,request['turns'],request['events'],request['terms'],owner=owner)
+    if lowered['native_identity']!=_recorded_identity(engine):
+        raise ValueError('native recorded objective changed its exact live model identity')
+    lowered['recorded_objective_request']=copy.deepcopy(request)
+    return lowered
+
+
+def _recorded_identity(engine):
+    from .native_grad import _identity
+    return _identity(engine)

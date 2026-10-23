@@ -65,8 +65,20 @@ def native_coefficient_gradients(engine, body, targets, owner=None):
                                  coefficient_targets=targets)
 
 
+def native_recorded_gradient(engine, request, owner=None):
+    """Evaluate a recorded objective's named adapter/state roots in one backward."""
+    from .native_recorded_objective import lower_recorded_objective_request
+    from ..model.native_derivative_contract import validate_recorded_objective_request
+    validate_recorded_objective_request(request)
+    body=lower_recorded_objective_request(engine,request,owner=owner)
+    targets={item['root']:{key:item[key] for key in ('kind','id','names') if key in item}
+        for item in request['targets']}
+    return native_graph_gradient(engine,body,owner,evaluation_target_specs=targets)
+
+
 def native_graph_gradient(engine, body, owner, *, coefficient_targets=None, evaluation_callback=None,
-                          adapter_leaves_override=None, native_state_overrides=None, evaluation_targets=None):
+                          adapter_leaves_override=None, native_state_overrides=None, evaluation_targets=None,
+                          evaluation_target_specs=None):
     if body.get('schema') != 'natlang.native-gradient-request/1':
         raise RequestError('neuralese-native-grad-schema', 'native graph gradients require schema natlang.native-gradient-request/1')
     if type(body.get('order',1)) is not int or body.get('order',1) != 1 or body.get('derived') or body.get('create_graph'):
@@ -128,7 +140,8 @@ def native_graph_gradient(engine, body, owner, *, coefficient_targets=None, eval
                 for parameter in restore:parameter.requires_grad_(True)
                 return run_invocation_actors(engine,names,declarations,
                     lambda bank:_native_graph_gradient_impl(engine,body,owner,leaves,actor_bank=bank,coefficient_targets=coefficient_targets,evaluation_callback=evaluation_callback,
-                        native_state_overrides=native_state_overrides,evaluation_targets=evaluation_targets),
+                        native_state_overrides=native_state_overrides,evaluation_targets=evaluation_targets,
+                        evaluation_target_specs=evaluation_target_specs),
                     default=body.get('adapters'),leaves=leaves,
                     gradient_precision=body.get('adapter_gradient_precision','storage'),source_names=source_names,
                     track_adapter_cotangents=(body.get('target',{}).get('kind')!='model-parameters'),
@@ -148,7 +161,8 @@ def native_graph_gradient(engine, body, owner, *, coefficient_targets=None, eval
             for parameter in restore:
                 parameter.requires_grad_(True)
             return run_native(engine, lambda: _native_graph_gradient_impl(engine, body, owner, leaves,coefficient_targets=coefficient_targets,evaluation_callback=evaluation_callback,
-                native_state_overrides=native_state_overrides,evaluation_targets=evaluation_targets),
+                native_state_overrides=native_state_overrides,evaluation_targets=evaluation_targets,
+                evaluation_target_specs=evaluation_target_specs),
                               body.get('adapters'), leaves=leaves,
                               gradient_precision=body.get('adapter_gradient_precision', 'storage'),
                               track_adapter_cotangents=(body.get('target',{}).get('kind')!='model-parameters'),
@@ -165,7 +179,8 @@ def native_graph_gradient(engine, body, owner, *, coefficient_targets=None, eval
 
 
 def _native_graph_gradient_impl(engine, body, owner, adapter_leaves, *, actor_bank=None, coefficient_targets=None,
-                                evaluation_callback=None,native_state_overrides=None,evaluation_targets=None):
+                                evaluation_callback=None,native_state_overrides=None,evaluation_targets=None,
+                                evaluation_target_specs=None):
     """Evaluate one actual native graph and return a durable named gradient.
 
     `target` selects either named native model parameters or one exact imported
@@ -218,6 +233,7 @@ def _native_graph_gradient_impl(engine, body, owner, adapter_leaves, *, actor_ba
                 for key, value in modes.items())):
             raise ValueError('native_state_modes must declare actual external IDs and same-base-adapter-state')
         imported, leaf_map, state_overrides, input_identities, consumption_receipts = {}, {}, {}, {}, {}
+        state_leaf_cache={}
         for name, binding in example.external_states.items():
             record = engine.store.get_native_state(binding['id'])
             if record is None:
@@ -248,13 +264,17 @@ def _native_graph_gradient_impl(engine, body, owner, adapter_leaves, *, actor_ba
             else:
                 block.require_native(**observation_identity)
                 input_identities[name] = observation_identity
-            if native_state_overrides is not None and binding['id'] in native_state_overrides:
+            if binding['id'] in state_leaf_cache:
+                copied,leaves=state_leaf_cache[binding['id']]
+            elif native_state_overrides is not None and binding['id'] in native_state_overrides:
                 copied=native_state_overrides[binding['id']]
                 copied.validate()
                 leaves={f'layers.{index}.{key}':value for index,layer in enumerate(copied.layers)
                         for key,value in layer.items() if key!='kind'}
+                state_leaf_cache[binding['id']]=(copied,leaves)
             else:
                 copied, leaves = _leaf_block(block)
+                state_leaf_cache[binding['id']]=(copied,leaves)
             leaf_map.update({f'external.{name}.{key}': value for key, value in leaves.items()})
             if is_policy:
                 state_overrides[binding['id']] = copied
@@ -262,63 +282,112 @@ def _native_graph_gradient_impl(engine, body, owner, adapter_leaves, *, actor_ba
                 imported[name] = copied
 
         target = body.get('target')
-        if not isinstance(target, dict):
-            raise ValueError('target must identify model parameters or one imported native state')
-        kind = target.get('kind')
-        if evaluation_targets is not None:
-            if evaluation_callback is None or kind not in ('model-parameters','adapter','native-state'):
+        target_groups=None
+        if evaluation_target_specs is not None:
+            if not isinstance(evaluation_target_specs,dict) or not evaluation_target_specs:
+                raise ValueError('joint derivative targets require a named target map')
+            target_groups={}
+            for alias,declaration in evaluation_target_specs.items():
+                if (not isinstance(alias,str) or not alias or not isinstance(declaration,dict)
+                        or set(declaration)-{'kind','id','names','tensors'}):
+                    raise ValueError('internal joint derivative targets need exact named typed declarations')
+                kind=declaration.get('kind');ident=declaration.get('id');requested=declaration.get('names')
+                supplied=declaration.get('tensors')
+                if supplied is not None:
+                    if (kind not in ('adapter','native-state','model-parameters') or not isinstance(supplied,dict)
+                            or not supplied or (requested is not None and set(supplied)!=set(requested))):
+                        raise ValueError('internal derivative target tensors differ from their exact typed declaration')
+                    tensors=supplied
+                elif kind=='adapter':
+                    available=adapter_leaves.get(ident)
+                    if available is None:raise ValueError('adapter gradient target is not an active exact coefficient artifact')
+                    names=sorted(available) if requested is None else requested
+                    if not isinstance(names,list) or not names or len(set(names))!=len(names) or any(name not in available for name in names):
+                        raise ValueError('adapter gradient names must uniquely select active coefficient tensors')
+                    tensors={name:available[name] for name in names}
+                elif kind=='native-state':
+                    matching=[name for name,binding in example.external_states.items() if binding['id']==ident]
+                    if not matching:raise ValueError('native-state gradient target must be an imported exact graph state')
+                    available={key.removeprefix(f'external.{matching[0]}.'):value for key,value in leaf_map.items()
+                        if key.startswith(f'external.{matching[0]}.')}
+                    names=sorted(available) if requested is None else requested
+                    if not isinstance(names,list) or not names or len(set(names))!=len(names) or any(name not in available for name in names):
+                        raise ValueError('native-state gradient names must select consumed named KV or hybrid-state tensors')
+                    tensors={name:available[name] for name in names}
+                elif kind=='model-parameters':
+                    tensors=_parameter_targets(engine.shared_model,requested)
+                    for parameter in tensors.values():
+                        if parameter not in restore_grad_flags:restore_grad_flags[parameter]=parameter.requires_grad
+                        parameter.requires_grad_(True)
+                else:raise ValueError('joint native derivative targets support adapter, native-state or model-parameters')
+                if not tensors:raise ValueError('joint native derivative target has no tensors')
+                if ident is not None and kind in ('adapter','native-state'):
+                    if any(item.get('id')==ident for item in target_groups.values()):
+                        raise ValueError('one exact native artifact ID must have one joint gradient root')
+                target_groups[alias]={'kind':kind,'id':ident,'tensors':tensors}
+            target_tensors={(alias,name):tensor for alias,item in target_groups.items()
+                for name,tensor in item['tensors'].items()}
+            kind='joint'
+            source_id=None
+            artifact_kind='joint-gradient'
+        elif evaluation_targets is not None:
+            if evaluation_callback is None or not isinstance(target,dict) or target.get('kind') not in ('model-parameters','adapter','native-state'):
                 raise ValueError('internal native derivative targets require an explicit objective evaluator')
+            kind=target['kind']
             target_tensors=evaluation_targets
-            artifact_kind={'model-parameters':'parameter-gradient','adapter':'adapter-gradient','native-state':'state-gradient'}[kind]
-            source_id=target.get('id') if kind!='model-parameters' else None
-        elif kind == 'model-parameters':
-            selected = _parameter_targets(engine.shared_model, target.get('names'))
-            # Serving factories freeze the model for generation. Enable only
-            # the explicitly named gradient targets during this locked call.
-            restore_grad_flags = {parameter: parameter.requires_grad for parameter in selected.values()}
-            for parameter in restore_grad_flags:
-                parameter.requires_grad_(True)
-            target_tensors = selected
-            artifact_kind = 'parameter-gradient'
-            source_id = None
-        elif kind == 'adapter':
-            groups=[]
-            for declaration in coefficient_targets if coefficient_targets is not None else [target]:
-                selected_id=declaration.get('id')
-                available=adapter_leaves.get(selected_id)
-                if available is None:
-                    raise ValueError('adapter gradient target must be active by its exact native coefficient artifact ID')
-                requested=declaration.get('names',sorted(available))
-                if (not isinstance(requested,list) or not requested or len(set(requested))!=len(requested)
-                        or any(name not in available for name in requested)):
-                    raise ValueError('adapter gradient names must uniquely select active coefficient tensors')
-                groups.append((selected_id,{name:available[name] for name in requested}))
-            if coefficient_targets is None:
-                source_id,target_tensors=groups[0]
-            else:
-                # The compound names are local gradient coordinates only;
-                # emitted artifacts retain each original parameter name.
-                source_id=None
-                target_tensors={(index,name):value for index,(_,values) in enumerate(groups) for name,value in values.items()}
-            artifact_kind='adapter-gradient'
-        elif kind == 'native-state':
-            state_id = target.get('id')
-            if not isinstance(state_id, str):
-                raise ValueError('native-state target needs its exact stored state ID')
-            matching = [name for name, binding in example.external_states.items() if binding['id'] == state_id]
-            if len(matching) != 1:
-                raise ValueError('native-state gradient target must occur exactly once as an imported graph state')
-            prefix = f'external.{matching[0]}.'
-            available = {name.removeprefix(prefix): value for name, value in leaf_map.items() if name.startswith(prefix)}
-            requested = target.get('names', sorted(available))
-            if (not isinstance(requested, list) or not requested or len(set(requested)) != len(requested)
-                    or any(name not in available for name in requested)):
-                raise ValueError('native-state gradient names must select consumed named KV or hybrid-state tensors')
-            target_tensors = {name: available[name] for name in requested}
-            artifact_kind = 'state-gradient'
-            source_id = state_id
+            artifact_kind={'model-parameters':'parameter-gradient','adapter':'adapter-gradient','native-state':'state-gradient'}[target['kind']]
+            source_id=target.get('id') if target['kind']!='model-parameters' else None
         else:
-            raise ValueError('target.kind must be model-parameters, native-state or adapter')
+            if not isinstance(target,dict):
+                raise ValueError('target must identify model parameters or one imported native state')
+            kind=target.get('kind')
+            if kind == 'model-parameters':
+                selected = _parameter_targets(engine.shared_model, target.get('names'))
+                # Serving factories freeze the model for generation. Enable only
+                # the explicitly named gradient targets during this locked call.
+                restore_grad_flags = {parameter: parameter.requires_grad for parameter in selected.values()}
+                for parameter in restore_grad_flags:parameter.requires_grad_(True)
+                target_tensors = selected
+                artifact_kind = 'parameter-gradient'
+                source_id = None
+            elif kind == 'adapter':
+                groups=[]
+                for declaration in coefficient_targets if coefficient_targets is not None else [target]:
+                    selected_id=declaration.get('id')
+                    available=adapter_leaves.get(selected_id)
+                    if available is None:
+                        raise ValueError('adapter gradient target must be active by its exact native coefficient artifact ID')
+                    requested=declaration.get('names',sorted(available))
+                    if (not isinstance(requested,list) or not requested or len(set(requested))!=len(requested)
+                            or any(name not in available for name in requested)):
+                        raise ValueError('adapter gradient names must uniquely select active coefficient tensors')
+                    groups.append((selected_id,{name:available[name] for name in requested}))
+                if coefficient_targets is None:
+                    source_id,target_tensors=groups[0]
+                else:
+                    # The compound names are local gradient coordinates only;
+                    # emitted artifacts retain each original parameter name.
+                    source_id=None
+                    target_tensors={(index,name):value for index,(_,values) in enumerate(groups) for name,value in values.items()}
+                artifact_kind='adapter-gradient'
+            elif kind == 'native-state':
+                state_id = target.get('id')
+                if not isinstance(state_id, str):
+                    raise ValueError('native-state target needs its exact stored state ID')
+                matching = [name for name, binding in example.external_states.items() if binding['id'] == state_id]
+                if not matching:
+                    raise ValueError('native-state gradient target must occur as an imported graph state')
+                prefix = f'external.{matching[0]}.'
+                available = {name.removeprefix(prefix): value for name, value in leaf_map.items() if name.startswith(prefix)}
+                requested = target.get('names', sorted(available))
+                if (not isinstance(requested, list) or not requested or len(set(requested)) != len(requested)
+                        or any(name not in available for name in requested)):
+                    raise ValueError('native-state gradient names must select consumed named KV or hybrid-state tensors')
+                target_tensors = {name: available[name] for name in requested}
+                artifact_kind = 'state-gradient'
+                source_id = state_id
+            else:
+                raise ValueError('target.kind must be model-parameters, native-state or adapter')
         if not target_tensors:
             raise ValueError('gradient target has no tensors')
         if objective is not None:
@@ -329,8 +398,14 @@ def _native_graph_gradient_impl(engine, body, owner, adapter_leaves, *, actor_ba
             loss, stats = graph_loss(engine.shared_model, example, external_blocks=imported,
                                      external_identity=input_identities,objective=query_objective)
         def provenance_for(names):
+            recorded=body.get('recorded_objective_request')
+            recorded_json=canonical_json_bytes(recorded).decode() if isinstance(recorded,dict) else None
+            import hashlib
             return {'objective': (query_objective.spec['schema'].removeprefix('natlang.') if query_objective is not None else
                 'native-graph-token-ce/1' if objective is None else objective.spec['schema'].removeprefix('natlang.')),
+            **({'recorded_objective_request_json':recorded_json,
+                'recorded_objective_request_sha256':hashlib.sha256(recorded_json.encode()).hexdigest()}
+                if recorded_json is not None else {}),
             **({'query_objective_sha256':canonical_json_sha256_hex(query_objective.spec),
                 'query_objective_json':canonical_json_bytes(query_objective.spec).decode()}
                 if query_objective is not None else {}), 'graph_id': example.id,
@@ -355,9 +430,32 @@ def _native_graph_gradient_impl(engine, body, owner, adapter_leaves, *, actor_ba
             if objective.behavior_policy is not None else {'behavior_native_identity':objective.identity,'behavior_adapter_binding':objective.adapter_binding})}
             if objective is not None else {})}
         if evaluation_callback is not None:
-            return evaluation_callback(loss,target_tensors,{'stats':stats,'kind':kind,
+            return evaluation_callback(loss,target_groups if target_groups is not None else target_tensors,{'stats':stats,'kind':kind,
                 'artifact_kind':artifact_kind,'source_artifact_id':source_id,
+                'target_groups':target_groups,
                 'graph_sha256':graph_sha256,'graph_id':example.id,'provenance':provenance_for(target_tensors)})
+        if target_groups is not None:
+            flat=list(target_tensors.items())
+            grads=torch.autograd.grad(loss,tuple(value for _,value in flat),allow_unused=True)
+            result={}
+            for ((alias,name),_),gradient in zip(flat,grads):
+                if gradient is None:raise ValueError(f'objective has no gradient path to requested tensor {alias}:{name}')
+                group=target_groups[alias];kind=group['kind'];ident=group['id']
+                artifact_kind={'model-parameters':'parameter-gradient','adapter':'adapter-gradient','native-state':'state-gradient'}[kind]
+                provenance={**provenance_for({name:group['tensors'][name]}),'target_kind':kind,'target_names':sorted(group['tensors'])}
+                values=result.setdefault(alias,{})
+                values[name]=gradient.detach()
+            artifacts={}
+            for alias,group in target_groups.items():
+                kind=group['kind'];ident=group['id'];tensors=result[alias]
+                artifact=NativeTensorArtifact({'model-parameters':'parameter-gradient','adapter':'adapter-gradient','native-state':'state-gradient'}[kind],
+                    expected,tensors,ident if kind!='model-parameters' else None,
+                    {**provenance_for(tensors),'target_kind':kind,'target_names':sorted(tensors),
+                     **({'adapter_binding':{'schema':'natlang.native-adapter/1','base_native_identity':expected,
+                        'adapters':execution_binding(engine)}} if kind=='adapter' and body.get('adapters') and actor_bank is None else {})}).validate()
+                artifacts[alias]=engine.store.put_native_tensor_artifact(artifact,owner).meta()
+            return {'loss':float(loss.detach()),'stats':stats,'gradients':artifacts,'native_identity':expected,
+                'objective':query_objective.spec['schema'] if query_objective is not None else 'native-graph-token-ce/1'}
         grads = torch.autograd.grad(loss, tuple(target_tensors.values()), allow_unused=True)
         tensors = {name: grad.detach() for name, grad in zip(target_tensors, grads) if grad is not None}
         if set(tensors) != set(target_tensors):

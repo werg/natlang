@@ -160,7 +160,7 @@ def make_handler(engine: Engine):
                                                   if native_enabled else "f32"),
                                         "store": {"owners": True, "persistent": engine.store.directory is not None},
                                         "max_block_length": engine.max_block, "context": engine.context,
-                                        "grad": True, "grad_order": 2 if not native_enabled else 1, "stream": True,
+                                        "grad": True, "grad_order": 2, "stream": True,
                                         "cutoff": None if native_enabled else engine.heads.cutoff,
                                         **({"native_state": {"enabled": True, "format":
                                                               ('neuralese.semantic-state/1' if getattr(engine, 'semantic_channel', None)
@@ -318,13 +318,18 @@ def make_handler(engine: Engine):
                 if self.path == "/v1/neuralese/grad":
                     body = self._object()
                     if getattr(engine, "native_state_enabled", False):
-                        if 'native_recorded_objective' in body:
-                            from .native_recorded_objective import native_recorded_gradient
-                            with grad_lock:
-                                return self._json(200, native_recorded_gradient(
-                                    engine, body['native_recorded_objective'], self._owner))
-                        from .native_grad import native_graph_gradient
+                        from .native_grad import native_graph_gradient,native_recorded_gradient
                         with grad_lock:
+                            if 'native_recorded_objective' in body:
+                                return self._json(200,native_recorded_gradient(engine,body['native_recorded_objective'],self._owner))
+                            if body.get('schema')=='natlang.native-recorded-objective-request/1':
+                                return self._json(200,native_recorded_gradient(engine,body,self._owner))
+                            if body.get('schema')=='natlang.native-derivative-program/1':
+                                from .native_derivative import execute_derivative_program
+                                return self._json(200,execute_derivative_program(engine,body,self._owner))
+                            if isinstance(body.get('native_derivative_program'),dict):
+                                from .native_derivative import execute_derivative_program
+                                return self._json(200,execute_derivative_program(engine,body['native_derivative_program'],self._owner))
                             return self._json(200, native_graph_gradient(engine, body, self._owner))
                     with grad_lock:
                         return self._json(200, GradSession(engine).run(body))
