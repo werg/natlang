@@ -77,6 +77,22 @@ test('validated edge conversion rejects mismatched block identities and body dig
   assert.throws(() => convertTrajectory(consumer, { softStateEdges: wrongBody }), /proof body digest mismatch/);
 });
 
+test('a future writer cannot bind as a consumer and repeated prose never creates another occurrence', () => {
+  const edge = fixture.proof.edges[0];
+  const consumer = structuredClone(fixture.actions.find(item => item.role === 'consumer' &&
+    item.record.id === edge.reader_record_id).record);
+  consumer.messages.push({ role: 'user', content: edge.body_source });
+  const converted = convertTrajectory(consumer, { softStateEdges: fixture.proof }).record;
+  const occurrences = converted.native_source_conversion.occurrences.filter(item => item.role === 'consumer');
+  assert.equal(occurrences.length, 1);
+  assert.deepEqual(occurrences[0].path, ['messages', '1', 'content', '1']);
+  assert.deepEqual(occurrences[0].body, edge.body_source);
+
+  const futureWriter = structuredClone(fixture.proof);
+  futureWriter.edges[0].writer_decision_index = edge.reader_decision_index + 1;
+  assert.throws(() => convertTrajectory(consumer, { softStateEdges: futureWriter }), /noncausal soft-state edge/);
+});
+
 test('assistant text writer retains exact target and lowers only an authenticated body sidecar', () => {
   const edge = fixture.proof.edges[0];
   const original = fixture.actions.find(item => item.role === 'producer' && item.record.id === edge.writer_record_id).record;

@@ -964,7 +964,10 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
       throw new Error(`validated soft-state provenance does not bind ${rowId}`);
     const edge = softEdgeForRecord;
     if (edge.expected_type !== 'Neuralese<string>' || !/^[a-z2-7]{20,}$/.test(edge.block_id.replace(/^nz1_/, '')) ||
-        !/^[0-9a-f]{64}$/.test(edge.body_sha256)) throw new Error(`invalid soft-state edge descriptor for ${rowId}`);
+        !/^[0-9a-f]{64}$/.test(edge.body_sha256) ||
+        !Number.isSafeInteger(edge.writer_decision_index) || !Number.isSafeInteger(edge.reader_decision_index) ||
+        edge.writer_decision_index >= edge.reader_decision_index)
+      throw new Error(`invalid or noncausal soft-state edge descriptor for ${rowId}`);
     if (typeof softEdgeForRecord.body_source !== 'string' ||
         createHash('sha256').update(softEdgeForRecord.body_source).digest('hex') !== softEdgeForRecord.body_sha256)
       throw new Error(`soft-state proof body digest mismatch for ${rowId}`);
