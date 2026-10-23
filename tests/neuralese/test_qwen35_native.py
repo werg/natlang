@@ -635,6 +635,43 @@ def test_qwen35_delta_state_only_replay_has_empty_readout():
     assert recurrent is not None
 
 
+def test_qwen35_single_token_replay_keeps_gradients_with_training_kernels(monkeypatch):
+    from transformers.models.qwen3_5 import modeling_qwen3_5
+
+    port = tiny_port()
+    module = port.layers[1].linear_attn
+    calls = []
+
+    def chunk(query, key, value, **kwargs):
+        assert torch.is_grad_enabled()
+        calls.append('chunk')
+        return value, kwargs['initial_state']
+
+    def recurrent(query, key, value, **kwargs):
+        assert not torch.is_grad_enabled(), 'inference-only recurrent kernel must not enter differentiable replay'
+        calls.append('recurrent')
+        return value, kwargs['initial_state']
+
+    monkeypatch.setattr(modeling_qwen3_5, 'torch_chunk_gated_delta_rule', chunk)
+    monkeypatch.setattr(modeling_qwen3_5, 'torch_recurrent_gated_delta_rule', recurrent)
+    payload = {
+        'mixed_qkv': torch.randn(1, module.conv_dim, requires_grad=True),
+        'z': torch.randn(1, module.num_v_heads * module.head_v_dim, requires_grad=True),
+        'b': torch.randn(1, module.num_v_heads, requires_grad=True),
+        'a': torch.randn(1, module.num_v_heads, requires_grad=True),
+    }
+
+    output, _, _ = replay(module, payload)
+    output.float().square().sum().backward()
+    assert calls == ['chunk']
+    assert payload['mixed_qkv'].grad is not None
+    assert payload['mixed_qkv'].grad.abs().sum() > 0
+
+    with torch.no_grad():
+        replay(module, {name: value.detach() for name, value in payload.items()})
+    assert calls == ['chunk', 'recurrent']
+
+
 def test_qwen35_full_attention_matches_hf_with_causal_mask_and_sdpa():
     torch.manual_seed(31)
     port = tiny_port()
