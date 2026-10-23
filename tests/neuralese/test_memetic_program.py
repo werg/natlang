@@ -99,6 +99,11 @@ def test_binding_requires_actual_native_id_and_oracle_gain(tmp_path):
     output.mkdir(parents=True)
     (output / 'results.jsonl').write_text(json.dumps({'trajectory': [
         {'model_response': {'native_state_imports': [{'id': ident}]}}]}) + '\n')
+    packet = tmp_path / 'packet.jsonl'; packet.write_text(json.dumps(case('one'))+'\n')
+    (tmp_path/'queue.jsonl').write_text(json.dumps({'output':str(output/'results.jsonl'),
+        'key':'one','index':0})+'\n')
+    (tmp_path/'preparation.json').write_text(json.dumps({'packet_sha256':hashlib.sha256(packet.read_bytes()).hexdigest()}))
+    (tmp_path/'journal.jsonl').write_text('')
     assert memetic.native_import_reached(tmp_path, ident)
     assert not memetic.native_import_reached(tmp_path, 'nzs1_' + 'b' * 52)
 
@@ -285,7 +290,7 @@ def test_real_collector_imports_written_state_from_tiny_shared_http_server(tmp_p
         packet = tmp_path / 'packet.jsonl'; packet.write_text(json.dumps(task) + '\n')
         args = Namespace(out=tmp_path, rows=1, samples=2, shards=1, temperature=1.,
             case_seconds=40, max_model_requests=2, max_turns=2, seed_base=7,
-            server=url, model_id='lfm')
+            server=url, model_id='lfm', policy_checkpoint_sha256=identity['checkpoint_sha256'])
         fit = memetic_task_runner.evaluate(args, {'id': 'actual',
             'guidance': memetic.state_guidance('guide', written['id'])}, packet,
             memetic_task_runner.default_system_prompt())
@@ -375,3 +380,29 @@ def test_cached_baseline_fitness_requires_exact_evaluation_receipt(tmp_path):
     with pytest.raises(ValueError, match='cached guidance fitness'):
         memetic.evaluate(args, tmp_path, 'unguided-dev', '', [case('a'), case('b')],
             base_system='exact-system', actor={}, server_info_sha256='f'*64)
+
+
+def test_memetic_budget_capture_uses_exact_shared_prefix_verifier(tmp_path,monkeypatch):
+    from natlang_neuralese.rl import task_rollouts
+    packet=tmp_path/'packet.jsonl';packet.write_text(json.dumps(case('one'))+'\n')
+    entry={'output':str(tmp_path/'empty.jsonl'),'key':'one','index':0,'jobs':str(tmp_path/'jobs')}
+    (tmp_path/'queue.jsonl').write_text(json.dumps(entry)+'\n')
+    (tmp_path/'preparation.json').write_text(json.dumps({'packet_sha256':hashlib.sha256(packet.read_bytes()).hexdigest()}))
+    finish={'event':'finish','key':'one','resource_limit_reason':'model_request_budget'}
+    (tmp_path/'journal.jsonl').write_text(json.dumps(finish)+'\n')
+    actor={key:'actor-'+key for key in memetic.IDENTITY}
+    prefix={'trajectory':[{'model_response':{'rl_sampling':{'policy':actor},
+        'native_state_imports':[{'id':'nzs1_'+'a'*52}]}}]}
+    calls=[]
+    def verified(e,t,f,**kwargs):
+        calls.append((e,t,f,kwargs));return prefix
+    monkeypatch.setattr(task_rollouts,'_budget_terminated_prefix',verified)
+    assert memetic.student_capture_reached(tmp_path,actor)
+    assert calls[0][0]==entry and calls[0][1]['id']=='one' and calls[0][2]==finish
+    assert calls[0][3]['packet_source_sha256']==hashlib.sha256(packet.read_bytes()).hexdigest()
+    assert memetic.native_import_reached(tmp_path,'nzs1_'+'a'*52)
+    prefix['trajectory'][0]['model_response']['rl_sampling']['policy']={**actor,'checkpoint_sha256':'wrong'}
+    assert not memetic.student_capture_reached(tmp_path,actor)
+    monkeypatch.setattr(task_rollouts,'_budget_terminated_prefix',lambda *a,**k:None)
+    assert not memetic.student_capture_reached(tmp_path,actor)
+    assert not memetic.native_import_reached(tmp_path,'nzs1_'+'a'*52)

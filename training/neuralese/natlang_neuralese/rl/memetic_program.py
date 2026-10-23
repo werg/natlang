@@ -186,6 +186,7 @@ def evaluate(args, out: Path, name: str, guidance: str, rows: list[dict], *, bas
     options.out = out
     options.rows = len(rows)
     options.shards = args.shards
+    options.policy_checkpoint_sha256 = actor['checkpoint_sha256']
     individual = {'id': name, 'guidance': guidance}
     fit = runner.evaluate(options, individual, packet, base_system)
     if fit['scored'] != len(rows) * args.samples:
@@ -205,13 +206,40 @@ def evaluate(args, out: Path, name: str, guidance: str, rows: list[dict], *, bas
     return fit
 
 
+def captured_invocations(evaluation: Path):
+    """Read complete results or the shared verifier's exact budget prefix."""
+    from .task_rollouts import _budget_terminated_prefix
+    packet = evaluation / 'packet.jsonl'
+    queue = evaluation / 'queue.jsonl'
+    if not queue.exists():
+        return []
+    entries = read_jsonl(queue)
+    tasks = read_jsonl(packet)
+    preparation = json.loads((evaluation / 'preparation.json').read_text())
+    packet_sha = hashlib.sha256(packet.read_bytes()).hexdigest()
+    if preparation.get('packet_sha256') != packet_sha:
+        return []
+    finishes = {row['key']: row for row in read_jsonl(evaluation / 'journal.jsonl')
+                if row.get('event') == 'finish'}
+    results = []
+    for entry in entries:
+        path = Path(entry['output'])
+        rows = read_jsonl(path) if path.exists() else []
+        if not rows:
+            prefix = _budget_terminated_prefix(entry, tasks[entry['index']], finishes.get(entry['key']),
+                packet_source_path=packet, packet_source_sha256=packet_sha)
+            rows = [{'trajectory': prefix['trajectory']}] if prefix else []
+        results.append(rows)
+    return results
+
+
 def student_capture_reached(evaluation: Path, actor: dict) -> bool:
-    paths = list(evaluation.glob('row-*/sample-*/results.jsonl'))
-    if not paths:
+    invocations = captured_invocations(evaluation)
+    if not invocations:
         return False
-    for path in paths:
+    for rows in invocations:
         captured = False
-        for result in read_jsonl(path):
+        for result in rows:
             for step in result.get('trajectory') or []:
                 sampling = (step.get('model_response') or {}).get('rl_sampling') or {}
                 if not sampling:
@@ -226,12 +254,12 @@ def student_capture_reached(evaluation: Path, actor: dict) -> bool:
 
 def native_import_reached(evaluation: Path, state_id: str) -> bool:
     """Require a server import receipt, not merely a sentinel in rendered text."""
-    paths = list(evaluation.glob('row-*/sample-*/results.jsonl'))
-    if not paths:
+    invocations = captured_invocations(evaluation)
+    if not invocations:
         return False
-    for path in paths:
+    for rows in invocations:
         imported = False
-        for result in read_jsonl(path):
+        for result in rows:
             for step in result.get('trajectory') or []:
                 response = step.get('model_response') or {}
                 receipts = response.get('native_state_imports') or []

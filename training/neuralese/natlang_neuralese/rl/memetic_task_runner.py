@@ -6,6 +6,7 @@ soft-block path is exposed by this module.
 """
 from __future__ import annotations
 import json
+import hashlib
 import re
 import subprocess
 import sys
@@ -59,6 +60,13 @@ def evaluate(args, ind: dict, packet: Path, base_system: str) -> dict:
     out = Path(args.out) / "evals" / ind["id"]
     out.mkdir(parents=True, exist_ok=True)
     (out / "packet.jsonl").write_text(packet.read_text())
+    # The shared rollout scorer needs the exact packet binding to authenticate
+    # complete budget-terminated execution prefixes without a terminal result row.
+    from ..common.jsonio import write_json_durable
+    write_json_durable(out / 'preparation.json', {
+        'schema': 'natlang.memetic-task-capture-preparation/1', 'root_mode': 'authored',
+        'packet_sha256': hashlib.sha256((out / 'packet.jsonl').read_bytes()).hexdigest(),
+        'policy_checkpoint_sha256': args.policy_checkpoint_sha256})
     system = out / "system.md"
     system.write_text(guided_system(base_system, ind["guidance"]))
     capture_config = out / 'native-capture.json'

@@ -32,6 +32,12 @@ def _runtime_leases(paths,canonical,owned_controller_fd=None):
 def _read(reference):return json.loads(_bound(reference).read_text())
 
 
+def _source_binding(value):
+    if isinstance(value,str):return binding(value)
+    if isinstance(value,dict) and isinstance(value.get('path'),str):return binding(value['path'])
+    raise ValueError('runtime handoff source lost its exact path binding')
+
+
 def _snap(reference,directory,name):
     source=_bound(reference)
     raw=source.read_bytes()
@@ -612,6 +618,72 @@ def _resident_recipe_ancestry(adopted, transition, proof, declaration, cursor):
             and binding(predecessor['production_recipe']) == transition['recipe'])
 
 
+def _current_adopted_resident_directory(config, resident_reference, adopted, lineage, transition):
+    """Return only the namespace bound by the current recipe adoption."""
+    from ..train.recipe import recipe_identity_sha256,resolve_recipe_data
+    current_directory=_bound(resident_reference).parent.resolve()
+    configured=config.get('resident_data_directory')
+    payload=adopted['payload'];plan=payload['plan'];recipe=payload['recipe']
+    plan_path=current_directory.parent/'recipe-plan.json'
+    actual_recipe=Path(config['production_recipe']).resolve(strict=True)
+    if (not isinstance(configured,str) or Path(configured).resolve()!=current_directory
+            or Path(recipe['path']).resolve()!=actual_recipe
+            or recipe['file_sha256']!=binding(actual_recipe)['sha256']
+            or recipe['sha256']!=recipe_identity_sha256(actual_recipe)
+            or plan['recipe_sha256']!=lineage
+            or plan.get('recipe')!=resolve_recipe_data(actual_recipe)
+            or plan.get('code')!=(transition.get('new_code') or transition.get('code'))
+            or json.loads(plan_path.read_text())!=plan):
+        raise ValueError('runtime handoff current recipe lost its authenticated resident namespace')
+    stage_id=config['production_stage'];inputs=plan['stage_inputs'][stage_id]
+    for config_key,plan_key in (('seed_native_graphs','native_graphs'),('held_native_graphs','held_native_graphs')):
+        if _source_binding(config.get(config_key))['sha256']!=inputs[plan_key]['sha256']:
+            raise ValueError('runtime handoff current resident plan changed its train/held source binding')
+    return current_directory
+
+
+def _retry_resident_directory(config, resident_reference, adopted, transition, proof,
+                              declaration, cursor):
+    """Authenticate a new retry namespace while retaining the old root as ancestry."""
+    reference=declaration.get('failed_supervised_retry')
+    if reference is None:
+        raise ValueError('runtime handoff later recipe lacks its exact retry adoption authority')
+    if isinstance(reference,str):reference=binding(reference)
+    from .native_failed_supervised_retry import verify_release
+    release=verify_release(reference,declaration)
+    receipt=_read(reference);intent=_read(receipt['intent'])
+    predecessor=_read(intent['snapshots']['config'])
+    history=[adopted['payload']['prior_recipe']['sha256'],
+        *[item['recipe']['sha256']for item in adopted['history']]]
+    from ..train.recipe import recipe_identity_sha256
+    transition_identity=recipe_identity_sha256(_bound(transition['recipe']))
+    current_identity=recipe_identity_sha256(Path(config['production_recipe']))
+    if (release.get('prior_runtime_handoff')!=declaration.get('runtime_handoff')
+            or release.get('recipe_lineage_sha256')!=proof['lineage']
+            or release.get('recipe_sha256')!=current_identity
+            or release.get('prior_resident_current')!=cursor.get('resident_current')
+            or binding(predecessor['production_recipe'])!=transition['recipe']
+            or transition_identity not in history):
+        raise ValueError('runtime handoff retry authority does not extend the authenticated resident history')
+    directory=Path(config['production_recipe']).resolve().parent/'resident-data'
+    if config.get('resident_data_directory')!=str(directory):
+        raise ValueError('runtime handoff retry recipe lost its new resident namespace')
+    resident_plan=release['resident_plan']
+    plan_path=directory.parent/'recipe-plan.json'
+    if binding(plan_path)['sha256']!=resident_plan['lineage_handoff']['sha256']:
+        raise ValueError('runtime handoff retry namespace lacks its installed authenticated future plan')
+    plan=_read(resident_plan['lineage_handoff'])
+    from ..train.recipe import resolve_recipe_data
+    if plan.get('recipe')!=resolve_recipe_data(config['production_recipe']):
+        raise ValueError('runtime handoff retry plan is for another current recipe')
+    stage=next(item for item in plan['recipe']['stages']if item['id']==config['production_stage'])
+    inputs=plan['stage_inputs'][stage['id']]
+    for config_key,plan_key in (('seed_native_graphs','native_graphs'),('held_native_graphs','held_native_graphs')):
+        if _source_binding(config.get(config_key))['sha256']!=inputs[plan_key]['sha256']:
+            raise ValueError('runtime handoff retry plan changed its current train/held source binding')
+    return directory
+
+
 def _configure_runtime_handoff(plan_path,declaration,bootstrap,config_path,*,verified_handoff=None):
     """Rebind invocation metadata; never republish a parent or rewrite a cursor."""
     reference=declaration['runtime_handoff'];proof=verify_runtime_handoff(reference,bootstrap=bootstrap,verified_handoff=verified_handoff)
@@ -640,17 +712,30 @@ def _configure_runtime_handoff(plan_path,declaration,bootstrap,config_path,*,ver
             if binding(proof['sources'][key]['path'])!=proof['sources'][key]:
                 raise ValueError('runtime handoff current operation changed before application')
     config=json.loads(json.dumps(prior if already else old))
+    adopted_current=None
+    adopted_directory=None
+    retry_adopted_directory=None
     if already and binding(config['production_recipe'])['sha256']!=transition['recipe']['sha256']:
         if bare:raise ValueError('bare runtime handoff current recipe changed without new authority')
         from ..train.native_resident import current
         from ..train.recipe import recipe_identity_sha256
         resident_reference=json.loads(Path(proof['sources']['cursor']['path']).read_text()).get('resident_current')
         adopted=current(_bound(resident_reference).parent) if resident_reference else None
-        if (not adopted or binding(config['production_recipe'])['sha256']!=adopted['payload']['recipe']['file_sha256']
-                or adopted['payload']['plan']['recipe_sha256']!=proof['lineage']
-                or not _resident_recipe_ancestry(adopted, transition, proof, declaration,
-                    json.loads(Path(proof['sources']['cursor']['path']).read_text()))):
+        cursor_value=json.loads(Path(proof['sources']['cursor']['path']).read_text())
+        if not adopted or adopted['payload']['plan']['recipe_sha256']!=proof['lineage']:
             raise ValueError('runtime handoff later recipe lacks its actual resident adoption history')
+        if binding(config['production_recipe'])['sha256']==adopted['payload']['recipe']['file_sha256']:
+            if not _resident_recipe_ancestry(adopted, transition, proof, declaration, cursor_value):
+                raise ValueError('runtime handoff later recipe lacks its actual resident adoption history')
+            adopted_directory=_current_adopted_resident_directory(config,resident_reference,adopted,
+                proof['lineage'],transition)
+            adopted_current=adopted
+        else:
+            # A fresh no-credit retry has already installed its verified
+            # future plan in a new recipe namespace. The previous resident
+            # root remains history authority, not the active data directory.
+            retry_adopted_directory=_retry_resident_directory(config,resident_reference,adopted,
+                transition,proof,declaration,cursor_value)
     if not already:
         config.update(production_recipe=transition['recipe']['path'],seed_native_graphs=inputs['native_graphs']['path'],
             held_native_graphs=inputs['held_native_graphs']['path'])
@@ -667,12 +752,23 @@ def _configure_runtime_handoff(plan_path,declaration,bootstrap,config_path,*,ver
     config['seed_trainer_parameters']={**config['trainer_parameters'],'stage_id':stage_id,'refresh_at_checkpoint':True}
     record=_read(proof['handoff'])
     if not bare:
-        source_record=record
-        if not source_record.get('resident'):
-            # A later policy owner can carry the already verified SFT frame.
-            # Its genuine source-plan authority remains the original drain.
-            source_record=_read(transition['handoff'])
-        resident_directory=(source_record.get('resident') or {}).get('directory')
+        if adopted_current is not None:
+            # Reapplication after an authenticated adoption must continue from
+            # the current recipe's resident plan, not route back to the old
+            # runtime handoff's drained source directory.
+            resident_directory=str(adopted_directory)
+            if _current_adopted_resident_directory(config, resident_reference, adopted_current,
+                    proof['lineage'],transition)!=adopted_directory:
+                raise ValueError('runtime handoff current resident plan changed during configuration')
+        elif retry_adopted_directory is not None:
+            resident_directory=str(retry_adopted_directory)
+        else:
+            source_record=record
+            if not source_record.get('resident'):
+                # A later policy owner can carry the already verified SFT frame.
+                # Its genuine source-plan authority remains the original drain.
+                source_record=_read(transition['handoff'])
+            resident_directory=(source_record.get('resident') or {}).get('directory')
         if not isinstance(resident_directory,str) or not Path(resident_directory).is_absolute():
             raise ValueError('resident runtime handoff lost its actual drained source directory')
         config['resident_data_directory']=resident_directory
