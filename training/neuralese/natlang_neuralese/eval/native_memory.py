@@ -666,8 +666,9 @@ def _resolve_memory_qualification(reference, *, model, optimizer, train, roles, 
     descriptor = json.loads(descriptor_path.read_text())
     if descriptor.get('schema') != 'natlang.native-preference-capacity-case/1':
         return reference
-    if objective is None or getattr(objective, 'kind', None) != 'native-offline-pairwise':
-        raise ValueError('preference capacity case requires the actual offline pairwise objective')
+    if objective is None or getattr(objective, 'kind', None) not in {
+            'native-offline-pairwise','native-failure-repair-dpo'}:
+        raise ValueError('preference capacity case requires an implemented whole-pair preference objective')
     package = Path(__file__).resolve().parents[1]
     runtime_code_sha = canonical_json_sha256_hex(code_inventory(package))
     identity = capacity_identity(config, args, backend)
