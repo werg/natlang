@@ -1348,3 +1348,15 @@ read test reproduces the two-header failure. Run48 live self-hosted teacher
 reads and record results before deployment; this is outstanding measurement
 debt until that actual evidence exists. See
 [decomposition](neuralese/teacher/TEXT_READER_SYSTEM_HEADER_DECOMPOSITION_20261023.md).
+
+
+## 2026-10-23: typed string read retains full value, revision12
+
+Revision11 completed48 real self-hosted Qwen3.6 typed library reads:43 exact
+values, all48 HTTP requests accepted, and five string values with embedded JSON
+lost their `Case N:` prefix. Revision12 keeps the single-header repair and
+explicitly tells the teacher to preserve the entire string, including prefixes,
+whitespace and embedded JSON. Run the same48 cases against the real teacher
+before adoption. The revision11 evidence is bound by SHA256
+`2ec8e1d08acf5053cc3755dec540e327af469a2f77b8801c676b4008f7cfb16f`
+at `/work/generation/qwen36-35b-teacher-20261022/typed-reader-single-header48-20261023-v2/result.json`.

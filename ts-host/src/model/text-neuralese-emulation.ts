@@ -12,7 +12,7 @@ import { COMBINATORS, type StandardLibrary } from '../neuralese/combinators.js';
 import { hexDigest } from '../native/hash.js';
 
 export const TEXT_NEURALESE_EMULATION_VERSION = 'text-marker-standin/2';
-export const TEXT_NEURALESE_PROMPT_REVISION = 'text-marker-guidance/11';
+export const TEXT_NEURALESE_PROMPT_REVISION = 'text-marker-guidance/12';
 export const TEXT_NEURALESE_DIALECT = 'nd:text-teacher-emulation/1';
 export const TEXT_NEURALESE_WIDTH = 32;
 
@@ -232,7 +232,8 @@ export function createTextNeuraleseEmulation(options: { store?: NeuraleseStore; 
       if (template && !returnTool) throw new Error('text Neuralese readout request has no return_result tool contract');
       const readInstruction = template ? `This is a typed Neuralese read call. Interpret the exact visible input block using the displayed declared result type and read instruction. ` +
         `Return one call to return_result with arguments {"status":"success","value":<the decoded value>}. ` +
-        `The value must match the declared result type exactly. Do not use any other tool and do not return an explanation.` : undefined;
+        `The value must match the declared result type exactly. For a string result, retain the whole value, including labels, whitespace and any embedded JSON; do not extract a JSON substring or drop a prefix. ` +
+        `Do not use any other tool and do not return an explanation.` : undefined;
       const renderedMessages = textReadout ? withReadoutInstruction(rendered, readInstruction!) : rendered;
       const { template: _template, ...withoutTemplate } = request;
       const renderedRequest = { ...(template || auxiliaryPlan ? withoutTemplate : request),

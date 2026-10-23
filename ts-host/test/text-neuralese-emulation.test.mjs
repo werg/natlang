@@ -82,7 +82,7 @@ test('native teacher collection emulates typed Neuralese markers through a recor
     const enabledIdentity = expectedProvenance(record, options);
     const disabledIdentity = expectedProvenance(record, { ...options, textNeuraleseEmulation: false });
     assert.equal(enabledIdentity.text_neuralese_transport.mode, 'text-marker-standin/2');
-    assert.equal(enabledIdentity.text_neuralese_transport.prompt_revision, 'text-marker-guidance/11');
+    assert.equal(enabledIdentity.text_neuralese_transport.prompt_revision, 'text-marker-guidance/12');
     assert.equal(Object.hasOwn(disabledIdentity, 'text_neuralese_transport'), false);
     assert.notEqual(enabledIdentity.system_prompt_sha256, disabledIdentity.system_prompt_sha256);
     const row = await nativeJobRunner(options)(item, expectedProvenance(record, options));
@@ -117,7 +117,7 @@ test('native teacher collection emulates typed Neuralese markers through a recor
       [turn.model_response.transport_provenance] : []);
     assert.ok(provenance.length >= 1);
     assert.ok(provenance.every(item => item.version === 'text-marker-standin/2' &&
-      item.prompt_revision === 'text-marker-guidance/11' &&
+      item.prompt_revision === 'text-marker-guidance/12' &&
       item.vector_semantics.includes('non-learned') && item.rendered_request_sha256));
     const typedReadouts = provenance.map(item => item.text_template_readout).filter(Boolean);
     assert.equal(typedReadouts.length, 5, 'template interpolation, +=, +, String, and JSON.stringify each use declared read');
@@ -237,7 +237,7 @@ test('partial resume replays a typed child body across fresh task IDs without du
 });
 
 test('text transport prompt explains typed text result promotion and literal markers', () => {
-  assert.equal(TEXT_NEURALESE_PROMPT_REVISION, 'text-marker-guidance/11');
+  assert.equal(TEXT_NEURALESE_PROMPT_REVISION, 'text-marker-guidance/12');
   assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /marker is transport syntax, not a JavaScript string/);
   assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /return the computed plain text as the result/);
   assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /stage it with return_result\(text\) inside eval/);
@@ -509,6 +509,7 @@ test('explicit text read source uses the declared read body, typed block context
     const shown = JSON.stringify(request.messages);
     assert.ok(shown.includes(COMBINATORS.read.text), 'provider receives the authenticated declared read source');
     assert.ok(shown.includes(NOTE), 'provider receives the exact typed input body');
+    assert.ok(shown.includes('do not extract a JSON substring or drop a prefix'), 'typed string read preserves the complete value');
     return { calls: [['return_result', { status: 'success', value: NOTE }]] };
   });
   const send = Object.assign(async request => {
@@ -650,7 +651,7 @@ test('repeated eval and return marker bytes preserve actual teacher writer occur
     const enabledIdentity = expectedProvenance(record, options);
     const disabledIdentity = expectedProvenance(record, { ...options, textNeuraleseEmulation: false });
     assert.equal(enabledIdentity.text_neuralese_transport.mode, 'text-marker-standin/2');
-    assert.equal(enabledIdentity.text_neuralese_transport.prompt_revision, 'text-marker-guidance/11');
+    assert.equal(enabledIdentity.text_neuralese_transport.prompt_revision, 'text-marker-guidance/12');
     assert.equal(Object.hasOwn(disabledIdentity, 'text_neuralese_transport'), false);
     assert.notEqual(enabledIdentity.system_prompt_sha256, disabledIdentity.system_prompt_sha256);
     const row = await nativeJobRunner(options)(item, expectedProvenance(record, options));
@@ -727,7 +728,7 @@ test('typed text readout preserves string and part headers without mutating the 
     const result = await send(request);
     assert.equal(result.calls[0][1].value, 'checked');
     assert.deepEqual(request, before);
-    assert.equal(result.transport_provenance.prompt_revision, 'text-marker-guidance/11');
+    assert.equal(result.transport_provenance.prompt_revision, 'text-marker-guidance/12');
     assert.deepEqual(result.transport_provenance.rendered_messages[0].role, 'system');
   }
 });
