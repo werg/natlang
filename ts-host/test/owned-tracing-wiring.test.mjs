@@ -4,7 +4,8 @@ import {
   installOwnedTracingEnvironment,createNatlangRuntime,
   setDefaultEnvironmentFactory,currentFrame
 } from '../dist/runtime/node.js';
-import {setModuleRealm} from '../dist/runtime/modules.js';
+import {setModuleRealm,moduleInstance} from '../dist/runtime/modules.js';
+import {parseModule,PATH_ONLY} from '../dist/runtime/loader.js';
 import {TypeScriptEnvironment} from '../dist/environment.js';
 
 test('opt-in owned evaluator wiring replaces the per-call Node evaluator without implicit fallback',async()=>{
@@ -65,4 +66,30 @@ test('owned dual-seam factory rejects missing capabilities or invalid mode',asyn
     }));
     setModuleRealm(()=>new TypeScriptEnvironment({mode:'retained'}));
   }
+});
+
+test('switching module realm authorities invalidates cached untraced module exports',()=>{
+  const record=parseModule('/__natlang__/folder/test.ts',
+    'export const answer: number = 1;',{},PATH_ONLY);
+  let closed=0;
+  const authority=value=>({
+    mode:'retained',authority:'owned-training-js/1',
+    execute(){throw new Error('not used');},
+    async executeAsync(){throw new Error('not used');},
+    evaluateModule(_code,bindings){bindings.exports.answer=value;},
+    fork(){throw new Error('not used');},
+    close(){closed++;}
+  });
+  try{
+    setModuleRealm(()=>authority(2));
+    const first=moduleInstance(record,{test:record});
+    assert.equal(first.answer,2);
+    assert.equal(moduleInstance(record,{test:record}),first);
+    setModuleRealm(()=>authority(3));
+    assert.equal(closed,1,'old retained module realm must be disposed');
+    const second=moduleInstance(record,{test:record});
+    assert.equal(second.answer,3);
+    assert.notEqual(first,second,'stale old-authority exports must not be returned');
+    assert.equal(first.answer,2);
+  }finally{setModuleRealm(()=>new TypeScriptEnvironment({mode:'retained'}));}
 });
