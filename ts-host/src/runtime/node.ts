@@ -78,7 +78,7 @@ export function installHybridTracingEnvironment(
     throw new TypeError('Invalid hybrid tracing options');
   // Compatibility-first is the intentional default. Applications must select
   // the owned route for any invocation whose output may be admitted as a trace.
-  const route = options.route ?? (() => 'native' as const);
+  const route = options.route ?? (() => 'owned' as const);
   function instantiate(mode: EnvironmentMode, runtimeOptions?: NatlangRuntimeOptions): EvalEnvironment {
     const owned = factory(mode, runtimeOptions);
     if (!owned || owned.mode !== mode || !owned.authority?.startsWith('owned-') ||
@@ -95,6 +95,8 @@ export function installHybridTracingEnvironment(
       const decision = route({kind, mode, code, path});
       if (decision !== 'owned' && decision !== 'native')
         throw new TypeError('Hybrid tracing route must return owned or native');
+      if (decision === 'native')
+        throw new Error('Trace required: native execution has no owned semantic archive');
       return decision;
     };
     const mark = (kind: 'execute' | 'executeAsync' | 'evaluateModule', path?: string) => {
@@ -104,9 +106,9 @@ export function installHybridTracingEnvironment(
       return event;
     };
     return {
-      authority: 'hybrid-native-compatibility/1',
+      authority: 'owned-trace-required/1',
       mode,
-      scopeCapabilities: {allowModules: true, allowNetwork: Boolean(runtimeOptions?.network)},
+      scopeCapabilities: {allowModules: false, allowNetwork: false},
       execute(request) {
         if (choose('execute', request.code, request.path) === 'owned')
           return owned.execute(request);
