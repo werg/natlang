@@ -1,5 +1,27 @@
 # Main goal: keep moving forward (owner, 2026-10-11)
 
+## Recovery and limited compute credit (owner, 2026-10-24)
+
+Remaining CoreWeave access is opaque: $500 is an upper bound and actual remaining
+credit may be lower. Do not treat it as a confirmed balance. Prepare a lean
+placement with local LFM work, one cloud Mellum learner and burst generation
+when recovered/admitted supply warrants it; use additional cloud GPUs only when
+their measured useful throughput justifies the spend. Resolve actual account
+rates, track cumulative estimated spend and bound allocations before launch.
+Preparation does not itself authorize restarting the paused training services.
+
+Filesystem snapshots are supplemental recovery. A quota cutoff can prevent
+restoring or reading them without another sandbox. The primary durable backup
+must remain independently downloadable from the workstation with zero running
+sandboxes: private full-state checkpoint exports (optimizer/RNG/exposure), exact
+recipe/control/runtime dependencies, admitted sources and generation journals.
+Retain a verified local recovery copy too. A READY snapshot, model-only export,
+upload acknowledgement or old readback alone does not cover these obligations.
+Monitor earned progress versus independently exported progress and actual object
+presence; preserve the last verified parent until its useful replacement is
+durable. Use snapshot/restore checks where available, without replacing the
+quota-independent export path or starting an otherwise idle recovery sandbox.
+
 ## Consolidated supervision (owner, 2026-10-20)
 
 Keep supervision, implementation and operations in one primary-agent strand.

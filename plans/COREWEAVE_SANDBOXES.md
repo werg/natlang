@@ -710,3 +710,50 @@ and a periodic snapshot operator in addition to full-state/source exports.
 The first READY snapshot and a verified restore must be observed before
 snapshot recovery is reported as covered. Keep snapshot failures visible and
 retain the latest independently verified backups while resolving them.
+
+### Quota-independent recovery preparation, October 24
+
+Owner correction: filesystem snapshots may require a new running sandbox to
+access their contents, precisely when an exhausted account cannot allocate one.
+Our successful salvage used private W&B run-file exports fetched directly on
+DGX with no running sandbox. Make those independent full-state and source/control
+exports the primary recovery route; snapshots supplement them. Keep optimizer,
+RNG, per-row exposure, full evolving recipes, exact reader/runtime/control
+closures, source/held inputs and generation journals. A model-only export does
+not suffice. Keep one verified local recovery representation and bounded private
+parents, with actual remote-presence checks before pruning.
+
+The current preparation mechanisms are shared across both model lines:
+
+- `scripts/coreweave/recovery_inputs.py --catalog CATALOG --out DIRECTORY`
+  authenticates the original full private-export receipts, downloads exact
+  content-addressed objects, independently hashes complete bytes and inventories
+  TAR members without extraction. Original JSON custody receipts and gzip runtime
+  archives are supported alongside zstd source archives. The default free-space
+  floor is 60 GiB; failures retain the durable source and cannot replace a
+  mismatching destination. Credentials and signed URLs are never journaled.
+- `scripts/coreweave/recovery_readiness.py --metadata CHECKPOINT_METADATA
+  --candidates SHA_TO_LOCAL_PATHS --archive-objects DIRECTORY --out REPORT`
+  reconciles checkpoint-declared source trees and exact control/base bindings.
+  It separates verified local files, actual verified archive members and missing
+  dependencies. This is an input audit, not complete controller closure,
+  admission, device qualification or resumed-training credit.
+- `scripts/coreweave/recovery_snapshots.py --sandbox-id ID --state-dir DIRECTORY`
+  schedules snapshots with durable request IDs, polling CREATING operations
+  instead of generating duplicates after ambiguous RPCs. READY and successful
+  restoration remain separate. `--verify-restore SNAPSHOT_ID
+  --destination-sandbox-id DESTINATION --restore-files EXACT_FILES_JSON` checks
+  the destination's actual backend restore-volume selector and hashes the real
+  files there before writing a restore receipt. It does not create that sandbox.
+  Retention touches only snapshots in this operator's own state, writes the exact
+  deletion plan first, preserves the newest two plus the verified/protected
+  parents, and requires a newer successful restore before deleting older states.
+  No successful cloud capture or restore is claimed by local tests.
+
+The owner reports at most $500 additional access, possibly less; actual remaining
+credit and GPU rates are unknown. Do not reuse the old preview-free assumption
+as a spending estimate. The lean prepared placement is local GB10 LFM, one cloud
+Mellum learner and burst Qwen3.6 generation when existing verified supply needs
+expansion. Measure useful throughput before adding a second cloud learner or a
+dedicated evaluator. Bound spending using actual account rates and allocations;
+snapshot access never counts as independent backup access at quota exhaustion.
