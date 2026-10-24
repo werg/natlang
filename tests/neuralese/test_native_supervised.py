@@ -298,6 +298,20 @@ def test_custom_seed_contract_retains_implicit_core_sources_and_current_optional
     assert 'foundation_native_graphs'not in config
 
 
+@pytest.mark.parametrize('role',['ce_supervision_policy','source_classification_migration',
+                                'foundation_qualification_request','unavailable_native_sources'])
+def test_source_contract_flags_follow_declared_stage_and_clear_obsolete_seed_bindings(role):
+    from natlang_neuralese.rl.production import expand_command
+    flag='--'+role.replace('_','-')
+    command=['python','-m','natlang_neuralese.train.native_state_sft',flag+'=old',flag,'duplicate-old']
+    config={'seed_command':command,role:'stale-config'}
+    supervised.bind_seed_sources(config,{role:{'path':'actual-current-contract'}})
+    actual=expand_command(config['seed_command'],{role:config[role]})
+    assert actual==['python','-m','natlang_neuralese.train.native_state_sft',flag,'actual-current-contract']
+    supervised.bind_seed_sources(config,{})
+    assert role not in config and config['seed_command']==command[:3]
+
+
 def test_declared_recipe_parameters_cannot_be_disabled_by_seed_defaults(tmp_path):
     from natlang_neuralese.rl.production import expand_command
     from natlang_neuralese.train.recipe import stage_parameter_args

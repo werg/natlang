@@ -29,7 +29,8 @@ SOURCE_ARGUMENTS = {
     'held_native_graphs': ('--held-native-graphs', 'held_native_graphs'),
     **{role: ('--'+role.replace('_','-'), role) for role in
        ('foundation_native_graphs', 'pending_native_sources', 'continued_native_graphs',
-        'continued_held_native_graphs', 'withdrawn_native_graphs', 'unavailable_native_sources')},
+        'continued_held_native_graphs', 'withdrawn_native_graphs', 'unavailable_native_sources',
+        'ce_supervision_policy', 'source_classification_migration', 'foundation_qualification_request')},
 }
 
 
