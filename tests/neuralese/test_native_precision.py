@@ -7,6 +7,20 @@ from natlang_neuralese.model.native_precision import set_native_linear_precision
 from natlang_neuralese.model.shared_state import SharedStateModel
 
 
+def test_base_location_change_requires_consistent_full_byte_inventory():
+    from natlang_neuralese.common.hashing import canonical_json_sha256_hex
+    from natlang_neuralese.model.native_precision import base_location_transition
+    inventory = {'config.json': 'a'*64, 'model.safetensors': 'b'*64, 'tokenizer.json': 'c'*64}
+    before = {'base': '/old/base', 'base_inventory': inventory,
+              'base_inventory_sha256': canonical_json_sha256_hex(inventory), 'rank': 8}
+    after = {**before, 'base': '/internal/base'}
+    assert same_source_precision_identity(before, after)
+    assert base_location_transition(before, after)['input_bytes'] == 'identical'
+    assert not same_source_precision_identity(before, {**after, 'rank': 9})
+    assert not same_source_precision_identity(before, {**after, 'base_inventory_sha256': '0'*64})
+    assert not same_source_precision_identity(before, {**after, 'base_inventory': {'config.json': 'a'*64}})
+
+
 def test_precision_is_per_model_restorable_and_preserves_parameters():
     from test_shared_state import tiny
     first = SharedStateModel(tiny('lfm'), (60, 61, 62, 63), rank=4)
@@ -40,12 +54,53 @@ def test_precision_checkpoint_exact_restore_and_identity(tmp_path):
     assert restored.native_linear_precision == 'bf16'
     assert restored_config == config
     assert all(torch.equal(value, dict(restored.named_parameters())[key]) for key, value in source_weights.items())
+    import shutil
+    relocated = tmp_path / 'relocated'
+    shutil.copytree(base, relocated)
+    moved, _, _, moved_config, _ = load_native_checkpoint(saved, base=relocated)
+    assert same_source_precision_identity(config, moved_config)
+    assert all(torch.equal(value, dict(moved.named_parameters())[key]) for key, value in source_weights.items())
     strict_config = {**config, 'native_linear_precision': 'ieee'}
     before = native_identity(model, config, checkpoint_sha256='1'*64)
     with pytest.raises(ValueError, match='arithmetic'):
         native_identity(model, strict_config, checkpoint_sha256='1'*64)
     set_native_linear_precision(model, 'ieee')
     assert before != native_identity(model, strict_config, checkpoint_sha256='1'*64)
+
+
+def test_real_optimizer_continuation_records_base_relocation_and_keeps_stage_credits(tmp_path):
+    import hashlib
+    import json
+    import shutil
+    from test_native_model import tiny_source
+    from test_native_state_sft import graph
+    from natlang_neuralese.model.native_model import load_native_model
+    from natlang_neuralese.train import native_state_sft as trainer
+    base = tmp_path/'base'; tiny_source(base)
+    _, _, _, config = load_native_model(base, dtype=torch.float32, rank=4)
+    train, held = tmp_path/'train.jsonl', tmp_path/'held.jsonl'
+    train.write_text(json.dumps({**graph('train'), 'tokenizer_fingerprint': config['tokenizer_fingerprint']})+'\n')
+    held.write_text(json.dumps({**graph('held'), 'split': 'test', 'tokenizer_fingerprint': config['tokenizer_fingerprint']})+'\n')
+    argv = ['--base',str(base),'--dtype','float32','--rank','4','--device','cpu',
+        '--native-graphs',str(train),'--held-native-graphs',str(held),'--epochs','1',
+        '--eval-every','10','--checkpoint-every','0','--checkpoint-seconds','0',
+        '--out',str(tmp_path/'before'),'--stage-id','before']
+    assert trainer.main(argv) == 0
+    parent = tmp_path/'before/checkpoint.pt'
+    parent_hash = hashlib.sha256(parent.read_bytes()).hexdigest()
+    old = torch.load(parent, weights_only=False)['training']
+    moved = tmp_path/'moved'; shutil.copytree(base, moved)
+    continued = argv.copy()
+    continued[continued.index('--base')+1] = str(moved)
+    continued[continued.index('--out')+1] = str(tmp_path/'after')
+    continued[continued.index('--stage-id')+1] = 'after'
+    assert trainer.main(continued+['--continue-from',str(parent),'--objective-continuation']) == 0
+    new = torch.load(tmp_path/'after/checkpoint.pt', weights_only=False)['training']
+    assert new['global_step'] == old['global_step']+1
+    assert new['sft_progress']['before'] == old['sft_progress']['before']
+    assert new['sft_progress']['after']['exposure_counts'] == {'train': 1}
+    assert new['options']['base_relocation_history'][-1]['input_bytes'] == 'identical'
+    assert hashlib.sha256(parent.read_bytes()).hexdigest() == parent_hash
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason='CUDA native arithmetic')

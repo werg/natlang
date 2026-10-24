@@ -111,9 +111,10 @@ class NativeSourcePreparation:
         if self.cache_only and not (path.suffix == '.json' and pair_model is None):
             self._require_cached_leaf(path, binding['sha256'], split, pair_model)
         if path.suffix == '.json' and pair_model is None:
-            from ..data.native_source_tree import initialize_manifest
+            from ..data.native_source_tree import initialize_manifest, _source_identity
             source = self.source_type.__new__(self.source_type)
             source.path, source.kind, source.pair_model = path, 'native-graphs', None
+            source.source_identity_path = _source_identity(path)
             source.role_ids = self.role_ids
             source.tokenizer_fingerprint, source.required_split = self.tokenizer_fingerprint, split
             initialize_manifest(source, _parents, load_child=self._load_child)

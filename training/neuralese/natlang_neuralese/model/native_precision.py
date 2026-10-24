@@ -44,9 +44,37 @@ def set_native_linear_precision(model, mode):
     return model
 
 
+def base_location_transition(previous, current):
+    """Separate a file location from the complete byte-pinned HF identity.
+
+    Native checkpoint loading verifies the actual files before this comparison.
+    Missing or inconsistent inventories cannot authorize a location change.
+    """
+    if previous.get('base') == current.get('base'):
+        return None
+    from ..common.hashing import canonical_json_sha256_hex
+    import re
+    inventory = current.get('base_inventory')
+    if (not isinstance(inventory, dict) or not inventory
+            or previous.get('base_inventory') != inventory
+            or any(not re.fullmatch('[0-9a-f]{64}', str(value)) for value in inventory.values())):
+        raise ValueError('base relocation requires the exact complete input inventory')
+    digest = canonical_json_sha256_hex(inventory)
+    if any(config.get('base_inventory_sha256') != digest for config in (previous, current)):
+        raise ValueError('base relocation inventory digest is inconsistent')
+    return {'from': previous.get('base'), 'to': current.get('base'),
+            'base_inventory_sha256': digest, 'input_bytes': 'identical'}
+
+
 def same_source_precision_identity(previous, current):
     """Only declared native arithmetic may change in an ordinary continuation."""
     arithmetic = {'native_linear_precision', 'native_attention_precision', 'native_shared_execution'}
+    if previous.get('base') != current.get('base'):
+        try:
+            base_location_transition(previous, current)
+        except ValueError:
+            return False
+        arithmetic.add('base')
     return ({k: v for k, v in previous.items() if k not in arithmetic} ==
             {k: v for k, v in current.items() if k not in arithmetic})
 

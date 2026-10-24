@@ -1181,6 +1181,17 @@ def _main(argv=None, *, requested_refresh):
         config['native_attention_precision'] = attention_precision
     saved_training = resume or shared_resume or {}
     saved_options = saved_training.get('options') or {}
+    from ..model.native_precision import base_location_transition
+    base_history = list(saved_options.get('base_relocation_history') or [])
+    previous_config = (saved_training.get('identity') or {}).get('config')
+    if previous_config:
+        relocation = base_location_transition(previous_config, config)
+        if relocation is not None:
+            relocation.update(at_global_step=int(saved_training.get('global_step', saved_training.get('step', 0))),
+                              weights_optimizer_rng_exposure='preserved')
+            base_history.append(relocation)
+            print(json.dumps({'event': 'native_base_relocation', **relocation}), flush=True)
+    checkpoint_options['base_relocation_history'] = base_history
     checkpoint_options['foundation_qualification_history'] = list(saved_options.get('foundation_qualification_history') or [])
     snapshot_ancestors = list(saved_options.get('native_snapshot_ancestors') or [])
     if any(not isinstance(value,str) or len(value)!=64 or any(char not in '0123456789abcdef' for char in value)
