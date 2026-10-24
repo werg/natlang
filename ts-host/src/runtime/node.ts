@@ -127,6 +127,93 @@ export function installHybridTracingEnvironment(
   setModuleRealm(() => instantiate('retained'));
 }
 
+/**
+ * Native observation mode for unsupported JS/TS. Records execution boundaries
+ * but does NOT invent VM operation events or an exact-replayable owned archive.
+ * Retained callable exports can execute after module installation: those calls
+ * are outside this bootstrap-level observer.
+ */
+export function installObservedNativeTracingEnvironment(
+  onTrace: (record: {
+    schema: 'natlang-native-observation/1';
+    phase: 'start' | 'completed' | 'failed';
+    kind: 'execute' | 'executeAsync' | 'evaluateModule';
+    mode: EnvironmentMode;
+    code: string;
+    path?: string;
+    error?: string;
+  }) => void,
+): void {
+  if (typeof onTrace !== 'function') throw new TypeError('Native trace observer required');
+  function instantiate(mode: EnvironmentMode, runtimeOptions?: NatlangRuntimeOptions): EvalEnvironment {
+    const native = new TypeScriptEnvironment({
+      mode, workspace: runtimeOptions?.workspace, network: runtimeOptions?.network
+    });
+    let closed = false;
+    const emit = (phase: 'start'|'completed'|'failed',
+      kind: 'execute'|'executeAsync'|'evaluateModule',code: string,path?: string,error?: unknown) => {
+      const record = {
+        schema:'natlang-native-observation/1' as const,phase,kind,mode,code,path,
+        ...(error === undefined ? {} : {error: error instanceof Error ? error.message : String(error)})
+      };
+      onTrace(record);
+    };
+    const start = (kind:'execute'|'executeAsync'|'evaluateModule',code:string,path?:string) => {
+      if (closed) throw new Error('Observed native environment is closed');
+      emit('start',kind,code,path);
+    };
+    return {
+      authority:'native-observed/1',
+      mode,
+      scopeCapabilities:{allowModules:true,allowNetwork:Boolean(runtimeOptions?.network)},
+      execute(request) {
+        start('execute',request.code,request.path);
+        try {
+          const result=native.execute(request);
+          emit('completed','execute',request.code,request.path);
+          return {...result,events:[
+            {operation:'execution.provenance',authority:'native-observed/1',
+              traceSchema:'natlang-native-observation/1'},...result.events
+          ]};
+        } catch (error) {
+          emit('failed','execute',request.code,request.path,error);
+          throw error;
+        }
+      },
+      async executeAsync(request) {
+        start('executeAsync',request.code,request.path);
+        try {
+          const result=await native.executeAsync(request);
+          emit('completed','executeAsync',request.code,request.path);
+          return {...result,events:[
+            {operation:'execution.provenance',authority:'native-observed/1',
+              traceSchema:'natlang-native-observation/1'},...result.events
+          ]};
+        } catch (error) {
+          emit('failed','executeAsync',request.code,request.path,error);
+          throw error;
+        }
+      },
+      evaluateModule(code,bindings) {
+        start('evaluateModule',code);
+        try {
+          const result=native.evaluateModule(code,bindings);
+          emit('completed','evaluateModule',code);
+          return result;
+        } catch(error) {
+          emit('failed','evaluateModule',code,undefined,error);
+          throw error;
+        }
+      },
+      declarationOf(name) {return native.declarationOf(name);},
+      fork() {return instantiate('fresh',runtimeOptions);},
+      close() {if(!closed){closed=true;native.close();}}
+    };
+  }
+  setDefaultEnvironmentFactory(options=>instantiate('fresh',options));
+  setModuleRealm(()=>instantiate('retained'));
+}
+
 // Every runtime records to the machine's call store unless it says otherwise (NATLANG_CALL_STORE=off disables it).
 setDefaultCallStoreFactory(() => { const root = machineStoreRoot(); return root ? CallStore.open(root) : undefined; });
 
