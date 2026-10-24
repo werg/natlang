@@ -305,6 +305,8 @@ def test_native_factory_retains_full_recipe_budget_and_uses_headless_actor(tmp_p
         entry.parent.mkdir(parents=True); entry.write_text('# exact actor entry\n')
         package = actor/'training/neuralese/natlang_neuralese'
         package.mkdir(parents=True); (package/'__init__.py').write_text('# exact package\n')
+        assets=actor/'training/prompt-pieces';assets.mkdir(parents=True)
+        for name in ('pieces.json','rendering-contract-fixtures.json'):(assets/name).write_text('{}')
         args.actor_runtime = actor
     production.configure_native(args)
     saved = json.loads(args.config.read_text())

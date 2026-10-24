@@ -61,10 +61,10 @@ test('retained callable invocations are observed with receiver and thrown errors
   const records=[];
   try {
     installObservedNativeTracingEnvironment(record=>records.push(record));
-    const record=parseModule('/__natlang__/folder/observed-call.ts',
+    const record=parseModule('/__natlang__/folder/observedCall.ts',
       'export function twice(n: number): number { return n * 2; }\n' +
       'export function fail(): never { throw new Error("call failed"); }',{},PATH_ONLY);
-    const exports=moduleInstance(record,{'observed-call':record});
+    const exports=moduleInstance(record,{observedCall:record});
     assert.equal(exports.twice(4),8);
     assert.throws(()=>exports.fail(),/call failed/);
     const calls=records.filter(item=>item.kind==='exportCall');
@@ -81,10 +81,10 @@ test('native callable async results have distinct returned and settled observati
   const records=[];
   try {
     installObservedNativeTracingEnvironment(record=>records.push(record));
-    const record=parseModule('/__natlang__/folder/observed-async.ts',
-      'export async function ok(n: number) { return n + 1; }\n' +
-      'export async function fail() { throw new Error("later"); }',{},PATH_ONLY);
-    const exports=moduleInstance(record,{'observed-async':record});
+    const record=parseModule('/__natlang__/folder/observedAsync.ts',
+      'export async function ok(n: number): Promise<number> { return n + 1; }\n' +
+      'export async function fail(): Promise<never> { throw new Error("later"); }',{},PATH_ONLY);
+    const exports=moduleInstance(record,{observedAsync:record});
     const a=exports.ok(4);
     const b=exports.fail();
     assert.equal(await a,5);
