@@ -76,8 +76,7 @@ export function installHybridTracingEnvironment(
       (options.route !== undefined && typeof options.route !== 'function') ||
       (options.onNativeExecution !== undefined && typeof options.onNativeExecution !== 'function'))
     throw new TypeError('Invalid hybrid tracing options');
-  // Compatibility-first is the intentional default. Applications must select
-  // the owned route for any invocation whose output may be admitted as a trace.
+  // Every accepted evaluation uses the owned interpreter.
   const route = options.route ?? (() => 'owned' as const);
   function instantiate(mode: EnvironmentMode, runtimeOptions?: NatlangRuntimeOptions): EvalEnvironment {
     const owned = factory(mode, runtimeOptions);
@@ -86,9 +85,6 @@ export function installHybridTracingEnvironment(
         typeof owned.evaluateModule !== 'function' ||
         typeof owned.close !== 'function' || typeof owned.fork !== 'function')
       throw new TypeError('Hybrid tracing factory returned an incompatible owned evaluator');
-    const native = new TypeScriptEnvironment({
-      mode, workspace: runtimeOptions?.workspace, network: runtimeOptions?.network
-    });
     let closed = false;
     const choose = (kind: 'execute' | 'executeAsync' | 'evaluateModule', code: string, path?: string) => {
       if (closed) throw new Error('Hybrid tracing environment is closed');
@@ -99,12 +95,6 @@ export function installHybridTracingEnvironment(
         throw new Error('Trace required: native execution has no owned semantic archive');
       return decision;
     };
-    const mark = (kind: 'execute' | 'executeAsync' | 'evaluateModule', path?: string) => {
-      const event = {operation: 'execution.provenance' as const,
-        authority: 'native-untraced/1' as const, kind, mode, path};
-      options.onNativeExecution?.(event);
-      return event;
-    };
     return {
       authority: 'owned-trace-required/1',
       mode,
@@ -112,29 +102,24 @@ export function installHybridTracingEnvironment(
       execute(request) {
         if (choose('execute', request.code, request.path) === 'owned')
           return owned.execute(request);
-        const marker = mark('execute', request.path);
-        const result = native.execute(request);
-        return {...result, events: [marker, ...result.events]};
+        throw new Error('Trace required: native execution has no owned semantic archive');
       },
       async executeAsync(request) {
         if (choose('executeAsync', request.code, request.path) === 'owned')
           return owned.executeAsync(request);
-        const marker = mark('executeAsync', request.path);
-        const result = await native.executeAsync(request);
-        return {...result, events: [marker, ...result.events]};
+        throw new Error('Trace required: native execution has no owned semantic archive');
       },
       evaluateModule(code, bindings) {
         if (choose('evaluateModule', code) === 'owned')
           return owned.evaluateModule(code, bindings);
-        mark('evaluateModule');
-        return native.evaluateModule(code, bindings);
+        throw new Error('Trace required: native execution has no owned semantic archive');
       },
-      declarationOf(name) { return owned.declarationOf?.(name) ?? native.declarationOf?.(name); },
+      declarationOf(name) { return owned.declarationOf?.(name); },
       fork() { return instantiate('fresh', runtimeOptions); },
       close() {
         if (closed) return;
         closed = true;
-        try { owned.close(); } finally { native.close(); }
+        owned.close();
       }
     };
   }
