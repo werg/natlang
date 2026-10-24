@@ -485,10 +485,19 @@ def local_references(paths, proc_root=Path('/proc')):
         # worker owns. The actual cwd is checked separately below; resource
         # variables such as CHECKPOINT or DATA_DIR remain explicit references.
         ambient_directories = {'HOME', 'PWD', 'OLDPWD'}
+        def may_be_directory(operand):
+            try:
+                return operand.is_dir()
+            except OSError:
+                # A disconnected mount must not abort checks for unrelated
+                # artifacts. Conservatively protect every descendant of an
+                # unreadable explicit operand, as if it were a directory.
+                return True
+
         directory_operands = [operand for operand in path_operands(resource_argv, cwd, equals=True)
-                              if operand.is_dir()]
+                              if may_be_directory(operand)]
         directory_operands.extend(operand for key, operand in env_operands
-                                  if key.upper() not in ambient_directories and operand.is_dir())
+                                  if key.upper() not in ambient_directories and may_be_directory(operand))
         command_text = ' '.join(argv)
         environment_text = ' '.join(environment)
         for resolved in targets:

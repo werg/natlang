@@ -315,6 +315,31 @@ class OffloadTests(unittest.TestCase):
         self.assertEqual(refs['open_fds'][0]['pid'], 12345)
         self.assertEqual(refs['inaccessible_fd_directories'], 1)
 
+    def test_unreadable_directory_operand_protects_descendants_without_blocking_unrelated_files(self):
+        checkpoint = self.root / 'checkpoint.pt'
+        unrelated = self.repo / 'unrelated.pt'
+        unrelated.write_bytes(b'closed sibling')
+        worker_cwd = self.repo / 'worker-cwd'
+        worker_cwd.mkdir()
+        original_is_dir = Path.is_dir
+
+        def disconnected(path):
+            if path == self.root:
+                raise OSError(5, 'Input/output error')
+            return original_is_dir(path)
+
+        with tempfile.TemporaryDirectory() as proc_temp:
+            proc = Path(proc_temp)
+            process = proc / '12345'
+            (process / 'fd').mkdir(parents=True)
+            (process / 'cmdline').write_bytes(f'worker\0--artifact-dir={self.root}\0'.encode())
+            (process / 'environ').write_bytes(f'DATA_DIR={self.root}\0'.encode())
+            (process / 'cwd').symlink_to(worker_cwd)
+            with patch.object(Path, 'is_dir', disconnected):
+                refs = module.local_references([checkpoint, unrelated], proc_root=proc)
+        self.assertEqual(refs['live_job_references'], [
+            {'pid': 12345, 'path': str(checkpoint.resolve()), 'source': 'artifact-directory-reference'}])
+
     def test_file_path_arguments_and_environment_protect_only_the_canonical_file(self):
         checkpoint = self.root / 'checkpoint.pt'
         best = self.root / 'best-checkpoint.pt'
