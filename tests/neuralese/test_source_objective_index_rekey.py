@@ -14,15 +14,16 @@ from natlang_neuralese.train import native_source_classification as m
 def case(tmp_path, monkeypatch):
     monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE', str(tmp_path/'cache'))
     old, new = tmp_path/'old', tmp_path/'new'
-    actual = Path(__file__).resolve().parents[2]/'training/neuralese/natlang_neuralese/data/native_sources.py'
-    after = actual.read_text()
-    before = after.replace(c._CE_SETTER, '', 1).replace(c._CE_YIELD, '                    yield example', 1)
+    fixture=Path(__file__).parent/'fixtures/reviewed-ce-index-packages-20261020.json'
+    reviewed=json.loads(fixture.read_text())
+    after=reviewed['new_native_sources']
+    before=reviewed['old_files']['data/native_sources.py']
     assert before != after
     for root, source in ((old, before), (new, after)):
         for name in c.POLICY_FILES:
             p=root/name;p.parent.mkdir(parents=True,exist_ok=True)
-            p.write_bytes(source.encode() if name=='data/native_sources.py' else (actual.parents[1]/name).read_bytes())
-        p=root/'train/native_source_classification.py';p.parent.mkdir(exist_ok=True);p.write_bytes((actual.parents[1]/'train/native_source_classification.py').read_bytes())
+            p.write_bytes(source.encode() if name=='data/native_sources.py' else reviewed['old_files'][name].encode())
+        p=root/'train/native_source_classification.py';p.parent.mkdir(exist_ok=True);p.write_text(reviewed['classification_producer'])
     source=tmp_path/'source.jsonl';source.write_text('NOT JSON: helper must not parse graph content\n')
     def bind(p):return {'path':str(p),'sha256':c.sha256_file_hex(p),'bytes':p.stat().st_size}
     q=c.prove_ce_objective_extension(old,new)
