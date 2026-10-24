@@ -53,6 +53,93 @@ export function installOwnedTracingEnvironment(
   setDefaultEnvironmentFactory(options => instantiate('fresh', options));
   setModuleRealm(() => instantiate('retained'));
 }
+/**
+ * Compatibility-first integration. Unlike installOwnedTracingEnvironment this
+ * deliberately permits the ordinary Node evaluator. A native selection has
+ * NO owned instruction trace and MUST NOT enter replay-verified training data.
+ *
+ * Routing happens before evaluation, never as a catch-and-retry after partially
+ * executed guest code or committed external side effects.
+ */
+export function installHybridTracingEnvironment(
+  factory: (mode: EnvironmentMode, options?: NatlangRuntimeOptions) => EvalEnvironment,
+  options: {
+    route?: (request: {kind: 'execute' | 'executeAsync' | 'evaluateModule';
+      mode: EnvironmentMode; code: string; path?: string}) => 'owned' | 'native';
+    onNativeExecution?: (event: {operation: 'execution.provenance';
+      authority: 'native-untraced/1'; kind: string; mode: EnvironmentMode;
+      path?: string}) => void;
+  } = {}
+): void {
+  if (typeof factory !== 'function') throw new TypeError('Hybrid owned evaluator factory required');
+  if (!options || typeof options !== 'object' ||
+      (options.route !== undefined && typeof options.route !== 'function') ||
+      (options.onNativeExecution !== undefined && typeof options.onNativeExecution !== 'function'))
+    throw new TypeError('Invalid hybrid tracing options');
+  // Compatibility-first is the intentional default. Applications must select
+  // the owned route for any invocation whose output may be admitted as a trace.
+  const route = options.route ?? (() => 'native' as const);
+  function instantiate(mode: EnvironmentMode, runtimeOptions?: NatlangRuntimeOptions): EvalEnvironment {
+    const owned = factory(mode, runtimeOptions);
+    if (!owned || owned.mode !== mode || !owned.authority?.startsWith('owned-') ||
+        typeof owned.execute !== 'function' || typeof owned.executeAsync !== 'function' ||
+        typeof owned.evaluateModule !== 'function' ||
+        typeof owned.close !== 'function' || typeof owned.fork !== 'function')
+      throw new TypeError('Hybrid tracing factory returned an incompatible owned evaluator');
+    const native = new TypeScriptEnvironment({
+      mode, workspace: runtimeOptions?.workspace, network: runtimeOptions?.network
+    });
+    let closed = false;
+    const choose = (kind: 'execute' | 'executeAsync' | 'evaluateModule', code: string, path?: string) => {
+      if (closed) throw new Error('Hybrid tracing environment is closed');
+      const decision = route({kind, mode, code, path});
+      if (decision !== 'owned' && decision !== 'native')
+        throw new TypeError('Hybrid tracing route must return owned or native');
+      return decision;
+    };
+    const mark = (kind: 'execute' | 'executeAsync' | 'evaluateModule', path?: string) => {
+      const event = {operation: 'execution.provenance' as const,
+        authority: 'native-untraced/1' as const, kind, mode, path};
+      options.onNativeExecution?.(event);
+      return event;
+    };
+    return {
+      authority: 'hybrid-native-compatibility/1',
+      mode,
+      scopeCapabilities: {allowModules: true, allowNetwork: Boolean(runtimeOptions?.network)},
+      execute(request) {
+        if (choose('execute', request.code, request.path) === 'owned')
+          return owned.execute(request);
+        const marker = mark('execute', request.path);
+        const result = native.execute(request);
+        return {...result, events: [marker, ...result.events]};
+      },
+      async executeAsync(request) {
+        if (choose('executeAsync', request.code, request.path) === 'owned')
+          return owned.executeAsync(request);
+        const marker = mark('executeAsync', request.path);
+        const result = await native.executeAsync(request);
+        return {...result, events: [marker, ...result.events]};
+      },
+      evaluateModule(code, bindings) {
+        if (choose('evaluateModule', code) === 'owned')
+          return owned.evaluateModule(code, bindings);
+        mark('evaluateModule');
+        return native.evaluateModule(code, bindings);
+      },
+      declarationOf(name) { return owned.declarationOf?.(name) ?? native.declarationOf?.(name); },
+      fork() { return instantiate('fresh', runtimeOptions); },
+      close() {
+        if (closed) return;
+        closed = true;
+        try { owned.close(); } finally { native.close(); }
+      }
+    };
+  }
+  setDefaultEnvironmentFactory(options => instantiate('fresh', options));
+  setModuleRealm(() => instantiate('retained'));
+}
+
 // Every runtime records to the machine's call store unless it says otherwise (NATLANG_CALL_STORE=off disables it).
 setDefaultCallStoreFactory(() => { const root = machineStoreRoot(); return root ? CallStore.open(root) : undefined; });
 
