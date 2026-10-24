@@ -37,3 +37,22 @@ preparation checks every available parsed row binding against the original earne
 frame and warms the unchanged parser cache. Cutover still requires this complete
 validation, original CE policy and held dependencies, actual graph capacity,
 publication/export continuity and observed optimizer progress on genuine graphs.
+
+Actual earned-state verification also found3370 pre-existing pending SFT rows
+and425 pending preference rows. The full inherited obligations therefore cover
+1,589,495 SFT rows and12,413 preference rows before adding the local recovery
+tranche. Temporarily deferring Search/OWL changes the original SFT active/pending
+view to1,579,098/10,397; it preserves all158,486 earned original SFT visits.
+Dependency recovery now enumerates these historical pending declarations too.
+Do not treat the active source tree alone as the complete recipe population.
+
+Failure-history custody is restored for both models from52 exact exported files.
+The shared detector/role functions match the historical8b1cd924 helper by their
+complete scoped AST and globals; unrelated helper additions changed the old
+whole-file identity. `continue_failed_history_mask_law` produces explicit new
+declarations, preserving all rows/spans/evidence and embedding the historical
+helper/proof. It rejects changed role, detector or global semantics. The current
+unmodified consumer additionally recomputes each consumed row's actual spans and
+failure evidence. The focused law/mask/custody suite passed32 checks. Recovered
+LFM/Mellum CE declarations now validate with their full decoder dependencies;
+these are updated declarations, not recovered bytes of the lost latest policy.
