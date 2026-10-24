@@ -65,9 +65,25 @@ versioned recipe retains every task/reward/source binding. The completed collect
 replays with its exact old actor Python closure, reconstructed from commit08e293a07;
 subsequent new actors use the current explicit runtime. Nothing was relabeled.
 
-Deferred throughput work: `serve/engine.py` advances native sequences individually
-in `_native_round`. Implement and compare real batched native forwards, including
-unequal positional KV, convolution/linear state, per-request adapter identities,
-sampling/RNG, cancellation and full RL occurrence capture. More collector workers
-alone do not remove this bottleneck. Keep the functioning learner/actor cycle
-moving while preparing that shared serving improvement.
+The first complete local cycle earned RL36387, SFT36487 and DPO36537, preserving
+optimizer/RNG and original recipe exposure. A second RL round subsequently
+committed eight complete GRPO episodes and SFT resumed on that earned child.
+Its16 samples yielded6 successes,4 invalid actions,2 semantic mismatches and4
+model-request-budget terminations. Different task mixes prevent interpreting
+these counts as measured capability lift. Whole-graph RL peaked at44.18GB CUDA
+allocation; the supervised worker subsequently peaked at22.21GB.
+
+Native decode batching is implemented and deployed in frozen runtimeb2747a552,
+including unequal positional KV, convolution/linear state, per-request adapter
+identities, sampling/RNG, cancellation and complete occurrence capture. The
+step36537 GB10 check measured83.19 versus302.67 decoded tokens/s for four lanes,
+with identical logits. Actual collection used grouped forwards before the next
+whole-graph learner took over. See the shared batched-decoding plan for scope.
+Both cloud learners remain paused; these are local LFM advances.
+
+Original full-source restoration remains an active obligation. Local staging
+restored1218 exact files and regenerated seven missing filtered payloads with
+their original hashes. Header recovery found five more exact manifests;66
+original headers and the7027-row Search/OWL payload remain unavailable. Restored
+bytes do not establish admission or exposure. Rejoin usable original data through
+an explicit continuation while retaining earned credits and missing-data debt.

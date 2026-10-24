@@ -28,8 +28,23 @@ KV/convolution/delta state and all named gradients match for LFM, Mellum, standa
 Qwen attention and Qwen3.5 hybrid state. Serving checks cover complete captured
 producer/import executions, adapter-group separation, cancellation, existing
 guidance, transport, close boundaries and whole-graph replay. The integrated
-focused suite passed55 checks. Actual full-size GB10 numerical/throughput evidence
-and deployment are recorded separately by the supervising operator before cutover.
+focused suite passed55 checks.
+
+Full-size GB10 evidence: the earned step36537 checkpoint, four independent lanes
+and24 decode steps measured1.1540s sequential versus0.3172s batched:83.19 versus
+302.67 tokens/s, a3.6384x speedup. Maximum logit difference was0.0; this benchmark
+made no optimizer updates. The evidence is retained at
+`/home/werg/data/lfm-local-recovery-20261024/rl/batched-decode-gpu-proof.json`.
+Frozen runtimeb2747a552 was deployed for the second local RL collection; live
+counters confirmed over19000 tokens actually used grouped native forwards.
+This isolated decode speedup is not an end-to-end training throughput claim.
+
+The first frozen package omitted required prompt rendering assets, leaving its
+process alive while `/info` failed. The complete `training/prompt-pieces` assets
+were restored with recorded hashes before collection advanced. Actor runtime
+preflight must bind required rendering assets as well as Python source; managed
+readiness also needs a deadline and exact-child cleanup so this cannot silently
+wait forever. Preserve each collection's actual runtime identities at cutover.
 
 Supervision policy: a worker failing before any saved child may be isolated when
 `continue_after_unstarted_stage_failure` is explicitly enabled. Preserve the exact

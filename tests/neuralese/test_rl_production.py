@@ -296,3 +296,41 @@ def test_python_runtime_reuses_resident_inventory_and_is_path_independent(tmp_pa
     assert initial['sha256'] == canonical_json_sha256_hex(code_inventory(packages[0]))
     (packages[1]/'actor.py').write_text('version = 2\n')
     assert python_runtime_binding(packages[1]) != initial
+
+
+def test_managed_actor_readiness_timeout_stops_the_exact_child(tmp_path,monkeypatch):
+    import time
+    from natlang_neuralese.rl import actor_client
+    stopped=[]
+    class Process:
+        pid=741;done=False
+        def __init__(self,*args,**kwargs):pass
+        def poll(self):return 0 if self.done else None
+        def terminate(self):self.done=True;stopped.append(self.pid)
+        def wait(self,*args,**kwargs):return 0
+    class Server:
+        def __init__(self,*args,**kwargs):pass
+        def get_bytes(self,path):raise OSError('unhealthy info route')
+    monkeypatch.setattr(production.subprocess,'Popen',Process)
+    monkeypatch.setattr(actor_client,'NativeActorClient',Server)
+    clock=iter([0.,0.,2.]);monkeypatch.setattr(time,'monotonic',lambda:next(clock))
+    monkeypatch.setattr(time,'sleep',lambda _:None)
+    with pytest.raises(RuntimeError,match='did not attest'):
+        production.collect_with_actor({'actor_command':['actor'],'actor_ready_seconds':1},
+            {'out':str(tmp_path),'policy_id':'current'},out=tmp_path,endpoints=['http://same'])
+    assert stopped==[741]
+
+
+def test_actor_runtime_requires_and_binds_rendering_assets_before_launch(tmp_path):
+    import sys
+    entry=tmp_path/'scripts/neuralese_data/serve_native_checkpoint.py';entry.parent.mkdir(parents=True);entry.write_text('# actor')
+    package=tmp_path/'training/neuralese/natlang_neuralese';package.mkdir(parents=True);(package/'__init__.py').write_text('# source')
+    with pytest.raises(ValueError,match='required rendering asset'):
+        production.actor_runtime_configuration(tmp_path)
+    assets=tmp_path/'training/prompt-pieces';assets.mkdir(parents=True)
+    for name in ('pieces.json','rendering-contract-fixtures.json'):(assets/name).write_text('{}')
+    config={**production.actor_runtime_configuration(tmp_path),'actor_command':[sys.executable,str(entry)]}
+    assert production.validate_actor_runtime_configuration(config)
+    (assets/'pieces.json').write_text('{"changed":true}')
+    with pytest.raises(ValueError,match='rendering assets'):
+        production.validate_actor_runtime_configuration(config)

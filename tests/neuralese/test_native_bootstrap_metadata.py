@@ -257,6 +257,8 @@ def test_explicit_actor_runtime_reconciles_known_role_binder_command_only(tmp_pa
     actor=tmp_path/'new-actor';actor.mkdir()
     entry=actor/'scripts/neuralese_data/serve_native_checkpoint.py';entry.parent.mkdir(parents=True);entry.write_text('# actor')
     package=actor/'training/neuralese/natlang_neuralese';package.mkdir(parents=True);(package/'__init__.py').write_text('# package')
+    assets=actor/'training/prompt-pieces';assets.mkdir(parents=True)
+    for asset in ('pieces.json','rendering-contract-fixtures.json'):(assets/asset).write_text('{}')
     environment={'NATLANG_REPO':str(actor),'PYTHONPATH':str(actor/'training/neuralese')+':'+str(actor)}
     old=['/usr/bin/env','NATLANG_REPO=/old-learner','PYTHONPATH=/old-learner/training/neuralese',
          '/usr/bin/python','/old-learner/scripts/neuralese_data/serve_native_checkpoint.py','--port','8097']
@@ -287,6 +289,8 @@ def test_actor_runtime_never_reinterprets_custom_prefix_with_native_path(tmp_pat
     from natlang_neuralese.rl.native_rounds import configure_provider
     entry=tmp_path/'scripts/neuralese_data/serve_native_checkpoint.py';entry.parent.mkdir(parents=True);entry.write_text('# actor')
     package=tmp_path/'training/neuralese/natlang_neuralese';package.mkdir(parents=True);(package/'__init__.py').write_text('# package')
+    assets=tmp_path/'training/prompt-pieces';assets.mkdir(parents=True)
+    for asset in ('pieces.json','rendering-contract-fixtures.json'):(assets/asset).write_text('{}')
     with pytest.raises(ValueError,match='custom actor command'):
         configure_provider({}, {'actor_runtime':str(tmp_path),'commands':{'actor_command':command}},
                            {},{},tmp_path/'unused',write=False)
@@ -298,6 +302,8 @@ def test_actor_runtime_accepts_declared_python_launcher_shapes(tmp_path,prefix):
     from natlang_neuralese.rl.native_rounds import configure_provider
     entry=tmp_path/'scripts/neuralese_data/serve_native_checkpoint.py';entry.parent.mkdir(parents=True);entry.write_text('# actor')
     package=tmp_path/'training/neuralese/natlang_neuralese';package.mkdir(parents=True);(package/'__init__.py').write_text('# package')
+    assets=tmp_path/'training/prompt-pieces';assets.mkdir(parents=True)
+    for asset in ('pieces.json','rendering-contract-fixtures.json'):(assets/asset).write_text('{}')
     environment={'NATLANG_REPO':str(tmp_path),'PYTHONPATH':str(tmp_path/'training/neuralese')}
     command=prefix+['/old/scripts/neuralese_data/serve_native_checkpoint.py','--port','8097']
     result=configure_provider({'actor_environment':environment},
@@ -315,6 +321,8 @@ def test_actor_runtime_retargets_default_factory_command_and_rejects_stale_ident
         root=tmp_path/f'{model}-{name}'
         entry=root/'scripts/neuralese_data/serve_native_checkpoint.py';entry.parent.mkdir(parents=True);entry.write_text('# '+name)
         package=root/'training/neuralese/natlang_neuralese';package.mkdir(parents=True);(package/'__init__.py').write_text('# '+name)
+        assets=root/'training/prompt-pieces';assets.mkdir(parents=True)
+        for asset in ('pieces.json','rendering-contract-fixtures.json'):(assets/asset).write_text('{}')
         roots.append(root)
     old,new=roots
     command=['/usr/bin/env','NATLANG_REPO='+str(old),'PYTHONPATH='+str(old/'training/neuralese')+':'+str(old),

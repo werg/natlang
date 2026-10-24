@@ -390,10 +390,16 @@ def collect_with_actor(config, values, **kwargs):
                 raise ValueError('managed actor environment requires explicit repository and Python path')
             import os
             environment = {**os.environ, **environment}
+        ready_seconds=config.get('actor_ready_seconds',900)
+        if type(ready_seconds) not in (int,float) or not 0<ready_seconds<float('inf'):
+            raise ValueError('actor_ready_seconds must be finite and positive')
         process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT,
                                    **({'env': environment} if environment is not None else {}))
+        deadline=time.monotonic()+ready_seconds
         try:
             while True:
+                if time.monotonic()>=deadline:
+                    raise RuntimeError('managed RL actor did not attest the requested policy within actor_ready_seconds; inspect actor.log')
                 if control is not None and control.stop.requested:
                     raise InterruptedError('actor stop requested before collection')
                 if process.poll() is not None:
@@ -888,7 +894,15 @@ def actor_runtime_configuration(repository):
     repository = Path(repository).resolve(strict=True)
     if not (repository/'scripts/neuralese_data/serve_native_checkpoint.py').is_file():
         raise ValueError('native actor runtime requires its actual serving entry point')
-    return {'native_actor_python_runtime': python_runtime_binding(repository/'training/neuralese/natlang_neuralese'),
+    python_runtime=python_runtime_binding(repository/'training/neuralese/natlang_neuralese')
+    from ..common.hashing import sha256_file_hex
+    assets={}
+    for name in ('pieces.json','rendering-contract-fixtures.json'):
+        relative='training/prompt-pieces/'+name
+        path=repository/relative
+        if not path.is_file():raise ValueError('native actor runtime lacks required rendering asset: '+relative)
+        assets[relative]=sha256_file_hex(path)
+    return {'native_actor_python_runtime': python_runtime, 'native_actor_assets':assets,
             'actor_environment': {'NATLANG_REPO': str(repository),
                 'PYTHONPATH': str(repository/'training/neuralese') + ':' + str(repository)}}
 
@@ -938,8 +952,9 @@ def validate_actor_runtime_configuration(config):
         raise ValueError('native actor runtime binding lacks its repository environment')
     expected=actor_runtime_configuration(repository)
     if (runtime!=expected['native_actor_python_runtime']
+            or config.get('native_actor_assets')!=expected['native_actor_assets']
             or environment.get('PYTHONPATH')!=expected['actor_environment']['PYTHONPATH']):
-        raise ValueError('native actor runtime environment and Python inventory disagree')
+        raise ValueError('native actor runtime environment, Python inventory or rendering assets disagree')
     command=config.get('actor_command')
     if bind_actor_runtime_command(command,repository)!=command:
         raise ValueError('native actor command and advertised runtime select different checkouts')

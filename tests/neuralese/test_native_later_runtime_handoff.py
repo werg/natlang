@@ -168,6 +168,8 @@ def test_actor_command_environment_and_runtime_move_only_at_free_boundary(later,
         entry.parent.mkdir(parents=True);entry.write_text('# '+name+'\n')
         package=root/'training/neuralese/natlang_neuralese';package.mkdir(parents=True)
         (package/'__init__.py').write_text('# '+name+'\n')
+        assets=root/'training/prompt-pieces';assets.mkdir(parents=True)
+        for asset in ('pieces.json','rendering-contract-fixtures.json'):(assets/asset).write_text('{}')
         roots.append(root)
     old_actor,new_actor=roots
     config=json.loads(x['config'].read_text());config.update(actor_runtime_configuration(old_actor))
