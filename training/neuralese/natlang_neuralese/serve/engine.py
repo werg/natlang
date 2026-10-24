@@ -142,6 +142,8 @@ class Engine:
         """Host-only scheduler observations; never block on actor execution/GPU."""
         active = tuple(self._active)
         return {'natlang_native_decode_tokens_total': self._native_decoded_tokens,
+                'natlang_native_batched_decode_rounds_total': getattr(self, '_native_batched_decode_rounds', 0),
+                'natlang_native_batched_decode_tokens_total': getattr(self, '_native_batched_decode_tokens', 0),
                 'natlang_active_sequences': sum(seq.phase != 'done' for seq in active),
                 'natlang_native_open_produce_spans': sum(
                     seq.phase != 'done' and seq.native_capture_open for seq in active),
@@ -911,119 +913,183 @@ class Engine:
         result["source_text_sha256"] = hashlib.sha256(text.encode("utf-8")).hexdigest()
         return result
 
+    def _native_step_logits(self, output):
+        return output['logits'] if 'logits' in output else self._native_logits(output['h_final'])
+
     def _native_round(self, sequences):
+        # Exact adapter declarations define disjoint model executions. An absent
+        # declaration inherits defaults; an explicit empty one does not.
+        from ..common.hashing import canonical_json_sha256_hex
+        groups = {}
         for seq in sequences:
             try:
-                self._native_run(lambda: self._native_round_impl([seq]), seq.request.adapters)
+                key = canonical_json_sha256_hex(seq.request.adapters)
+                groups.setdefault(key, []).append(seq)
             except Exception as error:
                 self._fail(seq, error)
+        for group in groups.values():
+            try:
+                self._native_run(lambda: self._native_round_group(group), group[0].request.adapters)
+            except Exception as error:
+                for seq in group:
+                    if not seq.future.done(): self._native_protocol_fail(seq, error)
+
+    def _native_round_group(self, sequences):
+        from ..model.native_decode_batch import native_step_batch, validate_decode_cache
+        pending = []
+        for seq in sequences:
+            step = self._native_sequence_step(seq)
+            try:
+                request = next(step)
+                validate_decode_cache(self.backbone, request[1])
+                pending.append((seq, step, request))
+            except StopIteration:
+                pass
+            except Exception as error:
+                step.close()
+                self._native_protocol_fail(seq, error)
+        if not pending: return
+        if len(pending) == 1:
+            _, _, (ids, cache, producing) = pending[0]
+            outputs = [self._native_forward(ids, cache, producing=producing)]
+        else:
+            ids = torch.tensor([request[0] for _, _, request in pending], dtype=torch.long,
+                               device=self.backbone.embedding_weight.device)
+            outputs = native_step_batch(self.shared_model, ids,
+                [request[1] for _, _, request in pending],
+                producing=[request[2] for _, _, request in pending])
+            logits = self.shared_model.logits(torch.cat([out['h_final'][:, -1] for out in outputs], dim=0))
+            for index, output in enumerate(outputs): output['logits'] = logits[index:index+1]
+            self._native_batched_decode_rounds = getattr(self, '_native_batched_decode_rounds', 0) + 1
+            self._native_batched_decode_tokens = getattr(self, '_native_batched_decode_tokens', 0) + len(pending)
+        for (seq, step, _), output in zip(pending, outputs):
+            try:
+                step.send(output)
+            except StopIteration:
+                pass
+            except Exception as error:
+                self._native_protocol_fail(seq, error)
+            else:
+                step.close()
+                self._fail(seq, RuntimeError('one native decode round yielded multiple model steps'))
 
     def _native_round_impl(self, sequences):
-        """Native marker-token generation through the same scheduler and TensorStore."""
+        """Independent cached reference for the same single-token state machine."""
         for seq in sequences:
-            if seq.request.cancelled:
-                self._fail(seq, RequestError("cancelled", "the client went away"))
-                continue
-            if seq.phase == "done":
-                continue
+            step = self._native_sequence_step(seq)
             try:
-                if (capture_enabled(seq) and seq.native_rl_policy is not None
-                        and self.execution_native_identity != seq.native_rl_policy):
-                    raise RequestError('neuralese-native-actor-changed',
-                        'keep the exact adapter binding unchanged until this invocation finishes')
-                if seq.phase == "prefill":
-                    self._native_prefill(seq)
-                    continue
-                if seq.native_forced_tokens and not seq.native_forced_replay:
-                    token = seq.native_forced_tokens.pop(0)
-                    if token in self.stop_ids:
-                        self._finish(seq, 'stop')
-                        continue
-                    output = self._native_forward([token], seq.cache)
-                    seq.cache, seq.logits = output['cache'], self._native_logits(output['h_final'])
-                    seq.generated_positions += 1
-                    self._native_decoded_tokens += 1
-                    self._native_record_input(seq, token,
-                        producing=seq.native_capture_open and token not in (
-                            self.role_tokens.produce_open, self.role_tokens.produce_close))
-                    seq.items.append(token)
-                    seq.native_item_positions.append(seq.native_own_position - 1)
-                    if not self._native_guide(seq):
-                        self._emit(seq, token=token)
-                    continue
-                if seq.native_forced_replay and not seq.native_forced_tokens:
-                    if seq.native_capture_open:
-                        raise RequestError('neuralese-native-state-open','forced teacher reply ended inside a producer span')
-                    self._finish(seq,'stop')
-                    continue
-                if seq.generated_positions >= seq.request.max_tokens:
-                    if seq.native_capture_open:
-                        raise RequestError("neuralese-native-state-open", "generation ended inside a produce span")
-                    self._finish(seq, "length")
-                    continue
-                forced=seq.native_forced_replay
-                token, sampled_logp = ((seq.native_forced_tokens.pop(0),None) if forced else self._native_token(seq))
-                sample_index = len(seq.rl_samples)
-                # The next-token query is the output position of the last own
-                # input; imported KV slots do not contribute to this index.
-                query_own_position = seq.native_own_position - 1
-                terminal = token in self.stop_ids
-                producing_input = seq.native_capture_open and token not in (
-                    self.role_tokens.produce_open, self.role_tokens.produce_close)
-                if capture_enabled(seq) or seq.guide is not None:
-                    seq.rl_samples.append({"index": sample_index, "token_id": token, "logp": sampled_logp,
-                                           **({'forced':True} if forced else {}),
-                                           **({'banned_token_ids': sorted(seq.bans.get(seq.native_own_position, ()))}
-                                              if seq.guide is not None else {}),
-                                           "input_role": "produce" if producing_input else "ordinary",
-                                           "terminal": terminal,
-                                           "query_own_position": query_own_position})
-                if terminal:
-                    if seq.native_capture_open:
-                        raise RequestError("neuralese-native-state-open", "generation stopped inside a produce span")
-                    self._finish(seq, "stop")
-                    continue
-                marker = self.role_tokens
-                if token == marker.produce_close and not seq.native_capture_open:
-                    raise RequestError("neuralese-native-state-close", "generation emitted a produce end marker without an open span")
-                if token in (marker.consume_open, marker.consume_close):
-                    raise RequestError("neuralese-native-state-consume-marker",
-                                       "consume markers are inserted only around an imported native-state part")
-                if seq.native_capture_open and token == marker.produce_close:
-                    seq.native_write_close_sample = sample_index
-                    output = self._native_forward([token], seq.cache)
-                    seq.cache, seq.logits = output["cache"], self._native_logits(output["h_final"])
-                    seq.generated_positions += 1
-                    self._native_decoded_tokens += 1
-                    self._native_record_input(seq, token, producing=False, sample_index=sample_index)
-                    self._native_finish_block(seq)
-                    continue
-                producing = seq.native_capture_open and token != marker.produce_open
-                if token == marker.produce_open:
-                    seq.native_write_start_own = seq.native_own_position
-                    seq.native_write_open_sample = sample_index
-                output = self._native_forward([token], seq.cache, producing=producing)
-                seq.cache, seq.logits = output["cache"], self._native_logits(output["h_final"])
+                ids, cache, producing = next(step)
+                step.send(self._native_forward(ids, cache, producing=producing))
+            except StopIteration:
+                pass
+            finally:
+                step.close()
+
+    def _native_sequence_step(self, seq):
+        """Preserve per-request sampling, protocol, forced turns and capture."""
+        if seq.request.cancelled:
+            self._fail(seq, RequestError("cancelled", "the client went away"))
+            return
+        if seq.phase == "done":
+            return
+        try:
+            if (capture_enabled(seq) and seq.native_rl_policy is not None
+                    and self.execution_native_identity != seq.native_rl_policy):
+                raise RequestError('neuralese-native-actor-changed',
+                    'keep the exact adapter binding unchanged until this invocation finishes')
+            if seq.phase == "prefill":
+                self._native_prefill(seq)
+                return
+            if seq.native_forced_tokens and not seq.native_forced_replay:
+                token = seq.native_forced_tokens.pop(0)
+                if token in self.stop_ids:
+                    self._finish(seq, 'stop')
+                    return
+                output = yield ([token], seq.cache, False)
+                seq.cache, seq.logits = output['cache'], self._native_step_logits(output)
                 seq.generated_positions += 1
                 self._native_decoded_tokens += 1
-                self._native_record_input(seq, token, producing=producing, sample_index=sample_index)
-                if token == marker.produce_open:
-                    if seq.native_capture_open:
-                        raise RequestError("neuralese-native-state-nested", "produce spans cannot nest")
-                    seq.native_capture_chunks = []
-                    seq.native_capture_ids = []
-                    seq.native_capture_open = True
-                    seq.native_write_start_sample = sample_index
-                elif producing:
-                    seq.native_capture_chunks.append(output)
-                    seq.native_capture_ids.append(token)
-                else:
-                    seq.items.append(token)
-                    seq.native_item_positions.append(seq.native_own_position - 1)
-                    if not self._native_guide(seq):
-                        self._emit(seq, token=token)
-            except Exception as error:  # one malformed sequence must not stop other requests
-                self._native_protocol_fail(seq, error)
+                self._native_record_input(seq, token,
+                    producing=seq.native_capture_open and token not in (
+                        self.role_tokens.produce_open, self.role_tokens.produce_close))
+                seq.items.append(token)
+                seq.native_item_positions.append(seq.native_own_position - 1)
+                if not self._native_guide(seq):
+                    self._emit(seq, token=token)
+                return
+            if seq.native_forced_replay and not seq.native_forced_tokens:
+                if seq.native_capture_open:
+                    raise RequestError('neuralese-native-state-open','forced teacher reply ended inside a producer span')
+                self._finish(seq,'stop')
+                return
+            if seq.generated_positions >= seq.request.max_tokens:
+                if seq.native_capture_open:
+                    raise RequestError("neuralese-native-state-open", "generation ended inside a produce span")
+                self._finish(seq, "length")
+                return
+            forced=seq.native_forced_replay
+            token, sampled_logp = ((seq.native_forced_tokens.pop(0),None) if forced else self._native_token(seq))
+            sample_index = len(seq.rl_samples)
+            # The next-token query is the output position of the last own
+            # input; imported KV slots do not contribute to this index.
+            query_own_position = seq.native_own_position - 1
+            terminal = token in self.stop_ids
+            producing_input = seq.native_capture_open and token not in (
+                self.role_tokens.produce_open, self.role_tokens.produce_close)
+            if capture_enabled(seq) or seq.guide is not None:
+                seq.rl_samples.append({"index": sample_index, "token_id": token, "logp": sampled_logp,
+                                       **({'forced':True} if forced else {}),
+                                       **({'banned_token_ids': sorted(seq.bans.get(seq.native_own_position, ()))}
+                                          if seq.guide is not None else {}),
+                                       "input_role": "produce" if producing_input else "ordinary",
+                                       "terminal": terminal,
+                                       "query_own_position": query_own_position})
+            if terminal:
+                if seq.native_capture_open:
+                    raise RequestError("neuralese-native-state-open", "generation stopped inside a produce span")
+                self._finish(seq, "stop")
+                return
+            marker = self.role_tokens
+            if token == marker.produce_close and not seq.native_capture_open:
+                raise RequestError("neuralese-native-state-close", "generation emitted a produce end marker without an open span")
+            if token in (marker.consume_open, marker.consume_close):
+                raise RequestError("neuralese-native-state-consume-marker",
+                                   "consume markers are inserted only around an imported native-state part")
+            if seq.native_capture_open and token == marker.produce_close:
+                seq.native_write_close_sample = sample_index
+                output = yield ([token], seq.cache, False)
+                seq.cache, seq.logits = output["cache"], self._native_step_logits(output)
+                seq.generated_positions += 1
+                self._native_decoded_tokens += 1
+                self._native_record_input(seq, token, producing=False, sample_index=sample_index)
+                self._native_finish_block(seq)
+                return
+            producing = seq.native_capture_open and token != marker.produce_open
+            if token == marker.produce_open:
+                seq.native_write_start_own = seq.native_own_position
+                seq.native_write_open_sample = sample_index
+            output = yield ([token], seq.cache, producing)
+            seq.cache, seq.logits = output["cache"], self._native_step_logits(output)
+            seq.generated_positions += 1
+            self._native_decoded_tokens += 1
+            self._native_record_input(seq, token, producing=producing, sample_index=sample_index)
+            if token == marker.produce_open:
+                if seq.native_capture_open:
+                    raise RequestError("neuralese-native-state-nested", "produce spans cannot nest")
+                seq.native_capture_chunks = []
+                seq.native_capture_ids = []
+                seq.native_capture_open = True
+                seq.native_write_start_sample = sample_index
+            elif producing:
+                seq.native_capture_chunks.append(output)
+                seq.native_capture_ids.append(token)
+            else:
+                seq.items.append(token)
+                seq.native_item_positions.append(seq.native_own_position - 1)
+                if not self._native_guide(seq):
+                    self._emit(seq, token=token)
+        except Exception as error:  # one malformed sequence must not stop other requests
+            self._native_protocol_fail(seq, error)
 
     def _round(self, sequences):
         self._native_round(sequences)

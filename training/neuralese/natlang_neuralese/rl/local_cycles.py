@@ -9,6 +9,8 @@ from __future__ import annotations
 import argparse
 import fcntl
 import json
+import subprocess
+import time
 from pathlib import Path
 
 from ..common.jsonio import write_json_durable
@@ -34,6 +36,34 @@ def publish_supervised(config, parent, checkpoint):
         raise ValueError('supervised publication found an unknown policy successor')
     if actual != checkpoint:
         _publish_checkpoint(config, checkpoint)
+
+
+def stage_failure_signature(stage, config):
+    from ..common.hashing import canonical_json_sha256_hex
+    return canonical_json_sha256_hex({'stage':stage,
+        'recipe':binding(config['production_recipe']),
+        'runtime':config.get('native_actor_python_runtime')})
+
+
+def record_unstarted_stage_failure(cursor, stage, config, directory, parent, error, *, enabled):
+    """Keep useful stages moving only when the failed child has no saved state.
+
+    Any saved child requires exact recovery; never advance from an obsolete
+    parent and silently lose an earned continuation. Stage index is a scheduling
+    cursor, not exposure credit. Failed obligations remain explicitly outstanding.
+    """
+    if not enabled or (Path(directory)/'learner/checkpoint.pt').exists():raise error
+    state=json.loads((Path(config['out'])/'state.json').read_text())
+    if binding(state['checkpoint'])!=parent:
+        raise ValueError('failed supervised worker found an unknown policy successor') from error
+    failure={'at':time.time(),'stage_id':stage['id'],'operation':str(directory),
+        'signature':stage_failure_signature(stage,config),'returncode':error.returncode,
+        'reason':'Worker failed before publishing any saved child; preserve outstanding exposure and continue other declared work.',
+        'completed':False,'parent':parent}
+    cursor.setdefault('failed_stages',{})[stage['id']]=failure
+    cursor['stage_index']+=1
+    write_json_durable(Path(directory)/'unstarted-worker-failure.json',failure)
+    return failure
 
 
 def run(plan_path, *, cycles=None, stop=None):
@@ -67,6 +97,12 @@ def run(plan_path, *, cycles=None, stop=None):
             while cursor['stage_index']<len(stages):
                 if stop is not None and stop.requested:return
                 index=cursor['stage_index'];stage=stages[index]
+                failure=cursor.get('failed_stages',{}).get(stage['id'])
+                if (plan.get('continue_after_unstarted_stage_failure') and failure
+                        and failure['signature']==stage_failure_signature(stage,config)):
+                    cursor['stage_index']+=1
+                    write_json_durable(cursor_path,cursor)
+                    continue
                 directory=out/f"cycle-{cursor['cycle']:06d}"/stage['id']
                 declaration=directory/'config.json'
                 if not declaration.exists():
@@ -79,10 +115,17 @@ def run(plan_path, *, cycles=None, stop=None):
                     write_json_durable(directory/'parent.json',parent)
                     write_json_durable(declaration,continuation)
                 parent=json.loads((directory/'parent.json').read_text())
-                result=production.run(declaration,stop=stop)
+                try:
+                    result=production.run(declaration,stop=stop)
+                except subprocess.CalledProcessError as error:
+                    record_unstarted_stage_failure(cursor,stage,config,directory,parent,error,
+                        enabled=plan.get('continue_after_unstarted_stage_failure') is True)
+                    write_json_durable(cursor_path,cursor)
+                    continue
                 if not result.get('pending_native_checkpoint'):return result
                 child=binding(result['pending_native_checkpoint'])
                 publish_supervised(config,parent,child)
+                cursor.get('failed_stages',{}).pop(stage['id'],None)
                 cursor['stage_index']+=1
                 cursor['checkpoint']=child
                 write_json_durable(cursor_path,cursor)
