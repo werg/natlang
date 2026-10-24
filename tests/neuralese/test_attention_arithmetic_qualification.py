@@ -10,6 +10,7 @@ from natlang_neuralese.model import shared_state
 from natlang_neuralese.model.native_precision import set_native_attention_precision
 from test_shared_state import tiny
 from test_native_optimizer_checkpointing import examples,assert_exact
+from scripts.neuralese_data.native_qualification_runtime import restore_qualification_execution
 
 
 @pytest.mark.parametrize('family',['lfm','mellum'])
@@ -32,6 +33,51 @@ def test_real_arithmetic_observer_compares_all_adjoints_without_updates(tmp_path
     assert torch.equal(rng,torch.get_rng_state())
     assert model.native_attention_precision==model.port.native_attention_precision=='ieee'
     assert all(value.grad is None for value in model.parameters())
+    assert not list(tmp_path.iterdir())
+
+
+@pytest.mark.parametrize('current', [False, True])
+def test_observer_restores_complete_capacity_execution_identity(monkeypatch, current):
+    from types import SimpleNamespace
+    from natlang_neuralese.eval import native_memory
+    monkeypatch.setattr(native_memory, 'memory_runtime', lambda device: {'device': device})
+    identity = {'model_config': {'architecture': 'lfm2'}, 'batch_graphs': 1,
+        'batch_tokens': 65536, 'checkpoint_layers': True, 'chunk_tokens': 1024,
+        'checkpoint_input_offload': False, 'runtime': {'device': 'cpu'},
+        'fp8': {'kind': 'off', 'recipe': 'delayed', 'amax_history_len': 16,
+                'input_gradient_precision': None}}
+    if current:
+        identity.update(checkpoint_direct_token_limit=10000, ffn_chunk_tokens=4096,
+            cotangent_accumulator_backend='device_fp32', share_causal_prefixes=True,
+            checkpoint_input_offload=True, checkpoint_input_offload_directory='/tmp/native-offload')
+    model = SimpleNamespace(port=SimpleNamespace())
+    args = restore_qualification_execution(model, identity, device='cpu')
+    assert native_memory.capacity_identity(identity['model_config'], args, None) == identity
+    assert model.checkpoint_direct_token_limit == (10000 if current else 0)
+    assert model.port.ffn_chunk_tokens == (4096 if current else 0)
+    assert model.native_cotangent_accumulator_backend == ('device_fp32' if current else 'cpu_file')
+    assert model.share_causal_prefixes is current
+    assert model.port.checkpoint_layers is True
+
+
+@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+def test_actual_observer_uses_restored_direct_backward_and_chunks(tmp_path, family):
+    model = shared_state.SharedStateModel(tiny(family), (58,59,60,61), rank=4)
+    if family == 'mellum': model.port.hf.natlang_precision = 'bf16'
+    set_native_attention_precision(model, 'ieee')
+    identity = {'batch_graphs': 1, 'batch_tokens': 65536, 'checkpoint_layers': True,
+        'chunk_tokens': 3, 'checkpoint_input_offload': False,
+        'checkpoint_direct_token_limit': 10000, 'ffn_chunk_tokens': 2,
+        'cotangent_accumulator_backend': 'device_fp32', 'share_causal_prefixes': True,
+        'fp8': {'kind': 'off', 'recipe': 'delayed', 'amax_history_len': 16}}
+    restore_qualification_execution(model, identity, device='cpu')
+    result = paired_arithmetic_case(model, diagnostic_optimizer(model), examples()[0],
+        atol=1e-6, rtol=1e-5, checkpoint_sha256='a'*64, source_binding={},
+        chunk_tokens=3, temporary_directory=tmp_path)
+    assert result['passed'] and result['named_gradients']
+    assert model.checkpoint_direct_token_limit == 10000
+    assert model.port.ffn_chunk_tokens == 2
+    assert model.native_cotangent_accumulator_backend == 'device_fp32'
     assert not list(tmp_path.iterdir())
 
 

@@ -17,6 +17,7 @@ import torch
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from scripts.neuralese_data.qualify_native_attention_index import diagnostic_optimizer, tensor_digest, gradient_name_aliases
 from scripts.neuralese_data.qualify_native_causal_prefixes import gradient_metrics, metrics
+from scripts.neuralese_data.native_qualification_runtime import restore_qualification_execution
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex
 from natlang_neuralese.eval.native_memory import qualify_capacity
 from natlang_neuralese.model.native_precision import set_native_attention_precision
@@ -152,12 +153,7 @@ def main(argv=None):
         model.port.activation_checkpoint=backend.checkpoint
     configure_checkpoint_input_offload(model.port,enabled=identity['checkpoint_input_offload'],
         directory=identity.get('checkpoint_input_offload_directory'))
-    model.share_causal_prefixes=identity.get('share_causal_prefixes',False)
-    actual_args=argparse.Namespace(**{key:identity[key] for key in
-        ('batch_graphs','batch_tokens','checkpoint_layers','chunk_tokens','checkpoint_input_offload')},
-        checkpoint_input_offload_directory=identity.get('checkpoint_input_offload_directory'),
-        device='cuda',share_causal_prefixes=model.share_causal_prefixes,fp8_training=identity['fp8']['kind'],
-        fp8_recipe=identity['fp8']['recipe'],fp8_amax_history_len=identity['fp8']['amax_history_len'])
+    actual_args=restore_qualification_execution(model,identity)
     if capacity_identity(config,actual_args,backend)!=identity:
         raise ValueError('actual restored parent/backend/geometry differs from bound capacity identity')
     source=NativeGraphSource(args.source,required_split='train',tokenizer_fingerprint=config['tokenizer_fingerprint'],

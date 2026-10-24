@@ -191,13 +191,10 @@ def main(argv=None):
             backend.restore_extra_state(options['extra_state'])
         model.port.activation_checkpoint = backend.checkpoint
     optimizer = diagnostic_optimizer(model)
-    configure_checkpoint_input_offload(model.port, enabled=identity['checkpoint_input_offload'])
-    model.share_causal_prefixes = identity.get('share_causal_prefixes', False)
-    actual_args = argparse.Namespace(**{key: identity[key] for key in
-        ('batch_graphs', 'batch_tokens', 'checkpoint_layers', 'chunk_tokens', 'checkpoint_input_offload')},
-        device='cuda', share_causal_prefixes=model.share_causal_prefixes,
-        fp8_training=identity['fp8']['kind'], fp8_recipe=identity['fp8']['recipe'],
-        fp8_amax_history_len=identity['fp8']['amax_history_len'])
+    configure_checkpoint_input_offload(model.port, enabled=identity['checkpoint_input_offload'],
+        directory=identity.get('checkpoint_input_offload_directory'))
+    from scripts.neuralese_data.native_qualification_runtime import restore_qualification_execution
+    actual_args = restore_qualification_execution(model, identity)
     if capacity_identity(config, actual_args, backend) != identity:
         raise ValueError('actual parent/backend/geometry differs from reviewed capacity identity')
     source = NativeGraphSource(args.source, required_split='train', tokenizer_fingerprint=config['tokenizer_fingerprint'],

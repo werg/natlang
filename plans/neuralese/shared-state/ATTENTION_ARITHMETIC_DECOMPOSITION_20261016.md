@@ -107,3 +107,16 @@ positive projection-call and row counters, using the same verifier as joint
 CUDA qualification. A finite backward with an inactive backend is rejected.
 The report includes retained hidden-output bytes; long-geometry host admission
 must include both output tensors as well as the loaded parent and active graph.
+
+2026-10-24 recovery follow-through: the arithmetic and index observers were
+reconstructing only the older capacity options. Current local checkpoints also
+declare a direct-backward token threshold, FFN chunking and device FP32
+cotangent accumulation. Both tools now restore those actual execution settings
+through `scripts/neuralese_data/native_qualification_runtime.py`, including the
+offload-directory binding, before checking the complete capacity identity.
+This fixes a real blocker to qualifying current parents without changing their
+weights, production arithmetic or numerical tolerances. Historical absent
+settings keep their original defaults. Fifty-five observer/capacity checks pass,
+including both actual tiny model backbones and complete current/old identity
+round trips. This tool repair alone establishes no TF32x3 production speedup;
+the running GB10 learner remains on its qualified IEEE attention path.
