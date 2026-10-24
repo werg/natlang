@@ -17,14 +17,13 @@ installObservedNativeTracingEnvironment(record => {
 Each record is `natlang-native-observation/1` and contains the phase
 (`start`, `completed`, `failed`), evaluation kind, mode, code, path and an
 optional error message. Synchronous and asynchronous evaluations also return
-a `native-observed/1` provenance event on success. Retained callable-folder
-module **bootstrap** is recorded via the callback.
+a `native-observed/1` provenance event on success. Retained callable-folder module **bootstrap** is recorded via the callback.\nTop-level own-data callable exports are also observed when called. Each\n`exportCall` record names the export and an invocation ID, with `start`,\n`completed` (synchronous return, including a returned Promise), or `failed`\n(synchronous throw). These wrappers preserve `this` forwarding and constructor\ninvocation, but intentionally change exported function identity.
 
 **Limit:** This is an *execution-boundary trace*, not a semantic instruction
 trace. It does not record individual expressions, reads, writes, dynamic
-calls, callback bodies, module-export invocations, asynchronous scheduling,
+calls, callback bodies, nested calls, asynchronous scheduling,
 host effects, snapshots or replayable state transitions. In particular,
-invoking callable exports after module bootstrap is **not** currently traced.
+calling a top-level exported function is observed, but its internal instructions,\npromise settlement, nested callbacks and subsequent export reassignment are **not** traced.
 Therefore this mode does not meet the requirement that every executed JS/TS
 operation be traced, and observations must not be passed to megatoken as
 owned/replay-verified training episodes.
