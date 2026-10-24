@@ -53,6 +53,235 @@ export function installOwnedTracingEnvironment(
   setDefaultEnvironmentFactory(options => instantiate('fresh', options));
   setModuleRealm(() => instantiate('retained'));
 }
+/**
+ * Compatibility-first integration. Unlike installOwnedTracingEnvironment this
+ * deliberately permits the ordinary Node evaluator. A native selection has
+ * NO owned instruction trace and MUST NOT enter replay-verified training data.
+ *
+ * Routing happens before evaluation, never as a catch-and-retry after partially
+ * executed guest code or committed external side effects.
+ */
+export function installHybridTracingEnvironment(
+  factory: (mode: EnvironmentMode, options?: NatlangRuntimeOptions) => EvalEnvironment,
+  options: {
+    route?: (request: {kind: 'execute' | 'executeAsync' | 'evaluateModule';
+      mode: EnvironmentMode; code: string; path?: string}) => 'owned' | 'native';
+    onNativeExecution?: (event: {operation: 'execution.provenance';
+      authority: 'native-untraced/1'; kind: string; mode: EnvironmentMode;
+      path?: string}) => void;
+  } = {}
+): void {
+  if (typeof factory !== 'function') throw new TypeError('Hybrid owned evaluator factory required');
+  if (!options || typeof options !== 'object' ||
+      (options.route !== undefined && typeof options.route !== 'function') ||
+      (options.onNativeExecution !== undefined && typeof options.onNativeExecution !== 'function'))
+    throw new TypeError('Invalid hybrid tracing options');
+  // Every accepted evaluation uses the owned interpreter.
+  const route = options.route ?? (() => 'owned' as const);
+  function instantiate(mode: EnvironmentMode, runtimeOptions?: NatlangRuntimeOptions): EvalEnvironment {
+    const owned = factory(mode, runtimeOptions);
+    if (!owned || owned.mode !== mode || !owned.authority?.startsWith('owned-') ||
+        typeof owned.execute !== 'function' || typeof owned.executeAsync !== 'function' ||
+        typeof owned.evaluateModule !== 'function' ||
+        typeof owned.close !== 'function' || typeof owned.fork !== 'function')
+      throw new TypeError('Hybrid tracing factory returned an incompatible owned evaluator');
+    let closed = false;
+    const choose = (kind: 'execute' | 'executeAsync' | 'evaluateModule', code: string, path?: string) => {
+      if (closed) throw new Error('Hybrid tracing environment is closed');
+      const decision = route({kind, mode, code, path});
+      if (decision !== 'owned' && decision !== 'native')
+        throw new TypeError('Hybrid tracing route must return owned or native');
+      if (decision === 'native')
+        throw new Error('Trace required: native execution has no owned semantic archive');
+      return decision;
+    };
+    return {
+      authority: 'owned-trace-required/1',
+      mode,
+      scopeCapabilities: {allowModules: false, allowNetwork: false},
+      execute(request) {
+        if (choose('execute', request.code, request.path) === 'owned')
+          return owned.execute(request);
+        throw new Error('Trace required: native execution has no owned semantic archive');
+      },
+      async executeAsync(request) {
+        if (choose('executeAsync', request.code, request.path) === 'owned')
+          return owned.executeAsync(request);
+        throw new Error('Trace required: native execution has no owned semantic archive');
+      },
+      evaluateModule(code, bindings) {
+        if (choose('evaluateModule', code) === 'owned')
+          return owned.evaluateModule(code, bindings);
+        throw new Error('Trace required: native execution has no owned semantic archive');
+      },
+      declarationOf(name) { return owned.declarationOf?.(name); },
+      fork() { return instantiate('fresh', runtimeOptions); },
+      close() {
+        if (closed) return;
+        closed = true;
+        owned.close();
+      }
+    };
+  }
+  setDefaultEnvironmentFactory(options => instantiate('fresh', options));
+  setModuleRealm(() => instantiate('retained'));
+}
+
+/**
+ * Native observation mode for unsupported JS/TS. Records execution boundaries
+ * but does NOT invent VM operation events or an exact-replayable owned archive.
+ * Retained callable exports can execute after module installation: those calls
+ * are outside this bootstrap-level observer.
+ */
+export function installObservedNativeTracingEnvironment(
+  onTrace: (record: {
+    schema: 'natlang-native-observation/1';
+    phase: 'start' | 'completed' | 'failed' | 'settled';
+    kind: 'execute' | 'executeAsync' | 'evaluateModule' | 'exportCall';
+    mode: EnvironmentMode;
+    code: string;
+    path?: string;
+    exportName?: string;
+    invocationId?: number;
+    completion?: 'returned' | 'fulfilled' | 'rejected';
+    error?: string;
+  }) => void,
+): void {
+  if (typeof onTrace !== 'function') throw new TypeError('Native trace observer required');
+  function instantiate(mode: EnvironmentMode, runtimeOptions?: NatlangRuntimeOptions): EvalEnvironment {
+    const native = new TypeScriptEnvironment({
+      mode, workspace: runtimeOptions?.workspace, network: runtimeOptions?.network
+    });
+    let closed = false;
+    let invocationSequence = 0;
+    const observeExports = (bindings: Record<string, unknown>) => {
+      // Decorate only own data-property callables; never evaluate host getters.
+      // This is deliberately a boundary trace, not an owned VM instruction trace.
+      const exportsValue = (bindings.module as {exports?:unknown}|undefined)?.exports ?? bindings.exports;
+      if (!exportsValue || typeof exportsValue !== 'object') return;
+      for (const key of Reflect.ownKeys(exportsValue)) {
+        const descriptor = Reflect.getOwnPropertyDescriptor(exportsValue,key);
+        if (!descriptor || !('value' in descriptor) || typeof descriptor.value !== 'function' ||
+            !descriptor.configurable || !descriptor.writable) continue;
+        const name = typeof key === 'symbol' ? key.toString() : key;
+        const original = descriptor.value as Function;
+        const wrap = new Proxy(original, {
+          apply(target,thisArg,args) {
+            const id = ++invocationSequence;
+            onTrace({schema:'natlang-native-observation/1',phase:'start',
+              kind:'exportCall',mode,code:'',exportName:name,invocationId:id});
+            try {
+              const value=Reflect.apply(target,thisArg,args);
+              onTrace({schema:'natlang-native-observation/1',phase:'completed',
+                kind:'exportCall',mode,code:'',exportName:name,invocationId:id,
+                completion:'returned'});
+              // Observe later promise settlement while returning the ORIGINAL value.
+              // Never replace it with a new promise: callers may depend on identity.
+              if (value instanceof Promise) {
+                value.then(
+                  () => { try { onTrace({schema:'natlang-native-observation/1',
+                    phase:'settled',kind:'exportCall',mode,code:'',exportName:name,
+                    invocationId:id,completion:'fulfilled'}); } catch {} },
+                  (error:unknown) => { try { onTrace({schema:'natlang-native-observation/1',
+                    phase:'settled',kind:'exportCall',mode,code:'',exportName:name,
+                    invocationId:id,completion:'rejected',
+                    error:error instanceof Error ? error.message : String(error)}); } catch {} }
+                );
+              }
+              return value;
+            } catch(error) {
+              onTrace({schema:'natlang-native-observation/1',phase:'failed',
+                kind:'exportCall',mode,code:'',exportName:name,invocationId:id,
+                error:error instanceof Error ? error.message : String(error)});
+              throw error;
+            }
+          },
+          construct(target,args,newTarget) {
+            const id=++invocationSequence;
+            onTrace({schema:'natlang-native-observation/1',phase:'start',
+              kind:'exportCall',mode,code:'',exportName:name,invocationId:id});
+            try {
+              const value=Reflect.construct(target,args,newTarget);
+              onTrace({schema:'natlang-native-observation/1',phase:'completed',
+                kind:'exportCall',mode,code:'',exportName:name,invocationId:id,
+                completion:'returned'});
+              return value;
+            } catch(error) {
+              onTrace({schema:'natlang-native-observation/1',phase:'failed',
+                kind:'exportCall',mode,code:'',exportName:name,invocationId:id,
+                error:error instanceof Error ? error.message : String(error)});
+              throw error;
+            }
+          }
+        });
+        Reflect.defineProperty(exportsValue,key,{...descriptor,value:wrap});
+      }
+    };
+    const emit = (phase: 'start'|'completed'|'failed',
+      kind: 'execute'|'executeAsync'|'evaluateModule',code: string,path?: string,error?: unknown) => {
+      const record = {
+        schema:'natlang-native-observation/1' as const,phase,kind,mode,code,path,
+        ...(error === undefined ? {} : {error: error instanceof Error ? error.message : String(error)})
+      };
+      onTrace(record);
+    };
+    const start = (kind:'execute'|'executeAsync'|'evaluateModule',code:string,path?:string) => {
+      if (closed) throw new Error('Observed native environment is closed');
+      emit('start',kind,code,path);
+    };
+    return {
+      authority:'native-observed/1',
+      mode,
+      scopeCapabilities:{allowModules:true,allowNetwork:Boolean(runtimeOptions?.network)},
+      execute(request) {
+        start('execute',request.code,request.path);
+        try {
+          const result=native.execute(request);
+          emit('completed','execute',request.code,request.path);
+          return {...result,events:[
+            {operation:'execution.provenance',authority:'native-observed/1',
+              traceSchema:'natlang-native-observation/1'},...result.events
+          ]};
+        } catch (error) {
+          emit('failed','execute',request.code,request.path,error);
+          throw error;
+        }
+      },
+      async executeAsync(request) {
+        start('executeAsync',request.code,request.path);
+        try {
+          const result=await native.executeAsync(request);
+          emit('completed','executeAsync',request.code,request.path);
+          return {...result,events:[
+            {operation:'execution.provenance',authority:'native-observed/1',
+              traceSchema:'natlang-native-observation/1'},...result.events
+          ]};
+        } catch (error) {
+          emit('failed','executeAsync',request.code,request.path,error);
+          throw error;
+        }
+      },
+      evaluateModule(code,bindings) {
+        start('evaluateModule',code);
+        try {
+          const result=native.evaluateModule(code,bindings);
+          observeExports(bindings);
+          emit('completed','evaluateModule',code);
+          return result;
+        } catch(error) {
+          emit('failed','evaluateModule',code,undefined,error);
+          throw error;
+        }
+      },
+      declarationOf(name) {return native.declarationOf(name);},
+      fork() {return instantiate('fresh',runtimeOptions);},
+      close() {if(!closed){closed=true;native.close();}}
+    };
+  }
+  setDefaultEnvironmentFactory(options=>instantiate('fresh',options));
+  setModuleRealm(()=>instantiate('retained'));
+}
+
 // Every runtime records to the machine's call store unless it says otherwise (NATLANG_CALL_STORE=off disables it).
 setDefaultCallStoreFactory(() => { const root = machineStoreRoot(); return root ? CallStore.open(root) : undefined; });
 
