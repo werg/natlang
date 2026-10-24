@@ -918,6 +918,7 @@ def build_parser():
     parser.add_argument('--continued-native-graphs', type=Path)
     parser.add_argument('--continued-held-native-graphs', type=Path)
     parser.add_argument('--withdrawn-native-graphs', type=Path)
+    parser.add_argument('--unavailable-native-sources', type=Path)
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--base', type=Path)
     parser.add_argument('--continue-from', type=Path)
@@ -1240,6 +1241,7 @@ def _main(argv=None, *, requested_refresh):
             if old_recipe.get('lineage_sha256',old_recipe['sha256'])!=new_recipe.get('lineage_sha256',new_recipe['sha256']):
                 raise ValueError('native continuation changed its preserved recipe lineage')
     checkpoint_options['withdrawal_history']=list((saved_training.get('options') or {}).get('withdrawal_history') or [])
+    checkpoint_options['source_availability_history']=list((saved_training.get('options') or {}).get('source_availability_history') or [])
     token_history = list((saved_training.get('options') or {}).get('token_row_upgrade_history') or [])
     if token_upgrade and (token_upgrade['added'] or token_upgrade.get('promoted_parameters')):
         token_history.append({**token_upgrade, 'at_global_step': int(saved_training.get('global_step', saved_training.get('step', 0))),
@@ -1457,6 +1459,21 @@ def _main(argv=None, *, requested_refresh):
             model_id=config['architecture']+':'+config['base_inventory_sha256'],source_origins=origins)
         carried_progress=collect_sft_progress(resume)
         checkpoint_options['withdrawal_history']=resume['options']['withdrawal_history']
+    if args.unavailable_native_sources:
+        if resume is None:
+            raise ValueError('source availability continuation needs the earned supervised frame')
+        from .native_availability import defer_unavailable_sources
+        leaves=set()
+        def available_leaves(source):
+            if source.kind=='manifest':
+                for child in source.children:available_leaves(child)
+            else:leaves.add(source.file_sha256)
+        available_leaves(train)
+        resume=defer_unavailable_sources(resume,args.unavailable_native_sources,
+            current_bindings=source_row_bindings,model_id=config['architecture']+':'+config['base_inventory_sha256'],
+            current_source_sha256s=leaves)
+        carried_progress=collect_sft_progress(resume)
+        checkpoint_options['source_availability_history']=resume['options']['source_availability_history']
     if shared_resume is not None and not restored_progress:
         old_options = shared_resume['options']
         old_optimizer = {'weight_decay': old_options.get('weight_decay', .1),
