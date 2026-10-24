@@ -137,10 +137,13 @@ export function installObservedNativeTracingEnvironment(
   onTrace: (record: {
     schema: 'natlang-native-observation/1';
     phase: 'start' | 'completed' | 'failed';
-    kind: 'execute' | 'executeAsync' | 'evaluateModule';
+    kind: 'execute' | 'executeAsync' | 'evaluateModule' | 'exportCall';
     mode: EnvironmentMode;
     code: string;
     path?: string;
+    exportName?: string;
+    invocationId?: number;
+    completion?: 'returned';
     error?: string;
   }) => void,
 ): void {
@@ -150,6 +153,57 @@ export function installObservedNativeTracingEnvironment(
       mode, workspace: runtimeOptions?.workspace, network: runtimeOptions?.network
     });
     let closed = false;
+    let invocationSequence = 0;
+    const observeExports = (bindings: Record<string, unknown>) => {
+      // Decorate only own data-property callables; never evaluate host getters.
+      // This is deliberately a boundary trace, not an owned VM instruction trace.
+      const exportsValue = (bindings.module as {exports?:unknown}|undefined)?.exports ?? bindings.exports;
+      if (!exportsValue || typeof exportsValue !== 'object') return;
+      for (const key of Reflect.ownKeys(exportsValue)) {
+        const descriptor = Reflect.getOwnPropertyDescriptor(exportsValue,key);
+        if (!descriptor || !('value' in descriptor) || typeof descriptor.value !== 'function' ||
+            !descriptor.configurable || !descriptor.writable) continue;
+        const name = typeof key === 'symbol' ? key.toString() : key;
+        const original = descriptor.value as Function;
+        const wrap = new Proxy(original, {
+          apply(target,thisArg,args) {
+            const id = ++invocationSequence;
+            onTrace({schema:'natlang-native-observation/1',phase:'start',
+              kind:'exportCall',mode,code:'',exportName:name,invocationId:id});
+            try {
+              const value=Reflect.apply(target,thisArg,args);
+              onTrace({schema:'natlang-native-observation/1',phase:'completed',
+                kind:'exportCall',mode,code:'',exportName:name,invocationId:id,
+                completion:'returned'});
+              return value;
+            } catch(error) {
+              onTrace({schema:'natlang-native-observation/1',phase:'failed',
+                kind:'exportCall',mode,code:'',exportName:name,invocationId:id,
+                error:error instanceof Error ? error.message : String(error)});
+              throw error;
+            }
+          },
+          construct(target,args,newTarget) {
+            const id=++invocationSequence;
+            onTrace({schema:'natlang-native-observation/1',phase:'start',
+              kind:'exportCall',mode,code:'',exportName:name,invocationId:id});
+            try {
+              const value=Reflect.construct(target,args,newTarget);
+              onTrace({schema:'natlang-native-observation/1',phase:'completed',
+                kind:'exportCall',mode,code:'',exportName:name,invocationId:id,
+                completion:'returned'});
+              return value;
+            } catch(error) {
+              onTrace({schema:'natlang-native-observation/1',phase:'failed',
+                kind:'exportCall',mode,code:'',exportName:name,invocationId:id,
+                error:error instanceof Error ? error.message : String(error)});
+              throw error;
+            }
+          }
+        });
+        Reflect.defineProperty(exportsValue,key,{...descriptor,value:wrap});
+      }
+    };
     const emit = (phase: 'start'|'completed'|'failed',
       kind: 'execute'|'executeAsync'|'evaluateModule',code: string,path?: string,error?: unknown) => {
       const record = {
@@ -198,6 +252,7 @@ export function installObservedNativeTracingEnvironment(
         start('evaluateModule',code);
         try {
           const result=native.evaluateModule(code,bindings);
+          observeExports(bindings);
           emit('completed','evaluateModule',code);
           return result;
         } catch(error) {
