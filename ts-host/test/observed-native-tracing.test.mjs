@@ -76,3 +76,26 @@ test('retained callable invocations are observed with receiver and thrown errors
     assert.notEqual(calls[0].invocationId,calls[2].invocationId);
   } finally {restore();}
 });
+
+test('native callable async results have distinct returned and settled observations',async()=>{
+  const records=[];
+  try {
+    installObservedNativeTracingEnvironment(record=>records.push(record));
+    const record=parseModule('/__natlang__/folder/observed-async.ts',
+      'export async function ok(n: number) { return n + 1; }\n' +
+      'export async function fail() { throw new Error("later"); }',{},PATH_ONLY);
+    const exports=moduleInstance(record,{'observed-async':record});
+    const a=exports.ok(4);
+    const b=exports.fail();
+    assert.equal(await a,5);
+    await assert.rejects(b,/later/);
+    const calls=records.filter(item=>item.kind==='exportCall');
+    for(const name of ['ok','fail']){
+      const items=calls.filter(item=>item.exportName===name);
+      assert.deepEqual(items.map(item=>item.phase),['start','completed','settled']);
+      assert.equal(items[0].invocationId,items[2].invocationId);
+    }
+    assert.equal(calls.find(item=>item.exportName==='ok' && item.phase==='settled').completion,'fulfilled');
+    assert.equal(calls.find(item=>item.exportName==='fail' && item.phase==='settled').completion,'rejected');
+  }finally {restore();}
+});
