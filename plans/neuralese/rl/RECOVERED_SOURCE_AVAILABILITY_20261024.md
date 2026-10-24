@@ -93,3 +93,34 @@ remain blocked by EIO on the disconnected external drive; general Python checks
 also encounter external artifact EIO. These are reported failures, not skipped
 checks or evidence of an all-green repository. The recovered local production
 inputs are internal and the real learner continues independently.
+
+The next actual continuation is deployed:ready-stage-v3 expands359875→1526769
+rows by appending1166894 validated original rows after the existing prefix.
+The normal trainer emitted `native_data_append` with restored optimizer state
+and cursor57064. It continues from the drained cycle4 child36765
+(SHA540c5f465e5d62b3bcd2505c5f098e25de2c1658d32f3e980e049b80643e06b7)
+in cycle5; runtime425126f2f is unchanged. At deployment its real maximum-graph
+qualification was active; the append event is not new-row exposure credit.
+Two remaining ordinary cold indexes remain live and CPU-bound.
+
+A storage census found that533 pending dependencies, totaling2658092032 bytes,
+were withheld solely by the old50GiB reserve. After the closed-cycle cleanup,
+recovery completed under a35GiB reserve:698/760 exact historical dependencies
+are staged. The remaining62 are metadata manifests, including lost historical
+full-cohort and aggregate pending headers; all enumerated pending payloads are
+available. The current saved3370 SFT/425 DPO outstanding rows are being extracted
+and verified against the actual original checkpoint, preserving their raw graph
+bindings and source custody. This is preparation: per-row CE failure-mask/source
+weight contracts, complete DPO objectives, held separation and geometry still
+must be preserved before actual activation. Missing historical header bytes are
+not grounds to discard recoverable admitted rows.
+
+Control supplementv4 is independently verified:605 files,44644587 compressed
+bytes,SHA64d0d7eff25efb9a5c3ae29c98697268c7bb35067b4fc35a2186426ab5f53ce9.
+Supplementv5 adds the deployed expanded recipe and current operator bindings:
+48 files,255198 compressed bytes,with its private receipt under
+`rl/control-backup-v5/`. Neither requires a running sandbox for retrieval.
+The36747 full-state PUT returned HTTP502 once and is retrying through the
+existing exporter; the36747 backup is not yet independently verified. The
+rolling-export adoption watcher preserves that live transfer and does not
+restart it solely because an observation wait expires.
