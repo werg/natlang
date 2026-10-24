@@ -56,3 +56,40 @@ unmodified consumer additionally recomputes each consumed row's actual spans and
 failure evidence. The focused law/mask/custody suite passed32 checks. Recovered
 LFM/Mellum CE declarations now validate with their full decoder dependencies;
 these are updated declarations, not recovered bytes of the lost latest policy.
+
+The original full stage is now active in frozen runtime425126f2f, with359875
+validated rows including all107767 recovered genuine communication graphs.
+The actual learner advanced36747→36755; its first updates include2–4 communication
+graphs each and preserve producer/consumer gradients. This is actual exposure,
+not readiness inferred from a registered source. Maximum137052-token capacity
+and a genuine producer/consumer numerical reference passed in the real entry.
+The remaining ordinary indexes continue concurrently;867/869 leaves and1526769
+rows were validated at21:03. The next append keeps the current active source
+prefix and restores exact original pending bindings, counts and remaining quotas.
+It removes the initial availability declaration rather than incorrectly applying
+its old deferred list to reactivated rows. Missing Search/OWL7027 graphs and the
+preexisting3370 SFT/425 preference obligations remain outstanding.
+
+Recovery supervision now has a cursor-bound rolling-checkpoint selector. It
+selects only the current operation and validates its declared output, stage and
+published parent; it never chooses an unrelated larger historical step. Adoption
+waits for the existing36747 private upload to finish independent GET verification,
+so useful transfer work is preserved. A new control supplement includes the real
+425126f2f runtime, deployed recipe and complete recovered failed-history closures
+for both models. Scheduled export is not a verified backup; receipts remain the
+source of truth.
+
+Closed cycles0 and1 were pruned only after36647 had an independently verified
+private full-state receipt. Five exact checkpoint paths reclaimed12939882859
+bytes; the current head, rolling child, private pins, original bootstrap parents,
+all source/held data and rollout custody remain. The interrupted old round3 was
+scored before its verified relocation: one scored unsuccessful episode, no
+complete positive episodes, no new exposure. Its namespace is free for the next
+actual-policy collection without relabeling that historical actor.
+
+Fresh full checks:4832 Neuralese checks passed,17 GPU checks passed,2138 TypeScript
+checks passed and22 conformance checks passed. Two Miro corpus integration checks
+remain blocked by EIO on the disconnected external drive; general Python checks
+also encounter external artifact EIO. These are reported failures, not skipped
+checks or evidence of an all-green repository. The recovered local production
+inputs are internal and the real learner continues independently.
