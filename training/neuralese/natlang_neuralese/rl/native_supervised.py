@@ -248,6 +248,13 @@ def _resume_source_arguments(config,directory,values,*,parameters=None):
 
 def prepare_seed_command(config,directory,values,state,state_path,*,parameters=None):
     """Use the same exact resume and publication binding for every SFT entry."""
+    # A rollout actor can bind history/rendering controls to the RL trainer.
+    # Static SFT and preference use their own declared parameters; forwarding
+    # the actor's argument splice can send unsupported serving flags to SFT.
+    from ..train.recipe import stage_parameter_args
+    selected=config.get('trainer_parameters',{}) if parameters is None else parameters
+    values['trainer_args']=stage_parameter_args(selected)
+    values['seed_trainer_args']=list(values['trainer_args'])
     command,reused=_resume_source_arguments(config,directory,values,parameters=parameters)
     if reused is not None:state['resumed_current_source_inputs']=reused
     if config.get('native_checkpoint_publication_owner_pointer') is not None:

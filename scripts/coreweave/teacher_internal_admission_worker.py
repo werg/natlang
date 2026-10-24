@@ -240,6 +240,48 @@ def _boundaries(first_batch:int,namespace:str,batches:set[int]|None=None,tranche
             if not private.is_file(): continue
             yield Tranche(batch,number,teacher_namespace=namespace),raw
 
+
+def _poll_policy_binding()->list[dict]:
+    """Small policy inputs invalidate scheduling reuse when they change.
+
+    This is not a new custody proof. A skipped completed operation grants no
+    admission, exposure or fresh verification; consumers keep their normal
+    exact-content checks. A new worker always performs a fresh first pass.
+    """
+    return [file_binding(path) for path in (
+        ORIGINAL_SETTINGS, PUBLISHER_CONFIG, DEPLOYMENT, TOKENIZERS, PROTECTION)]
+
+
+def _poll_stage_bindings(ctx:Tranche)->list[dict]:
+    """Observe small stage declarations, without claiming their verification.
+
+    Proof repair, a changed model receipt or a newly completed conversion must
+    return through the normal verifier even when the publisher is unchanged.
+    Large graph payloads remain checked by that verifier and actual consumers.
+    """
+    paths=[ctx.admission(SPOOL)/'canonical-source-verification.json',
+           SPOOL/'source-executions'/ctx.corpus_id/'source-result.json']
+    root=SPOOL/'conversions'/f'batch-{ctx.batch:04d}'
+    paths.extend(sorted(root.glob(f'tranche-{ctx.number:04d}-attempt-*/both-port-conversion.json')))
+    bindings=[]
+    for path in paths:
+        if not path.is_file():
+            bindings.append({'path':str(path),'missing':True})
+            continue
+        ref=file_binding(path);bindings.append(ref)
+        if path.name=='both-port-conversion.json':
+            for model in read_bound(ref).get('models',[]):
+                receipt=Path(model['receipt']['path'])
+                bindings.append(file_binding(receipt) if receipt.is_file() else
+                                {'path':str(receipt),'missing':True})
+    return bindings
+
+
+def _poll_boundary_signature(tranche:dict,private:dict,policy:list[dict],stages:list[dict])->str:
+    return hashlib.sha256(json.dumps({'tranche':tranche,'private':private,'policy':policy,'stages':stages},
+                                    sort_keys=True,separators=(',',':')).encode()).hexdigest()
+
+
 def run(*,once:bool,poll_seconds:int,batches:set[int]|None=None,tranches:set[int]|None=None)->None:
     publisher=read_bound(file_binding(PUBLISHER_CONFIG))
     if (publisher.get('schema')!='natlang.teacher-incremental-export-publisher/1'
@@ -252,18 +294,21 @@ def run(*,once:bool,poll_seconds:int,batches:set[int]|None=None,tranches:set[int
     first=publisher['first_export_batch']
     run_id=time.strftime('%Y%m%dT%H%M%SZ',time.gmtime())
     worker_log=SPOOL/'worker-logs'/f'worker-{run_id}.jsonl'
-    seen=set()
+    completed={}
     while True:
-        changed=False
+        policy=_poll_policy_binding();skipped=0
         for ctx,tranche in _boundaries(first,namespace,batches,tranches):
             key=ctx.corpus_id
-            if key in seen: continue
-            seen.add(key); changed=True
+            private=file_binding(SPOOL/f'batch-{ctx.batch:04d}'/'private-receipts'/f'tranche-{ctx.number:04d}.json')
             target=tranche['context']['source-cases.jsonl']['sha256']
             record={'at':time.time(),'tranche':key,'source_cases_sha256':target,
-                    'private_receipt':file_binding(SPOOL/f'batch-{ctx.batch:04d}'/'private-receipts'/f'tranche-{ctx.number:04d}.json'),
+                    'private_receipt':private,
                     'training_admission':False}
             try:
+                signature=_poll_boundary_signature(tranche,private,policy,_poll_stage_bindings(ctx))
+                if completed.get(key)==signature:
+                    skipped+=1
+                    continue
                 _ensure_source(ctx,target)
                 conversion=_next_conversion(ctx)
                 if conversion is None: raise RuntimeError('conversion did not produce a durable both-port receipt')
@@ -287,11 +332,18 @@ def run(*,once:bool,poll_seconds:int,batches:set[int]|None=None,tranches:set[int
             worker_log.parent.mkdir(parents=True,exist_ok=True)
             with worker_log.open('a') as stream: stream.write(json.dumps(record,sort_keys=True)+'\n')
             print(json.dumps(record,sort_keys=True),flush=True)
+            if record['status'] in ('registered','idempotent-existing-publication','verified-zero-delta'):
+                # Normal work may have created or repaired the observed stages.
+                # Store the pre-work identity: a subsequent poll rechecks any
+                # transition instead of assuming newly observed bytes passed.
+                completed[key]=signature
+            else:
+                completed.pop(key,None)  # Failed or incomplete work retries next poll.
         if once: return
+        if skipped:
+            print(json.dumps({'at':time.time(),'status':'unchanged-completed-boundaries',
+                              'skipped':skipped,'new_admission':False,'fresh_verification':False}),flush=True)
         time.sleep(poll_seconds)
-        # New poll sees new publisher exports; prior work remains auditable in
-        # the append-only log and is independently checked before every rerun.
-        seen=set()
 
 def main():
     p=argparse.ArgumentParser();p.add_argument('--once',action='store_true');p.add_argument('--poll-seconds',type=int,default=60);p.add_argument('--batch',type=int,action='append');p.add_argument('--tranche',type=int,action='append');a=p.parse_args()

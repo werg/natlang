@@ -120,7 +120,66 @@ bytes,SHA64d0d7eff25efb9a5c3ae29c98697268c7bb35067b4fc35a2186426ab5f53ce9.
 Supplementv5 adds the deployed expanded recipe and current operator bindings:
 48 files,255198 compressed bytes,with its private receipt under
 `rl/control-backup-v5/`. Neither requires a running sandbox for retrieval.
-The36747 full-state PUT returned HTTP502 once and is retrying through the
-existing exporter; the36747 backup is not yet independently verified. The
-rolling-export adoption watcher preserves that live transfer and does not
-restart it solely because an observation wait expires.
+The36747 full-state PUT returned HTTP502 once; later independently verified
+exports now supersede that observation. The rolling exporter preserves useful
+live transfers rather than restarting them solely because a wait expires.
+
+## Local continuation update, 2026-10-25 00:25 Berlin
+
+The active LFM v8 recipe contains1,588,891 SFT rows and114,794 genuine
+communication graphs. All7027 restored OWL rows match their original earned
+semantic row bindings in BOTH models, although reconstructed compressed bytes
+differ from the historical containers. Preserve both identities. LFM has
+reactivated2766 original pending rows;604 larger whole SFT graphs and269
+preference pairs still require capacity work. These counts are availability,
+not completed exposure. Current preference training is reference-free pairwise,
+not fixed-reference teacher-repair DPO.
+
+The local coordinator has committed three RL rounds. The next collection at
+step37018 produced15 scored outcomes with zero successes and zero reward spread;
+it earned no policy update. Preserve its failures with the exact old actor
+identity under `rl/interrupted-collections/`. A serving-only history binding
+leaked into the seed SFT CLI and prevented fallback before model loading.
+The shared argument-selection fix now passes the real SFT parser test; it is
+prepared in the development checkout, not yet deployed into the frozen425126f2f
+runtime. SFT resumed from the actual37018 parent and reached37071, with56,134+
+communication visits; full communication exposure remains incomplete.
+
+Low observed memory does not mean a stalled GPU: GB10 was96% busy. The354.5M
+parameter model has287.4M trainable parameters. Current settings use long-sequence
+layer checkpointing, a10,000-token direct bypass, FFN chunks4096, FP32
+masters/activations, BF16x6 dense GEMMs, IEEE attention and shared-prefix reuse.
+CPU activation offload is disabled. An earlier9,148-physical-token timing probe
+measured6.58s/4.0GiB with checkpointing versus5.16s/20.7GiB without it.
+That probe used successive unpublished diagnostic updates: it supports a timing
+tradeoff, not a same-state numerical parity claim. Current training has peaked
+at30,665,939,968 allocated CUDA bytes. Disabling checkpointing globally is not
+justified by an idle or between-update memory reading. Qualification also costs
+roughly12min per fresh continuation: the137k ordinary-token case took499s,
+whereas a119k physical-token communication case took14s. Prioritize measured
+attention/checkpointing improvements and safe reuse of unchanged capacity proofs.
+
+Mellum's35223 checkpoint metadata was recovered without materializing its model
+tensors, preserving the original compressed full state. ALL1,496,307 active SFT
+and25,968 held rows match their saved bindings in exact order;114,793 are genuine
+communication graphs. The source plan is
+`/home/werg/data/mellum-local-recovery-20261024/complete-original-source-ready.json`.
+Its10,809 pending SFT rows and359 pending preference pairs remain outstanding.
+Mellum has not resumed training; cloud allocations remain zero. The original
+finite foundation cohort header is still missing; no VAE readiness is granted.
+
+Private full-state step36977 is independently full-GET verified (SHA256
+73ee6f840429e4a703488bb4f4f7ee1c9a51e722ad704758fb64ba210491e910).
+Control supplementv7 is independently verified (1,069,294,725 bytes,SHA256
+6c904d9e947e88f3a7c69c2282d18929e3e644e6dad132d79082faa9b922b163).
+Both remain downloadable with zero running sandboxes. New v8 controls and later
+Mellum binding proofs need a compact follow-on supplement. The new static RL
+source has902 reference-verified cases, with protected-group separation checked;
+this is curriculum admission, not student task success or exposure.
+
+The final controller/admission fixes pass54 focused tests. Full checks are
+running; existing missing-external-drive EIO failures remain explicitly routed
+through coordination. Poll reuse now invalidates on source proof/result,
+completed conversion and actual model-receipt changes as well as publisher,
+custody and protection inputs. Errors retry. Schedule reload guards the exact
+publication owner and runtime while permitting ready data/cadence changes.

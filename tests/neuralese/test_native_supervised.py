@@ -359,3 +359,27 @@ def test_native_parameters_add_missing_splice_but_custom_launcher_keeps_its_cont
     with pytest.raises(ValueError,match='one trainer parameter splice'):
         supervised.bind_seed_parameters({'seed_command':['python','-m',
             'natlang_neuralese.train.native_state_sft','{trainer_args}','{seed_trainer_args}']},{})
+
+
+def test_seed_fallback_uses_declared_sft_parameters_instead_of_actor_serving_arguments(tmp_path):
+    from natlang_neuralese.rl.production import expand_command
+    from natlang_neuralese.train.native_state_sft import build_parser
+    actor_parameters={'history_reasoning_binding_path':'actor/tokenizer/history.json',
+                      'history_reasoning_binding_sha256':'a'*64,'stage_id':'rollout-policy'}
+    config={'native_actor_mode':'raw-state','trainer_parameters':actor_parameters,
+            'history_reasoning_policy':'keep','seed_command':['python','-m',
+            'natlang_neuralese.train.native_state_sft','--base','base','--native-graphs','source',
+            '--held-native-graphs','held','--out',str(tmp_path/'learner'),'{trainer_args}']}
+    values={'trainer_args':['--history-reasoning-binding-path','actor/tokenizer/history.json'],
+            'seed_trainer_args':['--history-reasoning-binding-sha256','a'*64]}
+    parameters={'stage_id':'native_full_sft','batch_tokens':65536,'refresh_at_checkpoint':True,
+                'refresh_after_updates':100,'checkpoint_every':100,'eval_every':50}
+    state={}
+    command=supervised.prepare_seed_command(config,tmp_path/'learner',values,state,tmp_path/'state.json',parameters=parameters)
+    actual=expand_command(command,values)
+    parsed=build_parser().parse_args(actual[3:])
+    assert parsed.stage_id=='native_full_sft'and parsed.refresh_after_updates==100
+    assert parsed.batch_tokens==65536 and parsed.refresh_at_checkpoint
+    assert '--history-reasoning-binding-path'not in actual and '--history-reasoning-binding-sha256'not in actual
+    assert config['trainer_parameters']==actor_parameters and config['history_reasoning_policy']=='keep'
+    assert values['seed_trainer_args']==values['trainer_args']and values['seed_trainer_args']is not values['trainer_args']

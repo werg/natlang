@@ -402,3 +402,90 @@ def test_internal_predecessor_rejects_registered_history_policy_mismatch(tmp_pat
     with pytest.raises(ValueError, match='history policy'):
         conversion_module._verified_internal_predecessors(
             tmp_path, worker.Tranche(21, 1, teacher_namespace='qwen36-verified-positive-native-graphs-20261022-recovery7853'), source_proof, contracts, rows)
+
+
+class StopPolling(Exception):
+    pass
+
+
+def polling_fixture(tmp_path,monkeypatch):
+    spool=tmp_path/'spool';monkeypatch.setattr(worker,'SPOOL',spool)
+    settings=tmp_path/'settings.json';write_json(settings,{'teacher_namespace':'fixture-teacher'})
+    publisher=tmp_path/'publisher.json';write_json(publisher,{
+        'schema':'natlang.teacher-incremental-export-publisher/1','directory_root':str(spool),'first_export_batch':41})
+    for name,path in [('ORIGINAL_SETTINGS',settings),('PUBLISHER_CONFIG',publisher),
+                      ('DEPLOYMENT',tmp_path/'deployment.json'),('TOKENIZERS',tmp_path/'tokenizers.json'),
+                      ('PROTECTION',tmp_path/'protection.json')]:
+        if not path.exists():write_json(path,{'revision':0})
+        monkeypatch.setattr(worker,name,path)
+    monkeypatch.setattr(worker,'ORIGINAL_SETTINGS_SHA',file_binding(settings)['sha256'])
+    ctx=worker.Tranche(41,0,teacher_namespace='fixture-teacher')
+    private=spool/'batch-0041/private-receipts/tranche-0000.json';write_json(private,{'revision':0})
+    write_json(ctx.admission(spool)/'canonical-source-verification.json',{'fixture':'already-normal-verified'})
+    conversion=spool/'conversions/batch-0041/tranche-0000-attempt-0000';models=[]
+    for model in ('lfm25','mellum21'):
+        ref=write_json(conversion/(model+'.json'),{'outputs':{'train':{'rows':0}}})
+        models.append({'model':model,'receipt':ref})
+    write_json(conversion/'both-port-conversion.json',{'models':models})
+    tranche={'context':{'source-cases.jsonl':{'sha256':'a'*64}}}
+    monkeypatch.setattr(worker,'_boundaries',lambda *args:[(ctx,tranche)])
+    monkeypatch.setattr(worker,'_next_conversion',lambda ctx:conversion)
+    monkeypatch.setattr(worker,'_publish_if_new_delta',lambda *args:{'status':'verified-zero-delta'})
+    return private
+
+
+def test_poll_skips_only_completed_unchanged_work_and_rechecks_changed_custody_and_policy(tmp_path,monkeypatch):
+    private=polling_fixture(tmp_path,monkeypatch);verified=[];polls=[]
+    monkeypatch.setattr(worker,'_ensure_source',lambda ctx,target:verified.append(ctx.corpus_id))
+    def sleep(seconds):
+        polls.append(seconds)
+        if len(polls)==2:write_json(private,{'revision':1})
+        if len(polls)==3:write_json(worker.PROTECTION,{'revision':1})
+        if len(polls)==4:raise StopPolling
+    monkeypatch.setattr(worker.time,'sleep',sleep)
+    with pytest.raises(StopPolling):worker.run(once=False,poll_seconds=60)
+    assert len(verified)==3
+    records=[json.loads(line)for path in (worker.SPOOL/'worker-logs').glob('worker-*.jsonl')for line in path.read_text().splitlines()]
+    assert len(records)==3 and all(row['status']=='verified-zero-delta'for row in records)
+    assert all(row['training_admission']is False and row['training_exposure']is False for row in records)
+    assert records[0]['private_receipt']!=records[1]['private_receipt']
+
+
+def test_failed_poll_retries_before_any_completed_scheduling_reuse(tmp_path,monkeypatch):
+    polling_fixture(tmp_path,monkeypatch);attempts=[];polls=[]
+    def ensure(ctx,target):
+        attempts.append(ctx.corpus_id)
+        if len(attempts)==1:raise ValueError('missing exact source; no admission')
+    monkeypatch.setattr(worker,'_ensure_source',ensure)
+    def sleep(seconds):
+        polls.append(seconds)
+        if len(polls)==3:raise StopPolling
+    monkeypatch.setattr(worker.time,'sleep',sleep)
+    with pytest.raises(StopPolling):worker.run(once=False,poll_seconds=60)
+    assert len(attempts)==2
+    records=[json.loads(line)for path in (worker.SPOOL/'worker-logs').glob('worker-*.jsonl')for line in path.read_text().splitlines()]
+    assert [row['status']for row in records]==['error','verified-zero-delta']
+
+
+@pytest.mark.parametrize('changed',['source-proof','source-result','conversion','model-receipt','new-conversion'])
+def test_poll_rechecks_changed_source_and_conversion_stages(tmp_path,monkeypatch,changed):
+    polling_fixture(tmp_path,monkeypatch);verified=[];polls=[]
+    ctx=worker.Tranche(41,0,teacher_namespace='fixture-teacher')
+    conversion=worker.SPOOL/'conversions/batch-0041/tranche-0000-attempt-0000'
+    monkeypatch.setattr(worker,'_ensure_source',lambda ctx,target:verified.append(ctx.corpus_id))
+    def sleep(seconds):
+        polls.append(seconds)
+        if len(polls)==2:
+            if changed=='source-proof':path=ctx.admission(worker.SPOOL)/'canonical-source-verification.json'
+            elif changed=='source-result':path=worker.SPOOL/'source-executions'/ctx.corpus_id/'source-result.json'
+            elif changed=='conversion':path=conversion/'both-port-conversion.json'
+            elif changed=='model-receipt':path=conversion/'lfm25.json'
+            else:path=conversion.parent/'tranche-0000-attempt-0001/both-port-conversion.json'
+            data=json.loads(path.read_text()) if path.exists() else {}
+            write_json(path,{**data,'revision':1})
+        if len(polls)==4:raise StopPolling
+    monkeypatch.setattr(worker.time,'sleep',sleep)
+    with pytest.raises(StopPolling):worker.run(once=False,poll_seconds=60)
+    # A changed receipt with its old parent binding is invalid and must keep
+    # retrying, rather than becoming a cached success after the first failure.
+    assert len(verified)==(3 if changed=='model-receipt' else 2)

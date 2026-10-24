@@ -166,3 +166,23 @@ test('answer and note calls distinguish returned values from requested file edit
     assert.ok(prompt.includes('Use eval for exact computation'));
   }
 });
+
+
+test('the parent and its semantic child both receive responsibility for completing their assigned judgment', async () => {
+  const { SEMANTIC_CALL_COMPLETION_PROMPT } = await import('../dist/native/prompt.js');
+  const seen = [];
+  const judge = defineNatlang('---\nargs: { note: string }\nreturns: boolean\n---\nJudge whether note requests cancellation.\n');
+  const runtime = createNatlangRuntime({ model: request => {
+    seen.push(request);
+    if (seen.length === 1) return { calls: [['eval', { finish: true, code:
+      'return await nl<boolean>`Judge whether note requests cancellation.`(note);' }]] };
+    return { calls: [['return_result', { status: 'success', value: true }]] };
+  } });
+  assert.equal(await runtime.run(() => judge('Please cancel my account.')), true);
+  assert.equal(seen.length, 2);
+  for (const request of seen) {
+    const system = request.messages.find(message => message.role === 'system').content;
+    assert.ok(system.includes(SEMANTIC_CALL_COMPLETION_PROMPT));
+    assert.ok(promptAtNlDepthLimit(system).includes(SEMANTIC_CALL_COMPLETION_PROMPT));
+  }
+});

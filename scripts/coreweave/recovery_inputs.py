@@ -49,7 +49,11 @@ def durable_json(path, value):
 def catalog_jobs(catalog):
     jobs = {}
     for item in catalog['objects']:
-        if item['role'] != 'bulk':
+        # Older source exports lived in a learner's run. Ownership is not
+        # artifact purpose: admit explicitly catalogued source archives without
+        # relabelling their historical role or selecting learner checkpoints.
+        kind = item.get('artifact_kind')
+        if kind != 'source-archive' and not (kind is None and item['role'] == 'bulk'):
             continue
         receipt_path = Path(item['receipt'])
         receipt = json.loads(receipt_path.read_text())
@@ -63,7 +67,9 @@ def catalog_jobs(catalog):
         if job['identity'] != identity:
             raise ValueError('conflicting content-addressed sizes')
         job['sources'].append(receipt['source'])
-        job['custody_receipts'].append({'path': str(receipt_path), 'sha256': digest(receipt_path)})
+        job['custody_receipts'].append({
+            'path': str(receipt_path), 'sha256': digest(receipt_path),
+            'role': item['role'], **({'artifact_kind': kind} if kind is not None else {})})
     return list(jobs.values())
 
 

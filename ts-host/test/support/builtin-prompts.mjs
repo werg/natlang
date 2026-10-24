@@ -1,8 +1,10 @@
 /**
  * What the model sees for each built-in natlang function (the progress judge, the stopping-condition note, the
  * behavior-comparison judge, view's body and the game policy), captured through public entry points with a
- * recording driver. Their prompt requests remain pinned to the base commit. The prompt-piece registry at the end
- * tracks its current scope metadata and registered variants for soft substitution and program-header rendering.
+ * recording driver. The fixture records the reviewed current prompt contract;
+ * intentional policy changes update it explicitly. Historical training packets
+ * keep their original prompt identities. The registry at the end tracks current
+ * scope metadata and variants for soft substitution and program-header rendering.
  */
 import { createNatlangRuntime, defaultProgressJudge, iterateOn } from '../../dist/runtime/node.js';
 import { defineNatlang } from '../../dist/runtime/callable.js';

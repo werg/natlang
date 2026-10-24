@@ -1,0 +1,74 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "restored-pending-whole-native-graph-bands-lfm-20261025-v1",
+  "owner": "dgx",
+  "path": "runs/restored-pending-whole-native-graph-bands-lfm-20261025-v1",
+  "files": [
+    {
+      "path": "1200000/membership.json",
+      "bytes": 9756,
+      "sha256": "13d9c9c5b0c37bf8b2381352f051fc8256de3b01e12026f9232c4a7d368da957"
+    },
+    {
+      "path": "1200000/native-graphs.jsonl.zst",
+      "bytes": 6645751,
+      "sha256": "bf9de1252060b16a67115f1e0294512a5fcd954b3bb799c4ec50371c5c9e83a8"
+    },
+    {
+      "path": "188000/membership.json",
+      "bytes": 271167,
+      "sha256": "70bd5fe095082ecc1d2960a82f2e398b1980e258fee2997ddbc294e74b6990a7"
+    },
+    {
+      "path": "188000/native-graphs.jsonl.zst",
+      "bytes": 23396590,
+      "sha256": "95f690968885ac6cc6611f497fb1045cd9204365d25c140b35ee67a5a538f45b"
+    },
+    {
+      "path": "2100000/membership.json",
+      "bytes": 937,
+      "sha256": "5da479b5f9cd25edfa230fec24405e9a22a2f97ad10974c2da40aca993472d6c"
+    },
+    {
+      "path": "2100000/native-graphs.jsonl.zst",
+      "bytes": 2146894,
+      "sha256": "ecdd45f6a9595213df449014ecefda847bcbf6f4f9e17b1eb22dd9b0d183c9b2"
+    },
+    {
+      "path": "250000/membership.json",
+      "bytes": 113945,
+      "sha256": "0fc5c0d9af5988354ec31fe8abc4b2e4cb493ebaa09ba5d9f529abce6b46982a"
+    },
+    {
+      "path": "250000/native-graphs.jsonl.zst",
+      "bytes": 15169777,
+      "sha256": "cc0c15163d0a760ddfe0d679680ecd8dc8426cd8236d1827c9b6ac5026f886e9"
+    },
+    {
+      "path": "320000/membership.json",
+      "bytes": 59198,
+      "sha256": "5f20b4541f9dc88c4906f219d402afa7c9a64ddb9977ac98300f722d30a0aa0f"
+    },
+    {
+      "path": "320000/native-graphs.jsonl.zst",
+      "bytes": 12200117,
+      "sha256": "c6ba5c7a2252ebeeba95691091204b2c2e2810eeefabd0a14fdb9d54d76177a9"
+    },
+    {
+      "path": "600000/membership.json",
+      "bytes": 39768,
+      "sha256": "d4898a3a9bd772e47d29d9f70477b6fbbb5d919973f53650366026a5c6e8d7af"
+    },
+    {
+      "path": "600000/native-graphs.jsonl.zst",
+      "bytes": 12651220,
+      "sha256": "3845ee9fcd86a7c1a1c39c1341deb90e4671b12d65ab8e4d60ae1ae7ca799b0f"
+    },
+    {
+      "path": "ready.json",
+      "bytes": 6003,
+      "sha256": "5affe48545e5c895d86af9eac4bb3b7ea38675e1b9f0c506efe29de1192b56ec"
+    }
+  ],
+  "bytes": 72711123
+}

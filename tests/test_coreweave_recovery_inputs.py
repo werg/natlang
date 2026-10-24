@@ -81,6 +81,35 @@ def test_catalog_preserves_all_historical_sources_and_rejects_changed_custody(tm
         recovery.catalog_jobs({'objects': [{**item, 'name': 'substituted'}]})
 
 
+def test_explicit_learner_source_archives_keep_custody_without_selecting_checkpoints(tmp_path):
+    ident = identity(b'original source')
+    receipt = {'private': True, 'identity': ident, 'independent_verification': ident,
+               'run': 'entity/project/learner', 'name': 'lfm/source.tar.zst',
+               'source': '/original/source.tar.zst'}
+    path = tmp_path / 'receipt.json'
+    path.write_text(json.dumps(receipt))
+    item = {'role': 'lfm', 'artifact_kind': 'source-archive', 'receipt': str(path),
+            'identity': ident, 'run': receipt['run'], 'name': receipt['name']}
+    # Implicit learner exports and explicitly typed checkpoint exports remain
+    # outside input recovery, including checkpoints in a bulk-owned run.
+    skipped = [{**item, 'artifact_kind': 'checkpoint'},
+               {**item, 'role': 'bulk', 'artifact_kind': 'checkpoint'},
+               {key: value for key, value in item.items() if key != 'artifact_kind'}]
+    jobs = recovery.catalog_jobs({'objects': [*skipped, item]})
+    assert len(jobs) == 1
+    assert (jobs[0]['run'], jobs[0]['name'], jobs[0]['sources']) == (
+        receipt['run'], receipt['name'], [receipt['source']])
+    assert jobs[0]['custody_receipts'] == [{
+        'path': str(path), 'sha256': recovery.digest(path),
+        'role': 'lfm', 'artifact_kind': 'source-archive'}]
+    assert json.loads(path.read_text()) == receipt
+    with pytest.raises(ValueError, match='differs'):
+        recovery.catalog_jobs({'objects': [{**item, 'run': 'entity/project/another'}]})
+    path.write_text(json.dumps({**receipt, 'independent_verification': {'local_sha256': ident['sha256']}}))
+    with pytest.raises(ValueError, match='independent verification'):
+        recovery.catalog_jobs({'objects': [item]})
+
+
 def make_archive(path, names):
     raw = io.BytesIO()
     with tarfile.open(fileobj=raw, mode='w') as tar:

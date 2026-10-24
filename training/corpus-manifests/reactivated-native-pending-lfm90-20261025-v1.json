@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "reactivated-native-pending-lfm90-20261025-v1",
+  "owner": "dgx",
+  "path": "runs/reactivated-native-pending-lfm90-20261025-v1",
+  "files": [
+    {
+      "path": "membership.json",
+      "bytes": 72101,
+      "sha256": "5f6d9c91baa9e83350a1605ef5e15757c09a7e719309c8ba412e0f59688d165d"
+    },
+    {
+      "path": "native-graphs.jsonl.zst",
+      "bytes": 3537156,
+      "sha256": "eb0e374c0aa6d4c8dc809ec1ff7bd9446247fa7bf2f6d047ece7ae3d4f56d7c3"
+    }
+  ],
+  "bytes": 3609257
+}

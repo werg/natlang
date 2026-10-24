@@ -605163,6 +605163,113 @@
       "source_class": "verified-self-hosted-teacher-positive-native-whole-trajectory-native-graphs",
       "split": "Train-only; empty test views; protected source groups remain excluded.",
       "training_admission": true
+    },
+    {
+      "id": "local-rl-semantic-curriculum-20261024-v1",
+      "owner": "dgx",
+      "path": "runs/local-rl-semantic-curriculum-20261024-v1",
+      "include": [
+        "additional-scaffold-cases.jsonl",
+        "additional-semantic-cases.jsonl",
+        "broad-selection-proof.json",
+        "cases.jsonl",
+        "normalized-additional-scaffold-qualification.json",
+        "procedural-parent-cases.jsonl",
+        "ready.json",
+        "semantic-qualification.json",
+        "semantic-reference-verification.json",
+        "task-source-manifest.json",
+        "union-audit.json"
+      ],
+      "source_class": "immutable-static-procedural-RL-task-source-with-complete-parent-programs",
+      "split": "Train-only; retains all140 prior tasks exactly and adds762 reference-verified tasks from fresh seed2026102402, including702 single-item judgments and60 complete programs.",
+      "admission": "RL task-source eligibility only. No sampled student/teacher trajectories, SFT exposure or capability lift is claimed.",
+      "training_admission": true,
+      "training_admission_reason": "Every new task passed the actual runtime reference executor; exact source groups are disjoint from the current held packet, held/quality unions and decision holds. New tasks use constructed procedural oracles; no teacher generation. All140 prior rows remain the byte-identical packet prefix.",
+      "derived_from": [
+        "decision-rich-train-20261017-v4-scaffold"
+      ],
+      "task_source_manifest": "runs/local-rl-semantic-curriculum-20261024-v1/task-source-manifest.json",
+      "snapshot_manifest": "training/corpus-manifests/local-rl-semantic-curriculum-20261024-v1.json",
+      "license_provenance": "New procedural tasks are project-generated; inherited140 rows retain existing source license facts and historical teacher qualification identities.",
+      "notes": "Shared task packet for LFM and Mellum. Reward actual correct execution with or without Neuralese; update an actual captured communication graph whole. Full parent programs remain alongside terminal semantic practice. Static reference success is not student performance; observe live outcomes and adapt."
+    },
+    {
+      "id": "restored-searchowl-original-native-views-20261025-v1",
+      "include": [
+        "evidence/mellum-original-earned-owl-rows.json",
+        "evidence/original-source-private-receipt.json",
+        "lfm25/earned-binding-comparison.json",
+        "lfm25/recovery.json",
+        "lfm25/train/native-graphs.jsonl.zst",
+        "mellum21/earned-binding-comparison.json",
+        "mellum21/recovery.json",
+        "mellum21/train/native-graphs.jsonl.zst"
+      ],
+      "source_class": "semantic-equivalent-original-native-graph-recovery-views",
+      "training_admission": true,
+      "split": "Train-only;7027 original graphs in each tokenizer view, same protected source groups and exact saved semantic row bindings.",
+      "training_admission_reason": "All7027 original LFM and Mellum graph bindings match their verified full-state parents. Mellum full active/held row sets and row order also match. Both original compressed container hashes remain recorded alongside the distinct reconstructed hashes.",
+      "derived_from": [
+        "external-expansion-search-owl-overcap-static-sft-20261016"
+      ],
+      "notes": "Recovery representations of already admitted examples, not additional independent rows. Source targets are reviewed third-party static SFT, not oracle/native execution. No new learner visits or capability lift claimed.",
+      "owner": "dgx",
+      "path": "runs/restored-searchowl-original-native-views-20261025-v1",
+      "snapshot_manifest": "training/corpus-manifests/restored-searchowl-original-native-views-20261025-v1.json",
+      "admission": "Source recovery/eligibility only; no new training exposure. Every original graph quota remains authoritative.",
+      "license_provenance": "Inherited exact original reviewed source licenses and provenance; no license exclusions or new teacher generations."
+    },
+    {
+      "id": "reactivated-native-pending-lfm90-20261025-v1",
+      "include": [
+        "native-graphs.jsonl.zst",
+        "membership.json"
+      ],
+      "source_class": "exact-whole-graph-original-pending-capacity-view",
+      "training_admission": true,
+      "split": "90 original train graphs, all forward/KV sizes<=137052, exact saved bindings and targets; held groups disjoint.",
+      "training_admission_reason": "Existing original pending admission and row identity retained; current complete-source CE contract validates these whole rows and the real v8 capacity entry passed.",
+      "derived_from": [
+        "original-lfm-native-full-sft-pending-ledger"
+      ],
+      "notes": "Subset view only; no truncation, detached producer or duplicate-row credit. Activation is not exposure. The other604 pending original graphs remain mandatory.",
+      "owner": "dgx",
+      "path": "runs/reactivated-native-pending-lfm90-20261025-v1",
+      "snapshot_manifest": "training/corpus-manifests/reactivated-native-pending-lfm90-20261025-v1.json",
+      "admission": "Source recovery/eligibility only; no new training exposure. Every original graph quota remains authoritative.",
+      "license_provenance": "Inherited exact original reviewed source licenses and provenance; no license exclusions or new teacher generations."
+    },
+    {
+      "id": "restored-pending-whole-native-graph-bands-lfm-20261025-v1",
+      "include": [
+        "ready.json",
+        "188000/native-graphs.jsonl.zst",
+        "188000/membership.json",
+        "250000/native-graphs.jsonl.zst",
+        "250000/membership.json",
+        "320000/native-graphs.jsonl.zst",
+        "320000/membership.json",
+        "600000/native-graphs.jsonl.zst",
+        "600000/membership.json",
+        "1200000/native-graphs.jsonl.zst",
+        "1200000/membership.json",
+        "2100000/native-graphs.jsonl.zst",
+        "2100000/membership.json"
+      ],
+      "source_class": "capacity-deferred-original-whole-native-graph-recovery",
+      "training_admission": false,
+      "split": "604 original train graphs grouped by physical forward/KV geometry; held/source identities remain original.",
+      "training_admission_reason": "Original pending obligations retained; larger-band activation requires measured device capacity and normal CE/held checks.",
+      "derived_from": [
+        "original-lfm-native-full-sft-pending-ledger"
+      ],
+      "notes": "336 additional whole rows fit below188000 tokens,139 below250000,70 below320000,46 below600000,12 below1200000 and1 below2100000. These are prepared views, not exposure, capacity passes or independent new examples.",
+      "owner": "dgx",
+      "path": "runs/restored-pending-whole-native-graph-bands-lfm-20261025-v1",
+      "snapshot_manifest": "training/corpus-manifests/restored-pending-whole-native-graph-bands-lfm-20261025-v1.json",
+      "admission": "Source recovery/eligibility only; no new training exposure. Every original graph quota remains authoritative.",
+      "license_provenance": "Inherited exact original reviewed source licenses and provenance; no license exclusions or new teacher generations."
     }
   ],
   "coverage_backlog": [

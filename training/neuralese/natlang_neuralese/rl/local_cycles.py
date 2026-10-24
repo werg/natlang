@@ -66,6 +66,45 @@ def record_unstarted_stage_failure(cursor, stage, config, directory, parent, err
     return failure
 
 
+def reload_schedule(plan_path, previous_plan, previous_config, previous_stages=(), *, cursor=None):
+    """Reload future work while retaining the actual optimizer/controller owner.
+
+    An existing operation keeps its frozen declaration. Changing a completed
+    prefix or replacing a pending operation's ID needs an explicit drained
+    reschedule; it cannot silently drop earned work or reuse an old bridge.
+    """
+    plan=json.loads(Path(plan_path).read_text())
+    config=resolve_recipe_data(Path(plan['rl_config']))
+    publication=config.get('native_checkpoint_publication') or {}
+    previous_publication=previous_config.get('native_checkpoint_publication') or {}
+    if (any(Path(plan[key]).resolve()!=Path(previous_plan[key]).resolve()
+            for key in ('out','optimizer_owner_lock'))
+            or Path(config['out']).resolve()!=Path(previous_config['out']).resolve()
+            or config.get('native_actor_mode')!='raw-state'
+            or config.get('model')!=previous_config.get('model')
+            or any(config.get(key)!=previous_config.get(key) for key in (
+                'native_checkpoint_publication_owner_pointer',
+                'native_checkpoint_publication_runtime_root',
+                'native_checkpoint_publication_role', 'native_participant'))
+            or any(publication.get(key)!=previous_publication.get(key)
+                   for key in ('namespace','producer','dependency_producer'))
+            or not set(previous_publication.get('readonly_input_roots',[])).issubset(
+                publication.get('readonly_input_roots',[]))
+            or config.get('native_actor_python_runtime')!=previous_config.get('native_actor_python_runtime')):
+        raise ValueError('live schedule changed optimizer/controller/runtime ownership; drain before rescheduling')
+    recipe=resolve_recipe_data(config['production_recipe'])
+    stages=[s for s in recipe['stages'] if s['kind'] in MANDATORY_STAGE_KINDS and s.get('admitted') is not False]
+    if cursor is not None and previous_stages:
+        index=cursor['stage_index'];before=[s['id'] for s in previous_stages];after=[s['id'] for s in stages]
+        if after[:index]!=before[:index]:
+            raise ValueError('live schedule changed its visited stage prefix; drain before rescheduling')
+        if index<len(before):
+            operation=Path(plan['out'])/f"cycle-{cursor['cycle']:06d}"/before[index]
+            if (operation/'config.json').exists() and (index>=len(after) or after[index]!=before[index]):
+                raise ValueError('live schedule replaced a pending operation; drain before rescheduling')
+    return plan,config,stages
+
+
 def run(plan_path, *, cycles=None, stop=None):
     plan_path=Path(plan_path)
     initial=json.loads(plan_path.read_text())
@@ -92,10 +131,14 @@ def run(plan_path, *, cycles=None, stop=None):
                         return result  # Incomplete/awaiting work is not an earned round.
                 cursor.update(phase='supervised',stage_index=0)
                 write_json_durable(cursor_path,cursor)
-            recipe=resolve_recipe_data(config['production_recipe'])
-            stages=[s for s in recipe['stages'] if s['kind'] in MANDATORY_STAGE_KINDS and s.get('admitted') is not False]
-            while cursor['stage_index']<len(stages):
+            # RL can take long enough for new sources or cadence improvements
+            # to become ready. Consume the actual current declarations before
+            # reserving each next supervised operation, including after RL.
+            plan,config,stages=reload_schedule(plan_path,plan,config)
+            while True:
                 if stop is not None and stop.requested:return
+                plan,config,stages=reload_schedule(plan_path,plan,config,stages,cursor=cursor)
+                if cursor['stage_index']>=len(stages):break
                 index=cursor['stage_index'];stage=stages[index]
                 failure=cursor.get('failed_stages',{}).get(stage['id'])
                 if (plan.get('continue_after_unstarted_stage_failure') and failure
