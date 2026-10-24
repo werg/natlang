@@ -24,22 +24,16 @@ const mockOwned = mode=>({
   close(){}
 });
 
-test('compatibility-first route executes ordinary Node JS and tags result untraced',async()=>{
-  const observed=[];
+test('default hybrid route executes owned code without native provenance',async()=>{
   let runtime;
   try {
-    installHybridTracingEnvironment(mockOwned,{
-      onNativeExecution:event=>observed.push(event)
-    });
+    installHybridTracingEnvironment(mockOwned);
     runtime=createNatlangRuntime();
     const result=await runtime.run(()=>currentFrame().task.environment().execute({
-      code:'1 + 2',scope:{},body:false,path:'hybrid://native'
+      code:'1 + 2',scope:{},body:false,path:'hybrid://owned-default'
     }));
-    assert.equal(result.result,3);
-    assert.equal(result.events[0].operation,'execution.provenance');
-    assert.equal(result.events[0].authority,'native-untraced/1');
-    assert.equal(result.events[0].path,'hybrid://native');
-    assert.equal(observed.length,1);
+    assert.equal(result.result,41);
+    assert.deepEqual(result.events,[]);
   } finally {runtime?.close();restore();}
 });
 
@@ -67,14 +61,26 @@ test('invalid route is rejected before either engine runs',async()=>{
   } finally {runtime?.close();restore();}
 });
 
-test('compatibility route installs a retained native callable module and reports provenance',()=>{
+test('native module route refuses execution before module bootstrap',()=>{
   const observed=[];
   try {
-    installHybridTracingEnvironment(mockOwned,{onNativeExecution:event=>observed.push(event)});
+    installHybridTracingEnvironment(mockOwned,{
+      route:()=> 'native',onNativeExecution:event=>observed.push(event)
+    });
     const record=parseModule('/__natlang__/folder/hybrid.ts',
       'export const answer: number = 1;',{},PATH_ONLY);
-    const instance=moduleInstance(record,{hybrid:record});
-    assert.equal(instance.answer,1);
-    assert.ok(observed.some(event=>event.kind==='evaluateModule'&&event.mode==='retained'));
+    assert.throws(()=>moduleInstance(record,{hybrid:record}),/Trace required/);
+    assert.equal(observed.length,0);
   } finally {restore();}
+});
+
+test('explicit native per-call route is rejected before evaluation',async()=>{
+  let runtime;
+  try {
+    installHybridTracingEnvironment(mockOwned,{route:()=> 'native'});
+    runtime=createNatlangRuntime();
+    await assert.rejects(runtime.run(()=>currentFrame().task.environment().execute({
+      code:'1 + 2',scope:{},body:false,path:'hybrid://native-rejected'
+    })),/Trace required/);
+  } finally {runtime?.close();restore();}
 });
