@@ -33,3 +33,41 @@ changed5.156s to5.112s in this measurement. These are temporary, sequential
 in-memory diagnostic updates, not a capability comparison or earned checkpoint.
 Do not extrapolate this capacity to arbitrarily longer whole graphs. Preserve
 qualified settings for RL until its actual collected graph capacity is checked.
+
+
+Actual first local execution: the 16 current-policy samples produced3 verified
+successes,6 invalid actions,1 semantic mismatch and6 budget terminations. The
+integer-return group had reward spread and4 complete episodes were admitted to
+GRPO. Two real updates saved36387 from36385, with good numerics and20.89GB peak
+CUDA allocation. Independent CPU full-state verification found92 changed backbone
+tensors, Adam age36387, exact preserved original SFT/DPO/current-tranche credits
+and unchanged held-row bindings. SFT resumed on this earned child.
+
+Adaptive recomputation is now implemented in the shared trainer with
+`checkpoint_direct_token_limit`: after prefix packing, graphs at or below the
+explicit physical token threshold use direct backward; longer graphs retain
+layer checkpointing. The value is saved in options and included in capacity
+identity. Default0 preserves uniform checkpointing. Local threshold10000 passed
+the actual maximum39077-token and near-threshold9996-token capacity/numerical
+checks before resumed SFT. The focused checkpoint/FFN/cursor suite passed63 checks.
+Mellum has the shared mechanism and retains its existing settings pending its
+own actual-hardware capacity qualification.
+
+The restored11988-row preference source and exact objective are declared in the
+current local recipe, preserving the previous6644 earned visits. New local DPO
+exposure is reported separately after its actual worker advances. Original full
+SFT source restoration/rejoining remains outstanding; local continuation and one
+RL round do not complete the entire recipe or establish capability lift.
+
+Operational repair: the first local held-task specification omitted
+`neuralese_server:true`; the learner rejected it before any update. The corrected
+versioned recipe retains every task/reward/source binding. The completed collection
+replays with its exact old actor Python closure, reconstructed from commit08e293a07;
+subsequent new actors use the current explicit runtime. Nothing was relabeled.
+
+Deferred throughput work: `serve/engine.py` advances native sequences individually
+in `_native_round`. Implement and compare real batched native forwards, including
+unequal positional KV, convolution/linear state, per-request adapter identities,
+sampling/RNG, cancellation and full RL occurrence capture. More collector workers
+alone do not remove this bottleneck. Keep the functioning learner/actor cycle
+moving while preparing that shared serving improvement.
