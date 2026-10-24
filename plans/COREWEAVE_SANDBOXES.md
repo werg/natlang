@@ -755,5 +755,8 @@ credit and GPU rates are unknown. Do not reuse the old preview-free assumption
 as a spending estimate. The lean prepared placement is local GB10 LFM, one cloud
 Mellum learner and burst Qwen3.6 generation when existing verified supply needs
 expansion. Measure useful throughput before adding a second cloud learner or a
-dedicated evaluator. Bound spending using actual account rates and allocations;
-snapshot access never counts as independent backup access at quota exhaustion.
+dedicated evaluator. Use actual account rates when exposed; otherwise bound
+concurrency and lifetime, monitor available usage and state clearly that this
+does not establish a dollar cap. An unavailable quote must not indefinitely
+block useful authorized work. Snapshot access never counts as independent backup
+access at quota exhaustion.

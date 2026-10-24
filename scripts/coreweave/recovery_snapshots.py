@@ -51,7 +51,10 @@ print(json.dumps(out))
         raise ValueError('restored files differ from their expected full identities')
     return {'source_sandbox_id': source_id, 'snapshot_id': snapshot_id,
             'destination_sandbox_id': destination_id, 'passed': True,
-            'verified_files': actual, 'verified_at': time.time()}
+            'verified_files': actual, 'verified_at': time.time(),
+            'full_training_continuation_verified': False,
+            'scope': 'Actual snapshot origin and selected exact restored files; '
+                     'full checkpoint decode and optimizer continuation are separate checks.'}
 
 
 def run_once(directory, sandbox_id, *, capture, inspect, delete, interval=1800,
@@ -138,6 +141,8 @@ def main():
     parser.add_argument('--restore-files', type=Path,
                         help='JSON list of exact path/bytes/sha256 bindings on /work')
     args = parser.parse_args()
+    if args.interval <= 0 or args.keep < 2:
+        parser.error('positive interval and at least two recovery snapshots required')
     try:
         from . import cwctl
     except ImportError:

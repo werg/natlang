@@ -6,8 +6,12 @@ Remaining CoreWeave access is opaque: $500 is an upper bound and actual remainin
 credit may be lower. Do not treat it as a confirmed balance. Prepare a lean
 placement with local LFM work, one cloud Mellum learner and burst generation
 when recovered/admitted supply warrants it; use additional cloud GPUs only when
-their measured useful throughput justifies the spend. Resolve actual account
-rates, track cumulative estimated spend and bound allocations before launch.
+their measured useful throughput justifies the spend. Use actual account rates
+when exposed and track cumulative spend; when rates or balance remain opaque,
+limit concurrency and allocation lifetime, monitor whatever usage is available,
+and keep independent recovery current. A time/concurrency bound is not a verified
+dollar cap. Do not invent a balance/rate or turn an unavailable quote into an
+indefinite barrier to useful authorized work.
 Preparation does not itself authorize restarting the paused training services.
 
 Filesystem snapshots are supplemental recovery. A quota cutoff can prevent
