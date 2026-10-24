@@ -90,7 +90,7 @@ def _reference_boundary(model, optimizer, backend):
     execution = ('native_shared_execution', 'native_norm_execution',
                  'native_cotangent_accumulator_backend', 'natlang_precision',
                  'native_linear_precision', 'native_attention_precision',
-                 'ffn_chunk_tokens', 'checkpoint_layers', 'share_causal_prefixes')
+                 'ffn_chunk_tokens', 'checkpoint_layers', 'checkpoint_direct_token_limit', 'share_causal_prefixes')
     owners = (model, model.port, getattr(model.port, 'hf', None))
     modes = [(id(module), module.training, id(type(module).forward),
               id(module.__dict__.get('forward'))) for module in model.modules()]
@@ -391,6 +391,7 @@ def capacity_identity(config,args,backend):
         **({'checkpoint_input_offload_directory':args.checkpoint_input_offload_directory}
            if getattr(args,'checkpoint_input_offload_directory',None) else {}),'model_config':config,'batch_graphs':args.batch_graphs,'batch_tokens':args.batch_tokens,
         'checkpoint_layers':args.checkpoint_layers,'chunk_tokens':args.chunk_tokens,
+        **({'checkpoint_direct_token_limit':args.checkpoint_direct_token_limit} if getattr(args,'checkpoint_direct_token_limit',0) else {}),
         **({'ffn_chunk_tokens':args.ffn_chunk_tokens}if getattr(args,'ffn_chunk_tokens',0)else {}),
         'checkpoint_input_offload':args.checkpoint_input_offload,
         **({'share_causal_prefixes':True} if getattr(args,'share_causal_prefixes',False) else {}),

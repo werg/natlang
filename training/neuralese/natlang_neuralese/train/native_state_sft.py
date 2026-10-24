@@ -437,7 +437,10 @@ def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=1
             plan.offsets[last-1]+len(plan.invocations[last-1].token_ids))) for first,last in ownership)
     else:
         plan, physical_rows = shared
-    model.port.checkpoint_layers = checkpoint_layers
+    # Use the actual compiled physical graph after prefix sharing. Keep complete
+    # episodes; this selects recomputation, never a context/token truncation.
+    direct_limit = getattr(model, 'checkpoint_direct_token_limit', 0)
+    model.port.checkpoint_layers = checkpoint_layers and not (direct_limit and plan.token_count <= direct_limit)
     if objective is not None:
         row_offsets = {example.id: {'node_start': first_node, 'node_stop': last_node,
         'physical_start': plan.offsets[first_node],
@@ -969,6 +972,8 @@ def build_parser():
     parser.add_argument('--cotangent-accumulator-backend', choices=('cpu_file', 'device_fp32'),
         default=None, help='explicit FP32 parameter-cotangent storage; default preserves historical cpu_file behavior')
     parser.add_argument('--checkpoint-layers', action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument('--checkpoint-direct-token-limit', type=int, default=0,
+                        help='Skip layer recomputation for compiled physical graphs at or below this size; zero retains uniform checkpointing')
     parser.add_argument('--chunk-tokens', type=int, default=128)
     parser.add_argument('--ffn-chunk-tokens', type=int, default=None,
         help='Existing token-local FFN workspace bound; omitted inherits saved value, zero disables chunking')
@@ -1039,6 +1044,8 @@ def main(argv=None):
 
 def _main(argv=None, *, requested_refresh):
     args = build_parser().parse_args(argv)
+    if args.checkpoint_direct_token_limit < 0 or (args.checkpoint_direct_token_limit and not args.checkpoint_layers):
+        raise ValueError('checkpoint-direct-token-limit requires a nonnegative limit and enabled layer checkpointing')
     if args.ffn_chunk_tokens is not None and args.ffn_chunk_tokens<0:
         raise ValueError('ffn-chunk-tokens must be a nonnegative integer')
     if args.refresh_after_updates is not None and args.refresh_after_updates < 1:
@@ -1579,6 +1586,7 @@ def _main(argv=None, *, requested_refresh):
     args.ffn_chunk_tokens=configure_ffn_chunk_tokens(model.port,args.ffn_chunk_tokens,saved_training)
     checkpoint_options['ffn_chunk_tokens']=args.ffn_chunk_tokens
     model.port.checkpoint_layers = args.checkpoint_layers
+    model.checkpoint_direct_token_limit = args.checkpoint_direct_token_limit
     model.to(args.device)
     model.train()
     optimizer, named = make_native_optimizer(model, lr=args.learning_rate, learned_row_lr=args.learned_row_learning_rate, interface_row_lr=args.interface_row_learning_rate,
