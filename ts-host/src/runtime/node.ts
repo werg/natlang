@@ -136,14 +136,14 @@ export function installHybridTracingEnvironment(
 export function installObservedNativeTracingEnvironment(
   onTrace: (record: {
     schema: 'natlang-native-observation/1';
-    phase: 'start' | 'completed' | 'failed';
+    phase: 'start' | 'completed' | 'failed' | 'settled';
     kind: 'execute' | 'executeAsync' | 'evaluateModule' | 'exportCall';
     mode: EnvironmentMode;
     code: string;
     path?: string;
     exportName?: string;
     invocationId?: number;
-    completion?: 'returned';
+    completion?: 'returned' | 'fulfilled' | 'rejected';
     error?: string;
   }) => void,
 ): void {
@@ -175,6 +175,19 @@ export function installObservedNativeTracingEnvironment(
               onTrace({schema:'natlang-native-observation/1',phase:'completed',
                 kind:'exportCall',mode,code:'',exportName:name,invocationId:id,
                 completion:'returned'});
+              // Observe later promise settlement while returning the ORIGINAL value.
+              // Never replace it with a new promise: callers may depend on identity.
+              if (value instanceof Promise) {
+                value.then(
+                  () => { try { onTrace({schema:'natlang-native-observation/1',
+                    phase:'settled',kind:'exportCall',mode,code:'',exportName:name,
+                    invocationId:id,completion:'fulfilled'}); } catch {} },
+                  (error:unknown) => { try { onTrace({schema:'natlang-native-observation/1',
+                    phase:'settled',kind:'exportCall',mode,code:'',exportName:name,
+                    invocationId:id,completion:'rejected',
+                    error:error instanceof Error ? error.message : String(error)}); } catch {} }
+                );
+              }
               return value;
             } catch(error) {
               onTrace({schema:'natlang-native-observation/1',phase:'failed',
