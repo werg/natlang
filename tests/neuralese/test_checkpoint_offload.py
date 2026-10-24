@@ -222,6 +222,19 @@ def test_no_mirror_on_the_source_filesystem_or_outside_the_runs(layout, monkeypa
     assert 'no mounted filesystem' in co.mirror_unavailable(layout[0] / 'checkpoint.pt', settings)
 
 
+def test_disconnected_optional_mirror_does_not_block_primary_checkpoint_policy(layout, monkeypatch):
+    def disconnected(_):
+        raise OSError(5, 'Input/output error')
+    monkeypatch.setattr(co, '_mount_of', disconnected)
+    record = co.policy_record(layout[0])
+    assert record['mirror'] is None
+    assert 'mirror filesystem inaccessible' in record['unavailable']
+    policy = cp.CheckpointPolicy(layout[0], every_steps=1)
+    policy.save({'earned': torch.tensor([1.0])})
+    assert policy.slot.is_file()
+    assert torch.equal(cp.CheckpointPolicy.load(policy.slot)['earned'], torch.tensor([1.0]))
+
+
 def test_the_default_copier_runs_in_an_idle_priority_child(layout):
     out, mirror_dir = layout
     slot = write(out / 'checkpoint.pt')

@@ -145,7 +145,12 @@ def mirror_unavailable(source, settings: OffloadSettings) -> str | None:
         return 'offload disabled'
     if mirror_path(source, settings) is None:
         return 'outside the mirrored trees'
-    mount = _mount_of(Path(settings.mirror_root))
+    try:
+        mount = _mount_of(Path(settings.mirror_root))
+    except OSError as error:
+        # A disconnected optional mirror must remain an unavailable backup,
+        # not prevent the primary local checkpoint policy from starting.
+        return 'mirror filesystem inaccessible: ' + str(error)
     if mount is None:
         return f'mirror root {settings.mirror_root} is on no mounted filesystem of its own'
     try:

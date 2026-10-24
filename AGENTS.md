@@ -13,6 +13,10 @@ and keep independent recovery current. A time/concurrency bound is not a verifie
 dollar cap. Do not invent a balance/rate or turn an unavailable quote into an
 indefinite barrier to useful authorized work.
 Preparation does not itself authorize restarting the paused training services.
+Owner follow-up (2026-10-24): bring the local LFM path up and running first.
+Local LFM full-state continuation is authorized; cloud learners and generation
+remain paused pending their own resumption. Continue earned local progress rather
+than returning to the salvaged parent when rejoining the full production recipe.
 
 Filesystem snapshots are supplemental recovery. A quota cutoff can prevent
 restoring or reading them without another sandbox. The primary durable backup
