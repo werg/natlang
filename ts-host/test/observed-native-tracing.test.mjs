@@ -56,3 +56,23 @@ test('retained module bootstrap is observed, not claimed as owned instruction tr
     assert.ok(records.some(item=>item.kind==='evaluateModule'&&item.phase==='completed'));
   }finally {restore();}
 });
+
+test('retained callable invocations are observed with receiver and thrown errors',()=>{
+  const records=[];
+  try {
+    installObservedNativeTracingEnvironment(record=>records.push(record));
+    const record=parseModule('/__natlang__/folder/observed-call.ts',
+      'export function twice(n: number): number { return n * 2; }\n' +
+      'export function fail(): never { throw new Error("call failed"); }',{},PATH_ONLY);
+    const exports=moduleInstance(record,{'observed-call':record});
+    assert.equal(exports.twice(4),8);
+    assert.throws(()=>exports.fail(),/call failed/);
+    const calls=records.filter(item=>item.kind==='exportCall');
+    assert.deepEqual(calls.map(item=>[item.exportName,item.phase]),[
+      ['twice','start'],['twice','completed'],
+      ['fail','start'],['fail','failed']
+    ]);
+    assert.equal(calls[0].invocationId,calls[1].invocationId);
+    assert.notEqual(calls[0].invocationId,calls[2].invocationId);
+  } finally {restore();}
+});
