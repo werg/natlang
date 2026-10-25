@@ -43,10 +43,6 @@ function onScroll() {
 }
 addEventListener('scroll', onScroll, { passive: true });
 onScroll();
-if ('IntersectionObserver' in window) {
-  const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }), { rootMargin: '0px 0px -8% 0px' });
-  $$('.reveal').forEach(el => io.observe(el));
-} else $$('.reveal').forEach(el => el.classList.add('in'));
 
 /* ------------------------------------------------------------------ syntax highlighting */
 const KW = new Set('const let var await async function return export import from type if else for of new declare try catch throw interface default as in while do break continue typeof'.split(' '));
@@ -95,6 +91,17 @@ $$('pre[data-hl]').forEach(p => {
   const k = p.dataset.hl;
   p.innerHTML = k === 'nl' ? hlNl(p.textContent) : k === 'sh' ? hlSh(p.textContent) : hl(p.textContent);
 });
+
+/* Copy the try-it commands; fall back to selecting them where the clipboard is refused. */
+(function copyCommands() {
+  const btn = $('#copy-cmds'), pre = $('#cmds');
+  if (!btn || !pre) return;
+  btn.addEventListener('click', () => {
+    const done = label => { btn.textContent = label; setTimeout(() => { btn.textContent = 'copy'; }, 1600); };
+    const select = () => { const r = document.createRange(); r.selectNodeContents(pre); const s = getSelection(); s.removeAllRanges(); s.addRange(r); done('selected: press ⌘C / Ctrl+C'); };
+    try { navigator.clipboard.writeText(pre.textContent).then(() => done('copied'), select); } catch (e) { select(); }
+  });
+})();
 
 /* ------------------------------------------------------------------ hero: one signature, two bodies */
 (function swap() {
@@ -702,6 +709,14 @@ await rank(tickets)   // → string[] (40), checked against the declared type
   });
   svg.addEventListener('pointermove', ev => { if (drag < 0) return; setP(drag, toV(ev)); render(); });
   svg.addEventListener('pointerup', () => { drag = -1; });
+  let sel = 1;
+  svg.addEventListener('keydown', ev => {
+    const k = ev.key;
+    if (k === 'ArrowLeft' || k === 'ArrowRight') sel = (sel + (k === 'ArrowRight' ? 1 : LABELS.length - 1)) % LABELS.length;
+    else if (k === 'ArrowUp' || k === 'ArrowDown') setP(sel, p[sel] + (k === 'ArrowUp' ? 0.05 : -0.05));
+    else return;
+    ev.preventDefault(); render();
+  });
   function render() {
     $$('#dec-tickets .chip').forEach((b, i) => b.classList.toggle('on', i === t));
     $$('#dec-truth .chip').forEach((b, i) => b.classList.toggle('on', i === truth));
@@ -709,13 +724,14 @@ await rank(tickets)   // → string[] (40), checked against the declared type
     let s = '';
     LABELS.forEach((l, i) => {
       const x = X0 + i * (BW + GAP), h = (BOT - TOP) * p[i];
-      s += `<rect class="track" x="${x}" y="${TOP}" width="${BW}" height="${BOT - TOP}" rx="8"/>`;
+      s += `<rect class="track ${i === sel ? 'sel' : ''}" x="${x}" y="${TOP}" width="${BW}" height="${BOT - TOP}" rx="8"/>`;
       s += `<rect class="fill ${i === truth ? 'truth' : ''}" x="${x}" y="${BOT - h}" width="${BW}" height="${h}" rx="8"/>`;
-      s += `<rect class="handle" x="${x + BW / 2 - 16}" y="${BOT - h - 5}" width="32" height="10" rx="5"/>`;
+      s += `<rect class="handle ${i === sel ? 'sel' : ''}" x="${x + BW / 2 - 16}" y="${BOT - h - 5}" width="32" height="10" rx="5"/>`;
       s += `<text class="pct" x="${x + BW / 2}" y="${Math.max(TOP + 14, BOT - h - 12)}">${(p[i] * 100).toFixed(0)}%</text>`;
       s += `<text x="${x + BW / 2}" y="${BOT + 22}">'${l}'</text>`;
     });
     svg.innerHTML = s;
+    svg.setAttribute('aria-valuetext', LABELS.map((l, i) => `${l} ${(p[i] * 100).toFixed(0)}%`).join(', '));
     const brier = p.reduce((a, x, i) => a + (x - (i === truth ? 1 : 0)) ** 2, 0);
     const logloss = -Math.log(p[truth]);
     const arg = p.indexOf(Math.max(...p));

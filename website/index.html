@@ -2,9 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>natlang, explained</title>
+<meta name="claude:viewport-fit-sides" content="cover">
 <meta name="description" content="An interactive explainer of natlang: TypeScript with natural-language functions. Typed prose, inference with typed holes, closures by mention, structural termination, refinement predicates, a tracing JIT for English, and Neuralese.">
+<meta property="og:title" content="natlang, explained">
+<meta property="og:description" content="TypeScript with natural-language functions: an interactive tour of typed prose, inference with typed holes, structural termination, refinement predicates and a tracing JIT for English.">
+<meta name="theme-color" content="#0e1016" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#edf1f3" media="(prefers-color-scheme: light)">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght,SOFT,WONK@0,9..144,300..700,0..100,0..1;1,9..144,300..700,0..100,0..1&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -37,6 +42,7 @@
 <div class="progress" id="progress"></div>
 
 <main id="top">
+<noscript><div class="wrap" style="padding-top:80px"><p class="honest">The text reads fine without JavaScript, but every widget on this page needs it.</p></div></noscript>
 
 <!-- ================================================================ HERO -->
 <section class="hero wrap">
@@ -52,7 +58,7 @@
       </ul>
     </div>
 
-    <div class="panel swap reveal" id="swap">
+    <div class="panel swap" id="swap">
       <div class="panel-h"><span class="dots"><i></i><i></i><i></i></span><span class="title" id="swap-file">is_urgent.nl</span><span class="right chips" role="group" aria-label="Implementation">
         <button class="chip" data-mode="crisp" type="button">crisp</button>
         <button class="chip p on" data-mode="nl" type="button">nl</button>
@@ -68,7 +74,7 @@
     </div>
   </div>
 
-  <div class="honest reveal">
+  <div class="honest">
     <b>What this page is.</b> An explainer, not a brochure. natlang is a research language and its specification is a 0.5 draft, with a list of known discrepancies in it. Every widget below is a toy re-implementation of one rule from <a href="https://github.com/werg/natlang/blob/main/spec/SPEC.md">the spec</a>, running in your browser. No model is called. Where a widget shows what a model answered, the answer is illustrative and the widget says so. The running example throughout is the repository's own <a href="https://github.com/werg/natlang/tree/main/examples/triage">support-ticket triage</a>.
   </div>
 </section>
@@ -104,7 +110,7 @@ Pick the label from rubric that fits ticket. If no rule in the rubric covers
 the ticket, report an error saying what is missing.</pre>
     </div>
 
-    <div class="panel reveal" id="dial">
+    <div class="panel" id="dial">
       <div class="panel-h"><span class="dots"><i></i><i></i><i></i></span><span class="title">the type dial</span><span class="right sim">schematic</span></div>
       <div class="panel-b">
         <span class="label">same instruction, different declared result</span>
@@ -145,7 +151,7 @@ the ticket, report an error saying what is missing.</pre>
       <div class="aside c">Why not infer the type from the model's first answer? Because then the answer would bless itself. The type has to exist before generation so that it can guide generation.<small>See <a href="https://github.com/werg/natlang/blob/main/docs/inline-natlang-lambdas.md">inline natlang lambdas</a>, §Inference rules; implementation in <code>ts-host/src/compiler/holes.ts</code>.</small></div>
     </div>
 
-    <div class="panel reveal" id="infer">
+    <div class="panel" id="infer">
       <div class="panel-h"><span class="dots"><i></i><i></i><i></i></span><span class="title">inference lab</span><span class="right sim">toy solver, same rules</span></div>
       <div class="panel-b">
         <pre class="code" data-hl>const r = await nl`Judge how bad ticket is.`(ticket);</pre>
@@ -180,7 +186,7 @@ the ticket, report an error saying what is missing.</pre>
       <p>The occasional false match is an accepted trade-off. The capture list is visible in the child's opening and in the trace.</p>
     </div>
 
-    <div class="panel reveal" id="cap">
+    <div class="panel" id="cap">
       <div class="panel-h"><span class="dots"><i></i><i></i><i></i></span><span class="title">capture by mention</span><span class="right sim">live tokenizer</span></div>
       <div class="panel-b">
         <span class="label">in scope</span>
@@ -208,7 +214,7 @@ the ticket, report an error saying what is missing.</pre>
       <p>The text of a natlang function belongs to its author. A <code>.nl</code> body is fixed text that refers to arguments by name, so a value is never spliced into it. The one splice point is <code>${…}</code> in an inline template. There the compiler reports <code>untrusted-instruction</code> when the interpolated expression is <code>Untrusted&lt;T&gt;</code>, or text derived from one. The fix it suggests is to pass the value as an argument.</p>
       <p>Arguments are rendered as data. A marked string shows up as a fenced block whose info line names its source. The fence is three backticks, or one more than the longest run of backticks in the text, so the text can never close its own fence. That last detail is a small one, and a good one.</p>
     </div>
-    <div class="panel reveal" id="fence">
+    <div class="panel" id="fence">
       <div class="panel-h"><span class="dots"><i></i><i></i><i></i></span><span class="title">untrusted data, rendered</span><span class="right sim">same fence rule</span></div>
       <div class="panel-b">
         <span class="label">an email body from <code>mail.fetch</code> · type anything, backticks included</span>
@@ -250,7 +256,7 @@ the ticket, report an error saying what is missing.</pre>
     </div>
   </div>
 
-  <div class="panel reveal" id="theater">
+  <div class="panel" id="theater">
     <div class="panel-h"><span class="dots"><i></i><i></i><i></i></span><span class="title">rank.nl · rank(tickets: Ticket[]): Promise&lt;string[]&gt;</span><span class="right sim">a scripted trace</span></div>
     <div class="theater">
       <div class="log" id="th-log" aria-live="polite"></div>
@@ -286,7 +292,7 @@ the ticket, report an error saying what is missing.</pre>
         <div class="post">calls step <i>ctx</i> → <i>ctx</i>(f) &nbsp;⟹&nbsp; the call graph is acyclic</div>
       </div><div class="name">DESCEND</div></div>
     </div>
-    <div class="panel reveal" id="dag">
+    <div class="panel" id="dag">
       <div class="panel-h"><span class="dots"><i></i><i></i><i></i></span><span class="title">review.nl and its callable folder</span><span class="right sim">real FNV hashes</span></div>
       <div class="panel-b">
         <svg class="dag" id="dag-svg" viewBox="0 0 540 330" role="img" aria-label="Context graph of review.nl"></svg>
@@ -316,7 +322,7 @@ return await iterateOn(shorten, draft)
 // IterationLimitError carries lastState: keep the shortest honest summary.</pre>
       <div class="aside" style="margin-top:22px">The deliberate exceptions are model-controlled: a loop with a natural-language predicate, and the agent loop of a call, which has no turn or time limit unless the caller sets one.<small>The rules address code written in good faith. The spec says plainly that the Node backend is not a sandbox.</small></div>
     </div>
-    <div class="panel reveal" id="iter">
+    <div class="panel" id="iter">
       <div class="panel-h"><span class="dots"><i></i><i></i><i></i></span><span class="title">iterateOn(shorten, draft)</span><span class="right sim">simulated steps</span></div>
       <div class="panel-b">
         <span class="label">stopping rule</span>
@@ -355,9 +361,9 @@ return await iterateOn(shorten, draft)
       <pre class="code" data-hl>const d = await runtime.decide(classify, ticket, rubric);
 // { value, probabilities: [{ value, probability }],
 //   confidence, scored }</pre>
-      <p style="margin-top:16px">Drag the bars to play the model, then pick the true label to grade it. Notice how log loss punishes confident mistakes far harder than Brier does.</p>
+      <p style="margin-top:16px">Drag the bars (or focus them and use the arrow keys) to play the model, then pick the true label to grade it. Notice how log loss punishes confident mistakes far harder than Brier does.</p>
     </div>
-    <div class="panel reveal" id="dec">
+    <div class="panel" id="dec">
       <div class="panel-h"><span class="dots"><i></i><i></i><i></i></span><span class="title">classify · readout: decision</span><span class="right sim">drag the bars</span></div>
       <div class="panel-b">
         <span class="label">ticket</span>
@@ -365,7 +371,7 @@ return await iterateOn(shorten, draft)
         <p class="note" id="dec-ticket" style="margin:10px 0 0;font-size:15px;color:var(--ink-2)"></p>
       </div>
       <div class="panel-b">
-        <svg class="bars" id="dec-bars" viewBox="0 0 420 210" role="img" aria-label="Probability per label"></svg>
+        <svg class="bars" id="dec-bars" viewBox="0 0 420 210" role="slider" tabindex="0" aria-label="Probability per label: left and right arrows pick a label, up and down change its probability"></svg>
         <div class="row" style="margin:6px 0 12px"><span class="label" style="margin:0">true label</span><span class="chips" id="dec-truth"></span></div>
         <div class="metrics" id="dec-metrics"></div>
         <pre class="code" id="dec-json" style="margin-top:12px"></pre>
@@ -384,7 +390,7 @@ return await iterateOn(shorten, draft)
       <p>The check is a single decision readout. It reads P(true), passes at the threshold, and inside an optional uncertainty band it applies a policy: <code>accept</code>, <code>reject</code> (<code>refinement-undecided</code>), or <code>escalate</code> to a stronger model. A failure on a return goes back to the executing model, which repairs it within a repair budget (3 by default). Verdicts are cached by the SHA-256 of the canonical value, the normalised predicate and the judge, so no value is judged twice.</p>
       <p>Subtyping falls out cleanly. <code>Is&lt;B, P&gt;</code> fits <code>T</code> whenever <code>B</code> fits <code>T</code>. <code>T</code> fits <code>Is&lt;B, P&gt;</code> too, with the check becoming that site's obligation. Two refinements with the same normalised predicate fit each other without a check.</p>
     </div>
-    <div class="panel reveal" id="judge">
+    <div class="panel" id="judge">
       <div class="panel-h"><span class="dots"><i></i><i></i><i></i></span><span class="title">the refinement judge</span><span class="right sim">P(true) values illustrative</span></div>
       <div class="panel-b">
         <svg class="axis01" id="judge-axis" viewBox="0 0 460 92" role="img" aria-label="Judge probabilities against threshold and band"></svg>
@@ -429,7 +435,7 @@ return await iterateOn(shorten, draft)
     </div>
   </div>
 
-  <div class="panel reveal" id="jitp">
+  <div class="panel" id="jitp">
     <div class="panel-h"><span class="dots"><i></i><i></i><i></i></span><span class="title">classify(ticket, rubric) · call store</span><span class="right sim">simulation · token counts illustrative</span></div>
     <div class="panel-b">
       <div class="row">
@@ -465,7 +471,7 @@ return await iterateOn(shorten, draft)
       <p>When one model hands a result to another, why round-trip through text? <code>Neuralese&lt;T, D&gt;</code> is a <b>soft value</b> of type <code>T</code>: an immutable, ordered block of vectors in dialect <code>D</code>, which a model reads through its read port. It is an abstract type in the classic sense. Host code may store it, pass it and return it, but may not look inside: no field access, no arithmetic, no comparison, no using it as a condition. <code>read</code> is the only route back to a <code>T</code>, and the result is validated like any call result.</p>
       <p>At the token level a soft value is two control tokens around a run of vectors. Writing is stochastic, gated by a Neuralese temperature <code>τ</code> that is separate from the text temperature. The payload is <code>μ + τ·σ⊙ε</code>, deterministic at <code>τ = 0</code>, which is the inference default. A call that needs Neuralese on a backend without support fails with <code>neuralese-unsupported-backend</code>. There is no text fallback.</p>
     </div>
-    <div class="panel reveal" id="nz">
+    <div class="panel" id="nz">
       <div class="panel-h"><span class="dots"><i></i><i></i><i></i></span><span class="title">brief.summary : Neuralese&lt;Summary&gt;</span><span class="right sim">compile-time rules</span></div>
       <div class="panel-b">
         <span class="label">the literal, as a model sees it</span>
@@ -486,7 +492,7 @@ return await iterateOn(shorten, draft)
       <p><code>natlang:neuralese</code> exports combinators: <code>map</code>, <code>zip</code>, <code>combine</code>, <code>split</code>, <code>read</code>, <code>ask</code> and friends. Each one (except <code>empty</code> and <code>ask</code>) is itself a system natural-language function <i>with a soft body</i>, which makes it trainable. They <b>approximately</b> satisfy algebraic laws: map identity, map fusion, read/map commutation, associativity and identity of combine, split of zip.</p>
       <p>The compiler uses these laws as rewrite rules to make programs cheaper. Each rule comes with guardrails. A rule matches only syntactic occurrences whose intermediate values have no other use. It never moves a call across an effect. And it is enabled per model and dialect version only after a whole-program comparison on held-out programs shows it does no harm. "≈" is measured through <code>read</code> and downstream consumers, never as equality of vectors.</p>
     </div>
-    <div class="panel reveal" id="rw">
+    <div class="panel" id="rw">
       <div class="panel-h"><span class="dots"><i></i><i></i><i></i></span><span class="title">rewrite playground</span><span class="right sim">click a highlighted redex</span></div>
       <div class="panel-b">
         <span class="label">program</span>
@@ -512,7 +518,7 @@ return await iterateOn(shorten, draft)
       <p>Any second reader keeps the hand-off as text. That includes an orchestrator peeking at a field, a log line, a second stage, or a different <code>model:</code>. The fix the authoring guide suggests is a sensible one: make the consumer carry forward whatever the orchestrator needed from the middle.</p>
       <div class="aside s">Where this is heading: the current research line replaces the vector channel with shared <b>positional KV and hybrid-state spans</b>. Producers export state, and consumers splice it in at the correct positions, with distinct markers for producing and for consuming. It is being trained now. Treat it as a direction, not a result.</div>
     </div>
-    <div class="panel reveal" id="fu">
+    <div class="panel" id="fu">
       <div class="panel-h"><span class="dots"><i></i><i></i><i></i></span><span class="title">orchestrator · which hand-offs may stay soft?</span><span class="right sim">fusibility check</span></div>
       <div class="panel-b">
         <svg class="fusion" id="fu-svg" viewBox="0 0 600 186" role="img" aria-label="Pipeline hand-offs"></svg>
@@ -547,23 +553,23 @@ const choose = pluggable(
       <p style="margin-top:16px">The applications in the repository take this all the way. Most of them ship a <code>DECOMPOSITION.md</code> recording, for every part of the real system, whether it became its own function, one instruction, or a crisp helper, and why.</p>
     </div>
     <div class="apps">
-      <div class="app reveal"><h4>nldb</h4><p>A database you talk to. Requests define tables, make transactional changes or ask questions. One engine is a database server written in natural language from end to end, over a documented folder format.</p><div class="files"><span class="nlf">database.nl</span> · <span class="tsf">sqlite/</span> · FORMAT.md</div></div>
-      <div class="app reveal"><h4>games</h4><p>Worlds whose rules are natural language: a market that settles in a seeded order, a duel arena that resolves simultaneously, NPCs acting from memory. Crisp code only checks what the stages produce.</p><div class="files"><span class="nlf">games.nl</span> · <span class="nlf">economy.nl</span> · <span class="nlf">combat.nl</span> · <span class="nlf">npc.nl</span></div></div>
-      <div class="app reveal"><h4>wiki</h4><p>A collaborative wiki whose edit pipeline is prose: change summaries, conflict detection, merge planning, verification against each intent, repair with <code>iterateOn</code>.</p><div class="files"><span class="nlf">merge.nl</span> · <span class="nlf">maintain.nl</span> · <span class="nlf">cells.nl</span> · <span class="tsf">index.ts</span></div></div>
-      <div class="app reveal"><h4>specializer</h4><p>Compiles recorded calls into guarded crisp cases (chapter 7), with its own judgment calls written as natural-language functions.</p><div class="files"><span class="nlf">worthLooking.nl</span> · <span class="nlf">chooseCondition.nl</span> · <span class="nlf">promote.nl</span></div></div>
-      <div class="app reveal"><h4>evidence</h4><p>A citation-checked question-answering console: plan a search, select sources, extract claims, find gaps, write an answer.</p><div class="files"><span class="nlf">plan_search.nl</span> · <span class="nlf">claims.nl</span> · <span class="nlf">gaps.nl</span></div></div>
-      <div class="app reveal"><h4>…and more</h4><p>A notebook, logs, a terminal, a publisher, a migration tool, a program improver, a scheduling assistant and a treaty-obligation ledger, all in <code>applications/</code>.</p><div class="files">natlang run applications/&lt;name&gt;</div></div>
+      <div class="app"><h4>nldb</h4><p>A database you talk to. Requests define tables, make transactional changes or ask questions. One engine is a database server written in natural language from end to end, over a documented folder format.</p><div class="files"><span class="nlf">database.nl</span> · <span class="tsf">sqlite/</span> · FORMAT.md</div></div>
+      <div class="app"><h4>games</h4><p>Worlds whose rules are natural language: a market that settles in a seeded order, a duel arena that resolves simultaneously, NPCs acting from memory. Crisp code only checks what the stages produce.</p><div class="files"><span class="nlf">games.nl</span> · <span class="nlf">economy.nl</span> · <span class="nlf">combat.nl</span> · <span class="nlf">npc.nl</span></div></div>
+      <div class="app"><h4>wiki</h4><p>A collaborative wiki whose edit pipeline is prose: change summaries, conflict detection, merge planning, verification against each intent, repair with <code>iterateOn</code>.</p><div class="files"><span class="nlf">merge.nl</span> · <span class="nlf">maintain.nl</span> · <span class="nlf">cells.nl</span> · <span class="tsf">index.ts</span></div></div>
+      <div class="app"><h4>specializer</h4><p>Compiles recorded calls into guarded crisp cases (chapter 7), with its own judgment calls written as natural-language functions.</p><div class="files"><span class="nlf">worthLooking.nl</span> · <span class="nlf">chooseCondition.nl</span> · <span class="nlf">promote.nl</span></div></div>
+      <div class="app"><h4>evidence</h4><p>A citation-checked question-answering console: plan a search, select sources, extract claims, find gaps, write an answer.</p><div class="files"><span class="nlf">plan_search.nl</span> · <span class="nlf">claims.nl</span> · <span class="nlf">gaps.nl</span></div></div>
+      <div class="app"><h4>…and more</h4><p>A notebook, logs, a terminal, a publisher, a migration tool, a program improver, a scheduling assistant and a treaty-obligation ledger, all in <code>applications/</code>.</p><div class="files">natlang run applications/&lt;name&gt;</div></div>
     </div>
   </div>
 
   <h3 style="margin-top:72px">House rules, from the project's own instructions</h3>
   <ol class="houserules">
-    <li class="reveal"><b>Teach in errors, not prompts.</b>Never spell out a wrong form in a prompt, because it primes the model to produce it. Handle it in the runtime and teach the fix in a one-sentence error.</li>
-    <li class="reveal"><b>No premature limits.</b>Termination is structural: no while loops, recursion on a smaller argument, <code>iterateOn</code> with a measure or a predicate. A resource limit gets added when a real problem shows up.</li>
-    <li class="reveal"><b>Measure model-facing changes live.</b>Anything the executing model sees (prompt text, how values render, error wording) is sampled on the live executor, about 48 samples per variant, before it is adopted.</li>
-    <li class="reveal"><b>The interpreter may be small.</b>"You are the capable program author; the interpreter may be a small model." Put the algorithm, the decomposition and the data contracts in source, spelled out as numbered steps over named data.</li>
-    <li class="reveal"><b>Stay close to JS.</b>Prefer making standard JavaScript idioms work over inventing new names. Be very circumspect about new model-facing vocabulary.</li>
-    <li class="reveal"><b>One implementation per concept.</b>Before adding a mechanism, find the existing one (specializer, call store, pluggable, refinement shadow) and extend it.</li>
+    <li><b>Teach in errors, not prompts.</b>Never spell out a wrong form in a prompt, because it primes the model to produce it. Handle it in the runtime and teach the fix in a one-sentence error.</li>
+    <li><b>No premature limits.</b>Termination is structural: no while loops, recursion on a smaller argument, <code>iterateOn</code> with a measure or a predicate. A resource limit gets added when a real problem shows up.</li>
+    <li><b>Measure model-facing changes live.</b>Anything the executing model sees (prompt text, how values render, error wording) is sampled on the live executor, about 48 samples per variant, before it is adopted.</li>
+    <li><b>The interpreter may be small.</b>"You are the capable program author; the interpreter may be a small model." Put the algorithm, the decomposition and the data contracts in source, spelled out as numbered steps over named data.</li>
+    <li><b>Stay close to JS.</b>Prefer making standard JavaScript idioms work over inventing new names. Be very circumspect about new model-facing vocabulary.</li>
+    <li><b>One implementation per concept.</b>Before adding a mechanism, find the existing one (specializer, call store, pluggable, refinement shadow) and extend it.</li>
   </ol>
 </section>
 
@@ -575,13 +581,13 @@ const choose = pluggable(
     <h2>Run something <em>real</em>.</h2>
   </div>
   <div class="grid2 even">
-    <pre class="code" data-hl="sh">scripts/setup_dev.sh --node-only     # build ts-host, install `natlang`
+    <div class="copywrap"><button class="btn copy" id="copy-cmds" type="button">copy</button><pre class="code" data-hl="sh" id="cmds">scripts/setup_dev.sh --node-only     # build ts-host, install `natlang`
 natlang doctor
 natlang setup                        # managed local model, an OpenAI-compatible
                                      # endpoint, or a Pi provider
 natlang check examples/triage        # types, nl signatures, folder policy
 natlang run examples/triage -- tickets.json
-natlang run applications/evidence    # a citation-checked QA console</pre>
+natlang run applications/evidence    # a citation-checked QA console</pre></div>
     <div class="prose">
       <p>The specification and the source are the active contract. When this page and the spec disagree, the spec wins, and when the spec and the code disagree, the spec lists the disagreement under "Known discrepancies" for the owner to decide. That small habit says a lot about the project.</p>
     </div>
