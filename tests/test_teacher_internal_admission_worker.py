@@ -463,6 +463,32 @@ class StopPolling(Exception):
     pass
 
 
+@pytest.mark.parametrize('tamper', [None,'completed-result','source-cases','relocation-bytes'])
+def test_source_retry_uses_exact_recovered_closure_without_cloud_fetch(tmp_path,monkeypatch,tamper):
+    spool=tmp_path/'spool';monkeypatch.setattr(worker,'SPOOL',spool)
+    ctx=worker.Tranche(63,7,teacher_namespace='fixture-teacher')
+    target='a'*64
+    relocation=tmp_path/'recovered-relocation.json'
+    reference=write_json(relocation,{'source_cases_sha256':'b'*64 if tamper=='source-cases'else target})
+    if tamper=='completed-result':
+        reference=write_json(tmp_path/'relocation-result.json',{
+            'schema':'natlang.teacher-ready-packet-relocation-result/1',
+            'relocation_declaration':reference})
+    write_json(spool/'source-executions'/ctx.corpus_id/'execution.json',{
+        'ready_packet_relocation':reference})
+    if tamper=='relocation-bytes':relocation.write_text('{}')
+    monkeypatch.setattr(worker,'_exists_valid_source',lambda ctx:False)
+    calls=[];monkeypatch.setattr(worker,'_run',lambda command,*args:calls.append(command))
+    if tamper in ('source-cases','relocation-bytes'):
+        with pytest.raises(ValueError):worker._ensure_source(ctx,target)
+        assert not calls
+    else:
+        worker._ensure_source(ctx,target)
+        assert len(calls)==1
+        assert calls[0][1].endswith('/teacher_internal_source.py')
+        assert calls[0][calls[0].index('--ready-packet-relocation')+1]==str(relocation)
+
+
 def polling_fixture(tmp_path,monkeypatch):
     spool=tmp_path/'spool';monkeypatch.setattr(worker,'SPOOL',spool)
     settings=tmp_path/'settings.json';write_json(settings,{'teacher_namespace':'fixture-teacher'})

@@ -308,3 +308,21 @@ Reader v2 retains the historical parser/builder; only source, zero-disposition
 and admission helpers are explicit reviewed overlays. Real batch41/tranche0
 readback check is running before resuming the complete conversion/admission
 worker; this is source engineering, never new teacher generation.
+
+21:23Berlin: real batch41/tranche0 now passes restored-source zero-delta
+verification. Batch63/tranche7 now completes the normal original full source
+verifier and records verified-zero-positive-source, with zero admission and
+exposure. Its source retry uses the exact recovered relocation declaration
+inside the completed result; source review metadata matches protection hash
+27b31f38b8d3b6108ea25eebb1cf1f614e204707a36b28b660b5484d9c2d9593.
+31focused worker tests pass. Start a conversion-only both-model backlog drain
+under the memory ledger while the complete full check runs; it never publishes
+a registry entry. Preserve its per-boundary journal and stop-after-boundary
+mechanism before handing the one admission strand back to normal publication.
+
+The local boot bootstrap is enabled and its actual no-duplicate invocation
+started zero processes while all three local jobs were running. It follows
+the current owner/config/cursor, uses ledger admission for future learner/export
+and monitor jobs, and allocates no cloud resources. Actual recovery after a
+second reboot has not been tested. New operator: resume-after-boot.py in the
+LFM recovery root; user unit natlang-local-recovery-bootstrap.service.

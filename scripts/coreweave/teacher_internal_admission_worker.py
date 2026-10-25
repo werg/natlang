@@ -48,17 +48,31 @@ def _exists_valid_source(ctx:Tranche)->bool:
 
 def _ensure_source(ctx:Tranche,target:str)->None:
     if _exists_valid_source(ctx): return
-    fetch=[sys.executable,str(CODE_ROOT/'scripts/coreweave/fetch_teacher_internal_ready_assets.py'),
-           '--batch',str(ctx.batch),'--source-cases-sha256',target]
-    _run(fetch,SPOOL/'worker-logs'/ctx.corpus_id/'fetch-ready-assets.log')
-    prepare=[sys.executable,str(CODE_ROOT/'scripts/coreweave/prepare_teacher_internal_ready_relocation.py'),
-             '--batch',str(ctx.batch),'--source-cases-sha256',target]
-    _run(prepare,SPOOL/'worker-logs'/ctx.corpus_id/'prepare-relocation.log')
-    ordinal_data=read_bound(file_binding(SPOOL/'assets/ready-packet/candidate-scan.json'))
-    matches=[i for i,row in enumerate(ordinal_data['scan']['candidates'])
-             if row.get('cases_binding',{}).get('sha256')==target]
-    if len(matches)!=1: raise ValueError('selected source cases do not bind exactly one ready packet')
-    relocation=SPOOL/'assets/ready-packet'/f'packet-{matches[0]:05d}'/'relocation.json'
+    execution=SPOOL/'source-executions'/ctx.corpus_id/'execution.json'
+    prior=read_bound(file_binding(execution))if execution.is_file()else{}
+    recovered=prior.get('ready_packet_relocation')
+    if recovered:
+        # A recovered closure is already hash-bound. Run the normal full source
+        # verifier again; do not require a dead historical sandbox to fetch it.
+        packet=read_bound(recovered)
+        if packet.get('schema')=='natlang.teacher-ready-packet-relocation-result/1':
+            recovered=packet['relocation_declaration']
+            packet=read_bound(recovered)
+        if packet.get('source_cases_sha256')!=target:
+            raise ValueError('recovered ready packet differs from the selected source cases')
+        relocation=Path(recovered['path'])
+    else:
+        fetch=[sys.executable,str(CODE_ROOT/'scripts/coreweave/fetch_teacher_internal_ready_assets.py'),
+               '--batch',str(ctx.batch),'--source-cases-sha256',target]
+        _run(fetch,SPOOL/'worker-logs'/ctx.corpus_id/'fetch-ready-assets.log')
+        prepare=[sys.executable,str(CODE_ROOT/'scripts/coreweave/prepare_teacher_internal_ready_relocation.py'),
+                 '--batch',str(ctx.batch),'--source-cases-sha256',target]
+        _run(prepare,SPOOL/'worker-logs'/ctx.corpus_id/'prepare-relocation.log')
+        ordinal_data=read_bound(file_binding(SPOOL/'assets/ready-packet/candidate-scan.json'))
+        matches=[i for i,row in enumerate(ordinal_data['scan']['candidates'])
+                 if row.get('cases_binding',{}).get('sha256')==target]
+        if len(matches)!=1: raise ValueError('selected source cases do not bind exactly one ready packet')
+        relocation=SPOOL/'assets/ready-packet'/f'packet-{matches[0]:05d}'/'relocation.json'
     cmd=[sys.executable,str(CODE_ROOT/'scripts/coreweave/teacher_internal_source.py'),
         '--original-settings',str(ORIGINAL_SETTINGS),'--original-settings-sha256',ORIGINAL_SETTINGS_SHA,
         '--publisher-config',str(PUBLISHER_CONFIG),'--publisher-sha256',PUBLISHER_SHA,
