@@ -1,4 +1,4 @@
-name: Owned tracing evaluator integration
+name: Selected semantic evaluator integration
 
 on:
   push:
@@ -18,20 +18,12 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
-        with:
-          repository: werg/tracing-js-self
-          ref: 4e5f8721f6373b6c8c736e97bbaa1a2a01f4a9f5 # pinned selected real execution adapter
-          path: tracing-js-self
-          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Install pinned natlang dependencies
+      - name: Install pinned Natlang and selected tracer dependencies
         run: npm ci
       - name: Compile Node evaluator and type-check integrations
         run: npm --workspace @natlang/typescript-host run build:node
-      - name: Install pinned selected tracer dependencies
-        run: npm ci --prefix tracing-js-self
       - name: Verify owned and selected evaluator wiring, async modules and cache invalidation
         run: node --test ts-host/test/owned-tracing-wiring.test.mjs ts-host/test/selected-semantic-module.test.mjs ts-host/test/selected-semantic-real-driver.test.mjs ts-host/test/selected-captures.test.mjs ts-host/test/selected-events.test.mjs

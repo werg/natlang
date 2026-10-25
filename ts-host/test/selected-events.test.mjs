@@ -32,6 +32,21 @@ test('Map emits completed work while an open source is below its capacity',{time
   await output.return();assert.equal(q.status,'cancelled');
 });
 
+test('Map close interrupts an idle host wait and aborts active workers without polling',{timeout:1000},async()=>{
+  const idle=new SelectedEventQueue('idle',1),output=mapSelectedEvents(idle,value=>value,1);
+  const waiting=output.next();assert.equal((await output.return()).done,true);
+  assert.equal((await waiting).done,true);assert.equal(idle.status,'cancelled');
+
+  const active=new SelectedEventQueue('active',1),entered=deferred();let signal;
+  active.post('a',1);
+  const workers=mapSelectedEvents(active,(_value,_event,ownedSignal)=>{
+    signal=ownedSignal;entered.resolve();return new Promise(()=>{});
+  },1);
+  const pending=workers.next();await entered.promise;
+  assert.equal((await workers.return()).done,true);assert.equal((await pending).done,true);
+  assert.equal(signal.aborted,true);assert.equal(active.status,'cancelled');
+});
+
 test('bounded Map retains input identity and order when later work completes first',async()=>{
   const q=new SelectedEventQueue('ordered',3),a=deferred(),b=deferred(),started=deferred(),active=[];
   q.post('a',1);q.post('b',2);q.post('c',3);q.close();
@@ -83,4 +98,21 @@ test('source failure and cancelled children cannot report normal completion',asy
   const input=new SelectedEventQueue('child',2);input.post('a',1);input.post('b',2);
   const output=mapSelectedEvents(input,()=>{throw new Error('child failed');},1);
   await assert.rejects(output.next(),/child failed/);assert.equal(input.status,'cancelled');
+});
+
+test('receipt failure preserves accepted deliveries and rejects every blocked wait',async()=>{
+  const delivered=new SelectedEventQueue('receipt-delivery',1,()=>{throw new Error('receipt unavailable');});
+  const waiting=delivered.next();
+  assert.equal(delivered.post('a',1).disposition,'buffered');
+  assert.equal((await waiting).value.id,'a');assert.equal(delivered.status,'failed');
+  assert.equal(delivered.post('a',1).disposition,'duplicate');
+  await assert.rejects(delivered.next(),/receipt unavailable/);
+
+  const buffered=new SelectedEventQueue('receipt-close',1,receipt=>{
+    if(receipt.disposition==='closed')throw new Error('close receipt unavailable');
+  });
+  buffered.post('a',1);const rejected=assert.rejects(buffered.push('b',2),/close receipt unavailable/);
+  buffered.close();await rejected;
+  assert.equal((await buffered.next()).value.id,'a');
+  await assert.rejects(buffered.next(),/close receipt unavailable/);
 });

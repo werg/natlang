@@ -39,6 +39,7 @@ export class SelectedEventQueue<T> implements AsyncIterableIterator<SelectedEven
   private waiting?: { resolve(value: IteratorResult<SelectedEvent<T>>): void; reject(error: unknown): void };
   private state: 'open' | 'closed' | 'failed' | 'cancelled' = 'open';
   private failure?: unknown;
+  private receiptFailed = false;
   private position = 0;
   constructor(readonly source: string, readonly capacity: number,
     private readonly receipt: (receipt: EventReceipt) => void = () => {}, readonly historyCapacity = 65536) {
@@ -49,6 +50,21 @@ export class SelectedEventQueue<T> implements AsyncIterableIterator<SelectedEven
   [Symbol.asyncIterator](): AsyncIterableIterator<SelectedEvent<T>> { return this; }
   get pending(): number { return this.buffered.length; }
   get status(): string { return this.state; }
+  private emit(value: EventReceipt): void {
+    if (this.receiptFailed) return;
+    try { this.receipt(Object.freeze(value)); }
+    catch (error) {
+      // Receipts observe committed queue transitions. An observer must never
+      // strand a waiter or erase an event after its delivery identity is saved.
+      // Stop the source, preserving accepted events for ordered delivery.
+      this.receiptFailed = true;
+      this.failure = this.state === 'failed' || this.state === 'cancelled' ?
+        new AggregateError([this.failure, error], 'Event source and receipt observer failed') : error;
+      if (this.state !== 'cancelled') this.state = 'failed';
+      for (const writer of this.space.splice(0)) writer.reject(this.failure);
+      this.waiting?.reject(this.failure); this.waiting = undefined;
+    }
+  }
   private open(): void {
     if (this.state !== 'open') throw this.failure ?? new Error(`Event source is ${this.state}`);
   }
@@ -60,13 +76,13 @@ export class SelectedEventQueue<T> implements AsyncIterableIterator<SelectedEven
     if (known) {
       if (known.digest !== digest) throw new Error('Event identity was reused with another payload');
       const receipt = { source: this.source, id, position: known.position, disposition: 'duplicate' as const };
-      this.receipt(receipt); return receipt;
+      this.emit(receipt); return receipt;
     }
     this.open();
     while (this.buffered.length >= this.capacity && !this.seen.has(id)) {
       this.open();
       if (this.space.length >= this.capacity) {
-        this.receipt({ source: this.source, id, disposition: 'overflow' });
+        this.emit({ source: this.source, id, disposition: 'overflow' });
         throw new RangeError('Event ingress waiting producers exceed its bound');
       }
       await new Promise<void>((resolve, reject) => this.space.push({ resolve, reject }));
@@ -83,33 +99,32 @@ export class SelectedEventQueue<T> implements AsyncIterableIterator<SelectedEven
     if (known) {
       if (known.digest !== digest) throw new Error('Event identity was reused with another payload');
       const receipt = { source: this.source, id, position: known.position, disposition: 'duplicate' as const };
-      this.receipt(receipt); return receipt;
+      this.emit(receipt); return receipt;
     }
     this.open();
     if (this.seen.size >= this.historyCapacity) {
-      this.receipt({ source: this.source, id, disposition: 'overflow' });
+      this.emit({ source: this.source, id, disposition: 'overflow' });
       throw new RangeError('Event delivery history is full; checkpoint and rotate the declared source epoch');
     }
     if (this.buffered.length >= this.capacity) {
-      this.receipt({ source: this.source, id, disposition: 'overflow' });
+      this.emit({ source: this.source, id, disposition: 'overflow' });
       throw new RangeError('Event queue overflow; pause the producer or increase its declared capacity');
     }
     const event = Object.freeze({ source: this.source, id, position: this.position++, value: JSON.parse(text) as T });
     this.seen.set(id, { position: event.position, digest });
     const receipt = { source: this.source, id, position: event.position, disposition: 'buffered' as const };
-    this.receipt(receipt);
-    if (this.waiting) {
-      const waiting = this.waiting; this.waiting = undefined;
-      this.receipt({ ...receipt, disposition: 'delivered' });
-      waiting.resolve({ value: event, done: false });
-    } else this.buffered.push(event);
+    const waiting = this.waiting; this.waiting = undefined;
+    if (waiting) waiting.resolve({ value: event, done: false });
+    else this.buffered.push(event);
+    this.emit(receipt);
+    if (waiting) this.emit({ ...receipt, disposition: 'delivered' });
     return receipt;
   }
   next(): Promise<IteratorResult<SelectedEvent<T>>> {
     if (this.buffered.length) {
       const value = this.buffered.shift()!;
       this.space.shift()?.resolve();
-      this.receipt({ source: this.source, id: value.id, position: value.position, disposition: 'delivered' });
+      this.emit({ source: this.source, id: value.id, position: value.position, disposition: 'delivered' });
       return Promise.resolve({ value, done: false });
     }
     if (this.state === 'failed' || this.state === 'cancelled') return Promise.reject(this.failure);
@@ -119,7 +134,7 @@ export class SelectedEventQueue<T> implements AsyncIterableIterator<SelectedEven
   }
   close(): void {
     if (this.state !== 'open') return;
-    this.state = 'closed'; this.receipt({ source: this.source, disposition: 'closed' });
+    this.state = 'closed'; this.emit({ source: this.source, disposition: 'closed' });
     for (const writer of this.space.splice(0)) writer.reject(new Error('Event source closed before admission'));
     this.waiting?.resolve({ value: undefined, done: true }); this.waiting = undefined;
   }
@@ -128,13 +143,13 @@ export class SelectedEventQueue<T> implements AsyncIterableIterator<SelectedEven
   private stop(state: 'failed' | 'cancelled', error: unknown): void {
     if (this.state === 'failed' || this.state === 'cancelled' || (this.state === 'closed' && state !== 'cancelled')) return;
     this.state = state; this.failure = error;
-    this.receipt({ source: this.source, disposition: state });
+    this.emit({ source: this.source, disposition: state });
     for (const writer of this.space.splice(0)) writer.reject(error);
     this.waiting?.reject(error); this.waiting = undefined;
     // Cancellation does not admit work that was only buffered. Failure retains
     // accepted items for ordered delivery before reporting the source failure.
     if (state === 'cancelled') for (const event of this.buffered.splice(0))
-      this.receipt({ source: this.source, id: event.id, position: event.position, disposition: 'cancelled' });
+      this.emit({ source: this.source, id: event.id, position: event.position, disposition: 'cancelled' });
   }
   return(): Promise<IteratorResult<SelectedEvent<T>>> {
     this.cancel(); return Promise.resolve({ value: undefined, done: true });
@@ -184,44 +199,67 @@ export async function foldSelectedEvents<T, S>(source: AsyncIterable<SelectedEve
 
 /** Bounded independent execution with input-order results and source identity.
  * Completed later items occupy the same bounded window until earlier work ends. */
-export async function* mapSelectedEvents<T, R>(source: AsyncIterable<SelectedEvent<T>>,
+export function mapSelectedEvents<T, R>(source: AsyncIterable<SelectedEvent<T>>,
   select: (value: T, event: SelectedEvent<T>, signal: AbortSignal) => Promise<R> | R, concurrency: number):
   AsyncGenerator<SelectedEvent<R>> {
   if (!Number.isSafeInteger(concurrency) || concurrency < 1)
     throw new RangeError('Selected Map concurrency must be a positive integer');
   const iterator = source[Symbol.asyncIterator]();
+  const abort = new AbortController();
+  let closed = false, cancelled = false, stop!: () => void, closing: Promise<unknown> | null = null;
+  const cancellation = new Promise<{ kind: 'cancel' }>(resolve => { stop = () => resolve({ kind: 'cancel' }); });
+  const closeInput = (): Promise<unknown> => closed ? Promise.resolve() :
+    closing ??= Promise.resolve().then(() => iterator.return?.());
   type Outcome = { value: SelectedEvent<R> } | { error: unknown };
   type Input = { kind: 'input'; next: IteratorResult<SelectedEvent<T>> } | { kind: 'input-error'; error: unknown };
   const pending: Promise<Outcome>[] = [];
-  const abort = new AbortController();
-  let closed = false, reading: Promise<Input> | null = null;
-  try {
-    while (!closed || pending.length) {
-      if (!closed && !reading && pending.length < concurrency)
-        reading = Promise.resolve(iterator.next()).then(next => ({ kind: 'input', next }),
-          error => ({ kind: 'input-error', error }));
-      const candidates: Promise<Input | { kind: 'output'; result: Outcome }>[] = [];
-      if (reading) candidates.push(reading);
-      if (pending.length) candidates.push(pending[0]!.then(result => ({ kind: 'output', result })));
-      const ready = await Promise.race(candidates);
-      if (ready.kind === 'input-error') throw ready.error;
-      if (ready.kind === 'input') {
-        reading = null;
-        if (ready.next.done) { closed = true; continue; }
-        const event = ready.next.value;
-        pending.push(Promise.resolve().then(() => select(event.value, event, abort.signal)).then(
-          value => ({ value: Object.freeze({ ...event, value }) }), error => ({ error })));
-      } else {
-        pending.shift();
-        if ('error' in ready.result) throw ready.result.error;
-        yield ready.result.value;
+  const output = (async function* (): AsyncGenerator<SelectedEvent<R>> {
+    let reading: Promise<Input> | null = null;
+    try {
+      while (!closed || pending.length) {
+        if (cancelled) return;
+        if (!closed && !reading && pending.length < concurrency)
+          reading = Promise.resolve(iterator.next()).then(next => ({ kind: 'input', next }),
+            error => ({ kind: 'input-error', error }));
+        const candidates: Promise<Input | { kind: 'output'; result: Outcome } | { kind: 'cancel' }>[] = [cancellation];
+        if (reading) candidates.push(reading);
+        if (pending.length) candidates.push(pending[0]!.then(result => ({ kind: 'output', result })));
+        const ready = await Promise.race(candidates);
+        if (cancelled || ready.kind === 'cancel') return;
+        if (ready.kind === 'input-error') throw ready.error;
+        if (ready.kind === 'input') {
+          reading = null;
+          if (ready.next.done) { closed = true; continue; }
+          const event = ready.next.value;
+          pending.push(Promise.resolve().then(() => select(event.value, event, abort.signal)).then(
+            value => ({ value: Object.freeze({ ...event, value }) }), error => ({ error })));
+        } else {
+          pending.shift();
+          if ('error' in ready.result) throw ready.result.error;
+          yield ready.result.value;
+        }
       }
+    } finally {
+      abort.abort(new Error('Selected Map consumer closed'));
+      await closeInput();
+      // Every in-flight promise has a rejection handler. Cancellation requests
+      // adapter cleanup; it does not undo an already dispatched native write.
+      void Promise.all(pending);
     }
-  } finally {
-    abort.abort(new Error('Selected Map consumer closed'));
-    if (!closed) await iterator.return?.();
-    // Every in-flight promise has a rejection handler. Cancellation is a request
-    // to its adapter, not a claim that an already dispatched write was undone.
-    void Promise.all(pending);
-  }
+  })();
+  const finish = output.return.bind(output), fail = output.throw.bind(output);
+  const cancel = (reason: unknown): Promise<unknown> => {
+    cancelled = true; abort.abort(reason); stop(); return closeInput();
+  };
+  // AsyncGenerator.return ordinarily waits behind an in-flight next(). Signal
+  // the host wait immediately, including before the first input has arrived.
+  output.return = value => {
+    const closing = cancel(new Error('Selected Map consumer closed'));
+    return Promise.all([finish(value), closing]).then(([result]) => result);
+  };
+  output.throw = error => {
+    const closing = cancel(error);
+    return Promise.all([fail(error), closing]).then(([result]) => result);
+  };
+  return output;
 }

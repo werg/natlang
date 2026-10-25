@@ -159,8 +159,8 @@ Fold completes a step before consuming the next item. Map bounds independent
 work and yields results in input order with the original source, event ID and
 position. It can yield an already completed item while an open source is below
 its concurrency window. Closing/cancelling a Map consumer cancels its source
-and signals outstanding workers; this does not undo an already dispatched
-native effect.
+and signals outstanding workers, including while `next()` is waiting for an
+input or worker result. This does not undo an already dispatched native effect.
 
 `push` applies producer backpressure. `post` reports explicit overflow for a
 producer that cannot pause. Queue capacity, pending producer capacity and
@@ -176,6 +176,9 @@ are taken at settled admission boundaries and preserve the cursor, queued
 payloads and duplicate ledger. Restore validates all payload digests and
 positions. Normal closure drains accepted events; source failure drains them
 then rejects; cancellation records discarded buffered items and rejects waits.
+Receipt observers run after the accepted queue transition. If an observer
+throws, the source fails and settles all blocked waits; already accepted events
+remain deliverable and cannot disappear behind their duplicate receipt.
 
 ## Verification
 
@@ -191,9 +194,57 @@ captured module state. `selected-captures`, `selected-semantic-module`, and
 `selected-events` tests cover conflicts, failed children, cache cycles, authority
 cutover, isolation, backpressure, reversed completion and checkpoint tampering.
 
-The `owned-tracing-smoke` workflow runs these tests against an immutable tracer
-checkout. The older `OWNED_TRACING_INTEGRATION.md` documents the separate bounded
+The root development dependency pins the tracer to an immutable GitHub source
+tarball, with the package lock recording its integrity. The `owned-tracing-smoke`
+workflow installs that package with `npm ci` and runs these tests through its
+public selected-execution and training exports. No sibling checkout is needed.
+The final roadmap integration pins tracer revision
+[`b238fb48e6dc2b3a97e8c1280d4b961c0593466c`](https://github.com/werg/tracing-js-self/commit/b238fb48e6dc2b3a97e8c1280d4b961c0593466c).
+Its public selected prefixes include the checked source and retained-state
+context used by both the teacher and executing model. Native orchestration,
+child completion, callback ownership and context-eviction verification use that
+same versioned runtime; installing the development dependency does not install
+or select a model checkpoint.
+
+The older `OWNED_TRACING_INTEGRATION.md` documents the separate bounded
 native evaluator reference; it is not the selected production path or a fallback.
 Protocol migration, corpus admission and learned evaluation use the shared
 cross-repository roadmap and its pinned v4 artifacts. No training or optimizer
 run is needed to execute these engineering fixtures.
+
+### Validation of the pinned package
+
+The final 2026-10-25 validation used a clean `npm ci` installation of that
+revision, then built Natlang against the installed package. The scoped runtime
+suite passed all 208 tests without skips. Node compilation, browser export
+types, dependency layering, the current source-review manifest, all 12 quick
+Python ratchets and the quick TypeScript check also passed.
+
+After `npm ci` and `npm run build:node`, reproduce the runtime gate from the
+repository root with:
+
+```sh
+node --test \
+  ts-host/test/selected-semantic-module.test.mjs \
+  ts-host/test/external-module.test.mjs \
+  ts-host/test/callable-types.test.mjs \
+  ts-host/test/iteration-measure.test.mjs \
+  ts-host/test/selected-semantic-real-driver.test.mjs \
+  ts-host/test/selected-captures.test.mjs \
+  ts-host/test/event-loop.test.mjs \
+  ts-host/test/scoped-fs.test.mjs \
+  ts-host/test/native-values.test.mjs \
+  ts-host/test/scope-compiler.test.mjs \
+  ts-host/test/native-files.test.mjs \
+  ts-host/test/runtime.test.mjs \
+  ts-host/test/selected-events.test.mjs \
+  ts-host/test/owned-tracing-wiring.test.mjs \
+  ts-host/test/interpreter.test.mjs
+```
+
+Run `scripts/check-main.sh --quick` for the source-review, Python and TypeScript
+checks, and the host workspace's `check:browser-types` and `check:layering`
+scripts for its export and dependency boundaries. The selected integration
+workflow uses the smaller five-file production integration gate above. These
+checks perform no optimizer updates; controlled selections retain their fixture
+origin and are not evidence of learned model success.

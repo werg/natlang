@@ -1,11 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {createNatlangSelectedEnvironment}
-  from '../../tracing-js-self/src/natlang-selected.js';
-import {encodeWitness,decodeWitness}
-  from '../../tracing-js-self/src/training/format.js';
-import {analyzeSemanticProgram} from '../../tracing-js-self/src/training/semantic-program.js';
-import {prepareHostRequest} from '../../tracing-js-self/src/host/operations.js';
+  from 'tracing-js-self/natlang-selected';
+import {encodeWitness,decodeWitness,analyzeSemanticProgram}
+  from 'tracing-js-self/training';
 import {createNatlangRuntime,installSelectedSemanticEnvironment,setDefaultEnvironmentFactory}
   from '../dist/runtime/node.js';
 import {setModuleRealm,moduleInstanceAsync}
@@ -20,6 +18,12 @@ import {recordingServices,selectedServiceSurface} from '../dist/native/effects.j
 import {isNatlangCallable} from '../dist/runtime/callable.js';
 import {Folder} from '../dist/native/scoped-fs.js';
 import {EvalFailure} from '../dist/native/evaluator.js';
+
+// Controlled fixtures form exact request payloads using the installed package's
+// own codec. This test-only helper is intentionally resolved from that immutable
+// dependency, never from a sibling checkout or ambient tracer installation.
+const {prepareHostRequest}=await import(new URL('./host/operations.js',
+  import.meta.resolve('tracing-js-self/natlang-selected')));
 
 const valid=prefix=>{
   const semantic=prefix.committed.filter(item=>item.kind==='semantic').length;

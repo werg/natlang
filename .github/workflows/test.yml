@@ -20,20 +20,13 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
-      - name: Checkout pinned selected tracer for real-driver tests
-        uses: actions/checkout@v4
-        with:
-          repository: werg/tracing-js-self
-          ref: 86b315ccaf5624f66ebcee4f8a8031988c2f01f2
-          path: tracing-js-self
-          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Install TypeScript dependencies
+      - name: Install TypeScript and pinned selected tracer dependencies
         # The workspace install: the staged npm packages resolve their dependencies from it too.
         run: npm ci
       - name: Install callable-folder application dependencies
