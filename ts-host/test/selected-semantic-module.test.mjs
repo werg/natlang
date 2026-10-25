@@ -8,6 +8,7 @@ import {setModuleRealm,moduleInstance,moduleInstanceAsync} from '../dist/runtime
 import {parseModule,PATH_ONLY} from '../dist/runtime/loader.js';
 import {itemValue} from '../dist/runtime/callable.js';
 import {TypeScriptEnvironment} from '../dist/environment.js';
+import {EvalFailure} from '../dist/native/evaluator.js';
 
 function restoreNative(){
   setDefaultEnvironmentFactory(options=>new TypeScriptEnvironment({
@@ -94,5 +95,93 @@ test('async module init rejects missing selected authority or async module metho
       'export const answer: number = 1;',{},PATH_ONLY);
     await assert.rejects(moduleInstanceAsync(record,{missing:record}),
       /Selected asynchronous module evaluation|async module execution/);
+  }finally{restoreNative();}
+});
+
+test('selected evaluator preserves the actual EvalFailure class, events, close and fork ownership',async()=>{
+  const receipts=[];let runtime;
+  try{
+    installSelectedSemanticEnvironment(mode=>({...controlledSelected(mode,receipts),
+      async executeAsync(){throw Object.assign(new Error('service rejected'),{
+        events:[{operation:'service.failed'}],debug:{logs:['before failure']}});}
+    }));
+    runtime=createNatlangRuntime();
+    await runtime.run(async()=>{
+      const env=currentFrame().task.environment();
+      await assert.rejects(env.executeAsync({code:'0',scope:{},path:'task',body:false}),error=>{
+        assert(error instanceof EvalFailure);assert.deepEqual(error.events,[{operation:'service.failed'}]);
+        assert.deepEqual(error.debug.logs,['before failure']);return true;
+      });
+      const child=env.fork();assert.equal(child.mode,'fresh');child.close();
+      env.close();env.close();
+      assert.throws(()=>env.fork(),/closed/);
+      await assert.rejects(env.executeAsync({code:'0',scope:{},path:'task',body:false}),/closed/);
+    });
+    assert.equal(receipts.filter(row=>row[0]==='closed').length,2);
+  }finally{runtime?.close();restoreNative();}
+});
+
+test('concurrent roots in a cyclic module graph initialize once without deadlock',async()=>{
+  const a=parseModule('/__natlang__/folder/a.ts','import {b} from "./b"; export const a = 1;',{},PATH_ONLY);
+  const b=parseModule('/__natlang__/folder/b.ts','import {a} from "./a"; export const b = 2;',{},PATH_ONLY);
+  const seen=[];
+  try{
+    installSelectedSemanticEnvironment(mode=>({...controlledSelected(mode,[]),
+      async evaluateModuleAsync(code,bindings){
+        const isA=bindings.__natlang_module.source.endsWith('/a.ts');
+        bindings.require(isA?'./b':'./a');
+        seen.push(isA?'a':'b');bindings.exports[isA?'a':'b']=isA?1:2;
+      }
+    }));
+    const [first,second]=await Promise.all([moduleInstanceAsync(a,{a,b}),moduleInstanceAsync(b,{a,b})]);
+    assert.equal(first.a,1);assert.equal(second.b,2);assert.deepEqual(seen,['b','a']);
+  }finally{restoreNative();}
+});
+
+test('isolated task module scopes close their resources and never share captured state',async()=>{
+  const record=parseModule('/__natlang__/folder/state.ts','export function next(): number {return 1;}',{},PATH_ONLY);
+  const receipts=[];let runtime,stale;
+  try{
+    installSelectedSemanticEnvironment(mode=>({...controlledSelected(mode,receipts),
+      async evaluateModuleAsync(_code,bindings){let n=0;bindings.exports.next=()=>++n;}
+    }));
+    runtime=createNatlangRuntime({isolateModules:true});
+    const first=await runtime.run(async()=>{
+      stale=await moduleInstanceAsync(record,{state:record});return [stale.next(),stale.next()];
+    });
+    const second=await runtime.run(async()=>{
+      const fresh=await moduleInstanceAsync(record,{state:record});return fresh.next();
+    });
+    assert.deepEqual(first,[1,2]);assert.equal(second,1);
+    assert.throws(()=>stale.next(),/authority changed or closed/);
+    assert.equal(receipts.filter(row=>row[0]==='closed').length,2);
+  }finally{runtime?.close();restoreNative();}
+});
+
+test('cutover invalidates handed-out callable references and pending initialization',async()=>{
+  const record=parseModule('/__natlang__/folder/waiting.ts','export function next(): number {return 1;}',{},PATH_ONLY);
+  let settle;const entered=new Promise(resolve=>{settle=resolve;});let finish;
+  try{
+    installSelectedSemanticEnvironment(mode=>({...controlledSelected(mode,[]),
+      async evaluateModuleAsync(_code,bindings){settle();await new Promise(resolve=>{finish=resolve;});bindings.exports.next=()=>1;}
+    }));
+    const callable=itemValue(record,{waiting:record});
+    const pending=moduleInstanceAsync(record,{waiting:record});await entered;
+    setModuleRealm(()=>controlledSelected('retained',[]));finish();
+    await assert.rejects(pending,/closed/);
+    assert.throws(()=>callable.next(),/authority changed or closed/);
+  }finally{restoreNative();}
+});
+
+test('failed initialization cannot repeat an uncertain native effect on cache retry',async()=>{
+  const record=parseModule('/__natlang__/folder/fail.ts','export const value = 1;',{},PATH_ONLY);
+  let writes=0;
+  try{
+    installSelectedSemanticEnvironment(mode=>({...controlledSelected(mode,[]),
+      async evaluateModuleAsync(){writes++;throw new Error('uncertain initialization write');}
+    }));
+    await assert.rejects(moduleInstanceAsync(record,{fail:record}),/uncertain initialization write/);
+    await assert.rejects(moduleInstanceAsync(record,{fail:record}),/uncertain initialization write/);
+    assert.equal(writes,1);
   }finally{restoreNative();}
 });

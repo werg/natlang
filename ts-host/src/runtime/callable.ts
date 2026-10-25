@@ -10,7 +10,8 @@ import { currentFrame, runInFrame, startedCalls, type Frame } from './context.js
 import { invokeDefinition, type CallableDefinition, type CaptureCell, type Instantiation } from './kernel.js';
 import { checkRepresentation, type Representation } from '../native/representation.js';
 import { parseNatlang, PATH_ONLY, type ItemRecord, type ModuleRecord, type NatlangRecord } from './loader.js';
-import { moduleInstance, moduleInstanceAsync, moduleRealmUsesAsync } from './modules.js';
+import { moduleInstance, moduleInstanceAsync, moduleRealmUsesAsync,
+  moduleRealmGeneration, ModuleRealmChangedError } from './modules.js';
 import { resolveFrame } from './runtime.js';
 import { iterateOn } from './iterate.js';
 import { traceFor } from '../native/graph.js';
@@ -184,7 +185,11 @@ export function itemValue(item: ItemRecord, level: Record<string, ItemRecord>, b
 
 /** A TypeScript module: callable if it has a default function export; exports and folder children as attributes. */
 function moduleValue(record: ModuleRecord, level: Record<string, ItemRecord>, bound?: Frame): unknown {
-  const instance = () => moduleRealmUsesAsync() ? moduleInstanceAsync(record, level) : moduleInstance(record, level);
+  const generation = moduleRealmGeneration();
+  const instance = () => {
+    if (generation !== moduleRealmGeneration()) throw new ModuleRealmChangedError();
+    return moduleRealmUsesAsync() ? moduleInstanceAsync(record, level) : moduleInstance(record, level);
+  };
   const enter = <T>(fn: () => T): T => bound ? runInFrame(bound, fn) : fn();
   const invoke = (exportName: string, args: unknown[]) => enter(() => {
     recordSkillHelperUse(record.source, exportName, bound ?? currentFrame());

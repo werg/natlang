@@ -34,4 +34,4 @@ jobs:
       - name: Install pinned selected tracer dependencies
         run: npm ci --prefix tracing-js-self
       - name: Verify owned and selected evaluator wiring, async modules and cache invalidation
-        run: node --test ts-host/test/owned-tracing-wiring.test.mjs ts-host/test/selected-semantic-module.test.mjs ts-host/test/selected-semantic-real-driver.test.mjs
+        run: node --test ts-host/test/owned-tracing-wiring.test.mjs ts-host/test/selected-semantic-module.test.mjs ts-host/test/selected-semantic-real-driver.test.mjs ts-host/test/selected-captures.test.mjs ts-host/test/selected-events.test.mjs

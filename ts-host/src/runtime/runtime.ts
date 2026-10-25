@@ -181,6 +181,13 @@ export class NatlangTask {
   readonly failedCalls = new Map<string, string>();
   readonly moduleInstances = new WeakMap<import('./loader.js').ModuleRecord, { exports: Record<string, unknown>; ready: boolean }>();
   private readonly pending = new Set<Promise<unknown>>();
+  private readonly cleanups = new Set<() => void>();
+  /** Register a task-owned native resource; released exactly once at task close. */
+  onClose(cleanup: () => void): () => void {
+    if (this.closed) { cleanup(); return () => {}; }
+    this.cleanups.add(cleanup);
+    return () => { this.cleanups.delete(cleanup); };
+  }
   private readonly pendingChildren = new Map<string, Set<Promise<unknown>>>();
   track<T>(call: Promise<T>, parentCallId?: string): Promise<T> {
     this.pending.add(call);
@@ -372,6 +379,12 @@ export class NatlangTask {
     // are released promptly instead of waiting for garbage collection.
     this.abort.abort(new Error('natlang task finished'));
     activeTasks.delete(this);
+    const failures: unknown[] = [];
+    for (const cleanup of this.cleanups) {
+      try { cleanup(); } catch (error) { failures.push(error); }
+    }
+    this.cleanups.clear();
+    if (failures.length) throw new AggregateError(failures, 'Natlang task resource cleanup failed');
   }
 }
 

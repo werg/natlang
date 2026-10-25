@@ -2,7 +2,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { Worker } from 'node:worker_threads';
 import { TypeScriptEnvironment } from '../environment.js';
-import type { EvalEnvironment, EnvironmentMode } from '../native/evaluator.js';
+import { EvalFailure, type EvalEnvironment, type EnvironmentMode } from '../native/evaluator.js';
 import type { NatlangRuntimeOptions } from './runtime.js';
 import { WorkspaceModules, findPackageWorkspace } from '../workspace-modules.js';
 import { currentFrame, setContextStore, type Frame } from './context.js';
@@ -13,6 +13,8 @@ import { learningModule } from '../neuralese/learning.js';
 import { neuraleseModule } from '../neuralese/combinators.js';
 import { setPythonWatchdog, WATCHDOG_SCRIPT } from '../native/folder-python.js';
 import { gepaModule } from '../gepa/index.js';
+import { selectedServiceSurface } from '../native/effects.js';
+import { selectedNativeIdentity, selectedNativeSurface, selectedNativeCleanup } from '../native/selected-surface.js';
 
 const storage = new AsyncLocalStorage<Frame | undefined>();
 setContextStore({ current: () => storage.getStore(), run: (frame, fn) => storage.run(frame, fn) });
@@ -76,19 +78,40 @@ export function installSelectedSemanticEnvironment(
       throw new TypeError('Selected semantic driver needs async entry and async module execution');
     if (driver.scopeCapabilities?.allowNetwork)
       throw new TypeError('Ambient network access is not a selected capability grant');
+    driver.configureNativeBindings?.({ adaptValue: value => selectedNativeSurface(selectedServiceSurface(value)),
+      resourceIdentity: selectedNativeIdentity, resourceCleanup: selectedNativeCleanup });
+    let closed = false;
+    const check = () => {
+      if (closed) throw new EvalFailure('Selected semantic environment is closed', []);
+    };
+    const evaluate = async <T>(work: () => Promise<T>): Promise<T> => {
+      check();
+      try {
+        const result = await work();
+        check();
+        return result;
+      } catch (error) {
+        if (error instanceof EvalFailure) throw error;
+        const failure = error as { message?: unknown; events?: unknown; debug?: unknown; stack?: unknown };
+        throw new EvalFailure(typeof failure?.message === 'string' ? failure.message : String(error),
+          Array.isArray(failure?.events) ? failure.events : [],
+          { ...(failure?.debug && typeof failure.debug === 'object' ? failure.debug : {}),
+            ...(typeof failure?.stack === 'string' ? { sourceStack: failure.stack } : {}) });
+      }
+    };
     return {
       authority: driver.authority,
       mode,
       scopeCapabilities: { allowModules: true, allowNetwork: false },
       execute() { throw new Error('Selected semantic execution is asynchronous; use executeAsync'); },
-      executeAsync(request) { return driver.executeAsync(request); },
+      executeAsync(request) { return evaluate(() => driver.executeAsync(request)); },
       evaluateModule() {
         throw new Error('Selected semantic module initialization is asynchronous; use moduleInstanceAsync');
       },
-      evaluateModuleAsync(code, bindings) { return driver.evaluateModuleAsync!(code, bindings); },
+      evaluateModuleAsync(code, bindings) { return evaluate(() => driver.evaluateModuleAsync!(code, bindings)); },
       declarationOf(name) { return driver.declarationOf?.(name); },
-      fork() { return instantiate('fresh', options); },
-      close() { driver.close(); },
+      fork() { check(); return instantiate('fresh', options); },
+      close() { if (!closed) { closed = true; driver.close(); } },
     };
   };
   setDefaultEnvironmentFactory(options => instantiate('fresh', options));

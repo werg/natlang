@@ -37,3 +37,5 @@ export { FolderIteration } from './folder-iteration.js';
 export type { FolderIterationResult } from './folder-iteration.js';
 
 export { Folder, FolderHandle, FileHandle, FolderSnapshot } from '../native/scoped-fs.js';
+export { SelectedEventQueue, foldSelectedEvents, mapSelectedEvents } from './selected-events.js';
+export type { SelectedEvent, EventReceipt, EventQueueSnapshot } from './selected-events.js';
