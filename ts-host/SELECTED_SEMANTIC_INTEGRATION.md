@@ -199,7 +199,7 @@ tarball, with the package lock recording its integrity. The `owned-tracing-smoke
 workflow installs that package with `npm ci` and runs these tests through its
 public selected-execution and training exports. No sibling checkout is needed.
 The final roadmap integration pins tracer revision
-[`b238fb48e6dc2b3a97e8c1280d4b961c0593466c`](https://github.com/werg/tracing-js-self/commit/b238fb48e6dc2b3a97e8c1280d4b961c0593466c).
+[`e8ff6785ac5ed836515317f2ca408d8ba9958391`](https://github.com/werg/tracing-js-self/commit/e8ff6785ac5ed836515317f2ca408d8ba9958391).
 Its public selected prefixes include the checked source and retained-state
 context used by both the teacher and executing model. Native orchestration,
 child completion, callback ownership and context-eviction verification use that
@@ -248,3 +248,7 @@ scripts for its export and dependency boundaries. The selected integration
 workflow uses the smaller five-file production integration gate above. These
 checks perform no optimizer updates; controlled selections retain their fixture
 origin and are not evidence of learned model success.
+
+## One canonical execution witness
+
+Natlang's selected environment consumes the source-grounded `semantic-execution/4` / `semantic-trace/4` selected-harness trace from its **pinned tracer commit**, never the old group-shaped diagnostic producer. The model does not choose between explicit, compact or outcome-only alternatives. Its returned work must satisfy the same selected-state checks and external effect authorization. Private interpreter journals and independent reference outcomes are not model inputs. A schema change must update the package pin and lockfile together and pass the actual selected async module/callback tests.
