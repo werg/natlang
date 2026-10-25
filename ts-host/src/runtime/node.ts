@@ -54,6 +54,47 @@ export function installOwnedTracingEnvironment(
   setModuleRealm(() => instantiate('retained'));
 }
 /**
+ * Opt in to an asynchronous, selected-semantic executor at both Natlang seams.
+ *
+ * Synchronous entry and module APIs deliberately throw: falling back to the
+ * process V8 evaluator would misrepresent semantic execution as model-owned.
+ * The driver must implement its actual selection, tool and observation loop;
+ * this installation only wires and checks its authority.
+ */
+export function installSelectedSemanticEnvironment(
+  factory: (mode: EnvironmentMode, options?: NatlangRuntimeOptions) => EvalEnvironment,
+): void {
+  if (typeof factory !== 'function') throw new TypeError('Selected semantic evaluator factory required');
+  const instantiate = (mode: EnvironmentMode, options?: NatlangRuntimeOptions): EvalEnvironment => {
+    const driver = factory(mode, options);
+    if (!driver || driver.mode !== mode ||
+        typeof driver.authority !== 'string' ||
+        !driver.authority.startsWith('selected-semantic/') ||
+        typeof driver.executeAsync !== 'function' ||
+        typeof driver.evaluateModuleAsync !== 'function' ||
+        typeof driver.fork !== 'function' || typeof driver.close !== 'function')
+      throw new TypeError('Selected semantic driver needs async entry and async module execution');
+    if (driver.scopeCapabilities?.allowNetwork)
+      throw new TypeError('Ambient network access is not a selected capability grant');
+    return {
+      authority: driver.authority,
+      mode,
+      scopeCapabilities: { allowModules: true, allowNetwork: false },
+      execute() { throw new Error('Selected semantic execution is asynchronous; use executeAsync'); },
+      executeAsync(request) { return driver.executeAsync(request); },
+      evaluateModule() {
+        throw new Error('Selected semantic module initialization is asynchronous; use moduleInstanceAsync');
+      },
+      evaluateModuleAsync(code, bindings) { return driver.evaluateModuleAsync!(code, bindings); },
+      declarationOf(name) { return driver.declarationOf?.(name); },
+      fork() { return instantiate('fresh', options); },
+      close() { driver.close(); },
+    };
+  };
+  setDefaultEnvironmentFactory(options => instantiate('fresh', options));
+  setModuleRealm(() => instantiate('retained'));
+}
+/**
  * Compatibility-first integration. Unlike installOwnedTracingEnvironment this
  * deliberately permits the ordinary Node evaluator. A native selection has
  * NO owned instruction trace and MUST NOT enter replay-verified training data.
