@@ -36,7 +36,7 @@ function controlledSelected(mode,receipts){
       } else if(code.includes('child') || code.includes('value')) {
         bindings.module.exports={value:12};
       } else {
-        bindings.module.exports={answer:()=>42};
+        bindings.module.exports={default:()=>42,answer:()=>42};
       }
     },
     fork(){return controlledSelected('fresh',receipts);},
