@@ -1,0 +1,612 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>natlang, explained</title>
+<meta name="description" content="An interactive explainer of natlang: TypeScript with natural-language functions. Typed prose, inference with typed holes, closures by mention, structural termination, refinement predicates, a tracing JIT for English, and Neuralese.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght,SOFT,WONK@0,9..144,300..700,0..100,0..1;1,9..144,300..700,0..100,0..1&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231d1a15'/%3E%3Ctext x='6' y='23' font-family='Georgia' font-style='italic' font-size='20' fill='%23f3b24a'%3En%3C/text%3E%3Ctext x='18' y='23' font-family='monospace' font-size='16' fill='%235fd4e8'%3E:%3C/text%3E%3C/svg%3E">
+<script>
+  try { const t = localStorage.getItem('natlang-theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+</script>
+</head>
+<body>
+
+<header class="bar">
+  <a class="brand" href="#top"><b>nat</b>lang<i>:</i></a>
+  <nav class="toc" aria-label="Chapters">
+    <a href="#contract">01 contract</a>
+    <a href="#inference">02 inference</a>
+    <a href="#captures">03 closures</a>
+    <a href="#inside">04 inside a call</a>
+    <a href="#termination">05 termination</a>
+    <a href="#judgment">06 judgment</a>
+    <a href="#jit">07 jit</a>
+    <a href="#neuralese">08 neuralese</a>
+    <a href="#policy">09 policy</a>
+  </nav>
+  <span class="spacer2"></span>
+  <button class="theme" id="theme" type="button" aria-label="Toggle light and dark theme">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M4.6 4.6l1.6 1.6M17.8 17.8l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6"/></svg>
+  </button>
+</header>
+<div class="progress" id="progress"></div>
+
+<main id="top">
+
+<!-- ================================================================ HERO -->
+<section class="hero wrap">
+  <div class="grid2">
+    <div>
+      <div class="eyebrow">a typed programming language · <span>spec 0.5-draft</span> · research</div>
+      <h1>Functions whose bodies are <em>paragraphs</em>.</h1>
+      <p class="lede"><strong>natlang is TypeScript with natural-language functions.</strong> The signature is ordinary, checked TypeScript. The body is instructions. A model, possibly a small local one, executes them inside a persistent TypeScript scope, and whatever it hands back has to type-check on the way out.</p>
+      <ul class="legend" aria-label="Colour key">
+        <li><span class="sw p"></span>prose: instructions a model executes</li>
+        <li><span class="sw c"></span>crisp: types and ordinary code</li>
+        <li><span class="sw s"></span>soft: values only a model reads</li>
+      </ul>
+    </div>
+
+    <div class="panel swap reveal" id="swap">
+      <div class="panel-h"><span class="dots"><i></i><i></i><i></i></span><span class="title" id="swap-file">is_urgent.nl</span><span class="right chips" role="group" aria-label="Implementation">
+        <button class="chip" data-mode="crisp" type="button">crisp</button>
+        <button class="chip p on" data-mode="nl" type="button">nl</button>
+        <button class="chip s" data-mode="shadow" type="button">shadow</button>
+      </span></div>
+      <div class="sig"><span>isUrgent(ticket: <span class="c">string</span>): <span class="c">Promise&lt;boolean&gt;</span></span><span class="lock">signature fixed</span></div>
+      <div class="body" id="swap-body"></div>
+      <div class="panel-b">
+        <span class="label">call it on a ticket <span class="sim" style="margin-left:6px">crisp runs for real · nl answers illustrative</span></span>
+        <div class="tickets" id="swap-tickets"></div>
+        <p class="note" id="swap-note" style="margin:12px 0 0"></p>
+      </div>
+    </div>
+  </div>
+
+  <div class="honest reveal">
+    <b>What this page is.</b> An explainer, not a brochure. natlang is a research language and its specification is a 0.5 draft, with a list of known discrepancies in it. Every widget below is a toy re-implementation of one rule from <a href="https://github.com/werg/natlang/blob/main/spec/SPEC.md">the spec</a>, running in your browser. No model is called. Where a widget shows what a model answered, the answer is illustrative and the widget says so. The running example throughout is the repository's own <a href="https://github.com/werg/natlang/tree/main/examples/triage">support-ticket triage</a>.
+  </div>
+</section>
+
+<!-- ================================================================ 01 CONTRACT -->
+<section class="chapter wrap" id="contract">
+  <div class="chead">
+    <div class="num">01</div>
+    <div class="kicker">the contract</div>
+    <h2>A signature is a promise you can <em>check</em>.</h2>
+  </div>
+
+  <div class="grid2">
+    <div class="prose">
+      <div class="rule"><div class="frac">
+        <div class="pre"><span><i>Γ</i> ⊢ <span class="ty t">(x₁: τ₁, …) ⇒ τ</span> &nbsp;<small>decided at compile time</small></span><span><span class="kw">body</span> ∈ Prose</span></div>
+        <div class="post"><i>Γ</i> ⊢ <span class="t">nl`<span class="kw">body</span>`</span> : <span class="ty t">(x₁: τ₁, …) ⇒ Promise&lt;τ&gt;</span></div>
+      </div><div class="name">NL-FUN</div></div>
+
+      <p>In most "LLM inside your code" setups a prompt is a string, its answer is a string, and everything in between is hope plus a JSON parser. natlang changes the order of events. <b>The compiler fixes the type of every natural-language call before the model runs</b>, shows that type to the model as part of the call's opening, and checks what comes back after each eval and again at completion.</p>
+      <p>A wrong-shaped value never reaches your code. It goes back to the model as an error message, and the model repairs it. A call that cannot succeed rejects with a <code>NatlangCallError</code> carrying its outcome, detail and trace, which you catch like any other rejection.</p>
+      <p>There are two source forms. Inline, a tagged template in TypeScript:</p>
+      <pre class="code" data-hl>const priority: 'urgent' | 'normal' = await nl`Decide whether ticket is urgent.`(ticket);</pre>
+      <p style="margin-top:16px">Named, a <code>.nl</code> file with YAML frontmatter, imported as an ordinary module. This is the triage example's <code>classify.nl</code>, which the build gives a generated <code>.d.ts</code>:</p>
+      <pre class="code" data-hl="nl">---
+description: Label one ticket using the rubric.
+args:
+  ticket: string
+  rubric: string
+returns: Label
+---
+Pick the label from rubric that fits ticket. If no rule in the rubric covers
+the ticket, report an error saying what is missing.</pre>
+    </div>
+
+    <div class="panel reveal" id="dial">
+      <div class="panel-h"><span class="dots"><i></i><i></i><i></i></span><span class="title">the type dial</span><span class="right sim">schematic</span></div>
+      <div class="panel-b">
+        <span class="label">same instruction, different declared result</span>
+        <div class="chips" id="dial-types"></div>
+      </div>
+      <div class="panel-b">
+        <span class="label">your code</span>
+        <pre class="code" id="dial-code"></pre>
+        <span class="label" style="margin-top:16px">what the model is shown (the call's opening)</span>
+        <pre class="code" id="dial-open"></pre>
+      </div>
+      <div class="panel-b">
+        <div class="row between"><span class="label" style="margin:0">what comes back</span><button class="btn" id="dial-bad" type="button">answer with the wrong shape</button></div>
+        <div id="dial-out" style="margin-top:12px"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================================================================ 02 INFERENCE -->
+<section class="chapter wrap" id="inference">
+  <div class="chead">
+    <div class="num">02</div>
+    <div class="kicker">types before tokens</div>
+    <h2>Inference with <em>typed holes</em>.</h2>
+  </div>
+
+  <div class="grid2">
+    <div class="prose">
+      <div class="rule"><div class="frac">
+        <div class="pre"><span><i>Γ</i>, r : <span class="ty t">?ρ</span> ⊢ uses(r) ⇝ <i>C</i></span><span><span class="ty t">ρ</span> = the most specific type satisfying <i>C</i></span></div>
+        <div class="post"><i>Γ</i> ⊢ <span class="t">nl`…`(ticket)</span> : <span class="ty t">Promise&lt;ρ&gt;</span></div>
+      </div><div class="name">HOLE</div></div>
+
+      <p>You rarely write the type yourself. The compiler collects evidence in a fixed order: an explicit <code>nl&lt;F&gt;</code>, the contextual type of the expression, an immediate call's arguments and result context, and finally <b>later uses of a local</b>.</p>
+      <p>That last step borrows a trick from local type inference in Rust and ML. Each tag whose result is still open gets a fresh placeholder type <code>?ρ</code>, and the compiler type-checks a second copy of the program. The placeholder flows through ordinary TypeScript: locals, arrays, <code>Promise.all</code>, <code>for…of</code>. Every place it lands adds a requirement.</p>
+      <p><b>Strong</b> requirements come from what TypeScript expects there (an assignment, an argument, a <code>push</code>) or what the syntax implies (a condition needs <code>boolean</code>, arithmetic needs <code>number</code>, <code>.toUpperCase()</code> names <code>string</code>). <b>Weak</b> ones apply only when nothing strong exists: interpolation into text suggests <code>string</code>, and comparison with a literal suggests its base type. The most specific requirement that satisfies all the others wins. Disagreement is a compile error that cites the statements responsible.</p>
+      <div class="aside c">Why not infer the type from the model's first answer? Because then the answer would bless itself. The type has to exist before generation so that it can guide generation.<small>See <a href="https://github.com/werg/natlang/blob/main/docs/inline-natlang-lambdas.md">inline natlang lambdas</a>, §Inference rules; implementation in <code>ts-host/src/compiler/holes.ts</code>.</small></div>
+    </div>
+
+    <div class="panel reveal" id="infer">
+      <div class="panel-h"><span class="dots"><i></i><i></i><i></i></span><span class="title">inference lab</span><span class="right sim">toy solver, same rules</span></div>
+      <div class="panel-b">
+        <pre class="code" data-hl>const r = await nl`Judge how bad ticket is.`(ticket);</pre>
+        <span class="label" style="margin-top:14px">later uses of r · toggle them</span>
+        <div class="uses" id="infer-uses"></div>
+      </div>
+      <div class="panel-b">
+        <svg class="lattice" id="infer-lattice" viewBox="0 0 520 210" role="img" aria-label="Subtype lattice of candidate result types"></svg>
+        <div id="infer-out" style="margin-top:10px"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================================================================ 03 CAPTURES -->
+<section class="chapter wrap" id="captures">
+  <div class="chead">
+    <div class="num">03</div>
+    <div class="kicker">lexical scope, read aloud</div>
+    <h2>Closures, <em>in English</em>.</h2>
+  </div>
+
+  <div class="grid2">
+    <div class="prose">
+      <div class="rule"><div class="frac">
+        <div class="pre"><span>x ∈ dom(<i>Γ</i>)</span><span>x ∈ words(<span class="kw">body</span>)</span><span>x ∉ params</span></div>
+        <div class="post">x ∈ captures(<span class="t">nl`<span class="kw">body</span>`</span>)</div>
+      </div><div class="name">MENTION</div></div>
+
+      <p>An inline <code>nl</code> closes over its lexical scope like an arrow function does. But how does it know which variables it uses when its body is prose? <b>By mention.</b> The compiler tokenizes the instruction text against the names in scope, using case-sensitive JavaScript identifier boundaries. Write <code>policy</code> and you have captured <code>policy</code>. Write "Policy" at the start of a sentence and you have written a word.</p>
+      <p>Explicit parameters shadow captures, as they do in any function. Data captures are read <b>live at each call</b>, not frozen at creation. A mentioned <code>let</code> may be reassigned by the model. The write-back happens after a successful eval and is version-checked: if a sibling call changed the variable in the meantime, the eval fails with <code>capture-conflict</code> and the model retries against the new value. Reassigning a captured <code>const</code> is a compile error. Bindings of function type are always captured by value, which turns out to matter for termination (chapter 5).</p>
+      <p>The occasional false match is an accepted trade-off. The capture list is visible in the child's opening and in the trace.</p>
+    </div>
+
+    <div class="panel reveal" id="cap">
+      <div class="panel-h"><span class="dots"><i></i><i></i><i></i></span><span class="title">capture by mention</span><span class="right sim">live tokenizer</span></div>
+      <div class="panel-b">
+        <span class="label">in scope</span>
+        <table class="scope" id="cap-scope"></table>
+      </div>
+      <div class="panel-b">
+        <span class="label">the instruction · edit it</span>
+        <textarea class="proseinput" id="cap-text" spellcheck="false" aria-label="Instruction text"></textarea>
+        <div class="chips" style="margin-top:8px" id="cap-try"></div>
+        <span class="label" style="margin-top:16px">how the compiler reads it</span>
+        <div class="reading" id="cap-reading"></div>
+        <div id="cap-out" style="margin-top:10px"></div>
+      </div>
+      <div class="panel-b">
+        <span class="label">late binding · threshold is a <code>let</code></span>
+        <div class="row"><span class="mono" style="min-width:150px">threshold = <b id="cap-thr-v">0.70</b></span><input type="range" id="cap-thr" min="0.5" max="0.95" step="0.05" value="0.7" style="flex:1" aria-label="threshold"></div>
+        <p class="note" id="cap-late" style="margin:8px 0 0"></p>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid2 even" style="margin-top:56px">
+    <div class="prose">
+      <h3>Data is never instructions: <code>Untrusted&lt;T&gt;</code></h3>
+      <p>The text of a natlang function belongs to its author. A <code>.nl</code> body is fixed text that refers to arguments by name, so a value is never spliced into it. The one splice point is <code>${…}</code> in an inline template. There the compiler reports <code>untrusted-instruction</code> when the interpolated expression is <code>Untrusted&lt;T&gt;</code>, or text derived from one. The fix it suggests is to pass the value as an argument.</p>
+      <p>Arguments are rendered as data. A marked string shows up as a fenced block whose info line names its source. The fence is three backticks, or one more than the longest run of backticks in the text, so the text can never close its own fence. That last detail is a small one, and a good one.</p>
+    </div>
+    <div class="panel reveal" id="fence">
+      <div class="panel-h"><span class="dots"><i></i><i></i><i></i></span><span class="title">untrusted data, rendered</span><span class="right sim">same fence rule</span></div>
+      <div class="panel-b">
+        <span class="label">an email body from <code>mail.fetch</code> · type anything, backticks included</span>
+        <textarea id="fence-in" spellcheck="false" aria-label="Untrusted text"></textarea>
+        <span class="label" style="margin-top:14px">what the model sees</span>
+        <div class="fence" id="fence-out"></div>
+        <div class="chips" style="margin-top:12px">
+          <button class="chip" id="fence-interp" type="button">nl`Summarize ${email}.`()</button>
+          <button class="chip on" id="fence-arg" type="button">nl`Summarize email.`(email)</button>
+        </div>
+        <div id="fence-msg" style="margin-top:10px"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================================================================ 04 INSIDE -->
+<section class="chapter wrap" id="inside">
+  <div class="chead">
+    <div class="num">04</div>
+    <div class="kicker">what await actually does</div>
+    <h2>The model is <em>the interpreter</em>.</h2>
+  </div>
+
+  <div class="grid2" style="margin-bottom:34px">
+    <div class="prose">
+      <div class="rule"><div class="frac">
+        <div class="pre"><span>⟨σ, e⟩ ⇓ ok σ′ ⟹ commit σ′</span><span>⟨σ, e⟩ ⇓ error ⟹ σ unchanged</span></div>
+        <div class="post">an <span class="t">eval</span> commits all of its changes, or none</div>
+      </div><div class="name">EVAL</div></div>
+      <p>When you await a natural-language function, the runtime opens a conversation with a model and offers it a few tools. The central one is <code>eval</code>, which runs TypeScript in a persistent scope. That scope holds the parameters (const and deeply frozen), the captures, the callable items of the function's context, and the host's services. Top-level declarations persist across evals.</p>
+      <p>The model reads, computes, delegates and finishes with <code>return_result(success | blocked | failed)</code>. <code>blocked</code> means required information is absent, <code>failed</code> means the instructions asked for something contradictory, and either one comes with a reason sentence instead of a value. Instructions don't all need code: an answer that takes only reading and judgment is given directly.</p>
+    </div>
+    <div class="prose">
+      <p>The details are where it gets good:</p>
+      <p><b>Cut-offs are honest.</b> A value too long to show is shortened with a note that is deliberately not TypeScript: <code>&lt;&lt;cut off: 37 of 40 items not shown; tickets holds all of it&gt;&gt;</code>. A cut-off literal copied into an eval fails to compile rather than running on part of the data.</p>
+      <p><b>Errors teach.</b> natlang never spells out a wrong form in a prompt, because that primes the model to produce it. The runtime handles the wrong form and teaches the fix in a one-sentence error.</p>
+      <p><b>Long conversations compact.</b> Past three quarters of the context budget, the model must call <code>compact_history(note)</code>. Older outputs are then replaced by pointers into a searchable <code>transcript</code>.</p>
+    </div>
+  </div>
+
+  <div class="panel reveal" id="theater">
+    <div class="panel-h"><span class="dots"><i></i><i></i><i></i></span><span class="title">rank.nl · rank(tickets: Ticket[]): Promise&lt;string[]&gt;</span><span class="right sim">a scripted trace</span></div>
+    <div class="theater">
+      <div class="log" id="th-log" aria-live="polite"></div>
+      <div class="side">
+        <div><span class="label">persistent scope</span><div class="vars" id="th-vars"></div></div>
+        <div><span class="label">child calls started by evals</span><div class="calls" id="th-calls"><span style="background:none;border:0;color:var(--muted);padding:0">none yet</span></div></div>
+        <div><span class="label">staged result</span><div class="vars" id="th-result"><div><span class="k">nothing staged</span></div></div></div>
+      </div>
+    </div>
+    <div class="stepper">
+      <button class="btn" id="th-prev" type="button">← back</button>
+      <button class="btn primary" id="th-next" type="button">next step →</button>
+      <button class="btn" id="th-play" type="button">play</button>
+      <span class="count" id="th-count"></span>
+    </div>
+  </div>
+</section>
+
+<!-- ================================================================ 05 TERMINATION -->
+<section class="chapter wrap" id="termination">
+  <div class="chead">
+    <div class="num">05</div>
+    <div class="kicker">no budgets, structurally</div>
+    <h2>Termination without a <em>gas meter</em>.</h2>
+  </div>
+
+  <div class="grid2">
+    <div class="prose">
+      <p>Agent frameworks usually stop runaway loops with budgets: max turns, max tokens, a timeout. natlang's house rule is <b>no premature limits</b>. Termination is structural, and it comes from three mechanisms that work together.</p>
+      <p><b>1. Contexts form a DAG.</b> Every natural-language function is curried over its <i>context</i>, an immutable, content-addressed folder value: <code>(context) =&gt; (...args) =&gt; Promise&lt;R&gt;</code>. <code>foo.nl</code> can call exactly the items in its companion folder <code>foo/</code>, and each of those items is bound to its own folder. Every call therefore steps <i>down</i> the context graph. Since a context's ID is a hash of its contents, no context can contain itself. Natural-language functions cannot recurse, by construction.</p>
+      <div class="rule"><div class="frac">
+        <div class="pre"><span>f ∈ items(<i>ctx</i>)</span><span>id(<i>ctx</i>) = H(contents(<i>ctx</i>))</span></div>
+        <div class="post">calls step <i>ctx</i> → <i>ctx</i>(f) &nbsp;⟹&nbsp; the call graph is acyclic</div>
+      </div><div class="name">DESCEND</div></div>
+    </div>
+    <div class="panel reveal" id="dag">
+      <div class="panel-h"><span class="dots"><i></i><i></i><i></i></span><span class="title">review.nl and its callable folder</span><span class="right sim">real FNV hashes</span></div>
+      <div class="panel-b">
+        <svg class="dag" id="dag-svg" viewBox="0 0 540 330" role="img" aria-label="Context graph of review.nl"></svg>
+        <div class="row" style="margin-top:6px">
+          <button class="btn primary" id="dag-call" type="button">await review(observations, criterion)</button>
+          <button class="btn" id="dag-cycle" type="button">let assess call review</button>
+        </div>
+        <div class="eqs" id="dag-eqs" style="margin-top:14px"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="prose narrow" style="margin-top:56px">
+    <p><b>2. Code iterates finitely.</b> Callable-folder TypeScript and eval code may use <code>for…of</code>, counted <code>for</code> loops and array methods. <code>while</code>, <code>do</code>, open <code>for(;;)</code> and generators are rejected. A TypeScript function that is already running in its own call chain may run again only on a <i>smaller argument</i>: a part of its input, a shorter array or string, or a smaller non-negative integer. The same argument must keep getting smaller along the chain. This is the structural recursion of a proof assistant's termination checker, enforced at run time. Have a go:</p>
+  </div>
+  <div class="row between" style="margin:22px 0 12px"><span class="label" style="margin:0">will it terminate? · eight small programs</span><span class="score" id="quiz-score">0 / 8 answered</span></div>
+  <div class="quiz" id="quiz"></div>
+
+  <div class="grid2" style="margin-top:64px">
+    <div class="prose">
+      <p><b>3. Open-ended work goes through <code>iterateOn</code>.</b> It takes a step function and an initial state, records every step, and returns the first state for which the stopping predicate holds. With a TypeScript predicate you must also give either a <b>measure</b>, a non-negative integer that strictly decreases at every step that continues (a loop variant, as in Hoare logic or Dafny), or a hard step limit. Otherwise the run fails with <code>iteration-unbounded</code>.</p>
+      <p>With a <b>natural-language predicate</b> no bound is required. The predicate runs under a system prompt saying it is a loop's stopping condition, showing the iteration count and whether recent states changed, and asking it to accept a reasonably met criterion rather than demand perfection. A <b>progress judge</b> also reviews the whole trajectory, more often as a run exceeds the per-site step-count statistics (for example, beyond mean+1σ every fourth step, then every second, then every step). A review never stops a run on its own. Only a <code>divergent</code> verdict ends it.</p>
+      <pre class="code" data-hl>// examples/triage/triage.ts, abridged
+return await iterateOn(shorten, draft)
+  .withLimit({ maxSteps: 3 })
+  .until(text =&gt; words(text) &lt;= MAX_SUMMARY_WORDS);
+// IterationLimitError carries lastState: keep the shortest honest summary.</pre>
+      <div class="aside" style="margin-top:22px">The deliberate exceptions are model-controlled: a loop with a natural-language predicate, and the agent loop of a call, which has no turn or time limit unless the caller sets one.<small>The rules address code written in good faith. The spec says plainly that the Node backend is not a sandbox.</small></div>
+    </div>
+    <div class="panel reveal" id="iter">
+      <div class="panel-h"><span class="dots"><i></i><i></i><i></i></span><span class="title">iterateOn(shorten, draft)</span><span class="right sim">simulated steps</span></div>
+      <div class="panel-b">
+        <span class="label">stopping rule</span>
+        <div class="chips" id="iter-mode"></div>
+        <div class="row" style="margin-top:12px">
+          <button class="toggle" id="iter-stuck" type="button"><span class="sw2"></span><span>stubborn step (sometimes returns a draft that isn't shorter)</span></button>
+        </div>
+        <pre class="code" id="iter-code" style="margin-top:10px"></pre>
+      </div>
+      <div class="panel-b">
+        <svg class="chart" id="iter-chart" viewBox="0 0 520 200" role="img" aria-label="Word count per step"></svg>
+        <div class="row" style="margin:10px 0 12px">
+          <button class="btn primary" id="iter-step" type="button">step</button>
+          <button class="btn" id="iter-run" type="button">run to the end</button>
+          <button class="btn" id="iter-reset" type="button">reset</button>
+        </div>
+        <div class="events" id="iter-events"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================================================================ 06 JUDGMENT -->
+<section class="chapter wrap" id="judgment">
+  <div class="chead">
+    <div class="num">06</div>
+    <div class="kicker">probabilities and predicates</div>
+    <h2>Judgment, <em>typed</em>.</h2>
+  </div>
+
+  <div class="grid2">
+    <div class="prose">
+      <h3 style="margin-top:0">Decisions are distributions</h3>
+      <p>A function whose result type is finite (a union of literals, <code>boolean</code>, <code>null</code>) may declare <code>readout: decision</code>. The call then offers no tools at all. The runtime asks the model to score <i>every allowed value</i> as the whole reply to the call's opening and returns the most probable one.</p>
+      <p>The normalised distribution is kept in the trace, so a decision is a <b>probability vector</b>. You can grade it with proper scoring rules such as the Brier score, log loss or ranked probability score, and on a Neuralese server you can differentiate it. Host code reads it with <code>runtime.decide(fn, ...args)</code>.</p>
+      <pre class="code" data-hl>const d = await runtime.decide(classify, ticket, rubric);
+// { value, probabilities: [{ value, probability }],
+//   confidence, scored }</pre>
+      <p style="margin-top:16px">Drag the bars to play the model, then pick the true label to grade it. Notice how log loss punishes confident mistakes far harder than Brier does.</p>
+    </div>
+    <div class="panel reveal" id="dec">
+      <div class="panel-h"><span class="dots"><i></i><i></i><i></i></span><span class="title">classify · readout: decision</span><span class="right sim">drag the bars</span></div>
+      <div class="panel-b">
+        <span class="label">ticket</span>
+        <div class="chips" id="dec-tickets"></div>
+        <p class="note" id="dec-ticket" style="margin:10px 0 0;font-size:15px;color:var(--ink-2)"></p>
+      </div>
+      <div class="panel-b">
+        <svg class="bars" id="dec-bars" viewBox="0 0 420 210" role="img" aria-label="Probability per label"></svg>
+        <div class="row" style="margin:6px 0 12px"><span class="label" style="margin:0">true label</span><span class="chips" id="dec-truth"></span></div>
+        <div class="metrics" id="dec-metrics"></div>
+        <pre class="code" id="dec-json" style="margin-top:12px"></pre>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid2" style="margin-top:64px">
+    <div class="prose">
+      <h3 style="margin-top:0">Predicates as types: <code>Is&lt;T, P&gt;</code></h3>
+      <div class="rule"><div class="frac">
+        <div class="pre"><span><i>Γ</i> ⊢ v : <span class="ty t">T</span></span><span>judge(v, <span class="kw">P</span>) ≥ θ</span></div>
+        <div class="post"><i>Γ</i> ⊢ v : <span class="ty t">Is&lt;T, <span class="kw">P</span>&gt;</span></div>
+      </div><div class="name">REFINE</div></div>
+      <p>Liquid Haskell refines types with logical predicates. natlang refines them with natural-language ones: <code>type Reply = Is&lt;string, "a reply to the customer that is polite and does not blame them"&gt;</code>. Structure is unchanged, so a refined value is a <code>T</code> everywhere. The predicate is an <b>obligation</b>, checked where a value enters a refined slot: a return value, an argument, a declared service result, or an explicit <code>refine(value, predicate)</code>. <code>assume</code> skips the check and records the assumption in the trace.</p>
+      <p>The check is a single decision readout. It reads P(true), passes at the threshold, and inside an optional uncertainty band it applies a policy: <code>accept</code>, <code>reject</code> (<code>refinement-undecided</code>), or <code>escalate</code> to a stronger model. A failure on a return goes back to the executing model, which repairs it within a repair budget (3 by default). Verdicts are cached by the SHA-256 of the canonical value, the normalised predicate and the judge, so no value is judged twice.</p>
+      <p>Subtyping falls out cleanly. <code>Is&lt;B, P&gt;</code> fits <code>T</code> whenever <code>B</code> fits <code>T</code>. <code>T</code> fits <code>Is&lt;B, P&gt;</code> too, with the check becoming that site's obligation. Two refinements with the same normalised predicate fit each other without a check.</p>
+    </div>
+    <div class="panel reveal" id="judge">
+      <div class="panel-h"><span class="dots"><i></i><i></i><i></i></span><span class="title">the refinement judge</span><span class="right sim">P(true) values illustrative</span></div>
+      <div class="panel-b">
+        <svg class="axis01" id="judge-axis" viewBox="0 0 460 92" role="img" aria-label="Judge probabilities against threshold and band"></svg>
+        <div class="row" style="margin-top:8px">
+          <span class="mono" style="min-width:120px">θ = <b id="judge-thr-v">0.50</b></span>
+          <input type="range" id="judge-thr" min="0.05" max="0.95" step="0.01" value="0.5" style="flex:1" aria-label="threshold">
+        </div>
+        <div class="row" style="margin-top:6px">
+          <button class="toggle" id="judge-band" type="button"><span class="sw2"></span><span>uncertainty band [0.35, 0.65]</span></button>
+          <span class="spacer"></span>
+          <span class="chips" id="judge-policy"></span>
+        </div>
+      </div>
+      <div class="panel-b">
+        <div class="replies" id="judge-replies"></div>
+        <p class="note" id="judge-cache" style="margin:12px 0 0;overflow-wrap:anywhere"></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================================================================ 07 JIT -->
+<section class="chapter wrap" id="jit">
+  <div class="chead">
+    <div class="num">07</div>
+    <div class="kicker">call records → compilations</div>
+    <h2>A tracing JIT <em>for English</em>.</h2>
+  </div>
+
+  <div class="grid2" style="margin-bottom:34px">
+    <div class="prose">
+      <div class="rule"><div class="frac">
+        <div class="pre"><span>guard<sub>i</sub>(args)</span><span>∀ j &lt; i. ¬guard<sub>j</sub>(args)</span><span>case<sub>i</sub> active</span></div>
+        <div class="post">call served by body<sub>i</sub>(args) &nbsp;·&nbsp; otherwise the agent runs</div>
+      </div><div class="name">CASE</div></div>
+      <p>The runtime records every call: the definition and its revision, exact inputs and captures, the result, each service call, the eval programs that ran, and the cost. In practice many natural-language functions run the same code for the same <i>kind</i> of input. A tracing JIT notices hot paths, and the specializer does the same for call records. It mines the call store for those patterns and writes a <b>compilation</b>: an ordered list of crisp cases, each one a guard over the arguments and a TypeScript body with the function's signature.</p>
+      <p>The first active case whose guard admits the arguments serves the call, and no model runs. A case that throws or returns the wrong type doesn't fail the call: the agent takes over, told which effects the case already performed. The program's source never changes, and a compilation only applies while the definition's context interface matches the one it was compiled against.</p>
+    </div>
+    <div class="prose">
+      <p>Cases are promoted and demoted by <b>measured comparison with the agent</b>: shadow runs, audits, and a minimum number of comparisons on <i>live</i> calls (three by default). The design notes record why live ones are required. One case passed 496 replays of recorded calls and then failed every live call, because replays share the context the case was written from.</p>
+      <div class="aside c">Then the nice twist: the specializer is itself a natlang program. <code>worthLooking.nl</code> decides whether a function is worth a look, <code>chooseCondition.nl</code> picks the guard a case should test, and <code>promote.nl</code> decides whether a case moves up, stays or moves down. Crisp code measures each condition exactly.<small>Policy in prose, mechanism in code; see chapter 9.</small></div>
+    </div>
+  </div>
+
+  <div class="panel reveal" id="jitp">
+    <div class="panel-h"><span class="dots"><i></i><i></i><i></i></span><span class="title">classify(ticket, rubric) · call store</span><span class="right sim">simulation · token counts illustrative</span></div>
+    <div class="panel-b">
+      <div class="row">
+        <button class="btn primary" id="jit-one" type="button">send a call</button>
+        <button class="btn" id="jit-ten" type="button">send 10</button>
+        <button class="btn" id="jit-mine" type="button" disabled>mine the call store</button>
+        <button class="btn" id="jit-reset" type="button">reset</button>
+        <span class="spacer"></span>
+      </div>
+      <div class="meter" id="jit-meter" style="margin-top:14px"></div>
+    </div>
+    <div class="jit">
+      <div><span class="label">recent calls</span><div class="calllog" id="jit-log"></div></div>
+      <div><span class="label">compilation of classify @ rev 3</span><div class="cases" id="jit-cases"></div><p class="note" id="jit-note" style="margin:12px 0 0"></p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================================================================ 08 NEURALESE -->
+<section class="chapter wrap" id="neuralese">
+  <div class="chead">
+    <div class="num">08</div>
+    <div class="kicker">research extension · 0.5-draft</div>
+    <h2>Neuralese: values only <em class="s" style="color:var(--soft)">models</em> can read.</h2>
+  </div>
+
+  <div class="grid2">
+    <div class="prose">
+      <div class="rule"><div class="frac">
+        <div class="pre"><span>v : <span class="sf t">Neuralese&lt;T&gt;</span></span><span><i>Γ</i> ⊬ v.f, v + 1, if (v)</span></div>
+        <div class="post"><span class="t">read(v)</span> : <span class="ty t">Promise&lt;T&gt;</span> &nbsp;is the only way out</div>
+      </div><div class="name">OPAQUE</div></div>
+      <p>When one model hands a result to another, why round-trip through text? <code>Neuralese&lt;T, D&gt;</code> is a <b>soft value</b> of type <code>T</code>: an immutable, ordered block of vectors in dialect <code>D</code>, which a model reads through its read port. It is an abstract type in the classic sense. Host code may store it, pass it and return it, but may not look inside: no field access, no arithmetic, no comparison, no using it as a condition. <code>read</code> is the only route back to a <code>T</code>, and the result is validated like any call result.</p>
+      <p>At the token level a soft value is two control tokens around a run of vectors. Writing is stochastic, gated by a Neuralese temperature <code>τ</code> that is separate from the text temperature. The payload is <code>μ + τ·σ⊙ε</code>, deterministic at <code>τ = 0</code>, which is the inference default. A call that needs Neuralese on a backend without support fails with <code>neuralese-unsupported-backend</code>. There is no text fallback.</p>
+    </div>
+    <div class="panel reveal" id="nz">
+      <div class="panel-h"><span class="dots"><i></i><i></i><i></i></span><span class="title">brief.summary : Neuralese&lt;Summary&gt;</span><span class="right sim">compile-time rules</span></div>
+      <div class="panel-b">
+        <span class="label">the literal, as a model sees it</span>
+        <div class="lit" id="nz-lit"></div>
+        <div class="row" style="margin-top:10px"><span class="mono" style="min-width:90px">τ = <b id="nz-tau-v">0.00</b></span><input type="range" id="nz-tau" min="0" max="1" step="0.05" value="0" style="flex:1" aria-label="Neuralese temperature"></div>
+      </div>
+      <div class="panel-b">
+        <span class="label">try something with it</span>
+        <div class="ops" id="nz-ops"></div>
+        <div id="nz-out" style="margin-top:10px"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid2" style="margin-top:64px">
+    <div class="prose">
+      <h3 style="margin-top:0">Laws, and rewrites in the spirit of GHC</h3>
+      <p><code>natlang:neuralese</code> exports combinators: <code>map</code>, <code>zip</code>, <code>combine</code>, <code>split</code>, <code>read</code>, <code>ask</code> and friends. Each one (except <code>empty</code> and <code>ask</code>) is itself a system natural-language function <i>with a soft body</i>, which makes it trainable. They <b>approximately</b> satisfy algebraic laws: map identity, map fusion, read/map commutation, associativity and identity of combine, split of zip.</p>
+      <p>The compiler uses these laws as rewrite rules to make programs cheaper. Each rule comes with guardrails. A rule matches only syntactic occurrences whose intermediate values have no other use. It never moves a call across an effect. And it is enabled per model and dialect version only after a whole-program comparison on held-out programs shows it does no harm. "≈" is measured through <code>read</code> and downstream consumers, never as equality of vectors.</p>
+    </div>
+    <div class="panel reveal" id="rw">
+      <div class="panel-h"><span class="dots"><i></i><i></i><i></i></span><span class="title">rewrite playground</span><span class="right sim">click a highlighted redex</span></div>
+      <div class="panel-b">
+        <span class="label">program</span>
+        <div class="chips" id="rw-progs"></div>
+      </div>
+      <div class="panel-b">
+        <div class="expr" id="rw-expr"></div>
+        <div class="row" style="margin-top:10px"><span class="label" style="margin:0">applicable rules</span><span class="rules-avail" id="rw-avail"></span></div>
+        <div class="metrics" id="rw-metrics" style="margin-top:12px"></div>
+        <div class="row" style="margin-top:12px">
+          <button class="toggle" id="rw-used" type="button"><span class="sw2"></span><span>the intermediate is also logged elsewhere</span></button>
+          <span class="spacer"></span><button class="btn" id="rw-reset" type="button">reset</button>
+        </div>
+        <div id="rw-log" style="margin-top:8px"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid2" style="margin-top:64px">
+    <div class="prose">
+      <h3 style="margin-top:0">Fusion you never write down</h3>
+      <p>You don't need to write <code>Neuralese</code> anywhere to benefit from it. If <code>natlang check</code> can prove that a stage's result is read <i>only</i> by the next stage, the runtime may keep that hand-off as vectors. The chain is already explicit in the language: <b>a call inside a call</b> (<code>analyze(parse(source))</code>), or a name used exactly once, as the next stage's argument.</p>
+      <p>Any second reader keeps the hand-off as text. That includes an orchestrator peeking at a field, a log line, a second stage, or a different <code>model:</code>. The fix the authoring guide suggests is a sensible one: make the consumer carry forward whatever the orchestrator needed from the middle.</p>
+      <div class="aside s">Where this is heading: the current research line replaces the vector channel with shared <b>positional KV and hybrid-state spans</b>. Producers export state, and consumers splice it in at the correct positions, with distinct markers for producing and for consuming. It is being trained now. Treat it as a direction, not a result.</div>
+    </div>
+    <div class="panel reveal" id="fu">
+      <div class="panel-h"><span class="dots"><i></i><i></i><i></i></span><span class="title">orchestrator · which hand-offs may stay soft?</span><span class="right sim">fusibility check</span></div>
+      <div class="panel-b">
+        <svg class="fusion" id="fu-svg" viewBox="0 0 600 186" role="img" aria-label="Pipeline hand-offs"></svg>
+        <pre class="code" id="fu-code" style="margin-top:6px"></pre>
+      </div>
+      <div class="panel-b">
+        <div class="toggles" id="fu-toggles"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================================================================ 09 POLICY -->
+<section class="chapter wrap" id="policy">
+  <div class="chead">
+    <div class="num">09</div>
+    <div class="kicker">how natlang people build things</div>
+    <h2>Policy is prose. <em class="c" style="color:var(--crisp)">Mechanism</em> is crisp.</h2>
+  </div>
+
+  <div class="grid2">
+    <div class="prose">
+      <p>The project's main design rule: before building anything, ask how it would be a natlang program. That means typed natural-language functions, callable folders, services for the outside world, and crisp code <i>only</i> where exactness or the outside world requires it. Any component that <b>decides</b> something (which tier serves, what to fuse, what to promote, how to recover) is a natlang program, and that includes natlang's own runtime and compiler. Crisp code is for services, the CLI, atomic commits, exact verifiers of what the stages produce, and plumbing.</p>
+      <p>When a policy is hot, it gets one interface with both implementations behind a setting. That is the hero widget at the top of this page, and a real primitive:</p>
+      <pre class="code" data-hl>import { pluggable } from '@natlang/node';
+const choose = pluggable(
+  { crisp: chooseTierCrisp, nl: chooseTier },
+  settings.tier,
+);
+// 'crisp' | 'nl' | 'shadow': shadow runs both, serves one,
+// and records a pluggable_shadow event saying whether they agreed.</pre>
+      <p style="margin-top:16px">The applications in the repository take this all the way. Most of them ship a <code>DECOMPOSITION.md</code> recording, for every part of the real system, whether it became its own function, one instruction, or a crisp helper, and why.</p>
+    </div>
+    <div class="apps">
+      <div class="app reveal"><h4>nldb</h4><p>A database you talk to. Requests define tables, make transactional changes or ask questions. One engine is a database server written in natural language from end to end, over a documented folder format.</p><div class="files"><span class="nlf">database.nl</span> · <span class="tsf">sqlite/</span> · FORMAT.md</div></div>
+      <div class="app reveal"><h4>games</h4><p>Worlds whose rules are natural language: a market that settles in a seeded order, a duel arena that resolves simultaneously, NPCs acting from memory. Crisp code only checks what the stages produce.</p><div class="files"><span class="nlf">games.nl</span> · <span class="nlf">economy.nl</span> · <span class="nlf">combat.nl</span> · <span class="nlf">npc.nl</span></div></div>
+      <div class="app reveal"><h4>wiki</h4><p>A collaborative wiki whose edit pipeline is prose: change summaries, conflict detection, merge planning, verification against each intent, repair with <code>iterateOn</code>.</p><div class="files"><span class="nlf">merge.nl</span> · <span class="nlf">maintain.nl</span> · <span class="nlf">cells.nl</span> · <span class="tsf">index.ts</span></div></div>
+      <div class="app reveal"><h4>specializer</h4><p>Compiles recorded calls into guarded crisp cases (chapter 7), with its own judgment calls written as natural-language functions.</p><div class="files"><span class="nlf">worthLooking.nl</span> · <span class="nlf">chooseCondition.nl</span> · <span class="nlf">promote.nl</span></div></div>
+      <div class="app reveal"><h4>evidence</h4><p>A citation-checked question-answering console: plan a search, select sources, extract claims, find gaps, write an answer.</p><div class="files"><span class="nlf">plan_search.nl</span> · <span class="nlf">claims.nl</span> · <span class="nlf">gaps.nl</span></div></div>
+      <div class="app reveal"><h4>…and more</h4><p>A notebook, logs, a terminal, a publisher, a migration tool, a program improver, a scheduling assistant and a treaty-obligation ledger, all in <code>applications/</code>.</p><div class="files">natlang run applications/&lt;name&gt;</div></div>
+    </div>
+  </div>
+
+  <h3 style="margin-top:72px">House rules, from the project's own instructions</h3>
+  <ol class="houserules">
+    <li class="reveal"><b>Teach in errors, not prompts.</b>Never spell out a wrong form in a prompt, because it primes the model to produce it. Handle it in the runtime and teach the fix in a one-sentence error.</li>
+    <li class="reveal"><b>No premature limits.</b>Termination is structural: no while loops, recursion on a smaller argument, <code>iterateOn</code> with a measure or a predicate. A resource limit gets added when a real problem shows up.</li>
+    <li class="reveal"><b>Measure model-facing changes live.</b>Anything the executing model sees (prompt text, how values render, error wording) is sampled on the live executor, about 48 samples per variant, before it is adopted.</li>
+    <li class="reveal"><b>The interpreter may be small.</b>"You are the capable program author; the interpreter may be a small model." Put the algorithm, the decomposition and the data contracts in source, spelled out as numbered steps over named data.</li>
+    <li class="reveal"><b>Stay close to JS.</b>Prefer making standard JavaScript idioms work over inventing new names. Be very circumspect about new model-facing vocabulary.</li>
+    <li class="reveal"><b>One implementation per concept.</b>Before adding a mechanism, find the existing one (specializer, call store, pluggable, refinement shadow) and extend it.</li>
+  </ol>
+</section>
+
+<!-- ================================================================ CODA -->
+<section class="coda wrap">
+  <div class="chead">
+    <div class="num qed">∎</div>
+    <div class="kicker">try it</div>
+    <h2>Run something <em>real</em>.</h2>
+  </div>
+  <div class="grid2 even">
+    <pre class="code" data-hl="sh">scripts/setup_dev.sh --node-only     # build ts-host, install `natlang`
+natlang doctor
+natlang setup                        # managed local model, an OpenAI-compatible
+                                     # endpoint, or a Pi provider
+natlang check examples/triage        # types, nl signatures, folder policy
+natlang run examples/triage -- tickets.json
+natlang run applications/evidence    # a citation-checked QA console</pre>
+    <div class="prose">
+      <p>The specification and the source are the active contract. When this page and the spec disagree, the spec wins, and when the spec and the code disagree, the spec lists the disagreement under "Known discrepancies" for the owner to decide. That small habit says a lot about the project.</p>
+    </div>
+  </div>
+  <div class="links">
+    <a href="https://github.com/werg/natlang/blob/main/spec/SPEC.md"><b>spec/SPEC.md</b><span>Functions, contexts, captures, iteration, services, the model surface</span></a>
+    <a href="https://github.com/werg/natlang/blob/main/spec/ERRORS.md"><b>spec/ERRORS.md</b><span>Every error code, the rule behind it and when it fires</span></a>
+    <a href="https://github.com/werg/natlang/blob/main/docs/inline-natlang-lambdas.md"><b>inline lambdas</b><span>Capture by mention and inference with typed holes</span></a>
+    <a href="https://github.com/werg/natlang/blob/main/docs/ITERATE_ON_PLAN.md"><b>iterateOn</b><span>Measures, progress judges, per-site statistics</span></a>
+    <a href="https://github.com/werg/natlang/blob/main/spec/ext/neuralese.md"><b>ext/neuralese.md</b><span>Soft values, combinators, laws, .nz files</span></a>
+    <a href="https://github.com/werg/natlang/blob/main/spec/ext/refinements.md"><b>ext/refinements.md</b><span>Is&lt;T, P&gt;, the judge, Untrusted&lt;T&gt;</span></a>
+    <a href="https://github.com/werg/natlang/blob/main/plans/TRACE_SPECIALIZATION.md"><b>trace specialization</b><span>The tracing JIT for natural-language functions</span></a>
+    <a href="https://github.com/werg/natlang/blob/main/skills/natlang-authoring/SKILL.md"><b>authoring skill</b><span>How to write natlang that small models can execute</span></a>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap row between">
+    <span>natlang · an interactive explainer · every widget is a toy model of a rule, not the runtime</span>
+    <a href="#top">back to top ↑</a>
+  </div>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
