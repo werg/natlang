@@ -349,3 +349,17 @@ require their own supplement before relying on them as fully durable controls.
 LFM earned first next-round policy update37278. Mellum advanced35403;
 its private recovery replacement is35224 and local mirror~9.8GB/48.3GB,
 so newer earned/exported progress remains an explicit recovery gap.
+
+21:38Berlin: conversion-only preparation cannot pass a positive predecessor
+until its normal admission is published; the batch47/tranche0 conversion has
+237graphs per student, so later tranches correctly retain prefix debt. The
+normal registrar publishes data-only commits from an isolated origin/main
+worktree with its own checks, independently of the primary checkout's pending
+code publication. Resume that normal worker rather than treating the code full
+check as a barrier to otherwise valid source admission. The registrar's stale
+hard-coded Claude coauthor/session trailers were removed; unattended commits
+now identify the actual registration tool without inventing an agent author.
+Supplement v10 is independently private-GET verified:67,484bytes,SHA
+02a523001e53929a2c2e6759d1bf0a31f1a1edbbbbbc69ed242f77e195608ec2.
+Mellum durable full-state export advanced35326; external mirror of first new
+35224 state remains in progress, and LFM RL earned37281.
