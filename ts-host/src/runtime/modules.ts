@@ -58,6 +58,8 @@ export function setModuleRealm(factory: () => EvalEnvironment): void {
   defaultRealm=factory;
   realm=undefined;
   instances=new WeakMap();
+  asyncInstances=new WeakMap();
+  asyncTaskInstances=new WeakMap();
   previous?.close();
 }
 function moduleRealm(): EvalEnvironment {
@@ -260,4 +262,127 @@ export function moduleInstance(record: ModuleRecord, level: Record<string, ItemR
   Object.defineProperty(exports, '__esModule', { value: true });
   state.ready = true;
   return exports;
+}
+
+
+/** A separate cache is required: an async initialization must not expose
+ * partially initialized live module exports as a completed synchronous module.
+ * The task-local cache stays isolated from the retained module realm. */
+type AsyncModuleState = {
+  exports: Record<string, unknown>;
+  ready: boolean;
+  pending?: Promise<Record<string, unknown>>;
+};
+let asyncInstances = new WeakMap<ModuleRecord, AsyncModuleState>();
+let asyncTaskInstances = new WeakMap<object, WeakMap<ModuleRecord, AsyncModuleState>>();
+
+export function moduleRealmUsesAsync(): boolean {
+  return typeof moduleRealm().evaluateModuleAsync === 'function';
+}
+
+function relativeModuleItem(specifier: string, level: Record<string, ItemRecord>,
+    source: string): {item: ItemRecord; parent: Record<string, ItemRecord>} {
+  if (!specifier.startsWith('./')) throw new NatlangSourceError(source, 'module import must be relative');
+  const parts = specifier.slice(2).replace(/\.(ts|js|nl)$/, '').split('/');
+  let scope: Record<string, ItemRecord> = level;
+  let parent = level;
+  let item: ItemRecord | undefined;
+  for (const part of parts) {
+    parent = scope;
+    item = scope[part];
+    if (!item) throw new NatlangSourceError(source,
+      `cannot import ${JSON.stringify(specifier)}: no matching callable-folder item`);
+    scope = item.codebase;
+  }
+  return {item: item!, parent};
+}
+
+/** Initialize a retained callable-folder module using only the asynchronous
+ * selected executor. Static sibling imports are initialized first. The same
+ * pending initialization is shared by concurrent callers; a cyclic import
+ * sees CJS's incomplete exports object rather than deadlocking.
+ *
+ * This is a real Natlang module compilation/lookup seam, not a native VM
+ * bootstrap. The provided evaluator owns semantics and any external effects.
+ */
+export async function moduleInstanceAsync(record: ModuleRecord,
+    level: Record<string, ItemRecord>,
+    visiting: ReadonlySet<ModuleRecord> = new Set()): Promise<Record<string, unknown>> {
+  const environment = moduleRealm();
+  if (typeof environment.evaluateModuleAsync !== 'function')
+    throw new Error('Selected asynchronous module evaluation is not installed');
+  const task = currentFrame()?.task;
+  const isolated = !!task && (task.programView.binding ||
+    task.runtime.options.isolateModules || task.programView.revisionId);
+  let cache = asyncInstances;
+  if (isolated) {
+    cache = asyncTaskInstances.get(task!) ?? new WeakMap<ModuleRecord, AsyncModuleState>();
+    asyncTaskInstances.set(task!, cache);
+  }
+  record = task?.programView.original(record) ?? record;
+  const patched = task?.programView.patched(record.source);
+  if (patched) record = task!.programView.record(record);
+  const existing = cache.get(record);
+  if (existing) {
+    if (existing.ready || visiting.has(record)) return existing.exports;
+    if (existing.pending) return existing.pending;
+    throw new Error('Module initialization has no pending activation');
+  }
+  // Resolve and compile before publishing an observable cached instance.
+  const code = compiledCode(record, level);
+  const exports: Record<string, unknown> = {};
+  const state: AsyncModuleState = {exports, ready:false};
+  cache.set(record, state);
+  const run = async (): Promise<Record<string, unknown>> => {
+    const nested = new Set(visiting);
+    nested.add(record);
+    // TypeScript's CJS lowering will call require synchronously inside the
+    // evaluator. Its statically declared sibling dependencies must therefore
+    // already have finished async initialization when the source executes.
+    for (const specifier of record.imports) {
+      if (!specifier.startsWith('./')) continue;
+      const {item, parent} = relativeModuleItem(specifier, level, record.source);
+      if (item.kind === 'module') await moduleInstanceAsync(item, parent, nested);
+    }
+    const require = (specifier: string): unknown => {
+      if (specifier === 'natlang:services') return servicesModule;
+      if (builtinModules.has(specifier)) return builtinModule(specifier);
+      if (specifier === NEUTRAL_RUNTIME_SPECIFIER ||
+          /^@natlang\/(node|browser|core)$/.test(specifier))
+        return {__esModule:true, ...surface};
+      if (specifier.startsWith('./')) {
+        const {item, parent} = relativeModuleItem(specifier, level, record.source);
+        if (item.kind === 'natlang')
+          return {__esModule:true, default:namedCallable(item.name, item as never)};
+        if (item.kind === 'namespace')return {__esModule:true, ...callableTree(item.codebase as never)};
+        const sibling = (task && (task.programView.binding ||
+          task.runtime.options.isolateModules || task.programView.revisionId) ?
+          asyncTaskInstances.get(task) : asyncInstances)?.get(item);
+        if (!sibling)throw new NatlangSourceError(record.source,
+          `sibling ${specifier} was not initialized by the async module loader`);
+        return sibling.exports;
+      }
+      if (specifier.startsWith('.') || specifier.startsWith('/'))
+        throw new NatlangSourceError(record.source,
+          `cannot import ${JSON.stringify(specifier)}: only sibling modules are allowed`);
+      if (!packageLoader)throw new NatlangSourceError(record.source,
+        `package imports are unavailable here: ${specifier}`);
+      return packageLoader(specifier);
+    };
+    const module = {exports};
+    await environment.evaluateModuleAsync!(code,
+      {exports,module,require,__natlang:lowered,__natlang_context:level,
+        nl:surface.nl,iterateOn:surface.iterateOn});
+    if (module.exports !== exports)Object.assign(exports,module.exports);
+    Object.defineProperty(exports,'__esModule',{value:true});
+    state.ready=true;
+    return exports;
+  };
+  // Defer the body one microtask so another invocation sees pending, not a
+  // half-built cache object. Failure clears the cache; no native retry occurs.
+  state.pending=Promise.resolve().then(run).catch(error=>{
+    cache.delete(record);
+    throw error;
+  });
+  return state.pending;
 }
