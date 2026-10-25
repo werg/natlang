@@ -5,7 +5,7 @@
   "program": {
     "schema": "natlang.program/v1",
     "id": "project",
-    "protocol": 7,
+    "protocol": 8,
     "buildHash": "a2b773a0df9bf511c5f594c95344900b0f17aeb711e981b7898f5342e2d77c49",
     "sources": {
       "main.ts": "import { nl } from '@natlang/node';\nexport const judge = /* @natlangSite portable */ nl<number>`Return one.`;\nexport async function invoke(): Promise<number> { await Promise.resolve(); return judge(); }\n"
@@ -39,11 +39,11 @@
           "slots": [],
           "helpers": [],
           "servicesHash": "40f04142095536e082fd7586d919bd5aacac2676db4f37fc830f64a91d8eef41",
-          "protocol": 7,
+          "protocol": 8,
           "visibleBindings": [],
           "slotBindings": []
         },
-        "contractHash": "b0bd95ab19cce0171c470baa9b17dc378cc2dd9f11e3b69b0001f193d687c5c9",
+        "contractHash": "86132e192958568c441f43ae4cf9b12d62f74e144aaf1fc91f5cbf5b9a74dc6b",
         "constraints": {
           "maxChars": 32000,
           "requiredBindings": []
@@ -77,11 +77,11 @@
           "slots": [],
           "helpers": [],
           "servicesHash": "40f04142095536e082fd7586d919bd5aacac2676db4f37fc830f64a91d8eef41",
-          "protocol": 7,
+          "protocol": 8,
           "visibleBindings": [],
           "slotBindings": []
         },
-        "contractHash": "5141e40f89b9b0451d63ee35095040b00adb756f0e0a6b7fe0702df35f1515cb",
+        "contractHash": "935ea460e0afd422a7eb73d5f8fc4a6894bb2fc2f760ec0cbaa5b667626efbcc",
         "constraints": {
           "maxChars": 32000,
           "requiredBindings": []
@@ -94,11 +94,11 @@
   },
   "artifact": {
     "schema": "natlang.adaptation/v1",
-    "digest": "0a6479f1f96a26589a2b43d0c3ffa3ed0391b9b39c571c0ac7acf8837ce57d73",
+    "digest": "af28cfb0a437cbeeb90f8e916f79bf283bd278d38f5e624fe2331d46ed1d6f81",
     "program": {
       "id": "project",
       "buildHash": "a2b773a0df9bf511c5f594c95344900b0f17aeb711e981b7898f5342e2d77c49",
-      "protocol": 7,
+      "protocol": 8,
       "guidanceScope": {
         "importedPrograms": []
       }
@@ -117,7 +117,144 @@
       {
         "key": "project::main.ts::site%3Aportable%3Ainstructions",
         "baselineHash": "76bab8522c3f7257ad2bcda64f7f7a24638b957d37a84af1b9deeff9fe667ed7",
-        "contractHash": "b0bd95ab19cce0171c470baa9b17dc378cc2dd9f11e3b69b0001f193d687c5c9",
+        "contractHash": "86132e192958568c441f43ae4cf9b12d62f74e144aaf1fc91f5cbf5b9a74dc6b",
+        "value": {
+          "kind": "lambda.instructions",
+          "template": {
+            "segments": [
+              "Return nine."
+            ],
+            "slotIds": []
+          }
+        }
+      }
+    ],
+    "provenance": {
+      "runId": "evaluation",
+      "strategy": "evaluation",
+      "engine": "natlang/v1",
+      "suiteHash": "9c3e84776bbe2b5556c2ee7956c1a22721619299149ec1eeea7c33cc24f83fbe",
+      "seed": 0,
+      "promotion": "selected",
+      "evidence": {}
+    }
+  },
+  "nodeProgram": {
+    "schema": "natlang.program/v1",
+    "id": "node-target",
+    "protocol": 8,
+    "buildHash": "a2b773a0df9bf511c5f594c95344900b0f17aeb711e981b7898f5342e2d77c49",
+    "sources": {
+      "main.ts": "import { nl } from '@natlang/node';\nexport const judge = /* @natlangSite portable */ nl<number>`Return one.`;\nexport async function invoke(): Promise<number> { await Promise.resolve(); return judge(); }\n"
+    },
+    "components": [
+      {
+        "key": "node-target::main.ts::site%3Aportable%3Ainstructions",
+        "kind": "lambda.instructions",
+        "origin": "authored-inline",
+        "baseline": {
+          "kind": "lambda.instructions",
+          "template": {
+            "segments": [
+              "Return one."
+            ],
+            "slotIds": []
+          }
+        },
+        "baselineHash": "76bab8522c3f7257ad2bcda64f7f7a24638b957d37a84af1b9deeff9fe667ed7",
+        "contract": {
+          "parameters": [],
+          "returns": {
+            "text": "number",
+            "natlang": "number",
+            "aliases": {}
+          },
+          "types": {},
+          "subtype": "function",
+          "openParameters": false,
+          "captures": [],
+          "slots": [],
+          "helpers": [],
+          "servicesHash": "40f04142095536e082fd7586d919bd5aacac2676db4f37fc830f64a91d8eef41",
+          "protocol": 8,
+          "visibleBindings": [],
+          "slotBindings": []
+        },
+        "contractHash": "86132e192958568c441f43ae4cf9b12d62f74e144aaf1fc91f5cbf5b9a74dc6b",
+        "constraints": {
+          "maxChars": 32000,
+          "requiredBindings": []
+        },
+        "definitionId": "nl:8f4ebee50590a5f4",
+        "source": {
+          "path": "main.ts",
+          "start": 85,
+          "end": 108,
+          "templateStart": 95,
+          "templateEnd": 108,
+          "expressions": []
+        }
+      },
+      {
+        "key": "node-target::program.guidance",
+        "kind": "program.guidance",
+        "origin": "program",
+        "baseline": {
+          "kind": "program.guidance",
+          "text": ""
+        },
+        "baselineHash": "aa0e5ee048cbff266111bb3a6fc3cb1113ef8d4731b10a34afc87e00515781f7",
+        "contract": {
+          "parameters": [],
+          "returns": "null",
+          "types": {},
+          "subtype": "function",
+          "openParameters": false,
+          "captures": [],
+          "slots": [],
+          "helpers": [],
+          "servicesHash": "40f04142095536e082fd7586d919bd5aacac2676db4f37fc830f64a91d8eef41",
+          "protocol": 8,
+          "visibleBindings": [],
+          "slotBindings": []
+        },
+        "contractHash": "935ea460e0afd422a7eb73d5f8fc4a6894bb2fc2f760ec0cbaa5b667626efbcc",
+        "constraints": {
+          "maxChars": 32000,
+          "requiredBindings": []
+        }
+      }
+    ],
+    "guidanceScope": {
+      "importedPrograms": []
+    }
+  },
+  "nodeArtifact": {
+    "schema": "natlang.adaptation/v1",
+    "digest": "a63dcf12191a93e23436f7fbfbc0e2dd7b96e4ebcd1085289862e4c5d07bcaf2",
+    "program": {
+      "id": "node-target",
+      "buildHash": "a2b773a0df9bf511c5f594c95344900b0f17aeb711e981b7898f5342e2d77c49",
+      "protocol": 8,
+      "guidanceScope": {
+        "importedPrograms": []
+      }
+    },
+    "executor": {
+      "id": "portable-fixture",
+      "configuration": {
+        "revision": 1
+      }
+    },
+    "policy": {
+      "codeEdits": "deny",
+      "settings": {}
+    },
+    "components": [
+      {
+        "key": "node-target::main.ts::site%3Aportable%3Ainstructions",
+        "baselineHash": "76bab8522c3f7257ad2bcda64f7f7a24638b957d37a84af1b9deeff9fe667ed7",
+        "contractHash": "86132e192958568c441f43ae4cf9b12d62f74e144aaf1fc91f5cbf5b9a74dc6b",
         "value": {
           "kind": "lambda.instructions",
           "template": {
