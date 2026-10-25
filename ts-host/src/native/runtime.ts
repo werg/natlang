@@ -29,6 +29,8 @@ import { dialectBinding, isNeuraleseRef, neuraleseRef, neuraleseSentinel, native
 import { blockInput, FILE_CONTEXT, graphNode, invocationNodeId, valueInputs } from './graph.js';
 import { canGenerateNl, currentFrame, racedCalls, runInFrame, type Frame } from '../runtime/context.js';
 import { isNatlangCallable } from '../runtime/callable.js';
+import { withSelectedCaptureAccessors } from '../runtime/selected-captures.js';
+import { declareSelectedSurface } from './selected-surface.js';
 import { PATH_ONLY, parseModule, parseNatlang, type ItemRecord } from '../runtime/loader.js';
 import { compileModule } from '../runtime/modules.js';
 import { readNeuraleseForCurrentTask } from '../neuralese/combinators.js';
@@ -722,7 +724,8 @@ export class NativeRuntime {
     signal?: AbortSignal) {
     this.checkInterruption();
     try {
-      const request = { code, body: true, path: 'eval', scope, live, ...(timeoutMs === undefined ? {} : { timeoutMs }) };
+      const request = { code, body: true, path: 'eval', scope, live,
+        ...(signal ? { signal } : {}), ...(timeoutMs === undefined ? {} : { timeoutMs }) };
       // Calls the eval starts derive their signal from the eval's, so stopping the eval stops what it started.
       const frame = this.frame && signal ? { ...this.frame, signal } : this.frame;
       // A stopped call stops waiting for its eval at once; the eval's timers are cleared when the call ends.
@@ -1022,7 +1025,11 @@ const deepFreeze = <T,>(value: T): T => {
  */
 export class TranscriptView {
   readonly #entries: readonly TranscriptEntry[];
-  constructor(entries: readonly TranscriptEntry[]) { this.#entries = entries; }
+  constructor(entries: readonly TranscriptEntry[]) {
+    this.#entries = entries;
+    declareSelectedSurface(this, 'TranscriptView', { search: 'synchronous', entry: 'synchronous',
+      toString: 'synchronous', toJSON: 'synchronous' } as const, ['length']);
+  }
   get length(): number { return this.#entries.length; }
   /**
    * Lines of earlier reasoning, code, and outputs that match: a case-insensitive text, or a regular expression (an empty text
@@ -2067,12 +2074,14 @@ export class NativeSession {
             () => { const active = this.activeScopeLocals?.get(capture.name); return active ? active[0]() : this.lam.let[capture.name]; },
             (value: unknown) => {
               const active = this.activeScopeLocals?.get(capture.name);
-              if (active?.[1]) active[1](value);
+              if (active?.[1]) return active[1](value);
               else this.lam.let[capture.name] = coerce(value, this.lam.letTypes[capture.name]!, this.env, `let/${capture.name}`);
             },
           ];
         }
-        return hooks.inline(this, plan, values, bound, origin);
+        return this.runtime.environment.authority.startsWith('selected-semantic/') ?
+          withSelectedCaptureAccessors(plan, bound, observed => hooks.inline(this, plan, values, observed, origin)) :
+          hooks.inline(this, plan, values, bound, origin);
       },
       finite: hooks.finite, finiteArrayIterator: hooks.finiteArrayIterator, finiteAsync: hooks.finiteAsync, guard: hooks.guard,
       iterateOn: (step: unknown, initial: unknown, ...args: unknown[]) => hooks.iterateOn(this, step, initial, ...args),

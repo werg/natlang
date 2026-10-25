@@ -12,7 +12,19 @@ from scripts.coreweave import teacher_helper_continuation as custody
 
 STAGED_API = Path(str(machine_paths.resolve('data_nvme', 'dgxops/teacher-zero-guided-control-closure-8c3358fa-20261022/scripts/coreweave/teacher_tranche_admission.py')))
 AUTHORITY_PATH = Path(custody.LEGACY_AUTHORITY["path"])
-OLD = json.loads(Path(custody.LEGACY_OBSERVATION["path"]).read_bytes())
+HISTORICAL_INPUTS = (custody.LEGACY_OBSERVATION, custody.LEGACY_AUTHORITY,
+                     custody.SOURCE_CLOSURE_RECEIPT, custody.SOURCE_CLOSURE_TRANSITION)
+MISSING_HISTORICAL_INPUTS = [ref["path"] for ref in HISTORICAL_INPUTS
+                             if not Path(ref["path"]).is_file()]
+pytestmark = pytest.mark.skipif(
+    bool(MISSING_HISTORICAL_INPUTS),
+    reason=("historical helper integrity checks require their exact preserved external inputs; "
+            "run scripts/coreweave/run_teacher_helper_history_gate.py for the strict history gate; "
+            "missing: " + ", ".join(MISSING_HISTORICAL_INPUTS)))
+
+
+def _old_observation():
+    return json.loads(Path(custody.LEGACY_OBSERVATION["path"]).read_bytes())
 
 
 def _ref(path: Path):
@@ -38,7 +50,7 @@ def _successor_fixture(tmp_path, *, bad_accounting=False):
     shutil.copyfile(old_api, relroot / "teacher_tranche_admission.py")
     authority = json.loads(AUTHORITY_PATH.read_bytes())
     inventory = {relative: _ref(Path(ref["path"])) for relative, ref in authority["files"].items()}
-    for relative, old_ref in OLD["reviewed_external_helpers"]["files"].items():
+    for relative, old_ref in _old_observation()["reviewed_external_helpers"]["files"].items():
         if relative == custody.LEGACY_API_RELATIVE:
             continue
         target = repo / relative
@@ -46,7 +58,7 @@ def _successor_fixture(tmp_path, *, bad_accounting=False):
         shutil.copyfile(Path(authority["files"][relative]["path"]), target)
     api_ref = _ref(staged_api)
     successor_inventory = {relative: _ref(repo / relative)
-        for relative in OLD["reviewed_external_helpers"]["files"]
+        for relative in _old_observation()["reviewed_external_helpers"]["files"]
         if relative != custody.LEGACY_API_RELATIVE}
     successor_converter = successor_inventory["scripts/neuralese_data/build_verified_teacher_trajectory_graphs.py"]
     successor_source_revision = "a" * 40

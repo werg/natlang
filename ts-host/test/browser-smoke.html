@@ -19,8 +19,22 @@
     const fixture = await (await fetch('./fixtures/adaptation-browser.json')).json();
     const adaptedProject = natlang.compileVirtualProject({ files: fixture.files }, natlang);
     if (!adaptedProject.ok) throw new Error(natlang.formatDiagnostics(adaptedProject.diagnostics));
-    if (adaptedProject.manifest.adaptation.buildHash !== fixture.program.buildHash) throw new Error('Node/browser build identity differs');
+    if (adaptedProject.manifest.adaptation.buildHash !== fixture.program.buildHash) throw new Error('browser fixture build identity differs');
     const binding = natlang.bindAdaptation(fixture.artifact, adaptedProject.manifest.adaptation, fixture.executor);
+    if (fixture.nodeProgram.id === adaptedProject.manifest.adaptation.id)
+      throw new Error('Node/browser mismatch fixture does not identify a separate compiled program');
+    let targetMismatchRefused = false;
+    try { natlang.bindAdaptation(fixture.nodeArtifact, adaptedProject.manifest.adaptation, fixture.executor); }
+    catch (error) { targetMismatchRefused = /adaptation is stale for this program/.test(String(error)); }
+    if (!targetMismatchRefused) throw new Error('browser binding accepted a Node-target adaptation artifact');
+    let staleRefused = false;
+    try {
+      const stale = { ...fixture.artifact,
+        program: { ...fixture.artifact.program, buildHash: '0'.repeat(64) } };
+      stale.digest = natlang.artifactDigest(stale);
+      natlang.bindAdaptation(stale, adaptedProject.manifest.adaptation, fixture.executor);
+    } catch (error) { staleRefused = /adaptation is stale for this program/.test(String(error)); }
+    if (!staleRefused) throw new Error('adaptation binding accepted a stale program identity');
     const adaptedRuntime = natlang.createNatlangRuntime({ program: adaptedProject.manifest.adaptation,
       adaptation: binding, executorIdentity: fixture.executor,
       agent: session => { session.lam.return = session.lam.body.includes('nine') ? 9 : 1; } });

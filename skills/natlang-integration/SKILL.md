@@ -21,6 +21,20 @@ Read [hosts and model drivers](references/hosts.md) for the runtime, compilation
 
 ## Operational commitments
 
+For a selected semantic executor, install `installSelectedSemanticEnvironment`
+at both fresh-task and retained-module seams and use `executeAsync` /
+`moduleInstanceAsync`. The selected binding bridge awaits generated inline
+capture accessors and guard callbacks; it never executes guest bodies natively.
+Keep declared service return classes, resource identities and the actual
+`EvalFailure` events/logs. Realm cutover invalidates old exports and callables;
+failed module initialization is not automatically retried. Native effects are
+not rolled back by a failed eval. See the checkout's
+`ts-host/SELECTED_SEMANTIC_INTEGRATION.md` for exact adapter surfaces and recovery.
+For outside events use stable source/epoch and event identities, bounded ingress,
+sequential Fold or bounded input-ordered Map, and explicit closure/cancellation.
+Controlled selected trajectories establish engineering fidelity, not learned
+execution quality; do not start training to fill an unfinished runtime seam.
+
 - Omit arbitrary run budgets unless deployment requires them; `limits` and model options exist for that. A call longer than the model's context (`contextTokens`) is compacted: the model writes a note, and its full history stays searchable from eval as `transcript`.
 - Set budgets (`maxTurns`, `maxTokens`, `maxSeconds`, `maxFailureRepairs`) explicitly for evaluations; none apply by default.
 - Services and live values are trusted native authority passed by reference. Eval is trusted code in the application's process, not a sandbox.

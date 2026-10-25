@@ -1,4 +1,4 @@
-name: Owned tracing evaluator integration
+name: Selected semantic evaluator integration
 
 on:
   push:
@@ -21,9 +21,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Install pinned natlang dependencies
+      - name: Install pinned Natlang and selected tracer dependencies
         run: npm ci
       - name: Compile Node evaluator and type-check integrations
         run: npm --workspace @natlang/typescript-host run build:node
-      - name: Verify owned evaluator factory wiring and module-realm cache invalidation
-        run: node --test ts-host/test/owned-tracing-wiring.test.mjs
+      - name: Verify owned and selected evaluator wiring, async modules and cache invalidation
+        run: node --test ts-host/test/owned-tracing-wiring.test.mjs ts-host/test/selected-semantic-module.test.mjs ts-host/test/selected-semantic-real-driver.test.mjs ts-host/test/selected-captures.test.mjs ts-host/test/selected-events.test.mjs

@@ -16,6 +16,11 @@ export type EffectEvent = { phase: 'requested' | 'completed' | 'failed'; service
 /** Marks services that are already wrapped, so they are never recorded twice. */
 const RECORDED = Symbol('natlang.recorded-services');
 export const isRecording = (services: object) => Object.hasOwn(services, RECORDED);
+const selectedSurfaces = new WeakMap<object, object>();
+/** Only recorder-owned proxies have this declared selected-execution surface. */
+export function selectedServiceSurface(value: unknown): unknown {
+  return value && (typeof value === 'object' || typeof value === 'function') ? selectedSurfaces.get(value) ?? value : value;
+}
 
 /**
  * A service's external effects that must happen once: `{ [ONCE_EFFECTS]: ['send'], send(...) {...} }`. A call with the
@@ -53,11 +58,13 @@ export function recordingServices<T extends Record<string, unknown>>(services: T
     } catch { return String(value); }
   };
   let sequence = 0;
-  const wrap = (target: object, label: string): object => new Proxy(target, {
+  const wrap = (target: object, label: string): object => {
+    const proxy = new Proxy(target, {
     get(object, property, receiver) {
       const value = Reflect.get(object, property, receiver);
       if (typeof property === 'symbol') return value;
-      if (typeof value === 'function') return (...given: unknown[]) => {
+      if (typeof value === 'function') {
+        const recorded = (...given: unknown[]) => {
         const args = given.map(item => hostCopy(item));
         const seq = sequence++;
         emit({ phase: 'requested', service: label, method: property, args: preview(args), seq, exact: { args } });
@@ -87,10 +94,29 @@ export function recordingServices<T extends Record<string, unknown>>(services: T
           emit({ phase: 'failed', service: label, method: property, error: String((error as Error)?.message ?? error), seq });
           throw error;
         }
-      };
+        };
+        Object.defineProperty(recorded, Symbol.for('natlang.native-call-kind'), { value:
+          Object.getOwnPropertyDescriptor(value, Symbol.for('natlang.native-call-kind'))?.value ??
+          (Object.getPrototypeOf(value)?.constructor?.name === 'AsyncFunction' ? 'promise' : 'synchronous') });
+        return recorded;
+      }
       return value;
     },
-  });
+    });
+    const surface = Object.create(null);
+    // The surface names come from the supplied service, not arbitrary property
+    // lookup on a guest proxy. Accessors remain lazy broker cell reads.
+    for (const key of Object.getOwnPropertyNames(target)) {
+      const descriptor = Object.getOwnPropertyDescriptor(target, key)!;
+      if ('value' in descriptor && typeof descriptor.value === 'function')
+        Object.defineProperty(surface, key, { value: Reflect.get(proxy, key), enumerable: true });
+      else Object.defineProperty(surface, key, { get: () => Reflect.get(proxy, key),
+        ...(descriptor.set || ('value' in descriptor && descriptor.writable) ? { set: (value: unknown) => Reflect.set(proxy, key, value) } : {}),
+        enumerable: true });
+    }
+    selectedSurfaces.set(proxy, surface);
+    return proxy;
+  };
   const wrapped = Object.fromEntries(Object.entries(services).map(([name, service]) =>
     [name, service && typeof service === 'object' ? wrap(service, name) : service]));
   Object.defineProperty(wrapped, RECORDED, { value: true });

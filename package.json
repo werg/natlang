@@ -17,5 +17,8 @@
     "pack:node": "npm pack --workspace @natlang/node",
     "pack:browser": "npm pack --workspace @natlang/browser",
     "pack:cli": "npm pack --workspace @natlang/cli"
+  },
+  "devDependencies": {
+    "tracing-js-self": "https://codeload.github.com/werg/tracing-js-self/tar.gz/1952ee3ae3bb24b8d2c9d975ca3ed7e86e18ab38"
   }
 }

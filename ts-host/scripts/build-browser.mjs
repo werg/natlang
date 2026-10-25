@@ -48,6 +48,12 @@ await build({ entryPoints: { 'call-store-worker': resolve(root, 'src/browser/cal
   platform: 'browser', format: 'esm', target: 'es2022', outdir: resolve(root, 'dist/browser'), external: ['undici'],
   plugins: [browserNodeImports()], legalComments: 'none' });
 copy(fileURLToPath(import.meta.resolve('@sqlite.org/sqlite-wasm/sqlite3.wasm')), resolve(root, 'dist/browser/sqlite3.wasm'));
+// SQLite's OPFS VFS starts these same-origin module workers dynamically.
+// Keep them beside the bundle so the pilot and deployed browser builds both
+// exercise the actual OPFS path instead of silently losing it at runtime.
+const sqliteEntry = fileURLToPath(import.meta.resolve('@sqlite.org/sqlite-wasm'));
+for (const asset of ['sqlite3-opfs-async-proxy.js', 'sqlite3-worker1.mjs'])
+  copy(join(dirname(sqliteEntry), asset), resolve(root, 'dist/browser', asset));
 for (const asset of ['neuralese-wasm.mjs', 'neuralese-wasm.wasm', 'neuralese-wasm-mt.mjs', 'neuralese-wasm-mt.wasm',
   'neuralese-wasm-gpu.mjs', 'neuralese-wasm-gpu.wasm'])
   copy(resolve(root, 'vendor/neuralese-wasm', asset), resolve(root, 'dist/browser', asset));
