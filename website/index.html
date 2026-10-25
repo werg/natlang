@@ -42,7 +42,7 @@
 <div class="progress" id="progress"></div>
 
 <main id="top">
-<noscript><div class="wrap" style="padding-top:80px"><p class="honest">The text reads fine without JavaScript, but every widget on this page needs it.</p></div></noscript>
+<noscript><div class="wrap" style="padding-top:80px"><p class="honest">The widgets on this page need JavaScript. The text works without it.</p></div></noscript>
 
 <!-- ================================================================ HERO -->
 <section class="hero wrap">
@@ -75,7 +75,7 @@
   </div>
 
   <div class="honest">
-    <b>What this page is.</b> An explainer, not a brochure. natlang is a research language and its specification is a 0.5 draft, with a list of known discrepancies in it. Every widget below is a toy re-implementation of one rule from <a href="https://github.com/werg/natlang/blob/main/spec/SPEC.md">the spec</a>, running in your browser. No model is called. Where a widget shows what a model answered, the answer is illustrative and the widget says so. The running example throughout is the repository's own <a href="https://github.com/werg/natlang/tree/main/examples/triage">support-ticket triage</a>.
+    <b>About this page.</b> Each widget below rebuilds one rule from <a href="https://github.com/werg/natlang/blob/main/spec/SPEC.md">the natlang spec</a> in a few lines of JavaScript and runs it in your browser. No model is called. When a widget shows a model's answer, the answer is made up to show the rule, and the widget is labelled that way. The spec itself is still a draft (version 0.5). The examples come from the repository's <a href="https://github.com/werg/natlang/tree/main/examples/triage">support-ticket triage</a> program.
   </div>
 </section>
 
@@ -94,7 +94,7 @@
         <div class="post"><i>Γ</i> ⊢ <span class="t">nl`<span class="kw">body</span>`</span> : <span class="ty t">(x₁: τ₁, …) ⇒ Promise&lt;τ&gt;</span></div>
       </div><div class="name">NL-FUN</div></div>
 
-      <p>In most "LLM inside your code" setups a prompt is a string, its answer is a string, and everything in between is hope plus a JSON parser. natlang changes the order of events. <b>The compiler fixes the type of every natural-language call before the model runs</b>, shows that type to the model as part of the call's opening, and checks what comes back after each eval and again at completion.</p>
+      <p>In most "LLM inside your code" setups a prompt is a string, its answer is a string, and everything in between is hope plus a JSON parser. In natlang, <b>the compiler fixes the type of every natural-language call before the model runs</b>, shows that type to the model as part of the call's opening, and checks what comes back after each eval and again at completion.</p>
       <p>A wrong-shaped value never reaches your code. It goes back to the model as an error message, and the model repairs it. A call that cannot succeed rejects with a <code>NatlangCallError</code> carrying its outcome, detail and trace, which you catch like any other rejection.</p>
       <p>There are two source forms. Inline, a tagged template in TypeScript:</p>
       <pre class="code" data-hl>const priority: 'urgent' | 'normal' = await nl`Decide whether ticket is urgent.`(ticket);</pre>
@@ -183,7 +183,7 @@ the ticket, report an error saying what is missing.</pre>
 
       <p>An inline <code>nl</code> closes over its lexical scope like an arrow function does. But how does it know which variables it uses when its body is prose? <b>By mention.</b> The compiler tokenizes the instruction text against the names in scope, using case-sensitive JavaScript identifier boundaries. Write <code>policy</code> and you have captured <code>policy</code>. Write "Policy" at the start of a sentence and you have written a word.</p>
       <p>Explicit parameters shadow captures, as they do in any function. Data captures are read <b>live at each call</b>, not frozen at creation. A mentioned <code>let</code> may be reassigned by the model. The write-back happens after a successful eval and is version-checked: if a sibling call changed the variable in the meantime, the eval fails with <code>capture-conflict</code> and the model retries against the new value. Reassigning a captured <code>const</code> is a compile error. Bindings of function type are always captured by value, which turns out to matter for termination (chapter 5).</p>
-      <p>The occasional false match is an accepted trade-off. The capture list is visible in the child's opening and in the trace.</p>
+      <p>Now and then an ordinary English word happens to match a variable name and gets captured. The project accepts that, and shows the capture list in the child call's opening and in its trace.</p>
     </div>
 
     <div class="panel" id="cap">
@@ -212,7 +212,7 @@ the ticket, report an error saying what is missing.</pre>
     <div class="prose">
       <h3>Data is never instructions: <code>Untrusted&lt;T&gt;</code></h3>
       <p>The text of a natlang function belongs to its author. A <code>.nl</code> body is fixed text that refers to arguments by name, so a value is never spliced into it. The one splice point is <code>${…}</code> in an inline template. There the compiler reports <code>untrusted-instruction</code> when the interpolated expression is <code>Untrusted&lt;T&gt;</code>, or text derived from one. The fix it suggests is to pass the value as an argument.</p>
-      <p>Arguments are rendered as data. A marked string shows up as a fenced block whose info line names its source. The fence is three backticks, or one more than the longest run of backticks in the text, so the text can never close its own fence. That last detail is a small one, and a good one.</p>
+      <p>Arguments are rendered as data. A marked string shows up as a fenced block whose info line names its source. The fence is three backticks, or one more than the longest run of backticks in the text, so the text can never close its own fence.</p>
     </div>
     <div class="panel" id="fence">
       <div class="panel-h"><span class="dots"><i></i><i></i><i></i></span><span class="title">untrusted data, rendered</span><span class="right sim">same fence rule</span></div>
@@ -249,8 +249,8 @@ the ticket, report an error saying what is missing.</pre>
       <p>The model reads, computes, delegates and finishes with <code>return_result(success | blocked | failed)</code>. <code>blocked</code> means required information is absent, <code>failed</code> means the instructions asked for something contradictory, and either one comes with a reason sentence instead of a value. Instructions don't all need code: an answer that takes only reading and judgment is given directly.</p>
     </div>
     <div class="prose">
-      <p>The details are where it gets good:</p>
-      <p><b>Cut-offs are honest.</b> A value too long to show is shortened with a note that is deliberately not TypeScript: <code>&lt;&lt;cut off: 37 of 40 items not shown; tickets holds all of it&gt;&gt;</code>. A cut-off literal copied into an eval fails to compile rather than running on part of the data.</p>
+      <p>Three details of this loop:</p>
+      <p><b>Long values are cut off visibly.</b> A value too long to show is shortened with a note that is deliberately not TypeScript: <code>&lt;&lt;cut off: 37 of 40 items not shown; tickets holds all of it&gt;&gt;</code>. A cut-off literal copied into an eval fails to compile rather than running on part of the data.</p>
       <p><b>Errors teach.</b> natlang never spells out a wrong form in a prompt, because that primes the model to produce it. The runtime handles the wrong form and teaches the fix in a one-sentence error.</p>
       <p><b>Long conversations compact.</b> Past three quarters of the context budget, the model must call <code>compact_history(note)</code>. Older outputs are then replaced by pointers into a searchable <code>transcript</code>.</p>
     </div>
@@ -320,7 +320,7 @@ return await iterateOn(shorten, draft)
   .withLimit({ maxSteps: 3 })
   .until(text =&gt; words(text) &lt;= MAX_SUMMARY_WORDS);
 // IterationLimitError carries lastState: keep the shortest honest summary.</pre>
-      <div class="aside" style="margin-top:22px">The deliberate exceptions are model-controlled: a loop with a natural-language predicate, and the agent loop of a call, which has no turn or time limit unless the caller sets one.<small>The rules address code written in good faith. The spec says plainly that the Node backend is not a sandbox.</small></div>
+      <div class="aside" style="margin-top:22px">The deliberate exceptions are model-controlled: a loop with a natural-language predicate, and the agent loop of a call, which has no turn or time limit unless the caller sets one.<small>These rules prevent accidental infinite loops. They are not a security boundary: the spec states that the Node backend is not a sandbox.</small></div>
     </div>
     <div class="panel" id="iter">
       <div class="panel-h"><span class="dots"><i></i><i></i><i></i></span><span class="title">iterateOn(shorten, draft)</span><span class="right sim">simulated steps</span></div>
@@ -431,7 +431,7 @@ return await iterateOn(shorten, draft)
     </div>
     <div class="prose">
       <p>Cases are promoted and demoted by <b>measured comparison with the agent</b>: shadow runs, audits, and a minimum number of comparisons on <i>live</i> calls (three by default). The design notes record why live ones are required. One case passed 496 replays of recorded calls and then failed every live call, because replays share the context the case was written from.</p>
-      <div class="aside c">Then the nice twist: the specializer is itself a natlang program. <code>worthLooking.nl</code> decides whether a function is worth a look, <code>chooseCondition.nl</code> picks the guard a case should test, and <code>promote.nl</code> decides whether a case moves up, stays or moves down. Crisp code measures each condition exactly.<small>Policy in prose, mechanism in code; see chapter 9.</small></div>
+      <div class="aside c">The specializer is itself written in natlang. <code>worthLooking.nl</code> decides whether a function is worth a look, <code>chooseCondition.nl</code> picks the guard a case should test, and <code>promote.nl</code> decides whether a case moves up, stays or moves down. Crisp code measures each condition exactly.<small>Policy in prose, mechanism in code; see chapter 9.</small></div>
     </div>
   </div>
 
@@ -515,8 +515,8 @@ return await iterateOn(shorten, draft)
     <div class="prose">
       <h3 style="margin-top:0">Fusion you never write down</h3>
       <p>You don't need to write <code>Neuralese</code> anywhere to benefit from it. If <code>natlang check</code> can prove that a stage's result is read <i>only</i> by the next stage, the runtime may keep that hand-off as vectors. The chain is already explicit in the language: <b>a call inside a call</b> (<code>analyze(parse(source))</code>), or a name used exactly once, as the next stage's argument.</p>
-      <p>Any second reader keeps the hand-off as text. That includes an orchestrator peeking at a field, a log line, a second stage, or a different <code>model:</code>. The fix the authoring guide suggests is a sensible one: make the consumer carry forward whatever the orchestrator needed from the middle.</p>
-      <div class="aside s">Where this is heading: the current research line replaces the vector channel with shared <b>positional KV and hybrid-state spans</b>. Producers export state, and consumers splice it in at the correct positions, with distinct markers for producing and for consuming. It is being trained now. Treat it as a direction, not a result.</div>
+      <p>Any second reader keeps the hand-off as text. That includes an orchestrator peeking at a field, a log line, a second stage, or a different <code>model:</code>. The authoring guide's advice is to have the consumer pass along whatever the orchestrator needed from the middle value, so the orchestrator never reads it.</p>
+      <div class="aside s">Where this is heading: the current research line replaces the vector channel with shared <b>positional KV and hybrid-state spans</b>. Producers export state, and consumers splice it in at the correct positions, with distinct markers for producing and for consuming. That work is in training now and has no results to report yet.</div>
     </div>
     <div class="panel" id="fu">
       <div class="panel-h"><span class="dots"><i></i><i></i><i></i></span><span class="title">orchestrator · which hand-offs may stay soft?</span><span class="right sim">fusibility check</span></div>
@@ -535,14 +535,14 @@ return await iterateOn(shorten, draft)
 <section class="chapter wrap" id="policy">
   <div class="chead">
     <div class="num">09</div>
-    <div class="kicker">how natlang people build things</div>
+    <div class="kicker">how natlang programs are designed</div>
     <h2>Policy is prose. <em class="c" style="color:var(--crisp)">Mechanism</em> is crisp.</h2>
   </div>
 
   <div class="grid2">
     <div class="prose">
       <p>The project's main design rule: before building anything, ask how it would be a natlang program. That means typed natural-language functions, callable folders, services for the outside world, and crisp code <i>only</i> where exactness or the outside world requires it. Any component that <b>decides</b> something (which tier serves, what to fuse, what to promote, how to recover) is a natlang program, and that includes natlang's own runtime and compiler. Crisp code is for services, the CLI, atomic commits, exact verifiers of what the stages produce, and plumbing.</p>
-      <p>When a policy is hot, it gets one interface with both implementations behind a setting. That is the hero widget at the top of this page, and a real primitive:</p>
+      <p>When a policy is hot, it gets one interface with both implementations behind a setting. The switch at the top of this page works the same way, using this primitive:</p>
       <pre class="code" data-hl>import { pluggable } from '@natlang/node';
 const choose = pluggable(
   { crisp: chooseTierCrisp, nl: chooseTier },
@@ -589,7 +589,7 @@ natlang check examples/triage        # types, nl signatures, folder policy
 natlang run examples/triage -- tickets.json
 natlang run applications/evidence    # a citation-checked QA console</pre></div>
     <div class="prose">
-      <p>The specification and the source are the active contract. When this page and the spec disagree, the spec wins, and when the spec and the code disagree, the spec lists the disagreement under "Known discrepancies" for the owner to decide. That small habit says a lot about the project.</p>
+      <p>The specification and the source are the active contract. When this page and the spec disagree, the spec wins, and when the spec and the code disagree, the spec lists the disagreement under "Known discrepancies" for the project owner to decide.</p>
     </div>
   </div>
   <div class="links">

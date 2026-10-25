@@ -541,7 +541,7 @@ await rank(tickets)   // → string[] (40), checked against the declared type
       id(assess/) = H(…, review ↦ id(review/))<br>
       id(review/) = H(…, assess/ ↦ id(assess/), …)<br>
       <span class="bad">⟹ id(assess/) = H(… H(… id(assess/) …) …): a folder would contain its own hash.</span><br>
-      The edge isn't rejected so much as unrepresentable. Rebinding can't sneak it in either: rebinding never adds an executable node (<code>context-new-executable</code>).
+      So the edge cannot be expressed at all, and there is nothing to reject at run time. Rebinding cannot add it either: rebinding never adds an executable node (<code>context-new-executable</code>).
       If one function must call another while active, nest it in the caller's callable folder: <code>root/inspect.nl</code>, <code>root/inspect/decide.nl</code>.`;
   });
 })();
@@ -559,7 +559,7 @@ await rank(tickets)   // → string[] (40), checked against the declared type
     { code: 'function f(xs: string[]): number {\n  return xs.length ? f(xs) : 0;\n}', a: 'fails',
       why: 'Re-entering with an argument that is not smaller fails when it happens, with <code>NatlangRecursionError</code>.' },
     { code: 'for (let i = 0; i < items.length; i++)\n  items.push(items[i]);', a: 'runs',
-      why: 'A counted loop reads its bound once, when it starts, so this doubles the array exactly once. It\'s a gotcha in plain JavaScript and well defined here.' },
+      why: 'A counted loop reads its bound once, when it starts, so this doubles the array exactly once. In plain JavaScript the same loop never ends.' },
     { code: 'for (const x of items)\n  items.push(x);', a: 'fails',
       why: '<code>for…of</code> is guarded at run time against iterating a growing collection: an array that grows during the loop throws.' },
     { code: 'await iterateOn(improve, draft)\n  .until(d => d.score > 0.9);', a: 'fails',
@@ -888,8 +888,8 @@ await rank(tickets)   // → string[] (40), checked against the declared type
       <div class="metric"><div class="v">${(stats.saved / 1000).toFixed(1)}k</div><div class="l">tokens saved, est.</div></div>`;
     const anyDemoted = cases.some(c => c.status === 'demoted');
     $('#jit-note').innerHTML = !mined ? 'Order matters: the first active case whose guard admits the arguments serves the call.'
-      : anyDemoted ? 'Case 2 learned the hard way that "refund" can be a technical problem. Look for a red row: an answer can be wrong before an audit notices. That is why promotion and demotion are measured, never assumed, and why a guard that holds on replays still has to face live inputs.'
-      : 'Shadow cases run beside the agent and are compared. Keep sending calls. (A tricky refund ticket is coming.)';
+      : anyDemoted ? 'Case 2 assumed every ticket mentioning a refund is about billing. A red row is a wrong answer it served before an audit caught it, and the audit then demoted it. Replays of old calls cannot catch this kind of mistake, which is why promotion also requires comparisons on live calls.'
+      : 'Shadow cases run beside the agent and their answers are compared. Keep sending calls: a ticket about a broken refund API is coming.';
   }
   $('#jit-one').addEventListener('click', send);
   $('#jit-ten').addEventListener('click', async () => { for (let k = 0; k < 10; k++) { send(); await sleep(140); } });
