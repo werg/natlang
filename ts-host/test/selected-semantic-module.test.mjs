@@ -33,7 +33,7 @@ function controlledSelected(mode,receipts){
       if(code.includes('require("./child")')){
         const child=bindings.require('./child');
         bindings.module.exports={answer:()=>child.value+1};
-      } else if(code.includes('child') || code.includes('value')) {
+      } else if(code.includes('exports.value')) {
         bindings.module.exports={value:12};
       } else {
         bindings.module.exports={default:()=>42,answer:()=>42};
