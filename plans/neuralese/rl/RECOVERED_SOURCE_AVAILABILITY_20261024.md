@@ -267,3 +267,44 @@ implementation inventory and source revision; it never relabels new helpers as
 old reviewed code. Sixteen focused tests pass after independent Luna engineering
 work and primary review. A complete final check is being repeated for this
 mechanism change before pushing; the failed first full check is retained.
+
+21:10Berlin follow-up: Mellum advanced beyond35326; its first earned full-state
+private export is in full-object readback verification, not yet a verified
+recovery replacement. The original full-state parent remains protected. The
+failed supplemental snapshot reports CWSANDBOX_FSS_CREATE_TIMED_OUT; suspend
+repeated captures until a concrete provider/storage fix, keep primary exports
+running. Local full SFT completed37252 and preference progressed beyond37266.
+The recovery stage had no saved child: its unintended reverse TF32x3-to-IEEE
+transition failed the existing numerical gate. Future unreserved SFT, preference
+and RL declarations now consistently retain earned TF32x3, with new bound
+capacity requests and unchanged tolerances; original failed stage exposure debt
+remains explicit until its real retry succeeds. Declarations and proof are in
+source-rejoin/ready-stage-v11-consistent-attention, existing operation unchanged.
+
+Reboot also removed the temporary admission reader. Reconstructed the historical
+7dda1a2dc71fdffa2d5fa90253b5c4ba1f8fd0fa closure into persistent internal
+storage /home/werg/data/natlang-internal-admission-readers-20261025, verified
+three exact pinned historical operators and overlaid only the already reviewed
+worker scheduling fix. Historical path aliases are explicit, no receipts
+rewritten. A single real batch41/tranche0 check now reaches the zero-delta
+verifier but rejects a cache-only dedup declaration whose original source is
+present again after drive reconnection. This needs a source-read continuation,
+not weakened cache custody. The worker is not left retrying this error forever.
+Batch63/tranche7 separately has zero actual positive outcomes and must receive
+a truthful verified-zero-positive terminal disposition; never admit its failure.
+No new admission or training exposure is claimed from reader reconstruction.
+
+21:14Berlin: first new Mellum full-state35224 now independently private-GET
+verified,48,264,727,761bytes,SHA420c674a41a1592f27b8d35433fdaddfee9b17358cccae958520a0898b7cbe36.
+The quota-independent external-drive mirror is actually downloading it; not yet
+a completed verified local replacement. Source/custody fixes now explicitly
+revalidate restored original graph bytes against the admitted manifest and
+retain exact historical cache receipt/key/policy identities. Empty positive
+source boundaries require complete rejected-outcome accounting and their exact
+completed source execution, receive no numeric conversion/admission/exposure,
+and become terminal poll dispositions.109focused tests pass, including altered
+source/index/policy/manifest and invalid empty-source disposition rejection.
+Reader v2 retains the historical parser/builder; only source, zero-disposition
+and admission helpers are explicit reviewed overlays. Real batch41/tranche0
+readback check is running before resuming the complete conversion/admission
+worker; this is source engineering, never new teacher generation.

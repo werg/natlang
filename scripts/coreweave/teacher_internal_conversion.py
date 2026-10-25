@@ -413,6 +413,47 @@ def _verified_internal_predecessors(root: Path, ctx: Tranche, source_proof: dict
     return checked
 
 
+def _registered_dedup_input(root, ident, model, fingerprint, policy, declared, *,
+                            registry_ref, predecessor, manifest_ref, manifest):
+    """Verify a historical cache receipt against an available original when restored.
+
+    Cache-only selection remains restricted to unavailable sources. Historical
+    receipts keep their recorded identity; a restored source adds an exact byte
+    check before reusing its existing parser/policy-addressed content index.
+    """
+    relative = f'{model}/train/native-graphs.jsonl.zst'
+    source = root / predecessor['path'] / relative
+    try:
+        source.stat()
+    except OSError as error:
+        if error.errno not in (errno.ENOENT, errno.EIO):
+            raise
+        cached, contents = registered_cached_content_index(
+            root, ident, model, fingerprint, policy, registry_ref=registry_ref,
+            registry_entry=predecessor, manifest_ref=manifest_ref,
+            manifest=manifest, verify_bindings=False)
+        return cached, contents, []
+    members = [item for item in manifest.get('files', []) if item.get('path') == relative]
+    actual = file_binding(source)
+    if (manifest.get('id') != ident or manifest.get('path') != predecessor['path']
+            or len(members) != 1
+            or any(members[0].get(key) != actual[key] for key in ('sha256', 'bytes'))):
+        raise ValueError('restored dedup source differs from its admitted manifest')
+    key = {'source_sha256': actual['sha256'], 'tokenizer_fingerprint': fingerprint,
+           'policy_sha256': policy, 'kind': 'teacher-content-fingerprints-v1'}
+    cache_ref = declared.get('content_index_cache') or {}
+    if file_binding(cache_ref.get('path', '')) != cache_ref:
+        raise ValueError('historical dedup content index differs from its recorded bytes')
+    from natlang_neuralese.common import row_index
+    index = row_index.load(Path(cache_ref['path']))
+    if not _valid_content_index(index, key):
+        raise ValueError('restored dedup source lacks its exact current-law content index')
+    cached = {'path': f'registered-cache:{ident}/{relative}',
+              'sha256': actual['sha256'], 'bytes': actual['bytes'], 'rows': index['rows'],
+              'content_index_cache': cache_ref, 'content_index_key': key}
+    return cached, index['fingerprints'], [actual]
+
+
 def _verified_zero_conversion(root: Path, path: Path, ctx: Tranche,
                              current_source_proof: dict, contracts: dict[str, dict]) -> dict:
     """Prove a prior boundary emitted no new graphs for either student."""
@@ -593,10 +634,11 @@ def _verified_zero_conversion(root: Path, path: Path, ctx: Tranche,
                 manifest_ref = file_binding(root / 'training/corpus-manifests' / f'{ident}.json')
                 manifest_refs.append(manifest_ref)
                 manifest = read_bound(manifest_ref)
-                cached, contents = registered_cached_content_index(
+                cached, contents, restored_inputs = _registered_dedup_input(
                     root, ident, model, receipt['tokenizer']['expanded_fingerprint'], policy,
-                    registry_ref=registry_ref, registry_entry=predecessor,
-                    manifest_ref=manifest_ref, manifest=manifest, verify_bindings=False)
+                    input_binding, registry_ref=registry_ref, predecessor=predecessor,
+                    manifest_ref=manifest_ref, manifest=manifest)
+                bound_inputs.extend(restored_inputs)
                 if any(input_binding.get(key) != cached.get(key)
                        for key in ('path', 'sha256', 'bytes', 'rows', 'content_index_cache', 'content_index_key')):
                     raise ValueError(f'{model} zero-boundary cache input differs from its admitted content index')
