@@ -65,20 +65,33 @@ def _execute_staged_proof_calls(path, manifest):
 
 
 def _review(path: Path):
+    old = json.loads(Path(stage.custody.LEGACY_OBSERVATION["path"]).read_bytes())
+    successor_inventory = {
+        relative: stage.file_binding(stage.ROOT / relative)
+        for relative in old["reviewed_external_helpers"]["files"]
+        if relative != stage.custody.LEGACY_API_RELATIVE
+    }
+    successor_source_revision = stage._source_revision(stage.ROOT)
+    builder = stage.file_binding(stage.ROOT / "scripts/neuralese_data/build_verified_teacher_trajectory_graphs.py")
     evidence = {}
     for name in ("focused", "full"):
         result = path.with_name(name + "-result.json")
         result.write_text(json.dumps({
-            "schema": "natlang.teacher-helper-transition-check-result/1", "status": "passed",
+            "schema": "natlang.teacher-helper-transition-check-result/2", "status": "passed",
             "exit_code": 0, "source_commit": "8c3358fac0355d462652f1b3352970ff2f5ca0f9",
+            "successor_source_revision": successor_source_revision,
+            "successor_implementation_files": successor_inventory,
             "unit": "review-fixture-" + name,
         }) + "\n")
         evidence["focused_evidence" if name == "focused" else "full_check_evidence"] = stage.file_binding(result)
     path.write_text(json.dumps({
-        "schema": "natlang.teacher-helper-transition-review/1", "passed": True,
+        "schema": "natlang.teacher-helper-transition-review/2", "passed": True,
         "full_check": True, "training_admission": False, "exposure": 0,
         "source_commit": "8c3358fac0355d462652f1b3352970ff2f5ca0f9",
         "successor_helper_sha256": stage.API_SOURCE_BINDING["sha256"],
+        "successor_source_revision": successor_source_revision,
+        "successor_converter": builder,
+        "successor_implementation_files": successor_inventory,
         **evidence,
     }) + "\n")
 
@@ -154,6 +167,20 @@ def test_operator_loader_rejects_changed_staged_verifier(tmp_path, monkeypatch):
                                env={"PATH": "/usr/bin:/bin", "PYTHONPATH": f"{stage.ROOT}:{stage.ROOT / 'training/neuralese'}"})
     assert completed.returncode != 0
     assert "pinned teacher helper continuation verifier changed" in completed.stderr
+
+
+def test_stage_rejects_review_without_exact_current_inventory(tmp_path, monkeypatch):
+    monkeypatch.setattr(stage, "DGXOPS", tmp_path)
+    destination = tmp_path / "candidate-stale-review"
+    review = tmp_path / "review.json"
+    _review(review)
+    report = json.loads(review.read_bytes())
+    builder = "scripts/neuralese_data/build_verified_teacher_trajectory_graphs.py"
+    report["successor_implementation_files"][builder]["sha256"] = "0" * 64
+    review.write_text(json.dumps(report) + "\n")
+    with pytest.raises(ValueError, match="exact active source revision and implementation inventory"):
+        stage.stage(destination, review)
+    assert not destination.exists()
 
 
 def test_stage_refuses_incomplete_review_and_modified_source(tmp_path, monkeypatch):

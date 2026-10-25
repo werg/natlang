@@ -37,15 +37,19 @@ def _successor_fixture(tmp_path, *, bad_accounting=False):
     old_api = Path(json.loads(AUTHORITY_PATH.read_bytes())["files"][custody.LEGACY_API_RELATIVE]["path"])
     shutil.copyfile(old_api, relroot / "teacher_tranche_admission.py")
     authority = json.loads(AUTHORITY_PATH.read_bytes())
-    inventory = {custody.LEGACY_API_RELATIVE: _ref(staged_api)}
+    inventory = {relative: _ref(Path(ref["path"])) for relative, ref in authority["files"].items()}
     for relative, old_ref in OLD["reviewed_external_helpers"]["files"].items():
         if relative == custody.LEGACY_API_RELATIVE:
             continue
         target = repo / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(Path(authority["files"][relative]["path"]), target)
-        inventory[relative] = _ref(target)
     api_ref = _ref(staged_api)
+    successor_inventory = {relative: _ref(repo / relative)
+        for relative in OLD["reviewed_external_helpers"]["files"]
+        if relative != custody.LEGACY_API_RELATIVE}
+    successor_converter = successor_inventory["scripts/neuralese_data/build_verified_teacher_trajectory_graphs.py"]
+    successor_source_revision = "a" * 40
     verifier_path = tmp_path / "operators/teacher_helper_continuation.py"
     shutil.copyfile(Path(custody.__file__), verifier_path)
     verifier_ref = _ref(verifier_path)
@@ -59,24 +63,32 @@ def _successor_fixture(tmp_path, *, bad_accounting=False):
     for name in ("focused", "full"):
         report_path = tmp_path / f"{name}-check.json"
         report_path.write_text(json.dumps({
-            "schema": "natlang.teacher-helper-transition-check-result/1", "status": "passed",
+            "schema": "natlang.teacher-helper-transition-check-result/2", "status": "passed",
             "exit_code": 0, "source_commit": custody.SUCCESSOR_COMMIT, "unit": "unit-" + name,
+            "successor_source_revision": successor_source_revision,
+            "successor_implementation_files": successor_inventory,
         }) + "\n")
         review_evidence["focused_evidence" if name == "focused" else "full_check_evidence"] = _ref(report_path)
     review_path.write_text(json.dumps({
-        "schema": "natlang.teacher-helper-transition-review/1", "passed": True,
+        "schema": "natlang.teacher-helper-transition-review/2", "passed": True,
         "full_check": True, "training_admission": False, "exposure": 0,
         "successor_helper_sha256": api_ref["sha256"],
         "source_commit": custody.SUCCESSOR_COMMIT,
+        "successor_source_revision": successor_source_revision,
+        "successor_converter": successor_converter,
+        "successor_implementation_files": successor_inventory,
         **review_evidence,
     }, sort_keys=True) + "\n")
     proof = {
-        "schema": "natlang.teacher-helper-continuation-transition/1",
+        "schema": "natlang.teacher-helper-continuation-transition/2",
         "legacy_observation": custody.LEGACY_OBSERVATION,
         "legacy_authority": custody.LEGACY_AUTHORITY,
         "successor_helper": api_ref,
         "successor_verifier": verifier_ref,
+        "successor_converter": successor_converter,
         "implementation_files": inventory,
+        "successor_implementation_files": successor_inventory,
+        "successor_source_revision": successor_source_revision,
         "source_closure": closure,
         "review": _ref(review_path),
         "training_admission": False,
@@ -91,8 +103,13 @@ def _successor_fixture(tmp_path, *, bad_accounting=False):
 
 def test_exact_historical_helper_receipt_remains_verifiable():
     root = Path(__file__).resolve().parents[1]
+    authority = json.loads(AUTHORITY_PATH.read_bytes())
+    builder_relative = "scripts/neuralese_data/build_verified_teacher_trajectory_graphs.py"
+    historical_builder = authority["files"][builder_relative]
+    assert _builder(root)["sha256"] != historical_builder["sha256"]
     execution = {"helper_continuation": custody.LEGACY_OBSERVATION,
-                 "converter": _builder(root)}
+                 "converter": {"path": str((root / builder_relative).resolve()),
+                               "sha256": historical_builder["sha256"]}}
     assert custody.verify_helper_continuation(
         execution, transition_binding={"path": "/not-read", "sha256": "b" * 64, "bytes": 1},
         successor_helper_binding={"path": "/not-read", "sha256": "c" * 64, "bytes": 1},
@@ -138,7 +155,7 @@ def test_successor_proof_cannot_claim_different_source_closure_accounting(tmp_pa
             expected_executor=execution["converter"])
 
 
-@pytest.mark.parametrize("tamper", ["helper", "implementation", "receipt", "executor", "transition"])
+@pytest.mark.parametrize("tamper", ["helper", "implementation", "builder", "review_inventory", "receipt", "executor", "transition"])
 def test_successor_refuses_tampered_or_unrelated_provenance(tmp_path, tamper):
     repo, helper_path, verifier_path, proof_path, proof, api_ref, verifier_ref = _successor_fixture(tmp_path)
     transition = _ref(proof_path)
@@ -148,6 +165,16 @@ def test_successor_refuses_tampered_or_unrelated_provenance(tmp_path, tamper):
     elif tamper == "implementation":
         target = repo / "training/neuralese/natlang_neuralese/train/text_supervision.py"
         target.write_bytes(target.read_bytes() + b"# changed\n")
+    elif tamper == "builder":
+        target = repo / "scripts/neuralese_data/build_verified_teacher_trajectory_graphs.py"
+        target.write_bytes(target.read_bytes() + b"# changed\n")
+    elif tamper == "review_inventory":
+        review_path = Path(proof["review"]["path"])
+        review = json.loads(review_path.read_bytes())
+        review["successor_implementation_files"]["scripts/neuralese_data/build_verified_teacher_trajectory_graphs.py"]["sha256"] = "0" * 64
+        review_path.write_text(json.dumps(review, sort_keys=True) + "\n")
+        proof["review"] = _ref(review_path)
+        proof_path.write_text(json.dumps(proof, sort_keys=True) + "\n")
     elif tamper == "receipt":
         proof["legacy_observation"] = {**custody.LEGACY_OBSERVATION, "sha256": "0" * 64}
         proof_path.write_text(json.dumps(proof, sort_keys=True) + "\n")

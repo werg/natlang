@@ -8,6 +8,7 @@ import hashlib
 import json
 import re
 import shutil
+import subprocess
 from pathlib import Path
 from natlang_neuralese.common import paths as machine_paths
 from typing import Any
@@ -209,6 +210,15 @@ def _copy_exact(reference: dict[str, Any], destination: Path) -> bytes:
     return raw
 
 
+def _source_revision(root: Path) -> str:
+    result = subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"],
+                            check=True, capture_output=True, text=True)
+    revision = result.stdout.strip()
+    if not re.fullmatch(r"[0-9a-f]{40,64}", revision):
+        raise ValueError("repository did not provide a canonical source revision")
+    return revision
+
+
 def stage(destination: Path, review_report: Path) -> dict[str, Any]:
     destination = destination.resolve()
     if not destination.is_relative_to(DGXOPS) or destination.exists():
@@ -218,7 +228,7 @@ def stage(destination: Path, review_report: Path) -> dict[str, Any]:
     if file_binding(review_report) != review_input_ref:
         raise ValueError("independent review report changed while it was read")
     review = json.loads(review_raw)
-    if (review.get("schema") != "natlang.teacher-helper-transition-review/1" or
+    if (review.get("schema") != "natlang.teacher-helper-transition-review/2" or
             review.get("passed") is not True or review.get("full_check") is not True or
             review.get("source_commit") != custody.SUCCESSOR_COMMIT or
             review.get("training_admission") is not False or review.get("exposure") != 0):
@@ -230,6 +240,33 @@ def stage(destination: Path, review_report: Path) -> dict[str, Any]:
         actual = file_binding(spec["path"])
         if actual["sha256"] != spec["sha256"] or actual["bytes"] != spec["bytes"]:
             raise ValueError(f"active operator source changed since review: {name}")
+    old = json.loads(Path(custody.LEGACY_OBSERVATION["path"]).read_bytes())
+    authority = json.loads(Path(custody.LEGACY_AUTHORITY["path"]).read_bytes())
+    builder_relative = "scripts/neuralese_data/build_verified_teacher_trajectory_graphs.py"
+    successor_converter = file_binding(ROOT / builder_relative)
+    successor_implementation_files = {
+        relative: file_binding(ROOT / relative)
+        for relative in old["reviewed_external_helpers"]["files"]
+        if relative != custody.LEGACY_API_RELATIVE
+    }
+    source_revision = _source_revision(ROOT)
+    if (review.get("successor_source_revision") != source_revision or
+            review.get("successor_converter") != successor_converter or
+            review.get("successor_implementation_files") != successor_implementation_files):
+        raise ValueError("independent review does not bind the exact active source revision and implementation inventory")
+    for field in ("focused_evidence", "full_check_evidence"):
+        evidence_ref = review.get(field)
+        if not isinstance(evidence_ref, dict):
+            raise ValueError(f"independent review omits {field}")
+        _, evidence_raw = custody._read_bound(evidence_ref)
+        evidence = json.loads(evidence_raw)
+        if (evidence.get("schema") != "natlang.teacher-helper-transition-check-result/2" or
+                evidence.get("status") != "passed" or evidence.get("exit_code") != 0 or
+                evidence.get("source_commit") != custody.SUCCESSOR_COMMIT or
+                evidence.get("successor_source_revision") != source_revision or
+                evidence.get("successor_implementation_files") != successor_implementation_files or
+                not evidence.get("unit")):
+            raise ValueError(f"independent review {field} does not bind the exact active source inventory")
     destination.mkdir(parents=True)
     api_dest = destination / "selected/scripts/coreweave/teacher_tranche_admission.py"
     api_dest.parent.mkdir(parents=True, exist_ok=True)
@@ -253,21 +290,23 @@ def stage(destination: Path, review_report: Path) -> dict[str, Any]:
             receipt.get("code_transition") != {k: custody.SOURCE_CLOSURE_TRANSITION[k] for k in ("path", "sha256")} or
             transition.get("training_admission") is not False):
         raise ValueError("source-closure authorities differ from the exact historical transition")
-    old = json.loads(Path(custody.LEGACY_OBSERVATION["path"]).read_bytes())
     implementation_files = {}
-    for relative, expected in old["reviewed_external_helpers"]["files"].items():
-        target = api_dest if relative == custody.LEGACY_API_RELATIVE else ROOT / relative
-        actual = file_binding(target)
-        if relative != custody.LEGACY_API_RELATIVE and any(actual[k] != expected[k] for k in ("sha256", "bytes")):
-            raise ValueError(f"unreviewed helper implementation changed: {relative}")
-        implementation_files[relative] = actual
+    for relative in old["reviewed_external_helpers"]["files"]:
+        # Keep an explicit binding to every historical closure file from its
+        # immutable authority. Active successor package dependencies receive
+        # their own inventory below, so current evolutions are not mislabeled
+        # as historical or silently substituted into the old receipt.
+        implementation_files[relative] = file_binding(authority["files"][relative]["path"])
     proof = {
-        "schema": "natlang.teacher-helper-continuation-transition/1",
+        "schema": "natlang.teacher-helper-continuation-transition/2",
         "legacy_observation": custody.LEGACY_OBSERVATION,
         "legacy_authority": custody.LEGACY_AUTHORITY,
         "successor_helper": api_ref,
         "successor_verifier": verifier_ref,
+        "successor_converter": successor_converter,
         "implementation_files": implementation_files,
+        "successor_implementation_files": successor_implementation_files,
+        "successor_source_revision": source_revision,
         "source_closure": {"receipt": file_binding(closure_receipt), "transition": file_binding(closure_transition),
                            "accounting": receipt["accounting"]},
         "review": file_binding(review_dest),

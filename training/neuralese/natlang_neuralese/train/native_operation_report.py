@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from pathlib import Path
 
 from ..common.hashing import sha256_file_hex_cached
@@ -325,3 +326,29 @@ def supervised_progress_numerics_ok(report, checkpoint):
             and certificate.get('reason') == 'shared qualification request pending'
             and certificate.get('checkpoint_sha256') == checkpoint['sha256']
             and not certificate.get('error'))
+
+
+def active_stage_handoff(report,checkpoint,*,stage_id=None):
+    """Publish a finished active stage without claiming all recipe/held debt complete."""
+    if report.get('schema')!='natlang.neuralese-native-sft-report/1'or report.get('active_stage_complete')is not True:return False
+    record=report.get('active_stage_completion')or{}
+    if (record.get('schema')!='natlang.native-active-stage-completion/1'
+            or not isinstance(record.get('stage_id'),str)or not record['stage_id']
+            or (stage_id is not None and record['stage_id']!=stage_id)
+            or record.get('checkpoint_sha256')!=checkpoint['sha256']
+            or record.get('train_source_sha256')!=(report.get('train_source')or{}).get('sha256')
+            or record.get('held_source_sha256')!=(report.get('held_source')or{}).get('sha256')):return False
+    import re
+    if any(not re.fullmatch('[0-9a-f]{64}',str(record.get(key,'')))
+           for key in ('checkpoint_sha256','train_source_sha256','held_source_sha256')):return False
+    required=record.get('required_graph_visits');observed=record.get('graph_visits');remaining=record.get('remaining_graph_visits')
+    if (type(required)is not int or required<1 or type(observed)is not int or observed<required
+            or type(remaining)is not int or remaining!=0):return False
+    held=(report.get('metrics')or{}).get('held')or{}
+    return (record.get('held_scope')in ('cadence-subset','full')
+        and record['held_scope']==held.get('scope')
+        and record.get('full_held_qualification_complete')is (held.get('scope')=='full')
+        and not held.get('operationally_interrupted')and held.get('examples',0)>0
+        and type(held.get('loss'))in (int,float)and math.isfinite(held['loss'])
+        and held.get('source_sha256')==record['held_source_sha256']
+        and supervised_progress_numerics_ok(report,checkpoint))

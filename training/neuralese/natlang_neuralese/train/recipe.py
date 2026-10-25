@@ -39,7 +39,7 @@ HANDLERS = {
                          'required_inputs': {'native_graphs', 'held_native_graphs'},
                          'optional_inputs': {'continue_from', 'continued_native_graphs', 'continued_held_native_graphs', 'foundation_native_graphs', 'foundation_qualification_request', 'withdrawn_native_graphs', 'pending_native_sources', 'unavailable_native_sources', 'source_classification_migration', 'ce_supervision_policy'},
                          'parameters': {'base', 'rank', 'dtype', 'native_linear_precision', 'native_attention_precision', 'epochs', 'batch_graphs', 'batch_tokens', 'learning_rate', 'weight_decay',
-                             'latent_ns', 'eval_every', 'held_eval_tokens', 'held_eval_graphs', 'checkpoint_every', 'checkpoint_seconds', 'async_checkpoint', 'checkpoint_layers', 'checkpoint_direct_token_limit', 'checkpoint_input_offload', 'checkpoint_input_offload_directory', 'chunk_tokens', 'ffn_chunk_tokens',
+                             'latent_ns', 'eval_every', 'held_eval_tokens', 'held_eval_graphs', 'held_final_policy', 'checkpoint_every', 'checkpoint_seconds', 'async_checkpoint', 'checkpoint_layers', 'checkpoint_direct_token_limit', 'checkpoint_input_offload', 'checkpoint_input_offload_directory', 'chunk_tokens', 'ffn_chunk_tokens',
                              'fp8_training', 'fp8_recipe', 'fp8_amax_history_len', 'learned_row_learning_rate', 'interface_row_learning_rate', 'native_optimizer_migration', 'native_ordinary_precision', 'native_norm_execution', 'native_shared_execution', 'history_reasoning_policy', 'seed', 'task_eval', 'objective_continuation',
                              'task_eval_every', 'forward_atol', 'gradient_atol', 'qualify_training_backend', 'resident_geometry_qualification', 'memory_qualification', 'communication_foundation', 'foundation_communication_batches', 'urgent_cohort_fairness', 'refresh_at_checkpoint', 'refresh_foundation_readiness', 'foundation_readiness_policy', 'refresh_after_updates', 'learn_reasoning_boundaries', 'share_causal_prefixes', 'cotangent_accumulator_backend'}, 'result': 'checkpoint.pt'},
 
@@ -93,6 +93,8 @@ def validate_stage_parameters(kind, parameters):
             from ..model.native_precision import NATIVE_ATTENTION_PRECISIONS
             if parameters['native_attention_precision'] not in NATIVE_ATTENTION_PRECISIONS:
                 raise ValueError('unsupported native attention precision')
+        if parameters.get('held_final_policy','budgeted')not in ('budgeted','full'):
+            raise ValueError('unsupported terminal held evaluation policy')
         from .native_optimizer_migration import validate_native_optimizer_migration
         validate_native_optimizer_migration(parameters.get('native_optimizer_migration'))
         from .native_learning_rates import validate_learned_row_rate
@@ -688,6 +690,7 @@ def write_json(path, value):
 # Stage parameters that change how a stage computes, not what it optimizes: a lineage may switch them in place
 # (``--handoff``). Each trainer also lists them among its resume-operational options.
 OPERATIONAL_STAGE_PARAMETERS = frozenset({'refresh_foundation_readiness', 'foundation_readiness_policy', 'refresh_after_updates', 'eval_every', 'checkpoint_every', 'checkpoint_seconds', 'async_checkpoint', 'sdpa_backend', 'deterministic_training', 'fp8_training', 'checkpoint_layers', 'checkpoint_direct_token_limit', 'task_eval', 'task_eval_every', 'qualify_training_backend', 'memory_qualification', 'refresh_at_checkpoint', 'checkpoint_input_offload', 'checkpoint_input_offload_directory'})
+OPERATIONAL_STAGE_PARAMETERS |= {'held_final_policy'}
 
 def native_stage_parameter_handoffs(old_recipe, new_recipe, out):
     """Allow only current native trainers' explicit resume-safe parameter changes."""

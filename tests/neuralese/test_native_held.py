@@ -2,7 +2,29 @@ import copy
 
 import pytest
 
-from natlang_neuralese.train.native_held import held_selection
+from natlang_neuralese.train.native_held import held_selection,commit_held_observations
+
+
+@pytest.mark.parametrize('final',[False,True])
+@pytest.mark.parametrize('completed',[0,1,3])
+def test_interrupted_held_counts_only_observed_rows_and_preserves_prior_visits(final,completed):
+    entries=rows(4,4)
+    _,previous,_=select(entries,graph_budget=2)
+    indices,planned,selection=select(entries,previous,final=final,graph_budget=4)
+    original=copy.deepcopy(previous)
+    ids=[entries[i]['id']for i in indices[:completed]]
+    actual,proof=commit_held_observations(entries,previous,planned,selection,ids)
+    assert previous==original
+    assert actual['graph_visits']==previous['graph_visits']+completed
+    assert actual['forward_token_visits']==previous['forward_token_visits']+3*completed
+    for kind in ('ordinary','communication'):
+        pool=[row for row in entries if row['id'].startswith(kind)]
+        assert actual['classes'][kind]['visits']==[
+            previous['classes'][kind]['visits'][i]+(row['id']in ids)for i,row in enumerate(pool)]
+    assert proof['observed_graphs']==completed and proof['operationally_interrupted']
+    # A continued check must revisit every unobserved selected row fairly.
+    _,continued,_=select(entries,actual,final=True)
+    assert continued['completed_sweeps']>=1
 
 
 def rows(ordinary=12, communication=12):

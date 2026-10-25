@@ -307,7 +307,9 @@ def execute(config,state,state_path,control):
         and declared_sha is not None and declared_sha in (admission.get('declarations') or [])
         and any(declared_sha in (stage.get('pending_source_declarations') or {})
             for stage in ((report.get('mandatory_sft') or {}).get('stages') or {}).values()))
-    usable=(metadata_admitted or report.get('completed') is True or (boundary.get('kind')=='semantic-refresh'
+    from ..train.native_operation_report import active_stage_handoff
+    active_complete=active_stage_handoff(report,{'sha256':sha256_file_hex_cached(checkpoint)},stage_id=config.get('production_stage'))
+    usable=(metadata_admitted or active_complete or report.get('completed') is True or (boundary.get('kind')=='semantic-refresh'
         and boundary.get('reached') is True and boundary.get('new_optimizer_updates',0)>0))
     from ..train.native_operation_report import supervised_progress_numerics_ok
     numerics_ok = supervised_progress_numerics_ok(report,

@@ -183,3 +183,87 @@ through coordination. Poll reuse now invalidates on source proof/result,
 completed conversion and actual model-receipt changes as well as publisher,
 custody and protection inputs. Errors retry. Schedule reload guards the exact
 publication owner and runtime while permitting ready data/cadence changes.
+
+
+## Workstation reboot and authorized Mellum resumption (2026-10-25 evening)
+
+The workstation rebooted; the previous boot journal ends abruptly at01:34Berlin
+with no contemporaneous kernel OOM record. The cause remains unconfirmed. The
+external drive is mounted again and the current source/test reads work. Local
+LFM resumed from its actual saved37124 full state, completed preference through
+37149 and a genuine current-policy RL update, and rejoined full-source SFT.
+
+The current local controller is
+`natlang-lfm-local-rl-cycles-root-20261025-held-v3`, using frozen runtime
+`b0e89f99c3d2b0b70a88133acdbe1a00d921fff3cee0218a2695df9116fb1e30`.
+It preserves the actual RL parent014e5b797fb12b3feab28777b68bb15f1b5d9f20e1e3b7711408a65dbe7ac786
+and every optimizer/RNG/exposure obligation. TF32x3 attention passed actual
+complete cached/reference and transition-gradient checks on that parent; the
+active source's largest ordinary/communication/total-KV cases passed capacity.
+Real SFT updates are advancing again;37153 was directly observed. Independent
+private full-state recovery is verified through37149, rather than the older
+36977 parent mentioned above. Whole-recipe and communication exposure remain
+incomplete.
+
+The terminal held-check bug is repaired in the shared trainer. Routine stage
+ends honor the declared graph/token budgets and record only actually evaluated
+graphs after interruption. Explicit full qualification still requests a full
+sweep. A checkpoint/source-bound active-stage handoff lets the controller
+continue without claiming full-held or entire-recipe completion. Both controller
+consumers use the shared verifier. Independent Luna review found no remaining
+blocker;106 focused CPU tests and the quick checks pass. The full check is still
+running, so no all-green claim is made yet.
+
+The owner explicitly authorized Mellum cloud resumption. One initial10Gi host
+allocation was stopped promptly before any learner/data restoration, because it
+could not safely restore the48GB full state. Its96Gi-minimum replacement is
+`7ab0bb85-16f4-47ae-afa6-8d2db63ba5c9`, with one80GB H100 and96Gi host RAM. The initial stopped10Gi-host box had
+a96GB Blackwell; it is not the current learner.
+The initial lifetime is four hours; this is a concurrency/time bound, never a
+verified dollar cap or production-completion limit. Rates and remaining credit
+are still opaque. Generation remains paused.
+
+The48,264,136,785-byte35223 parent was fully downloaded and SHA-verified in
+that sandbox. All original active1,496,307SFT rows,114,793communication graphs,
+25,968held rows and12,054preference pairs/objective are prepared for the shared
+adaptive SFT/preference/whole-graph RL controller. Original10,809pending SFT
+and359pending preference obligations remain carried; their bodies were recovered
+locally and their original private custody remains retained. This restoration
+is not completed exposure.
+
+Direct private downloads verified266archives, avoiding the workstation uplink
+for most payloads. Source aliases retain compression suffixes, resolve the
+actual sandbox root mapping and preserve relative preference paths. Exact
+source/tokenizer/role/parser-policy-bound indexes are reused after verification:
+818for all active SFT/held leaves, plus3for the full original preference corpus.
+The missing historical finite foundation header still does not grant VAE
+readiness; the real ordinary producer/consumer graphs continue training.
+
+Operational state and exact receipts are under
+`/home/werg/data/mellum-cloud-resume-20261025`. Its real shared controller passed
+startup capacity checks and actual optimizer updates reached35231 from35223.
+Its first saved earned full state is35224, SHA256
+420c674a41a1592f27b8d35433fdaddfee9b17358cccae958520a0898b7cbe36;
+private export is in progress, not yet independently verified. The independent export supervisor follows the real controller
+cursor and pins full optimizer/RNG states for private upload and full readback.
+The first supplemental filesystem snapshot failed despite the explicit volume;
+there is no successful snapshot/restore coverage claim. Keep private exports
+as primary recovery. A superseded6,957,271,744-byte slow-transfer archive was
+pruned with an exact deletion plan while retaining all usable source payloads.
+
+The current Mellum code/control/source-residue supplement is now independently
+private-GET verified:786,985,628bytes,SHA256
+8cbc8e01e511602ea3f61fad3a89cd7d07f4ff334572639fb8d06522de99e1f3.
+The LFM v8 supplement is independently verified too:52,944,862bytes,SHA256
+288d926956f89f5fa373cfe92c04b10594c5999df3182af052db8cb3e46ba611.
+Both supplements are separate from full model/optimizer recovery checkpoints.
+
+The full check completed with4,855Neuralese CPU tests,17GPU tests,2,143TS tests
+and22conformance cases passing. Three general-Python historical-helper tests
+failed because current converter code was being compared with an immutable
+historical builder receipt. The repair verifies real historical frozen bytes
+and requires new successor v2 reviews/checks to bind the complete actual active
+implementation inventory and source revision; it never relabels new helpers as
+old reviewed code. Sixteen focused tests pass after independent Luna engineering
+work and primary review. A complete final check is being repeated for this
+mechanism change before pushing; the failed first full check is retained.

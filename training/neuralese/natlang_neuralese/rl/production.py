@@ -522,13 +522,16 @@ def initial_controller_state(config):
 def qualified_seed_boundary(config,mode,progress,checkpoint):
     """Accept actual SFT work at its checkpoint, without declaring the stage complete."""
     if not config.get('native_state') or mode!='seed':return False
+    from ..train.native_operation_report import active_stage_handoff
+    from ..common.hashing import sha256_file_hex_cached
+    if Path(checkpoint).is_file()and active_stage_handoff(progress,{'sha256':sha256_file_hex_cached(checkpoint)},
+            stage_id=(config.get('seed_trainer_parameters')or{}).get('stage_id')):return True
     boundary=progress.get('continuation_boundary') or {}
     if (progress.get('schema')!='natlang.neuralese-native-sft-report/1'
             or progress.get('numerics_ok') is not True or boundary.get('kind')!='semantic-refresh'
             or boundary.get('reached') is not True
             or type(boundary.get('new_optimizer_updates')) is not int
             or boundary['new_optimizer_updates']<=0 or not Path(checkpoint).is_file()):return False
-    from ..common.hashing import sha256_file_hex_cached
     return boundary.get('checkpoint_sha256')==sha256_file_hex_cached(checkpoint)
 
 

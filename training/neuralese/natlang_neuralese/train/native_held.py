@@ -8,8 +8,34 @@
 from __future__ import annotations
 
 from collections import deque
+from copy import deepcopy
 
 from ..common.hashing import canonical_json_sha256_hex
+
+
+def commit_held_observations(entries, coverage, planned, selection, observed_ids):
+    """Count only completed whole graphs when an operational stop interrupts evaluation."""
+    observed=list(observed_ids)
+    if len(set(observed))!=len(observed):raise ValueError('held observations contain duplicate rows')
+    requested={index for row in selection['classes'].values()for index in row['selected_indices']}
+    by_id={entry['id']:index for index,entry in enumerate(entries)}
+    if any(key not in by_id or by_id[key]not in requested for key in observed):
+        raise ValueError('held observation differs from the selected source rows')
+    actual={by_id[key]for key in observed};result=deepcopy(planned);proof=deepcopy(selection)
+    for name,record in result['classes'].items():
+        pool=[i for i,entry in enumerate(entries)if ('communication'if entry.get('communication')else'ordinary')==name]
+        local={index:j for j,index in enumerate(pool)}
+        chosen=selection['classes'][name]['selected_indices'];done=[i for i in chosen if i in actual]
+        for index in chosen:
+            if index not in actual:record['visits'][local[index]]-=1
+        record['cursor']=((local[done[-1]]+1)%len(pool)if done else selection['classes'][name]['cursor_before'])
+        proof['classes'][name].update(selected_indices=done,selected_ids=[entries[i]['id']for i in done],cursor_after=record['cursor'])
+    counts=[value for record in result['classes'].values()for value in record['visits']]
+    result.update(cursor=result['classes']['ordinary']['cursor']if result['classes']['ordinary']['rows']else result['classes']['communication']['cursor'],
+        graph_visits=sum(counts),completed_sweeps=min(counts),
+        forward_token_visits=int((coverage or {}).get('forward_token_visits',0))+sum(entries[i]['forward_tokens']for i in actual))
+    proof.update(requested_graphs=len(requested),observed_graphs=len(actual),operationally_interrupted=len(actual)!=len(requested))
+    return result,proof
 
 
 def held_selection(entries, coverage=None, *, source_sha256, token_budget=0,

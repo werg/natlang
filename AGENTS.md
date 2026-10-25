@@ -18,6 +18,10 @@ Local LFM full-state continuation and local whole-graph RL alternating with
 SFT/DPO are authorized (owner follow-up, 2026-10-24); cloud learners and generation
 remain paused pending their own resumption. Continue earned local progress rather
 than returning to the salvaged parent when rejoining the full production recipe.
+Owner follow-up (2026-10-25): resume local work after the workstation reboot and
+bring Mellum sandbox training back as quota allows. Use one cloud Mellum learner
+with recovery and usage monitoring; generation remains paused. The external drive
+is mounted again, but verify reads before relying on recovered paths.
 
 Filesystem snapshots are supplemental recovery. A quota cutoff can prevent
 restoring or reading them without another sandbox. The primary durable backup

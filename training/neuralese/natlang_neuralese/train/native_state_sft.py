@@ -601,7 +601,8 @@ def scheduled_indices(examples, *, seed, epoch, prior_ids=None):
     return old + new
 
 
-def _evaluate(model, examples, *, checkpoint_layers, chunk_tokens, backend=None, graph_classes=None, objective=None):
+def _evaluate(model, examples, *, checkpoint_layers, chunk_tokens, backend=None, graph_classes=None, objective=None,
+              stop_requested=None):
     from ..data.native_graph import graph_loss
     previous_mode = model.training
     model.eval()
@@ -614,10 +615,14 @@ def _evaluate(model, examples, *, checkpoint_layers, chunk_tokens, backend=None,
     classes = {}
     evaluation_metrics = {}
     evaluation_bindings = {}
+    evaluated_ids=[];interrupted=False
     try:
         with scope, torch.no_grad():
             total_weight, total_loss, total_correct, total_tokens, total_graphs, forward_tokens = 0., 0., 0., 0, 0, 0
             for example in examples:
+                if stop_requested is not None and stop_requested():
+                    interrupted=True
+                    break
                 if objective is not None:
                     loss,detail=objective.evaluate(model,example,checkpoint_layers=checkpoint_layers,
                         chunk_tokens=chunk_tokens,boundary_ids=boundary_ids)
@@ -661,8 +666,12 @@ def _evaluate(model, examples, *, checkpoint_layers, chunk_tokens, backend=None,
                 total_tokens += detail['supervised_tokens']
                 total_graphs += 1
                 forward_tokens += example.plan.token_count
+                evaluated_ids.append(example.id)
     finally:
         model.train(previous_mode)
+    if interrupted and not evaluated_ids:
+        return {'loss':None,'examples':0,'forward_tokens':0,'weight':0.,
+                'operationally_interrupted':True,'_evaluated_ids':[]}
     if not math.isfinite(total_loss) or total_weight <= 0:
         raise FloatingPointError('native held evaluation is nonfinite or empty')
     def summarize_boundaries(values):
@@ -673,6 +682,7 @@ def _evaluate(model, examples, *, checkpoint_layers, chunk_tokens, backend=None,
         for token, sums in values.items()}
     boundaries = summarize_boundaries(boundary_sums)
     return {'loss': total_loss / total_weight, 'weighted_accuracy': total_correct / total_weight,
+            **({'operationally_interrupted':interrupted,'_evaluated_ids':evaluated_ids}if stop_requested is not None else{}),
             'weight': total_weight, 'supervised_tokens': total_tokens, 'examples': total_graphs,
             'forward_tokens': forward_tokens, 'boundaries': boundaries,
             'ce_metric_kind': 'original-corpus-weighted-token-mean',
@@ -703,20 +713,34 @@ def held_cadence_indices(entries, cursor=0, *, token_budget=0, graph_budget=0):
     return sorted(indices, key=lambda i: (i-position) % len(entries)), state['cursor']
 
 
+def _full_held_requested(args):
+    return (getattr(args,'held_final_policy','budgeted')=='full'
+            or getattr(args,'foundation_qualification_request',None)is not None)
+
+
 def _evaluate_cadence(model, source, *, args, coverage=None, final=False, backend=None,
-                      previous_result=None, objective=None):
+                      previous_result=None, objective=None, stop_requested=None):
     from .native_held import held_selection
     coverage = coverage or {}
     indices, next_coverage, selection = held_selection(source.entries, coverage,
         source_sha256=source.file_sha256, token_budget=args.held_eval_tokens,
-        graph_budget=args.held_eval_graphs, final=final, previous_result=previous_result)
+        graph_budget=args.held_eval_graphs, final=final and _full_held_requested(args), previous_result=previous_result)
     cursor = next_coverage['cursor']
     started = time.monotonic()
     result = _evaluate(model, source.iter_indices(indices), checkpoint_layers=args.checkpoint_layers,
                        chunk_tokens=args.chunk_tokens, backend=backend, objective=objective,
+                       **({'stop_requested':stop_requested}if stop_requested is not None else{}),
                        graph_classes={source.entries[i]['id']: ('communication' if source.entries[i].get('communication')
                                       else 'ordinary') for i in indices})
-    result.update(scope='full' if len(indices) == len(source) else 'cadence-subset',
+    observed=result.pop('_evaluated_ids',None)
+    if observed is not None:
+        from .native_held import commit_held_observations
+        next_coverage,selection=commit_held_observations(source.entries,coverage,next_coverage,selection,observed)
+        actual_count=len(observed);cursor=next_coverage['cursor']
+    else:actual_count=len(indices)
+    result.update(scope='full' if actual_count == len(source) else 'cadence-subset',
+                  terminal_policy=getattr(args,'held_final_policy','budgeted'),
+                  full_sweep_requested=bool(final and _full_held_requested(args)),
                   source_sha256=source.file_sha256,
                   source_graphs=len(source), cursor_before=int(coverage.get('cursor', 0)),
                   cursor_after=cursor, seconds=time.monotonic()-started,
@@ -959,6 +983,8 @@ def build_parser():
     parser.add_argument('--held-eval-tokens', type=int, default=0,
         help='rotating whole-graph held-token budget per cadence; final evaluation always covers all held data')
     parser.add_argument('--held-eval-graphs', type=int, default=0)
+    parser.add_argument('--held-final-policy', choices=('budgeted','full'), default='budgeted',
+        help='Keep the declared rotating held budget at component-stage ends; full explicitly requests a whole-source sweep. Shared foundation qualification requests also require a full sweep.')
     parser.add_argument('--checkpoint-every', type=int, default=0)
     parser.add_argument('--checkpoint-seconds', type=float, default=3600.)
     parser.add_argument('--async-checkpoint', action=argparse.BooleanOptionalAction, default=False,
@@ -2047,7 +2073,7 @@ def _main(argv=None, *, requested_refresh):
                 evaluation_rng = capture_training_rng_state(args.device)
                 try:
                     held_metrics, held_coverage = _evaluate_cadence(model, held, args=args,
-                        coverage=metrics.get('held_coverage'), previous_result=metrics.get('held'), final=step == total_end and not policy_operation, backend=backend, objective=held_objective)
+                        coverage=metrics.get('held_coverage'), previous_result=metrics.get('held'), final=step == total_end and not policy_operation, backend=backend, objective=held_objective,stop_requested=lambda:policy.signaled)
                 except Exception as error:
                     # This boundary follows a completed optimizer update and exact
                     # exposure accounting. Never checkpoint a partial failed update.
@@ -2198,7 +2224,7 @@ def _main(argv=None, *, requested_refresh):
     if metadata_dirty or ((step != resumed_step or policy.signaled) and last_saved_step != step):
         if not policy.signaled and not metrics.get('held'):
             metrics['held'], metrics['held_coverage'] = _evaluate_cadence(model, held, args=args,
-                coverage=metrics.get('held_coverage'), previous_result=metrics.get('held'), final=step == total_end and not policy_operation, backend=backend, objective=held_objective)
+                coverage=metrics.get('held_coverage'), previous_result=metrics.get('held'), final=step == total_end and not policy_operation, backend=backend, objective=held_objective,stop_requested=lambda:policy.signaled)
         _save(policy, model, optimizer, config=config, identity=training_identity, step=step,
               global_step=global_step, epoch=epoch, cursor=cursor, source_receipts=source_receipts,
               source_hash=source_hash, source_row_bindings=source_row_bindings,
@@ -2208,10 +2234,10 @@ def _main(argv=None, *, requested_refresh):
               fp8_state=backend.extra_state() if backend is not None else None, sft_progress=carried_progress)
         last_saved_step = step
     completed = all(exposure_counts[key] >= visits for key, visits in required_visits.items())
-    if completed and not policy_operation and not policy.signaled and (metrics.get('held', {}).get('scope') != 'full'
+    if completed and not policy_operation and not policy.signaled and _full_held_requested(args) and (metrics.get('held', {}).get('scope') != 'full'
             or metrics.get('held', {}).get('source_sha256') != held.file_sha256):
         metrics['held'], metrics['held_coverage'] = _evaluate_cadence(model, held, args=args,
-            coverage=metrics.get('held_coverage'), previous_result=metrics.get('held'), final=True, backend=backend, objective=held_objective)
+            coverage=metrics.get('held_coverage'), previous_result=metrics.get('held'), final=True, backend=backend, objective=held_objective,stop_requested=lambda:policy.signaled)
         metrics.pop('task_checkpoint_sha256', None)
         metrics.pop('task_native_identity', None)
         _save(policy, model, optimizer, config=config, identity=training_identity, step=step,
@@ -2221,6 +2247,13 @@ def _main(argv=None, *, requested_refresh):
             rng=capture_training_rng_state(args.device), metrics=metrics,
             architecture=config['architecture'], options={**checkpoint_options, '_source_row_order': source_order},
             fp8_state=backend.extra_state() if backend is not None else None, sft_progress=carried_progress)
+    held_measurement=metrics.get('held')or{}
+    active_stage_complete=bool(completed and not policy.signaled
+        and held_measurement.get('source_sha256')==held.file_sha256
+        and held_measurement.get('examples',0)>0
+        and not held_measurement.get('operationally_interrupted')
+        and isinstance(held_measurement.get('loss'),(int,float))
+        and math.isfinite(held_measurement['loss']))
     completed = (completed and (policy_operation or metrics.get('held', {}).get('scope') == 'full')
                  and metrics.get('held', {}).get('source_sha256') == held.file_sha256)
     foundation = foundation_exposure() if args.communication_foundation else None
@@ -2236,7 +2269,7 @@ def _main(argv=None, *, requested_refresh):
     # summaries were checkpointed. At the same final weights, make one real
     # cadence call; do not reuse an unbound log row or enter final_at's retry
     # loop merely to force an eligible score.
-    if not policy.signaled and task_eval is not None and ((completed and not policy_operation) or foundation_boundary) and (
+    if not policy.signaled and task_eval is not None and (((completed or active_stage_complete) and not policy_operation) or foundation_boundary) and (
             not metrics.get('task_checkpoint_sha256') or
             metrics['task_checkpoint_sha256'] != sha256_file_hex_cached(policy.slot)):
         current_sha = sha256_file_hex_cached(policy.slot)
@@ -2272,8 +2305,8 @@ def _main(argv=None, *, requested_refresh):
                                                checkpoint_sha256=checkpoint_sha)
         write_json(task_receipt_path, task_receipt)
     runtime_path = args.out / 'native-runtime-certificate.json'
-    deferred_qualification = (args.foundation_readiness_policy == 'on-shared-request' and not completed and not foundation_boundary)
-    if policy.signaled or deferred_qualification or (not completed and not foundation_boundary and not refresh_boundary):
+    deferred_qualification = (args.foundation_readiness_policy == 'on-shared-request' and not completed and not foundation_boundary and not active_stage_complete)
+    if policy.signaled or deferred_qualification or (not completed and not foundation_boundary and not refresh_boundary and not active_stage_complete):
         # Operational stops preserve the exact resumable checkpoint. Defer a
         # full capture/splice qualification until the declared data exposure is
         # finished; do not make interruptions pay for a second model pass.
@@ -2336,8 +2369,16 @@ def _main(argv=None, *, requested_refresh):
               'qualification_profile':qualification_profile,
               'resident_adoption': resident_receipt,
               'communication_exposure': communication, 'completed': completed,
+              'active_stage_complete':active_stage_complete,
+              'active_stage_completion':{'schema':'natlang.native-active-stage-completion/1',
+                  'stage_id':args.stage_id,'checkpoint_sha256':checkpoint_sha,
+                  'train_source_sha256':source_receipts[0]['sha256'],'held_source_sha256':held.file_sha256,
+                  'required_graph_visits':sum(required_visits.values()),
+                  'graph_visits':sum(exposure_counts[key]for key in required_visits),
+                  'remaining_graph_visits':sum(max(0,count-exposure_counts[key])for key,count in required_visits.items()),
+                  'held_scope':held_measurement.get('scope'),'full_held_qualification_complete':held_measurement.get('scope')=='full'},
               'completion_scope':'policy-operation' if policy_operation else 'supervised-exposure',
-              'held_qualification':{'required_scope':'cadence' if policy_operation else 'full',
+              'held_qualification':{'required_scope':'cadence' if policy_operation or not _full_held_requested(args) else 'full',
                   'observed_scope':metrics.get('held',{}).get('scope'),
                   'source_sha256':metrics.get('held',{}).get('source_sha256')},
               'foundation_ready': foundation_ready, 'communication_foundation': foundation, 'mandatory_sft': mandatory_sft,
