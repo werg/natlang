@@ -20,6 +20,13 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
+      - name: Checkout pinned selected tracer for real-driver tests
+        uses: actions/checkout@v4
+        with:
+          repository: werg/tracing-js-self
+          ref: 86b315ccaf5624f66ebcee4f8a8031988c2f01f2
+          path: tracing-js-self
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
