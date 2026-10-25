@@ -36,6 +36,21 @@ def gradient_metrics(actual,expected,*,atol,rtol):
     if actual.shape!=expected.shape or actual.dtype!=expected.dtype:
         return {'passed':False,'reason':'gradient geometry or dtype differs'}
     a,b=actual.detach().float(),expected.detach().float()
+    # Complete-gradient qualification drains both derivatives to CPU before
+    # this comparison. Inactive expert banks can be large dense zero tensors;
+    # avoid the difference, finite, norm, cosine, and mismatch passes when
+    # both cast-to-float32 values are exactly zero. Keep this off accelerators:
+    # synchronizing a device scalar here would cost more than the saved work.
+    if (a.device.type=='cpu' and b.device.type=='cpu'
+            and a.layout==torch.strided and b.layout==torch.strided
+            and type(atol) in (int,float) and type(rtol) in (int,float)
+            and (type(atol) is int or math.isfinite(atol)) and atol>=0
+            and (type(rtol) is int or math.isfinite(rtol)) and rtol>=0
+            and (a.numel()==0 or (a.numel()>=256
+                and torch.count_nonzero(a).item()==0 and torch.count_nonzero(b).item()==0))):
+        return {'passed':True,'finite':True,'max_abs':0.,'shape':list(actual.shape),
+            'dtype':str(actual.dtype),'relative_l2':0.,'cosine':1.,'reference_l2':0.,
+            'actual_l2':0.,'mismatched_elements':0,'elements':a.numel(),'atol':atol,'rtol':rtol}
     difference=(a-b).abs();finite=bool(torch.isfinite(a).all() and torch.isfinite(b).all())
     an,bn=torch.linalg.vector_norm(a,dtype=torch.float64),torch.linalg.vector_norm(b,dtype=torch.float64)
     relative=float(torch.linalg.vector_norm(a-b,dtype=torch.float64)/bn.clamp_min(1e-30))

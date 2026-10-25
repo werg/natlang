@@ -649,6 +649,11 @@ afterwards. The rules below are consequences of this one.
   and synchronize bounded write windows, release clean cache when appropriate,
   and resume an interrupted copy only after validating its actual prefix. Verify
   full content before replacing a logical path; preserve source and live readers.
+- Do not add or remove hardlinks to source, manifest or index files while live
+  native readers validate or stream them. Link-count changes alter ctime even
+  when bytes remain unchanged and correctly invalidate strict reader checks.
+  Copy for live backup staging or drain the affected readers first; keep the
+  strict checks. Immutable checkpoint pinning has its own checked-stat protocol.
 - Restart transient ledger services through the ledger with a fresh unit name
   (engineering finding, 2026-10-22). A stopped transient unit may already have
   been collected, so `systemctl start` can fail even after a clean stop. Preserve

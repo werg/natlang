@@ -405,3 +405,56 @@ transfer and coherent controller handoff before its limit; preserve the newest
 earned full state and pending RL dependencies, never revert to35223. A second
 learner or teacher is not running. Actual CoreWeave rates and remaining credit
 are still unavailable; allocation lifetime is not a verified dollar cap.
+
+2026-10-26 00:28 Berlin: Mellum's first RL round completed two real optimizer
+updates to35575 and passed its complete shared-state gradient/runtime check.
+Its initial4h sandbox was safely drained before the23:58 lifetime. Replacement
+646f7e62-742b-4266-85bb-7ac437d545c5 restored the exact35575 full state, optimizer,
+RNG, exposure and pending round publication, and the reviewed expanded recipe.
+Old sandbox7ab0bb85-16f4-47ae-afa6-8d2db63ba5c9 was stopped at23:56 after private
+full readback and replacement verification. Only one Natlang cloud learner is
+now allocated; teacher generation remains paused. Replacement lifetime ends
+07:19 Berlin, an8h allocation bound, not a dollar cap or known remaining balance.
+The new real SFT child has advanced to35647. Local LFM has seven committed RL
+rounds and has returned to full SFT, observed37545. Neither result establishes
+held task lift or comprehensive-recipe completion.
+
+The exact35575 private full state is48222844281bytes, SHA
+720ae4291195de501bf73a985a524f1734ce34b7475cbb31624eacfd3bb886b8.
+Current full static sources/index caches are independently private-GET verified:
+7892790976bytes,SHA
+3dd55cf86dba11e57abcbfbdc400eff0e4e3363c2484a04a50a4ccbffa8eeaba.
+Drained controller/recipe/native-block metadata:57748555bytes,SHA
+4b1407ab5cd4b3e3585229f8b17341e1be7bdce52bb866b662cdfb5fa7ac3ea8.
+All were restored and member-verified before the actual resumed entry. Private
+exports and the independently downloadable external mirror remain active.
+The original snapshot failed; supplemental replacement snapshot work is separate
+and carries no restore qualification yet.
+
+Live source staging exposed a real metadata hazard: adding hardlinks changes
+ctime even with unchanged bytes and correctly tripped a strict manifest check.
+The source append was retried after link creation ended, retaining the failure
+and all verification gates. Future live-source staging must copy or drain readers.
+The static archive itself exceeded its initial SDK command wait; its completed
+archive, receipt and round-trip proof were recovered and published without
+repacking or weakening identity verification.
+
+The next teacher wave covers192 privately verified packages, including older
+recovered batches.24 are already-active byte-identical sources,7 contain only
+identical graph bindings, and161 contribute24249 unique rows. Two packages need
+whole-graph row selection to avoid duplicate IDs; source bytes/graph bindings,
+old prefix, CE coefficients, held data and capacity cases are preserved. All33
+row/source selection proofs, exact census and predecessor CE/append custody are
+bound. Independent Luna review passed (reviewSHA
+9a96e3e8fe8d5bba23c5c733635cbb68c97701561bceb94b413ae3542cb72b9b).
+Candidate LFM total1618603; private control backup and future-schedule CAS are
+still pending. This is not completed learner exposure. Mellum needs its own
+role-specific append preparation with the same complete selection mechanism.
+
+A narrow shared CPU gradient-comparison fast path now retains every existing
+metric/gate for exact-zero derivatives.37 focused cases pass; the16.8M-element
+zero benchmark improved~22x while active pairs were~2%slower. This is a helper
+benchmark, not measured end-to-end learner throughput. Full checks passed:
+2748 general Python,4871 Neuralese CPU,17 GPU and2177 TypeScript tests, plus
+build/layer/conformance checks. Running learners still use the frozenB0 package;
+a bound safe continuation is required before claiming deployed benefit.
