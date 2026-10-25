@@ -608834,6 +608834,105 @@
       "source_class": "verified-self-hosted-teacher-positive-native-whole-trajectory-native-graphs",
       "split": "Train-only; empty test views; protected source groups remain excluded.",
       "training_admission": true
+    },
+    {
+      "admission": "13 full verified teacher trajectories; 209 action turns source-verified; per-model exact dedup omissions and emitted rows are in both native conversion receipts.",
+      "derived_from": [
+        "qwen-verified-positive-native-graphs-20261015-v21"
+      ],
+      "id": "qwen36-verified-positive-native-graphs-20261023-internal-batch0053-tranche0002",
+      "include": [
+        "lfm25/receipt.json",
+        "lfm25/train/native-graphs.jsonl.zst",
+        "lfm25/test/native-graphs.jsonl.zst",
+        "mellum21/receipt.json",
+        "mellum21/train/native-graphs.jsonl.zst",
+        "mellum21/test/native-graphs.jsonl.zst",
+        "evidence/native-trajectories.jsonl",
+        "evidence/canonical-source-verification.json",
+        "evidence/source-result.json",
+        "evidence/both-port-conversion.json",
+        "evidence/tokenizer-relocation.json",
+        "evidence/predecessor-relocations.json",
+        "evidence/base-inventory-lfm25.json",
+        "evidence/base-inventory-mellum21.json",
+        "evidence/registration-proof.json"
+      ],
+      "license_provenance": "Project-collected trajectories from the pinned self-hosted Qwen3.6-35B-A3B teacher; exact source actor/runtime bindings retained.",
+      "note": "Registration establishes availability only; learner exposure is recorded by each model continuation.",
+      "owner": "dgx",
+      "path": "runs/qwen36-verified-positive-native-graphs-20261023-internal-batch0053-tranche0002",
+      "source_binding": {
+        "canonical_source_verification_sha256": "90fe2aed2c11bfeb34ea8de1bf9ea3532a859a665a282258985cba43ff7da8ff",
+        "current_protection_manifest_sha256": "1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704",
+        "models": {
+          "lfm25": {
+            "conversion_receipt": {
+              "bytes": 254453,
+              "path": "/home/werg/data/natlang-internal-spool/teacher-qwen36-continuation-20261023/conversions/batch-0053/tranche-0002-attempt-0000/lfm25/receipt.json",
+              "sha256": "81859cfc033baadd533262db75d6656c193e7efa3b5313b3b95d92a8112382f7"
+            },
+            "dedup_omissions": 2,
+            "model_id": "lfm2:f40d7a5bf651a03618ae8c06bda24a180e22fa79de964e55862c2c4984249da6",
+            "receipt": {
+              "bytes": 254453,
+              "path": "/home/werg/data/natlang-internal-spool/teacher-qwen36-continuation-20261023/registered-packages/qwen36-verified-positive-native-graphs-20261023-internal-batch0053-tranche0002/lfm25/receipt.json",
+              "sha256": "81859cfc033baadd533262db75d6656c193e7efa3b5313b3b95d92a8112382f7"
+            },
+            "rows": 195,
+            "test": {
+              "bytes": 13,
+              "path": "/home/werg/data/natlang-internal-spool/teacher-qwen36-continuation-20261023/registered-packages/qwen36-verified-positive-native-graphs-20261023-internal-batch0053-tranche0002/lfm25/test/native-graphs.jsonl.zst",
+              "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+            },
+            "tokenizer_fingerprint": "be949ec48f44e17b2b17e1131aeb1dab4262175ba20f9783ecd8e59c27a58105",
+            "tokens": 1426887,
+            "train": {
+              "bytes": 169510,
+              "path": "/home/werg/data/natlang-internal-spool/teacher-qwen36-continuation-20261023/registered-packages/qwen36-verified-positive-native-graphs-20261023-internal-batch0053-tranche0002/lfm25/train/native-graphs.jsonl.zst",
+              "sha256": "eaf267904200bcb2c62097c1d49475b225417e15c39b413d2e717235a99fd2e2"
+            }
+          },
+          "mellum21": {
+            "conversion_receipt": {
+              "bytes": 256378,
+              "path": "/home/werg/data/natlang-internal-spool/teacher-qwen36-continuation-20261023/conversions/batch-0053/tranche-0002-attempt-0000/mellum21/receipt.json",
+              "sha256": "938d303587d526fa5a21ff904fa727b149991564e4bc95797a6a3b0da47b9cf3"
+            },
+            "dedup_omissions": 2,
+            "model_id": "mellum:bc700045baee1c7ea1869675c38efedd59d9db09975ea0b38cff8db152d6148f",
+            "receipt": {
+              "bytes": 256378,
+              "path": "/home/werg/data/natlang-internal-spool/teacher-qwen36-continuation-20261023/registered-packages/qwen36-verified-positive-native-graphs-20261023-internal-batch0053-tranche0002/mellum21/receipt.json",
+              "sha256": "938d303587d526fa5a21ff904fa727b149991564e4bc95797a6a3b0da47b9cf3"
+            },
+            "rows": 195,
+            "test": {
+              "bytes": 13,
+              "path": "/home/werg/data/natlang-internal-spool/teacher-qwen36-continuation-20261023/registered-packages/qwen36-verified-positive-native-graphs-20261023-internal-batch0053-tranche0002/mellum21/test/native-graphs.jsonl.zst",
+              "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+            },
+            "tokenizer_fingerprint": "fbf22d8773d09be802cb9977895067db36cdfba747fcb24b02ddbf1312d3778f",
+            "tokens": 1443577,
+            "train": {
+              "bytes": 163408,
+              "path": "/home/werg/data/natlang-internal-spool/teacher-qwen36-continuation-20261023/registered-packages/qwen36-verified-positive-native-graphs-20261023-internal-batch0053-tranche0002/mellum21/train/native-graphs.jsonl.zst",
+              "sha256": "e7a5e41ca75f46169570a8d44e5a5aa86e84696c4e108f0150f3311711da70e1"
+            }
+          }
+        },
+        "registration_proof": {
+          "bytes": 5448,
+          "path": "runs/qwen36-verified-positive-native-graphs-20261023-internal-batch0053-tranche0002/evidence/registration-proof.json",
+          "sha256": "c7238f5d2ab45969dec0475762c14691eb69ac033305d956080c8830071c93aa"
+        },
+        "source_sha256": "b95489d4b376fd82544c199b90254fd6d16e8fb01bba8962110cc318a42e3e34",
+        "teacher_action_turns": 209,
+        "training_exposure": false
+      },
+      "source_class": "verified-self-hosted-teacher-positive-native-whole-trajectory-native-graphs",
+      "split": "Train-only; empty test views; protected source groups remain excluded.",
+      "training_admission": true
     }
   ],
   "coverage_backlog": [
