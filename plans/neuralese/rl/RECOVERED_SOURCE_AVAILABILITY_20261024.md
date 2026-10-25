@@ -363,3 +363,45 @@ Supplement v10 is independently private-GET verified:67,484bytes,SHA
 02a523001e53929a2c2e6759d1bf0a31f1a1edbbbbbc69ed242f77e195608ec2.
 Mellum durable full-state export advanced35326; external mirror of first new
 35224 state remains in progress, and LFM RL earned37281.
+
+2026-10-25 23:13 Berlin: local LFM has six committed whole-episode RL rounds,
+then resumed its comprehensive SFT/preference schedule; observed optimizer step
+37420. The prior recovery-stage precision mismatch is repaired and that stage
+completed, leaving no failed-stage declarations. Ready append v12 passed actual
+independent Luna operator review and future-operation CAS adoption: 24 privately
+readback-verified teacher packages add 5463 unique LFM rows, preserving the old
+1588891-row prefix, for1594354 active rows. Held/source separation, old CE
+coefficients and real capacity checks remain intact; adoption alone is not
+completed exposure. The v12 exact-control/source-index supplement is privately
+GET-verified (107557632 bytes, SHA
+b3f0ef7230c1e0d19041e108e0be96a3d7bd904322220308281dba8ea1abe534).
+Normal recovered-teacher conversion/admission and independent package exports
+continue; generation remains paused. Shared recovery/source fixes and the
+upstream selected-semantic changes were integrated and pushed after the full
+check passed:2748 general Python and4855 Neuralese CPU tests, plus GPU tests,
+TypeScript/build/layer/conformance checks. This is runtime verification, not a
+claim of student task improvement.
+
+Mellum completed250 SFT and100 preference updates from the salvaged35223 state,
+reaching35573. Its16-episode first RL collection produced8 successful task
+executions with actual native-state blocks. The optimizer entry initially failed
+before model loading because checkpoint_every25 was incompatible with eval_every50.
+The coordinator was confirmed dead; corrected both ordinary RL and seed cadence
+to50, removed the empty task-evaluation argument, and resumed the same cursor,
+checkpoint and completed collection. No runtime/actor identity or rollout was
+rewritten. Observe actual RL optimizer updates before declaring that stage resumed.
+The independent exporter now also follows current owned RL children, retaining
+its last verified private export across service replacement. Step35573 full state
+(48219460857 bytes, SHA
+75b904094b7e349b38d4b560654d8f0779a2002bb00423933946792161ef83fb)
+is independently privately GET-verified; the external local mirror has verified
+35224 and is downloading35478. Completed RL collection/blocks/tokenizer and
+cadence correction are independently private-GET verified and local
+(40115573 bytes, SHA
+48bf3ccf12a4a7b95e77c7883131011a9feadcfd33266d9ee0ae472f899d44ce).
+
+The one Mellum sandbox expires23:58 Berlin. Prepare an exact source/index-cache
+transfer and coherent controller handoff before its limit; preserve the newest
+earned full state and pending RL dependencies, never revert to35223. A second
+learner or teacher is not running. Actual CoreWeave rates and remaining credit
+are still unavailable; allocation lifetime is not a verified dollar cap.
