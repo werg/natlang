@@ -26,7 +26,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Install TypeScript dependencies
+      - name: Install TypeScript and pinned selected tracer dependencies
         # The workspace install: the staged npm packages resolve their dependencies from it too.
         run: npm ci
       - name: Install callable-folder application dependencies
@@ -36,20 +36,29 @@ jobs:
       - name: Install ffmpeg for the media workbench tests
         run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends ffmpeg
       - name: Runtime, applications, and conformance tests
+        id: runtime_tests
         working-directory: ts-host
         run: npm test
       - name: Training tools tests
         run: |
           # CPU torch and transformers for the training-tool tests; model-backed tests skip without a cached model.
           python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-          python -m pip install -e '.[dev]' transformers
+          # Install the test suite's declared data extra (zstandard) and Triton,
+          # which is declared in the train extra but is imported by CPU-safe
+          # Neuralese tests as well. Do not install the train extra here: it
+          # pins a CUDA-agnostic torch wheel and would replace the CPU build.
+          python -m pip install -e '.[dev,data]' transformers 'triton==3.6.0; sys_platform == "linux"'
           python -m pytest -q
       - name: Install Chromium for browser smoke tests
+        if: ${{ always() && steps.runtime_tests.outcome == 'success' }}
+        id: chromium_install
         working-directory: ts-host
         run: npx playwright-core install --with-deps chromium
       - name: Browser runtime and board smoke
+        if: ${{ always() && steps.runtime_tests.outcome == 'success' && steps.chromium_install.outcome == 'success' }}
         working-directory: ts-host
         run: npm run test:browser -- --application
       - name: Browser playground smoke
+        if: ${{ always() && steps.runtime_tests.outcome == 'success' && steps.chromium_install.outcome == 'success' }}
         working-directory: ts-host
         run: npm run test:playground

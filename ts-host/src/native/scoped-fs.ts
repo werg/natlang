@@ -4,6 +4,7 @@ import { currentFrame } from '../runtime/context.js';
 import { FolderIteration } from '../runtime/folder-iteration.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { folderFromData, type FolderDataLayout } from './data-layout.js';
+import { declareSelectedSurface } from './selected-surface.js';
 
 export type FolderAccess = 'read' | 'write' | 'overlay';
 export type FileContents = string | Uint8Array;
@@ -166,7 +167,18 @@ function checkedKind(folder: Folder, path: string, requested: string, want: 'fil
 export class EntryHandle {
   // The backing folder is not enumerable, so inspecting a handle shows its path, not the store behind it.
   declare readonly folder: Folder;
-  constructor(folder: Folder, readonly path: string) { Object.defineProperty(this, 'folder', { value: folder, enumerable: false }); }
+  constructor(folder: Folder, readonly path: string) {
+    Object.defineProperty(this, 'folder', { value: folder, enumerable: false });
+    const entry = { exists: 'promise', stat: 'promise', remove: 'promise', moveTo: 'promise' } as const;
+    const file = { readText: 'promise', readJson: 'promise', readBytes: 'promise', writeText: 'promise', writeJson: 'promise',
+      writeBytes: 'promise', editText: 'promise' } as const;
+    const directory = { file: 'synchronous', dir: 'synchronous', entry: 'synchronous', entries: 'promise', files: 'promise',
+      folders: 'promise', snapshot: 'synchronous', at: 'synchronous', propose: 'promise', accept: 'promise', select: 'promise',
+      diff: 'promise', beginTransaction: 'promise', apply: 'promise' } as const;
+    declareSelectedSurface(this, new.target.name, { ...entry,
+      ...(new.target === FileHandle ? file : new.target === FolderHandle ? directory : {}) },
+      ['name', 'path', 'relativePath', 'parent']);
+  }
   get name(): string { return this.path.split('/').at(-1) ?? ''; }
   get relativePath(): string { return this.path; }
   get parent(): FolderHandle | null {
@@ -243,7 +255,10 @@ export class FolderHandle extends EntryHandle {
 export class FolderTransaction {
   private closed = false;
   constructor(readonly parent: Folder, readonly folder: Folder, readonly prefix = '',
-    private readonly release: () => void = () => {}, readonly scopedFile?: string) {}
+    private readonly release: () => void = () => {}, readonly scopedFile?: string) {
+    declareSelectedSurface(this, 'FolderTransaction', { validateSync: 'synchronous', commitSync: 'synchronous',
+      commit: 'promise', abort: 'synchronous' }, ['open', 'folder', 'prefix', 'scopedFile'], () => { if (this.open) this.abort(); });
+  }
   get open(): boolean { return !this.closed; }
   private ensureOpen(): void { if (this.closed) throw new Error('folder transaction is closed'); }
   private rootedChanges(include?: string[], exclude?: string[]): ChangeSet {
@@ -339,6 +354,15 @@ export class Folder {
     this.scope = options.scope ?? '';
     this.writeFence = options.writeFence;
     for (const field of ['source', 'overlay', 'moves', 'writerLock', 'revisionNumber', 'computed', 'lineage', 'scope', 'writeFence']) Object.defineProperty(this, field, { enumerable: false });
+    declareSelectedSurface(this, new.target.name, { root: 'synchronous', file: 'synchronous', dir: 'synchronous', entry: 'synchronous',
+      filePaths: 'synchronous', list: 'synchronous', listFiles: 'synchronous', listFolders: 'synchronous',
+      exists: 'promise', stat: 'promise', readText: 'promise', readJson: 'promise', readBytes: 'promise',
+      writeText: 'synchronous', writeJson: 'promise', writeBytes: 'synchronous',
+      remove: 'synchronous', move: 'synchronous', editText: 'promise', search: 'promise', diff: 'promise',
+      snapshot: 'synchronous', at: 'synchronous', fork: 'synchronous', beginTransaction: 'promise',
+      propose: 'promise', accept: 'promise', select: 'promise', apply: 'promise',
+      ...(new.target === FolderSnapshot ? { branch: 'synchronous' as const } : {}) },
+      ['access', ...(new.target === FolderSnapshot ? ['digest'] : [])]);
   }
 
   static fromFiles(files: Record<string, FileContents>, access: FolderAccess = 'write'): Folder {
@@ -606,7 +630,9 @@ function isSource(value: unknown): value is FolderSource {
 /** Proposals are capabilities, not serializable patches. Only their originating folder may accept them. */
 /** Live proposal capability: preserve identity across interpreter eval boundaries. */
 export class FolderProposal<R = unknown> {
-  constructor(readonly folder: FolderSnapshot, readonly value: R, readonly baseRevision: number, readonly diff: ChangeSet) { Object.freeze(this); }
+  constructor(readonly folder: FolderSnapshot, readonly value: R, readonly baseRevision: number, readonly diff: ChangeSet) {
+    declareSelectedSurface(this, 'FolderProposal', {}, ['folder', 'value', 'baseRevision', 'diff']); Object.freeze(this);
+  }
 }
 const proposals = new WeakMap<object, { parent: Folder; path: string; revision: number; base: string }>();
 const revisions=new WeakMap<object,Map<string,FolderSnapshot>>();

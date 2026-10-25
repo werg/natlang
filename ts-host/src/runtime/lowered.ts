@@ -22,6 +22,7 @@ import { live, nzExports, softFunction } from './contexts.js';
 import { resolveFrame } from './runtime.js';
 import { readNeuraleseForCurrentTask } from '../neuralese/combinators.js';
 import { isNeuraleseRef, neuraleseRef } from '../native/neuralese.js';
+import { withSelectedCaptureAccessors } from './selected-captures.js';
 
 export { bindAwait, guard };
 
@@ -335,6 +336,14 @@ export function inline(plan: InlineLambdaPlan, values: readonly unknown[], acces
     { inline_instruction_site: instructionSite(plan, renderedValues, origin) }, rebindInline);
 }
 
+/** Selected-executor counterpart: capture getter/setter calls are asynchronous guest invocations. */
+export async function inlineSelected(plan: InlineLambdaPlan, values: readonly unknown[], accessors: Record<string, unknown>,
+  context?: Record<string, unknown>, version: number = NATLANG_COMPILE_VERSION, bound?: import('./context.js').Frame,
+  origin?: InlineInstructionOrigin): Promise<NatlangCallable> {
+  return withSelectedCaptureAccessors(plan, accessors, observed => inline(plan, values,
+    observed as CaptureAccessors, context, version, bound, origin));
+}
+
 /**
  * `nl.with({ … })`: the captures are exactly the listed ones. Snapshot entries are read now, when the function is
  * created; `live(x)` entries are read at each call and written back. A template that is one Neuralese block is a soft
@@ -581,6 +590,22 @@ export function service(name: string): object {
       return descriptor ? { ...descriptor, configurable: true } : undefined;
     },
   });
+}
+
+/** Explicit selected surface for a configured service; methods resolve the current task on every call. */
+export function selectedService(name: string): object {
+  const current = service(name) as Record<string, unknown>, surface = Object.create(null);
+  for (const key of Object.keys(current)) {
+    const descriptor = Object.getOwnPropertyDescriptor(current, key)!;
+    if ('value' in descriptor && typeof descriptor.value === 'function') {
+      const invoke = (...args: unknown[]) => Reflect.apply((service(name) as Record<string, Function>)[key]!, undefined, args);
+      Object.defineProperty(invoke, Symbol.for('natlang.native-call-kind'), { value:
+        Object.getOwnPropertyDescriptor(descriptor.value, Symbol.for('natlang.native-call-kind'))?.value ??
+        (Object.getPrototypeOf(descriptor.value)?.constructor?.name === 'AsyncFunction' ? 'promise' : 'synchronous') });
+      Object.defineProperty(surface, key, { value: invoke, enumerable: true });
+    } else Object.defineProperty(surface, key, { get: () => (service(name) as Record<string, unknown>)[key], enumerable: true });
+  }
+  return surface;
 }
 
 /** The raw `nl` export: reached only when a module was not compiled by the natlang compiler. */

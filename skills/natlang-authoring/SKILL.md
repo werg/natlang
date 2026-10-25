@@ -41,6 +41,16 @@ Keep search overlays separate from authored source. Load a compatible artifact e
 
 ## Preserve the execution model
 
+When the host selects semantic execution, await callable-folder module entry
+and inline native boundaries. Captured mutable bindings are shared cells:
+complete the current step before consuming the next Fold event, and use bounded
+Map only for independent work. A capture-conflict means another writer changed
+the binding; reread current state and retry the owning computation deliberately.
+Do not retry a failed native write merely because the surrounding eval failed.
+After a realm-authority change, restart the task and reload its modules instead
+of keeping old exported functions. Keep source and invocation identities in
+controlled fixtures, and distinguish those fixtures from learned-model results.
+
 - A natural-language call is an ordinary awaited function call returning a checked, typed value; a failure rejects with `NatlangCallError` (`outcome`, `detail`, `trace`). Catch it where the application can recover.
 - When a stage invokes an inline literal for one relation, give the literal its source-backed item, supporting evidence and prior semantic context. Its typed result is the relation decision; the parent appends that returned decision to its carried state and passes the original complete input to the next named stage. A narrow literal cannot reconstruct a full source bundle from partial state.
 - An inline `nl` reads the variables its instructions mention by exact name, live at call time. Mutable captures (`let`) are written back after a successful eval; a concurrent change makes that eval fail with `capture-conflict` so it retries against the current value. Rebinding a captured `const` is a compile error.
