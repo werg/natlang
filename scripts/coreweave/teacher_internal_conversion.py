@@ -826,6 +826,31 @@ def history_policy_args(model: str) -> list[str]:
     return args
 
 
+def registered_dedup_args(root: Path, ident: str, model: str) -> list[str]:
+    """Select the actual available source, retaining cache fallback custody."""
+    registry_ref=file_binding(root/'training/neuralese_corpora.json')
+    registry=read_bound(registry_ref)
+    matches=[row for row in registry['corpora']if row.get('id')==ident]
+    if len(matches)!=1 or matches[0].get('training_admission')is not True:
+        raise ValueError('registered dedup input is not uniquely admitted')
+    entry=matches[0];relative=f'{model}/train/native-graphs.jsonl.zst'
+    source=root/entry['path']/relative
+    try:source.stat()
+    except OSError as error:
+        if error.errno not in(errno.ENOENT,errno.EIO):raise
+        return ['--deduplicate-against-registered-cache',ident]
+    manifest_ref=file_binding(root/'training/corpus-manifests'/f'{ident}.json')
+    manifest=read_bound(manifest_ref)
+    members=[row for row in manifest.get('files',[])if row.get('path')==relative]
+    actual=file_binding(source)
+    if (manifest.get('id')!=ident or manifest.get('path')!=entry['path']
+            or len(members)!=1 or any(members[0].get(key)!=actual[key]for key in('sha256','bytes'))
+            or file_binding(root/'training/neuralese_corpora.json')!=registry_ref
+            or file_binding(manifest_ref['path'])!=manifest_ref):
+        raise ValueError('available registered dedup source differs from admitted custody')
+    return ['--deduplicate-against',str(source)]
+
+
 def _registered_model_identity(root: Path, model: str, direct_inputs: list[Path], output: Path) -> Path:
     registry_path = root / 'training/neuralese_corpora.json'
     registry_ref = file_binding(registry_path)
@@ -1024,9 +1049,9 @@ def convert(*, root: Path, settings_path: Path, settings_sha256: str,
         for path in dedup:
             args.extend(['--deduplicate-against', str(path)])
         for corpus_id in cached_ids[model]:
-            args.extend(['--deduplicate-against-registered-cache', corpus_id])
+            args.extend(registered_dedup_args(root,corpus_id,model))
         if model == 'lfm25':
-            args.extend(['--deduplicate-against-registered-cache', LFM_HISTORY_KEEP])
+            args.extend(registered_dedup_args(root,LFM_HISTORY_KEEP,model))
         log = outputs / f'{model}.conversion.log'
         with log.open('xb') as stream:
             result = subprocess.run(args, cwd=root,

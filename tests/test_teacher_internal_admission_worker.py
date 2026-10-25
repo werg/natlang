@@ -253,6 +253,24 @@ def test_zero_row_rejects_forged_content_or_represented_id_with_same_graph_bytes
             teacher_namespace='qwen36-verified-positive-native-graphs-20261022-recovery7853'), conversion)
 
 
+@pytest.mark.parametrize('state', ['present','missing','changed','unadmitted'])
+def test_new_conversion_selects_restored_registered_graph_instead_of_cache(tmp_path,state):
+    zero_conversion(tmp_path)
+    ident='registered-native-predecessor'
+    source=tmp_path/'runs'/ident/'lfm25/train/native-graphs.jsonl.zst'
+    if state=='missing':source.unlink()
+    elif state=='changed':source.write_bytes(b'changed graph')
+    elif state=='unadmitted':
+        p=tmp_path/'training/neuralese_corpora.json';d=json.loads(p.read_text())
+        d['corpora'][0]['training_admission']=False;write_json(p,d)
+    if state in('changed','unadmitted'):
+        with pytest.raises(ValueError):conversion_module.registered_dedup_args(tmp_path,ident,'lfm25')
+    else:
+        expected=(['--deduplicate-against',str(source)]if state=='present'else
+                  ['--deduplicate-against-registered-cache',ident])
+        assert conversion_module.registered_dedup_args(tmp_path,ident,'lfm25')==expected
+
+
 def test_zero_row_requires_readable_empty_native_output_streams(tmp_path, monkeypatch):
     conversion = zero_conversion(tmp_path)
     monkeypatch.setattr(worker, 'ROOT', tmp_path)

@@ -326,3 +326,26 @@ the current owner/config/cursor, uses ledger admission for future learner/export
 and monitor jobs, and allocates no cloud resources. Actual recovery after a
 second reboot has not been tested. New operator: resume-after-boot.py in the
 LFM recovery root; user unit natlang-local-recovery-bootstrap.service.
+
+21:33Berlin: backlog census selects197closed boundaries, including already
+admitted predecessors.48existing conversions were resolved before a shared
+preparation blocker stopped the drain at a boundary. New conversions still
+forced the special LFM history-keep corpus through the cache-only selector.
+Now select manifest-verified present graph bytes for that corpus and any
+restored cached predecessor; genuinely unavailable originals keep the normal
+exact cache verifier.106focused tests pass including tampered and unadmitted
+source rejection. Reader v5 now has current registry/source-artifact roots,
+complete current source-review metadata and the actual built JS materializer,
+whose runtime inventory is recorded by normal decision receipts. Real new
+batch47conversion is running; no new admission/exposure claimed. Retain all
+failed attempts and the stopped drain journal rather than retrying the same
+missing preparation on every boundary.
+
+Control supplement v9 independently private-GET verified:9,753,937bytes,
+SHA6d57f5b696627b0087d1f72a43d37884c570a28b56fccf931b7cf15b00acfb6f.
+It covers current attention declarations, boot service/operators, original
+source operators and recovered20caseclosures; later reader metadata additions
+require their own supplement before relying on them as fully durable controls.
+LFM earned first next-round policy update37278. Mellum advanced35403;
+its private recovery replacement is35224 and local mirror~9.8GB/48.3GB,
+so newer earned/exported progress remains an explicit recovery gap.
