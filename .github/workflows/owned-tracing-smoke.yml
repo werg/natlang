@@ -21,7 +21,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: werg/tracing-js-self
-          ref: ec88d7ec4b05a67cfbffea563e8c60b72eee98fa # pinned selected real execution adapter
+          ref: 4e5f8721f6373b6c8c736e97bbaa1a2a01f4a9f5 # pinned selected real execution adapter
           path: tracing-js-self
           persist-credentials: false
       - uses: actions/setup-node@v4
