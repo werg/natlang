@@ -1,0 +1,10 @@
+---
+args: {"change": "LocaleSourceChange", "targetLocales": "string[]", "localeLedger": "LocaleEditionLedger | null"}
+returns: "LocaleEditionReview"
+---
+1. Bind prior to localeLedger or an empty edition ledger. Bind segments = recoverContextSegments(change, prior.segments). Each key must retain content, context and grammatical role; identical strings for an action and a status stay distinct.
+2. Bind affected = identifySemanticInvalidation(change.changedSources, segments, prior). A punctuation-only edit may preserve meaning, while a changed obligation, concept sense or glossary authority requires targeted re-review. Preserve unaffected candidates and approval identities.
+3. For each segment named in affected.segmentKeys and each target locale bind termDecisions = resolveConceptTerminology(segment, locale, change.glossaryEvidence). Keep unresolved terminology conflicts visible. Then call transformCommunicativePurpose(segment, termDecisions, locale) only with the actual scoped decisions, collecting its returned candidates alongside unaffected retained candidates.
+4. For each new or invalidated candidate call independentlyReviewLocale(itsSegment, candidate, change.structuralReceipts or an empty collection, change.sourceEvidence), collecting returned reviews alongside still-valid prior reviews. Exact protected token identity and multiplicity permit grammatical reordering. Missing actual markup, plural, length or link validation receipts remain release blocks; fluency does not establish fidelity.
+5. Bind proposedBundles = assembleCoherentJourneys(segments, candidates, reviews, prior.bundles, change). Bind each proposed locale bundle to consistent source, glossary, context and review versions. A delayed locale requires an explicit safe fallback for the whole affected journey, not silent mixture of critical editions.
+6. Return the next ledger with new and retained candidates, affected.candidateIds as exact invalidation identities, terminology questions and proposed bundles. Only an actual approved artifact release receipt may mark a bundle released. Never label a generated translation, candidate review or fallback proposal as deployed.

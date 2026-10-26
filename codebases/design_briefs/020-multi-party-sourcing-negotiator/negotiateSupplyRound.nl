@@ -1,0 +1,11 @@
+---
+args: {"desk": "SourcingDesk", "book": "NegotiationBook | null"}
+returns: "NegotiationRound"
+---
+1. Bind prior to the supplied book, or initialize a complete NegotiationBook at revision zero with empty candidates, replies, envelopes, commitments and consumed-evidence lists, an empty mandate version and null approvedFx. Preserve every old dispatch receipt and source version. Bind mandate = readBuyerMandate(desk, prior).
+2. When the mandate changed, call suspendUnapprovedOffers(prior, mandate, desk.quotations). Return suspend-outstanding with those envelopes and questions about any externally unknown status. Do not create new counteroffers in this branch or claim a dispatched offer was withdrawn without its receiver's receipt.
+3. Bind offers = readQuotationBook(desk, mandate). Bind replies = reconcileSupplierReplies(desk.quotations, prior.candidates, mandate). Apply each qualified reply only to its named term; re-open every package depending on a changed condition.
+4. Bind candidates = searchFeasiblePackages(desk, offers, replies, mandate). Keep unfilled demand, incompatible bundles and unresolved prices explicit. If authoritative constraints or conversion evidence are missing, return await-authority while preserving the previous book and newly learned facts.
+5. For each surviving candidate call recheckCommitmentBoundary(candidate, offers, replies, mandate, prior). Only a complete package with current binding offers, configured signature evidence and the exact approved conversion basis can become ready-to-sign. Verbal assent remains unconfirmed when written evidence is required.
+6. If no package has complete acceptance, call proposeSealedCounteroffers(candidates, mandate, prior). Produce a separate envelope per supplier. Do not expose rival quote amounts, identities or private concessions in another supplier's view.
+7. Return the next book revision with updated candidates, term replies, suspended or draft envelopes, consumed evidence IDs and unchanged historical commitments. Append a committed package ID only when its actual signed agreement receipt is present. Keep alternate-rate sensitivity in the buyer brief; never overwrite the approvedFx basis with a new market rate.

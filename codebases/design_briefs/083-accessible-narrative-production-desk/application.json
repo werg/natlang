@@ -1,0 +1,102 @@
+{
+  "schema": "natlang.application/1",
+  "id": "083",
+  "title": "Accessible Narrative Production Desk",
+  "entrypoint": "produceAccessibleTimeline.nl",
+  "interfaces": [
+    {
+      "name": "produceAccessibleTimeline",
+      "path": "produceAccessibleTimeline.nl",
+      "purpose": "Coordinate captions, descriptions and transcripts against stable scene edits, actual channel windows and the audience knowledge timeline.",
+      "stateParameter": "mediaState",
+      "stateResultPath": [
+        "mediaState"
+      ]
+    }
+  ],
+  "source_files": [
+    "natlang.json",
+    "produceAccessibleTimeline.nl",
+    "produceAccessibleTimeline/assignEssentialInformation.nl",
+    "produceAccessibleTimeline/assignEssentialInformation/resolveDenseScene.nl",
+    "produceAccessibleTimeline/challengeSynchronizedExperience.nl",
+    "produceAccessibleTimeline/identifyChannelWindows.nl",
+    "produceAccessibleTimeline/identifyStableSceneEdits.nl",
+    "produceAccessibleTimeline/preserveAudienceKnowledge.nl",
+    "produceAccessibleTimeline/preserveAudienceKnowledge/distinguishObservationFromReveal.nl",
+    "produceAccessibleTimeline/reconstructSceneInformation.nl",
+    "produceAccessibleTimeline/retimeAffectedCues.nl",
+    "produceAccessibleTimeline/retimeAffectedCues/shiftCueInterval.ts",
+    "produceAccessibleTimeline/writeObservableCue.nl",
+    "qualification/qualifyOriginal.nl",
+    "qualification/types.ts",
+    "types.ts"
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "modelNarrativeInformation",
+        "paths": [
+          "produceAccessibleTimeline/preserveAudienceKnowledge/distinguishObservationFromReveal.nl"
+        ]
+      },
+      {
+        "stage": "planChannels",
+        "paths": [
+          "produceAccessibleTimeline/assignEssentialInformation/resolveDenseScene.nl"
+        ]
+      },
+      {
+        "stage": "writeAccessibleText",
+        "paths": [
+          "produceAccessibleTimeline/writeObservableCue.nl"
+        ]
+      },
+      {
+        "stage": "validateSynchronization",
+        "paths": [
+          "produceAccessibleTimeline/challengeSynchronizedExperience.nl"
+        ]
+      },
+      {
+        "stage": "packageAccessibleMedia",
+        "paths": [
+          "produceAccessibleTimeline/challengeSynchronizedExperience.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "produceAccessibleTimeline/identifyStableSceneEdits.nl",
+          "produceAccessibleTimeline/retimeAffectedCues.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "produceAccessibleTimeline/preserveAudienceKnowledge/distinguishObservationFromReveal.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "produceAccessibleTimeline/assignEssentialInformation/resolveDenseScene.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "produceAccessibleTimeline/writeObservableCue.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "produceAccessibleTimeline/challengeSynchronizedExperience.nl"
+        ]
+      }
+    ]
+  }
+}

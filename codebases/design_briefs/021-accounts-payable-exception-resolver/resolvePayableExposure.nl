@@ -1,0 +1,10 @@
+---
+args: {"dossier": "PayableDossier", "ledger": "PayableBook | null"}
+returns: "PayableReview"
+---
+1. Bind prior to ledger or a new empty PayableBook with revision zero. Bind versions = identifyLiabilityVersions(dossier, prior). Treat a corrected same-number invoice as a new document version of its evidenced liability; ambiguous supplier/entity references remain unresolved.
+2. Bind priorPayments = invalidateChangedPayments(versions, prior, dossier.documents). A new verified credit or changed payable version invalidates the affected unissued instruction before further release. Preserve the original service dates if a period closes; any new posting period requires its own authority.
+3. Bind lines = readInvoiceLines(dossier.documents, versions). For every line call locateReceiptLinks(line, dossier.documents, prior.reservations) and collect the returned edges as links. Build alternative many-to-many mappings without forcing text similarity into a receipt identity.
+4. Bind partitions = partitionSupportedBalance(lines, links, versions, prior, dossier.documents). Keep accepted, held and verified credited amounts distinct. Do not turn a substituted item into accepted delivery without the receiving authority's evidence.
+5. Bind reservations = proposeReceiptReservations(links, partitions, prior). Bind instructions = prepareEntityInstructions(partitions, versions, reservations, dossier). Require the receipt allocation ledger's expected version and an independent approver. Scope each reservation to the shared legal-entity receipt ledger, not just this invoice; a stale global reservation requires recomputing the allocation.
+6. Return ledger revision plus one, carrying all historical versions, the returned reservations, updated priorPayments and processor operation IDs. Keep lines with null amount components held and never sum null as zero. Add proposed reservations only; mark reserved or consumed only from authoritative ledger receipts. Include line-level explanations and the smallest missing acceptance, currency or authority question. No payment is posted by this operation.

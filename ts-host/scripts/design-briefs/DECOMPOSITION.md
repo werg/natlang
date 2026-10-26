@@ -1,5 +1,20 @@
 # Design-brief corpus preparation
 
+## Program diversity is a source requirement
+
+Every application owns its interface, intermediate representations, call tree,
+control flow, state and failure recovery. The verifier must not require common
+helper names, a shared five-stage pipeline, a universal request/response shape,
+or a minimum function count. Those requirements rewarded schematic repetition.
+`application.json` now declares each application's actual native API. Domain
+contracts and original operational obligations remain independently checked.
+
+`inspectPotentialCalls` records source references and unresolved/orphaned helpers
+for architectural review. It does not turn a source reference into an observed
+call, or infer behavioral diversity from topology alone. Review must inspect the
+algorithms, typed intermediate meanings, branch conditions and actual child-result
+consumption. Live source-bound trajectories remain a separate measurement.
+
 ## Responsibility and boundaries
 
 The 100 supplied application briefs are implemented under
@@ -24,8 +39,11 @@ semantic implementation:
 ## Data flow
 
 The build reads native source, brief metadata, and independently stored case
-inputs/oracles. Only `.nl` and non-generated `.ts` files enter the model-visible
-project. Hidden metadata and expected answers remain outside that project.
+inputs/oracles. Only the explicit `application.json.source_files` inventory of
+`.nl`, non-generated `.ts`, and the root `natlang.json` package boundary enters
+the model-visible project. Hidden metadata and expected answers remain outside
+that project. The compiler, runtime and packet freezer consume that same inventory;
+leftover local files cannot silently reintroduce a retired implementation.
 The existing native loader resolves every function's callable folder and types.
 The runtime's own type coercion checks fixture inputs and exact expected values.
 `operational-contracts.json` retains section 9's five original use cases for each

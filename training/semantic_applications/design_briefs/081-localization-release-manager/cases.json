@@ -1,7 +1,7 @@
 [
   {
     "id": "081-first-gate-pass",
-    "root": "runCase/segmentWithContext/audit/qualify.nl",
+    "root": "qualification/qualifyOriginal.nl",
     "split_group": "world-081-first-gate",
     "inputs": {
       "evidence": {
@@ -64,7 +64,7 @@
   },
   {
     "id": "081-first-gate-fail",
-    "root": "runCase/segmentWithContext/audit/qualify.nl",
+    "root": "qualification/qualifyOriginal.nl",
     "split_group": "world-081-first-gate",
     "inputs": {
       "evidence": {
@@ -127,7 +127,7 @@
   },
   {
     "id": "081-first-gate-needs-review",
-    "root": "runCase/segmentWithContext/audit/qualify.nl",
+    "root": "qualification/qualifyOriginal.nl",
     "split_group": "world-081-first-gate",
     "inputs": {
       "evidence": {
@@ -193,69 +193,76 @@
   },
   {
     "id": "081-workflow-1",
-    "root": "runCase.nl",
+    "root": "coordinateLocaleEdition.nl",
     "split_group": "world-081-workflow-1",
     "inputs": {
-      "request": "Prepare a reviewable Localization Release Manager proposal from the supplied case records and evidence.",
-      "records": [
-        {
-          "id": "081-workflow-1-record",
-          "caseId": "081-workflow-1",
-          "sourceRefs": [
-            "081-wf-1-source"
-          ],
-          "state": "draft",
-          "kind": "LocalizationRelease",
-          "subject": "Locale source segment S-81 uses “Place order” for a button and “order status” for a page heading. French Canadian draft uses the same target term for both.",
-          "status": "candidate",
-          "evidenceIds": [
-            "081-wf-1-source"
-          ],
-          "fields": {
-            "sourceArtifact": "081-wf-1-source",
-            "sourceVersion": "v1"
-          },
-          "sourceReleaseId": "SRCREL-81",
-          "localeIds": [
-            "fr-CA",
-            "fr-FR"
-          ],
-          "contentIds": [
-            "PAYMENT-FAIL",
-            "ORDER-STATUS"
-          ],
-          "managerId": "LOC-7",
-          "glossaryVersion": "v3"
-        }
+      "change": {
+        "instruction": "Prepare a reviewable Localization Release Manager proposal from the supplied case records and evidence.",
+        "releases": [
+          {
+            "id": "081-workflow-1-record",
+            "caseId": "081-workflow-1",
+            "sourceRefs": [
+              "081-wf-1-source"
+            ],
+            "state": "draft",
+            "kind": "LocalizationRelease",
+            "subject": "Locale source segment S-81 uses “Place order” for a button and “order status” for a page heading. French Canadian draft uses the same target term for both.",
+            "status": "candidate",
+            "evidenceIds": [
+              "081-wf-1-source"
+            ],
+            "fields": {
+              "sourceArtifact": "081-wf-1-source",
+              "sourceVersion": "v1"
+            },
+            "sourceReleaseId": "SRCREL-81",
+            "localeIds": [
+              "fr-CA",
+              "fr-FR"
+            ],
+            "contentIds": [
+              "PAYMENT-FAIL",
+              "ORDER-STATUS"
+            ],
+            "managerId": "LOC-7",
+            "glossaryVersion": "v3"
+          }
+        ],
+        "sourceEvidence": [
+          {
+            "id": "081-wf-1-source",
+            "source": "primary case artifact 081-E1",
+            "version": "v1",
+            "text": "Locale source segment S-81 uses “Place order” for a button and “order status” for a page heading. French Canadian draft uses the same target term for both.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "glossaryEvidence": [],
+        "expectedContentIds": [
+          "081-workflow-1-record"
+        ],
+        "releaseManager": "accountable reviewer",
+        "previouslyCommittedIds": [
+          "081-workflow-1-record"
+        ],
+        "changedSources": [
+          {
+            "id": "081-wf-1-source",
+            "source": "primary case artifact 081-E1",
+            "version": "v1",
+            "text": "Locale source segment S-81 uses “Place order” for a button and “order status” for a page heading. French Canadian draft uses the same target term for both.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "targetLocales": [
+        "fr-CA",
+        "fr-FR"
       ],
-      "evidence": [
-        {
-          "id": "081-wf-1-source",
-          "source": "primary case artifact 081-E1",
-          "version": "v1",
-          "text": "Locale source segment S-81 uses “Place order” for a button and “order status” for a page heading. French Canadian draft uses the same target term for both.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "081-workflow-1-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "081-workflow-1-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "081-wf-1-source",
-          "source": "primary case artifact 081-E1",
-          "version": "v1",
-          "text": "Locale source segment S-81 uses “Place order” for a button and “order status” for a page heading. French Canadian draft uses the same target term for both.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      "localeLedger": null
     },
     "expected": {
       "application": "Localization Release Manager",
@@ -278,69 +285,76 @@
   },
   {
     "id": "081-workflow-2",
-    "root": "runCase.nl",
+    "root": "coordinateLocaleEdition.nl",
     "split_group": "world-081-workflow-2",
     "inputs": {
-      "request": "Prepare a reviewable Localization Release Manager proposal from the supplied case records and evidence.",
-      "records": [
-        {
-          "id": "081-workflow-2-record",
-          "caseId": "081-workflow-2",
-          "sourceRefs": [
-            "081-wf-2-source"
-          ],
-          "state": "draft",
-          "kind": "LocalizationRelease",
-          "subject": "Checkout failure source string contains tokens {orderId} and {retryUrl}; translation v3 moved {retryUrl} outside the link.",
-          "status": "candidate",
-          "evidenceIds": [
-            "081-wf-2-source"
-          ],
-          "fields": {
-            "sourceArtifact": "081-wf-2-source",
-            "sourceVersion": "v1"
-          },
-          "sourceReleaseId": "SRCREL-81",
-          "localeIds": [
-            "fr-CA",
-            "fr-FR"
-          ],
-          "contentIds": [
-            "PAYMENT-FAIL",
-            "ORDER-STATUS"
-          ],
-          "managerId": "LOC-7",
-          "glossaryVersion": "v3"
-        }
+      "change": {
+        "instruction": "Prepare a reviewable Localization Release Manager proposal from the supplied case records and evidence.",
+        "releases": [
+          {
+            "id": "081-workflow-2-record",
+            "caseId": "081-workflow-2",
+            "sourceRefs": [
+              "081-wf-2-source"
+            ],
+            "state": "draft",
+            "kind": "LocalizationRelease",
+            "subject": "Checkout failure source string contains tokens {orderId} and {retryUrl}; translation v3 moved {retryUrl} outside the link.",
+            "status": "candidate",
+            "evidenceIds": [
+              "081-wf-2-source"
+            ],
+            "fields": {
+              "sourceArtifact": "081-wf-2-source",
+              "sourceVersion": "v1"
+            },
+            "sourceReleaseId": "SRCREL-81",
+            "localeIds": [
+              "fr-CA",
+              "fr-FR"
+            ],
+            "contentIds": [
+              "PAYMENT-FAIL",
+              "ORDER-STATUS"
+            ],
+            "managerId": "LOC-7",
+            "glossaryVersion": "v3"
+          }
+        ],
+        "sourceEvidence": [
+          {
+            "id": "081-wf-2-source",
+            "source": "primary case artifact 081-E2",
+            "version": "v1",
+            "text": "Checkout failure source string contains tokens {orderId} and {retryUrl}; translation v3 moved {retryUrl} outside the link.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "glossaryEvidence": [],
+        "expectedContentIds": [
+          "081-workflow-2-record"
+        ],
+        "releaseManager": "accountable reviewer",
+        "previouslyCommittedIds": [
+          "081-workflow-2-record"
+        ],
+        "changedSources": [
+          {
+            "id": "081-wf-2-source",
+            "source": "primary case artifact 081-E2",
+            "version": "v1",
+            "text": "Checkout failure source string contains tokens {orderId} and {retryUrl}; translation v3 moved {retryUrl} outside the link.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "targetLocales": [
+        "fr-CA",
+        "fr-FR"
       ],
-      "evidence": [
-        {
-          "id": "081-wf-2-source",
-          "source": "primary case artifact 081-E2",
-          "version": "v1",
-          "text": "Checkout failure source string contains tokens {orderId} and {retryUrl}; translation v3 moved {retryUrl} outside the link.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "081-workflow-2-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "081-workflow-2-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "081-wf-2-source",
-          "source": "primary case artifact 081-E2",
-          "version": "v1",
-          "text": "Checkout failure source string contains tokens {orderId} and {retryUrl}; translation v3 moved {retryUrl} outside the link.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      "localeLedger": null
     },
     "expected": {
       "application": "Localization Release Manager",
@@ -363,69 +377,76 @@
   },
   {
     "id": "081-workflow-3",
-    "root": "runCase.nl",
+    "root": "coordinateLocaleEdition.nl",
     "split_group": "world-081-workflow-3",
     "inputs": {
-      "request": "Prepare a reviewable Localization Release Manager proposal from the supplied case records and evidence.",
-      "records": [
-        {
-          "id": "081-workflow-3-record",
-          "caseId": "081-workflow-3",
-          "sourceRefs": [
-            "081-event-3"
-          ],
-          "state": "draft",
-          "kind": "LocalizationRelease",
-          "subject": "Source segment S-81 revision v4 changes only a comma in the French Canadian checkout instruction. Product owner PO-4 marks the edit punctuation-only; semantic review record SR-81 has not checked whether the exception scope changed, and translations reference v3.",
-          "status": "candidate",
-          "evidenceIds": [
-            "081-event-3"
-          ],
-          "fields": {
-            "sourceArtifact": "081-event-3",
-            "sourceVersion": "v1"
-          },
-          "sourceReleaseId": "SRCREL-81",
-          "localeIds": [
-            "fr-CA",
-            "fr-FR"
-          ],
-          "contentIds": [
-            "PAYMENT-FAIL",
-            "ORDER-STATUS"
-          ],
-          "managerId": "LOC-7",
-          "glossaryVersion": "v3"
-        }
+      "change": {
+        "instruction": "Prepare a reviewable Localization Release Manager proposal from the supplied case records and evidence.",
+        "releases": [
+          {
+            "id": "081-workflow-3-record",
+            "caseId": "081-workflow-3",
+            "sourceRefs": [
+              "081-event-3"
+            ],
+            "state": "draft",
+            "kind": "LocalizationRelease",
+            "subject": "Source segment S-81 revision v4 changes only a comma in the French Canadian checkout instruction. Product owner PO-4 marks the edit punctuation-only; semantic review record SR-81 has not checked whether the exception scope changed, and translations reference v3.",
+            "status": "candidate",
+            "evidenceIds": [
+              "081-event-3"
+            ],
+            "fields": {
+              "sourceArtifact": "081-event-3",
+              "sourceVersion": "v1"
+            },
+            "sourceReleaseId": "SRCREL-81",
+            "localeIds": [
+              "fr-CA",
+              "fr-FR"
+            ],
+            "contentIds": [
+              "PAYMENT-FAIL",
+              "ORDER-STATUS"
+            ],
+            "managerId": "LOC-7",
+            "glossaryVersion": "v3"
+          }
+        ],
+        "sourceEvidence": [
+          {
+            "id": "081-event-3",
+            "source": "current domain record 081-E3",
+            "version": "v1",
+            "text": "Source segment S-81 revision v4 changes only a comma in the French Canadian checkout instruction. Product owner PO-4 marks the edit punctuation-only; semantic review record SR-81 has not checked whether the exception scope changed, and translations reference v3.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "glossaryEvidence": [],
+        "expectedContentIds": [
+          "081-workflow-3-record"
+        ],
+        "releaseManager": "accountable reviewer",
+        "previouslyCommittedIds": [
+          "081-workflow-3-record"
+        ],
+        "changedSources": [
+          {
+            "id": "081-event-3",
+            "source": "current domain record 081-E3",
+            "version": "v1",
+            "text": "Source segment S-81 revision v4 changes only a comma in the French Canadian checkout instruction. Product owner PO-4 marks the edit punctuation-only; semantic review record SR-81 has not checked whether the exception scope changed, and translations reference v3.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "targetLocales": [
+        "fr-CA",
+        "fr-FR"
       ],
-      "evidence": [
-        {
-          "id": "081-event-3",
-          "source": "current domain record 081-E3",
-          "version": "v1",
-          "text": "Source segment S-81 revision v4 changes only a comma in the French Canadian checkout instruction. Product owner PO-4 marks the edit punctuation-only; semantic review record SR-81 has not checked whether the exception scope changed, and translations reference v3.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "081-workflow-3-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "081-workflow-3-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "081-event-3",
-          "source": "current domain record 081-E3",
-          "version": "v1",
-          "text": "Source segment S-81 revision v4 changes only a comma in the French Canadian checkout instruction. Product owner PO-4 marks the edit punctuation-only; semantic review record SR-81 has not checked whether the exception scope changed, and translations reference v3.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      "localeLedger": null
     },
     "expected": {
       "application": "Localization Release Manager",
@@ -448,69 +469,76 @@
   },
   {
     "id": "081-workflow-4",
-    "root": "runCase.nl",
+    "root": "coordinateLocaleEdition.nl",
     "split_group": "world-081-workflow-4",
     "inputs": {
-      "request": "Prepare a reviewable Localization Release Manager proposal from the supplied case records and evidence.",
-      "records": [
-        {
-          "id": "081-workflow-4-record",
-          "caseId": "081-workflow-4",
-          "sourceRefs": [
-            "081-event-4"
-          ],
-          "state": "draft",
-          "kind": "LocalizationRelease",
-          "subject": "Locale fr-CA release is delayed until 2026-10-30; the previous approved critical safety instruction is v3 and the new fr-CA version is still under review. Other locales are ready; manifest v8 currently mixes fr-CA v3 with other locales v4.",
-          "status": "candidate",
-          "evidenceIds": [
-            "081-event-4"
-          ],
-          "fields": {
-            "sourceArtifact": "081-event-4",
-            "sourceVersion": "v1"
-          },
-          "sourceReleaseId": "SRCREL-81",
-          "localeIds": [
-            "fr-CA",
-            "fr-FR"
-          ],
-          "contentIds": [
-            "PAYMENT-FAIL",
-            "ORDER-STATUS"
-          ],
-          "managerId": "LOC-7",
-          "glossaryVersion": "v3"
-        }
+      "change": {
+        "instruction": "Prepare a reviewable Localization Release Manager proposal from the supplied case records and evidence.",
+        "releases": [
+          {
+            "id": "081-workflow-4-record",
+            "caseId": "081-workflow-4",
+            "sourceRefs": [
+              "081-event-4"
+            ],
+            "state": "draft",
+            "kind": "LocalizationRelease",
+            "subject": "Locale fr-CA release is delayed until 2026-10-30; the previous approved critical safety instruction is v3 and the new fr-CA version is still under review. Other locales are ready; manifest v8 currently mixes fr-CA v3 with other locales v4.",
+            "status": "candidate",
+            "evidenceIds": [
+              "081-event-4"
+            ],
+            "fields": {
+              "sourceArtifact": "081-event-4",
+              "sourceVersion": "v1"
+            },
+            "sourceReleaseId": "SRCREL-81",
+            "localeIds": [
+              "fr-CA",
+              "fr-FR"
+            ],
+            "contentIds": [
+              "PAYMENT-FAIL",
+              "ORDER-STATUS"
+            ],
+            "managerId": "LOC-7",
+            "glossaryVersion": "v3"
+          }
+        ],
+        "sourceEvidence": [
+          {
+            "id": "081-event-4",
+            "source": "current domain record 081-E4",
+            "version": "v1",
+            "text": "Locale fr-CA release is delayed until 2026-10-30; the previous approved critical safety instruction is v3 and the new fr-CA version is still under review. Other locales are ready; manifest v8 currently mixes fr-CA v3 with other locales v4.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "glossaryEvidence": [],
+        "expectedContentIds": [
+          "081-workflow-4-record"
+        ],
+        "releaseManager": "accountable reviewer",
+        "previouslyCommittedIds": [
+          "081-workflow-4-record"
+        ],
+        "changedSources": [
+          {
+            "id": "081-event-4",
+            "source": "current domain record 081-E4",
+            "version": "v1",
+            "text": "Locale fr-CA release is delayed until 2026-10-30; the previous approved critical safety instruction is v3 and the new fr-CA version is still under review. Other locales are ready; manifest v8 currently mixes fr-CA v3 with other locales v4.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "targetLocales": [
+        "fr-CA",
+        "fr-FR"
       ],
-      "evidence": [
-        {
-          "id": "081-event-4",
-          "source": "current domain record 081-E4",
-          "version": "v1",
-          "text": "Locale fr-CA release is delayed until 2026-10-30; the previous approved critical safety instruction is v3 and the new fr-CA version is still under review. Other locales are ready; manifest v8 currently mixes fr-CA v3 with other locales v4.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "081-workflow-4-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "081-workflow-4-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "081-event-4",
-          "source": "current domain record 081-E4",
-          "version": "v1",
-          "text": "Locale fr-CA release is delayed until 2026-10-30; the previous approved critical safety instruction is v3 and the new fr-CA version is still under review. Other locales are ready; manifest v8 currently mixes fr-CA v3 with other locales v4.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      "localeLedger": null
     },
     "expected": {
       "application": "Localization Release Manager",
@@ -533,69 +561,76 @@
   },
   {
     "id": "081-workflow-5",
-    "root": "runCase.nl",
+    "root": "coordinateLocaleEdition.nl",
     "split_group": "world-081-workflow-5",
     "inputs": {
-      "request": "Prepare a reviewable Localization Release Manager proposal from the supplied case records and evidence.",
-      "records": [
-        {
-          "id": "081-workflow-5-record",
-          "caseId": "081-workflow-5",
-          "sourceRefs": [
-            "081-event-5"
-          ],
-          "state": "draft",
-          "kind": "LocalizationRelease",
-          "subject": "Glossary v7 changes approved term T-8 for the concept “refund pending” to a new French Canadian form. Segment S-81A and S-81C use that concept; segment S-81B uses the same word in the distinct “order status” sense.",
-          "status": "candidate",
-          "evidenceIds": [
-            "081-event-5"
-          ],
-          "fields": {
-            "sourceArtifact": "081-event-5",
-            "sourceVersion": "v1"
-          },
-          "sourceReleaseId": "SRCREL-81",
-          "localeIds": [
-            "fr-CA",
-            "fr-FR"
-          ],
-          "contentIds": [
-            "PAYMENT-FAIL",
-            "ORDER-STATUS"
-          ],
-          "managerId": "LOC-7",
-          "glossaryVersion": "v3"
-        }
+      "change": {
+        "instruction": "Prepare a reviewable Localization Release Manager proposal from the supplied case records and evidence.",
+        "releases": [
+          {
+            "id": "081-workflow-5-record",
+            "caseId": "081-workflow-5",
+            "sourceRefs": [
+              "081-event-5"
+            ],
+            "state": "draft",
+            "kind": "LocalizationRelease",
+            "subject": "Glossary v7 changes approved term T-8 for the concept “refund pending” to a new French Canadian form. Segment S-81A and S-81C use that concept; segment S-81B uses the same word in the distinct “order status” sense.",
+            "status": "candidate",
+            "evidenceIds": [
+              "081-event-5"
+            ],
+            "fields": {
+              "sourceArtifact": "081-event-5",
+              "sourceVersion": "v1"
+            },
+            "sourceReleaseId": "SRCREL-81",
+            "localeIds": [
+              "fr-CA",
+              "fr-FR"
+            ],
+            "contentIds": [
+              "PAYMENT-FAIL",
+              "ORDER-STATUS"
+            ],
+            "managerId": "LOC-7",
+            "glossaryVersion": "v3"
+          }
+        ],
+        "sourceEvidence": [
+          {
+            "id": "081-event-5",
+            "source": "current domain record 081-E5",
+            "version": "v1",
+            "text": "Glossary v7 changes approved term T-8 for the concept “refund pending” to a new French Canadian form. Segment S-81A and S-81C use that concept; segment S-81B uses the same word in the distinct “order status” sense.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "glossaryEvidence": [],
+        "expectedContentIds": [
+          "081-workflow-5-record"
+        ],
+        "releaseManager": "accountable reviewer",
+        "previouslyCommittedIds": [
+          "081-workflow-5-record"
+        ],
+        "changedSources": [
+          {
+            "id": "081-event-5",
+            "source": "current domain record 081-E5",
+            "version": "v1",
+            "text": "Glossary v7 changes approved term T-8 for the concept “refund pending” to a new French Canadian form. Segment S-81A and S-81C use that concept; segment S-81B uses the same word in the distinct “order status” sense.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "targetLocales": [
+        "fr-CA",
+        "fr-FR"
       ],
-      "evidence": [
-        {
-          "id": "081-event-5",
-          "source": "current domain record 081-E5",
-          "version": "v1",
-          "text": "Glossary v7 changes approved term T-8 for the concept “refund pending” to a new French Canadian form. Segment S-81A and S-81C use that concept; segment S-81B uses the same word in the distinct “order status” sense.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "081-workflow-5-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "081-workflow-5-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "081-event-5",
-          "source": "current domain record 081-E5",
-          "version": "v1",
-          "text": "Glossary v7 changes approved term T-8 for the concept “refund pending” to a new French Canadian form. Segment S-81A and S-81C use that concept; segment S-81B uses the same word in the distinct “order status” sense.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      "localeLedger": null
     },
     "expected": {
       "application": "Localization Release Manager",

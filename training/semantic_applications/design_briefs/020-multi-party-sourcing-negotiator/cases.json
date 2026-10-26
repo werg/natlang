@@ -1,7 +1,7 @@
 [
   {
     "id": "020-modelPackage-supported",
-    "root": "runCase/modelPackage/audit/qualify.nl",
+    "root": "qualification/qualifyOriginal.nl",
     "split_group": "design-brief-app-020",
     "inputs": {
       "draft": {
@@ -101,7 +101,7 @@
   },
   {
     "id": "020-modelPackage-contradictory",
-    "root": "runCase/modelPackage/audit/qualify.nl",
+    "root": "qualification/qualifyOriginal.nl",
     "split_group": "design-brief-app-020",
     "inputs": {
       "draft": {
@@ -201,7 +201,7 @@
   },
   {
     "id": "020-modelPackage-missing",
-    "root": "runCase/modelPackage/audit/qualify.nl",
+    "root": "qualification/qualifyOriginal.nl",
     "split_group": "design-brief-app-020",
     "inputs": {
       "draft": {
@@ -301,19 +301,17 @@
   },
   {
     "id": "020-workflow-01",
-    "root": "runCase.nl",
+    "root": "negotiateSupplyRound.nl",
     "split_group": "design-brief-app-020",
     "inputs": {
-      "request": {
-        "caseId": "SYN-020-01",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+      "desk": {
+        "roundId": "SYN-020-01",
+        "buyerInstruction": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
         "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
-      },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+        "buyer": "case owner",
+        "expectedSourceVersion": "v1",
+        "sourceVersion": "v1",
+        "events": [
           {
             "requirementIds": [
               "REQ-F4"
@@ -344,7 +342,7 @@
             "retentionPolicyId": "retention-020"
           }
         ],
-        "evidencePages": [
+        "quotations": [
           {
             "evidence": [
               {
@@ -370,7 +368,7 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "mandateEvidence": [
           {
             "id": "POL-020",
             "authority": "named case owner",
@@ -383,10 +381,11 @@
             ]
           }
         ],
-        "searchedPartitions": [
+        "searchedBooks": [
           "case-folder-2026"
         ]
-      }
+      },
+      "book": null
     },
     "expected": {
       "commitAllowed": false
@@ -407,19 +406,17 @@
   },
   {
     "id": "020-workflow-02",
-    "root": "runCase.nl",
+    "root": "negotiateSupplyRound.nl",
     "split_group": "design-brief-app-020",
     "inputs": {
-      "request": {
-        "caseId": "SYN-020-02",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+      "desk": {
+        "roundId": "SYN-020-02",
+        "buyerInstruction": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
         "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
-      },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+        "buyer": "case owner",
+        "expectedSourceVersion": "v1",
+        "sourceVersion": "v1",
+        "events": [
           {
             "requirementIds": [
               "REQ-F4"
@@ -450,7 +447,7 @@
             "retentionPolicyId": "retention-020"
           }
         ],
-        "evidencePages": [
+        "quotations": [
           {
             "evidence": [
               {
@@ -476,7 +473,7 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "mandateEvidence": [
           {
             "id": "POL-020",
             "authority": "named case owner",
@@ -489,10 +486,11 @@
             ]
           }
         ],
-        "searchedPartitions": [
+        "searchedBooks": [
           "case-folder-2026"
         ]
-      }
+      },
+      "book": null
     },
     "expected": {
       "commitAllowed": false
@@ -513,19 +511,17 @@
   },
   {
     "id": "020-workflow-03",
-    "root": "runCase.nl",
+    "root": "negotiateSupplyRound.nl",
     "split_group": "design-brief-app-020",
     "inputs": {
-      "request": {
-        "caseId": "SYN-020-03",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+      "desk": {
+        "roundId": "SYN-020-03",
+        "buyerInstruction": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
         "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
-      },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+        "buyer": "case owner",
+        "expectedSourceVersion": "v1",
+        "sourceVersion": "v1",
+        "events": [
           {
             "requirementIds": [
               "REQ-F4"
@@ -556,7 +552,7 @@
             "retentionPolicyId": "retention-020"
           }
         ],
-        "evidencePages": [
+        "quotations": [
           {
             "evidence": [
               {
@@ -582,7 +578,7 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "mandateEvidence": [
           {
             "id": "POL-020",
             "authority": "named case owner",
@@ -595,10 +591,11 @@
             ]
           }
         ],
-        "searchedPartitions": [
+        "searchedBooks": [
           "case-folder-2026"
         ]
-      }
+      },
+      "book": null
     },
     "expected": {
       "commitAllowed": false
@@ -619,19 +616,17 @@
   },
   {
     "id": "020-workflow-04",
-    "root": "runCase.nl",
+    "root": "negotiateSupplyRound.nl",
     "split_group": "design-brief-app-020",
     "inputs": {
-      "request": {
-        "caseId": "SYN-020-04",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+      "desk": {
+        "roundId": "SYN-020-04",
+        "buyerInstruction": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
         "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
-      },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+        "buyer": "case owner",
+        "expectedSourceVersion": "v1",
+        "sourceVersion": "v1",
+        "events": [
           {
             "requirementIds": [
               "REQ-F4"
@@ -662,7 +657,7 @@
             "retentionPolicyId": "retention-020"
           }
         ],
-        "evidencePages": [
+        "quotations": [
           {
             "evidence": [
               {
@@ -688,7 +683,7 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "mandateEvidence": [
           {
             "id": "POL-020",
             "authority": "named case owner",
@@ -701,10 +696,11 @@
             ]
           }
         ],
-        "searchedPartitions": [
+        "searchedBooks": [
           "case-folder-2026"
         ]
-      }
+      },
+      "book": null
     },
     "expected": {
       "commitAllowed": false
@@ -725,19 +721,17 @@
   },
   {
     "id": "020-workflow-05",
-    "root": "runCase.nl",
+    "root": "negotiateSupplyRound.nl",
     "split_group": "design-brief-app-020",
     "inputs": {
-      "request": {
-        "caseId": "SYN-020-05",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+      "desk": {
+        "roundId": "SYN-020-05",
+        "buyerInstruction": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
         "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
-      },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+        "buyer": "case owner",
+        "expectedSourceVersion": "v1",
+        "sourceVersion": "v1",
+        "events": [
           {
             "requirementIds": [
               "REQ-F4"
@@ -768,7 +762,7 @@
             "retentionPolicyId": "retention-020"
           }
         ],
-        "evidencePages": [
+        "quotations": [
           {
             "evidence": [
               {
@@ -794,7 +788,7 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "mandateEvidence": [
           {
             "id": "POL-020",
             "authority": "named case owner",
@@ -807,10 +801,11 @@
             ]
           }
         ],
-        "searchedPartitions": [
+        "searchedBooks": [
           "case-folder-2026"
         ]
-      }
+      },
+      "book": null
     },
     "expected": {
       "commitAllowed": false

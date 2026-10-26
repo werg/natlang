@@ -11,7 +11,7 @@ import { generationHoldReason, quarantineReason } from '../../dist/teacher/curri
 export const REPO = resolve(import.meta.dirname, '../../..');
 export const SOURCE_ROOT = 'codebases/design_briefs';
 export const FIXTURE_ROOT = 'training/semantic_applications/design_briefs';
-export const RELEASE = 'design-briefs-100-native-20261025-v1';
+export const RELEASE = 'design-briefs-100-distinct-applications-20261026-v2';
 export const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 export const json = value => JSON.stringify(value, null, 2) + '\n';
 export const jsonl = rows => rows.map(row => JSON.stringify(row)).join('\n') + (rows.length ? '\n' : '');
@@ -45,13 +45,28 @@ export async function confinedFile(root, name) {
 
 export async function sourceFiles(root) {
   const files = {};
+  let manifest;
+  try { manifest = JSON.parse(await readFile(await confinedFile(root, 'application.json'), 'utf8')); }
+  catch (error) { if (error.code !== 'ENOENT') throw error; }
+  if (manifest?.source_files !== undefined) {
+    const paths = manifest.source_files;
+    if (!Array.isArray(paths) || !paths.length || new Set(paths).size !== paths.length)
+      throw new Error('source_files must be a nonempty inventory of distinct native source paths');
+    for (const name of [...paths].sort()) {
+      safeRelative(name);
+      if (!(name === 'natlang.json' || (/\.(nl|ts)$/.test(name) && !name.endsWith('.d.nl.ts'))))
+        throw new Error(`not a native source path: ${name}`);
+      files[name] = await readFile(await confinedFile(root, name), 'utf8');
+    }
+    return files;
+  }
   async function walk(folder, prefix = '') {
     for (const entry of (await readdir(folder, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name))) {
       if (entry.name.startsWith('.') || ['node_modules', 'dist'].includes(entry.name)) continue;
       const name = prefix + entry.name;
       if (entry.isSymbolicLink()) throw new Error(`symlink in source project: ${name}`);
       if (entry.isDirectory()) await walk(join(folder, entry.name), name + '/');
-      else if (entry.isFile() && /\.(nl|ts)$/.test(name) && !name.endsWith('.d.nl.ts'))
+      else if (entry.isFile() && ((/\.(nl|ts)$/.test(name) && !name.endsWith('.d.nl.ts')) || name === 'natlang.json'))
         files[name] = await readFile(join(folder, entry.name), 'utf8');
     }
   }
@@ -73,8 +88,8 @@ export function oracleLevel(spec) {
 }
 
 /** Preserve the six concrete domain records from each brief, including enums and exact value types. */
-export function checkDomainContracts(files, contracts) {
-  const node = programNode({ semantics: { root: 'runCase.nl', files } });
+export function checkDomainContracts(files, contracts, root = 'runCase.nl') {
+  const node = programNode({ semantics: { root, files } });
   const scalarNames = Object.fromEntries(['ID', 'Ref', 'SpanRef', 'LocalDate', 'DateTime'].map(name => [name, parseType('string')]));
   const env = new TypeEnv(node.types, new TypeEnv(scalarNames));
   let fields = 0;
@@ -101,10 +116,10 @@ export function checkDomainContracts(files, contracts) {
 }
 
 /** A prose reference cannot make an out-of-scope sibling into an actual callable. */
-export function checkNativeCalls(files) {
+export function checkNativeCalls(files, root = 'runCase.nl') {
   const paths = Object.keys(files).filter(path => path.endsWith('.nl'));
   const names = new Set(paths.map(path => basename(path, '.nl')));
-  const sharedTypes = files['runCase.nl'] ? programNode({ semantics: { root: 'runCase.nl', files } }).types : {};
+  const sharedTypes = files[root] ? programNode({ semantics: { root, files } }).types : {};
   let references = 0;
   for (const path of paths) {
     const definition = programDefinition({ semantics: { root: path, files } });
@@ -119,11 +134,146 @@ export function checkNativeCalls(files) {
       const call = new RegExp(`\\b${escaped}\\s*\\(|\\b(?:call|calling|invoke|invoking)\\s+${escaped}\\b`, 'i');
       if (call.test(definition.body)) {
         if (!visible.has(name)) throw new Error(`${path}: referenced helper ${name} is outside its native callable scope`);
+        const child = definition.codebase[name];
+        if (child.kind === 'natlang') {
+          const parameters = Object.keys(child.args ?? {}), minimum = parameters.filter(name => !name.endsWith('?')).length;
+          for (const match of definition.body.matchAll(new RegExp(`\\b${escaped}\\s*\\(`, 'g'))) {
+            const args = literalCallArguments(definition.body, match.index + match[0].length);
+            if (args && !args.some(arg => arg.includes('...')) && (args.length < minimum || args.length > parameters.length))
+              throw new Error(`${path}: ${name} declares ${minimum === parameters.length ? minimum : `${minimum}–${parameters.length}`} positional arguments, but this explicit call supplies ${args.length}`);
+          }
+        }
         references++;
       }
     }
   }
   return { functions: paths.length, visible_references: references };
+}
+
+// Only inspect explicitly parenthesized calls. Natural-language references remain potential graph evidence.
+function literalCallArguments(body, start) {
+  const values = []; let depth = 0, quote = null, escaped = false, from = start;
+  for (let i = start; i < body.length; i++) {
+    const char = body[i];
+    if (quote) {
+      if (escaped) escaped = false;
+      else if (char === '\\') escaped = true;
+      else if (char === quote) quote = null;
+      continue;
+    }
+    if (char === '"' || char === "'" || char === '`') { quote = char; continue; }
+    if ('([{'.includes(char)) depth++;
+    else if (')]}' .includes(char)) {
+      if (char === ')' && depth === 0) {
+        const last = body.slice(from, i).trim(); if (last || values.length) values.push(last);
+        return values;
+      }
+      if (--depth < 0) return null;
+    } else if (char === ',' && depth === 0) { values.push(body.slice(from, i).trim()); from = i + 1; }
+  }
+  return null;
+}
+
+/** Check source interfaces without imposing a shared domain API, workflow, or node count. */
+export function checkApplicationInterfaces(files, manifest, metadata) {
+  if (!manifest || manifest.schema !== 'natlang.application/1' ||
+      String(manifest.id).padStart(3, '0') !== String(metadata.application_id).padStart(3, '0') ||
+      manifest.title !== metadata.title)
+    throw new Error('application interface identity differs from its original brief');
+  safeRelative(manifest.entrypoint);
+  if (!manifest.entrypoint.endsWith('.nl') || !files[manifest.entrypoint])
+    throw new Error('application entrypoint must be an existing native function');
+  if (!Array.isArray(manifest.interfaces) || !manifest.interfaces.length)
+    throw new Error('application must declare its own callable interfaces');
+  const names = new Set();
+  const interfaces = manifest.interfaces.map(item => {
+    if (!item || typeof item.name !== 'string' || !/^[A-Za-z][A-Za-z0-9_-]*$/.test(item.name) ||
+        names.has(item.name) || typeof item.purpose !== 'string' || !item.purpose.trim())
+      throw new Error('application interfaces require distinct names and an explicit purpose');
+    names.add(item.name);
+    safeRelative(item.path);
+    if (!item.path.endsWith('.nl') || !files[item.path]) throw new Error(`missing native interface ${item.path}`);
+    const definition = programDefinition({ semantics: { root: item.path, files } });
+    if (item.stateParameter !== undefined && !definition.params.some(param => param.name === item.stateParameter))
+      throw new Error(`${item.name}: stateParameter is not a declared native parameter`);
+    for (const key of ['stateResultPath', 'effectsPath']) if (item[key] !== undefined &&
+        (!Array.isArray(item[key]) || item[key].some(part => typeof part !== 'string' || !part ||
+          ['__proto__', 'constructor', 'prototype'].includes(part))))
+      throw new Error(`${item.name}: ${key} must be an explicit safe property path`);
+    const node = programNode({ semantics: { root: item.path, files } });
+    const env = new TypeEnv(node.types);
+    const resultAtPath = (type, path) => {
+      if (!path.length) return type;
+      const resolved = env.resolve(type);
+      if (resolved.kind === 'union') return { kind: 'union', members: resolved.members.map(member => resultAtPath(member, path)) };
+      const field = resolved.kind === 'record' && resolved.fields.find(field => field.name === path[0]);
+      if (!field || field.optional) throw new Error(`${item.name}: result path ${path.join('.')} must exist in every result`);
+      return resultAtPath(field.type, path.slice(1));
+    };
+    if (item.stateResultPath !== undefined || item.stateParameter !== undefined) {
+      const state = resultAtPath(node.type.returns, item.stateResultPath ?? []);
+      const parameter = node.type.params.fields.find(field => field.name === item.stateParameter);
+      if (parameter && !fitsType(state, parameter.type, env))
+        throw new Error(`${item.name}: saved result state does not fit stateParameter ${item.stateParameter}`);
+    }
+    if (item.effectsPath !== undefined) resultAtPath(node.type.returns, item.effectsPath);
+    if (item.stateKey !== undefined && (typeof item.stateKey !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,100}$/.test(item.stateKey)))
+      throw new Error(`${item.name}: stateKey must be an explicit safe record identifier`);
+    return { name: item.name, path: item.path, parameters: definition.params.map(param => param.name),
+      returns: formatType(node.type.returns) };
+  });
+  if (!manifest.interfaces.some(item => item.path === manifest.entrypoint))
+    throw new Error('the application entrypoint must be exposed by its own interface');
+  return { entrypoint: manifest.entrypoint, interfaces,
+    evidence: 'native source contracts; no observed execution or semantic quality claim' };
+}
+
+/** Potential calls are evidence of source structure, never a substitute for captured execution. */
+export function inspectPotentialCalls(files, entrypoints) {
+  const paths = Object.keys(files).filter(path => path.endsWith('.nl'));
+  const edges = [];
+  for (const path of paths) {
+    const definition = programDefinition({ semantics: { root: path, files } });
+    for (const [name, child] of Object.entries(definition.codebase ?? {})) {
+      // Native loader identity covers both companion-folder children and explicit package `uses:` edges.
+      const target = child.source;
+      if (typeof target !== 'string' || !paths.includes(target)) continue;
+      const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      // NatLang may say "using interpretWitness" or name several calls in one sentence.
+      // A visible callable's name in instructions is a potential edge, not proof that it was executed.
+      if (new RegExp(`\\b${escaped}\\b`, 'i').test(definition.body))
+        edges.push({ caller: path, callee: target });
+    }
+  }
+  const reached = new Set(entrypoints), queue = [...entrypoints];
+  for (let i = 0; i < queue.length; i++) for (const edge of edges.filter(edge => edge.caller === queue[i]))
+    if (!reached.has(edge.callee)) { reached.add(edge.callee); queue.push(edge.callee); }
+  return { evidence: 'statically referenced visible callable names; not observed model calls',
+    entrypoints, edges, unreferenced: paths.filter(path => !reached.has(path)) };
+}
+
+/** Ownership paths bind every original requirement to actual source, without prescribing its decomposition. */
+export function checkSourceCoverage(files, manifest, metadata) {
+  const coverage = manifest.coverage;
+  if (!coverage || !Array.isArray(coverage.domainGates) || !Array.isArray(coverage.operationalRules))
+    throw new Error('application must identify the source owners of its original domain gates and operational rules');
+  const owners = (rows, key, expected) => {
+    if (rows.length !== expected.length || new Set(rows.map(row => row[key])).size !== expected.length ||
+        expected.some(value => !rows.some(row => row[key] === value)))
+      throw new Error(`source coverage must retain every original ${key}`);
+    for (const row of rows) {
+      if (!Array.isArray(row.paths) || !row.paths.length || new Set(row.paths).size !== row.paths.length)
+        throw new Error(`${key} ${row[key]} requires explicit distinct source owner paths`);
+      for (const path of row.paths) {
+        safeRelative(path);
+        if (!path.endsWith('.nl') || !files[path]) throw new Error(`${key} ${row[key]} names a missing NatLang owner: ${path}`);
+      }
+    }
+  };
+  owners(coverage.domainGates, 'stage', metadata.stages.map(stage => stage.name));
+  owners(coverage.operationalRules, 'id', metadata.operational_details.map((_, index) => index + 1));
+  return { domain_gates: coverage.domainGates.length, operational_rules: coverage.operationalRules.length,
+    evidence: 'explicit source ownership; semantic correctness requires independent execution review' };
 }
 
 /** Uses the real native type system; structural checks never grade semantic meaning. */
@@ -164,7 +314,7 @@ export function checkOperationalCoverage(app, fixtures, original) {
     throw new Error('missing original operational-detail contract or source binding');
   if (JSON.stringify(app.operational_details) !== JSON.stringify(original.details))
     throw new Error('operational details must retain the five original brief use cases verbatim');
-  const workflows = fixtures.filter(fixture => fixture.root === 'runCase.nl');
+  const workflows = fixtures.filter(fixture => oracleLevel(fixture.oracle) === 'judged');
   if (workflows.length !== 5 || new Set(workflows.map(fixture => fixture.operational_detail_id)).size !== 5)
     throw new Error('five workflows must cover five distinct original operational details');
   for (const fixture of workflows) {
@@ -196,7 +346,7 @@ export function checkOperationalCoverage(app, fixtures, original) {
 export function makeRecord(app, files, fixture, fixtureHash) {
   const { level } = checkFixture(files, fixture);
   const applicationId = String(app.application_id).padStart(3, '0');
-  const group = `design-briefs-v1:application-${applicationId}`;
+  const group = `design-briefs:application-${applicationId}`;
   const split = applicationSplit(applicationId);
   const exact = level === 'exact';
   const expected = level === 'judged' ? {
@@ -208,7 +358,7 @@ export function makeRecord(app, files, fixture, fixtureHash) {
   } : fixture.expected;
   const row = {
     version: 'natlang.program/2',
-    id: `design-briefs-v1:${applicationId}:${fixture.id}`,
+    id: `design-briefs-v2:${applicationId}:${fixture.id}`,
     kind: 'lambda_graph', family: `design_brief_${applicationId}`, split,
     source: 'user-design-brief-native-program',
     source_ids: [app.source_relative_path], source_groups: [group],
@@ -258,18 +408,16 @@ export async function readApplication(repo, name, sourceIndex, domainContracts, 
     throw new Error(`${name}: five distinct domain algorithms and gates required`);
   const files = await sourceFiles(appRoot);
   const nlFiles = Object.keys(files).filter(path => path.endsWith('.nl'));
-  if (!files['runCase.nl'] || nlFiles.length < 36)
-    throw new Error(`${name}: incomplete root and semantic decomposition`);
+  const interfaceBytes = await readFile(await confinedFile(appRoot, 'application.json'));
+  const manifest = JSON.parse(interfaceBytes);
+  if (!Array.isArray(manifest.source_files)) throw new Error(`${name}: missing explicit native source inventory`);
+  const interfaceCheck = checkApplicationInterfaces(files, manifest, app);
+  const sourceCoverage = checkSourceCoverage(files, manifest, app);
   const contracts = domainContracts ?? JSON.parse(await readFile(join(repo, FIXTURE_ROOT, 'domain-contracts.json'), 'utf8'));
   if (!contracts.applications[id]) throw new Error(`${name}: missing original domain contracts`);
-  const contractCheck = checkDomainContracts(files, contracts.applications[id]);
-  const callCheck = checkNativeCalls(files);
+  const contractCheck = checkDomainContracts(files, contracts.applications[id], manifest.entrypoint);
+  const callCheck = checkNativeCalls(files, manifest.entrypoint);
   await confinedFile(appRoot, 'DECOMPOSITION.md');
-  for (const stage of app.stages) {
-    const stem = `runCase/${stage.name.replace(/\.nl$/, '')}`;
-    for (const path of [stem + '.nl', ...['prepare', 'decide', 'construct', 'audit'].map(child => `${stem}/${child}.nl`)])
-      if (!files[path]) throw new Error(`${name}: missing domain module ${path}`);
-  }
   const fixturePath = await confinedFile(join(repo, FIXTURE_ROOT, name), 'cases.json');
   const fixtureBytes = await readFile(fixturePath);
   const cases = JSON.parse(fixtureBytes);
@@ -277,16 +425,22 @@ export async function readApplication(repo, name, sourceIndex, domainContracts, 
     throw new Error(`${name}: three counterfactual gate cases and five operational workflows are required`);
   const operational = operationalContracts ?? JSON.parse(await readFile(join(repo, FIXTURE_ROOT, 'operational-contracts.json'), 'utf8'));
   const operationalCoverage = checkOperationalCoverage(app, cases, operational.applications[id]);
-  const records = cases.map(fixture => makeRecord(app, files, fixture, sha256(fixtureBytes)));
+  const records = cases.map(fixture => {
+    const row = makeRecord(app, files, fixture, sha256(fixtureBytes));
+    row.source_ids.push(`${SOURCE_ROOT}/${name}/application.json`);
+    row.source_revisions.push(`sha256:${sha256(interfaceBytes)}`);
+    row.generation.interface_manifest_sha256 = sha256(interfaceBytes);
+    return row;
+  });
   const gateCases = records.filter(row => oracleLevel(row.semantics.oracle) === 'exact');
-  const workflows = records.filter(row => row.semantics.root === 'runCase.nl');
+  const workflows = records.filter(row => oracleLevel(row.semantics.oracle) === 'judged');
   if (gateCases.length !== 3 || workflows.length !== 5)
     throw new Error(`${name}: missing gate or full-workflow coverage`);
   for (const verdict of ['pass', 'fail', 'needs-review'])
     if (!gateCases.some(row => row.semantics.expected === verdict))
       throw new Error(`${name}: no exact ${verdict} counterfactual`);
   for (const row of gateCases.filter(item => item.semantics.expected === 'pass')) {
-    const stage = app.stages.find(item => row.semantics.root.startsWith(`runCase/${item.name.replace(/\.nl$/, '')}/`));
+    const stage = app.stages[0];
     const required = contracts.applications[id][stage?.output_type];
     const draft = row.semantics.inputs.draft;
     const values = draft?.values ?? draft?.value ?? draft;
@@ -296,9 +450,14 @@ export async function readApplication(repo, name, sourceIndex, domainContracts, 
   const visibleGateInputs = gateCases.map(row => JSON.stringify(row.semantics.inputs));
   if (new Set(visibleGateInputs).size !== gateCases.length)
     throw new Error(`${name}: identical visible gate inputs have multiple answer records`);
-  return { name, app, files, records, metadata_sha256: sha256(metadataBytes), fixture_sha256: sha256(fixtureBytes),
+  const potentialCalls = inspectPotentialCalls(files, [...new Set([
+    ...manifest.interfaces.map(item => item.path), ...cases.map(item => item.root),
+  ])]);
+  return { name, app, files, manifest, records, interfaces: interfaceCheck,
+    interface_sha256: sha256(interfaceBytes), potential_calls: potentialCalls,
+    metadata_sha256: sha256(metadataBytes), fixture_sha256: sha256(fixtureBytes),
     source_sha256: sourceDigest(files), native_functions: nlFiles.length, domain_contracts: contractCheck,
-    callable_scope: callCheck, operational_coverage: operationalCoverage };
+    callable_scope: callCheck, operational_coverage: operationalCoverage, source_coverage: sourceCoverage };
 }
 
 export async function verifyPacket(directory) {

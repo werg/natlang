@@ -1,7 +1,7 @@
 [
   {
     "id": "003-recoverCommitments-supported",
-    "root": "runCase/recoverCommitments/audit/qualify.nl",
+    "root": "qualification/qualifyOriginal.nl",
     "split_group": "design-brief-app-003",
     "inputs": {
       "draft": {
@@ -96,7 +96,7 @@
   },
   {
     "id": "003-recoverCommitments-contradictory",
-    "root": "runCase/recoverCommitments/audit/qualify.nl",
+    "root": "qualification/qualifyOriginal.nl",
     "split_group": "design-brief-app-003",
     "inputs": {
       "draft": {
@@ -191,7 +191,7 @@
   },
   {
     "id": "003-recoverCommitments-missing",
-    "root": "runCase/recoverCommitments/audit/qualify.nl",
+    "root": "qualification/qualifyOriginal.nl",
     "split_group": "design-brief-app-003",
     "inputs": {
       "draft": {
@@ -286,19 +286,17 @@
   },
   {
     "id": "003-workflow-01",
-    "root": "runCase.nl",
+    "root": "planDepartureHandover.nl",
     "split_group": "design-brief-app-003",
     "inputs": {
-      "request": {
-        "caseId": "SYN-003-01",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+      "docket": {
+        "handoverId": "SYN-003-01",
+        "desiredOutcome": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
         "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
-      },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+        "coordinator": "case owner",
+        "expectedVersion": "v1",
+        "sourceVersion": "v1",
+        "departures": [
           {
             "personId": "Arun Vale",
             "departureDate": "2026-10-04",
@@ -328,7 +326,7 @@
             "retentionPolicyId": "retention-003"
           }
         ],
-        "evidencePages": [
+        "correspondence": [
           {
             "evidence": [
               {
@@ -354,7 +352,7 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "sharingRules": [
           {
             "id": "POL-003",
             "authority": "named case owner",
@@ -367,10 +365,11 @@
             ]
           }
         ],
-        "searchedPartitions": [
+        "searchedFolders": [
           "case-folder-2026"
         ]
-      }
+      },
+      "portfolio": null
     },
     "expected": {
       "commitAllowed": false
@@ -391,19 +390,17 @@
   },
   {
     "id": "003-workflow-02",
-    "root": "runCase.nl",
+    "root": "planDepartureHandover.nl",
     "split_group": "design-brief-app-003",
     "inputs": {
-      "request": {
-        "caseId": "SYN-003-02",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+      "docket": {
+        "handoverId": "SYN-003-02",
+        "desiredOutcome": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
         "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
-      },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+        "coordinator": "case owner",
+        "expectedVersion": "v1",
+        "sourceVersion": "v1",
+        "departures": [
           {
             "personId": "Arun Vale",
             "departureDate": "2026-10-04",
@@ -433,7 +430,7 @@
             "retentionPolicyId": "retention-003"
           }
         ],
-        "evidencePages": [
+        "correspondence": [
           {
             "evidence": [
               {
@@ -459,7 +456,7 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "sharingRules": [
           {
             "id": "POL-003",
             "authority": "named case owner",
@@ -472,10 +469,11 @@
             ]
           }
         ],
-        "searchedPartitions": [
+        "searchedFolders": [
           "case-folder-2026"
         ]
-      }
+      },
+      "portfolio": null
     },
     "expected": {
       "commitAllowed": false
@@ -496,19 +494,17 @@
   },
   {
     "id": "003-workflow-03",
-    "root": "runCase.nl",
+    "root": "planDepartureHandover.nl",
     "split_group": "design-brief-app-003",
     "inputs": {
-      "request": {
-        "caseId": "SYN-003-03",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+      "docket": {
+        "handoverId": "SYN-003-03",
+        "desiredOutcome": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
         "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
-      },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+        "coordinator": "case owner",
+        "expectedVersion": "v1",
+        "sourceVersion": "v1",
+        "departures": [
           {
             "personId": "Arun Vale",
             "departureDate": "2026-10-04",
@@ -538,7 +534,7 @@
             "retentionPolicyId": "retention-003"
           }
         ],
-        "evidencePages": [
+        "correspondence": [
           {
             "evidence": [
               {
@@ -564,7 +560,7 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "sharingRules": [
           {
             "id": "POL-003",
             "authority": "named case owner",
@@ -577,10 +573,11 @@
             ]
           }
         ],
-        "searchedPartitions": [
+        "searchedFolders": [
           "case-folder-2026"
         ]
-      }
+      },
+      "portfolio": null
     },
     "expected": {
       "commitAllowed": false
@@ -601,19 +598,17 @@
   },
   {
     "id": "003-workflow-04",
-    "root": "runCase.nl",
+    "root": "planDepartureHandover.nl",
     "split_group": "design-brief-app-003",
     "inputs": {
-      "request": {
-        "caseId": "SYN-003-04",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+      "docket": {
+        "handoverId": "SYN-003-04",
+        "desiredOutcome": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
         "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
-      },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+        "coordinator": "case owner",
+        "expectedVersion": "v1",
+        "sourceVersion": "v1",
+        "departures": [
           {
             "personId": "Arun Vale",
             "departureDate": "2026-10-04",
@@ -643,7 +638,7 @@
             "retentionPolicyId": "retention-003"
           }
         ],
-        "evidencePages": [
+        "correspondence": [
           {
             "evidence": [
               {
@@ -669,7 +664,7 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "sharingRules": [
           {
             "id": "POL-003",
             "authority": "named case owner",
@@ -682,10 +677,11 @@
             ]
           }
         ],
-        "searchedPartitions": [
+        "searchedFolders": [
           "case-folder-2026"
         ]
-      }
+      },
+      "portfolio": null
     },
     "expected": {
       "commitAllowed": false
@@ -706,19 +702,17 @@
   },
   {
     "id": "003-workflow-05",
-    "root": "runCase.nl",
+    "root": "planDepartureHandover.nl",
     "split_group": "design-brief-app-003",
     "inputs": {
-      "request": {
-        "caseId": "SYN-003-05",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+      "docket": {
+        "handoverId": "SYN-003-05",
+        "desiredOutcome": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
         "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
-      },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+        "coordinator": "case owner",
+        "expectedVersion": "v1",
+        "sourceVersion": "v1",
+        "departures": [
           {
             "personId": "Arun Vale",
             "departureDate": "2026-10-04",
@@ -748,7 +742,7 @@
             "retentionPolicyId": "retention-003"
           }
         ],
-        "evidencePages": [
+        "correspondence": [
           {
             "evidence": [
               {
@@ -774,7 +768,7 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "sharingRules": [
           {
             "id": "POL-003",
             "authority": "named case owner",
@@ -787,10 +781,11 @@
             ]
           }
         ],
-        "searchedPartitions": [
+        "searchedFolders": [
           "case-folder-2026"
         ]
-      }
+      },
+      "portfolio": null
     },
     "expected": {
       "commitAllowed": false

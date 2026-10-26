@@ -1,0 +1,10 @@
+---
+args: {"docket": "DepartureDocket", "portfolio": "HandoverPortfolio | null"}
+returns: "ContinuityPlan"
+---
+1. Bind capture = determineAccessCapture(docket). When access is revoked, use only previously authorized frozen source snapshots and their actual capture receipts. Request selective sharing of a relevant personal note; do not recover revoked mail or export a notebook.
+2. Bind promises = reconstructPromiseEpisodes(docket, capture). Preserve the historical promisor and unknown due dates. Bind progress = matchOutcomeAcceptance(promises, docket.correspondence). A due date passing or a file being sent does not satisfy an acceptance condition.
+3. For promises with open, partial or uncertain work bind prerequisites = discoverContinuityPrerequisites(promises, progress, docket). Detect cycles through the finite dependency identities; retain unresolved owners and minimal recovery tasks. Completed/cancelled promises do not acquire fabricated access tasks.
+4. Bind slices = offerSuccessorSlices(promises, progress, prerequisites, docket, portfolio). Preserve every earlier exact scope acknowledgment; split a partially accepted project into accepted and unowned portions before counting transferred responsibility. A recurring obligation's proposed cadence remains unconfirmed until owner evidence supports it.
+5. Bind introductions = prepareCustomerIntroductions(promises, slices, docket, portfolio). Keep reviewed wording, actual dispatch and receipt separately; an expected named contact needs a consented introduction, not a silent reassignment.
+6. Bind closure = reviewImmediateContinuity(promises, progress, prerequisites, slices, introductions). Construct the next portfolio from those actual results, prior reply identities and capture. Return separate transferComplete/workComplete, open work, unaccepted slices, missing access, cycles and unresolved questions. Transfer closure requires every immediate obligation to have an accepting owner and confirmed next checkpoint even when delivery work remains open.

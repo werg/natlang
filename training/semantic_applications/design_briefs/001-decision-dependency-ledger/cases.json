@@ -1,7 +1,7 @@
 [
   {
     "id": "001-extractDecisions-supported",
-    "root": "runCase/extractDecisions/audit/qualify.nl",
+    "root": "qualification/qualifyOriginal.nl",
     "split_group": "design-brief-app-001",
     "inputs": {
       "draft": {
@@ -92,7 +92,7 @@
   },
   {
     "id": "001-extractDecisions-contradictory",
-    "root": "runCase/extractDecisions/audit/qualify.nl",
+    "root": "qualification/qualifyOriginal.nl",
     "split_group": "design-brief-app-001",
     "inputs": {
       "draft": {
@@ -183,7 +183,7 @@
   },
   {
     "id": "001-extractDecisions-missing",
-    "root": "runCase/extractDecisions/audit/qualify.nl",
+    "root": "qualification/qualifyOriginal.nl",
     "split_group": "design-brief-app-001",
     "inputs": {
       "draft": {
@@ -274,19 +274,17 @@
   },
   {
     "id": "001-workflow-01",
-    "root": "runCase.nl",
+    "root": "reopenDecisionLedger.nl",
     "split_group": "design-brief-app-001",
     "inputs": {
-      "request": {
-        "caseId": "SYN-001-01",
+      "inbox": {
+        "reviewId": "SYN-001-01",
         "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
         "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
-      },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+        "reviewer": "case owner",
+        "expectedVersion": "v1",
+        "sourceVersion": "v1",
+        "cases": [
           {
             "subject": "Case SYN-001-01",
             "ownerId": "Mira Patel",
@@ -312,7 +310,7 @@
             "retentionPolicyId": "retention-001"
           }
         ],
-        "evidencePages": [
+        "meetingAndCorrectionSources": [
           {
             "evidence": [
               {
@@ -356,7 +354,7 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "authority": [
           {
             "id": "POL-001",
             "authority": "named case owner",
@@ -372,7 +370,8 @@
         "searchedPartitions": [
           "case-folder-2026"
         ]
-      }
+      },
+      "ledger": null
     },
     "expected": {
       "commitAllowed": false
@@ -393,19 +392,17 @@
   },
   {
     "id": "001-workflow-02",
-    "root": "runCase.nl",
+    "root": "reopenDecisionLedger.nl",
     "split_group": "design-brief-app-001",
     "inputs": {
-      "request": {
-        "caseId": "SYN-001-02",
+      "inbox": {
+        "reviewId": "SYN-001-02",
         "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
         "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
-      },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+        "reviewer": "case owner",
+        "expectedVersion": "v1",
+        "sourceVersion": "v1",
+        "cases": [
           {
             "subject": "Case SYN-001-02",
             "ownerId": "Mira Patel",
@@ -431,7 +428,7 @@
             "retentionPolicyId": "retention-001"
           }
         ],
-        "evidencePages": [
+        "meetingAndCorrectionSources": [
           {
             "evidence": [
               {
@@ -475,7 +472,7 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "authority": [
           {
             "id": "POL-001",
             "authority": "named case owner",
@@ -491,7 +488,8 @@
         "searchedPartitions": [
           "case-folder-2026"
         ]
-      }
+      },
+      "ledger": null
     },
     "expected": {
       "commitAllowed": false
@@ -512,19 +510,17 @@
   },
   {
     "id": "001-workflow-03",
-    "root": "runCase.nl",
+    "root": "reopenDecisionLedger.nl",
     "split_group": "design-brief-app-001",
     "inputs": {
-      "request": {
-        "caseId": "SYN-001-03",
+      "inbox": {
+        "reviewId": "SYN-001-03",
         "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
         "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
-      },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+        "reviewer": "case owner",
+        "expectedVersion": "v1",
+        "sourceVersion": "v1",
+        "cases": [
           {
             "subject": "Case SYN-001-03",
             "ownerId": "Mira Patel",
@@ -550,7 +546,7 @@
             "retentionPolicyId": "retention-001"
           }
         ],
-        "evidencePages": [
+        "meetingAndCorrectionSources": [
           {
             "evidence": [
               {
@@ -594,7 +590,7 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "authority": [
           {
             "id": "POL-001",
             "authority": "named case owner",
@@ -610,7 +606,8 @@
         "searchedPartitions": [
           "case-folder-2026"
         ]
-      }
+      },
+      "ledger": null
     },
     "expected": {
       "commitAllowed": false
@@ -631,19 +628,17 @@
   },
   {
     "id": "001-workflow-04",
-    "root": "runCase.nl",
+    "root": "reopenDecisionLedger.nl",
     "split_group": "design-brief-app-001",
     "inputs": {
-      "request": {
-        "caseId": "SYN-001-04",
+      "inbox": {
+        "reviewId": "SYN-001-04",
         "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
         "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
-      },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+        "reviewer": "case owner",
+        "expectedVersion": "v1",
+        "sourceVersion": "v1",
+        "cases": [
           {
             "subject": "Case SYN-001-04",
             "ownerId": "Mira Patel",
@@ -669,7 +664,7 @@
             "retentionPolicyId": "retention-001"
           }
         ],
-        "evidencePages": [
+        "meetingAndCorrectionSources": [
           {
             "evidence": [
               {
@@ -713,7 +708,7 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "authority": [
           {
             "id": "POL-001",
             "authority": "named case owner",
@@ -729,7 +724,8 @@
         "searchedPartitions": [
           "case-folder-2026"
         ]
-      }
+      },
+      "ledger": null
     },
     "expected": {
       "commitAllowed": false
@@ -750,19 +746,17 @@
   },
   {
     "id": "001-workflow-05",
-    "root": "runCase.nl",
+    "root": "reopenDecisionLedger.nl",
     "split_group": "design-brief-app-001",
     "inputs": {
-      "request": {
-        "caseId": "SYN-001-05",
+      "inbox": {
+        "reviewId": "SYN-001-05",
         "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
         "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
-      },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+        "reviewer": "case owner",
+        "expectedVersion": "v1",
+        "sourceVersion": "v1",
+        "cases": [
           {
             "subject": "Case SYN-001-05",
             "ownerId": "Mira Patel",
@@ -788,7 +782,7 @@
             "retentionPolicyId": "retention-001"
           }
         ],
-        "evidencePages": [
+        "meetingAndCorrectionSources": [
           {
             "evidence": [
               {
@@ -832,7 +826,7 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "authority": [
           {
             "id": "POL-001",
             "authority": "named case owner",
@@ -848,7 +842,8 @@
         "searchedPartitions": [
           "case-folder-2026"
         ]
-      }
+      },
+      "ledger": null
     },
     "expected": {
       "commitAllowed": false

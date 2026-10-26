@@ -1,7 +1,7 @@
 [
   {
     "id": "004-mapVocabularies-supported",
-    "root": "runCase/mapVocabularies/audit/qualify.nl",
+    "root": "qualification/qualifyOriginal.nl",
     "split_group": "design-brief-app-004",
     "inputs": {
       "draft": {
@@ -99,7 +99,7 @@
   },
   {
     "id": "004-mapVocabularies-contradictory",
-    "root": "runCase/mapVocabularies/audit/qualify.nl",
+    "root": "qualification/qualifyOriginal.nl",
     "split_group": "design-brief-app-004",
     "inputs": {
       "draft": {
@@ -197,7 +197,7 @@
   },
   {
     "id": "004-mapVocabularies-missing",
-    "root": "runCase/mapVocabularies/audit/qualify.nl",
+    "root": "qualification/qualifyOriginal.nl",
     "split_group": "design-brief-app-004",
     "inputs": {
       "draft": {
@@ -295,19 +295,17 @@
   },
   {
     "id": "004-workflow-01",
-    "root": "runCase.nl",
+    "root": "planConceptIntegration.nl",
     "split_group": "design-brief-app-004",
     "inputs": {
-      "request": {
-        "caseId": "SYN-004-01",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
-      },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "inquiry": {
+        "projectId": "SYN-004-01",
+        "requestedWork": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "targetScope": "one named case",
+        "sponsor": "case owner",
+        "expectedVersion": "v1",
+        "sourceVersion": "v1",
+        "projects": [
           {
             "leftOrgId": "Atlas Systems",
             "rightOrgId": "Northstar Labs",
@@ -333,7 +331,7 @@
             "retentionPolicyId": "retention-004"
           }
         ],
-        "evidencePages": [
+        "usageSources": [
           {
             "evidence": [
               {
@@ -359,7 +357,7 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "accessAndDecisionRules": [
           {
             "id": "POL-004",
             "authority": "named case owner",
@@ -372,10 +370,11 @@
             ]
           }
         ],
-        "searchedPartitions": [
+        "searchedCollections": [
           "case-folder-2026"
         ]
-      }
+      },
+      "atlas": null
     },
     "expected": {
       "commitAllowed": false
@@ -396,19 +395,17 @@
   },
   {
     "id": "004-workflow-02",
-    "root": "runCase.nl",
+    "root": "planConceptIntegration.nl",
     "split_group": "design-brief-app-004",
     "inputs": {
-      "request": {
-        "caseId": "SYN-004-02",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
-      },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "inquiry": {
+        "projectId": "SYN-004-02",
+        "requestedWork": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "targetScope": "one named case",
+        "sponsor": "case owner",
+        "expectedVersion": "v1",
+        "sourceVersion": "v1",
+        "projects": [
           {
             "leftOrgId": "Atlas Systems",
             "rightOrgId": "Northstar Labs",
@@ -434,7 +431,7 @@
             "retentionPolicyId": "retention-004"
           }
         ],
-        "evidencePages": [
+        "usageSources": [
           {
             "evidence": [
               {
@@ -460,7 +457,7 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "accessAndDecisionRules": [
           {
             "id": "POL-004",
             "authority": "named case owner",
@@ -473,10 +470,11 @@
             ]
           }
         ],
-        "searchedPartitions": [
+        "searchedCollections": [
           "case-folder-2026"
         ]
-      }
+      },
+      "atlas": null
     },
     "expected": {
       "commitAllowed": false
@@ -497,19 +495,17 @@
   },
   {
     "id": "004-workflow-03",
-    "root": "runCase.nl",
+    "root": "planConceptIntegration.nl",
     "split_group": "design-brief-app-004",
     "inputs": {
-      "request": {
-        "caseId": "SYN-004-03",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
-      },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "inquiry": {
+        "projectId": "SYN-004-03",
+        "requestedWork": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "targetScope": "one named case",
+        "sponsor": "case owner",
+        "expectedVersion": "v1",
+        "sourceVersion": "v1",
+        "projects": [
           {
             "leftOrgId": "Atlas Systems",
             "rightOrgId": "Northstar Labs",
@@ -535,7 +531,7 @@
             "retentionPolicyId": "retention-004"
           }
         ],
-        "evidencePages": [
+        "usageSources": [
           {
             "evidence": [
               {
@@ -561,7 +557,7 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "accessAndDecisionRules": [
           {
             "id": "POL-004",
             "authority": "named case owner",
@@ -574,10 +570,11 @@
             ]
           }
         ],
-        "searchedPartitions": [
+        "searchedCollections": [
           "case-folder-2026"
         ]
-      }
+      },
+      "atlas": null
     },
     "expected": {
       "commitAllowed": false
@@ -598,19 +595,17 @@
   },
   {
     "id": "004-workflow-04",
-    "root": "runCase.nl",
+    "root": "planConceptIntegration.nl",
     "split_group": "design-brief-app-004",
     "inputs": {
-      "request": {
-        "caseId": "SYN-004-04",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
-      },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "inquiry": {
+        "projectId": "SYN-004-04",
+        "requestedWork": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "targetScope": "one named case",
+        "sponsor": "case owner",
+        "expectedVersion": "v1",
+        "sourceVersion": "v1",
+        "projects": [
           {
             "leftOrgId": "Atlas Systems",
             "rightOrgId": "Northstar Labs",
@@ -636,7 +631,7 @@
             "retentionPolicyId": "retention-004"
           }
         ],
-        "evidencePages": [
+        "usageSources": [
           {
             "evidence": [
               {
@@ -662,7 +657,7 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "accessAndDecisionRules": [
           {
             "id": "POL-004",
             "authority": "named case owner",
@@ -675,10 +670,11 @@
             ]
           }
         ],
-        "searchedPartitions": [
+        "searchedCollections": [
           "case-folder-2026"
         ]
-      }
+      },
+      "atlas": null
     },
     "expected": {
       "commitAllowed": false
@@ -699,19 +695,17 @@
   },
   {
     "id": "004-workflow-05",
-    "root": "runCase.nl",
+    "root": "planConceptIntegration.nl",
     "split_group": "design-brief-app-004",
     "inputs": {
-      "request": {
-        "caseId": "SYN-004-05",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
-      },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "inquiry": {
+        "projectId": "SYN-004-05",
+        "requestedWork": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "targetScope": "one named case",
+        "sponsor": "case owner",
+        "expectedVersion": "v1",
+        "sourceVersion": "v1",
+        "projects": [
           {
             "leftOrgId": "Atlas Systems",
             "rightOrgId": "Northstar Labs",
@@ -737,7 +731,7 @@
             "retentionPolicyId": "retention-004"
           }
         ],
-        "evidencePages": [
+        "usageSources": [
           {
             "evidence": [
               {
@@ -763,7 +757,7 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "accessAndDecisionRules": [
           {
             "id": "POL-004",
             "authority": "named case owner",
@@ -776,10 +770,11 @@
             ]
           }
         ],
-        "searchedPartitions": [
+        "searchedCollections": [
           "case-folder-2026"
         ]
-      }
+      },
+      "atlas": null
     },
     "expected": {
       "commitAllowed": false

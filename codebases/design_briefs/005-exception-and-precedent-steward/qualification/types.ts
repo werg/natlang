@@ -1,0 +1,11 @@
+export type ID = string;
+export type Hash = string;
+export type DateTime = string;
+export type Ref = { tenantId: ID; objectId: ID; version: string; hash: Hash };
+export type FieldConflict = { field: string; alternatives: string[]; evidenceRefs: string[] };
+export type Evidence = { id: string; source: string; version: string; observedAt: string; authority: string; scope: string; text: string };
+export type EvidencePage = { evidence: Evidence[]; searchedPartition: string; complete: boolean };
+export type PolicySelection = { selected: string[]; precedenceQuestions: string[]; applicableScope: string };
+export type GateVerdict = 'pass' | 'fail' | 'needs-review';
+export type ExceptionCase = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; requesterId: string; requestedDeviation: string; policyId: string; eventDate: string; accountableOwnerId: string };
+export type DraftExceptionRecord = { value: { tenantId?: string; id?: string; version?: number; schemaVersion?: string; state?: string; createdAt?: string; updatedAt?: string; createdBy?: string; sourceRefs?: Ref[]; decisionRefs?: Ref[]; sensitivity?: string[]; purposeIds?: string[]; retentionPolicyId?: string; caseId?: string; ruleId?: string; waivedRequirement?: string; survivingRequirements?: string[]; expiresAt?: string; grantedBy?: string }; missingFields: string[]; conflicts: FieldConflict[]; evidenceRefs: string[] };

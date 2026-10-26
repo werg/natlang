@@ -1,0 +1,111 @@
+{
+  "schema": "natlang.application/1",
+  "id": "004",
+  "title": "Organizational knowledge integration workbench",
+  "entrypoint": "planConceptIntegration.nl",
+  "interfaces": [
+    {
+      "name": "planConceptIntegration",
+      "path": "planConceptIntegration.nl",
+      "purpose": "Test operational meanings in both directions and assemble reversible organizational integration waves with explicit responsibility boundaries.",
+      "stateParameter": "atlas",
+      "stateResultPath": [
+        "atlas"
+      ],
+      "stateKey": "integration-atlas"
+    },
+    {
+      "name": "rescheduleIntegrationCutover",
+      "path": "rescheduleIntegrationCutover.nl",
+      "purpose": "Move authorized execution dates while preserving effective decisions and completed wave history.",
+      "stateParameter": "atlas",
+      "stateResultPath": [
+        "atlas"
+      ],
+      "stateKey": "integration-atlas"
+    }
+  ],
+  "source_files": [
+    "natlang.json",
+    "planConceptIntegration.nl",
+    "planConceptIntegration/negotiateRoleInterfaces.nl",
+    "planConceptIntegration/planReversibleFamilies.nl",
+    "planConceptIntegration/planReversibleFamilies/checkRoundTripMeaning.nl",
+    "planConceptIntegration/readOrganizationalUsage.nl",
+    "planConceptIntegration/readOrganizationalUsage/distinguishLocalSenses.nl",
+    "planConceptIntegration/testOperationalSubstitution.nl",
+    "planConceptIntegration/testOperationalSubstitution/substituteMeaning.nl",
+    "planConceptIntegration/testOperationalSubstitution/substituteMeaning/readOperationalConsequences.nl",
+    "planConceptIntegration/walkCrossTeamTransactions.nl",
+    "qualification/qualifyOriginal.nl",
+    "qualification/types.ts",
+    "rescheduleIntegrationCutover.nl",
+    "types.ts"
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "mapVocabularies",
+        "paths": [
+          "planConceptIntegration/readOrganizationalUsage/distinguishLocalSenses.nl"
+        ]
+      },
+      {
+        "stage": "alignConcepts",
+        "paths": [
+          "planConceptIntegration/testOperationalSubstitution.nl"
+        ]
+      },
+      {
+        "stage": "reconcileRoles",
+        "paths": [
+          "planConceptIntegration/negotiateRoleInterfaces.nl"
+        ]
+      },
+      {
+        "stage": "planMigration",
+        "paths": [
+          "planConceptIntegration/planReversibleFamilies.nl"
+        ]
+      },
+      {
+        "stage": "validateInterfaces",
+        "paths": [
+          "planConceptIntegration/walkCrossTeamTransactions.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "planConceptIntegration/readOrganizationalUsage/distinguishLocalSenses.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "planConceptIntegration/readOrganizationalUsage.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "planConceptIntegration/negotiateRoleInterfaces.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "rescheduleIntegrationCutover.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "planConceptIntegration/testOperationalSubstitution.nl"
+        ]
+      }
+    ]
+  }
+}

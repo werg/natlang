@@ -1,5 +1,29 @@
 # Model-facing changes and their measurement
 
+### 2026-10-26 — independently designed design-brief application source
+
+PR #4's one-hundred application corpus is being revised from repeated request
+families and prepare/decide/construct/audit scaffolding into application-owned
+native interfaces, typed domain subproblems, semantic control flow, and explicit
+operational recovery. The original brief records, observed fixture worlds,
+finite gate answers, and application-level split assignments remain the source
+contracts; representation and callable paths may change. The optional durable
+host is an exact transport/persistence mechanism outside the model-visible
+programs and does not supply domain judgments or training answers.
+
+Status: **unmeasured; source-only; training admission remains false.** Native
+loading, source coverage, compiler checks, and scripted host tests establish
+engineering properties only. Generation is paused; this revision does not
+resume teacher services, create trajectories, or start training. In the next
+authorized own-model teacher window, sample about 48 executions per retained
+presentation variant and independently review task outcomes, actual nested
+calls, consumption of child values, state continuation, unresolved branches,
+and effect receipts. Compare structurally similar programs as well as different
+domains to detect remaining schematic repetition. Keep held applications held
+out, preserve failures, and require real external-adapter qualification before
+claiming deployed production behavior. Both authoring and integration skills
+now state these boundaries and the required type-compatible resume mapping.
+
 ### 2026-10-18 — terminal Neuralese text results are written as typed values
 
 A final assistant text reply to a function declared as `Neuralese<string>` is

@@ -1,7 +1,7 @@
 [
   {
     "id": "053-industrial-surplus-exchange-gate-supported",
-    "root": "runCase/interpretOffers/audit/qualify.nl",
+    "root": "qualification/qualifyOriginal.nl",
     "split_group": "053-industrial-surplus-exchange",
     "inputs": {
       "draft": {
@@ -76,7 +76,7 @@
   },
   {
     "id": "053-industrial-surplus-exchange-gate-contradictory",
-    "root": "runCase/interpretOffers/audit/qualify.nl",
+    "root": "qualification/qualifyOriginal.nl",
     "split_group": "053-industrial-surplus-exchange",
     "inputs": {
       "draft": {
@@ -151,7 +151,7 @@
   },
   {
     "id": "053-industrial-surplus-exchange-gate-missing",
-    "root": "runCase/interpretOffers/audit/qualify.nl",
+    "root": "qualification/qualifyOriginal.nl",
     "split_group": "053-industrial-surplus-exchange",
     "inputs": {
       "draft": {
@@ -203,13 +203,30 @@
   },
   {
     "id": "053-industrial-surplus-exchange-operational-1",
-    "root": "runCase.nl",
+    "root": "assembleReuseExchange.nl",
     "split_group": "053-industrial-surplus-exchange",
     "inputs": {
-      "input": {
-        "caseId": "053-industrial-surplus-exchange-operational-1",
-        "goal": "Review the Industrial surplus exchange evidence for case 053-industrial-surplus-exchange-operational-1; return a traceable proposal from the supplied records.",
-        "evidence": [
+      "desk": {
+        "exchangeId": "053-industrial-surplus-exchange-operational-1",
+        "coordinatorRequest": "Review the Industrial surplus exchange evidence for case 053-industrial-surplus-exchange-operational-1; return a traceable proposal from the supplied records.",
+        "suppliedOffer": {
+          "id": "053-prior-surplusoffer-detail-1-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "053-industrial-surplus-exchange-operational-1",
+          "ownerId": "surplus-owner-53",
+          "materialFunction": "stainless pump offered for transfer; food-contact use requested",
+          "quantity": {
+            "value": "1",
+            "unit": "pump"
+          },
+          "condition": "serial plate unreadable; no material certificate",
+          "transferRestrictions": [
+            "do not reserve for food-contact use before certification"
+          ]
+        },
+        "materialEvents": [
           {
             "id": "053-operational-detail-1-source-v2",
             "source": "Industrial surplus exchange operational event log",
@@ -224,34 +241,16 @@
             "status": "current"
           }
         ],
-        "policy": [
+        "allocationRules": [
           "current named-source authority; applicability must be checked against version and scope"
         ],
-        "authorityStatus": "authorized",
-        "changedEvidenceIds": [
+        "authority": "authorized",
+        "changedMaterialIds": [
           "053-operational-detail-1-source-v2"
         ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "053-prior-surplusoffer-detail-1-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "053-industrial-surplus-exchange-operational-1",
-            "ownerId": "surplus-owner-53",
-            "materialFunction": "stainless pump offered for transfer; food-contact use requested",
-            "quantity": {
-              "value": "1",
-              "unit": "pump"
-            },
-            "condition": "serial plate unreadable; no material certificate",
-            "transferRestrictions": [
-              "do not reserve for food-contact use before certification"
-            ]
-          }
-        }
-      }
+        "audience": "accountable reviewer"
+      },
+      "exchange": null
     },
     "expected": {
       "preservePriorVersion": true,
@@ -275,13 +274,30 @@
   },
   {
     "id": "053-industrial-surplus-exchange-operational-2",
-    "root": "runCase.nl",
+    "root": "assembleReuseExchange.nl",
     "split_group": "053-industrial-surplus-exchange",
     "inputs": {
-      "input": {
-        "caseId": "053-industrial-surplus-exchange-operational-2",
-        "goal": "Review the Industrial surplus exchange evidence for case 053-industrial-surplus-exchange-operational-2; return a traceable proposal from the supplied records.",
-        "evidence": [
+      "desk": {
+        "exchangeId": "053-industrial-surplus-exchange-operational-2",
+        "coordinatorRequest": "Review the Industrial surplus exchange evidence for case 053-industrial-surplus-exchange-operational-2; return a traceable proposal from the supplied records.",
+        "suppliedOffer": {
+          "id": "053-prior-surplusoffer-detail-2-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "053-industrial-surplus-exchange-operational-2",
+          "ownerId": "surplus-owner-53",
+          "materialFunction": "stainless pump offered for transfer; food-contact use requested",
+          "quantity": {
+            "value": "1",
+            "unit": "pump"
+          },
+          "condition": "serial plate unreadable; no material certificate",
+          "transferRestrictions": [
+            "do not reserve for food-contact use before certification"
+          ]
+        },
+        "materialEvents": [
           {
             "id": "053-operational-detail-2-source-v2",
             "source": "Industrial surplus exchange operational event log",
@@ -296,34 +312,16 @@
             "status": "current"
           }
         ],
-        "policy": [
+        "allocationRules": [
           "current named-source authority; applicability must be checked against version and scope"
         ],
-        "authorityStatus": "unclear",
-        "changedEvidenceIds": [
+        "authority": "unclear",
+        "changedMaterialIds": [
           "053-operational-detail-2-source-v2"
         ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "053-prior-surplusoffer-detail-2-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "053-industrial-surplus-exchange-operational-2",
-            "ownerId": "surplus-owner-53",
-            "materialFunction": "stainless pump offered for transfer; food-contact use requested",
-            "quantity": {
-              "value": "1",
-              "unit": "pump"
-            },
-            "condition": "serial plate unreadable; no material certificate",
-            "transferRestrictions": [
-              "do not reserve for food-contact use before certification"
-            ]
-          }
-        }
-      }
+        "audience": "accountable reviewer"
+      },
+      "exchange": null
     },
     "expected": {
       "preservePriorVersion": true,
@@ -347,13 +345,30 @@
   },
   {
     "id": "053-industrial-surplus-exchange-operational-3",
-    "root": "runCase.nl",
+    "root": "assembleReuseExchange.nl",
     "split_group": "053-industrial-surplus-exchange",
     "inputs": {
-      "input": {
-        "caseId": "053-industrial-surplus-exchange-operational-3",
-        "goal": "Review the Industrial surplus exchange evidence for case 053-industrial-surplus-exchange-operational-3; return a traceable proposal from the supplied records.",
-        "evidence": [
+      "desk": {
+        "exchangeId": "053-industrial-surplus-exchange-operational-3",
+        "coordinatorRequest": "Review the Industrial surplus exchange evidence for case 053-industrial-surplus-exchange-operational-3; return a traceable proposal from the supplied records.",
+        "suppliedOffer": {
+          "id": "053-prior-surplusoffer-detail-3-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "053-industrial-surplus-exchange-operational-3",
+          "ownerId": "surplus-owner-53",
+          "materialFunction": "stainless pump offered for transfer; food-contact use requested",
+          "quantity": {
+            "value": "1",
+            "unit": "pump"
+          },
+          "condition": "serial plate unreadable; no material certificate",
+          "transferRestrictions": [
+            "do not reserve for food-contact use before certification"
+          ]
+        },
+        "materialEvents": [
           {
             "id": "053-operational-detail-3-source-v2",
             "source": "Industrial surplus exchange operational event log",
@@ -368,34 +383,16 @@
             "status": "current"
           }
         ],
-        "policy": [
+        "allocationRules": [
           "current named-source authority; applicability must be checked against version and scope"
         ],
-        "authorityStatus": "authorized",
-        "changedEvidenceIds": [
+        "authority": "authorized",
+        "changedMaterialIds": [
           "053-operational-detail-3-source-v2"
         ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "053-prior-surplusoffer-detail-3-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "053-industrial-surplus-exchange-operational-3",
-            "ownerId": "surplus-owner-53",
-            "materialFunction": "stainless pump offered for transfer; food-contact use requested",
-            "quantity": {
-              "value": "1",
-              "unit": "pump"
-            },
-            "condition": "serial plate unreadable; no material certificate",
-            "transferRestrictions": [
-              "do not reserve for food-contact use before certification"
-            ]
-          }
-        }
-      }
+        "audience": "accountable reviewer"
+      },
+      "exchange": null
     },
     "expected": {
       "preservePriorVersion": true,
@@ -419,13 +416,30 @@
   },
   {
     "id": "053-industrial-surplus-exchange-operational-4",
-    "root": "runCase.nl",
+    "root": "assembleReuseExchange.nl",
     "split_group": "053-industrial-surplus-exchange",
     "inputs": {
-      "input": {
-        "caseId": "053-industrial-surplus-exchange-operational-4",
-        "goal": "Review the Industrial surplus exchange evidence for case 053-industrial-surplus-exchange-operational-4; return a traceable proposal from the supplied records.",
-        "evidence": [
+      "desk": {
+        "exchangeId": "053-industrial-surplus-exchange-operational-4",
+        "coordinatorRequest": "Review the Industrial surplus exchange evidence for case 053-industrial-surplus-exchange-operational-4; return a traceable proposal from the supplied records.",
+        "suppliedOffer": {
+          "id": "053-prior-surplusoffer-detail-4-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "053-industrial-surplus-exchange-operational-4",
+          "ownerId": "surplus-owner-53",
+          "materialFunction": "stainless pump offered for transfer; food-contact use requested",
+          "quantity": {
+            "value": "1",
+            "unit": "pump"
+          },
+          "condition": "serial plate unreadable; no material certificate",
+          "transferRestrictions": [
+            "do not reserve for food-contact use before certification"
+          ]
+        },
+        "materialEvents": [
           {
             "id": "053-operational-detail-4-source-v2",
             "source": "Industrial surplus exchange operational event log",
@@ -440,34 +454,16 @@
             "status": "current"
           }
         ],
-        "policy": [
+        "allocationRules": [
           "current named-source authority; applicability must be checked against version and scope"
         ],
-        "authorityStatus": "authorized",
-        "changedEvidenceIds": [
+        "authority": "authorized",
+        "changedMaterialIds": [
           "053-operational-detail-4-source-v2"
         ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "053-prior-surplusoffer-detail-4-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "053-industrial-surplus-exchange-operational-4",
-            "ownerId": "surplus-owner-53",
-            "materialFunction": "stainless pump offered for transfer; food-contact use requested",
-            "quantity": {
-              "value": "1",
-              "unit": "pump"
-            },
-            "condition": "serial plate unreadable; no material certificate",
-            "transferRestrictions": [
-              "do not reserve for food-contact use before certification"
-            ]
-          }
-        }
-      }
+        "audience": "accountable reviewer"
+      },
+      "exchange": null
     },
     "expected": {
       "preservePriorVersion": true,
@@ -491,13 +487,30 @@
   },
   {
     "id": "053-industrial-surplus-exchange-operational-5",
-    "root": "runCase.nl",
+    "root": "assembleReuseExchange.nl",
     "split_group": "053-industrial-surplus-exchange",
     "inputs": {
-      "input": {
-        "caseId": "053-industrial-surplus-exchange-operational-5",
-        "goal": "Review the Industrial surplus exchange evidence for case 053-industrial-surplus-exchange-operational-5; return a traceable proposal from the supplied records.",
-        "evidence": [
+      "desk": {
+        "exchangeId": "053-industrial-surplus-exchange-operational-5",
+        "coordinatorRequest": "Review the Industrial surplus exchange evidence for case 053-industrial-surplus-exchange-operational-5; return a traceable proposal from the supplied records.",
+        "suppliedOffer": {
+          "id": "053-prior-surplusoffer-detail-5-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "053-industrial-surplus-exchange-operational-5",
+          "ownerId": "surplus-owner-53",
+          "materialFunction": "stainless pump offered for transfer; food-contact use requested",
+          "quantity": {
+            "value": "1",
+            "unit": "pump"
+          },
+          "condition": "serial plate unreadable; no material certificate",
+          "transferRestrictions": [
+            "do not reserve for food-contact use before certification"
+          ]
+        },
+        "materialEvents": [
           {
             "id": "053-operational-detail-5-source-v2",
             "source": "Industrial surplus exchange operational event log",
@@ -512,34 +525,16 @@
             "status": "current"
           }
         ],
-        "policy": [
+        "allocationRules": [
           "current named-source authority; applicability must be checked against version and scope"
         ],
-        "authorityStatus": "authorized",
-        "changedEvidenceIds": [
+        "authority": "authorized",
+        "changedMaterialIds": [
           "053-operational-detail-5-source-v2"
         ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "053-prior-surplusoffer-detail-5-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "053-industrial-surplus-exchange-operational-5",
-            "ownerId": "surplus-owner-53",
-            "materialFunction": "stainless pump offered for transfer; food-contact use requested",
-            "quantity": {
-              "value": "1",
-              "unit": "pump"
-            },
-            "condition": "serial plate unreadable; no material certificate",
-            "transferRestrictions": [
-              "do not reserve for food-contact use before certification"
-            ]
-          }
-        }
-      }
+        "audience": "accountable reviewer"
+      },
+      "exchange": null
     },
     "expected": {
       "preservePriorVersion": true,

@@ -1,0 +1,10 @@
+---
+args: {"session": "DatasetAuditSession", "edition": "DatasetEditionState | null"}
+returns: "DatasetEditionReview"
+---
+1. Bind prior to edition or an empty revision-zero state. Inspect changed source events for an authorized consent withdrawal. If present, call traceConsentWithdrawal(session.sourceEvents, prior); append the returned removal cases and return withdrawal-open before any prospective release. Keep missing lineage and missing delivery receipts visible.
+2. Bind use = interpretDatasetUse(session). Treat session.proposedUse as a supplied prior contract to reassess, not an already proven current authorization. Bind labels = establishObservableLabels(use, session.sourceEvents, session.suppliedRules). If a label requires unavailable facts, return revise-task with that label's missing observation; do not infer it from stereotypes or proxy attributes.
+3. Bind families = buildSourceFamilies(session.candidates or an empty collection, session.sourceEvents, prior.families). Keep copies, underlying worlds and disputed identity links explicit. Then bind eligibility = adjudicateRecordUse(session.candidates or an empty collection, use, families, session).
+4. Bind accounting = accountIndependentCoverage(eligibility, families, use). Count record coverage and independent family coverage separately. A target met through copied examples remains a mechanism or independence gap.
+5. Bind release = freezePermittedEdition(use, labels, families, eligibility, accounting, session, prior). Return review-release only for a concrete artifact inventory with closed split groups, audience-specific permissions, supported required slices and exact owner approval. Otherwise return acquire-evidence with targeted acquisition briefs and known limits.
+6. Persist the revised use, labels, family graph, eligibility decisions and accounting in the next edition revision. Preserve historical releases and their permissions; no generated text may claim release or removal without the corresponding host artifact and receiver receipts.

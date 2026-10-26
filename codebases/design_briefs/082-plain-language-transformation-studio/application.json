@@ -1,0 +1,104 @@
+{
+  "schema": "natlang.application/1",
+  "id": "082",
+  "title": "Plain Language Transformation Studio",
+  "entrypoint": "reviseReaderEdition.nl",
+  "interfaces": [
+    {
+      "name": "reviseReaderEdition",
+      "path": "reviseReaderEdition.nl",
+      "purpose": "Rewrite around reader decisions while preserving an operative meaning graph and independently testing source/draft consequence equivalence.",
+      "stateParameter": "edition",
+      "stateResultPath": [
+        "edition"
+      ]
+    }
+  ],
+  "source_files": [
+    "natlang.json",
+    "qualification/qualifyOriginal.nl",
+    "qualification/types.ts",
+    "reviseReaderEdition.nl",
+    "reviseReaderEdition/answerFromAuthoritativeUnits.nl",
+    "reviseReaderEdition/answerFromReaderDraft.nl",
+    "reviseReaderEdition/checkReaderEditionBoundary.nl",
+    "reviseReaderEdition/compareConsequentialAnswers.nl",
+    "reviseReaderEdition/designConsequenceProbes.nl",
+    "reviseReaderEdition/modelActualReaderDecisions.nl",
+    "reviseReaderEdition/recoverOperativeMeaning.nl",
+    "reviseReaderEdition/recoverOperativeMeaning/recoverClauseGraph.nl",
+    "reviseReaderEdition/recoverOperativeMeaning/recoverClauseGraph/resolveNestedExceptionScope.nl",
+    "reviseReaderEdition/recoverOperativeMeaning/recoverClauseGraph/verifyQuotedSpan.ts",
+    "reviseReaderEdition/writeTaskCentredDraft.nl",
+    "reviseReaderEdition/writeTaskCentredDraft/formulateTaskParagraph.nl",
+    "types.ts"
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "recoverMeaning",
+        "paths": [
+          "reviseReaderEdition/recoverOperativeMeaning/recoverClauseGraph/resolveNestedExceptionScope.nl"
+        ]
+      },
+      {
+        "stage": "modelReaderTasks",
+        "paths": [
+          "reviseReaderEdition/modelActualReaderDecisions.nl"
+        ]
+      },
+      {
+        "stage": "rewriteStructure",
+        "paths": [
+          "reviseReaderEdition/writeTaskCentredDraft/formulateTaskParagraph.nl"
+        ]
+      },
+      {
+        "stage": "challengeComprehension",
+        "paths": [
+          "reviseReaderEdition/compareConsequentialAnswers.nl"
+        ]
+      },
+      {
+        "stage": "releaseAccessible",
+        "paths": [
+          "reviseReaderEdition/checkReaderEditionBoundary.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "reviseReaderEdition/recoverOperativeMeaning/recoverClauseGraph/resolveNestedExceptionScope.nl",
+          "reviseReaderEdition/compareConsequentialAnswers.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "reviseReaderEdition/writeTaskCentredDraft/formulateTaskParagraph.nl",
+          "reviseReaderEdition/answerFromReaderDraft.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "reviseReaderEdition/writeTaskCentredDraft/formulateTaskParagraph.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "reviseReaderEdition/checkReaderEditionBoundary.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "reviseReaderEdition/checkReaderEditionBoundary.nl"
+        ]
+      }
+    ]
+  }
+}

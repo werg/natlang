@@ -47,12 +47,15 @@ export async function build({ repo = REPO, out }) {
     source_root: `${SOURCE_ROOT}/${item.name}`, fixture_path: `${FIXTURE_ROOT}/${item.name}/cases.json`,
     brief_sha256: item.app.source_sha256, source_sha256: item.source_sha256,
     metadata_sha256: item.metadata_sha256, fixture_sha256: item.fixture_sha256,
+    interface_sha256: item.interface_sha256, application_interfaces: item.interfaces,
+    potential_calls: item.potential_calls,
     native_functions: item.native_functions, tasks: item.records.length,
     domain_contracts: item.domain_contracts,
     callable_scope: item.callable_scope,
     operational_coverage: item.operational_coverage,
+    source_coverage: item.source_coverage,
     gate_tasks: item.records.filter(row => oracleLevel(row.semantics.oracle) === 'exact').length,
-    workflow_tasks: item.records.filter(row => row.semantics.root === 'runCase.nl').length,
+    workflow_tasks: item.records.filter(row => oracleLevel(row.semantics.oracle) === 'judged').length,
     stage_names: item.app.stages.map(stage => stage.name) }));
   const inventoryBytes = Buffer.from(json(inventory));
   await writeFile(join(out, 'inventory.json'), inventoryBytes, { flag: 'wx' });
@@ -75,6 +78,8 @@ export async function build({ repo = REPO, out }) {
       original_operational_details_and_workflow_mapping: true,
       view_durable_state_and_effect_proposal_assertions: true,
       named_helper_scope: true,
+      application_specific_interfaces: true,
+      graph_evidence: 'potential source calls only; observed trajectories require live execution',
       compiler: 'run check.mjs separately', live_model: false, teacher_trajectories: 0, rl_rollouts: 0 },
   };
   await writeFile(join(out, 'manifest.json'), json(manifest), { flag: 'wx' });

@@ -1,0 +1,113 @@
+{
+  "schema": "natlang.application/1",
+  "id": "002",
+  "title": "Contradiction-aware knowledge publisher",
+  "entrypoint": "prepareClaimRelease.nl",
+  "interfaces": [
+    {
+      "name": "prepareClaimRelease",
+      "path": "prepareClaimRelease.nl",
+      "purpose": "Build and independently verify exact page edits from qualified claim neighborhoods and scoped publication authority.",
+      "stateParameter": "state",
+      "stateResultPath": [
+        "state"
+      ],
+      "stateKey": "claim-release"
+    },
+    {
+      "name": "reconcilePagePublication",
+      "path": "reconcilePagePublication.nl",
+      "purpose": "Reconcile page-specific publish receipts and preserve partial-failure repair work.",
+      "stateParameter": "state",
+      "stateResultPath": [
+        "state"
+      ],
+      "stateKey": "claim-release"
+    }
+  ],
+  "source_files": [
+    "natlang.json",
+    "prepareClaimRelease.nl",
+    "prepareClaimRelease/bindPageReleaseApprovals.nl",
+    "prepareClaimRelease/compareClaimNeighborhoods.nl",
+    "prepareClaimRelease/compareClaimNeighborhoods/adjudicateScopedPair.nl",
+    "prepareClaimRelease/draftCoordinatedEdits.nl",
+    "prepareClaimRelease/recoverQualifiedPropositions.nl",
+    "prepareClaimRelease/recoverQualifiedPropositions/interpretQualifiedClaims.nl",
+    "prepareClaimRelease/resolvePublicationAuthority.nl",
+    "prepareClaimRelease/stagePageCandidate.nl",
+    "prepareClaimRelease/stagePageCandidate/applyRangeEdits.ts",
+    "prepareClaimRelease/verifyStagedMeaning.nl",
+    "prepareClaimRelease/verifyStagedMeaning/rereadCandidateClaims.nl",
+    "qualification/qualifyOriginal.nl",
+    "qualification/types.ts",
+    "reconcilePagePublication.nl",
+    "types.ts"
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "indexClaims",
+        "paths": [
+          "prepareClaimRelease/recoverQualifiedPropositions/interpretQualifiedClaims.nl"
+        ]
+      },
+      {
+        "stage": "compareClaims",
+        "paths": [
+          "prepareClaimRelease/compareClaimNeighborhoods/adjudicateScopedPair.nl"
+        ]
+      },
+      {
+        "stage": "resolveAuthority",
+        "paths": [
+          "prepareClaimRelease/resolvePublicationAuthority.nl"
+        ]
+      },
+      {
+        "stage": "composePatchSet",
+        "paths": [
+          "prepareClaimRelease/stagePageCandidate.nl"
+        ]
+      },
+      {
+        "stage": "verifyPublication",
+        "paths": [
+          "prepareClaimRelease/verifyStagedMeaning/rereadCandidateClaims.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "prepareClaimRelease/draftCoordinatedEdits.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "prepareClaimRelease/compareClaimNeighborhoods/adjudicateScopedPair.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "prepareClaimRelease/draftCoordinatedEdits.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "prepareClaimRelease/recoverQualifiedPropositions.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "reconcilePagePublication.nl"
+        ]
+      }
+    ]
+  }
+}

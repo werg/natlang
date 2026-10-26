@@ -1,7 +1,7 @@
 [
   {
     "id": "051-disruption-aware-shipment-replanner-gate-supported",
-    "root": "runCase/interpretDisruption/audit/qualify.nl",
+    "root": "qualification/qualifyOriginal.nl",
     "split_group": "051-disruption-aware-shipment-replanner",
     "inputs": {
       "draft": {
@@ -75,7 +75,7 @@
   },
   {
     "id": "051-disruption-aware-shipment-replanner-gate-contradictory",
-    "root": "runCase/interpretDisruption/audit/qualify.nl",
+    "root": "qualification/qualifyOriginal.nl",
     "split_group": "051-disruption-aware-shipment-replanner",
     "inputs": {
       "draft": {
@@ -149,7 +149,7 @@
   },
   {
     "id": "051-disruption-aware-shipment-replanner-gate-missing",
-    "root": "runCase/interpretDisruption/audit/qualify.nl",
+    "root": "qualification/qualifyOriginal.nl",
     "split_group": "051-disruption-aware-shipment-replanner",
     "inputs": {
       "draft": {
@@ -201,13 +201,29 @@
   },
   {
     "id": "051-disruption-aware-shipment-replanner-operational-1",
-    "root": "runCase.nl",
+    "root": "replanShipmentLegs.nl",
     "split_group": "051-disruption-aware-shipment-replanner",
     "inputs": {
-      "input": {
-        "caseId": "051-disruption-aware-shipment-replanner-operational-1",
-        "goal": "Review the Disruption-aware shipment replanner evidence for case 051-disruption-aware-shipment-replanner-operational-1; return a traceable proposal from the supplied records.",
-        "evidence": [
+      "update": {
+        "incidentId": "051-disruption-aware-shipment-replanner-operational-1",
+        "dispatcherInstruction": "Review the Disruption-aware shipment replanner evidence for case 051-disruption-aware-shipment-replanner-operational-1; return a traceable proposal from the supplied records.",
+        "suppliedImpact": {
+          "id": "051-prior-disruptionimpact-detail-1-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "051-disruption-aware-shipment-replanner-operational-1",
+          "routeIds": [
+            "bridge-B-51",
+            "cold-chain-route-C3"
+          ],
+          "affectedWindow": "bridge closed 36 hours; medicine due 16:00",
+          "unavailableCapabilities": [
+            "carrier C-2 has ambient capacity only"
+          ],
+          "uncertainty": "cold-chain slot with carrier C-3 is later than the delivery window"
+        },
+        "notices": [
           {
             "id": "051-operational-detail-1-source-v2",
             "source": "Disruption-aware shipment replanner operational event log",
@@ -222,33 +238,16 @@
             "status": "current"
           }
         ],
-        "policy": [
+        "priorityRules": [
           "current named-source authority; applicability must be checked against version and scope"
         ],
-        "authorityStatus": "authorized",
-        "changedEvidenceIds": [
+        "authority": "authorized",
+        "changedNoticeIds": [
           "051-operational-detail-1-source-v2"
         ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "051-prior-disruptionimpact-detail-1-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "051-disruption-aware-shipment-replanner-operational-1",
-            "routeIds": [
-              "bridge-B-51",
-              "cold-chain-route-C3"
-            ],
-            "affectedWindow": "bridge closed 36 hours; medicine due 16:00",
-            "unavailableCapabilities": [
-              "carrier C-2 has ambient capacity only"
-            ],
-            "uncertainty": "cold-chain slot with carrier C-3 is later than the delivery window"
-          }
-        }
-      }
+        "audience": "accountable reviewer"
+      },
+      "dispatchBook": null
     },
     "expected": {
       "preservePriorVersion": true,
@@ -272,13 +271,29 @@
   },
   {
     "id": "051-disruption-aware-shipment-replanner-operational-2",
-    "root": "runCase.nl",
+    "root": "replanShipmentLegs.nl",
     "split_group": "051-disruption-aware-shipment-replanner",
     "inputs": {
-      "input": {
-        "caseId": "051-disruption-aware-shipment-replanner-operational-2",
-        "goal": "Review the Disruption-aware shipment replanner evidence for case 051-disruption-aware-shipment-replanner-operational-2; return a traceable proposal from the supplied records.",
-        "evidence": [
+      "update": {
+        "incidentId": "051-disruption-aware-shipment-replanner-operational-2",
+        "dispatcherInstruction": "Review the Disruption-aware shipment replanner evidence for case 051-disruption-aware-shipment-replanner-operational-2; return a traceable proposal from the supplied records.",
+        "suppliedImpact": {
+          "id": "051-prior-disruptionimpact-detail-2-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "051-disruption-aware-shipment-replanner-operational-2",
+          "routeIds": [
+            "bridge-B-51",
+            "cold-chain-route-C3"
+          ],
+          "affectedWindow": "bridge closed 36 hours; medicine due 16:00",
+          "unavailableCapabilities": [
+            "carrier C-2 has ambient capacity only"
+          ],
+          "uncertainty": "cold-chain slot with carrier C-3 is later than the delivery window"
+        },
+        "notices": [
           {
             "id": "051-operational-detail-2-source-v2",
             "source": "Disruption-aware shipment replanner operational event log",
@@ -293,33 +308,16 @@
             "status": "current"
           }
         ],
-        "policy": [
+        "priorityRules": [
           "current named-source authority; applicability must be checked against version and scope"
         ],
-        "authorityStatus": "unclear",
-        "changedEvidenceIds": [
+        "authority": "unclear",
+        "changedNoticeIds": [
           "051-operational-detail-2-source-v2"
         ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "051-prior-disruptionimpact-detail-2-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "051-disruption-aware-shipment-replanner-operational-2",
-            "routeIds": [
-              "bridge-B-51",
-              "cold-chain-route-C3"
-            ],
-            "affectedWindow": "bridge closed 36 hours; medicine due 16:00",
-            "unavailableCapabilities": [
-              "carrier C-2 has ambient capacity only"
-            ],
-            "uncertainty": "cold-chain slot with carrier C-3 is later than the delivery window"
-          }
-        }
-      }
+        "audience": "accountable reviewer"
+      },
+      "dispatchBook": null
     },
     "expected": {
       "preservePriorVersion": true,
@@ -343,13 +341,29 @@
   },
   {
     "id": "051-disruption-aware-shipment-replanner-operational-3",
-    "root": "runCase.nl",
+    "root": "replanShipmentLegs.nl",
     "split_group": "051-disruption-aware-shipment-replanner",
     "inputs": {
-      "input": {
-        "caseId": "051-disruption-aware-shipment-replanner-operational-3",
-        "goal": "Review the Disruption-aware shipment replanner evidence for case 051-disruption-aware-shipment-replanner-operational-3; return a traceable proposal from the supplied records.",
-        "evidence": [
+      "update": {
+        "incidentId": "051-disruption-aware-shipment-replanner-operational-3",
+        "dispatcherInstruction": "Review the Disruption-aware shipment replanner evidence for case 051-disruption-aware-shipment-replanner-operational-3; return a traceable proposal from the supplied records.",
+        "suppliedImpact": {
+          "id": "051-prior-disruptionimpact-detail-3-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "051-disruption-aware-shipment-replanner-operational-3",
+          "routeIds": [
+            "bridge-B-51",
+            "cold-chain-route-C3"
+          ],
+          "affectedWindow": "bridge closed 36 hours; medicine due 16:00",
+          "unavailableCapabilities": [
+            "carrier C-2 has ambient capacity only"
+          ],
+          "uncertainty": "cold-chain slot with carrier C-3 is later than the delivery window"
+        },
+        "notices": [
           {
             "id": "051-operational-detail-3-source-v2",
             "source": "Disruption-aware shipment replanner operational event log",
@@ -364,33 +378,16 @@
             "status": "current"
           }
         ],
-        "policy": [
+        "priorityRules": [
           "current named-source authority; applicability must be checked against version and scope"
         ],
-        "authorityStatus": "authorized",
-        "changedEvidenceIds": [
+        "authority": "authorized",
+        "changedNoticeIds": [
           "051-operational-detail-3-source-v2"
         ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "051-prior-disruptionimpact-detail-3-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "051-disruption-aware-shipment-replanner-operational-3",
-            "routeIds": [
-              "bridge-B-51",
-              "cold-chain-route-C3"
-            ],
-            "affectedWindow": "bridge closed 36 hours; medicine due 16:00",
-            "unavailableCapabilities": [
-              "carrier C-2 has ambient capacity only"
-            ],
-            "uncertainty": "cold-chain slot with carrier C-3 is later than the delivery window"
-          }
-        }
-      }
+        "audience": "accountable reviewer"
+      },
+      "dispatchBook": null
     },
     "expected": {
       "preservePriorVersion": true,
@@ -414,13 +411,29 @@
   },
   {
     "id": "051-disruption-aware-shipment-replanner-operational-4",
-    "root": "runCase.nl",
+    "root": "replanShipmentLegs.nl",
     "split_group": "051-disruption-aware-shipment-replanner",
     "inputs": {
-      "input": {
-        "caseId": "051-disruption-aware-shipment-replanner-operational-4",
-        "goal": "Review the Disruption-aware shipment replanner evidence for case 051-disruption-aware-shipment-replanner-operational-4; return a traceable proposal from the supplied records.",
-        "evidence": [
+      "update": {
+        "incidentId": "051-disruption-aware-shipment-replanner-operational-4",
+        "dispatcherInstruction": "Review the Disruption-aware shipment replanner evidence for case 051-disruption-aware-shipment-replanner-operational-4; return a traceable proposal from the supplied records.",
+        "suppliedImpact": {
+          "id": "051-prior-disruptionimpact-detail-4-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "051-disruption-aware-shipment-replanner-operational-4",
+          "routeIds": [
+            "bridge-B-51",
+            "cold-chain-route-C3"
+          ],
+          "affectedWindow": "bridge closed 36 hours; medicine due 16:00",
+          "unavailableCapabilities": [
+            "carrier C-2 has ambient capacity only"
+          ],
+          "uncertainty": "cold-chain slot with carrier C-3 is later than the delivery window"
+        },
+        "notices": [
           {
             "id": "051-operational-detail-4-source-v2",
             "source": "Disruption-aware shipment replanner operational event log",
@@ -435,33 +448,16 @@
             "status": "current"
           }
         ],
-        "policy": [
+        "priorityRules": [
           "current named-source authority; applicability must be checked against version and scope"
         ],
-        "authorityStatus": "authorized",
-        "changedEvidenceIds": [
+        "authority": "authorized",
+        "changedNoticeIds": [
           "051-operational-detail-4-source-v2"
         ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "051-prior-disruptionimpact-detail-4-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "051-disruption-aware-shipment-replanner-operational-4",
-            "routeIds": [
-              "bridge-B-51",
-              "cold-chain-route-C3"
-            ],
-            "affectedWindow": "bridge closed 36 hours; medicine due 16:00",
-            "unavailableCapabilities": [
-              "carrier C-2 has ambient capacity only"
-            ],
-            "uncertainty": "cold-chain slot with carrier C-3 is later than the delivery window"
-          }
-        }
-      }
+        "audience": "accountable reviewer"
+      },
+      "dispatchBook": null
     },
     "expected": {
       "preservePriorVersion": true,
@@ -485,13 +481,29 @@
   },
   {
     "id": "051-disruption-aware-shipment-replanner-operational-5",
-    "root": "runCase.nl",
+    "root": "replanShipmentLegs.nl",
     "split_group": "051-disruption-aware-shipment-replanner",
     "inputs": {
-      "input": {
-        "caseId": "051-disruption-aware-shipment-replanner-operational-5",
-        "goal": "Review the Disruption-aware shipment replanner evidence for case 051-disruption-aware-shipment-replanner-operational-5; return a traceable proposal from the supplied records.",
-        "evidence": [
+      "update": {
+        "incidentId": "051-disruption-aware-shipment-replanner-operational-5",
+        "dispatcherInstruction": "Review the Disruption-aware shipment replanner evidence for case 051-disruption-aware-shipment-replanner-operational-5; return a traceable proposal from the supplied records.",
+        "suppliedImpact": {
+          "id": "051-prior-disruptionimpact-detail-5-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "051-disruption-aware-shipment-replanner-operational-5",
+          "routeIds": [
+            "bridge-B-51",
+            "cold-chain-route-C3"
+          ],
+          "affectedWindow": "bridge closed 36 hours; medicine due 16:00",
+          "unavailableCapabilities": [
+            "carrier C-2 has ambient capacity only"
+          ],
+          "uncertainty": "cold-chain slot with carrier C-3 is later than the delivery window"
+        },
+        "notices": [
           {
             "id": "051-operational-detail-5-source-v2",
             "source": "Disruption-aware shipment replanner operational event log",
@@ -506,33 +518,16 @@
             "status": "current"
           }
         ],
-        "policy": [
+        "priorityRules": [
           "current named-source authority; applicability must be checked against version and scope"
         ],
-        "authorityStatus": "authorized",
-        "changedEvidenceIds": [
+        "authority": "authorized",
+        "changedNoticeIds": [
           "051-operational-detail-5-source-v2"
         ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "051-prior-disruptionimpact-detail-5-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "051-disruption-aware-shipment-replanner-operational-5",
-            "routeIds": [
-              "bridge-B-51",
-              "cold-chain-route-C3"
-            ],
-            "affectedWindow": "bridge closed 36 hours; medicine due 16:00",
-            "unavailableCapabilities": [
-              "carrier C-2 has ambient capacity only"
-            ],
-            "uncertainty": "cold-chain slot with carrier C-3 is later than the delivery window"
-          }
-        }
-      }
+        "audience": "accountable reviewer"
+      },
+      "dispatchBook": null
     },
     "expected": {
       "preservePriorVersion": true,

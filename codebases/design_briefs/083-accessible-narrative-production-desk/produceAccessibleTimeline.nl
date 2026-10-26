@@ -1,0 +1,10 @@
+---
+args: {"productions": "AccessibleProduction[]", "edit": "AccessibilityEdit", "mediaState": "AccessibleMediaState | null"}
+returns: "AccessibleMediaReview"
+---
+1. Bind prior to mediaState or an empty media revision. Bind scenes = reconstructSceneInformation(productions, edit.sceneEvidence). Bind reveals = preserveAudienceKnowledge(scenes, edit.sceneEvidence). Separate observable information from its later narrative significance.
+2. Bind dependencies = identifyStableSceneEdits(edit.sourceDelta, scenes, prior). Bind retimedCues = retimeAffectedCues(dependencies, prior.cues). Preserve unaffected scene/cue identities; an edit before scene S9 shifts its dependent cues without inventing new scene identity.
+3. Bind windows = identifyChannelWindows(scenes, edit.sceneEvidence, edit.styleAndConsent). Bind allocation = assignEssentialInformation(scenes, reveals, windows, edit.styleAndConsent). A scene with no description gap requires an approved alternative channel or edit request, not overlap with essential dialogue.
+4. Bind candidateCues initially to unaffected prior cues and retimed cues whose information and reveal order remain unchanged. For each remaining channel assignment with an actual window call writeObservableCue(scene, channelWindow, reveals, edit.styleAndConsent), adding its actual returned cue. An assignment without a window becomes an edit request rather than an invented timed cue. Verify off-screen speaker identity from actual source evidence and describe visible actions without invented motives or future meaning.
+5. Bind findings = challengeSynchronizedExperience(scenes, allocation, candidateCues, reveals, edit.playerReceipts or an empty collection). Check essential information across transitions as well as individual cues. Keep exact time/overlap checks and independent narrative/usability review distinct.
+6. Return a new media state, proposed cues, stale cue IDs, edit requests and missing essential information. Delivery artifact IDs must come from actual target-format/player receipts bound to this exact source edition. Missing or failed target validation blocks release; plausible cue timing alone is insufficient.

@@ -7,7 +7,7 @@ description: Author, refactor, review, evaluate, and adapt natlang code — inli
 
 You are the capable program author; the interpreter may be a small model. Put the algorithm, decomposition, data contracts, and recovery decisions in source so execution does not depend on the interpreter inventing an architecture.
 
-Natlang is TypeScript with natural-language functions. Ordinary TypeScript owns exact computation, I/O, and orchestration. A natural-language function owns a judgment: interpretation, planning, semantic merging, choosing among options, explaining. Choose the boundary deliberately. A host that computes everything and asks natlang to approve wastes it; making the model do arithmetic by hand wastes its context.
+Natlang is TypeScript with natural-language functions. Ordinary TypeScript owns exact computation, I/O, and mechanical sequencing. Natural-language functions own interpretation, planning, semantic merging, choosing among options, explaining, and semantic decisions about which work to perform next. Choose the boundary deliberately. A host that computes everything and asks natlang to approve wastes it; making the model do arithmetic by hand wastes its context.
 
 For a student served with `program-header` rendering, native natlang calls omit their generic tool schemas because that tool surface was trained into the student. A separate application calling the student directly should still supply schemas for its own tools; serving retains those schemas in this mode.
 
@@ -26,12 +26,24 @@ For evaluation suites, instruction optimization, or trainable program guidance, 
 ## Build a real program
 
 1. State the behavior as typed inputs, results, and observable scenarios, including ambiguity, empty inputs, and partial failure. Types check structure, not meaning.
-2. Write the orchestration in TypeScript. Call natural language where judgment is needed: inline with `` nl`…` `` for a one-off decision, or a named `.nl` function when the instruction deserves its own file, its own helpers, or reuse.
+2. Put semantic control flow in natural-language instructions: which hypothesis to test, which dependencies to reopen, when to change strategy, and what an unresolved result permits next. Use TypeScript for exact transport, arithmetic, and mechanical sequencing. Use inline `` nl`…` `` for a focused decision, or a named `.nl` function when it deserves its own file and typed children. Moving a TypeScript algorithm verbatim into an `.nl` body does not make its design NatLang-native.
 3. Give each natural-language function one coherent responsibility, a precise signature, and the helpers it may call in its callable folder (`foo/` beside `foo.nl`, or `natlang.d/` for inline calls in application code). Put only the program's own code there; the systems it acts on (stores, boards, simulators, verifiers, APIs) are services with declarations, scoped to the functions that should use them.
    When one named function must call another during its own active call, place the second `.nl` inside the first function's callable folder. For a chain `root -> inspect -> decide`, use `root/inspect.nl` and `root/inspect/decide.nl`; two sibling files under `root/` do not give `inspect` access to `decide`.
 4. Write each instruction so a small interpreter can take the next step: name the data and how to reach it, state the step a loop repeats, and keep the words for finishing statuses ("missing", "cannot") for real blockers. See [patterns](references/patterns.md).
 5. Keep exact work exact: helpers in callable folders are ordinary TypeScript under a finite-iteration policy; application code outside them is unrestricted.
 6. Run `natlang check` (types, `nl` signatures, callable-folder policy), then exercise the real source through the runtime. Distinguish checks, scripted wiring, live-model runs, and semantic evaluation.
+
+## Design independent applications for a diverse corpus
+
+Start each application from its own users, decisions, persistent domain records, events, and failure modes. Choose its public operations and typed intermediate structures before designing helper functions. A shared request envelope, a fixed number of stages, or identical prepare/decide/construct/audit children across unrelated programs creates repeated architecture even when domain nouns change. Do not use one generator or common semantic scaffold to stand in for those individual designs.
+
+Depth must represent real work. A dependency ledger may need interval-scoped edge traversal; a scheduler may need a finite candidate frontier; a tutoring application may need competing diagnostic hypotheses and an interrupted-session checkpoint. Give each distinct judgment its own typed child when the parent needs that child's result. Reference actual calls with their supplied inputs, pass returned values to downstream decisions, and preserve unresolved outcomes. More files and unused helpers do not establish deeper execution.
+
+Expose meaningful domain operations as the application's interface. Internal parsing or policy-selection helpers are not automatically public endpoints. Let the program own its request types, checkpoint state, result, and recovery operations; optional exact persistence or HTTP infrastructure must not prescribe those semantic contracts. A type-compatible saved checkpoint is necessary for resume: a version number cannot substitute for the domain state that the next call expects.
+
+Validate the frozen program as well as the working directory. Native `uses:` paths need the package boundary (`natlang.json`) in the snapshot. Sibling functions require an explicit supported import or the correct callable-folder relationship. Native type grammar is narrower than TypeScript: use optional fields or `null`, not a type named `undefined`, and use `boolean` rather than boolean literal types. Run the native loader, callable-scope check, fixture type check, and interface-state compatibility check; a compiler-only pass cannot establish those contracts.
+
+Preserve independent oracle answers and observed fixture evidence while changing API representations. Keep source ownership for every original domain invariant and operational scenario, without forcing those obligations into a common pipeline. Static potential-call graphs document source structure; only captured model execution demonstrates actual child calls and result consumption. Do not claim learned quality, training admission, or production deployment from structural checks.
 
 ## Improve instructions with measured adaptation
 

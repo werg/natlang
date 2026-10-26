@@ -19,6 +19,16 @@ Read [hosts and model drivers](references/hosts.md) for the runtime, compilation
 4. Define event ordering and commit points with ordinary code or `EventLoop` (`KeyedEventLoop` for one loop per user or document). Persist operation identities and observations for effects that must not repeat.
 5. Test the actual engine and transport, success and partial failure. Make general fixes in the shared runtime, not as app-local workarounds.
 
+## Preserve each application's domain interface
+
+An application host may provide exact authentication, storage transactions, source binding, version checks, and delivery receipts. Those facilities must accept the program's actual named parameters and checked return type. They must not reshape unrelated programs into one semantic request/result protocol or choose their policy, decomposition, or next domain action. Design each public operation around a real user task, and keep private helpers private.
+
+When persisting a native checkpoint, declare exactly which returned value becomes which next-call parameter and check their type compatibility before serving the application. Keep source identity and the previous state version with the checkpoint. Reject stale proposals after input refresh or intervening commit, bind approval to the complete immutable proposal and effect packet, and keep operation identities across process restarts. A repeated request returns its durable receipt; it does not infer a new answer before checking for an existing operation.
+
+External effects need an application-specific adapter or scoped service with an actual receiver contract. A model's intention, a queued action, an approval, and a confirmed delivery are distinct observations. An unconfirmed delivery remains unresolved until evidence establishes delivery or establishes that no send occurred. Test crash recovery, stale updates, permission boundaries, and the application's domain-specific resume behavior. Do not claim external deployment or live-model qualification when only the source and controlled engineering drivers have been exercised.
+
+For independently authored training applications, keep optional host mechanisms outside model-visible source snapshots. Package every application's own native interfaces and callable paths, including a package boundary used by `uses:` imports. Report structural coverage and measured execution separately; source counts, uniform scaffolding, and fixture replay are not evidence of semantic diversity or production behavior.
+
 ## Operational commitments
 
 For a selected semantic executor, install `installSelectedSemanticEnvironment`

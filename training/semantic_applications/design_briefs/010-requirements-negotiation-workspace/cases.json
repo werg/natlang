@@ -286,19 +286,20 @@
   },
   {
     "id": "010-workflow-01",
-    "root": "runCase.nl",
+    "root": "negotiateRequirements.nl",
     "split_group": "design-brief-app-010",
     "inputs": {
       "request": {
         "caseId": "SYN-010-01",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
+        "productScope": "Customer data API availability",
+        "releaseTarget": "Release 2, 2026",
+        "sponsorId": "Leah Ford",
+        "expectedBaselineVersion": "v1",
+        "question": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work."
       },
-      "snapshot": {
+      "dossier": {
         "version": "v1",
-        "caseRecords": [
+        "project": [
           {
             "productScope": "Customer data API availability",
             "sponsorId": "Leah Ford",
@@ -328,7 +329,7 @@
             "retentionPolicyId": "retention-010"
           }
         ],
-        "evidencePages": [
+        "stakeholderRecords": [
           {
             "evidence": [
               {
@@ -354,7 +355,137 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "constraintEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "010-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Procurement lead Omar says encryption at rest is mandatory under security policy S-2; the signed requirement quotes the clause and scope."
+              },
+              {
+                "id": "E2",
+                "source": "010-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-03",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Stakeholder Omar Reed left security role Oct 2; historical assent A-10 is signed, and directory assigns successor Priya Shah from Oct 3."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "agreementRecords": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "010-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Procurement lead Omar says encryption at rest is mandatory under security policy S-2; the signed requirement quotes the clause and scope."
+              },
+              {
+                "id": "E2",
+                "source": "010-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-03",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Stakeholder Omar Reed left security role Oct 2; historical assent A-10 is signed, and directory assigns successor Priya Shah from Oct 3."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "roleChanges": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "010-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Procurement lead Omar says encryption at rest is mandatory under security policy S-2; the signed requirement quotes the clause and scope."
+              },
+              {
+                "id": "E2",
+                "source": "010-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-03",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Stakeholder Omar Reed left security role Oct 2; historical assent A-10 is signed, and directory assigns successor Priya Shah from Oct 3."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "interfaceOwners": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "010-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Procurement lead Omar says encryption at rest is mandatory under security policy S-2; the signed requirement quotes the clause and scope."
+              },
+              {
+                "id": "E2",
+                "source": "010-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-03",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Stakeholder Omar Reed left security role Oct 2; historical assent A-10 is signed, and directory assigns successor Priya Shah from Oct 3."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "simulatorSchemas": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "010-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Procurement lead Omar says encryption at rest is mandatory under security policy S-2; the signed requirement quotes the clause and scope."
+              },
+              {
+                "id": "E2",
+                "source": "010-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-03",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Stakeholder Omar Reed left security role Oct 2; historical assent A-10 is signed, and directory assigns successor Priya Shah from Oct 3."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "policies": [
           {
             "id": "POL-010",
             "authority": "named case owner",
@@ -369,7 +500,8 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
-        ]
+        ],
+        "simulatorResults": []
       }
     },
     "expected": {
@@ -377,7 +509,7 @@
     },
     "oracle": {
       "level": "judged",
-      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Generated stakeholder positions, hard constraints, accepted concessions, and simulator-based requirement feasibility.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A stakeholder changes role: retain historical assent and require successor authority for future changes. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A stakeholder changes role: retain historical assent and require successor authority for future changes. Use only the facts in caseId=SYN-010-01, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—retain historical assent and require successor authority for future changes.—as a versioned proposal against caseId=SYN-010-01, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (retain historical assent and require successor authority for future changes.) against caseId=SYN-010-01, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Generated stakeholder positions, hard constraints, accepted concessions, and simulator-based requirement feasibility.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A stakeholder changes role: retain historical assent and require successor authority for future changes. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A stakeholder changes role: retain historical assent and require successor authority for future changes. Use only the facts in caseId=SYN-010-01, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome\u2014retain historical assent and require successor authority for future changes.\u2014as a versioned proposal against caseId=SYN-010-01, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (retain historical assent and require successor authority for future changes.) against caseId=SYN-010-01, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
     },
     "scenario": "A stakeholder changes role: retain historical assent and require successor authority for future changes.",
     "difficulty": "operational-workflow",
@@ -385,25 +517,26 @@
     "brief_detail": "A stakeholder changes role: retain historical assent and require successor authority for future changes.",
     "boundary_assertions": {
       "view": "For the required user or reviewer view, make the disposition of this original condition explicit: A stakeholder changes role: retain historical assent and require successor authority for future changes. Use only the facts in caseId=SYN-010-01, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
-      "durable_state": "For durable-state proposals, represent the required outcome—retain historical assent and require successor authority for future changes.—as a versioned proposal against caseId=SYN-010-01, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "durable_state": "For durable-state proposals, represent the required outcome\u2014retain historical assent and require successor authority for future changes.\u2014as a versioned proposal against caseId=SYN-010-01, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
       "effects": "For the effect ledger, propose only a concrete next step needed for this condition (retain historical assent and require successor authority for future changes.) against caseId=SYN-010-01, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
     }
   },
   {
     "id": "010-workflow-02",
-    "root": "runCase.nl",
+    "root": "negotiateRequirements.nl",
     "split_group": "design-brief-app-010",
     "inputs": {
       "request": {
         "caseId": "SYN-010-02",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
+        "productScope": "Customer data API availability",
+        "releaseTarget": "Release 2, 2026",
+        "sponsorId": "Leah Ford",
+        "expectedBaselineVersion": "v1",
+        "question": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work."
       },
-      "snapshot": {
+      "dossier": {
         "version": "v1",
-        "caseRecords": [
+        "project": [
           {
             "productScope": "Customer data API availability",
             "sponsorId": "Leah Ford",
@@ -433,7 +566,7 @@
             "retentionPolicyId": "retention-010"
           }
         ],
-        "evidencePages": [
+        "stakeholderRecords": [
           {
             "evidence": [
               {
@@ -459,7 +592,137 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "constraintEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "010-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Procurement lead Omar says encryption at rest is mandatory under security policy S-2; the signed requirement quotes the clause and scope."
+              },
+              {
+                "id": "E2",
+                "source": "010-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Meeting audio records verbal agreement to requirement R-10 but no signed minutes or follow-up confirmation exists."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "agreementRecords": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "010-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Procurement lead Omar says encryption at rest is mandatory under security policy S-2; the signed requirement quotes the clause and scope."
+              },
+              {
+                "id": "E2",
+                "source": "010-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Meeting audio records verbal agreement to requirement R-10 but no signed minutes or follow-up confirmation exists."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "roleChanges": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "010-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Procurement lead Omar says encryption at rest is mandatory under security policy S-2; the signed requirement quotes the clause and scope."
+              },
+              {
+                "id": "E2",
+                "source": "010-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Meeting audio records verbal agreement to requirement R-10 but no signed minutes or follow-up confirmation exists."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "interfaceOwners": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "010-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Procurement lead Omar says encryption at rest is mandatory under security policy S-2; the signed requirement quotes the clause and scope."
+              },
+              {
+                "id": "E2",
+                "source": "010-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Meeting audio records verbal agreement to requirement R-10 but no signed minutes or follow-up confirmation exists."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "simulatorSchemas": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "010-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Procurement lead Omar says encryption at rest is mandatory under security policy S-2; the signed requirement quotes the clause and scope."
+              },
+              {
+                "id": "E2",
+                "source": "010-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Meeting audio records verbal agreement to requirement R-10 but no signed minutes or follow-up confirmation exists."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "policies": [
           {
             "id": "POL-010",
             "authority": "named case owner",
@@ -474,7 +737,8 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
-        ]
+        ],
+        "simulatorResults": []
       }
     },
     "expected": {
@@ -482,7 +746,7 @@
     },
     "oracle": {
       "level": "judged",
-      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Generated stakeholder positions, hard constraints, accepted concessions, and simulator-based requirement feasibility.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A requirement is verbally agreed but not recorded: keep it pending and issue a focused confirmation request. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A requirement is verbally agreed but not recorded: keep it pending and issue a focused confirmation request. Use only the facts in caseId=SYN-010-02, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—keep it pending and issue a focused confirmation request.—as a versioned proposal against caseId=SYN-010-02, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (keep it pending and issue a focused confirmation request.) against caseId=SYN-010-02, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Generated stakeholder positions, hard constraints, accepted concessions, and simulator-based requirement feasibility.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A requirement is verbally agreed but not recorded: keep it pending and issue a focused confirmation request. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A requirement is verbally agreed but not recorded: keep it pending and issue a focused confirmation request. Use only the facts in caseId=SYN-010-02, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome\u2014keep it pending and issue a focused confirmation request.\u2014as a versioned proposal against caseId=SYN-010-02, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (keep it pending and issue a focused confirmation request.) against caseId=SYN-010-02, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
     },
     "scenario": "A requirement is verbally agreed but not recorded: keep it pending and issue a focused confirmation request.",
     "difficulty": "operational-workflow",
@@ -490,25 +754,26 @@
     "brief_detail": "A requirement is verbally agreed but not recorded: keep it pending and issue a focused confirmation request.",
     "boundary_assertions": {
       "view": "For the required user or reviewer view, make the disposition of this original condition explicit: A requirement is verbally agreed but not recorded: keep it pending and issue a focused confirmation request. Use only the facts in caseId=SYN-010-02, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
-      "durable_state": "For durable-state proposals, represent the required outcome—keep it pending and issue a focused confirmation request.—as a versioned proposal against caseId=SYN-010-02, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "durable_state": "For durable-state proposals, represent the required outcome\u2014keep it pending and issue a focused confirmation request.\u2014as a versioned proposal against caseId=SYN-010-02, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
       "effects": "For the effect ledger, propose only a concrete next step needed for this condition (keep it pending and issue a focused confirmation request.) against caseId=SYN-010-02, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
     }
   },
   {
     "id": "010-workflow-03",
-    "root": "runCase.nl",
+    "root": "negotiateRequirements.nl",
     "split_group": "design-brief-app-010",
     "inputs": {
       "request": {
         "caseId": "SYN-010-03",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
+        "productScope": "Customer data API availability",
+        "releaseTarget": "Release 2, 2026",
+        "sponsorId": "Leah Ford",
+        "expectedBaselineVersion": "v1",
+        "question": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work."
       },
-      "snapshot": {
+      "dossier": {
         "version": "v1",
-        "caseRecords": [
+        "project": [
           {
             "productScope": "Customer data API availability",
             "sponsorId": "Leah Ford",
@@ -538,7 +803,7 @@
             "retentionPolicyId": "retention-010"
           }
         ],
-        "evidencePages": [
+        "stakeholderRecords": [
           {
             "evidence": [
               {
@@ -564,7 +829,137 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "constraintEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "010-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Procurement lead Omar says encryption at rest is mandatory under security policy S-2; the signed requirement quotes the clause and scope."
+              },
+              {
+                "id": "E2",
+                "source": "010-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Interface proposal I-10 changes the customer API field; platform owner has not reviewed the compatibility note."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "agreementRecords": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "010-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Procurement lead Omar says encryption at rest is mandatory under security policy S-2; the signed requirement quotes the clause and scope."
+              },
+              {
+                "id": "E2",
+                "source": "010-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Interface proposal I-10 changes the customer API field; platform owner has not reviewed the compatibility note."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "roleChanges": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "010-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Procurement lead Omar says encryption at rest is mandatory under security policy S-2; the signed requirement quotes the clause and scope."
+              },
+              {
+                "id": "E2",
+                "source": "010-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Interface proposal I-10 changes the customer API field; platform owner has not reviewed the compatibility note."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "interfaceOwners": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "010-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Procurement lead Omar says encryption at rest is mandatory under security policy S-2; the signed requirement quotes the clause and scope."
+              },
+              {
+                "id": "E2",
+                "source": "010-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Interface proposal I-10 changes the customer API field; platform owner has not reviewed the compatibility note."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "simulatorSchemas": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "010-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Procurement lead Omar says encryption at rest is mandatory under security policy S-2; the signed requirement quotes the clause and scope."
+              },
+              {
+                "id": "E2",
+                "source": "010-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Interface proposal I-10 changes the customer API field; platform owner has not reviewed the compatibility note."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "policies": [
           {
             "id": "POL-010",
             "authority": "named case owner",
@@ -579,7 +974,8 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
-        ]
+        ],
+        "simulatorResults": []
       }
     },
     "expected": {
@@ -587,33 +983,34 @@
     },
     "oracle": {
       "level": "judged",
-      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Generated stakeholder positions, hard constraints, accepted concessions, and simulator-based requirement feasibility.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: One compromise changes another team’s interface: require affected-party review before baseline acceptance. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: One compromise changes another team’s interface: require affected-party review before baseline acceptance. Use only the facts in caseId=SYN-010-03, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—require affected-party review before baseline acceptance.—as a versioned proposal against caseId=SYN-010-03, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (require affected-party review before baseline acceptance.) against caseId=SYN-010-03, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Generated stakeholder positions, hard constraints, accepted concessions, and simulator-based requirement feasibility.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: One compromise changes another team\u2019s interface: require affected-party review before baseline acceptance. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: One compromise changes another team\u2019s interface: require affected-party review before baseline acceptance. Use only the facts in caseId=SYN-010-03, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome\u2014require affected-party review before baseline acceptance.\u2014as a versioned proposal against caseId=SYN-010-03, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (require affected-party review before baseline acceptance.) against caseId=SYN-010-03, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
     },
-    "scenario": "One compromise changes another team’s interface: require affected-party review before baseline acceptance.",
+    "scenario": "One compromise changes another team\u2019s interface: require affected-party review before baseline acceptance.",
     "difficulty": "operational-workflow",
     "operational_detail_id": 3,
-    "brief_detail": "One compromise changes another team’s interface: require affected-party review before baseline acceptance.",
+    "brief_detail": "One compromise changes another team\u2019s interface: require affected-party review before baseline acceptance.",
     "boundary_assertions": {
-      "view": "For the required user or reviewer view, make the disposition of this original condition explicit: One compromise changes another team’s interface: require affected-party review before baseline acceptance. Use only the facts in caseId=SYN-010-03, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
-      "durable_state": "For durable-state proposals, represent the required outcome—require affected-party review before baseline acceptance.—as a versioned proposal against caseId=SYN-010-03, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "view": "For the required user or reviewer view, make the disposition of this original condition explicit: One compromise changes another team\u2019s interface: require affected-party review before baseline acceptance. Use only the facts in caseId=SYN-010-03, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
+      "durable_state": "For durable-state proposals, represent the required outcome\u2014require affected-party review before baseline acceptance.\u2014as a versioned proposal against caseId=SYN-010-03, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
       "effects": "For the effect ledger, propose only a concrete next step needed for this condition (require affected-party review before baseline acceptance.) against caseId=SYN-010-03, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
     }
   },
   {
     "id": "010-workflow-04",
-    "root": "runCase.nl",
+    "root": "negotiateRequirements.nl",
     "split_group": "design-brief-app-010",
     "inputs": {
       "request": {
         "caseId": "SYN-010-04",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
+        "productScope": "Customer data API availability",
+        "releaseTarget": "Release 2, 2026",
+        "sponsorId": "Leah Ford",
+        "expectedBaselineVersion": "v1",
+        "question": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work."
       },
-      "snapshot": {
+      "dossier": {
         "version": "v1",
-        "caseRecords": [
+        "project": [
           {
             "productScope": "Customer data API availability",
             "sponsorId": "Leah Ford",
@@ -643,7 +1040,7 @@
             "retentionPolicyId": "retention-010"
           }
         ],
-        "evidencePages": [
+        "stakeholderRecords": [
           {
             "evidence": [
               {
@@ -669,7 +1066,137 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "constraintEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "010-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Procurement lead Omar says encryption at rest is mandatory under security policy S-2; the signed requirement quotes the clause and scope."
+              },
+              {
+                "id": "E2",
+                "source": "010-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Acceptance test AT-10 asserts use of vendor X although the stated outcome is 99.9% availability."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "agreementRecords": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "010-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Procurement lead Omar says encryption at rest is mandatory under security policy S-2; the signed requirement quotes the clause and scope."
+              },
+              {
+                "id": "E2",
+                "source": "010-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Acceptance test AT-10 asserts use of vendor X although the stated outcome is 99.9% availability."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "roleChanges": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "010-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Procurement lead Omar says encryption at rest is mandatory under security policy S-2; the signed requirement quotes the clause and scope."
+              },
+              {
+                "id": "E2",
+                "source": "010-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Acceptance test AT-10 asserts use of vendor X although the stated outcome is 99.9% availability."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "interfaceOwners": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "010-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Procurement lead Omar says encryption at rest is mandatory under security policy S-2; the signed requirement quotes the clause and scope."
+              },
+              {
+                "id": "E2",
+                "source": "010-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Acceptance test AT-10 asserts use of vendor X although the stated outcome is 99.9% availability."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "simulatorSchemas": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "010-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Procurement lead Omar says encryption at rest is mandatory under security policy S-2; the signed requirement quotes the clause and scope."
+              },
+              {
+                "id": "E2",
+                "source": "010-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Acceptance test AT-10 asserts use of vendor X although the stated outcome is 99.9% availability."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "policies": [
           {
             "id": "POL-010",
             "authority": "named case owner",
@@ -684,7 +1211,8 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
-        ]
+        ],
+        "simulatorResults": []
       }
     },
     "expected": {
@@ -692,7 +1220,7 @@
     },
     "oracle": {
       "level": "judged",
-      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Generated stakeholder positions, hard constraints, accepted concessions, and simulator-based requirement feasibility.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: An acceptance test encodes an implementation preference: separate the outcome from the proposed method. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: An acceptance test encodes an implementation preference: separate the outcome from the proposed method. Use only the facts in caseId=SYN-010-04, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—separate the outcome from the proposed method.—as a versioned proposal against caseId=SYN-010-04, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (separate the outcome from the proposed method.) against caseId=SYN-010-04, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Generated stakeholder positions, hard constraints, accepted concessions, and simulator-based requirement feasibility.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: An acceptance test encodes an implementation preference: separate the outcome from the proposed method. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: An acceptance test encodes an implementation preference: separate the outcome from the proposed method. Use only the facts in caseId=SYN-010-04, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome\u2014separate the outcome from the proposed method.\u2014as a versioned proposal against caseId=SYN-010-04, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (separate the outcome from the proposed method.) against caseId=SYN-010-04, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
     },
     "scenario": "An acceptance test encodes an implementation preference: separate the outcome from the proposed method.",
     "difficulty": "operational-workflow",
@@ -700,25 +1228,26 @@
     "brief_detail": "An acceptance test encodes an implementation preference: separate the outcome from the proposed method.",
     "boundary_assertions": {
       "view": "For the required user or reviewer view, make the disposition of this original condition explicit: An acceptance test encodes an implementation preference: separate the outcome from the proposed method. Use only the facts in caseId=SYN-010-04, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
-      "durable_state": "For durable-state proposals, represent the required outcome—separate the outcome from the proposed method.—as a versioned proposal against caseId=SYN-010-04, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "durable_state": "For durable-state proposals, represent the required outcome\u2014separate the outcome from the proposed method.\u2014as a versioned proposal against caseId=SYN-010-04, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
       "effects": "For the effect ledger, propose only a concrete next step needed for this condition (separate the outcome from the proposed method.) against caseId=SYN-010-04, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
     }
   },
   {
     "id": "010-workflow-05",
-    "root": "runCase.nl",
+    "root": "negotiateRequirements.nl",
     "split_group": "design-brief-app-010",
     "inputs": {
       "request": {
         "caseId": "SYN-010-05",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
+        "productScope": "Customer data API availability",
+        "releaseTarget": "Release 2, 2026",
+        "sponsorId": "Leah Ford",
+        "expectedBaselineVersion": "v1",
+        "question": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work."
       },
-      "snapshot": {
+      "dossier": {
         "version": "v1",
-        "caseRecords": [
+        "project": [
           {
             "productScope": "Customer data API availability",
             "sponsorId": "Leah Ford",
@@ -748,7 +1277,7 @@
             "retentionPolicyId": "retention-010"
           }
         ],
-        "evidencePages": [
+        "stakeholderRecords": [
           {
             "evidence": [
               {
@@ -774,7 +1303,137 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "constraintEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "010-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Procurement lead Omar says encryption at rest is mandatory under security policy S-2; the signed requirement quotes the clause and scope."
+              },
+              {
+                "id": "E2",
+                "source": "010-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Release plan RP-10 assigns requirement R-10 to phase 2; phase 1 baseline has no binding date for it."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "agreementRecords": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "010-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Procurement lead Omar says encryption at rest is mandatory under security policy S-2; the signed requirement quotes the clause and scope."
+              },
+              {
+                "id": "E2",
+                "source": "010-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Release plan RP-10 assigns requirement R-10 to phase 2; phase 1 baseline has no binding date for it."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "roleChanges": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "010-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Procurement lead Omar says encryption at rest is mandatory under security policy S-2; the signed requirement quotes the clause and scope."
+              },
+              {
+                "id": "E2",
+                "source": "010-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Release plan RP-10 assigns requirement R-10 to phase 2; phase 1 baseline has no binding date for it."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "interfaceOwners": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "010-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Procurement lead Omar says encryption at rest is mandatory under security policy S-2; the signed requirement quotes the clause and scope."
+              },
+              {
+                "id": "E2",
+                "source": "010-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Release plan RP-10 assigns requirement R-10 to phase 2; phase 1 baseline has no binding date for it."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "simulatorSchemas": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "010-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Procurement lead Omar says encryption at rest is mandatory under security policy S-2; the signed requirement quotes the clause and scope."
+              },
+              {
+                "id": "E2",
+                "source": "010-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Release plan RP-10 assigns requirement R-10 to phase 2; phase 1 baseline has no binding date for it."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "policies": [
           {
             "id": "POL-010",
             "authority": "named case owner",
@@ -789,7 +1448,8 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
-        ]
+        ],
+        "simulatorResults": []
       }
     },
     "expected": {
@@ -797,7 +1457,7 @@
     },
     "oracle": {
       "level": "judged",
-      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Generated stakeholder positions, hard constraints, accepted concessions, and simulator-based requirement feasibility.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: Delivery is phased: tag each requirement with the release in which it becomes binding. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: Delivery is phased: tag each requirement with the release in which it becomes binding. Use only the facts in caseId=SYN-010-05, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—tag each requirement with the release in which it becomes binding.—as a versioned proposal against caseId=SYN-010-05, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (tag each requirement with the release in which it becomes binding.) against caseId=SYN-010-05, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Generated stakeholder positions, hard constraints, accepted concessions, and simulator-based requirement feasibility.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: Delivery is phased: tag each requirement with the release in which it becomes binding. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: Delivery is phased: tag each requirement with the release in which it becomes binding. Use only the facts in caseId=SYN-010-05, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome\u2014tag each requirement with the release in which it becomes binding.\u2014as a versioned proposal against caseId=SYN-010-05, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (tag each requirement with the release in which it becomes binding.) against caseId=SYN-010-05, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
     },
     "scenario": "Delivery is phased: tag each requirement with the release in which it becomes binding.",
     "difficulty": "operational-workflow",
@@ -805,7 +1465,7 @@
     "brief_detail": "Delivery is phased: tag each requirement with the release in which it becomes binding.",
     "boundary_assertions": {
       "view": "For the required user or reviewer view, make the disposition of this original condition explicit: Delivery is phased: tag each requirement with the release in which it becomes binding. Use only the facts in caseId=SYN-010-05, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
-      "durable_state": "For durable-state proposals, represent the required outcome—tag each requirement with the release in which it becomes binding.—as a versioned proposal against caseId=SYN-010-05, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "durable_state": "For durable-state proposals, represent the required outcome\u2014tag each requirement with the release in which it becomes binding.\u2014as a versioned proposal against caseId=SYN-010-05, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
       "effects": "For the effect ledger, propose only a concrete next step needed for this condition (tag each requirement with the release in which it becomes binding.) against caseId=SYN-010-05, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
     }
   }

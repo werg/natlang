@@ -1,0 +1,101 @@
+{
+  "schema": "natlang.application/1",
+  "id": "080",
+  "title": "Patient Experience Improvement Laboratory",
+  "entrypoint": "investigateAdministrativeExperience.nl",
+  "interfaces": [
+    {
+      "name": "investigateAdministrativeExperience",
+      "path": "investigateAdministrativeExperience.nl",
+      "purpose": "Investigate administrative service mechanisms using patient-scoped evidence, stable observation frames, minority outcomes and consent lineage.",
+      "stateParameter": "studyState",
+      "stateResultPath": [
+        "studyState"
+      ]
+    }
+  ],
+  "source_files": [
+    "investigateAdministrativeExperience.nl",
+    "investigateAdministrativeExperience/adjudicateAdministrativeOutcome.nl",
+    "investigateAdministrativeExperience/adjudicateAdministrativeOutcome/compareObservationFrame.nl",
+    "investigateAdministrativeExperience/adjudicateAdministrativeOutcome/compareObservationFrame/detectChannelAvailabilityShift.nl",
+    "investigateAdministrativeExperience/designAdministrativeTrials.nl",
+    "investigateAdministrativeExperience/investigateRivalMechanisms.nl",
+    "investigateAdministrativeExperience/investigateRivalMechanisms/seekDisconfirmingExperience.nl",
+    "investigateAdministrativeExperience/linkAuthorizedJourneys.nl",
+    "investigateAdministrativeExperience/linkAuthorizedJourneys/checkPatientScopedLink.nl",
+    "investigateAdministrativeExperience/removeAttributableDerivatives.nl",
+    "investigateAdministrativeExperience/separateAdministrativeEpisodes.nl",
+    "investigateAdministrativeExperience/separateAdministrativeEpisodes/segmentMixedComplaint.nl",
+    "natlang.json",
+    "qualification/qualifyOriginal.nl",
+    "qualification/types.ts",
+    "types.ts"
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "extractExperiences",
+        "paths": [
+          "investigateAdministrativeExperience/separateAdministrativeEpisodes/segmentMixedComplaint.nl"
+        ]
+      },
+      {
+        "stage": "linkJourneyEvents",
+        "paths": [
+          "investigateAdministrativeExperience/linkAuthorizedJourneys/checkPatientScopedLink.nl"
+        ]
+      },
+      {
+        "stage": "formMechanisms",
+        "paths": [
+          "investigateAdministrativeExperience/investigateRivalMechanisms/seekDisconfirmingExperience.nl"
+        ]
+      },
+      {
+        "stage": "designImprovements",
+        "paths": [
+          "investigateAdministrativeExperience/designAdministrativeTrials.nl"
+        ]
+      },
+      {
+        "stage": "reviewResults",
+        "paths": [
+          "investigateAdministrativeExperience/adjudicateAdministrativeOutcome/compareObservationFrame.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "investigateAdministrativeExperience/separateAdministrativeEpisodes/segmentMixedComplaint.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "investigateAdministrativeExperience/adjudicateAdministrativeOutcome/compareObservationFrame/detectChannelAvailabilityShift.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "investigateAdministrativeExperience/investigateRivalMechanisms/seekDisconfirmingExperience.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "investigateAdministrativeExperience/removeAttributableDerivatives.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "investigateAdministrativeExperience/adjudicateAdministrativeOutcome.nl"
+        ]
+      }
+    ]
+  }
+}

@@ -1,7 +1,7 @@
 [
   {
     "id": "021-matchDocuments-supported",
-    "root": "runCase/matchDocuments/audit/qualify.nl",
+    "root": "qualification/qualifyOriginal.nl",
     "split_group": "design-brief-app-021",
     "inputs": {
       "draft": {
@@ -95,7 +95,7 @@
   },
   {
     "id": "021-matchDocuments-contradictory",
-    "root": "runCase/matchDocuments/audit/qualify.nl",
+    "root": "qualification/qualifyOriginal.nl",
     "split_group": "design-brief-app-021",
     "inputs": {
       "draft": {
@@ -189,7 +189,7 @@
   },
   {
     "id": "021-matchDocuments-missing",
-    "root": "runCase/matchDocuments/audit/qualify.nl",
+    "root": "qualification/qualifyOriginal.nl",
     "split_group": "design-brief-app-021",
     "inputs": {
       "draft": {
@@ -283,19 +283,17 @@
   },
   {
     "id": "021-workflow-01",
-    "root": "runCase.nl",
+    "root": "resolvePayableExposure.nl",
     "split_group": "design-brief-app-021",
     "inputs": {
-      "request": {
-        "caseId": "SYN-021-01",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
-      },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "dossier": {
+        "reviewId": "SYN-021-01",
+        "instruction": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "entityScope": "one named case",
+        "submitter": "case owner",
+        "expectedDocumentVersion": "v1",
+        "documentVersion": "v1",
+        "liabilities": [
           {
             "supplierId": "SUP-21",
             "invoiceId": "I-21",
@@ -321,7 +319,7 @@
             "retentionPolicyId": "retention-021"
           }
         ],
-        "evidencePages": [
+        "documents": [
           {
             "evidence": [
               {
@@ -347,7 +345,7 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "delegations": [
           {
             "id": "POL-021",
             "authority": "named case owner",
@@ -360,10 +358,11 @@
             ]
           }
         ],
-        "searchedPartitions": [
+        "searchedFiles": [
           "case-folder-2026"
         ]
-      }
+      },
+      "ledger": null
     },
     "expected": {
       "commitAllowed": false
@@ -384,19 +383,17 @@
   },
   {
     "id": "021-workflow-02",
-    "root": "runCase.nl",
+    "root": "resolvePayableExposure.nl",
     "split_group": "design-brief-app-021",
     "inputs": {
-      "request": {
-        "caseId": "SYN-021-02",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
-      },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "dossier": {
+        "reviewId": "SYN-021-02",
+        "instruction": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "entityScope": "one named case",
+        "submitter": "case owner",
+        "expectedDocumentVersion": "v1",
+        "documentVersion": "v1",
+        "liabilities": [
           {
             "supplierId": "SUP-21",
             "invoiceId": "I-21",
@@ -422,7 +419,7 @@
             "retentionPolicyId": "retention-021"
           }
         ],
-        "evidencePages": [
+        "documents": [
           {
             "evidence": [
               {
@@ -448,7 +445,7 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "delegations": [
           {
             "id": "POL-021",
             "authority": "named case owner",
@@ -461,10 +458,11 @@
             ]
           }
         ],
-        "searchedPartitions": [
+        "searchedFiles": [
           "case-folder-2026"
         ]
-      }
+      },
+      "ledger": null
     },
     "expected": {
       "commitAllowed": false
@@ -485,19 +483,17 @@
   },
   {
     "id": "021-workflow-03",
-    "root": "runCase.nl",
+    "root": "resolvePayableExposure.nl",
     "split_group": "design-brief-app-021",
     "inputs": {
-      "request": {
-        "caseId": "SYN-021-03",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
-      },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "dossier": {
+        "reviewId": "SYN-021-03",
+        "instruction": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "entityScope": "one named case",
+        "submitter": "case owner",
+        "expectedDocumentVersion": "v1",
+        "documentVersion": "v1",
+        "liabilities": [
           {
             "supplierId": "SUP-21",
             "invoiceId": "I-21",
@@ -523,7 +519,7 @@
             "retentionPolicyId": "retention-021"
           }
         ],
-        "evidencePages": [
+        "documents": [
           {
             "evidence": [
               {
@@ -549,7 +545,7 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "delegations": [
           {
             "id": "POL-021",
             "authority": "named case owner",
@@ -562,10 +558,11 @@
             ]
           }
         ],
-        "searchedPartitions": [
+        "searchedFiles": [
           "case-folder-2026"
         ]
-      }
+      },
+      "ledger": null
     },
     "expected": {
       "commitAllowed": false
@@ -586,19 +583,17 @@
   },
   {
     "id": "021-workflow-04",
-    "root": "runCase.nl",
+    "root": "resolvePayableExposure.nl",
     "split_group": "design-brief-app-021",
     "inputs": {
-      "request": {
-        "caseId": "SYN-021-04",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
-      },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "dossier": {
+        "reviewId": "SYN-021-04",
+        "instruction": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "entityScope": "one named case",
+        "submitter": "case owner",
+        "expectedDocumentVersion": "v1",
+        "documentVersion": "v1",
+        "liabilities": [
           {
             "supplierId": "SUP-21",
             "invoiceId": "I-21",
@@ -624,7 +619,7 @@
             "retentionPolicyId": "retention-021"
           }
         ],
-        "evidencePages": [
+        "documents": [
           {
             "evidence": [
               {
@@ -650,7 +645,7 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "delegations": [
           {
             "id": "POL-021",
             "authority": "named case owner",
@@ -663,10 +658,11 @@
             ]
           }
         ],
-        "searchedPartitions": [
+        "searchedFiles": [
           "case-folder-2026"
         ]
-      }
+      },
+      "ledger": null
     },
     "expected": {
       "commitAllowed": false
@@ -687,19 +683,17 @@
   },
   {
     "id": "021-workflow-05",
-    "root": "runCase.nl",
+    "root": "resolvePayableExposure.nl",
     "split_group": "design-brief-app-021",
     "inputs": {
-      "request": {
-        "caseId": "SYN-021-05",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
-      },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "dossier": {
+        "reviewId": "SYN-021-05",
+        "instruction": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "entityScope": "one named case",
+        "submitter": "case owner",
+        "expectedDocumentVersion": "v1",
+        "documentVersion": "v1",
+        "liabilities": [
           {
             "supplierId": "SUP-21",
             "invoiceId": "I-21",
@@ -725,7 +719,7 @@
             "retentionPolicyId": "retention-021"
           }
         ],
-        "evidencePages": [
+        "documents": [
           {
             "evidence": [
               {
@@ -751,7 +745,7 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "delegations": [
           {
             "id": "POL-021",
             "authority": "named case owner",
@@ -764,10 +758,11 @@
             ]
           }
         ],
-        "searchedPartitions": [
+        "searchedFiles": [
           "case-folder-2026"
         ]
-      }
+      },
+      "ledger": null
     },
     "expected": {
       "commitAllowed": false

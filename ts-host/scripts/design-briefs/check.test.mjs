@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { applicationSplit, checkDomainContracts, checkFixture, checkNativeCalls, checkOperationalCoverage, confinedFile, json, makeRecord, oracleLevel,
+import { applicationSplit, checkApplicationInterfaces, checkDomainContracts, checkFixture, checkNativeCalls, checkOperationalCoverage, checkSourceCoverage, confinedFile, inspectPotentialCalls, json, makeRecord, oracleLevel,
   REPO, sha256, sourceDigest, sourceFiles, verifyPacket } from './lib.mjs';
 import { checkOracle } from '../../dist/evaluation/oracles.js';
 
@@ -70,6 +70,14 @@ test('a sibling mentioned in prose must be moved into actual native callable sco
     { functions: 2, visible_references: 1 });
 });
 
+test('explicit native calls obey positional signatures rather than a single named-argument map', () => {
+  const child = '---\nargs: { mission: string, change: string }\nreturns: string\n---\nInterpret the changed mission.\n';
+  const parent = body => ({ 'plan.nl': `---\nargs: { mission: string, change: string }\nreturns: string\n---\n${body}\n`, 'plan/interpret.nl': child });
+  assert.equal(checkNativeCalls(parent('Bind result = interpret(mission, change).'), 'plan.nl').visible_references, 1);
+  assert.throws(() => checkNativeCalls(parent('Call interpret({ mission, change }).'), 'plan.nl'), /2 positional arguments.*supplies 1/);
+  assert.throws(() => checkNativeCalls(parent('Call interpret(mission, change, "extra").'), 'plan.nl'), /supplies 3/);
+});
+
 test('existing exact scorer rewards only the finite answer; judged workflow never auto-passes', async () => {
   for (const answer of ['pass', 'fail', 'needs-review']) {
     const correct = await checkOracle(answer, answer, 'exact');
@@ -100,13 +108,26 @@ test('record identity and source hash are deterministic; expected answers stay o
   const b = makeRecord(app, Object.fromEntries(Object.entries(files).reverse()), fixture, 'b'.repeat(64));
   assert.equal(sourceDigest(a.semantics.files), sourceDigest(b.semantics.files));
   assert.equal(a.id, b.id);
-  assert.deepEqual(a.source_groups, ['design-briefs-v1:application-001']);
+  assert.deepEqual(a.source_groups, ['design-briefs:application-001']);
   assert.equal(a.generation.provider_calls, 0);
   assert.equal(a.generation.teacher_trajectory, false);
   assert.equal(a.collection_guidance.training_admission, false);
   assert.equal(a.curriculum.rl.qualification, 'source-only-live-pending');
   assert.deepEqual(a.semantics.inputs, fixture.inputs);
   assert.equal(Object.hasOwn(a.semantics.files, 'cases.json'), false);
+});
+
+test('explicit source inventories exclude retired implementations and reject unsafe additions', async t => {
+  const root = await temporary(t);
+  for (const [path, text] of Object.entries(files)) await writeFile(join(root, path), text);
+  await writeFile(join(root, 'retired.nl'), 'this abandoned implementation must never execute');
+  const manifest = { source_files: Object.keys(files) };
+  await writeFile(join(root, 'application.json'), json(manifest));
+  assert.deepEqual(await sourceFiles(root), files);
+  for (const paths of [['qualify.nl', 'qualify.nl'], ['../other.nl'], ['cases.json'], ['qualify.d.nl.ts']]) {
+    await writeFile(join(root, 'application.json'), json({ source_files: paths }));
+    await assert.rejects(() => sourceFiles(root));
+  }
 });
 
 test('packet validation detects content tampering and unlisted path traversal', async t => {
@@ -154,4 +175,78 @@ test('original use cases cannot be replaced by stage descriptions or duplicate w
   assert.throws(() => checkOperationalCoverage(metadata, cases, { ...source, source_sha256: 'wrong' }), /source binding/);
   const copied = { ...cases[0], inputs: { evidence: [{ text: details[0] }] } };
   assert.throws(() => checkOperationalCoverage(metadata, [copied, ...cases.slice(1)], source), /copied into observed evidence/);
+});
+
+test('each application owns its native interface; unrelated API shapes stay distinct', () => {
+  const sources = {
+    'types.ts': 'export type Interval = { start: string; end: string };',
+    'reopenPremises.nl': '---\nargs: { changed: Interval, decisionIds: string[] }\nreturns: string[]\n---\nReturn decisionIds affected by the changed interval.\n',
+    'reviseScore.nl': '---\nargs: { voices: string[], tempo: number, annotations: string[] }\nreturns: { measures: string[]; unresolved: string[] }\n---\nRead the score annotations and preserve distinct voices.\n',
+  };
+  const own = (path, name) => ({ schema: 'natlang.application/1', id: '001', title: 'Test', entrypoint: path,
+    interfaces: [{ name, path, purpose: 'A distinct domain operation with its own contract.' }] });
+  const a = checkApplicationInterfaces(sources, own('reopenPremises.nl', 'reopenPremises'), { ...app, title: 'Test' });
+  const b = checkApplicationInterfaces(sources, own('reviseScore.nl', 'reviseScore'), { ...app, title: 'Test' });
+  assert.deepEqual(a.interfaces[0].parameters, ['changed', 'decisionIds']);
+  assert.deepEqual(b.interfaces[0].parameters, ['voices', 'tempo', 'annotations']);
+  const bad = own('reopenPremises.nl', 'reopenPremises');
+  bad.interfaces[0].stateParameter = 'genericCase';
+  assert.throws(() => checkApplicationInterfaces(sources, bad, { ...app, title: 'Test' }), /not a declared/);
+  assert.throws(() => checkApplicationInterfaces(sources, own('../escape.nl', 'escape'), { ...app, title: 'Test' }), /unsafe/);
+});
+
+test('potential-call evidence distinguishes referenced children from unused wrappers', () => {
+  const native = (body) => `---\nargs: { value: string }\nreturns: string\n---\n${body}\n`;
+  const graph = inspectPotentialCalls({
+    'reconcile.nl': native('Call compare(value) and use the returned conflict.'),
+    'reconcile/compare.nl': native('Call readWitness(value) before comparing authority.'),
+    'reconcile/compare/readWitness.nl': native('Read the original witness and return its statement.'),
+    'reconcile/unused.nl': native('Return value.'),
+  }, ['reconcile.nl']);
+  assert.equal(graph.edges.length, 2);
+  assert.deepEqual(graph.unreferenced, ['reconcile/unused.nl']);
+  assert.match(graph.evidence, /not observed/);
+});
+
+test('saved native state must fit the declared resume parameter and exist in every result', () => {
+  const sources = { 'types.ts': 'export type Ledger = { revision: number; entries: string[] };',
+    'review.nl': '---\nargs: { ledger: Ledger }\nreturns: { revision: number; next: Ledger }\n---\nReview each entry and return its resulting ledger.\n' };
+  const manifest = { schema: 'natlang.application/1', id: '001', title: 'Ledger', entrypoint: 'review.nl',
+    interfaces: [{ name: 'review', path: 'review.nl', purpose: 'Review the ledger and resume its exact approved state.',
+      stateParameter: 'ledger', stateResultPath: ['next'] }] };
+  const metadata = { ...app, title: 'Ledger' };
+  assert.equal(checkApplicationInterfaces(sources, manifest, metadata).interfaces.length, 1);
+  const change = path => ({ ...manifest, interfaces: [{ ...manifest.interfaces[0], stateResultPath: path }] });
+  assert.throws(() => checkApplicationInterfaces(sources, change(['revision']), metadata), /does not fit/);
+  assert.throws(() => checkApplicationInterfaces(sources, change(['absent']), metadata), /every result/);
+  assert.throws(() => checkApplicationInterfaces(sources, change(['__proto__']), metadata), /safe property path/);
+  const optional = { ...sources, 'review.nl': sources['review.nl'].replace('next: Ledger', 'next?: Ledger') };
+  assert.throws(() => checkApplicationInterfaces(optional, manifest, metadata), /every result/);
+});
+
+test('package uses edges survive source freezing and are counted by native callable identity', async t => {
+  const root = await temporary(t);
+  await mkdir(join(root, 'evidence'));
+  await writeFile(join(root, 'natlang.json'), '{}\n');
+  await writeFile(join(root, 'review.nl'), '---\nargs: { text: string }\nreturns: string\nuses: [evidence/readWitness]\n---\nCall readWitness(text) before reviewing the claim.\n');
+  await writeFile(join(root, 'evidence/readWitness.nl'), '---\nargs: { text: string }\nreturns: string\n---\nReturn the attributed witness passage.\n');
+  const frozen = await sourceFiles(root);
+  assert.equal(frozen['natlang.json'], '{}\n');
+  assert.equal(checkNativeCalls(frozen, 'review.nl').visible_references, 1);
+  const graph = inspectPotentialCalls(frozen, ['review.nl']);
+  assert.deepEqual(graph.edges, [{ caller: 'review.nl', callee: 'evidence/readWitness.nl' }]);
+  assert.deepEqual(graph.unreferenced, []);
+});
+
+test('original requirements require concrete source owners without prescribing a common graph', () => {
+  const metadata = { stages: [{ name: 'reopen' }, { name: 'resolve' }], operational_details: ['A changed premise', 'An owner response'] };
+  const manifest = { coverage: {
+    domainGates: [{ stage: 'reopen', paths: ['change.nl'] }, { stage: 'resolve', paths: ['response.nl'] }],
+    operationalRules: [{ id: 1, paths: ['change.nl'] }, { id: 2, paths: ['response.nl'] }],
+  } };
+  const sources = { 'change.nl': 'A premise change.', 'response.nl': 'An owner response.' };
+  assert.equal(checkSourceCoverage(sources, manifest, metadata).domain_gates, 2);
+  assert.throws(() => checkSourceCoverage({ 'change.nl': sources['change.nl'] }, manifest, metadata), /missing NatLang owner/);
+  const duplicate = structuredClone(manifest); duplicate.coverage.domainGates[1].stage = 'reopen';
+  assert.throws(() => checkSourceCoverage(sources, duplicate, metadata), /every original/);
 });

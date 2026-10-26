@@ -1,7 +1,7 @@
 [
   {
     "id": "050-dataset-specification-and-audit-studio-gate-supported",
-    "root": "runCase/defineUseContract/audit/qualify.nl",
+    "root": "qualification/qualifyOriginal.nl",
     "split_group": "050-dataset-specification-and-audit-studio",
     "inputs": {
       "draft": {
@@ -76,7 +76,7 @@
   },
   {
     "id": "050-dataset-specification-and-audit-studio-gate-contradictory",
-    "root": "runCase/defineUseContract/audit/qualify.nl",
+    "root": "qualification/qualifyOriginal.nl",
     "split_group": "050-dataset-specification-and-audit-studio",
     "inputs": {
       "draft": {
@@ -150,7 +150,7 @@
   },
   {
     "id": "050-dataset-specification-and-audit-studio-gate-missing",
-    "root": "runCase/defineUseContract/audit/qualify.nl",
+    "root": "qualification/qualifyOriginal.nl",
     "split_group": "050-dataset-specification-and-audit-studio",
     "inputs": {
       "draft": {
@@ -202,13 +202,30 @@
   },
   {
     "id": "050-dataset-specification-and-audit-studio-operational-1",
-    "root": "runCase.nl",
+    "root": "governDatasetEdition.nl",
     "split_group": "050-dataset-specification-and-audit-studio",
     "inputs": {
-      "input": {
-        "caseId": "050-dataset-specification-and-audit-studio-operational-1",
-        "goal": "Review the Dataset specification and audit studio evidence for case 050-dataset-specification-and-audit-studio-operational-1; return a traceable proposal from the supplied records.",
-        "evidence": [
+      "session": {
+        "projectId": "050-dataset-specification-and-audit-studio-operational-1",
+        "instruction": "Review the Dataset specification and audit studio evidence for case 050-dataset-specification-and-audit-studio-operational-1; return a traceable proposal from the supplied records.",
+        "proposedUse": {
+          "id": "050-prior-datasetuse-detail-1-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "050-dataset-specification-and-audit-studio-operational-1",
+          "task": "train a service eligibility classifier",
+          "targetPopulation": "rural-language applicants in the intended service region",
+          "prohibitedUses": [
+            "credit scoring",
+            "law-enforcement screening"
+          ],
+          "requiredSlices": [
+            "rural-language coverage",
+            "consent purpose"
+          ]
+        },
+        "sourceEvents": [
           {
             "id": "050-operational-detail-1-source-v2",
             "source": "Dataset specification and audit studio operational event log",
@@ -223,34 +240,16 @@
             "status": "current"
           }
         ],
-        "policy": [
+        "suppliedRules": [
           "current named-source authority; applicability must be checked against version and scope"
         ],
-        "authorityStatus": "authorized",
-        "changedEvidenceIds": [
+        "authority": "authorized",
+        "changedSourceIds": [
           "050-operational-detail-1-source-v2"
         ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "050-prior-datasetuse-detail-1-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "050-dataset-specification-and-audit-studio-operational-1",
-            "task": "train a service eligibility classifier",
-            "targetPopulation": "rural-language applicants in the intended service region",
-            "prohibitedUses": [
-              "credit scoring",
-              "law-enforcement screening"
-            ],
-            "requiredSlices": [
-              "rural-language coverage",
-              "consent purpose"
-            ]
-          }
-        }
-      }
+        "reviewer": "accountable reviewer"
+      },
+      "edition": null
     },
     "expected": {
       "preservePriorVersion": true,
@@ -274,13 +273,30 @@
   },
   {
     "id": "050-dataset-specification-and-audit-studio-operational-2",
-    "root": "runCase.nl",
+    "root": "governDatasetEdition.nl",
     "split_group": "050-dataset-specification-and-audit-studio",
     "inputs": {
-      "input": {
-        "caseId": "050-dataset-specification-and-audit-studio-operational-2",
-        "goal": "Review the Dataset specification and audit studio evidence for case 050-dataset-specification-and-audit-studio-operational-2; return a traceable proposal from the supplied records.",
-        "evidence": [
+      "session": {
+        "projectId": "050-dataset-specification-and-audit-studio-operational-2",
+        "instruction": "Review the Dataset specification and audit studio evidence for case 050-dataset-specification-and-audit-studio-operational-2; return a traceable proposal from the supplied records.",
+        "proposedUse": {
+          "id": "050-prior-datasetuse-detail-2-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "050-dataset-specification-and-audit-studio-operational-2",
+          "task": "train a service eligibility classifier",
+          "targetPopulation": "rural-language applicants in the intended service region",
+          "prohibitedUses": [
+            "credit scoring",
+            "law-enforcement screening"
+          ],
+          "requiredSlices": [
+            "rural-language coverage",
+            "consent purpose"
+          ]
+        },
+        "sourceEvents": [
           {
             "id": "050-operational-detail-2-source-v2",
             "source": "Dataset specification and audit studio operational event log",
@@ -295,34 +311,16 @@
             "status": "current"
           }
         ],
-        "policy": [
+        "suppliedRules": [
           "current named-source authority; applicability must be checked against version and scope"
         ],
-        "authorityStatus": "unclear",
-        "changedEvidenceIds": [
+        "authority": "unclear",
+        "changedSourceIds": [
           "050-operational-detail-2-source-v2"
         ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "050-prior-datasetuse-detail-2-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "050-dataset-specification-and-audit-studio-operational-2",
-            "task": "train a service eligibility classifier",
-            "targetPopulation": "rural-language applicants in the intended service region",
-            "prohibitedUses": [
-              "credit scoring",
-              "law-enforcement screening"
-            ],
-            "requiredSlices": [
-              "rural-language coverage",
-              "consent purpose"
-            ]
-          }
-        }
-      }
+        "reviewer": "accountable reviewer"
+      },
+      "edition": null
     },
     "expected": {
       "preservePriorVersion": true,
@@ -346,13 +344,30 @@
   },
   {
     "id": "050-dataset-specification-and-audit-studio-operational-3",
-    "root": "runCase.nl",
+    "root": "governDatasetEdition.nl",
     "split_group": "050-dataset-specification-and-audit-studio",
     "inputs": {
-      "input": {
-        "caseId": "050-dataset-specification-and-audit-studio-operational-3",
-        "goal": "Review the Dataset specification and audit studio evidence for case 050-dataset-specification-and-audit-studio-operational-3; return a traceable proposal from the supplied records.",
-        "evidence": [
+      "session": {
+        "projectId": "050-dataset-specification-and-audit-studio-operational-3",
+        "instruction": "Review the Dataset specification and audit studio evidence for case 050-dataset-specification-and-audit-studio-operational-3; return a traceable proposal from the supplied records.",
+        "proposedUse": {
+          "id": "050-prior-datasetuse-detail-3-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "050-dataset-specification-and-audit-studio-operational-3",
+          "task": "train a service eligibility classifier",
+          "targetPopulation": "rural-language applicants in the intended service region",
+          "prohibitedUses": [
+            "credit scoring",
+            "law-enforcement screening"
+          ],
+          "requiredSlices": [
+            "rural-language coverage",
+            "consent purpose"
+          ]
+        },
+        "sourceEvents": [
           {
             "id": "050-operational-detail-3-source-v2",
             "source": "Dataset specification and audit studio operational event log",
@@ -367,34 +382,16 @@
             "status": "current"
           }
         ],
-        "policy": [
+        "suppliedRules": [
           "current named-source authority; applicability must be checked against version and scope"
         ],
-        "authorityStatus": "authorized",
-        "changedEvidenceIds": [
+        "authority": "authorized",
+        "changedSourceIds": [
           "050-operational-detail-3-source-v2"
         ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "050-prior-datasetuse-detail-3-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "050-dataset-specification-and-audit-studio-operational-3",
-            "task": "train a service eligibility classifier",
-            "targetPopulation": "rural-language applicants in the intended service region",
-            "prohibitedUses": [
-              "credit scoring",
-              "law-enforcement screening"
-            ],
-            "requiredSlices": [
-              "rural-language coverage",
-              "consent purpose"
-            ]
-          }
-        }
-      }
+        "reviewer": "accountable reviewer"
+      },
+      "edition": null
     },
     "expected": {
       "preservePriorVersion": true,
@@ -418,13 +415,30 @@
   },
   {
     "id": "050-dataset-specification-and-audit-studio-operational-4",
-    "root": "runCase.nl",
+    "root": "governDatasetEdition.nl",
     "split_group": "050-dataset-specification-and-audit-studio",
     "inputs": {
-      "input": {
-        "caseId": "050-dataset-specification-and-audit-studio-operational-4",
-        "goal": "Review the Dataset specification and audit studio evidence for case 050-dataset-specification-and-audit-studio-operational-4; return a traceable proposal from the supplied records.",
-        "evidence": [
+      "session": {
+        "projectId": "050-dataset-specification-and-audit-studio-operational-4",
+        "instruction": "Review the Dataset specification and audit studio evidence for case 050-dataset-specification-and-audit-studio-operational-4; return a traceable proposal from the supplied records.",
+        "proposedUse": {
+          "id": "050-prior-datasetuse-detail-4-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "050-dataset-specification-and-audit-studio-operational-4",
+          "task": "train a service eligibility classifier",
+          "targetPopulation": "rural-language applicants in the intended service region",
+          "prohibitedUses": [
+            "credit scoring",
+            "law-enforcement screening"
+          ],
+          "requiredSlices": [
+            "rural-language coverage",
+            "consent purpose"
+          ]
+        },
+        "sourceEvents": [
           {
             "id": "050-operational-detail-4-source-v2",
             "source": "Dataset specification and audit studio operational event log",
@@ -439,34 +453,16 @@
             "status": "current"
           }
         ],
-        "policy": [
+        "suppliedRules": [
           "current named-source authority; applicability must be checked against version and scope"
         ],
-        "authorityStatus": "authorized",
-        "changedEvidenceIds": [
+        "authority": "authorized",
+        "changedSourceIds": [
           "050-operational-detail-4-source-v2"
         ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "050-prior-datasetuse-detail-4-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "050-dataset-specification-and-audit-studio-operational-4",
-            "task": "train a service eligibility classifier",
-            "targetPopulation": "rural-language applicants in the intended service region",
-            "prohibitedUses": [
-              "credit scoring",
-              "law-enforcement screening"
-            ],
-            "requiredSlices": [
-              "rural-language coverage",
-              "consent purpose"
-            ]
-          }
-        }
-      }
+        "reviewer": "accountable reviewer"
+      },
+      "edition": null
     },
     "expected": {
       "preservePriorVersion": true,
@@ -490,13 +486,31 @@
   },
   {
     "id": "050-dataset-specification-and-audit-studio-operational-5",
-    "root": "runCase.nl",
+    "root": "governDatasetEdition.nl",
     "split_group": "050-dataset-specification-and-audit-studio",
     "inputs": {
-      "input": {
-        "caseId": "050-dataset-specification-and-audit-studio-operational-5",
-        "goal": "Review the Dataset specification and audit studio evidence for case 050-dataset-specification-and-audit-studio-operational-5; return a traceable proposal from the supplied records.",
-        "evidence": [
+      "session": {
+        "projectId": "050-dataset-specification-and-audit-studio-operational-5",
+        "instruction": "Review the Dataset specification and audit studio evidence for case 050-dataset-specification-and-audit-studio-operational-5; return a traceable proposal from the supplied records.",
+        "proposedUse": {
+          "id": "050-prior-datasetuse-detail-5-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "050-dataset-specification-and-audit-studio-operational-5",
+          "task": "research release dataset D50-v4 after participant P50-19 consent withdrawal",
+          "targetPopulation": "released rows R50-19a and R50-19b in object version v4; known recipient deliveries DL50-301, DL50-322, DL50-337",
+          "prohibitedUses": [
+            "redistribute source documents",
+            "retain withdrawn-consent rows for future training release"
+          ],
+          "requiredSlices": [
+            "consent purpose by participant",
+            "release object version",
+            "downstream recipients and delivery receipts"
+          ]
+        },
+        "sourceEvents": [
           {
             "id": "050-operational-detail-5-source-v2",
             "source": "Dataset specification and audit studio operational event log",
@@ -511,35 +525,16 @@
             "status": "current"
           }
         ],
-        "policy": [
+        "suppliedRules": [
           "current named-source authority; applicability must be checked against version and scope"
         ],
-        "authorityStatus": "authorized",
-        "changedEvidenceIds": [
+        "authority": "authorized",
+        "changedSourceIds": [
           "050-operational-detail-5-source-v2"
         ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "050-prior-datasetuse-detail-5-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "050-dataset-specification-and-audit-studio-operational-5",
-            "task": "research release dataset D50-v4 after participant P50-19 consent withdrawal",
-            "targetPopulation": "released rows R50-19a and R50-19b in object version v4; known recipient deliveries DL50-301, DL50-322, DL50-337",
-            "prohibitedUses": [
-              "redistribute source documents",
-              "retain withdrawn-consent rows for future training release"
-            ],
-            "requiredSlices": [
-              "consent purpose by participant",
-              "release object version",
-              "downstream recipients and delivery receipts"
-            ]
-          }
-        }
-      }
+        "reviewer": "accountable reviewer"
+      },
+      "edition": null
     },
     "expected": {
       "preservePriorVersion": true,

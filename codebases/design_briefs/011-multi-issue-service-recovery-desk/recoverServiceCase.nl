@@ -1,0 +1,10 @@
+---
+description: Reconcile linked customer failures, authorized remedies, external operations and partial closure.
+args:{request:RecoveryRequest;serviceState:ServiceRecoverySnapshot}
+returns:ServiceRecoveryProposal
+---
+Bind scope = `frameServiceRecovery(request, serviceState.cases)` and policy = `selectRecoveryPolicy(serviceState.policyEditions, request.orderIds)`. Preserve case version, order scope and channel preference. Bind issues = `decomposeServiceIssues(scope, policy, serviceState.cases, serviceState.customerTimeline)`. Split only independently resolvable failures; keep earlier promises linked where later timing changes their value.
+
+Bind entitlements = `resolveIssueEntitlements(scope, policy, issues.accepted, serviceState.orderAndPurchaseRecords, serviceState.documentedExceptions)`. Apply purchase-date edition and exact exception scope per issue. Keep mandatory entitlements distinct from discretionary gestures, and ask only for decisive missing evidence. Bind remedies = `buildJointRecoveryBundles(scope, policy, issues.accepted, entitlements.accepted, serviceState.paymentAndStockLedger, serviceState.customerChoices)`. Check amount limits, mutually exclusive remedies and duplicate compensation while preserving separately entitled issue outcomes.
+
+Before promising scarce stock, require a current reservation and customer choice. Bind actions = `coordinateRecoveryOperations(scope, policy, remedies.accepted, serviceState.operationReceipts)`. Each action has a stable operation ID and matching authorization; if an external response is lost, read the receipt ledger first. Unknown effects are never retried blindly. Bind closure = `compareIssueClosure(scope, policy, issues.accepted, actions.accepted, serviceState.operationReceipts, serviceState.customerChoices)`. Close only issues with exact fulfillment receipts or explicit accepted alternatives. Return partial completions, pending choices, expired reservations, uncertain operations and remaining obligations separately; set commitAllowed false.

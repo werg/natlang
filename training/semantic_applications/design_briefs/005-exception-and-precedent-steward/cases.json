@@ -1,7 +1,7 @@
 [
   {
     "id": "005-normalizeExceptions-supported",
-    "root": "runCase/normalizeExceptions/audit/qualify.nl",
+    "root": "qualification/qualifyOriginal.nl",
     "split_group": "design-brief-app-005",
     "inputs": {
       "draft": {
@@ -94,7 +94,7 @@
   },
   {
     "id": "005-normalizeExceptions-contradictory",
-    "root": "runCase/normalizeExceptions/audit/qualify.nl",
+    "root": "qualification/qualifyOriginal.nl",
     "split_group": "design-brief-app-005",
     "inputs": {
       "draft": {
@@ -187,7 +187,7 @@
   },
   {
     "id": "005-normalizeExceptions-missing",
-    "root": "runCase/normalizeExceptions/audit/qualify.nl",
+    "root": "qualification/qualifyOriginal.nl",
     "split_group": "design-brief-app-005",
     "inputs": {
       "draft": {
@@ -280,19 +280,17 @@
   },
   {
     "id": "005-workflow-01",
-    "root": "runCase.nl",
+    "root": "hearExceptionRequest.nl",
     "split_group": "design-brief-app-005",
     "inputs": {
-      "request": {
-        "caseId": "SYN-005-01",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+      "hearing": {
+        "hearingId": "SYN-005-01",
+        "requestedReview": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
         "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
-      },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+        "reviewer": "case owner",
+        "expectedVersion": "v1",
+        "policySnapshotVersion": "v1",
+        "requests": [
           {
             "requesterId": "Lee Park",
             "requestedDeviation": "Waive overnight delivery only for order O-55",
@@ -318,7 +316,7 @@
             "retentionPolicyId": "retention-005"
           }
         ],
-        "evidencePages": [
+        "caseHistory": [
           {
             "evidence": [
               {
@@ -344,7 +342,7 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "currentRules": [
           {
             "id": "POL-005",
             "authority": "named case owner",
@@ -357,10 +355,11 @@
             ]
           }
         ],
-        "searchedPartitions": [
+        "searchedPrecedents": [
           "case-folder-2026"
         ]
-      }
+      },
+      "register": null
     },
     "expected": {
       "commitAllowed": false
@@ -381,19 +380,17 @@
   },
   {
     "id": "005-workflow-02",
-    "root": "runCase.nl",
+    "root": "hearExceptionRequest.nl",
     "split_group": "design-brief-app-005",
     "inputs": {
-      "request": {
-        "caseId": "SYN-005-02",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+      "hearing": {
+        "hearingId": "SYN-005-02",
+        "requestedReview": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
         "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
-      },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+        "reviewer": "case owner",
+        "expectedVersion": "v1",
+        "policySnapshotVersion": "v1",
+        "requests": [
           {
             "requesterId": "Lee Park",
             "requestedDeviation": "Waive overnight delivery only for order O-55",
@@ -419,7 +416,7 @@
             "retentionPolicyId": "retention-005"
           }
         ],
-        "evidencePages": [
+        "caseHistory": [
           {
             "evidence": [
               {
@@ -445,7 +442,7 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "currentRules": [
           {
             "id": "POL-005",
             "authority": "named case owner",
@@ -458,10 +455,11 @@
             ]
           }
         ],
-        "searchedPartitions": [
+        "searchedPrecedents": [
           "case-folder-2026"
         ]
-      }
+      },
+      "register": null
     },
     "expected": {
       "commitAllowed": false
@@ -482,19 +480,17 @@
   },
   {
     "id": "005-workflow-03",
-    "root": "runCase.nl",
+    "root": "hearExceptionRequest.nl",
     "split_group": "design-brief-app-005",
     "inputs": {
-      "request": {
-        "caseId": "SYN-005-03",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+      "hearing": {
+        "hearingId": "SYN-005-03",
+        "requestedReview": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
         "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
-      },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+        "reviewer": "case owner",
+        "expectedVersion": "v1",
+        "policySnapshotVersion": "v1",
+        "requests": [
           {
             "requesterId": "Lee Park",
             "requestedDeviation": "Waive overnight delivery only for order O-55",
@@ -520,7 +516,7 @@
             "retentionPolicyId": "retention-005"
           }
         ],
-        "evidencePages": [
+        "caseHistory": [
           {
             "evidence": [
               {
@@ -546,7 +542,7 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "currentRules": [
           {
             "id": "POL-005",
             "authority": "named case owner",
@@ -559,10 +555,11 @@
             ]
           }
         ],
-        "searchedPartitions": [
+        "searchedPrecedents": [
           "case-folder-2026"
         ]
-      }
+      },
+      "register": null
     },
     "expected": {
       "commitAllowed": false
@@ -583,19 +580,17 @@
   },
   {
     "id": "005-workflow-04",
-    "root": "runCase.nl",
+    "root": "hearExceptionRequest.nl",
     "split_group": "design-brief-app-005",
     "inputs": {
-      "request": {
-        "caseId": "SYN-005-04",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+      "hearing": {
+        "hearingId": "SYN-005-04",
+        "requestedReview": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
         "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
-      },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+        "reviewer": "case owner",
+        "expectedVersion": "v1",
+        "policySnapshotVersion": "v1",
+        "requests": [
           {
             "requesterId": "Lee Park",
             "requestedDeviation": "Waive overnight delivery only for order O-55",
@@ -621,7 +616,7 @@
             "retentionPolicyId": "retention-005"
           }
         ],
-        "evidencePages": [
+        "caseHistory": [
           {
             "evidence": [
               {
@@ -647,7 +642,7 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "currentRules": [
           {
             "id": "POL-005",
             "authority": "named case owner",
@@ -660,10 +655,11 @@
             ]
           }
         ],
-        "searchedPartitions": [
+        "searchedPrecedents": [
           "case-folder-2026"
         ]
-      }
+      },
+      "register": null
     },
     "expected": {
       "commitAllowed": false
@@ -684,19 +680,17 @@
   },
   {
     "id": "005-workflow-05",
-    "root": "runCase.nl",
+    "root": "hearExceptionRequest.nl",
     "split_group": "design-brief-app-005",
     "inputs": {
-      "request": {
-        "caseId": "SYN-005-05",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+      "hearing": {
+        "hearingId": "SYN-005-05",
+        "requestedReview": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
         "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
-      },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+        "reviewer": "case owner",
+        "expectedVersion": "v1",
+        "policySnapshotVersion": "v1",
+        "requests": [
           {
             "requesterId": "Lee Park",
             "requestedDeviation": "Waive overnight delivery only for order O-55",
@@ -722,7 +716,7 @@
             "retentionPolicyId": "retention-005"
           }
         ],
-        "evidencePages": [
+        "caseHistory": [
           {
             "evidence": [
               {
@@ -748,7 +742,7 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "currentRules": [
           {
             "id": "POL-005",
             "authority": "named case owner",
@@ -761,10 +755,11 @@
             ]
           }
         ],
-        "searchedPartitions": [
+        "searchedPrecedents": [
           "case-folder-2026"
         ]
-      }
+      },
+      "register": null
     },
     "expected": {
       "commitAllowed": false

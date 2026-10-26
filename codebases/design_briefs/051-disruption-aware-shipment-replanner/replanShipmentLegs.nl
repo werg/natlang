@@ -1,0 +1,10 @@
+---
+args: {"update": "DispatchUpdate", "dispatchBook": "DeliveryRecoveryBook | null"}
+returns: "ShipmentRepair"
+---
+1. Bind prior to dispatchBook or an empty recovery book. Bind orders to update.orders or an empty collection. Bind reservations = reconcileCarrierTransactions(prior.reservations, update.notices, update.reservationReceipts or an empty collection). Process operation receipts before offering any capacity again; an unknown cancellation leaves its capacity occupied.
+2. Bind delta = interpretClassScopedDisruption(update, prior). Bind promises = recoverDistinctAppointments(update.orders or an empty collection, prior.promises, update.notices, update.priorityRules). Preserve each shipment's separate delivery deadlines and dependent installation appointments.
+3. Identify only legs dependent on changed offers, class eligibility, handling capability or reservation outcomes. Preserve all other leg and promise records. A partial route reopening applies only to established eligible classes, never to an uncertain reopening time.
+4. For each affected shipment call enumerateHandlingSafePaths(order, update.routeOffers or an empty collection, delta, reservations), collecting the returned alternatives. Generate reroute, split or consolidation alternatives only from supplied capabilities and offered capacity.
+5. Bind allocated = allocateScarceLegs(alternatives, orders, reservations, update.priorityRules). Bind reviewedPromises = qualifyRevisedPromises(allocated, promises, reservations, update.notices). Do not promise the last slot to two planners, or call recovery complete because a booking was accepted.
+6. Return a next book revision carrying allocated legs and reviewedPromises while preserving actual delivery receipts, rejected bookings and every unknown operation. Emit proposed reservation requests with expected offer versions, plus customer corrections for unsupported promises. Close a recovery task only when actual carrier progress and the customer's approved commitments agree.

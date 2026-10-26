@@ -1,7 +1,7 @@
 [
   {
     "id": "083-first-gate-pass",
-    "root": "runCase/modelNarrativeInformation/audit/qualify.nl",
+    "root": "qualification/qualifyOriginal.nl",
     "split_group": "world-083-first-gate",
     "inputs": {
       "evidence": {
@@ -61,7 +61,7 @@
   },
   {
     "id": "083-first-gate-fail",
-    "root": "runCase/modelNarrativeInformation/audit/qualify.nl",
+    "root": "qualification/qualifyOriginal.nl",
     "split_group": "world-083-first-gate",
     "inputs": {
       "evidence": {
@@ -121,7 +121,7 @@
   },
   {
     "id": "083-first-gate-needs-review",
-    "root": "runCase/modelNarrativeInformation/audit/qualify.nl",
+    "root": "qualification/qualifyOriginal.nl",
     "split_group": "world-083-first-gate",
     "inputs": {
       "evidence": {
@@ -184,11 +184,10 @@
   },
   {
     "id": "083-workflow-1",
-    "root": "runCase.nl",
+    "root": "produceAccessibleTimeline.nl",
     "split_group": "world-083-workflow-1",
     "inputs": {
-      "request": "Review the edit timeline and update accessibility segments affected by the versioned change.",
-      "records": [
+      "productions": [
         {
           "id": "083-production-1",
           "caseId": "083-workflow-1",
@@ -223,34 +222,38 @@
           ]
         }
       ],
-      "evidence": [
-        {
-          "id": "083-event-1",
-          "source": "approved script, shot log, or player test",
-          "version": "v4",
-          "text": "SCRIPT-83-v4 edit E12 adds six seconds before stable scene S9. Segment CAP-9 is currently scheduled at 00:52; the v4 timeline places scene S9 at 00:58. Scene IDs S8/S9/S12 are unchanged.",
-          "status": "current",
-          "authority": "primary production artifact"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "083-production-1"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "083-production-1"
-      ],
-      "sourceDelta": [
-        {
-          "id": "083-event-1",
-          "source": "approved script, shot log, or player test",
-          "version": "v4",
-          "text": "SCRIPT-83-v4 edit E12 adds six seconds before stable scene S9. Segment CAP-9 is currently scheduled at 00:52; the v4 timeline places scene S9 at 00:58. Scene IDs S8/S9/S12 are unchanged.",
-          "status": "current",
-          "authority": "primary production artifact"
-        }
-      ]
+      "edit": {
+        "instruction": "Review the edit timeline and update accessibility segments affected by the versioned change.",
+        "sceneEvidence": [
+          {
+            "id": "083-event-1",
+            "source": "approved script, shot log, or player test",
+            "version": "v4",
+            "text": "SCRIPT-83-v4 edit E12 adds six seconds before stable scene S9. Segment CAP-9 is currently scheduled at 00:52; the v4 timeline places scene S9 at 00:58. Scene IDs S8/S9/S12 are unchanged.",
+            "status": "current",
+            "authority": "primary production artifact"
+          }
+        ],
+        "styleAndConsent": [],
+        "requiredProductionIds": [
+          "083-production-1"
+        ],
+        "accessibilityEditor": "accountable reviewer",
+        "priorSegmentIds": [
+          "083-production-1"
+        ],
+        "sourceDelta": [
+          {
+            "id": "083-event-1",
+            "source": "approved script, shot log, or player test",
+            "version": "v4",
+            "text": "SCRIPT-83-v4 edit E12 adds six seconds before stable scene S9. Segment CAP-9 is currently scheduled at 00:52; the v4 timeline places scene S9 at 00:58. Scene IDs S8/S9/S12 are unchanged.",
+            "status": "current",
+            "authority": "primary production artifact"
+          }
+        ]
+      },
+      "mediaState": null
     },
     "expected": {
       "application": "Accessible Narrative Production Desk",
@@ -273,11 +276,10 @@
   },
   {
     "id": "083-workflow-2",
-    "root": "runCase.nl",
+    "root": "produceAccessibleTimeline.nl",
     "split_group": "world-083-workflow-2",
     "inputs": {
-      "request": "Prepare an accessible description of a visual clue while preserving the later reveal.",
-      "records": [
+      "productions": [
         {
           "id": "083-production-2",
           "caseId": "083-workflow-2",
@@ -312,34 +314,38 @@
           ]
         }
       ],
-      "evidence": [
-        {
-          "id": "083-event-2",
-          "source": "approved script, shot log, or player test",
-          "version": "v4",
-          "text": "Scene S8 shot log shows a brass key at 00:42. A production note identifies scene S12 at 01:50 as the first point where the key owner is named. The scene S8 audio-description draft contains only the visible action.",
-          "status": "current",
-          "authority": "primary production artifact"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "083-production-2"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "083-production-2"
-      ],
-      "sourceDelta": [
-        {
-          "id": "083-event-2",
-          "source": "approved script, shot log, or player test",
-          "version": "v4",
-          "text": "Scene S8 shot log shows a brass key at 00:42. A production note identifies scene S12 at 01:50 as the first point where the key owner is named. The scene S8 audio-description draft contains only the visible action.",
-          "status": "current",
-          "authority": "primary production artifact"
-        }
-      ]
+      "edit": {
+        "instruction": "Prepare an accessible description of a visual clue while preserving the later reveal.",
+        "sceneEvidence": [
+          {
+            "id": "083-event-2",
+            "source": "approved script, shot log, or player test",
+            "version": "v4",
+            "text": "Scene S8 shot log shows a brass key at 00:42. A production note identifies scene S12 at 01:50 as the first point where the key owner is named. The scene S8 audio-description draft contains only the visible action.",
+            "status": "current",
+            "authority": "primary production artifact"
+          }
+        ],
+        "styleAndConsent": [],
+        "requiredProductionIds": [
+          "083-production-2"
+        ],
+        "accessibilityEditor": "accountable reviewer",
+        "priorSegmentIds": [
+          "083-production-2"
+        ],
+        "sourceDelta": [
+          {
+            "id": "083-event-2",
+            "source": "approved script, shot log, or player test",
+            "version": "v4",
+            "text": "Scene S8 shot log shows a brass key at 00:42. A production note identifies scene S12 at 01:50 as the first point where the key owner is named. The scene S8 audio-description draft contains only the visible action.",
+            "status": "current",
+            "authority": "primary production artifact"
+          }
+        ]
+      },
+      "mediaState": null
     },
     "expected": {
       "application": "Accessible Narrative Production Desk",
@@ -362,11 +368,10 @@
   },
   {
     "id": "083-workflow-3",
-    "root": "runCase.nl",
+    "root": "produceAccessibleTimeline.nl",
     "split_group": "world-083-workflow-3",
     "inputs": {
-      "request": "Find a usable accessibility path for dialogue that overlaps the proposed description cue.",
-      "records": [
+      "productions": [
         {
           "id": "083-production-3",
           "caseId": "083-workflow-3",
@@ -401,34 +406,38 @@
           ]
         }
       ],
-      "evidence": [
-        {
-          "id": "083-event-3",
-          "source": "approved script, shot log, or player test",
-          "version": "v4",
-          "text": "Scene S4 dialogue runs from 00:38 to 00:44 with no silence gap. The proposed audio-description cue AD-4 also runs 00:40 to 00:45 and masks the final spoken line.",
-          "status": "current",
-          "authority": "primary production artifact"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "083-production-3"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "083-production-3"
-      ],
-      "sourceDelta": [
-        {
-          "id": "083-event-3",
-          "source": "approved script, shot log, or player test",
-          "version": "v4",
-          "text": "Scene S4 dialogue runs from 00:38 to 00:44 with no silence gap. The proposed audio-description cue AD-4 also runs 00:40 to 00:45 and masks the final spoken line.",
-          "status": "current",
-          "authority": "primary production artifact"
-        }
-      ]
+      "edit": {
+        "instruction": "Find a usable accessibility path for dialogue that overlaps the proposed description cue.",
+        "sceneEvidence": [
+          {
+            "id": "083-event-3",
+            "source": "approved script, shot log, or player test",
+            "version": "v4",
+            "text": "Scene S4 dialogue runs from 00:38 to 00:44 with no silence gap. The proposed audio-description cue AD-4 also runs 00:40 to 00:45 and masks the final spoken line.",
+            "status": "current",
+            "authority": "primary production artifact"
+          }
+        ],
+        "styleAndConsent": [],
+        "requiredProductionIds": [
+          "083-production-3"
+        ],
+        "accessibilityEditor": "accountable reviewer",
+        "priorSegmentIds": [
+          "083-production-3"
+        ],
+        "sourceDelta": [
+          {
+            "id": "083-event-3",
+            "source": "approved script, shot log, or player test",
+            "version": "v4",
+            "text": "Scene S4 dialogue runs from 00:38 to 00:44 with no silence gap. The proposed audio-description cue AD-4 also runs 00:40 to 00:45 and masks the final spoken line.",
+            "status": "current",
+            "authority": "primary production artifact"
+          }
+        ]
+      },
+      "mediaState": null
     },
     "expected": {
       "application": "Accessible Narrative Production Desk",
@@ -451,11 +460,10 @@
   },
   {
     "id": "083-workflow-4",
-    "root": "runCase.nl",
+    "root": "produceAccessibleTimeline.nl",
     "split_group": "world-083-workflow-4",
     "inputs": {
-      "request": "Identify the voice from the supplied source evidence and prepare a safe unresolved disposition if it is not identifiable.",
-      "records": [
+      "productions": [
         {
           "id": "083-production-4",
           "caseId": "083-workflow-4",
@@ -490,34 +498,38 @@
           ]
         }
       ],
-      "evidence": [
-        {
-          "id": "083-event-4",
-          "source": "approved script, shot log, or player test",
-          "version": "v4",
-          "text": "In scene S6, the camera shows an empty doorway while an off-screen voice says “I will return tomorrow.” The script’s speaker field is blank; no cast list or source note links the voice to a named character.",
-          "status": "current",
-          "authority": "primary production artifact"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "083-production-4"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "083-production-4"
-      ],
-      "sourceDelta": [
-        {
-          "id": "083-event-4",
-          "source": "approved script, shot log, or player test",
-          "version": "v4",
-          "text": "In scene S6, the camera shows an empty doorway while an off-screen voice says “I will return tomorrow.” The script’s speaker field is blank; no cast list or source note links the voice to a named character.",
-          "status": "current",
-          "authority": "primary production artifact"
-        }
-      ]
+      "edit": {
+        "instruction": "Identify the voice from the supplied source evidence and prepare a safe unresolved disposition if it is not identifiable.",
+        "sceneEvidence": [
+          {
+            "id": "083-event-4",
+            "source": "approved script, shot log, or player test",
+            "version": "v4",
+            "text": "In scene S6, the camera shows an empty doorway while an off-screen voice says “I will return tomorrow.” The script’s speaker field is blank; no cast list or source note links the voice to a named character.",
+            "status": "current",
+            "authority": "primary production artifact"
+          }
+        ],
+        "styleAndConsent": [],
+        "requiredProductionIds": [
+          "083-production-4"
+        ],
+        "accessibilityEditor": "accountable reviewer",
+        "priorSegmentIds": [
+          "083-production-4"
+        ],
+        "sourceDelta": [
+          {
+            "id": "083-event-4",
+            "source": "approved script, shot log, or player test",
+            "version": "v4",
+            "text": "In scene S6, the camera shows an empty doorway while an off-screen voice says “I will return tomorrow.” The script’s speaker field is blank; no cast list or source note links the voice to a named character.",
+            "status": "current",
+            "authority": "primary production artifact"
+          }
+        ]
+      },
+      "mediaState": null
     },
     "expected": {
       "application": "Accessible Narrative Production Desk",
@@ -540,11 +552,10 @@
   },
   {
     "id": "083-workflow-5",
-    "root": "runCase.nl",
+    "root": "produceAccessibleTimeline.nl",
     "split_group": "world-083-workflow-5",
     "inputs": {
-      "request": "Check caption timing and segmentation against the named target player profile.",
-      "records": [
+      "productions": [
         {
           "id": "083-production-5",
           "caseId": "083-workflow-5",
@@ -579,34 +590,38 @@
           ]
         }
       ],
-      "evidence": [
-        {
-          "id": "083-event-5",
-          "source": "approved script, shot log, or player test",
-          "version": "v4",
-          "text": "Player profile WEBVTT-32 wraps captions at 32 characters and supports a 1.5-second minimum cue. Caption C18 is 49 characters in a 1.0-second cue; the alternate player profile uses a different split.",
-          "status": "current",
-          "authority": "primary production artifact"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "083-production-5"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "083-production-5"
-      ],
-      "sourceDelta": [
-        {
-          "id": "083-event-5",
-          "source": "approved script, shot log, or player test",
-          "version": "v4",
-          "text": "Player profile WEBVTT-32 wraps captions at 32 characters and supports a 1.5-second minimum cue. Caption C18 is 49 characters in a 1.0-second cue; the alternate player profile uses a different split.",
-          "status": "current",
-          "authority": "primary production artifact"
-        }
-      ]
+      "edit": {
+        "instruction": "Check caption timing and segmentation against the named target player profile.",
+        "sceneEvidence": [
+          {
+            "id": "083-event-5",
+            "source": "approved script, shot log, or player test",
+            "version": "v4",
+            "text": "Player profile WEBVTT-32 wraps captions at 32 characters and supports a 1.5-second minimum cue. Caption C18 is 49 characters in a 1.0-second cue; the alternate player profile uses a different split.",
+            "status": "current",
+            "authority": "primary production artifact"
+          }
+        ],
+        "styleAndConsent": [],
+        "requiredProductionIds": [
+          "083-production-5"
+        ],
+        "accessibilityEditor": "accountable reviewer",
+        "priorSegmentIds": [
+          "083-production-5"
+        ],
+        "sourceDelta": [
+          {
+            "id": "083-event-5",
+            "source": "approved script, shot log, or player test",
+            "version": "v4",
+            "text": "Player profile WEBVTT-32 wraps captions at 32 characters and supports a 1.5-second minimum cue. Caption C18 is 49 characters in a 1.0-second cue; the alternate player profile uses a different split.",
+            "status": "current",
+            "authority": "primary production artifact"
+          }
+        ]
+      },
+      "mediaState": null
     },
     "expected": {
       "application": "Accessible Narrative Production Desk",

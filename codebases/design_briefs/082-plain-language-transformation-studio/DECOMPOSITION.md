@@ -1,17 +1,11 @@
-# 082 — Plain Language Transformation Studio
+# Plain Language Transformation Studio
 
-## Source-derived procedure
+## Operative meaning graph and consequence equivalence
 
-Five domain stages: recoverMeaning, modelReaderTasks, rewriteStructure, challengeComprehension, releaseAccessible. Each stage has a bounded evidence preparation step, field-level decision, typed draft construction, and independent audit. Ten cross-cutting procedures frame scope, select authority, plan dependencies and evidence, reconcile collections, resolve questions, propose bounded repairs, prepare review, compose a recipient-specific view, and assess the impact of source deltas.
+The source is first represented as claims, duties, permissions, conditions and exceptions with exact source spans. Reader tasks control presentation, not which rules survive. Nested exception scope is resolved before paragraphs are rewritten. Technical terms without safe substitutes remain with explanations.
 
-## Domain algorithms and gates
+Comprehension probes are answered through two separate native readers: one sees authoritative units, the other only the draft. A third judgment compares consequential actions, especially negative requirements, deadlines and unless clauses. Source changes invalidate only dependent units, paragraphs and reviews. An edition retains a side-by-side source map and independent fidelity/accessibility evidence; a readability improvement cannot itself authorize release.
 
-- **recoverMeaning** — Parse the source into claims, duties, permissions, conditions, and exceptions before rewriting. Identify terms that require explanation and preserve uncertainty or scope; do not treat dense wording as permission to remove consequential distinctions. Gate: All operative meaning units are represented with source locations.
-- **modelReaderTasks** — Interpret what the intended reader must understand or do using supplied audience guidance. Identify decision points and necessary background without stereotyping ability, and distinguish information that can be reorganized from information that cannot be omitted. Gate: Reader tasks cover all consequential uses of the document.
-- **rewriteStructure** — Reorganize information around reader tasks, use clearer sentences, and introduce explanations or examples where they help. Preserve technical terms when necessary, label examples as illustrative, and avoid creating new rules through oversimplified summaries. Gate: Rewrite preserves every material condition, exception, and uncertainty.
-- **challengeComprehension** — Create realistic comprehension questions and boundary scenarios that test whether readers would act correctly. Include cases involving exceptions and negative requirements, then compare source and rewrite answers to detect semantic drift. Gate: Source and rewrite imply the same consequential answers.
-- **releaseAccessible** — Reconcile reviewer feedback, maintain side-by-side source mapping, and publish the accessible edition with its scope and version. Revalidate affected meaning units after source changes and preserve access to authoritative wording where required. Gate: Independent fidelity review passes; readability alone is not the acceptance criterion.
+## Verification boundary
 
-## Action boundary
-
-The natural-language program produces a proposal for accountable review. Authorization, persistence, and external effects are exact host responsibilities. Evidence gaps and conflicts stay visible; no action is inferred from fluent completion.
+The original domain records, five semantic gates, five operational scenarios, and independent finite gate answers remain the contract. Public operations and checkpoints belong to this application. Native loading and source-call inspection do not prove learned execution quality. Effect intent is distinct from an authorized receiver receipt.

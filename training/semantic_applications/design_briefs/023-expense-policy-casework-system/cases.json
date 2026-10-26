@@ -1,7 +1,7 @@
 [
   {
     "id": "023-normalizeClaim-supported",
-    "root": "runCase/normalizeClaim/audit/qualify.nl",
+    "root": "qualification/qualifyOriginal.nl",
     "split_group": "design-brief-app-023",
     "inputs": {
       "draft": {
@@ -105,7 +105,7 @@
   },
   {
     "id": "023-normalizeClaim-contradictory",
-    "root": "runCase/normalizeClaim/audit/qualify.nl",
+    "root": "qualification/qualifyOriginal.nl",
     "split_group": "design-brief-app-023",
     "inputs": {
       "draft": {
@@ -209,7 +209,7 @@
   },
   {
     "id": "023-normalizeClaim-missing",
-    "root": "runCase/normalizeClaim/audit/qualify.nl",
+    "root": "qualification/qualifyOriginal.nl",
     "split_group": "design-brief-app-023",
     "inputs": {
       "draft": {
@@ -313,19 +313,17 @@
   },
   {
     "id": "023-workflow-01",
-    "root": "runCase.nl",
+    "root": "adjudicateExpenseAppeal.nl",
     "split_group": "design-brief-app-023",
     "inputs": {
-      "request": {
+      "submission": {
         "caseId": "SYN-023-01",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
-      },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+        "instruction": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "claimedScope": "one named case",
+        "requester": "case owner",
+        "expectedRevision": "v1",
+        "sourceRevision": "v1",
+        "claims": [
           {
             "claimantId": "C-23",
             "tripId": "TRIP-23",
@@ -355,7 +353,7 @@
             "retentionPolicyId": "retention-023"
           }
         ],
-        "evidencePages": [
+        "receiptFolders": [
           {
             "evidence": [
               {
@@ -381,7 +379,7 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "policyEditions": [
           {
             "id": "POL-023",
             "authority": "named case owner",
@@ -394,10 +392,11 @@
             ]
           }
         ],
-        "searchedPartitions": [
+        "searchedReceiptSets": [
           "case-folder-2026"
         ]
-      }
+      },
+      "caseFile": null
     },
     "expected": {
       "commitAllowed": false
@@ -418,19 +417,17 @@
   },
   {
     "id": "023-workflow-02",
-    "root": "runCase.nl",
+    "root": "adjudicateExpenseAppeal.nl",
     "split_group": "design-brief-app-023",
     "inputs": {
-      "request": {
+      "submission": {
         "caseId": "SYN-023-02",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
-      },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+        "instruction": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "claimedScope": "one named case",
+        "requester": "case owner",
+        "expectedRevision": "v1",
+        "sourceRevision": "v1",
+        "claims": [
           {
             "claimantId": "C-23",
             "tripId": "TRIP-23",
@@ -460,7 +457,7 @@
             "retentionPolicyId": "retention-023"
           }
         ],
-        "evidencePages": [
+        "receiptFolders": [
           {
             "evidence": [
               {
@@ -486,7 +483,7 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "policyEditions": [
           {
             "id": "POL-023",
             "authority": "named case owner",
@@ -499,10 +496,11 @@
             ]
           }
         ],
-        "searchedPartitions": [
+        "searchedReceiptSets": [
           "case-folder-2026"
         ]
-      }
+      },
+      "caseFile": null
     },
     "expected": {
       "commitAllowed": false
@@ -523,19 +521,17 @@
   },
   {
     "id": "023-workflow-03",
-    "root": "runCase.nl",
+    "root": "adjudicateExpenseAppeal.nl",
     "split_group": "design-brief-app-023",
     "inputs": {
-      "request": {
+      "submission": {
         "caseId": "SYN-023-03",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
-      },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+        "instruction": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "claimedScope": "one named case",
+        "requester": "case owner",
+        "expectedRevision": "v1",
+        "sourceRevision": "v1",
+        "claims": [
           {
             "claimantId": "C-23",
             "tripId": "TRIP-23",
@@ -565,7 +561,7 @@
             "retentionPolicyId": "retention-023"
           }
         ],
-        "evidencePages": [
+        "receiptFolders": [
           {
             "evidence": [
               {
@@ -591,7 +587,7 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "policyEditions": [
           {
             "id": "POL-023",
             "authority": "named case owner",
@@ -604,10 +600,11 @@
             ]
           }
         ],
-        "searchedPartitions": [
+        "searchedReceiptSets": [
           "case-folder-2026"
         ]
-      }
+      },
+      "caseFile": null
     },
     "expected": {
       "commitAllowed": false
@@ -628,19 +625,17 @@
   },
   {
     "id": "023-workflow-04",
-    "root": "runCase.nl",
+    "root": "adjudicateExpenseAppeal.nl",
     "split_group": "design-brief-app-023",
     "inputs": {
-      "request": {
+      "submission": {
         "caseId": "SYN-023-04",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
-      },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+        "instruction": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "claimedScope": "one named case",
+        "requester": "case owner",
+        "expectedRevision": "v1",
+        "sourceRevision": "v1",
+        "claims": [
           {
             "claimantId": "C-23",
             "tripId": "TRIP-23",
@@ -670,7 +665,7 @@
             "retentionPolicyId": "retention-023"
           }
         ],
-        "evidencePages": [
+        "receiptFolders": [
           {
             "evidence": [
               {
@@ -696,7 +691,7 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "policyEditions": [
           {
             "id": "POL-023",
             "authority": "named case owner",
@@ -709,10 +704,11 @@
             ]
           }
         ],
-        "searchedPartitions": [
+        "searchedReceiptSets": [
           "case-folder-2026"
         ]
-      }
+      },
+      "caseFile": null
     },
     "expected": {
       "commitAllowed": false
@@ -733,19 +729,17 @@
   },
   {
     "id": "023-workflow-05",
-    "root": "runCase.nl",
+    "root": "adjudicateExpenseAppeal.nl",
     "split_group": "design-brief-app-023",
     "inputs": {
-      "request": {
+      "submission": {
         "caseId": "SYN-023-05",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
-      },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+        "instruction": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "claimedScope": "one named case",
+        "requester": "case owner",
+        "expectedRevision": "v1",
+        "sourceRevision": "v1",
+        "claims": [
           {
             "claimantId": "C-23",
             "tripId": "TRIP-23",
@@ -775,7 +769,7 @@
             "retentionPolicyId": "retention-023"
           }
         ],
-        "evidencePages": [
+        "receiptFolders": [
           {
             "evidence": [
               {
@@ -801,7 +795,7 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "policyEditions": [
           {
             "id": "POL-023",
             "authority": "named case owner",
@@ -814,10 +808,11 @@
             ]
           }
         ],
-        "searchedPartitions": [
+        "searchedReceiptSets": [
           "case-folder-2026"
         ]
-      }
+      },
+      "caseFile": null
     },
     "expected": {
       "commitAllowed": false

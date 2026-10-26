@@ -1,0 +1,9 @@
+---
+args: {"inbox": "WarehouseInbox", "journal": "WarehouseJournal | null"}
+returns: "WarehouseReview"
+---
+1. Bind prior to journal or an empty revision-zero journal. Bind ingress = reconcileDeviceOrder(inbox.deviceEntries or an empty collection, inbox.verificationReceipts or an empty collection, prior.cursors, prior.observations). An offline queue remains unacknowledged until actual signed payloads and verification receipts are present; an event log describing queued scans is not their payload.
+2. Bind identities = establishLotIdentity(ingress.admitted, prior.identities, inbox.eventEvidence). Do not infer stock identity or quantity from the complaint or supplied prior observation. For each uncertain identity return a bounded discriminating scan, preserving lot and serial alternatives.
+3. Bind findings = classifyPhysicalDifference(identities, ingress.admitted, prior, inbox.eventEvidence). Distinguish misplaced, mislabeled, damaged, missing and pending receipt. Preserve physical quantity when reducing damaged stock's availability.
+4. Bind work = sequenceWarehouseWork(findings, identities, inbox.procedures, prior, inbox.eventEvidence). Bind conservationFindings = challengeLateReceiptDoubleCount(work, prior.adjustments, inbox.eventEvidence) before proposing an adjustment. A late receipt linked to an earlier shortage adjustment requires reconciliation, not another automatic increment.
+5. Return the next journal containing prior observations plus ingress.admitted only once, ingress.cursors and identities, pending work and unchanged ledger balances. Require independent verification where the procedure demands it, especially when the recount operator was the original picker. An observation or proposed task never directly manufactures an inventory adjustment or customer fulfillment.

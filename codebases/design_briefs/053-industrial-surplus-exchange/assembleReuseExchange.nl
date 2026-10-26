@@ -1,0 +1,10 @@
+---
+args: {"desk": "ReuseDesk", "exchange": "ReuseExchangeBook | null"}
+returns: "ReuseExchangeReview"
+---
+1. Bind prior to exchange or an empty exchange book. Bind profiles = qualifyOfferedMaterial(desk, prior.profiles). Bind needs = recoverFunctionalNeeds(desk.needs or an empty collection, desk.materialEvents). Treat the supplied prior offer as a source-bound hypothesis to update, never proof of unsupported properties.
+2. If any owner withdrew an offer or changed a transfer restriction, call invalidateDependentTransfers(profiles, prior.legs). Hold its entire dependent leg closure before confirming any package. Preserve actual in-transit custody and unknown external status for reconciliation.
+3. For each relevant offer/need combination call inventQualifiedReuse(profile, need, desk.materialEvents), collecting its returned concepts. Bind qualifiedConcepts to only those returned concepts with qualified status and the required actual qualification evidence. Preserve multiple functional mechanisms and adaptations. Unknown maintenance history or essential suitability creates a qualification task; it cannot become an allocated match merely because the concept is creative.
+4. Bind legs = planDependentExchangeLegs(qualifiedConcepts, profiles, needs, prior, desk.materialEvents). Require exact unit compatibility, evidenced density for weight/volume conversion, available quantities, real reservation receipts and permitted storage/transport windows before promising a transfer.
+5. Bind residuals = reconcileRecipientAcceptance(legs, profiles, desk.transferReceipts or an empty collection, prior.residuals). Separate custody, title and recipient acceptance. A partial acceptance releases only its actually remaining quantity and preserves rejected-condition evidence.
+6. Return the next exchange book with concepts, qualification work, dependent legs, residual offers and unmet needs. Claim completed reuse only for accepted quantities with actual custody/title/acceptance evidence; matching, reservation and dispatch alone do not establish that outcome.

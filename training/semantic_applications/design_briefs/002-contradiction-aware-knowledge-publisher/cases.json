@@ -1,7 +1,7 @@
 [
   {
     "id": "002-indexClaims-supported",
-    "root": "runCase/indexClaims/audit/qualify.nl",
+    "root": "qualification/qualifyOriginal.nl",
     "split_group": "design-brief-app-002",
     "inputs": {
       "draft": {
@@ -94,7 +94,7 @@
   },
   {
     "id": "002-indexClaims-contradictory",
-    "root": "runCase/indexClaims/audit/qualify.nl",
+    "root": "qualification/qualifyOriginal.nl",
     "split_group": "design-brief-app-002",
     "inputs": {
       "draft": {
@@ -187,7 +187,7 @@
   },
   {
     "id": "002-indexClaims-missing",
-    "root": "runCase/indexClaims/audit/qualify.nl",
+    "root": "qualification/qualifyOriginal.nl",
     "split_group": "design-brief-app-002",
     "inputs": {
       "draft": {
@@ -280,19 +280,17 @@
   },
   {
     "id": "002-workflow-01",
-    "root": "runCase.nl",
+    "root": "prepareClaimRelease.nl",
     "split_group": "design-brief-app-002",
     "inputs": {
-      "request": {
-        "caseId": "SYN-002-01",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+      "desk": {
+        "releaseId": "SYN-002-01",
+        "intention": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
         "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
-      },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+        "editor": "case owner",
+        "expectedVersion": "v1",
+        "sourceVersion": "v1",
+        "revisions": [
           {
             "topic": "Beacon battery life",
             "audience": "US storefront buyers",
@@ -320,7 +318,7 @@
             "retentionPolicyId": "retention-002"
           }
         ],
-        "evidencePages": [
+        "evidence": [
           {
             "evidence": [
               {
@@ -355,7 +353,7 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "publicationHierarchy": [
           {
             "id": "POL-002",
             "authority": "named case owner",
@@ -371,7 +369,8 @@
         "searchedPartitions": [
           "case-folder-2026"
         ]
-      }
+      },
+      "state": null
     },
     "expected": {
       "commitAllowed": false
@@ -392,19 +391,17 @@
   },
   {
     "id": "002-workflow-02",
-    "root": "runCase.nl",
+    "root": "prepareClaimRelease.nl",
     "split_group": "design-brief-app-002",
     "inputs": {
-      "request": {
-        "caseId": "SYN-002-02",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+      "desk": {
+        "releaseId": "SYN-002-02",
+        "intention": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
         "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
-      },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+        "editor": "case owner",
+        "expectedVersion": "v1",
+        "sourceVersion": "v1",
+        "revisions": [
           {
             "topic": "Beacon battery life",
             "audience": "US storefront buyers",
@@ -432,7 +429,7 @@
             "retentionPolicyId": "retention-002"
           }
         ],
-        "evidencePages": [
+        "evidence": [
           {
             "evidence": [
               {
@@ -458,7 +455,7 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "publicationHierarchy": [
           {
             "id": "POL-002",
             "authority": "named case owner",
@@ -474,7 +471,8 @@
         "searchedPartitions": [
           "case-folder-2026"
         ]
-      }
+      },
+      "state": null
     },
     "expected": {
       "commitAllowed": false
@@ -495,19 +493,17 @@
   },
   {
     "id": "002-workflow-03",
-    "root": "runCase.nl",
+    "root": "prepareClaimRelease.nl",
     "split_group": "design-brief-app-002",
     "inputs": {
-      "request": {
-        "caseId": "SYN-002-03",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+      "desk": {
+        "releaseId": "SYN-002-03",
+        "intention": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
         "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
-      },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+        "editor": "case owner",
+        "expectedVersion": "v1",
+        "sourceVersion": "v1",
+        "revisions": [
           {
             "topic": "Beacon battery life",
             "audience": "US storefront buyers",
@@ -535,7 +531,7 @@
             "retentionPolicyId": "retention-002"
           }
         ],
-        "evidencePages": [
+        "evidence": [
           {
             "evidence": [
               {
@@ -561,7 +557,7 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "publicationHierarchy": [
           {
             "id": "POL-002",
             "authority": "named case owner",
@@ -577,7 +573,8 @@
         "searchedPartitions": [
           "case-folder-2026"
         ]
-      }
+      },
+      "state": null
     },
     "expected": {
       "commitAllowed": false
@@ -598,19 +595,17 @@
   },
   {
     "id": "002-workflow-04",
-    "root": "runCase.nl",
+    "root": "prepareClaimRelease.nl",
     "split_group": "design-brief-app-002",
     "inputs": {
-      "request": {
-        "caseId": "SYN-002-04",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+      "desk": {
+        "releaseId": "SYN-002-04",
+        "intention": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
         "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
-      },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+        "editor": "case owner",
+        "expectedVersion": "v1",
+        "sourceVersion": "v1",
+        "revisions": [
           {
             "topic": "Beacon battery life",
             "audience": "US storefront buyers",
@@ -638,7 +633,7 @@
             "retentionPolicyId": "retention-002"
           }
         ],
-        "evidencePages": [
+        "evidence": [
           {
             "evidence": [
               {
@@ -664,7 +659,7 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "publicationHierarchy": [
           {
             "id": "POL-002",
             "authority": "named case owner",
@@ -680,7 +675,8 @@
         "searchedPartitions": [
           "case-folder-2026"
         ]
-      }
+      },
+      "state": null
     },
     "expected": {
       "commitAllowed": false
@@ -701,19 +697,17 @@
   },
   {
     "id": "002-workflow-05",
-    "root": "runCase.nl",
+    "root": "prepareClaimRelease.nl",
     "split_group": "design-brief-app-002",
     "inputs": {
-      "request": {
-        "caseId": "SYN-002-05",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+      "desk": {
+        "releaseId": "SYN-002-05",
+        "intention": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
         "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
-      },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+        "editor": "case owner",
+        "expectedVersion": "v1",
+        "sourceVersion": "v1",
+        "revisions": [
           {
             "topic": "Beacon battery life",
             "audience": "US storefront buyers",
@@ -741,7 +735,7 @@
             "retentionPolicyId": "retention-002"
           }
         ],
-        "evidencePages": [
+        "evidence": [
           {
             "evidence": [
               {
@@ -767,7 +761,7 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "publicationHierarchy": [
           {
             "id": "POL-002",
             "authority": "named case owner",
@@ -783,7 +777,8 @@
         "searchedPartitions": [
           "case-folder-2026"
         ]
-      }
+      },
+      "state": null
     },
     "expected": {
       "commitAllowed": false

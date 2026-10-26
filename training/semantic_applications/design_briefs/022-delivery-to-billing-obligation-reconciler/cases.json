@@ -1,7 +1,7 @@
 [
   {
     "id": "022-extractConditions-supported",
-    "root": "runCase/extractConditions/audit/qualify.nl",
+    "root": "qualification/qualifyOriginal.nl",
     "split_group": "design-brief-app-022",
     "inputs": {
       "draft": {
@@ -91,7 +91,7 @@
   },
   {
     "id": "022-extractConditions-contradictory",
-    "root": "runCase/extractConditions/audit/qualify.nl",
+    "root": "qualification/qualifyOriginal.nl",
     "split_group": "design-brief-app-022",
     "inputs": {
       "draft": {
@@ -181,7 +181,7 @@
   },
   {
     "id": "022-extractConditions-missing",
-    "root": "runCase/extractConditions/audit/qualify.nl",
+    "root": "qualification/qualifyOriginal.nl",
     "split_group": "design-brief-app-022",
     "inputs": {
       "draft": {
@@ -271,19 +271,17 @@
   },
   {
     "id": "022-workflow-01",
-    "root": "runCase.nl",
+    "root": "prepareMilestoneInvoice.nl",
     "split_group": "design-brief-app-022",
     "inputs": {
-      "request": {
-        "caseId": "SYN-022-01",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
-      },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "docket": {
+        "reviewId": "SYN-022-01",
+        "instruction": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "projectScope": "one named case",
+        "billingOwner": "case owner",
+        "expectedVersion": "v1",
+        "contractVersion": "v1",
+        "projects": [
           {
             "agreementId": "AGR-22",
             "customerId": "C-22",
@@ -309,7 +307,7 @@
             "retentionPolicyId": "retention-022"
           }
         ],
-        "evidencePages": [
+        "agreementSources": [
           {
             "evidence": [
               {
@@ -335,7 +333,7 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "authorityRecords": [
           {
             "id": "POL-022",
             "authority": "named case owner",
@@ -348,10 +346,11 @@
             ]
           }
         ],
-        "searchedPartitions": [
+        "searchedSchedules": [
           "case-folder-2026"
         ]
-      }
+      },
+      "book": null
     },
     "expected": {
       "commitAllowed": false
@@ -372,19 +371,17 @@
   },
   {
     "id": "022-workflow-02",
-    "root": "runCase.nl",
+    "root": "prepareMilestoneInvoice.nl",
     "split_group": "design-brief-app-022",
     "inputs": {
-      "request": {
-        "caseId": "SYN-022-02",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
-      },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "docket": {
+        "reviewId": "SYN-022-02",
+        "instruction": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "projectScope": "one named case",
+        "billingOwner": "case owner",
+        "expectedVersion": "v1",
+        "contractVersion": "v1",
+        "projects": [
           {
             "agreementId": "AGR-22",
             "customerId": "C-22",
@@ -410,7 +407,7 @@
             "retentionPolicyId": "retention-022"
           }
         ],
-        "evidencePages": [
+        "agreementSources": [
           {
             "evidence": [
               {
@@ -436,7 +433,7 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "authorityRecords": [
           {
             "id": "POL-022",
             "authority": "named case owner",
@@ -449,10 +446,11 @@
             ]
           }
         ],
-        "searchedPartitions": [
+        "searchedSchedules": [
           "case-folder-2026"
         ]
-      }
+      },
+      "book": null
     },
     "expected": {
       "commitAllowed": false
@@ -473,19 +471,17 @@
   },
   {
     "id": "022-workflow-03",
-    "root": "runCase.nl",
+    "root": "prepareMilestoneInvoice.nl",
     "split_group": "design-brief-app-022",
     "inputs": {
-      "request": {
-        "caseId": "SYN-022-03",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
-      },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "docket": {
+        "reviewId": "SYN-022-03",
+        "instruction": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "projectScope": "one named case",
+        "billingOwner": "case owner",
+        "expectedVersion": "v1",
+        "contractVersion": "v1",
+        "projects": [
           {
             "agreementId": "AGR-22",
             "customerId": "C-22",
@@ -511,7 +507,7 @@
             "retentionPolicyId": "retention-022"
           }
         ],
-        "evidencePages": [
+        "agreementSources": [
           {
             "evidence": [
               {
@@ -537,7 +533,7 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "authorityRecords": [
           {
             "id": "POL-022",
             "authority": "named case owner",
@@ -550,10 +546,11 @@
             ]
           }
         ],
-        "searchedPartitions": [
+        "searchedSchedules": [
           "case-folder-2026"
         ]
-      }
+      },
+      "book": null
     },
     "expected": {
       "commitAllowed": false
@@ -574,19 +571,17 @@
   },
   {
     "id": "022-workflow-04",
-    "root": "runCase.nl",
+    "root": "prepareMilestoneInvoice.nl",
     "split_group": "design-brief-app-022",
     "inputs": {
-      "request": {
-        "caseId": "SYN-022-04",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
-      },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "docket": {
+        "reviewId": "SYN-022-04",
+        "instruction": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "projectScope": "one named case",
+        "billingOwner": "case owner",
+        "expectedVersion": "v1",
+        "contractVersion": "v1",
+        "projects": [
           {
             "agreementId": "AGR-22",
             "customerId": "C-22",
@@ -612,7 +607,7 @@
             "retentionPolicyId": "retention-022"
           }
         ],
-        "evidencePages": [
+        "agreementSources": [
           {
             "evidence": [
               {
@@ -638,7 +633,7 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "authorityRecords": [
           {
             "id": "POL-022",
             "authority": "named case owner",
@@ -651,10 +646,11 @@
             ]
           }
         ],
-        "searchedPartitions": [
+        "searchedSchedules": [
           "case-folder-2026"
         ]
-      }
+      },
+      "book": null
     },
     "expected": {
       "commitAllowed": false
@@ -675,19 +671,17 @@
   },
   {
     "id": "022-workflow-05",
-    "root": "runCase.nl",
+    "root": "prepareMilestoneInvoice.nl",
     "split_group": "design-brief-app-022",
     "inputs": {
-      "request": {
-        "caseId": "SYN-022-05",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
-      },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "docket": {
+        "reviewId": "SYN-022-05",
+        "instruction": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "projectScope": "one named case",
+        "billingOwner": "case owner",
+        "expectedVersion": "v1",
+        "contractVersion": "v1",
+        "projects": [
           {
             "agreementId": "AGR-22",
             "customerId": "C-22",
@@ -713,7 +707,7 @@
             "retentionPolicyId": "retention-022"
           }
         ],
-        "evidencePages": [
+        "agreementSources": [
           {
             "evidence": [
               {
@@ -739,7 +733,7 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "authorityRecords": [
           {
             "id": "POL-022",
             "authority": "named case owner",
@@ -752,10 +746,11 @@
             ]
           }
         ],
-        "searchedPartitions": [
+        "searchedSchedules": [
           "case-folder-2026"
         ]
-      }
+      },
+      "book": null
     },
     "expected": {
       "commitAllowed": false

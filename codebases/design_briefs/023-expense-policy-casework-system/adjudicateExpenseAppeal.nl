@@ -1,0 +1,11 @@
+---
+args: {"submission": "ExpenseSubmission", "caseFile": "ExpenseCaseFile | null"}
+returns: "ExpenseDispositionReview"
+---
+1. Bind prior to the supplied immutable-history case file, or an empty file at revision zero. Bind appeal = identifyReceiptLineage(submission, prior). Link a resubmitted receipt to its original claim and reimbursement operation; a new upload alone does not create a second reimbursable claim.
+2. Bind components = separateReceiptComponents(submission.receiptFolders, prior.components). Preserve exact amounts, currency and dates, including separate tax, tip and fee lines. Retain unreadable values instead of reconstructing them.
+3. For each affected component call interpretBusinessShare(component, submission, appeal), collecting the returned shares by componentKey. Use only explicit trip, attendance and allocation facts. A personal companion does not make the claimant's supported business portion ineligible.
+4. For each component and its purpose share call evaluateDatedExpenseRule(component, share, submission.policyEditions, submission.receiptFolders), collecting the returned decisions. Preserve the policy effective-date rule across the trip and apply an exception only to its authorized night, category, amount and person.
+5. Bind questions = minimizeClaimantQuestions(decisions, components, submission.receiptFolders). Reuse evidence already supplied, group questions sharing one factual answer, and request sensitive material through restricted channels. A persuasive explanation without exception authority remains held.
+6. Bind independentReviewer = findIndependentExpenseReviewer(submission, decisions). If the manager is also claimant or preparer, route to the actual independent delegation; missing authority blocks payment release.
+7. Return the next case-file revision with original claims, prior decisions outside the appeal scope, revised affected lines and append-only appeal history. Require exact same-currency conservation of allowed, rejected and held amounts, verified duplicate-reimbursement checks, independent approval and current receipts before paymentReleaseAllowed. Keep actual payment receipt IDs distinct from recommendations and never modify the original claim to match a reduced disposition.

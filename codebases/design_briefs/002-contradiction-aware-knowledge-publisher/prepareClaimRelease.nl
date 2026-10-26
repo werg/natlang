@@ -1,0 +1,9 @@
+---
+args: {"desk": "PublicationDesk", "state": "ClaimReleaseState | null"}
+returns: "ClaimReleasePacket"
+---
+1. Start from the prior release state or an empty revision. Bind claims = recoverQualifiedPropositions(desk). Keep source denials as opaque lineage events; remove their unsupported derived claims from releasable neighborhoods without naming the denied source to this reader.
+2. Bind comparisons = compareClaimNeighborhoods(claims, desk). Only genuine overlapping-scope contradictions require authority arbitration. Bind authorities = resolvePublicationAuthority(comparisons, claims, desk.publicationHierarchy) for those contradictions; equal or missing authority blocks only the affected keys.
+3. If no resolved contradiction or supported stale current-guidance link needs an edit, return the claim inventory and open questions with no fabricated patch. Otherwise bind drafts = draftCoordinatedEdits(claims, comparisons, authorities, desk). Missing full current page text is a source request, never permission to invent an anchor.
+4. For each draft and its exact readable page bind candidate = stagePageCandidate(page, draft). Collect candidates; any exact edit error blocks that page. Bind reviews = verifyStagedMeaning(claims, candidates, desk). Use actual re-extracted claims and protected meanings; a successful string edit alone does not establish fidelity.
+5. Bind approvals = bindPageReleaseApprovals(candidates, reviews, desk). Only pages with current exact text approvals, resolved semantic checks and matching source versions enter releasablePageIds. Preserve unrelated completed receipts and append the new candidate revisions. A concurrent base change requires re-reading affected anchors and renewed approval for changed meaning. Return the resulting state, actual comparisons/authorities/drafts and scoped blockers; no draft is a publish receipt.
