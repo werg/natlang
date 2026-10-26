@@ -1,445 +1,764 @@
 # Hierarchical LoRA tuning for natlang programs
 
-Status: complete-scope implementation assignment, 2026-10-26.
+Status: complete-scope implementation assignment; reviewed 2026-10-26 against
+repository commit `6a128e5e79fa94cf17bf4b098c567cf8a433ab74`.
+Unchecked work below is required work, not a claim of implemented capability.
 
 ## 0. Mandate
 
-Implement this entire plan in one continuous effort. There are no phases,
-pilot stopping points, approval gates, go/no-go reviews or deferred work items.
-Every section below is required scope: data generation, the joint trainer,
-placement, the family level, distillation back into the base, runtime binding,
-serving on the reference server, vLLM and the llama.cpp fork, the `natlang
-tune` build step, evaluation and documentation.
+Implement this entire plan in one continuous effort. There are no pilot stopping
+points, approval gates, go/no-go reviews or deferred work items. Data generation,
+the joint trainer, placement, family learning, distillation into the base,
+runtime binding, all serving targets, `natlang tune`, evaluation and documentation
+are required. Both LFM2.5-350M and Mellum are first-class targets throughout.
 
-Work proceeds in dependency order, but no item waits for a measurement to
-justify it. Measurements inform tuning choices (ranks, penalties, thresholds,
-teacher routing); they never suspend implementation. When something fails,
-fix it, rewrite it, recollect the data or rerun the job, and keep progressing
-other available work in parallel. Report empirical results honestly, including
-where an arm does not beat its baseline, and then improve that arm.
+Work proceeds in dependency order. Measurements inform ranks, penalties,
+placement, teacher routing and implementation repairs; a disappointing result
+does not cancel an arm or suspend independent work. Report measured results
+honestly, investigate failures against exact references, and improve the system.
+Correctness checks still apply: a corrupt artifact, leaked evaluation row or
+wrong-base state must not be relabelled as usable to keep a pipeline moving.
 
-Both students are first-class targets from the start: LFM2.5-350M and Mellum.
+### Natlang-native decomposition
+
+Follow [the repository's owner rules](../AGENTS.md): policy is natural language;
+exact mathematics, verification, durability and external I/O are crisp. Before
+implementation, write `DECOMPOSITION.md` in the owning tuning application and
+map each unit to an existing mechanism or a justified new one.
+
+| Unit | Natural-language policy | Crisp mechanism |
+| --- | --- | --- |
+| Data | Propose root inputs; route authorized teachers; diagnose disagreements | Trace capture, replay, split enforcement, typed/task verifiers |
+| Training | Propose families, rank changes and decomposition candidates | Shared native trainer, autodiff, optimizers, deterministic tensor mappings |
+| Placement | Propose removals, scope roots and shared-stack pins | Execute ablations, calculate costs, verify constraints |
+| Build/runtime | Explain failures and propose recovery | Dependency hashes, lexical binding, cache identities, atomic publication |
+
+Extend the existing specializer, call store, pluggable policies, shared trainer,
+recipe inheritance and hashing. Weight adapters complement native positional
+KV/hybrid-state communication; they do not replace it. Preserve complete
+trajectories and actual producer/consumer graph dependencies in training.
 
 ## 1. Outcome
 
-Every natlang program gets a build step that specialises the student to that
-program. Per-lambda training data comes from teacher runs inside the real
-runtime. The result is a tree of small LoRAs that mirrors the program's context
-tree. A call runs the base plus the sum of the adapters on its lexical path, so
-shared behaviour is trained once and only what is genuinely lambda-specific is
-stored per lambda.
+Every natlang program gets a build step that specializes a student to that
+program. Data comes from whole-program execution. Jointly trained residual
+adapters mirror a declared lexical scope tree over the program's bound
+definitions; a call uses its own binding's path and family adapters.
 
-The deliverable is a working system:
+The deliverable comprises:
 
-1. **Data.** Inputs captured by running whole programs, teacher trajectories,
-   a verification ladder, on-policy corrections, all stored per lambda.
-2. **Training.** One joint run per program trains every level of the tree;
-   depth-weighted penalties push shared behaviour up the tree; a placement pass
-   keeps only the adapters that pay; a cross-program family level and periodic
-   distillation into the base complete the hierarchy.
-3. **Runtime and serving.** Adapters are data items in contexts; each call's
-   stack follows its lexical path; each stack is exported as one standard LoRA
-   and served with batched multi-LoRA on vLLM and the llama.cpp fork.
-4. **Lifecycle.** Adapters are build products keyed on source, interface, base
-   and data; `natlang tune` builds them incrementally; datasets are the durable
-   asset.
+1. **Data:** real and synthetic root invocations, captured inner calls, full
+   teacher trajectories, explicit verification evidence and on-policy repairs.
+2. **Training:** joint program adaptation, measured placement, cross-program
+   families and periodic distillation into each student's base.
+3. **Runtime/serving:** immutable adapter bindings, exact effective-model
+   identities, exported stacks and batched serving on the reference server,
+   vLLM, the llama.cpp fork and wllama.
+4. **Lifecycle:** incremental builds, dependency-aware invalidation, atomic
+   activation/rollback and reusable source datasets with exact provenance.
 
-The success measure is held-out program-level task success at matched
-inference cost.
+The primary outcome is held-out program-level task success under a declared
+inference-cost envelope. Report success, latency, throughput and memory together;
+do not substitute token loss or adapter size for task success.
 
-## 2. Starting point in this repository
+## 2. Verified starting point
 
-| Existing piece | Where | Use in this plan |
+These are integration points at the reviewed revision, not claims that the
+hierarchical pipeline already exists.
+
+| Existing piece | Source | Required extension |
 | --- | --- | --- |
-| Contexts as content-addressed folder values; each call steps down the context graph | `spec/SPEC.md` (Contexts) | The tree adapters attach to; lexical scoping rule |
-| Callable folders, `natlang.d/` binding | `spec/SPEC.md` | Folder-level nodes |
-| `nnt1` native adapter coefficients, frozen SVD bases, native graph gradients, Adam/SGD continuation | `ts-host/src/neuralese/learning.ts`, native trainer | Training parameterisation |
-| `withNativeAdapters` (AsyncLocalStorage scope, nested scopes add up) | `ts-host/src/neuralese/learning.ts` | Replaced by path-resolved stacks for tuned programs; kept as the explicit experiment API |
-| Invocation tracing | runtime | Call capture for inner-lambda inputs |
-| Source/world connected-component split selector | `natlang_neuralese.rl.memetic_batch` | Splits that keep related cases together |
-| Task oracles, `classify_case` / `reward_of` | collector and RL code | Top rung of the verification ladder |
-| Self-hosted Qwen3.6-35B, Luna, Bunny teachers | `TEACHER_SETUP.md` | Trajectory generation |
-| Per-request LoRA in llama.cpp (no mixed-adapter batching) | `vendor/` fork | Serving, extended with grouping and batched kernels |
-| Native-state import refusal for adapted KV | native serving path | Boundary rule for lambdas that pass native states |
+| Content-addressed context DAG; companion-folder binding and `.in(context)` | [Contexts](../spec/SPEC.md#contexts) | A lexical adapter-scope overlay with explicit binding identity |
+| `nnt1` frozen-SVD bases, coefficient cores and functional weight substitution | [native_adapters.py](../training/neuralese/natlang_neuralese/model/native_adapters.py), [basis math](../training/neuralese/natlang_neuralese/model/native_adapter_math.py) | Multi-node joint updates, shared basis inventory, free-factor option and export |
+| `withNativeAdapters`, recorded objectives and optimizer continuation | [learning.ts](../ts-host/src/neuralese/learning.ts) | Separate resolved lexical bindings from explicit dynamic experiment scopes |
+| Runtime contexts and callable bindings | [contexts.ts](../ts-host/src/runtime/contexts.ts), [callable.ts](../ts-host/src/runtime/callable.ts) | Immutable per-invocation stack selection and trace fields |
+| Source/world connected-component selector | [memetic_batch.py](../training/neuralese/natlang_neuralese/rl/memetic_batch.py) | Extend train-only development/confirmation selection; preserve external protected sets |
+| Explicit `same-base-adapter-state` imports and consumption receipts | [native_adapters.py](../training/neuralese/natlang_neuralese/model/native_adapters.py), [native_grad.py](../training/neuralese/natlang_neuralese/serve/native_grad.py) | Retain cross-stack producer/consumer identity and gradients; distinguish cache reuse |
+| Teacher configuration and current operating instructions | [TEACHER_SETUP.md](../TEACHER_SETUP.md), [AGENTS.md](../AGENTS.md) | Calibrated routing among currently authorized actors |
+| Shared training recipes and line parity | [TRAINING_RECIPE.md](neuralese/TRAINING_RECIPE.md) | One shared hierarchical recipe with declared backbone differences |
 
-## 3. The adapter hierarchy
+The existing split selector rejects non-train inputs and makes development and
+confirmation groups; it does not already implement the complete split protocol
+below. The native adapter path stores FP32 bases/cores, binds the exact base
+identity, and applies `U C V^T`; it is not yet a generic free-factor LoRA trainer.
 
-Adapters attach to nodes of the context tree that the spec already defines.
-A call's effective weights are the base plus the sum of the adapters on its
-lexical path, plus the family adapters its lambda belongs to.
+## 3. Hierarchy and binding semantics
 
-| Level | Attaches to | Trained on | Initial rank |
+| Level | Scope | Training population | Initial rank per target matrix |
 | --- | --- | --- | --- |
-| Family | A library entry shared across programs (classify, extract, summarise, agentic glue, and every family clustering discovers) | Lambdas of that family in all programs | 16 |
-| Tree | A program root, and every subtree root marked by the author or discovered by placement | Every lambda in the tree | 8 |
-| Folder | A callable folder or `natlang.d/` node | Lambdas bound to that folder and below | 4 |
-| Lambda | A named `.nl` function or an inline `nl` call site | That lambda only | 2–4 |
+| Family | Versioned library family, separately for each student/base | Members across training programs | 16 |
+| Tree | Program root and author-marked or discovered subtree roots | Lambdas below that root | 8 |
+| Folder | Callable folder or `natlang.d/` scope | Lambdas in that scope and below | 4 |
+| Lambda | Named `.nl` definition or inline `nl` site | That bound lambda | 2–4 |
 
-Initial ranks are tuned automatically by the rank sweep in §5.6.
+Ranks are starting settings, selected on development data (§5.6). Every level
+may be absent. Author pins can require/forbid a node or require a set of calls to
+share an effective stack. Conflicting pins produce an actionable build error.
 
-```text
-Base student (frozen)
- + Family adapters (cross-program, mixed by learned scales)
- + Program A root ............................ tree adapter
-     natlang.d/ ............................. no adapter after placement
-         summarise.nl ....................... lambda adapter
-     triage/ ................................ folder adapter
-         label-ticket.nl .................... lambda adapter   (family: classify)
-         inline nl call ..................... lambda adapter
+### 3.1 Lexical scopes over a DAG
 
-Call to label-ticket.nl runs on:
-  base + classify + Program A + triage/ + label-ticket.nl   → exported as one LoRA
-```
+The context DAG is not itself a tree with a unique parent. Compile an explicit
+adapter-scope tree over **bound definitions**, with a manifest entry for each
+binding: owning program/library, definition or site ID, semantic context digest,
+and ordered scope ancestry. Resolve this entry from the callee value, never by
+walking the dynamic caller chain or choosing the first path through a DAG.
 
-**Composition.** Adapters are residual. LoRA deltas add, so a stack is one LoRA
-whose rank is the sum of its parts, with a per-adapter scale. Scale 0 removes
-an adapter, which gives ablation and rollback without retraining.
+Two aliases of the same bound callable retain one binding and stack. Two scoped
+instances of content-identical code/context may have different binding IDs and
+stacks. An imported callable retains its defining binding; a program-specific
+instance requires an explicit binding in that program's manifest. `.in(context)`
+creates a new binding revision and rechecks compatibility. A compatible context
+without a tuned binding uses the declared fallback; it must not inherit the
+caller's program adapter by accident.
 
-**Lexical scoping.** The spec binds each function to its own context, and every
-call steps down the context graph. A callee runs under its own path's stack and
-never inherits its caller's stack. Explicit `withNativeAdapters` in user code
-still appends to the resolved stack, for experiments.
+For example, a bound `triage/label-ticket.nl` can use
+`classify + program-root + triage-folder + label-ticket`. Calling it from
+another folder does not add that caller's adapters. An explicit
+`withNativeAdapters` experiment scope appends separately (§6).
 
-**Shared contexts.** Contexts form a DAG. A folder reachable from two parents
-takes its stack from its containing folders in the source tree, so the stack is
-deterministic and cacheable however the folder is reached.
+### 3.2 Composition and identity
 
-**Multi-family membership.** A lambda may belong to several families. Each
-membership carries a learned mixing scale, trained jointly with the program's
-adapters (§5.4). Membership comes from frontmatter tags and from clustering
-(§5.5); both sources are implemented.
+For each target matrix `m`, the effective weight is
+`W0,m + sum_f a[l,f] D[f,m] + sum_n s[n] D[n,m]`, where `n` ranges over the
+binding's lexical path. Membership and scales are static per binding/version,
+not token-dependent routing. `s[n]` is a fixed deployment/ablation scale (normally
+1 or 0); only the family gates specified in §5.4 are learned.
 
-**Empty nodes.** Any node may have no adapter. Placement decides which nodes
-keep one; an empty node contributes nothing to the stacks below it.
+Addition is exact algebraically. The sum's rank is **at most** the sum of factor
+ranks, and can be much smaller with shared bases (§5.3). Floating-point kernel
+and quantization parity require measurement; algebraic equality does not imply
+bit-identical outputs across backends.
 
-## 4. Data generation
+Family adapters are model-specific artifacts. LFM and Mellum share family labels,
+data and policy, not tensor coordinates, factors or native states.
 
-Inner lambdas get their inputs by running whole programs, never by inventing
-arguments from signatures alone.
+## 4. Data generation and evidence
 
-1. **Program inputs.** Real invocation traces wherever they exist. In addition,
-   a large model synthesises program-level inputs from the root signature, its
-   types and real examples. Every input is tagged real or synthetic.
-2. **Call capture.** Run each program on those inputs with the teacher as
-   executor. Every inner call's arguments, context ID, source hash and result
-   become a lambda-level record.
-3. **Teacher trajectories.** For each captured call, sample k teacher
-   trajectories with every model turn kept, so the student trains on the turn
-   sequence the runtime actually renders.
-4. **Teacher routing.** Each family is calibrated on a sample: the self-hosted
-   Qwen3.6-35B and the paid teachers (Luna, Bunny) run the same verified
-   cases, and each family routes to the teacher with the highest verified
-   success per unit cost. Routing is recomputed whenever a teacher changes.
-5. **Verification ladder**, strongest available label first:
-    - the program's task oracle, propagated to inner calls whose results led
-      to a verified program result;
-    - typed return checks and refinement types;
-    - agreement among the k teacher samples, with the agreement rate stored as
-      label confidence;
-    - a judge, for free-text results, stored as the weakest label source.
-6. **On-policy corrections.** After every training round, the student runs
-   with its current stacks. At each student-visited turn boundary the teacher
-   continues from the student's state, and that turn becomes a target.
-   Turn-level targets work across the Qwen, LFM and Mellum tokenizers.
-   Correction rounds repeat until held success stops improving.
-7. **Splits.** The existing connected-component selector assigns development,
-   confirmation and held sets per program. Held inputs are never shown to the
-   input synthesiser or the teachers' prompts.
+### 4.1 Split before expansion
 
-Each record carries: lambda ID, context ID, source hash, interface hash, input
-provenance, label source and confidence, teacher identity, split, and the
-student stack it was collected under (for on-policy rows). Records stay valid
-across base-model changes; they are the durable asset.
+Partition root invocations by connected source/world components before input
+synthesis, trajectory sampling, inner-call extraction or student correction.
+Every derived row inherits its root's partition and lineage. Extend the existing
+selector rather than independently splitting each lambda's rows.
 
-**Lambda identity.** Named functions use their path. Inline `nl` call sites get
-a stable ID from the compiler's plan for the call: enclosing function, ordinal
-among its `nl` calls, declared parameters and return type. The instruction-text
-hash is kept separately for staleness (§8).
+| Partition | Permitted use |
+| --- | --- |
+| Training | Gradient updates, input synthesis seeds, family discovery and distillation |
+| Development | Teacher calibration, stopping, ranks/penalties, gates, placement and student/default selection |
+| Confirmation | Evaluate a selected candidate; record selection history if its feedback guides further work |
+| Protected held/test | Report a predeclared candidate and ablations; never select configurations or generate training repairs |
+
+Confirmation used repeatedly for decisions is adaptive validation, not an
+untouched test. Keep protected held data outside all tuning, family and base-SFT
+inputs. If held failure details are used for repairs, retire that set as a clean
+final estimate and use new protected components for the next such estimate;
+retain the original protection/provenance records.
+
+Enforce component separation globally across programs, families and distillation,
+including duplicate tasks, source variants and synthetic descendants. For
+unseen-program transfer, exclude the entire evaluation program and related
+source/world components from family training, clustering and base distillation.
+An isolated evaluator may query a teacher on held inputs for the teacher arm;
+those prompts, answers and traces never enter the training/generation pipeline.
+
+### 4.2 Whole-program collection and teacher routing
+
+1. Import real root invocation traces with source/world and provenance tags.
+   Synthesize additional root inputs from training-only signatures, examples
+   and context; do not invent inner arguments from signatures alone.
+2. Run the real runtime with a teacher executor. Capture every inner invocation,
+   bound definition/context, arguments, captures, tool interactions and outcome.
+   Replay side effects against a captured world or sandbox so multiple samples
+   do not repeat real writes or see different external state unnoticed.
+3. Sample `k` complete trajectories for captured calls, preserving all model
+   turns, rendered prompts, tool results, return/stop decisions and graph edges.
+   Record `k`, decoding settings and failed attempts, including useful repair
+   or preference examples; do not label failure traces as positive targets.
+4. Calibrate Qwen3.6-35B, Luna and Bunny integrations on common development cases,
+   but only execute actors authorized by the current owner instructions and
+   available deployment. The 2026-10-26 instructions resume Luna generation;
+   they do not implicitly resume paused CoreWeave services or authorize every
+   other external provider. Preserve each actor's exact original identity.
+5. Choose a teacher on the measured quality/cost frontier with a declared minimum
+   task-quality requirement. Include retries, verification, input/output tokens
+   and elapsed compute in cost. Recalibrate on actor/runtime changes; a cheap
+   weak teacher must not win solely through a success-per-token ratio.
+
+For the current operating configuration, the owner calls for six supervised
+parallel Luna generation workers, separate from engineering helpers. Integrate
+with that supervisor-managed pool; a program build must not launch a duplicate
+pool. Worker concurrency remains operational configuration, not a fixed property
+of the learning algorithm.
+
+### 4.3 Verification evidence, not automatic credit assignment
+
+Store separate evidence fields instead of collapsing all checks into one
+"verified" flag.
+
+| Evidence | What it establishes | Training treatment |
+| --- | --- | --- |
+| Direct task oracle/local semantic contract | Correctness under that oracle's declared coverage | Highest-confidence positive target when it passes |
+| Successful enclosing program | Association with a successful trajectory | Weak inner-call attribution unless a local check or controlled replay verifies the call |
+| Type/refinement checks | The specific structural/property constraints tested | Necessary validity evidence; not general task correctness |
+| Teacher agreement | Consensus among sampled answers | Weak evidence; record dependence and disagreement |
+| Free-text judge | That judge's assessment | Calibrate on development oracle cases; retain judge/version/rubric |
+
+A correct final answer does not prove every intermediate result was correct;
+agreement can repeat a shared mistake. Direct contradictory evidence overrides
+consensus. Confidence weights and abstention are calibrated on development data,
+with separate counts/results for oracle-backed and weakly labelled rows.
+
+### 4.4 On-policy correction and durable records
+
+After each training round, run the current student on training roots. At each
+visited turn boundary, ask an authorized teacher to repair or continue the
+serialized student-visible prefix in the same captured world. Retain the whole
+trajectory and distinguish the student's mistaken prefix from the corrected
+target. Reverify the continuation and downstream result. Mix admitted repairs
+with earlier usable data and select further correction rounds on development
+performance, never held performance.
+
+Cross-tokenizer transfer is through text/tool semantics, rendered and tokenized
+for each student. It is not token-index alignment or transfer of the teacher's
+KV. Preserve native communication graphs with model-specific producer/consumer
+state and actual occurrence bindings; do not detach a producer when training
+its downstream consumer.
+
+Each record includes root invocation/component IDs, binding and site IDs,
+source/interface/semantic-context hashes, captures/world/service receipts,
+full trajectory and graph, real/synthetic ancestry, split receipt, verifier
+evidence, teacher checkpoint/tokenizer/runtime, decoding settings and collection
+policy. On-policy rows also record exact student checkpoint, requested/effective
+stack, prefix and correction round. Record actual admitted and trained exposure
+separately from capture or registration.
+
+Raw text/world evidence is durable across base changes. Rendered tokens, native
+states and correction distributions have compatibility/provenance requirements;
+revalidate/rerender them rather than declaring every derived artifact universal.
+Interface changes invalidate admission, not the existence of useful source data.
+
+**Site identity.** Named definitions use a package-relative definition ID.
+Inline sites use compiler-persisted IDs, with an optional author ID and structural
+matching on edits. Instruction text is a separate digest. An ordinal alone is
+not stable when another `nl` call is inserted. Ambiguous matches receive new IDs
+or an explicit migration map; never silently attach another site's adapter.
 
 ## 5. Training
 
-### 5.1 Joint objective
+### 5.1 Joint objective and updates
 
-One joint run trains all of a program's adapters at once. Each example
-activates exactly the adapters on its lambda's path plus its family adapters,
-so the tree adapter sees every example, a folder adapter sees its subtree, and
-a lambda adapter sees only its own calls.
+One logical program training run updates all its tree/folder/lambda adapters
+and family gates jointly, with published family tensors frozen. Every example
+activates its own bound path. A complete native graph retains the actor at each
+invocation and gradients through actual producer/consumer dependencies.
 
-Turn-level cross-entropy on verified teacher turns, weighted by label
-confidence, plus an L2 penalty on each adapter's delta that grows with depth:
+For trajectory `i`, let `z[i,t]` be student-tokenized tokens, `h[i,t]` the rendered
+prefix/graph state, and `b[i,t]` the declared role/mask weight. Model turns and
+return/stop decisions have primary weight; prompt/input/tool text has the lower
+auxiliary weight required by the shared recipe. Padding, unavailable targets
+and rejected positive targets have zero weight. Normalize by positive token
+weight so long trajectories do not silently dominate; reject rows with no
+positive target weight. Assign losses to actual recorded turn/graph occurrences
+so a producer used by several consumers is not accidentally counted repeatedly.
 
-```latex
-L = \sum_{i} w_i \, \mathrm{CE}_i\Big(W_0 + \sum_{f \in F(i)} \alpha_f B_f A_f + \sum_{n \in \mathrm{path}(i)} s_n B_n A_n\Big) + \sum_{n} \lambda_{d(n)} \lVert B_n A_n \rVert_F^2
+```text
+ell_i = - sum_t b[i,t] log p_W(z[i,t] | h[i,t]) / sum_t b[i,t]
+L = mean_lambda mean_{i in lambda}(w_i ell_i)
+    + sum_n lambda_depth(n) sum_m q_m ||D[n,m]||_F^2
+    + tau mean_lambda sum_{f in F(lambda)} a[lambda,f]
 ```
 
-d(n) is a node's depth, λ increases with depth, F(i) is the lambda's family
-set and α its learned mixing scales. A behaviour that several lambdas share is
-cheaper to learn once in a shallow adapter than many times in deep ones, so
-shared structure migrates up the tree. Per-lambda sampling is balanced, so a
-high-volume lambda cannot dominate the shared levels.
+Here `w_i` is the calibrated evidence weight and `q_m` is a fixed, recorded
+matrix-size normalization (initially inverse element count). Family gates are
+nonnegative (§5.4). Balance lambdas in the training sampler; separately evaluate
+both macro program success and the observed production input mix. Keep trajectory
+sampling and correction-round weights explicit to avoid counting `k` correlated
+teacher samples as `k` independent invocations.
 
-### 5.2 Placement
+Depth-weighted L2 encourages economical sharing; it does **not** identify a
+unique decomposition or prove behavior migrates upward. Parent and child deltas
+can substitute for one another. Establish sharing through refitted ablations,
+placement and transfer results, not a penalty interpretation alone.
 
-After the joint run, each node is ablated (scale 0) on the development split,
-deepest first. A node keeps its adapter when removing it costs more than the
-placement threshold in program-level success per kilobyte, measured together
-with serving throughput (§7). Removed nodes are folded away and the remaining
-adapters are re-fitted briefly. Authors can pin a node to force or forbid an
-adapter.
+Use the existing native FP32-master/optimizer and continuation mechanisms.
+Accumulate all active-node/gate gradients against one immutable parameter
+snapshot before applying the logical update; do not update a parent midway
+through a graph. Check zero-adapter equivalence, active/inactive gradient routing,
+actual parameter changes and resume equivalence. Persist optimizer/RNG,
+sampling/exposure cursors and dependency identities for resumable jobs.
 
-The threshold has a global default and a per-program override in the program
-manifest. The default is fitted across all tuned programs to maximise held
-success per unit of serving cost.
+### 5.2 Placement and subtree discovery
 
-**Subtree discovery.** Placement also proposes new tree roots: when a folder's
-adapter carries most of its subtree's gain and its siblings' adapters do not
-overlap with it, the folder is promoted to a tree root with its own rank-8
-adapter. Authors can mark tree roots explicitly as well.
+Use development data and a fixed serving workload. Record allowable task-success
+loss, latency/memory envelope, cost weights and author pins in the manifest.
+Prefer the lowest measured serving/storage cost among candidates within that
+quality envelope; also report the full success/cost frontier.
 
-### 5.3 Model placement and parameterisation
+Start with deepest-first ablations, then test interacting node/level groups where
+single-node results are ambiguous. This order is a search heuristic, not an
+additive attribution theorem. Refit remaining adapters after proposed removals
+and remeasure the complete candidate against the unpruned stack using paired
+root invocations. Include uncertainty; an underpowered ablation is not evidence
+that a node is useless. Removing a node zeros it; folding its delta into another
+node is a separate rank/mapping change that must be verified.
 
-Adapters cover all layers of each student. On LFM2.5 that is all 16 layers:
-attention projections, the convolution blocks' input and output projections,
-and the MLPs. On Mellum it is attention, shared and expert MLP matrices.
+Fit global defaults across training/development programs only, with per-program
+overrides. Serving cost includes exported-stack duplication, active rank,
+resident memory, load/eviction and batching costs (§7), not just source adapter
+kilobytes. A shared source adapter can still be duplicated in every export.
 
-Training uses the native `nnt1` coefficient path, restricted to top-r singular
-subspaces, so every adapter converts exactly to a standard LoRA. The trainer
-also implements free LoRA factors; the rank sweep (§5.6) selects per level
-which parameterisation each student uses.
+Propose a subtree root when residual errors or measured ablations suggest useful
+local sharing. Promote it, allocate its declared rank, refit and compare the
+result under the same workload. Factor overlap alone is not a behavioral test.
+Honor explicit tree roots and shared-stack pins throughout.
 
-### 5.4 Family mixing
+### 5.3 Target matrices, parameterization and exact export
 
-Family mixing scales α are leaves in the same joint run. They are initialised
-from tag membership (1 for tagged families, 0 otherwise) and from clustering
-similarity, and trained with an L1 penalty, so a lambda keeps only the
-families that help it.
+Enumerate targets from each pinned model and record names, shapes, expert axes,
+orientation, dtype and backend mapping. LFM2.5-350M has 16 configured layers;
+cover attention, convolution-block **input/output projections**, and MLP
+matrices. Mellum covers attention plus shared and expert MLP matrices. A
+convolution kernel/state tensor is not an ordinary linear projection. Preserve
+the native target inventory's protected embeddings/output/interface/control
+parameters unless a separately declared recipe explicitly changes that scope.
 
-### 5.5 Family training across programs
+Implement both parameterizations through the shared trainer:
 
-1. Collect lambda adapters and datasets across all tuned programs.
-2. Cluster lambda adapters by delta similarity (cosine over stacked factors)
-   and merge with frontmatter tags into family assignments.
-3. Train each family adapter on the union of its members' data.
-4. Re-fit each member program's tree with the family adapters frozen beneath
-   it and the mixing scales trainable.
+| Parameterization | Delta for one matrix | Export |
+| --- | --- | --- |
+| Native frozen subspace | `U_r C V_r^T`, with FP32 `r x r` core | `B = U_r C`, `A = V_r^T` |
+| Free LoRA factors | `(alpha_lora/r) B A` | Fold the declared scaling into an exported factor |
 
-This runs on a schedule and after every batch of newly tuned programs.
+For native subspaces, compute/store one canonical maximum-rank basis per base
+matrix and use exact leading slices. If all stack members use nested slices of
+that same basis, their sum is `U_R (sum_j s_j pad_R(C_j)) V_R^T`, with rank at
+most `R = max_j r_j`, not the sum of ranks. Verify shared basis IDs/slices;
+independent SVD calls are not a sufficient nesting contract. Store/report basis
+bytes separately from the small coefficient cores.
 
-### 5.6 Rank and penalty sweep
+For free or unrelated bases, concatenate `B_export = [s_1 B_1 ... s_k B_k]`
+and `A_export = [A_1; ...; A_k]`, including per-adapter LoRA scaling exactly once.
+Use unit export scaling or an equivalent documented config. Mixed target
+inventories require explicit zero contributions and per-module ranks. Apply the
+same rule per expert with a verified packed/unpacked and sharding map.
 
-A standing sweep over ranks per level, depth penalties and parameterisations
-runs on a rotating sample of programs. It includes the capacity measurement:
-flat per-lambda LoRA and full per-lambda fine-tuning at 8, 32, 128 and 512
-verified examples, against untuned LFM, untuned Mellum and the teacher. Its
-results set the defaults used by `natlang tune`, and they decide per program
-which student is the default executor. Where full fine-tuning also stays far
-below the teacher, `natlang tune` reports the lambda as a decomposition
-candidate, with its failure categories, to the program-improver workflow.
+Free factors start with one factor zero and the other nonzero, so the initial
+delta is zero without killing both gradients. The rank sweep compares capacity,
+parameter count and cost of both forms: a frozen top-singular subspace is a
+restriction on direction, not merely a cheaper equivalent of free LoRA.
 
-### 5.7 Distillation into the base
+### 5.4 Family gates
 
-At every base-model training round, outputs of the best adapter stacks across
-all tuned programs join the base SFT mix, together with the verified datasets.
-A better base shrinks every adapter, and programs that were never tuned improve
-too. After a base update all adapters are rebuilt (§8).
+Use per-binding gates `a[lambda,f]`, not one global scale per family. Initialize
+tagged memberships at 1 and cluster candidates from calibrated similarity;
+project gates into `[0, a_max]` (initial `a_max = 1`) and apply the L1 term in
+§5.1. Zero is an exact removable membership. Dev-selected gate bounds and
+thresholds are recorded; absent families are not silently eligible for updates.
 
-## 6. Runtime
+Published family tensors and their normalization/amplitude convention are frozen
+while program adapters and gates train. During a family update, memberships and
+their training weights are fixed; publish a new immutable family version before
+refitting program gates. Never jointly leave an unconstrained family amplitude
+and its gates free: shrinking a gate while inflating its factors would defeat
+the intended sparsity penalty. Record a canonical weight-space norm/scale for
+each published family; raw-factor normalization is not invariant.
 
-**Binding.** Adapters are data items in contexts, like `.nz` files. A folder's
-adapter lives in that folder; a lambda's adapter sits next to its `.nl` file or,
-for inline sites, in the enclosing folder under the call-site ID. A
-program-level manifest, `natlang.adapters.json`, lists every adapter with its
-node, level, scale, family memberships and mixing scales, base hash and build
-receipt. Adding or replacing an adapter produces a new context revision, so
-promotion and rollback are rebinding.
+Concretely, use `||D_f||_q = sqrt(sum_m q_m ||D[f,m]||_F^2)` and fix its nonzero
+amplitude `rho_f` from a training-only seed fit. Hold `rho_f` fixed during ensuing
+family/gate alternation, normalizing updated family directions to that amplitude;
+changing it is an explicit development-selected recipe change. A near-zero
+family is absent until a useful nonzero fit exists. This convention works for
+both coefficient cores and free factors without choosing a raw-factor gauge.
 
-**Stack resolution.** For each call the runtime computes the ordered stack:
-families with their scales, then tree, folders and lambda. The stack ID is a
-hash of the ordered adapter IDs and scales. The resolved stack replaces any
-inherited one; an explicit `withNativeAdapters` scope appends on top of it.
-Every trace records the stack ID a call ran with.
+### 5.5 Cross-program family learning
 
-**Degradation.** A missing, stale or wrong-base adapter is skipped and logged,
-and the call runs on the rest of its stack. A call never fails because an
-adapter is unavailable.
+1. Collect training-only member data and same-base adapter deltas, with context,
+   label quality and exposure receipts. Start with author tags when learned
+   families are not yet available; run discovery again as data accumulates.
+2. Cluster using normalized **effective deltas** or behavioral signatures on
+   training/development probes. Cosine over stacked raw factors is invalid:
+   `BA = (BQ)(Q^-1 A)` permits different factors for the same delta. Low-rank
+   Gram products can calculate delta similarities without dense expansion.
+3. Merge tag and discovered proposals with explicit membership/version records.
+   Train each family on its members' data against the frozen base, with private
+   program/folder/lambda residuals disabled and membership weights fixed. This
+   lets a new family learn behavior already present in private adapters instead
+   of adding a second copy on top of a fully fitted stack. Use balanced
+   program/lambda sampling and the shared trainer; record any other fixed family
+   contributions in the training actor.
+4. Publish a versioned family, then refit each affected program's adapters and
+   gates with the new family frozen. Compare members and non-members for
+   negative transfer; preserve the previous coherent release for rollback.
 
-**Native states across boundaries.** A native state written under one stack and
-read under another is re-encoded from its text at the boundary, as the
-serving path already requires for adapted KV. Lambdas that pass native states
-to each other can be pinned to share one stack; placement honours that pin.
+Run after newly tuned program batches and on a configured schedule. Never
+cluster incompatible bases or compare LFM and Mellum tensor factors directly.
+Keep held-program transfer data outside family discovery as well as gradients.
 
-## 7. Serving
+### 5.6 Rank, penalty and capacity sweep
 
-**Export.** Each distinct stack is exported as one LoRA: factors concatenate
-in rank, with scales folded into B. Stacks are precomputed per lambda at build
-time, so servers load only standard LoRAs.
+Sweep ranks, target coverage, depth penalties, gate settings and parameterization
+on a rotating training/development sample. Include flat per-lambda LoRA and full
+per-lambda fine-tuning at 8, 32, 128 and 512 verified root-derived examples, plus
+the full-data point where available. Deduplicate related trajectories; report
+independent root/component counts, not only turn counts.
 
-| Server | Work |
+Compare untuned LFM, untuned Mellum and the teacher reference. Record actual
+trainable parameters, tokens/exposures, updates, tuning trials, seeds and compute;
+use declared comparable training budgets or label differences. Match inference
+constraints and measure actual cost, since tokens differ across tokenizers.
+Use repeat runs for close/noisy decisions. Select defaults/student on development
+data and evaluate the selected candidate on confirmation/protected sets.
+
+If full fine-tuning also trails the teacher, first check data, rendering, gradients,
+optimizer state and inference parity. Report remaining lambda failure categories
+to the program-improver as decomposition candidates; a weak run alone does not
+establish an intrinsic capacity limit.
+
+### 5.7 Distillation into each base
+
+At each base-training round, add admitted, verified training-split outputs from
+selected stacks and the durable datasets to that student's shared production
+SFT recipe. Reverify stack-generated targets, deduplicate and balance sources;
+preserve existing native graph and full-trajectory obligations. Do not admit
+development, confirmation or protected evaluation examples through this loop.
+
+Measure untuned-base task success on unseen programs, retention on existing
+tasks, and adapter size/cost after rebuilding. Base improvement need not shrink
+every adapter. Rebuild all weight adapters against the new exact base and
+requalify native-state compatibility; never carry old tensor coordinates forward
+merely because architecture and tokenizer names are unchanged.
+
+## 6. Runtime contracts
+
+### Binding, publication and scopes
+
+Adapters are immutable data items in contexts. Folder adapters reside in their
+folders; named-lambda adapters beside their definitions; inline adapters under
+their site IDs. `natlang.adapters.json` is the versioned binding manifest with
+scope ancestry, family versions/gates, source/data/build receipts, target maps,
+export hashes and fallback bindings. Generated records are implementation data,
+not new model-visible prompt content by default.
+
+Prepare and verify artifacts before atomically publishing the complete manifest
+and context binding. Pin one release/base for a top-level invocation, including
+its inner calls; in-flight work completes on that release. Rollback selects the
+previous coherent release rather than mutating an adapter under an existing ID.
+
+Maintain separate lexical and explicit experiment scopes. At a call boundary:
+
+1. Resolve the callee's binding and its family/tree/folder/lambda stack.
+2. Replace the caller's lexical stack with that stack.
+3. Append the explicit `withNativeAdapters` scopes in deterministic nesting order.
+4. Validate compatibility and snapshot the effective stack for all turns of that
+   call. Async siblings and post-`await` continuations cannot mutate each other.
+
+The browser gets the same semantics through its runtime scope mechanism; do
+not assume Node's AsyncLocalStorage is available there. Publish the scoping
+change and recovery advice in the spec, authoring/integration skills and API
+migration entry when implementation changes those semantics.
+
+### Effective identity, degradation and caches
+
+Canonical stack identity covers exact base/checkpoint, tokenizer/embedding
+identity, target-map/parameterization version, ordered artifact hashes and finite
+canonical scales. Extend the existing native effective-identity contract. An
+execution identity additionally binds backend, quantization/layout and rendering
+semantics where these affect outputs or state compatibility.
+
+Record **requested and effective** stack IDs, resolved release and skipped
+artifacts/reasons. An unavailable, stale or incompatible adapter triggers the
+manifest's declared fallback. Dropping a parent also drops children that require
+that parent version unless that reduced stack has been explicitly validated.
+Do not assemble an arbitrary mixture of individually loadable residuals.
+
+Ordinary availability fallback can reach the compatible base executor and is
+marked degraded; it is never reported as success of the requested tuned stack.
+Evaluation/export-validation uses strict resolution so missing artifacts cannot
+produce misleading benchmark results. Invalid state imports or absent compatible
+execution paths remain explicit errors, not silently altered semantics.
+
+Call-result, prefix/KV and hybrid-state caches include effective actor identity,
+relevant source/context, rendered tokens, position/layout, explicit imported-state
+receipts and decoding/world inputs as applicable. Never reuse a cached result or
+implicit KV entry merely because the source lambda or requested stack matches.
+Test cold/warm and concurrent reuse, base changes, eviction and rollback.
+
+### Native communication versus implicit cache reuse
+
+Preserve the existing distinction:
+
+| Boundary | Rule |
 | --- | --- |
-| Native reference server | Training and gradient sessions; per-call stacks through the existing adapter scope |
-| vLLM | Load exported stacks; route requests by stack ID; batched multi-LoRA for rollouts and production |
-| llama.cpp fork | Group concurrent requests by stack ID; add batched multi-LoRA kernels (SGMV-style) as an upstreamable patch; GGUF LoRA export for every stack |
-| Browser (wllama) | Load exported stacks through the fork's LoRA path; store them in OPFS beside the model |
+| Ordinary prefix/KV/hybrid cache reuse | Require compatible effective actor and layout/positions; a stack change invalidates that reuse |
+| Explicit native communication across adapters | Use the existing declared `same-base-adapter-state` mode, exact immutable base, source/consumer bindings, state ID, positions, layout and consumption receipt |
+| Different base/model/tokenizer | Use the declared text reconstruction or learned semantic adaptation path with its own provenance/qualification; raw state is not interchangeable |
 
-**Throughput accounting.** Every serving benchmark records batch
-fragmentation by stack ID. The placement threshold (§5.2) is fitted against
-these measurements.
+Explicit same-base communication may have different producer and consumer
+adapter stacks. Preserve producer and every consumer occurrence in captured
+graphs and backpropagate through their real dependencies. Shared-stack pins
+remain an optimization, not a requirement that erases valid explicit imports.
+
+Text reconstruction is a separately measured path using retained text/context;
+it is not guaranteed to reproduce the original KV or LFM convolution state.
+Do not silently replace a native communication edge with text or claim that a
+LoRA-capable server already implements native-state import/export and gradients.
+
+## 7. Serving and export
+
+Export every distinct static effective stack using §5.3 as safetensors/standard
+LoRA and GGUF. Record the exact base, module/expert mapping, scaling, actual
+exported rank, exporter version and artifact digest. Deduplicate identical
+effective stacks. Explicit experimental stacks are exported/cached on demand
+under the same identity contract rather than misusing a precomputed lambda ID.
+
+| Server | Required work |
+| --- | --- |
+| Native reference | Joint gradient sessions and per-call actor bindings; whole-graph/state reference |
+| vLLM | Route exported stacks by unique IDs; configure ranks/residency; batch multiple LoRAs; implement required target/native-state gaps |
+| llama.cpp fork | GGUF mapping; request grouping; batched multi-LoRA kernels with verified sequence isolation, written for upstreaming |
+| wllama | Fork-compatible exports and binding scopes; OPFS artifact storage; measured loading, eviction and browser memory behavior |
+
+Maintain a tested capability matrix for **each student x backend x target class
+x dtype/quantization x state mode**. Upstream architecture-level LoRA support
+does not prove coverage of this repository's native weights, all LFM projections,
+Mellum expert layouts or graph/state operations. Missing coverage is explicit
+implementation work; never silently omit tensors, truncate ranks or claim a
+backend complete using the reference server in its place. Browser measurements
+state the hardware/model size actually exercised.
+
+Verify dense-delta algebra first, then reference/exported forward logits and
+greedy/tool decisions, then cached decoding and full programs. Set and record
+dtype/backend tolerances before comparison, including the native path's rounded
+weight arithmetic versus an unmerged LoRA kernel. Test each target type,
+multi-adapter scales, variable ranks and mixed-stack batches. An SVD compression
+of an export is approximate and needs a new artifact/measurement; exact
+concatenation or common-basis summation does not.
+
+**Cost accounting:** report unique source cores/factors and basis bytes,
+materialized export bytes, CPU/GPU/OPFS residency, active ranks, load/eviction
+time, adapter and prefix-cache hits, prefill/decode throughput, p50/p95 program
+latency and fragmentation by stack ID. Benchmark observed request mixtures and
+concurrency with both warm and cold caches. Include text/state conversion and
+fallback frequency. Placement uses these measurements, not an assumption that
+rank or source-file bytes alone predict serving cost.
 
 ## 8. Lifecycle and `natlang tune`
 
-Adapters are build products. `natlang tune <program>` produces them from
-datasets, and any change to their inputs marks them stale.
+### Dependency graph and build keys
 
-**Build key.** Each adapter's receipt records the base checkpoint hash, the
-lambda's instruction-text hash, its interface hash (signature, captures,
-callable context items), the dataset receipt, and the hashes of the adapters
-above it in the stack.
+Adapters are build products of immutable source/data/configuration snapshots.
+Keep separate keys for dataset admission/rendering, trained artifacts, exports
+and deployed bindings so an exporter change need not regenerate teacher data.
 
-| Change | Effect |
+A training receipt covers base checkpoint/architecture/tokenizer/embedding,
+semantic source and context dependencies, binding/site-ID schema, target map,
+dataset/split/verifier receipts, family versions/gates, parent artifacts,
+parameterization/basis, optimizer/seed/recipe and training-policy versions.
+Joint-run outputs share one input snapshot and run receipt; exports then bind
+the exact final stack plus exporter/backend/quantization configuration.
+
+Avoid a content-hash cycle: semantic source/context digests exclude generated
+adapter payloads and manifests. Hash source/data/configuration first, then
+trained artifacts, then stack exports, then the published context/release.
+Do not hash a generated adapter back into its own training input or make
+jointly trained parent/child output hashes depend recursively on each other.
+
+Track reverse dependencies: shared adapters depend on their contributing lambda
+data/semantics; residual descendants depend on the shared versions used in fit.
+
+| Change | Invalidation/rebuild |
 | --- | --- |
-| Instruction text of one lambda | That adapter is stale; the call runs on its parent stack while an incremental build retrains it warm-started from the stale one |
-| Signature, captures or callable items | That lambda's adapter and dataset are dropped; data is regenerated and the adapter rebuilt |
-| A folder adds or removes lambdas | Folder adapter stays valid; a joint re-fit of that subtree is scheduled |
-| A family or tree adapter is retrained | Every adapter below it is re-fitted with the new one frozen |
-| Base checkpoint | Every adapter is rebuilt from stored datasets |
+| Lambda instruction text | Revalidate its rows; mark its artifact and shared ancestors trained on those semantics dirty, then follow residual dependents |
+| Signature, captures, used data/tool contract or callable context | Invalidate affected row admission/bindings; retain raw evidence; regenerate/reverify/rerender as needed |
+| Add/remove/move a lambda or change scope ancestry | Recompute bindings and the affected shared-training population; invalidate affected ancestors and residual dependents |
+| Retrain family/tree/folder or change a family gate | Rebuild dependent stacks; refit residuals whose trained parent composition changed |
+| Append admitted data | Update data receipts and schedule affected fitting; existing published release remains immutable |
+| Change base/checkpoint/tokenizer | Revalidate/render data and rebuild all affected adapters; requalify state transport |
+| Change export format/backend/quantization | Re-export and repeat backend parity; retrain only when the target/math contract changes |
 
-**Incremental builds.** A changed lambda retrains only its own adapter, with
-everything above it frozen. A full joint re-fit runs on a schedule and after a
-configured number of incremental builds.
+Distinguish binary compatibility, semantic freshness and measured quality. A
+folder adapter trained on removed/changed descendants is not automatically
+fresh. An edit may invalidate siblings through a shared ancestor; incremental
+cost is the dependency closure, not necessarily one lambda.
 
-**Commands.**
+### Incremental execution and commands
 
-- `natlang tune <program>`: full pipeline (capture, teachers, verification,
-  joint training, placement, export, manifest).
-- `natlang tune <program> --incremental`: rebuild stale adapters only.
-- `natlang tune <program> --watch`: incremental rebuilds in the background
-  while an author edits.
-- `natlang tune --families`: cross-program family clustering and training.
-- `natlang tune --report <program>`: held results, per-level ablation, adapter
-  bytes and throughput.
+Incremental builds may first fit a leaf against explicitly pinned frozen parents
+as a fast **candidate**, then complete the affected shared refit. The candidate
+records which older semantics those parents saw and is not advertised as a
+fully refreshed joint build. Warm-start compatible weights; preserve optimizer
+state only when its exact continuation contract remains valid, otherwise record
+the new optimizer history. Re-evaluate the actual fallback and candidate stacks.
 
-**Provenance.** Each receipt names its teachers, dataset split receipts,
-placement decision and evaluation results, so a regression bisects to one
-adapter.
+Jobs are resumable and idempotent by input receipt. Watch mode coalesces edits,
+isolates in-progress builds, and compares the source/release revision before
+publication so an older job cannot overwrite a newer result. Full joint refits
+run on a configured schedule and after a configured number of incremental builds.
+
+- `natlang tune <program>`: capture, teachers, evidence, joint training, placement,
+  export, validation and manifest publication for the declared targets.
+- `natlang tune <program> --incremental`: rebuild the stale dependency closure.
+- `natlang tune <program> --watch`: resumable background incremental builds.
+- `natlang tune --families`: versioned cross-program discovery/training/refits.
+- `natlang tune --report <program>`: exact candidate/release results, ablations,
+  provenance, costs, degradation and incomplete required work.
+
+Reports distinguish collected, admitted, trained, exported and actually served
+artifacts. Receipts identify all affected dependencies so a regression can be
+bisected without pretending one adapter necessarily has sole causal credit.
 
 ## 9. Evaluation
 
-Evaluation runs continuously alongside implementation and on every build. It
-reports; it never blocks work.
+Evaluation runs alongside implementation and on builds. It informs repairs and
+publication choices, without cancelling required work. Protect data according
+to §4.1 and report a versioned candidate, workload and measurement protocol.
 
-**Arms**, all on the same held sets at matched inference cost:
-
-| Arm | What it shows |
+| Arm | Question |
 | --- | --- |
-| Untuned student (LFM, Mellum) | Baseline |
-| One adapter per program | Value of per-lambda structure |
-| Flat per-lambda adapters | Value of sharing |
-| Hierarchy before placement | The joint objective |
-| Hierarchy after placement | Success kept per byte and per unit throughput |
-| Hierarchy with families | Cross-program sharing |
-| Base after distillation, untuned | Transfer to programs that are never tuned |
-| Teacher | Ceiling |
+| Untuned LFM and Mellum | What is each exact base's task performance? |
+| One program adapter | Does per-lambda structure help at comparable capacity/cost? |
+| Flat per-lambda adapters | Does sharing help relative to independent specialization? |
+| Hierarchy before placement | What does joint adaptation achieve? |
+| Hierarchy after placement | What quality/cost tradeoff does removal/refitting achieve? |
+| Hierarchy with families | What is the within-program gain and unseen-program transfer? |
+| Distilled base without program adapters | Does transfer persist for programs excluded from distillation? |
+| Teacher reference | What does the selected teacher achieve under the stated tool/input constraints? |
 
-**Per-level ablation.** Leave-one-level-out (scale 0) on held sets, per
-program, in every report.
+The teacher is a reference, not a guaranteed ceiling. Report both native cost
+and comparable cost envelopes rather than claiming exact cost matching where
+there is no comparable operating point. Fix tool access, root cases, decoding
+policy, retry rules and concurrency per comparison; report total program cost,
+including inner calls and errors. State training-budget differences separately.
 
-**Reported per program:** held success on real and synthetic inputs
-separately, per-level contributions, adapter bytes, serving throughput and
-batch fragmentation, teacher tokens spent, build time.
+Use paired root cases and confidence intervals clustered by independent
+source/world component; turns and correlated teacher samples are not independent
+trials. Report counts, seeds/repeats and unresolved uncertainty. Leave-one-level-
+out results are conditional effects in a particular stack, not contributions
+that can be summed. Select ablations on development data and predeclare those
+reported on held sets.
 
-**Regression checks.** Programs without adapters stay byte-identical in
-behaviour. Programs with adapters are re-evaluated after every base update and
-every family retrain.
+**Per program:** task success and failure categories; real/synthetic and
+oracle-backed/weak-evidence strata; macro and traffic-weighted results; all
+source/export/resident bytes; latency/throughput/cache/fragmentation; teacher
+tokens and cost; training/build time and compute; actual exposure; requested
+versus effective stacks and fallback rates. Quantify family negative transfer
+and the fraction of calls whose low data counts prevent a reliable estimate.
 
-## 10. Decisions on former open questions
+**Regression contract:** with the same base, backend, inputs, seed and runtime,
+disabling all adapters preserves the untuned execution path and its numerical
+tolerance. A base update is expected to change outputs and requires task
+regression/transfer evaluation; do not promise byte-identical behavior across
+base revisions. Re-evaluate affected programs after shared/family updates and
+verify that unrelated bindings retain their own identities and behavior.
+
+## 10. Decisions and their limits
 
 | Question | Decision |
 | --- | --- |
-| Can a callee inherit its caller's adapters? | No. Stacks follow the lexical path; explicit `withNativeAdapters` appends for experiments |
-| Can a lambda belong to several families? | Yes, with learned mixing scales under an L1 penalty (§5.4) |
-| Placement threshold per program or global? | Both: a fitted global default plus a per-program override (§5.2) |
-| Who marks tree roots? | Both: authors mark them, and placement discovers and promotes them (§5.2) |
-| Which teacher serves which family? | Calibrated routing by verified success per cost, recomputed on teacher changes (§4) |
-| Which student? | Both LFM2.5-350M and Mellum are implemented; the sweep picks each program's default executor (§5.6) |
+| Caller adapter inheritance? | No lexical inheritance; explicit experiment scopes append separately |
+| Shared DAG node's parent? | Binding manifest declares scope ancestry; aliases keep the callee's binding |
+| Multi-family membership? | Yes: static per-binding, bounded learned gates over frozen family versions |
+| Placement policy? | Development-selected global defaults and per-program cost/quality overrides |
+| Tree-root discovery? | Author declarations plus measured, refitted placement proposals |
+| Which teacher? | Authorized actors calibrated on development quality and complete cost |
+| Which student? | Implement both; select the program executor on development measurements |
+| Exact exported rank? | Common nested bases: at most maximum rank; general factors: at most rank sum |
+| Native state across stacks? | Explicit same-base communication with receipts; no implicit cache reuse |
+| Missing/stale artifact? | Declared dependency-consistent fallback, visible effective identity; strict evaluation |
 
-## 11. Work list
+## 11. Required work list
 
-All items are required and are implemented in this effort.
+All items remain in this effort. Implement in dependency order while advancing
+independent work; a checked item needs its artifact and actual evidence.
 
 **Data**
 
-- [ ] Real-input import from invocation traces, with provenance tags
-- [ ] Program-level input synthesiser seeded from real examples and types
-- [ ] Call capture of every inner call into lambda-level records
-- [ ] Teacher trajectory runner with k samples and full turn retention
-- [ ] Teacher calibration and per-family routing
-- [ ] Verification ladder with oracle propagation and label confidence
-- [ ] On-policy correction rounds at student-visited turn boundaries
-- [ ] Split assignment through the connected-component selector
-- [ ] Stable inline call-site IDs in the compiler plan
+- [ ] Real-root import and training-only root synthesis with source/world lineage
+- [ ] Global split enforcement through expansion, family learning and distillation
+- [ ] Complete inner-call/trajectory capture and replayable service worlds
+- [ ] Authorized teacher integrations, calibration and routing with full costs
+- [ ] Integrate the current six-worker Luna generation instruction with its
+  supervisor, separately from engineering helpers and without duplicate pools
+- [ ] Direct/weak evidence schema, confidence calibration and disagreement handling
+- [ ] Student-prefix corrections with verified continuations and graph provenance
+- [ ] Stable binding/inline-site IDs and explicit edit/rename migration
 
 **Training**
 
-- [ ] Path-routed joint trainer on `nnt1` with depth-weighted penalties and balanced sampling
-- [ ] Free LoRA factor parameterisation beside top-r subspaces
-- [ ] Family mixing scales as trainable leaves with L1 penalty
-- [ ] Placement pass: deepest-first ablation, fold, re-fit, author pins, subtree discovery
-- [ ] Cross-program clustering and family adapter training
-- [ ] Rank, penalty and capacity sweep with automatic default updates
-- [ ] Stack outputs and datasets added to the base SFT mix at each base round
-- [ ] LFM2.5-350M and Mellum support throughout
+- [ ] Path-routed joint trainer, balanced trajectory objective and depth penalties
+- [ ] Shared nested `nnt1` bases/cores and free-factor parameterization
+- [ ] Immutable-snapshot gradient updates, actual-update checks and exact continuation
+- [ ] Per-binding family gates with fixed family scale/version contracts
+- [ ] Placement, interactions, refits, pins and subtree discovery using measured costs
+- [ ] Invariant family clustering, balanced training and dependent program refits
+- [ ] Rank/penalty/capacity sweeps and development-only defaults/student selection
+- [ ] Verified stack/data distillation into each base followed by adapter rebuilds
+- [ ] LFM and Mellum coverage with shared recipes and declared architecture differences
 
-**Runtime**
+**Runtime and serving**
 
-- [ ] Adapters as context items and the `natlang.adapters.json` manifest
-- [ ] Path-resolved stack resolution replacing inherited scopes
-- [ ] Stack IDs in every trace
-- [ ] Graceful degradation for missing, stale and wrong-base adapters
-- [ ] Native-state re-encoding at stack boundaries and shared-stack pins
+- [ ] Manifest-bound lexical scopes over context DAGs, `.in()` and library imports
+- [ ] Explicit experiment scopes and async/browser isolation
+- [ ] Atomic release pinning, requested/effective identities and coherent fallback
+- [ ] Call/prefix/KV/hybrid cache compatibility and rollback behavior
+- [ ] Existing explicit same-base native imports, complete occurrence receipts/gradients
+- [ ] Safetensors/GGUF export with verified scale/rank/module/expert mappings
+- [ ] vLLM multi-LoRA routing, residency and required native-state integration
+- [ ] llama.cpp grouping and batched multi-LoRA kernels, written for upstreaming
+- [ ] wllama/OPFS loading, binding scopes and hardware-specific measurements
+- [ ] Full capability matrix and algebra/numerical/cached/program parity evidence
+- [ ] Cost/fragmentation/cache measurements feeding placement
 
-**Serving**
+**Lifecycle, evaluation and documentation**
 
-- [ ] Stack export to standard LoRA (safetensors and GGUF)
-- [ ] vLLM multi-LoRA routing by stack ID
-- [ ] llama.cpp request grouping by stack ID
-- [ ] llama.cpp batched multi-LoRA kernels, written for upstreaming
-- [ ] wllama stack loading and OPFS storage
-- [ ] Throughput and fragmentation benchmarks feeding placement
-
-**Lifecycle and tooling**
-
-- [ ] Build receipts and staleness rules from §8
-- [ ] `natlang tune` with `--incremental`, `--watch`, `--families` and `--report`
-- [ ] Scheduled full re-fits and post-base-update rebuilds
-
-**Evaluation, tests and documentation**
-
-- [ ] Continuous evaluation arms and reports from §9
-- [ ] Conformance cases: stack resolution, lexical scoping, DAG-shared folders, degradation, export parity against the reference server
-- [ ] Spec text for adapter context items and scoping in `spec/SPEC.md`
-- [ ] Author guide for `natlang tune`, pins and manifests
-- [ ] API migration entry under `training/api-migrations/` for the scoping change
+- [ ] Acyclic build keys, reverse dependencies and invalidation matrix
+- [ ] All five CLI modes, resumable jobs, watch races and scheduled full refits
+- [ ] Every evaluation arm, paired uncertainty and held-program transfer reports
+- [ ] Conformance: DAG aliases/rebinding, nested/parallel scopes, exact exports,
+  wrong-base rejection, explicit cross-stack states/gradients, degraded cache
+  identities, ancestor invalidation, interrupted publication and rollback
+- [ ] Spec, author guide, authoring/integration skill updates and API migration
+- [ ] Live measurement of actual model-facing changes under repository rules
 
 ## 12. Risks and responses
 
 | Risk | Response |
 | --- | --- |
-| Synthetic inputs differ from real ones | Call capture from real program runs; real and synthetic results reported separately; synthesiser seeded from real examples |
-| Weak verifiers distil teacher mistakes | Verification ladder with confidence weights; oracle-backed rows weighted highest; on-policy rounds correct drift |
-| Too few examples for a lambda | The hierarchy pools data upward; placement removes lambda adapters that do not pay |
-| Capacity limits on some lambdas | The sweep detects them; `natlang tune` routes the program to Mellum or reports the lambda for decomposition |
-| Many adapters fragment serving batches | Throughput-fitted placement; grouping and batched kernels |
-| Frequent edits keep adapters stale | Parent-stack fallback; fast incremental and watch builds |
-| Native states change meaning across stacks | Re-encoding at boundaries; shared-stack pins |
+| Synthetic distribution shift or correlated duplicates | Real-root capture, component lineage and stratified program results |
+| False inner-call credit or correlated teacher errors | Separate evidence, direct checks and controlled replay where useful |
+| Adaptive evaluation leaks into training | Global split receipts; development decisions; protected final estimates |
+| Sharing exists only in the regularizer's interpretation | Refitted ablations, flat/program baselines and transfer measurements |
+| Frozen subspaces restrict capacity | Free-factor/full-tuning controls with matched exposure and cost disclosure |
+| Factor/gate ambiguity or invalid clustering | Frozen family scale/version, bounded gates and effective-delta similarity |
+| Export rank, tensor coverage or rounding differs | Explicit target inventory and backend-specific parity before claiming support |
+| Source bytes look small but exports fragment serving | Measure duplication, residency, ranks, cache/load costs and request mixtures |
+| Frequent edits invalidate shared ancestors | Dependency-closure builds, explicit provisional candidates and coherent fallback |
+| Native state or cached results cross actor identities | Exact effective identity; explicit communication mode and occurrence receipts |
+| Distillation loses specialized behavior | Verified source mix, per-task retention/transfer measurement and rebuilt adapters |
 
 ## 13. Definition of done
 
-- Every program in the production task packets can be tuned with one
-  `natlang tune` command on both students.
-- Tuned programs run with path-resolved stacks on the reference server, vLLM,
-  the llama.cpp fork and wllama, with export parity checked.
-- Families exist and are trained across programs; distillation into the base
-  has run at least once and all adapters have been rebuilt on the new base.
-- Evaluation reports for every tuned program include all arms, per-level
-  ablations, throughput and costs, with results stated as measured.
-- Spec, guides, conformance cases and the API migration entry are merged.
+- Every production-packet program can be tuned from its permitted training data
+  with one `natlang tune` command on both students; protected rows stay excluded.
+- Bound tuned programs execute on the reference server, vLLM, the llama.cpp fork
+  and wllama with declared target/state coverage, measured parity and actual
+  hardware evidence. Required backend gaps remain visible until implemented.
+- Families have been learned across programs for each student, and each base
+  has completed at least one distillation/rebuild cycle with measured outcomes.
+- Reports include all arms, real/synthetic success, evidence strata, uncertainty,
+  ablations, unseen-program transfer, source/export/resident cost and throughput.
+  Report negative results honestly; implementation completion is not proof of lift.
+- Incremental edits, shared-parent changes, missing artifacts, concurrent calls,
+  interrupted builds and rollback satisfy the conformance contracts.
+- Spec, guides, skills, API migration and implementation decomposition are merged;
+  actual model-facing changes have their required live measurements.
+
+## 14. External integration references
+
+Consult the pinned implementation as well as these upstream contracts. Versions
+and exact capabilities used by a build belong in its receipt.
+
+- [LFM2.5-350M model configuration](https://huggingface.co/LiquidAI/LFM2.5-350M/blob/main/config.json): layer and architecture inventory.
+- [vLLM supported models](https://docs.vllm.ai/en/latest/models/supported_models/): architecture-level support, not proof of every target/state mode.
+- [vLLM LoRA serving](https://docs.vllm.ai/en/latest/features/lora/): request IDs, loading and rank/residency configuration.
+- [PEFT LoRA guide](https://huggingface.co/docs/peft/developer_guides/lora): factor/scaling, target-module and expert-parameter integration.
