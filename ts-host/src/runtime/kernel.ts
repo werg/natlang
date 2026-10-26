@@ -27,6 +27,7 @@ import { runTiered, type TierAttempt } from '../calls/tiers.js';
 import { specializerOutput } from '../calls/compilations.js';
 import type { DefinitionIdentity } from '../calls/types.js';
 import { loadSkills, memorySkillSource } from '../skills/registry.js';
+import { weightBindingFor } from '../adaptation/weights/binding.js';
 import { readSkillDocument, renderScopeDeclarations, renderSkillListing, scopeBindings } from '../skills/disclosure.js';
 
 export type { CaptureCell };
@@ -423,10 +424,14 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
   definition = { ...definition, codebase: view.tree(definition.codebase as Record<string, import('./loader.js').ItemRecord>) };
   const owner = definition.programId ?? (descriptor ? view.program?.id : frame.programOwner);
   const eligibleGuidance = !!owner && (owner === view.program?.id || !!view.program?.guidanceScope.importedPrograms.includes(owner));
-  const adaptationProvenance = view.program ? { ...view.provenance(definition.id, owner),
+  // The callee's own lexical weight stack replaces the caller's (plans/HIERARCHICAL_LORA_TUNING.md §6).
+  const weights = weightBindingFor(task.weights, owner)?.resolve(definition.id, descriptor?.key, definition.contextId ?? null);
+  const adaptationProvenance = view.program || weights ? { ...(view.program ? view.provenance(definition.id, owner) : {}),
+    ...(weights ? { weights: { release: weights.release, binding: weights.binding, status: weights.status, identity: weights.identity,
+      requested: weights.requested, effective: weights.effective, skipped: weights.skipped, ...(weights.reason ? { reason: weights.reason } : {}) } } : {}),
     effectiveInstructionHash: hexDigest(options.instructions ?? definition.body), originalInstructionHash: descriptor?.baselineHash ?? null,
-    guidanceComponent: eligibleGuidance ? view.program.components.find(component => component.kind === 'program.guidance')?.key ?? null : null,
-    guidanceApplied: eligibleGuidance, evaluation: task.runtime.options.evaluation ?? null } : undefined;
+    guidanceComponent: eligibleGuidance ? view.program?.components.find(component => component.kind === 'program.guidance')?.key ?? null : null,
+    ...(view.program ? { guidanceApplied: eligibleGuidance, evaluation: task.runtime.options.evaluation ?? null } : {}) } : undefined;
   const adHoc = !!(options.manifest?.inline || options.manifest?.delegate) && options.manifest?.adHoc !== false;
   const fileRoot = !adHoc && definition.source?.endsWith('.nl');
   const adHocDepth = fileRoot ? 0 : (frame.adHocDepth ?? 0) + (adHoc ? 1 : 0);
@@ -565,6 +570,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
   const childFrame: Frame = { task, chain: [...frame.chain, callIdentity], parentCallId: callId, adHocDepth, programOwner: owner,
     signal: frame.signal, abort: frame.abort,
     ...(invocationSkillFiles ? { skillFiles: invocationSkillFiles } : {}),
+    ...(weights ? { weights } : {}),
     ...(frame.scopedHandleReplacements ? { scopedHandleReplacements: frame.scopedHandleReplacements } : {}),
     ...(options.manifest?.inline ? { inline: true } : {}) };
   const model = task.model(definition.model);
@@ -646,7 +652,9 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
         revision: model.revision ?? null } : undefined, dialect: readerDialect(task.runtime.options.neuralese),
         rewrites: task.runtime.options.rewrites?.enabledRules() ?? [], rootContext: frame.parentCallId ? undefined : definition.contextId,
         seeds: { policy: task.runtime.options.seed ?? null } }),
-      ...(definition.source ? { definition_source: definition.source } : {}), ...(options.manifest ?? {}),
+      ...(definition.source ? { definition_source: definition.source } : {}),
+      ...(weights ? { weight_stack: { release: weights.release, binding: weights.binding, identity: weights.identity, status: weights.status,
+        effective: weights.effective.map(({ id, scale }) => ({ id, scale })) } } : {}), ...(options.manifest ?? {}),
       ...(options.manifest?.inline_instruction_site ? { inline_instruction_site: {
         ...(options.manifest.inline_instruction_site as Record<string, unknown>),
         realized_instruction: options.instructions ?? definition.body } } : {}) } });

@@ -61,8 +61,19 @@ export function setNativeAdapterSource(next: () => readonly NativeAdapterBinding
 /** Install where active stored native-state context comes from. */
 export function setNativeStateSource(next: () => readonly NativeStateBinding[] | undefined): void { nativeStateSource = next; }
 
-/** Native coefficient actors active in the current asynchronous context. */
-export function activeNativeAdapters(): readonly NativeAdapterBinding[] { return nativeAdapterSource() ?? []; }
+let lexicalAdapterSource: () => readonly NativeAdapterBinding[] | undefined = () => undefined;
+
+/** Install where the current invocation's lexical (tuned) weight stack comes from (the runtime does this). */
+export function setLexicalNativeAdapterSource(next: () => readonly NativeAdapterBinding[] | undefined): void { lexicalAdapterSource = next; }
+
+/**
+ * Native coefficient actors active in the current asynchronous context: the invocation's lexical stack resolved from
+ * its own binding, then explicit `withNativeAdapters` scopes in nesting order (plans/HIERARCHICAL_LORA_TUNING.md §6).
+ */
+export function activeNativeAdapters(): readonly NativeAdapterBinding[] {
+  const lexical = lexicalAdapterSource(), explicit = nativeAdapterSource();
+  return lexical?.length ? explicit?.length ? [...lexical, ...explicit] : lexical : explicit ?? [];
+}
 
 /** Stored positional state active in the current asynchronous context. */
 export function activeNativeStates(): readonly NativeStateBinding[] { return nativeStateSource() ?? []; }

@@ -59,6 +59,8 @@ export { compileVirtualProject, virtualProjectFiles, virtualSourceFiles, loadVir
 export type { VirtualProject, CompiledProject } from './runtime/virtual-project.js';
 
 export * from './adaptation/index.js';
+export { storeRelease, readRelease, readActive, activateRelease, rollbackRelease, currentManifest, tuneStatus, activeWeights,
+  tuneDirectory, tuneJobLock, ACTIVE_SCHEMA, type ActiveRecord, type TuneStatus } from './adaptation/weights/release.js';
 
 export * from './skills/index.js';
 export { directorySkillSource } from './skills/node.js';
