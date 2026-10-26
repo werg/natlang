@@ -58,6 +58,7 @@ export interface GlueMsgLoadReq {
     lora_paths?: string[] | undefined;
     lora_scales?: number[] | undefined;
     lora_init_without_apply?: boolean | undefined;
+    native_state_paths?: string[] | undefined;
     spec_draft_model?: string | undefined;
     spec_draft_ngl?: number | undefined;
     spec_draft_n_max?: number | undefined;
@@ -136,6 +137,15 @@ export interface GlueMsgSystemoneRes {
     success: boolean;
     req_id: number;
 }
+export interface GlueMsgScoreReq {
+    _name: "scor_req";
+    data_json: string;
+}
+export interface GlueMsgScoreRes {
+    _name: "scor_res";
+    success: boolean;
+    req_id: number;
+}
 export interface GlueMsgGetResultReq {
     _name: "gres_req";
     req_id: number;
@@ -164,4 +174,4 @@ export interface GlueMsgTestBackendOpsRes {
     retcode: number;
     success: boolean;
 }
-export type GlueMsg = GlueMsgError | GlueMsgLoadReq | GlueMsgLoadRes | GlueMsgCompletionReq | GlueMsgCompletionRes | GlueMsgEmbeddingReq | GlueMsgEmbeddingRes | GlueMsgRerankReq | GlueMsgRerankRes | GlueMsgSystemoneReq | GlueMsgSystemoneRes | GlueMsgGetResultReq | GlueMsgGetResultRes | GlueMsgCancelReq | GlueMsgCancelRes | GlueMsgTestBackendOpsReq | GlueMsgTestBackendOpsRes;
+export type GlueMsg = GlueMsgError | GlueMsgLoadReq | GlueMsgLoadRes | GlueMsgCompletionReq | GlueMsgCompletionRes | GlueMsgEmbeddingReq | GlueMsgEmbeddingRes | GlueMsgRerankReq | GlueMsgRerankRes | GlueMsgSystemoneReq | GlueMsgSystemoneRes | GlueMsgScoreReq | GlueMsgScoreRes | GlueMsgGetResultReq | GlueMsgGetResultRes | GlueMsgCancelReq | GlueMsgCancelRes | GlueMsgTestBackendOpsReq | GlueMsgTestBackendOpsRes;

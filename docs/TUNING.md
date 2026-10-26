@@ -211,7 +211,7 @@ reference server applies the stack through its exact native adapter path.
 | llama.cpp fork (`--lora-per-sequence`, `--native-state`) | Same | Yes with `tune.softStates: true` (LFM2): exact native state spans | Yes, per-sequence scales, verified bitwise isolation |
 | Native reference server (`neuraleseServer: true` profile) | Exact native coefficient artifacts | Yes | Per request |
 | vLLM (`vllm: true` profile) | One whole-stack PEFT LoRA per distinct effective stack, loaded at activation | No: soft-state bindings run degraded | Yes (multi-LoRA batching) |
-| wllama in the page (vendored build, `loadBrowserRelease`) | Per-node GGUF LoRA, per-request scales | No: soft-state bindings run degraded | No (serialized per stack) |
+| wllama in the page (vendored build of the fork, `loadBrowserRelease`) | Per-node GGUF LoRA, per-request scales | Yes: the fork's native state spans (`nativeStates`) | No (serialized per stack) |
 
 **Soft states on the managed llama.cpp fork.** A soft state is native KV/hybrid state, not text: per position, the
 attention keys (after the key norm, before RoPE) and values, and LFM2's short-convolution gated inputs. With
@@ -225,11 +225,20 @@ soft states (`weights-unavailable`); in `run`/`call` such releases run their sof
 soft states are not exportable yet.
 
 In a page, `loadBrowserRelease(releaseUrl, { baseGgufSha256 })` fetches `natlang.adapters.json` and its GGUF exports,
-checks each file's sha256 (program residuals and family versions; files are cached in the origin-private file system by content hash and re-verified on every load, `removeCachedModelFiles` drops replaced ones), and returns the adapters for `loadBrowserLocalModel(source, { loraAdapters })` and the
+checks each file's sha256 (program residuals and family versions; files are cached in the origin-private file system by content hash and re-verified on every load, `removeCachedModelFiles` drops replaced ones), and returns the adapters for `loadBrowserLocalModel(source, { loraAdapters, nativeStates })` and the
 binding for `createNatlangRuntime({ weights })`. Adapters load at scale 0; each request lists every adapter with its
-own call's scales. A release exported for another base GGUF runs untuned. This needs the patched wllama vendored in
-`ts-host/vendor/wllama` (LoRA blobs, and a server that never reuses a prompt computed with other adapters; see its
-`provenance.json`); a stock wllama build refuses the adapters with `weights-unavailable`.
+own call's scales. Soft states load as native state spans when every one has a state export for the page's base GGUF
+(otherwise their bindings run degraded), and requests carry them as `native_state` parts, as on the managed fork. A
+release exported for another base GGUF runs untuned. This needs the patched wllama vendored in `ts-host/vendor/wllama`
+(LoRA and state blobs, the fork's native state spans and decision readout, and a server that never reuses a prompt
+computed with other adapters; see its `provenance.json`); a stock wllama build refuses the adapters or states with
+`weights-unavailable`.
+
+**Decision readout on llama.cpp.** The fork scores replies at `POST /v1/natlang/score` (each continuation as the
+closed final assistant message, summed over its tokens after the rendered prompt; the continuations of an item share
+the prompt). The managed session sends every decision readout there, with each call's own LoRA scales; the in-page
+model does the same through wllama (`model.turn.decide`). The upstream runtime has no such endpoint and no
+`prompt_logprobs`, so readouts there stay unscored (`decision-unsupported`).
 
 The managed runtime accepts the fork's server only once the fork is rebased onto a build the runtime check accepts
 (currently `>= b10964`).

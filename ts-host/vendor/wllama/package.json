@@ -1,7 +1,7 @@
 {
   "name": "@wllama/wllama",
-  "version": "3.12.0-natlang.1",
-  "description": "wllama 3.12.0 (master 3bb2a46) with LoRA blob loading and adapter-safe prompt caching (provenance.json)",
+  "version": "3.12.0-natlang.2",
+  "description": "wllama 3.12.0 (master 3bb2a46) with LoRA blob loading, adapter-safe prompt caching, natlang native state spans and decision readout (provenance.json)",
   "type": "module",
   "main": "esm/index.js",
   "types": "esm/index.d.ts",

@@ -1,0 +1,438 @@
+diff --git a/cpp/glue.hpp b/cpp/glue.hpp
+index 9b338ce..30ef32d 100644
+--- a/cpp/glue.hpp
++++ b/cpp/glue.hpp
+@@ -545,6 +545,7 @@ struct glue_msg_load_req
+   GLUE_FIELD_NULLABLE(arr_str, lora_paths)
+   GLUE_FIELD_NULLABLE(arr_float, lora_scales)
+   GLUE_FIELD_NULLABLE(bool, lora_init_without_apply)
++  GLUE_FIELD_NULLABLE(arr_str, native_state_paths)
+   GLUE_FIELD_NULLABLE(str, spec_draft_model)
+   GLUE_FIELD_NULLABLE(int, spec_draft_ngl)
+   GLUE_FIELD_NULLABLE(int, spec_draft_n_max)
+@@ -652,6 +653,21 @@ struct glue_msg_systemone_res
+ 
+ /////////
+ 
++struct glue_msg_score_req
++{
++  GLUE_HANDLER("scor_req")
++  GLUE_FIELD(str, data_json)
++};
++
++struct glue_msg_score_res
++{
++  GLUE_HANDLER("scor_res")
++  GLUE_FIELD(bool, success)
++  GLUE_FIELD(int, req_id)
++};
++
++/////////
++
+ struct glue_msg_get_result_req
+ {
+   GLUE_HANDLER("gres_req")
+diff --git a/cpp/wllama-context.h b/cpp/wllama-context.h
+index cae07f6..4d4a8bf 100644
+--- a/cpp/wllama-context.h
++++ b/cpp/wllama-context.h
+@@ -276,6 +276,7 @@ struct wllama_context
+     int32_t n_tokens = 0;
+   };
+   std::unordered_map<int, decision_request> decision_reqs; // keyed by req_id
++  std::unordered_map<int, server_score_batch> score_reqs;    // keyed by req_id
+ 
+   struct console
+   {
+@@ -554,6 +555,8 @@ struct wllama_context
+     }
+     if (req.lora_init_without_apply.not_null())
+       params.lora_init_without_apply = req.lora_init_without_apply.value;
++    if (req.native_state_paths.not_null())
++      params.native_states = req.native_state_paths.arr;
+ 
+     // speculative decoding
+     if (req.spec_draft_model.not_null())
+@@ -819,6 +822,33 @@ struct wllama_context
+     return res;
+   }
+ 
++  glue_msg_score_res action_score(const char *req_raw)
++  {
++    PARSE_REQ(glue_msg_score_req);
++    glue_msg_score_res res;
++
++    json body = json::parse(req.data_json.value);
++    auto rd = std::make_unique<server_response_reader>(ctx_server.get_response_reader());
++    server_score_batch batch;
++    auto tasks = server_score_tasks(*meta, vocab, params, body, *rd, batch);
++    size_t n_results = 0;
++    for (const auto &item : batch.results)
++    {
++      n_results += item.size();
++    }
++    batch.log_probs.resize(n_results);
++    batch.n_scored.resize(n_results);
++    if (!tasks.empty())
++    {
++      rd->post_tasks(std::move(tasks));
++    }
++
++    res.success.value = true;
++    res.req_id.value = register_reader(std::move(rd));
++    score_reqs.emplace(res.req_id.value, std::move(batch));
++    return res;
++  }
++
+   json format_decision_response(const decision_request &dreq)
+   {
+     json answers = json::object();
+@@ -859,6 +889,19 @@ struct wllama_context
+     }
+     server_response_reader &rd = *it->second;
+ 
++    auto score_it = score_reqs.find(req.req_id.value);
++    if (score_it != score_reqs.end() && !rd.has_next())
++    {
++      // every item failed to render, so there was no task
++      res.success.value = true;
++      res.has_more.value = false;
++      res.data_json.value = server_score_response(score_it->second).dump();
++      res.is_error.value = false;
++      readers.erase(it);
++      score_reqs.erase(score_it);
++      return res;
++    }
++
+     run_loop();
+     auto [result, is_error] = get_next_result(rd);
+     // the task queue can be empty while the request is still streaming, keep polling until we get the stop result
+@@ -900,6 +943,22 @@ struct wllama_context
+           data_json = format_decision_response(dreq);
+         }
+       }
++      else if (auto *sres = dynamic_cast<server_task_result_score *>(result.get()))
++      {
++        // only send the scores once all the tasks are done
++        auto &batch = score_reqs.at(req.req_id.value);
++        GGML_ASSERT(sres->index < batch.log_probs.size());
++        batch.log_probs[sres->index] = sres->log_prob;
++        batch.n_scored[sres->index] = sres->n_scored;
++        if (has_more)
++        {
++          result = nullptr;
++        }
++        else
++        {
++          data_json = server_score_response(batch);
++        }
++      }
+       else
+       {
+         // completion result
+@@ -916,6 +975,7 @@ struct wllama_context
+     {
+       readers.erase(it);
+       decision_reqs.erase(req.req_id.value);
++      score_reqs.erase(req.req_id.value);
+     }
+     return res;
+   }
+@@ -931,6 +991,7 @@ struct wllama_context
+       // reader destructor posts cancel tasks; run one loop iteration to release the slot right away
+       readers.erase(it);
+       decision_reqs.erase(req.req_id.value);
++      score_reqs.erase(req.req_id.value);
+       run_loop();
+     }
+ 
+@@ -1035,14 +1096,28 @@ void server_queue::cleanup_pending_task(int id_target)
+       queue_tasks_deferred.end());
+ }
+ 
++// a task that finds no free slot waits here until a slot is released
+ void server_queue::defer(server_task &&task)
+ {
+-  assert(false && "should not be called in wllama");
++  queue_tasks_deferred.push_back(std::move(task));
+ }
+ 
+ void server_queue::pop_deferred_task(int id_slot)
+ {
+-  // no deferred task in wllama, so this is a no-op
++  if (queue_tasks_deferred.empty())
++  {
++    return;
++  }
++  // prefer a task that asks for this slot, otherwise the oldest one
++  auto it = std::find_if(queue_tasks_deferred.begin(), queue_tasks_deferred.end(),
++                         [id_slot](const server_task &task)
++                         { return task.id_slot == id_slot; });
++  if (it == queue_tasks_deferred.end())
++  {
++    it = queue_tasks_deferred.begin();
++  }
++  queue_tasks.emplace_front(std::move(*it));
++  queue_tasks_deferred.erase(it);
+ }
+ 
+ void server_queue::wait_until_no_sleep()
+diff --git a/cpp/wllama.cpp b/cpp/wllama.cpp
+index b499be1..a00f43a 100644
+--- a/cpp/wllama.cpp
++++ b/cpp/wllama.cpp
+@@ -114,6 +114,7 @@ extern "C" const char *wllama_action(const char *name, const char *req_raw)
+     WLLAMA_ACTION(embedding)
+     WLLAMA_ACTION(rerank)
+     WLLAMA_ACTION(systemone)
++    WLLAMA_ACTION(score)
+     WLLAMA_ACTION(get_result)
+     WLLAMA_ACTION(cancel)
+     WLLAMA_ACTION(test_backend_ops)
+@@ -131,8 +132,14 @@ extern "C" const char *wllama_action(const char *name, const char *req_raw)
+   }
+   catch (std::exception &e)
+   {
++    // the caller gets the error message instead of a response
+     printStr(GGML_LOG_LEVEL_ERROR, e.what());
+-    return nullptr;
++    glue_msg_error err;
++    err.message.value = e.what();
++    err.handler.serialize(output_buffer);
++    uint32_t *output_len = (uint32_t *)req_raw;
++    output_len[0] = output_buffer.data.size();
++    return output_buffer.data.data();
+   }
+ }
+ 
+diff --git a/src/types/oai-compat.ts b/src/types/oai-compat.ts
+index 47bb89f..b3cac37 100644
+--- a/src/types/oai-compat.ts
++++ b/src/types/oai-compat.ts
+@@ -17,10 +17,17 @@ export interface ChatCompletionMessageAudio {
+   data: ArrayBuffer;
+ }
+ 
++// A natlang native state span loaded with the model (`native_states`), consumed at this position
++export interface ChatCompletionMessageNativeState {
++  type: 'native_state';
++  id: string;
++}
++
+ export type ChatCompletionMessageContent =
+   | ChatCompletionMessageText
+   | ChatCompletionMessageImage
+-  | ChatCompletionMessageAudio;
++  | ChatCompletionMessageAudio
++  | ChatCompletionMessageNativeState;
+ 
+ // Tool definitions
+ 
+@@ -61,7 +68,7 @@ export type ChatCompletionToolChoice =
+ 
+ export interface ChatCompletionSystemMessage {
+   role: 'system';
+-  content: string;
++  content: string | ChatCompletionMessageContent[];
+   name?: string;
+ }
+ 
+@@ -403,3 +410,24 @@ export interface SystemOneResponse {
+     output_tokens: number;
+   };
+ }
++
++// natlang decision readout (see llama.cpp server /v1/natlang/score)
++
++export interface NatlangScoreItem {
++  messages: ChatCompletionMessage[];
++  /** Each reply, scored as the closed final assistant message after `messages` */
++  continuations: string[];
++  tools?: any[];
++  /** LoRA adapter scales for this item, as in a completion request */
++  lora?: { id: number; scale: number }[];
++}
++
++export interface NatlangScoreParams {
++  items: NatlangScoreItem[];
++  lora?: { id: number; scale: number }[];
++}
++
++export interface NatlangScoreResponse {
++  /** Per item: the summed log-probability and the number of the reply tokens after the prompt, or why the item failed */
++  results: ({ log_probs: number[]; tokens: number[] } | { error: string })[];
++}
+diff --git a/src/types/types.ts b/src/types/types.ts
+index 7f8fc23..2afaadd 100644
+--- a/src/types/types.ts
++++ b/src/types/types.ts
+@@ -66,6 +66,10 @@ export interface LoadModelParams {
+    */
+   lora_adapters?: { path?: string; blob?: Blob; scale?: number }[];
+   lora_init_without_apply?: boolean;
++  /**
++   * natlang native state spans (GGUF, llama.cpp `common/native-state.h`) loaded with the model, each from a `path` inside the wasm FS or a `blob`. A chat message content part `{ type: 'native_state', id }` consumes the state with that ID.
++   */
++  native_states?: { path?: string; blob?: Blob }[];
+   spec_draft_model?: string;
+   spec_draft_ngl?: number;
+   spec_draft_n_max?: number;
+diff --git a/src/wllama.ts b/src/wllama.ts
+index 8439e92..545e959 100644
+--- a/src/wllama.ts
++++ b/src/wllama.ts
+@@ -22,6 +22,7 @@ import type {
+   GlueMsgEmbeddingRes,
+   GlueMsgRerankRes,
+   GlueMsgSystemoneRes,
++  GlueMsgScoreRes,
+   GlueMsgGetResultRes,
+   GlueMsgLoadRes,
+   GlueMsgTestBackendOpsRes,
+@@ -46,6 +47,8 @@ import type {
+   RerankResponse,
+   SystemOneParams,
+   SystemOneResponse,
++  NatlangScoreParams,
++  NatlangScoreResponse,
+ } from './types/oai-compat';
+ import { LogLevel } from './types/types';
+ import { getHFModelSource, type HuggingFaceParams } from './huggingface';
+@@ -172,8 +175,12 @@ export class Wllama {
+   // The CacheManager and ModelManager are singleton, can be accessed by user
+   public cacheManager: CacheManager;
+   public modelManager: ModelManager;
+-  /** Feature detection: `loraBlobs` means `lora_adapters` accepts GGUF blobs. */
+-  public readonly capabilities = { loraBlobs: true } as const;
++  /** Feature detection: `loraBlobs` means `lora_adapters` accepts GGUF blobs, `nativeStates` means `native_states` loads natlang native state spans, `natlangScore` means `createNatlangScore` is available. */
++  public readonly capabilities = {
++    loraBlobs: true,
++    nativeStates: true,
++    natlangScore: true,
++  } as const;
+ 
+   private compat: WllamaCompat | null = null;
+ 
+@@ -510,24 +517,51 @@ export class Wllama {
+     }
+ 
+     const modelFiles = await prepareBlobs(blobs);
+-    // LoRA blobs are separate files next to the model, never model shards
++    // LoRA and native state blobs are separate files next to the model, never model shards
+     const loraPaths: string[] = [];
+-    const loraFiles: { name: string; blob: Blob }[] = [];
++    const sideFiles: { name: string; blob: Blob }[] = [];
+     for (const [i, adapter] of (params.lora_adapters ?? []).entries()) {
+       if (adapter.blob) {
+         if (adapter.blob.size === 0) {
+-          throw new WllamaError(`LoRA adapter ${i} is an empty Blob`, 'load_error');
++          throw new WllamaError(
++            `LoRA adapter ${i} is an empty Blob`,
++            'load_error'
++          );
+         }
+         const name = `lora-${padDigits(i + 1, 5)}.gguf`;
+-        loraFiles.push({ name, blob: adapter.blob });
++        sideFiles.push({ name, blob: adapter.blob });
+         loraPaths.push(`models/${name}`);
+       } else if (adapter.path) {
+         loraPaths.push(adapter.path);
+       } else {
+-        throw new WllamaError(`LoRA adapter ${i} needs a path or a blob`, 'load_error');
++        throw new WllamaError(
++          `LoRA adapter ${i} needs a path or a blob`,
++          'load_error'
++        );
+       }
+     }
+-    await this.proxy.moduleInit([...modelFiles.all, ...loraFiles]);
++    const statePaths: string[] = [];
++    for (const [i, state] of (params.native_states ?? []).entries()) {
++      if (state.blob) {
++        if (state.blob.size === 0) {
++          throw new WllamaError(
++            `Native state ${i} is an empty Blob`,
++            'load_error'
++          );
++        }
++        const name = `native-state-${padDigits(i + 1, 5)}.gguf`;
++        sideFiles.push({ name, blob: state.blob });
++        statePaths.push(`models/${name}`);
++      } else if (state.path) {
++        statePaths.push(state.path);
++      } else {
++        throw new WllamaError(
++          `Native state ${i} needs a path or a blob`,
++          'load_error'
++        );
++      }
++    }
++    await this.proxy.moduleInit([...modelFiles.all, ...sideFiles]);
+ 
+     // run it
+     this.logger().debug('Calling wllamaStart...');
+@@ -590,6 +624,7 @@ export class Wllama {
+       lora_paths: params.lora_adapters ? loraPaths : undefined,
+       lora_scales: params.lora_adapters?.map((a) => a.scale ?? 1.0),
+       lora_init_without_apply: params.lora_init_without_apply,
++      native_state_paths: params.native_states ? statePaths : undefined,
+       spec_draft_model: params.spec_draft_model,
+       spec_draft_ngl: params.spec_draft_ngl,
+       spec_draft_n_max: params.spec_draft_n_max,
+@@ -777,6 +812,31 @@ export class Wllama {
+     );
+   }
+ 
++  /**
++   * Score candidate replies to chat messages (natlang decision readout): the log-probability of each reply as the closed final assistant message, summed over its tokens after the chat prompt. The replies of an item share the prompt.
++   * @param options The items to score
++   * @returns Per item, the log-probability and token count of each reply, or the error of an item that could not be rendered
++   */
++  async createNatlangScore(
++    options: NatlangScoreParams
++  ): Promise<NatlangScoreResponse> {
++    this.checkModelLoaded();
++
++    const result = await this.proxy.wllamaAction<GlueMsgScoreRes>('score', {
++      _name: 'scor_req',
++      data_json: JSON.stringify(options),
++    });
++
++    if (!result.success) {
++      throw new WllamaError('Model failed to start scoring', 'inference_error');
++    }
++
++    return await this.getSingleResult<NatlangScoreResponse>(
++      result.req_id,
++      'score'
++    );
++  }
++
+   /**
+    * Make chat completion for a given chat messages.
+    * @param options OAI-compatible chat completion options
+@@ -1030,8 +1090,8 @@ export class Wllama {
+       if (Array.isArray(m.content)) {
+         const newContent: typeof m.content = [];
+         for (const c of m.content) {
+-          if (c.type === 'text') {
+-            // no transform for text content
++          if (c.type === 'text' || c.type === 'native_state') {
++            // no transform for text content and native states
+             newContent.push(c);
+           } else {
+             // replace multimodal input with media marker
+diff --git a/src/worker.ts b/src/worker.ts
+index 3cdc7c9..9bfcd50 100644
+--- a/src/worker.ts
++++ b/src/worker.ts
+@@ -221,6 +221,9 @@ export class ProxyToWorker {
+       callbackId: this.taskId++,
+     });
+     const parsedResult = glueDeserialize(result);
++    if (parsedResult._name === 'erro_evt') {
++      throw new WllamaRuntimeError(parsedResult.message, '');
++    }
+     return parsedResult as T;
+   }
+ 

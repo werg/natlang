@@ -11,7 +11,11 @@ export interface ChatCompletionMessageAudio {
     type: 'audio';
     data: ArrayBuffer;
 }
-export type ChatCompletionMessageContent = ChatCompletionMessageText | ChatCompletionMessageImage | ChatCompletionMessageAudio;
+export interface ChatCompletionMessageNativeState {
+    type: 'native_state';
+    id: string;
+}
+export type ChatCompletionMessageContent = ChatCompletionMessageText | ChatCompletionMessageImage | ChatCompletionMessageAudio | ChatCompletionMessageNativeState;
 export interface ChatCompletionToolFunctionParameters {
     type: 'object';
     properties: Record<string, {
@@ -41,7 +45,7 @@ export type ChatCompletionToolChoice = 'none' | 'auto' | 'required' | {
 };
 export interface ChatCompletionSystemMessage {
     role: 'system';
-    content: string;
+    content: string | ChatCompletionMessageContent[];
     name?: string;
 }
 export interface ChatCompletionUserMessage {
@@ -328,4 +332,31 @@ export interface SystemOneResponse {
         input_tokens: number;
         output_tokens: number;
     };
+}
+export interface NatlangScoreItem {
+    messages: ChatCompletionMessage[];
+    /** Each reply, scored as the closed final assistant message after `messages` */
+    continuations: string[];
+    tools?: any[];
+    /** LoRA adapter scales for this item, as in a completion request */
+    lora?: {
+        id: number;
+        scale: number;
+    }[];
+}
+export interface NatlangScoreParams {
+    items: NatlangScoreItem[];
+    lora?: {
+        id: number;
+        scale: number;
+    }[];
+}
+export interface NatlangScoreResponse {
+    /** Per item: the summed log-probability and the number of the reply tokens after the prompt, or why the item failed */
+    results: ({
+        log_probs: number[];
+        tokens: number[];
+    } | {
+        error: string;
+    })[];
 }
