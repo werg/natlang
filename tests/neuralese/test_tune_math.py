@@ -2,7 +2,7 @@ import pytest
 import torch
 
 from natlang_neuralese.tune import TuneMathError
-from natlang_neuralese.tune.bases import BasisSlice, canonical_basis, verify_nested
+from natlang_neuralese.tune.bases import BasisSlice, build_canonical_basis, verify_nested
 from natlang_neuralese.tune.gates import family_norm, gate_l1, normalize_family, project_gates, q_weights
 from natlang_neuralese.tune.objective import depth_penalty, program_loss, total_loss, trajectory_losses
 from natlang_neuralese.tune.parameterization import FreeLoRADelta, SubspaceDelta, dense, init_free, init_subspace
@@ -21,15 +21,15 @@ def core(rank, seed, leading=()):
 
 
 def test_nested_slices_are_views_of_one_canonical_basis():
-    basis = canonical_basis(IDENTITY, 'w', weight((12, 10), 1), 8)
+    basis = build_canonical_basis(IDENTITY, 'w', weight((12, 10), 1), 8)
     left, right = basis.slice(3)
     assert left.data_ptr() == basis.left.data_ptr() and left.shape == (12, 3) and right.shape == (10, 3)
     assert torch.allclose(basis.left.T @ basis.left, torch.eye(8), atol=1e-5)
     with pytest.raises(TuneMathError):
         basis.slice(9)
-    other = canonical_basis(IDENTITY, 'w', weight((12, 10), 2), 8)
+    other = build_canonical_basis(IDENTITY, 'w', weight((12, 10), 2), 8)
     assert other.basis_id == basis.basis_id  # same declared key, different content
-    assert canonical_basis({**IDENTITY, 'checkpoint_sha256': '1'*64}, 'w', weight((12, 10), 1), 8).basis_id != basis.basis_id
+    assert build_canonical_basis({**IDENTITY, 'checkpoint_sha256': '1'*64}, 'w', weight((12, 10), 1), 8).basis_id != basis.basis_id
     with pytest.raises(TuneMathError):
         verify_nested([BasisSlice(basis.basis_id, 2), BasisSlice('nb1:other', 2)], {basis.basis_id: basis})
     forged = type(basis)(basis.basis_id, 'w', 8, other.left, other.right, basis.content_sha256)
@@ -38,7 +38,7 @@ def test_nested_slices_are_views_of_one_canonical_basis():
 
 
 def test_common_basis_sum_is_exact_and_rank_bounded_by_max():
-    basis = canonical_basis(IDENTITY, 'w', weight((16, 14), 3), 8)
+    basis = build_canonical_basis(IDENTITY, 'w', weight((16, 14), 3), 8)
     bases = {basis.basis_id: basis}
     members = [StackMember('family:a', 'family', 0.7, {'w': SubspaceDelta(basis.basis_id, 8, core(8, 4))}),
                StackMember('tree:root', 'tree', 1., {'w': SubspaceDelta(basis.basis_id, 4, core(4, 5))}),
@@ -51,7 +51,7 @@ def test_common_basis_sum_is_exact_and_rank_bounded_by_max():
 
 
 def test_free_and_unrelated_bases_concatenate_with_scaling_once():
-    basis = canonical_basis(IDENTITY, 'w', weight((9, 7), 7), 4)
+    basis = build_canonical_basis(IDENTITY, 'w', weight((9, 7), 7), 4)
     bases = {basis.basis_id: basis}
     free = init_free((9, 7), 3, alpha=6., seed=1)
     free.B = weight((9, 3), 8)
@@ -71,7 +71,7 @@ def test_free_and_unrelated_bases_concatenate_with_scaling_once():
 
 def test_expert_banks_compose_per_expert():
     bank = weight((3, 8, 6), 10)
-    basis = canonical_basis(IDENTITY, 'experts', bank, 4)
+    basis = build_canonical_basis(IDENTITY, 'experts', bank, 4)
     bases = {basis.basis_id: basis}
     members = [StackMember('tree:t', 'tree', 1., {'e': SubspaceDelta(basis.basis_id, 4, core(4, 11, (3,)))}),
                StackMember('lambda:l', 'lambda', 1., {'e': FreeLoRADelta(weight((3, 8, 2), 12), weight((3, 2, 6), 13), 2.)})]
@@ -89,7 +89,7 @@ def test_zero_init_free_lora_has_zero_delta_and_live_b_gradient():
     x = weight((4, 5), 14)
     (x @ (weight((6, 5), 15) + dense(delta)).T).sum().backward()
     assert torch.count_nonzero(delta.B.grad) > 0
-    sub = init_subspace(canonical_basis(IDENTITY, 'w', weight((6, 5), 16), 3), 3)
+    sub = init_subspace(build_canonical_basis(IDENTITY, 'w', weight((6, 5), 16), 3), 3)
     assert sub.core.dtype == torch.float32 and torch.count_nonzero(sub.core) == 0
 
 

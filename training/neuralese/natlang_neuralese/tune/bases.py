@@ -47,7 +47,7 @@ class CanonicalBasis:
         return self
 
 
-def canonical_basis(native_identity, parameter_name, weight, max_rank):
+def build_canonical_basis(native_identity, parameter_name, weight, max_rank):
     """Compute once from the exact base weight in FP32; store FP32."""
     left, right = singular_bases(weight.detach().float(), max_rank)
     return CanonicalBasis(basis_id(native_identity, parameter_name, max_rank, weight.shape), parameter_name, max_rank,

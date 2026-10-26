@@ -71,7 +71,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
     plan, manifest, rows = load_plan(args.plan)
     from ..serve import load_native_engine
-    config = plan['engine']
+    config = plan.get('engine') or {'checkpoint': plan['student']['checkpoint'], **plan['student'].get('engine', {})}
     engine = load_native_engine(config['checkpoint'], device=config.get('device', 'cpu'),
                                 dtype=getattr(torch, config.get('dtype', 'float32')))
     out = Path(args.out)
@@ -83,14 +83,42 @@ def main(argv=None):
     save = lambda: (persist_artifacts(engine, [*trainer.state['node_artifacts'].values(), *trainer.state['optimizer_states'].values()],
                                       out / 'artifacts'), _write(state_path, trainer.state))
     state = json.loads(state_path.read_text()) if state_path.exists() else None
+    from .rows import lower_rows
+    rows = lower_rows(engine, rows, prompt_weight=plan.get('recipe', {}).get('prompt_weight', .1))
     trainer = JointTrainer(engine, manifest, rows, Recipe.from_json(plan.get('recipe', {})), state=state)
     save()
     while trainer.state['step'] < trainer.recipe.steps:
         record = trainer.step()
         save()
         print(json.dumps({'step': record['step'], 'mean_row_loss': sum(record['row_losses']) / len(record['row_losses'])}), flush=True)
-    _write(out / 'result.json', {'schema': 'natlang.tune.build-result/1', 'receipt': trainer.receipt()})
+    fragment = trainer.manifest_fragment()
+    if 'gguf' in plan.get('exports', []):
+        export_nodes(trainer, engine, plan, out, fragment['artifacts'])
+    _write(out / 'result.json', {'schema': 'natlang.tune.build-result/1', **fragment, 'families': [], 'receipt': trainer.receipt()})
     return 0
+
+
+def export_nodes(trainer, engine, plan, out, artifacts):
+    """One GGUF LoRA per scope node, unscaled: llama.cpp sums the loaded residuals of a call's stack with its
+    per-request scales, which equals the exported-stack sum exactly (§5.3). Each export binds the base GGUF."""
+    from ..common.hashing import sha256_file_hex
+    from ..model.native_adapters import target_parameters
+    from .export import export_gguf, export_peft
+    from .stack import stack_factors
+    student = plan['student']
+    if not student.get('hfConfigDir') or not student.get('baseGgufSha256'):
+        raise ValueError('GGUF export needs student.hfConfigDir and student.baseGgufSha256')
+    shapes = {name: tuple(value.shape) for name, value in target_parameters(engine.shared_model).items() if name in trainer.targets}
+    for artifact in artifacts:
+        file = f"exports/{artifact['artifact']}.gguf"
+        target = out / file
+        if not target.exists():
+            members, bases = trainer.node_members(artifact['node'])
+            peft = out / 'exports' / (artifact['artifact'] + '.peft')
+            export_peft(stack_factors(members, bases, shapes), trainer.targets, peft, base_identity=dict(engine.native_identity),
+                        base_model_name_or_path=student['hfConfigDir'], stack_identity=artifact['artifact'])
+            export_gguf(peft, student['hfConfigDir'], target)
+        artifact['exports'] = {'gguf': {'file': file, 'sha256': sha256_file_hex(target), 'baseGgufSha256': student['baseGgufSha256']}}
 
 
 if __name__ == '__main__':

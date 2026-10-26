@@ -130,7 +130,7 @@ export async function tuneProgram(options: TuneOptions): Promise<TuneReport> {
         writeFileSync(rowsPath, trainRows.map(turn => JSON.stringify(turn)).join('\n') + '\n');
         const plan = join(jobDir, 'plan.json');
         writeFileSync(plan, JSON.stringify({ schema: 'natlang.tune-plan/v1', manifest: scaffold, base: student.base, rows: rowsPath,
-          student: { name: student.name, moduleMap: student.moduleMap, ...(student.hfConfigDir ? { hfConfigDir: student.hfConfigDir } : {}),
+          student: { name: student.name, moduleMap: student.moduleMap, checkpoint: student.checkpoint, engine: student.engine ?? {}, ...(student.hfConfigDir ? { hfConfigDir: student.hfConfigDir } : {}),
             ...(student.baseGgufSha256 ? { baseGgufSha256: student.baseGgufSha256 } : {}) },
           exports: options.settings.backend === 'managed-local' ? ['gguf'] : [], recipe: { seed: 0 } }, null, 2));
         await runTrainer(student, plan, out, log);

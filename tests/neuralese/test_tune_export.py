@@ -4,7 +4,7 @@ import pytest
 import torch
 
 from natlang_neuralese.tune import TuneMathError
-from natlang_neuralese.tune.bases import canonical_basis
+from natlang_neuralese.tune.bases import build_canonical_basis
 from natlang_neuralese.tune.export import ModuleTarget, export_peft, load_peft_dense
 from natlang_neuralese.tune.parameterization import FreeLoRADelta, SubspaceDelta
 from natlang_neuralese.tune.stack import StackMember, stack_factors
@@ -17,7 +17,7 @@ def rand(shape, seed):
 
 
 def test_peft_round_trip_reconstructs_stack_deltas(tmp_path):
-    basis = canonical_basis(IDENTITY, 'q', rand((10, 8), 1), 6)
+    basis = build_canonical_basis(IDENTITY, 'q', rand((10, 8), 1), 6)
     bases = {basis.basis_id: basis}
     targets = {'q': (10, 8), 'experts': (2, 6, 5), 'conv_in': (5, 7), 'unused': (3, 3)}
     members = [StackMember('tree:r', 'tree', 1., {'q': SubspaceDelta(basis.basis_id, 6, rand((6, 6), 2))}),

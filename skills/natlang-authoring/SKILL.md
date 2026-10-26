@@ -63,6 +63,10 @@ Use adaptation when the callable contracts and decomposition are sound and the t
 
 Keep search overlays separate from authored source. Load a compatible artifact explicitly, use `adaptation: null` for a baseline task, and revalidate after source or model changes. Read the [adaptation reference](references/adaptation.md) for SDK and CLI examples; use `natlang-integration` when wiring an application host or browser deployment.
 
+## Specialize a student with `natlang tune`
+
+When a program's calls should run on a smaller student, add root examples to `tune.examples.jsonl` (one `{"function", "input", "expected"?, "group"?}` object per line; mark held examples `"protected": true`) and run `natlang tune <program>`. Each call then runs its own definition's adapter stack, never its caller's; call sites, types and instructions stay unchanged. Group examples that share a world so they split together. After editing a definition, run `natlang tune <program> --incremental`; until then the changed definition runs untuned. Recovery: `weights-unavailable` means an adapter is not loaded by the backend (rerun `natlang tune` or restart the process); `weights-incompatible` means the release belongs to another base model (retune); `weights-stale` means a definition changed (`--incremental`). See [docs/TUNING.md](../../docs/TUNING.md).
+
 ## Preserve the execution model
 
 When the host selects semantic execution, await callable-folder module entry

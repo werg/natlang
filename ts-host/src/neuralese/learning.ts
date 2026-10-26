@@ -370,7 +370,9 @@ setNativeStateSource(() => nativeStateScope.getStore());
 /**
  * Run `fn` with weight adapters active: every Neuralese-server turn inside (generation and decision readouts) runs
  * the adapted model, and turns recorded for `grad` replay with the same adapters. Adapters are values: inside
- * `valueAndGrad(f, adapter)` the adapter's coefficients get gradients like any soft value. Nested scopes add up.
+ * `valueAndGrad(f, adapter)` the adapter's coefficients get gradients like any soft value. Nested scopes add up. These
+ * explicit scopes append after the calling invocation's own lexical (tuned) stack (docs/TUNING.md); they are an
+ * experiment scope, separate from a program's release.
  */
 export async function withNativeAdapters<T>(adapters: NativeAdapterUse | readonly NativeAdapterUse[], fn: () => Promise<T> | T): Promise<T> {
   const bindings = (Array.isArray(adapters) ? adapters : [adapters]).map((item: NativeAdapterUse): NativeAdapterBinding => {

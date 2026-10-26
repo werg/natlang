@@ -78,6 +78,10 @@ For native shared-state turns, keep `{type: 'native_state', id}` references stru
 
 Tool-call JSON text is decoded exactly once while building model history. Preserve scalar strings as strings, and treat a nested native-state reference as importable only when it carries the full canonical `nzs1_` ID. If a state ID is incomplete, keep the source argument unchanged and recover the complete ID from the original state receipt before retrying.
 
+## Tuned weight releases
+
+Hosts pass `weights: activeWeights(programRoot, { program })` to `createNatlangRuntime`; each new task pins the release active at its creation, so activation never changes a running task. The model driver must serve the release: the managed llama.cpp session takes the release's GGUF exports through `loraAdapters` and every request carries its own call's stack; other backends report the release `degraded` and run the base. Do not pass adapter IDs or wrap calls to select a stack; resolution is per callee. Use strict `WeightBinding` resolution in evaluation so missing artifacts throw (`weights-unavailable`, `weights-incompatible`, `weights-stale`) instead of producing base results labelled as tuned. See [docs/TUNING.md](../../docs/TUNING.md).
+
 ## Student prompt rendering
 
 Use `promptRendering: "program-header"` in the model profile (or runtime `model`

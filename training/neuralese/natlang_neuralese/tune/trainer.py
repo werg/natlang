@@ -297,11 +297,22 @@ class JointTrainer:
     def stack_members(self, binding_id):
         """The binding's effective stack as `stack.StackMember`s over `bases.CanonicalBasis` views of the native
         basis artifacts, for exact export (`stack.stack_factors`, `export.export_peft`)."""
+        return self._members(self._stack(binding_id))
+
+    def node_members(self, node):
+        """One scope node's residual alone (scale from the manifest), for per-node backend exports that the server
+        sums per request."""
+        import dataclasses
+        members, bases = self._members([('node', node)])
+        # The serving request applies the manifest scale; the export carries the unscaled residual.
+        return [dataclasses.replace(member, scale=1.) for member in members], bases
+
+    def _members(self, items):
         from .bases import CanonicalBasis, tensor_digest
         from .parameterization import FreeLoRADelta, SubspaceDelta
         from .stack import StackMember
         members, bases = [], {}
-        for kind, item in self._stack(binding_id):
+        for kind, item in items:
             if kind == 'family':
                 family = self.families[(item['family'], item['version'])]
                 artifact, node, level = family['artifact'], f'family:{item["family"]}@{item["version"]}', 'family'

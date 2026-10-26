@@ -40,7 +40,7 @@ const program = root => {
   return built.manifest.adaptation;
 };
 const settings = { student: 'lfm', students: {}, teacher: 'teacher', backend: 'managed-local' };
-const student = root => ({ name: 'lfm', base, trainer: [process.execPath, join(root, 'trainer.mjs')], moduleMap: 'lfm2', baseGgufSha256: 'f'.repeat(64) });
+const student = root => ({ name: 'lfm', base, checkpoint: '/unused', trainer: [process.execPath, join(root, 'trainer.mjs')], moduleMap: 'lfm2', baseGgufSha256: 'f'.repeat(64) });
 /** A backend stand-in that serves the release and records which adapters each request carried. */
 function serve(seen) {
   return async ({ manifest }) => {
