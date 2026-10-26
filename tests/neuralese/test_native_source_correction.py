@@ -687,3 +687,34 @@ def test_active_recipe_stage_accepts_only_exact_source_correction_handoff(tmp_pa
     altered = dict(new, held_native_graphs={'path': '/inputs/other-held.json',
         'sha256': 'changed', 'binding': 'held_native_graphs'})
     assert not _source_correction_continuation(old, altered)
+
+
+@pytest.mark.parametrize('relative_ledger', [False, True])
+def test_live_recipe_correction_accepts_proved_held_repair_and_portable_ledgers(tmp_path, relative_ledger):
+    from natlang_neuralese.train.recipe import _source_correction_continuation
+    prior = _receipt('/inputs/old.json', 'old-manifest', ['edge'], ['old-leaf'])
+    current = _receipt('/inputs/new.json', 'new-manifest', ['edge'], ['new-leaf'])
+    old_held = _receipt('/inputs/held.json', 'old-held', ['held'], ['old-held-leaf'])
+    new_held = _receipt('/inputs/held-repaired.json', 'new-held', ['held'], ['new-held-leaf'])
+    proof = _write_proof(tmp_path, prior, current,
+        [_row('edge', {'h':'old'}, {'h':'new'}, 'old-leaf', 'new-leaf', 'corrected')],
+        protected_held={'prior':old_held, 'current':new_held,
+            'rows':[_row('held', {'h':'old'}, {'h':'new'}, 'old-held-leaf', 'new-held-leaf', 'corrected')]})
+    document = json.loads(proof.read_text())
+    if relative_ledger:
+        document['row_bindings_path'] = Path(document['row_bindings_path']).name
+        document['protected_held_correction']['row_bindings_path'] = Path(document['protected_held_correction']['row_bindings_path']).name
+        proof.write_text(json.dumps(document))
+    def ref(source, label):
+        return {'path':source['path'], 'sha256':source['sha256'], 'binding':label}
+    old = {'native_graphs':ref(prior,'train'), 'held_native_graphs':ref(old_held,'held')}
+    new = {'native_graphs':ref(current,'new-train'), 'continued_native_graphs':ref(prior,'prior-train'),
+           'held_native_graphs':ref(new_held,'new-held'), 'continued_held_native_graphs':ref(old_held,'prior-held'),
+           'source_correction':{'path':str(proof),'sha256':_sha(proof),'binding':'correction'}}
+    assert _source_correction_continuation(old,new)
+    bad = copy.deepcopy(new);bad['held_native_graphs']['sha256']='unproved'
+    assert not _source_correction_continuation(old,bad)
+    bad = copy.deepcopy(new);bad['continued_held_native_graphs']['path']='/inputs/unrelated.json'
+    assert not _source_correction_continuation(old,bad)
+    bad = copy.deepcopy(new);bad['unrelated_input']={'path':'/smuggled','sha256':'bad','binding':'other'}
+    assert not _source_correction_continuation(old,bad)

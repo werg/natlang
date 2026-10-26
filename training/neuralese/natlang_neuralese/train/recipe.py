@@ -851,8 +851,7 @@ def _source_correction_continuation(old, new):
     if (role not in new or new.get(role) == old.get(role)
             or not isinstance(old.get('native_graphs'), dict)
             or not isinstance(new.get('native_graphs'), dict)
-            or new.get('continued_native_graphs', {}).get('sha256') != old['native_graphs'].get('sha256')
-            or old.get('held_native_graphs') != new.get('held_native_graphs')):
+            or new.get('continued_native_graphs', {}).get('sha256') != old['native_graphs'].get('sha256')):
         return False
     reference = new[role]
     if not all(reference.get(key) for key in ('path', 'sha256', 'binding')):
@@ -867,10 +866,22 @@ def _source_correction_continuation(old, new):
         return False
     if not ref_matches(proof.get('current_source'), new['native_graphs']):
         return False
-    if (proof.get('row_bindings_path') != dependencies[1]['path']
+    from .native_source_correction import _proof_file, _receipt_matches_with_staged_relocation
+    if (str(_proof_file(path, proof.get('row_bindings_path', ''))) != dependencies[1]['path']
             or proof.get('row_bindings_sha256') != dependencies[1]['sha256']):
         return False
     excluded = {'native_graphs', 'continued_native_graphs', role}
+    held_changed = old.get('held_native_graphs') != new.get('held_native_graphs')
+    if held_changed or 'continued_held_native_graphs' in new:
+        protected = proof.get('protected_held_correction')
+        if (not isinstance(protected, dict)
+                or not _receipt_matches_with_staged_relocation(protected.get('prior_source'),
+                    old.get('held_native_graphs'), proof, path)
+                or not ref_matches(protected.get('current_source'), new.get('held_native_graphs') or {})
+                or not _receipt_matches_with_staged_relocation(protected.get('prior_source'),
+                    new.get('continued_held_native_graphs'), proof, path)):
+            return False
+        excluded |= {'held_native_graphs', 'continued_held_native_graphs'}
     return {key:value for key,value in old.items() if key not in excluded} == {
         key:value for key,value in new.items() if key not in excluded}
 
