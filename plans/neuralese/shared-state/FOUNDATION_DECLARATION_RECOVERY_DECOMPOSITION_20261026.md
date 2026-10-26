@@ -31,3 +31,11 @@ unselected stale declarations are not current recovery dependencies. The recover
 proof retains its directly authenticated historical documents without traversing
 obsolete checkpoint paths mentioned inside those documents. These are shared
 exact custody and durability helpers, not additional training policy.
+
+Map custody wraps the unchanged source-routing helpers. It snapshots conservative
+ancestor map identities before and after each resolver call, including every
+recursive canonical dependency-walker route through an explicit observer callback.
+This preserves the byte-identical helper implementation needed by existing source
+routing continuation proofs. A focused race check covers a map appearing between
+the identity and dependency traversals. The helper itself is not extended or
+reclassified as a new historical source reader.

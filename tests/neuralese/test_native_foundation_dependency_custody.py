@@ -4,7 +4,8 @@ from pathlib import Path
 import pytest
 
 from natlang_neuralese.common.hashing import sha256_file_hex
-from natlang_neuralese.train.native_foundation_recovery import native_graph_bindings
+from natlang_neuralese.train.native_foundation_recovery import native_graph_bindings, _source_map_call
+from natlang_neuralese.train import native_foundation_recovery
 from natlang_neuralese.data import native_source_tree
 
 
@@ -53,10 +54,26 @@ def test_payload_reverse_identity_map_is_part_of_consumed_custody(tmp_path):
 def test_map_custody_rejects_mutation_during_its_canonical_read(tmp_path,monkeypatch):
     mapping=tmp_path/'.natlang-source-map.json'
     mapping.write_text(json.dumps({'schema':'natlang.staged-source-map/1','paths':{}}))
-    actual=native_source_tree.sha256_file_hex_cached
+    actual=native_foundation_recovery.sha256_file_hex_cached
     def changed(path):
         mapping.write_text(json.dumps({'schema':'natlang.staged-source-map/1','paths':{},'changed':True}))
         return actual(path)
-    monkeypatch.setattr(native_source_tree,'sha256_file_hex_cached',changed)
+    monkeypatch.setattr(native_foundation_recovery,'sha256_file_hex_cached',changed)
     with pytest.raises(ValueError,match='changed while reading'):
-        native_source_tree._source_identity(tmp_path/'payload',custody=[])
+        _source_map_call(native_source_tree._source_identity,tmp_path/'payload',maps=[])
+
+
+def test_recipe_dependency_walk_captures_a_map_created_after_identity_walk(tmp_path, monkeypatch):
+    from natlang_neuralese.train import recipe
+    payload=tmp_path/'pairs.jsonl';payload.write_text('exact payload')
+    staged=tmp_path/'staged.jsonl';staged.write_bytes(payload.read_bytes())
+    reference=header(tmp_path/'source.json',payload,'pairs.jsonl')
+    mapping=tmp_path/'.natlang-source-map.json'
+    original=recipe.native_source_dependencies
+    def changed(path, **kwargs):
+        mapping.write_text(json.dumps({'schema':'natlang.staged-source-map/1',
+            'paths':{str(payload):str(staged)}}))
+        return original(path, **kwargs)
+    monkeypatch.setattr(recipe,'native_source_dependencies',changed)
+    paths={item['path']for item in native_graph_bindings(reference)}
+    assert {str(mapping),str(staged),str(payload)} <= paths

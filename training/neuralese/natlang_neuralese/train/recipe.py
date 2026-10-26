@@ -284,7 +284,7 @@ def resolve_stage_inputs(recipe, stage, defaults, overrides=None):
     return _bind_native_source_dependencies(result)
 
 
-def native_source_dependencies(path, *, parents=()):
+def native_source_dependencies(path, *, parents=(), source_route=None):
     """Validate portable immutable graph manifests and enumerate every actual input."""
     path = Path(path).resolve()
     if path.suffix != '.json':
@@ -301,14 +301,14 @@ def native_source_dependencies(path, *, parents=()):
         child = Path(source['path'])
         child = child if child.is_absolute() else path.parent / child
         from ..data.native_source_tree import _staged_path
-        child = _staged_path(path, child)
+        child = (source_route or _staged_path)(path, child)
         child = child.resolve()
         digest = sha(child)
         if digest != source.get('sha256'):
             raise ValueError('native graph manifest dependency content hash mismatch: ' + str(child))
         dependencies[str(child)] = digest
         if source['kind'] == 'native-graphs':
-            for value in native_source_dependencies(child, parents=(*parents, path)):
+            for value in native_source_dependencies(child, parents=(*parents, path), source_route=source_route):
                 dependencies[value['path']] = value['sha256']
     return [{'path': child, 'sha256': digest} for child, digest in dependencies.items()]
 

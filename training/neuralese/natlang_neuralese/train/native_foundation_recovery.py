@@ -9,6 +9,38 @@ from ..common.hashing import sha256_file_hex_cached
 SCHEMA = 'natlang.native-foundation-declaration-recovery/1'
 
 
+def _source_map_call(resolver, path, *arguments, maps):
+    """Bind map custody around an unchanged historical routing helper.
+
+    Maps in the resolver's ancestry are a conservative closure: an earlier
+    match may stop its scan, but no map that it could read is omitted. Keep the
+    actual routing implementation byte-identical for authenticated reader
+    continuations; custody does not select or reinterpret a source path.
+    """
+    def candidates():
+        return [parent / '.natlang-source-map.json'
+                for parent in Path(path).resolve().parents
+                if (parent / '.natlang-source-map.json').is_file()]
+    fields = ('st_dev', 'st_ino', 'st_size', 'st_mtime_ns', 'st_ctime_ns')
+    before = {}
+    for index in candidates():
+        stat = index.stat()
+        digest = sha256_file_hex_cached(index)
+        if tuple(getattr(stat, key) for key in fields) != tuple(getattr(index.stat(), key) for key in fields):
+            raise ValueError('staged native source map changed while reading: ' + str(index))
+        before[index] = ({'path': str(index), 'sha256': digest, 'bytes': stat.st_size},
+                         tuple(getattr(stat, key) for key in fields))
+    result = resolver(path, *arguments)
+    if set(candidates()) != set(before):
+        raise ValueError('staged native source map changed while reading')
+    for index, (reference, signature) in before.items():
+        if (tuple(getattr(index.stat(), key) for key in fields) != signature
+                or sha256_file_hex_cached(index) != reference['sha256']):
+            raise ValueError('staged native source map changed while reading: ' + str(index))
+        maps.append(reference)
+    return result
+
+
 def native_graph_bindings(reference):
     """Enumerate a graph header, its payload closure, and maps used to resolve it."""
     header = _bound(reference)
@@ -20,7 +52,7 @@ def native_graph_bindings(reference):
     seen = set()
     maps = []
     consumed = []
-    _source_identity(header, custody=maps)
+    _source_map_call(_source_identity, header, maps=maps)
     while manifests:
         manifest_path = manifests.pop().resolve()
         if manifest_path in seen or manifest_path.suffix != '.json':
@@ -30,11 +62,11 @@ def native_graph_bindings(reference):
         if value.get('schema') != 'natlang.native-graph-sources/1':
             continue
         for source in value.get('sources') or []:
-            target = _staged_path(manifest_path, source['path'], custody=maps)
+            target = _source_map_call(_staged_path, manifest_path, source['path'], maps=maps)
             if not target.is_absolute():
                 target = manifest_path.parent / target
             target = target.resolve(strict=True)
-            _source_identity(target, custody=maps)
+            _source_map_call(_source_identity, target, maps=maps)
             consumed.append(target)
             if source.get('kind') == 'native-graphs':
                 manifests.append(target)
@@ -42,7 +74,9 @@ def native_graph_bindings(reference):
     # native_source_dependencies performs the canonical recursive schema,
     # identity and payload hash checks. Include its results unchanged.
     direct = [header, *consumed]
-    for item in native_source_dependencies(header):
+    def route(manifest, target):
+        return _source_map_call(_staged_path, manifest, target, maps=maps)
+    for item in native_source_dependencies(header, source_route=route):
         direct.append(_bound({'path': item['path'], 'sha256': item['sha256']}))
     direct.extend(_bound(reference) for reference in maps)
     unique = {}

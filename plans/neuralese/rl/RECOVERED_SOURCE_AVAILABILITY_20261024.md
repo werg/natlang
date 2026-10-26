@@ -525,3 +525,53 @@ reviewed and passes102 focused tests, including an in-place zero-update case
 that saves audit history while preserving exact weights, moments, RNG, exposure
 and quotas. Its full repository check remains in progress. Both learners still
 executeB0 until a reviewed, source-bound runtime continuation is adopted.
+
+2026-10-26 03:15 Berlin: the restarted Mellum optimizer has reached35947,
+regaining and exceeding the113 updates lost in the same-ID workspace reset.
+Actual private full-state recovery is35817; the independently verified workstation
+mirror is35697. The recovered controller/bootstrap supplement is privately durable
+(0d9e9a36…), preserving the coherent35697 entry and already completed RL round.
+LFM has completed nine whole-graph RL rounds and reached37836 in full-source SFT;
+its privately and locally verified full state is37793. These are training and
+recovery facts, not held capability improvement or comprehensive recipe completion.
+
+Mellum's full192-package teacher census is now independently reviewed and adopted
+for future operations:24,249 additional unique rows,1,526,019 active rows. Its
+private control backup46952cd8… and exact adoption80715d9c… are verified. The active
+frozen SFT operation still uses its previous source population; adoption is not
+exposure. LFM's corresponding active full-source recipe has1,618,603 rows.
+
+The shared foundation restoration and exact selected dependency closure are
+integrated in5f096f6b3+03d546acd, independently reviewed and156 focused tests pass.
+The combined full check remains running. B1 packageb0f42c9b… is prepared for both
+machines with exact ancestor-bound declarations and separately verified private
+control backups. Both executing learners still useB0 until the check passes and
+a safe real-state continuation is adopted. Full SFT/DPO/RL debts are preserved.
+
+The complete paired foundation was reconstructed from its exact surviving37 and
+26,275 admitted rows, retaining all original per-row model views and identities.
+The shared VAE/joint/distillation curriculum binds all26,312 training pairs and
+all9,896 original held pairs; actual source-group overlap is zero. Readiness and
+learned adaptation are not granted by this preparation. Evidence is under
+`/home/werg/data/lfm-local-recovery-20261024/source-rejoin/shared-semantic-foundation-recovered-20261026`.
+
+Reviewed cleanup removed18 superseded local numeric checkpoint paths, reclaiming
+44,025,765,888 allocated bytes while protecting current and recovery-selected
+operations, ancestry, optimizer parents and live readers. Cloud export-pin cleanup
+removed two superseded copies, reclaiming96,534,552,576 allocated bytes. The same
+two obsolete W&B private checkpoint objects were separately deleted and absence
+verified (96,534,549,282 bytes). Exact plans/receipts remain in the local and cloud
+retention audit directories. Current verified private exports, local recovery,
+active parents, source/held data and in-flight transfers are preserved.
+
+03:30 correction: the first combined check passed4,922 Neuralese CPU checks,
+17 GPU checks and2,177 TypeScript tests, but failed three general Python routing
+continuity checks. No runtime was cut over. Map custody now wraps the unchanged
+historical routing helpers and every recursive dependency route instead of
+modifying those helpers;167 focused routing/foundation/provider/append checks
+pass and independent review found no remaining concrete map-custody gap.
+The recovered full paired source is independently backed up:226,743,758 bytes,
+SHA01a064539ac8aa43b7d431866359e00be70ebd627530f0d46a83f7d2f6d9ce03.
+Cloud pin cleanup is temporarily stopped while its long hash/decode work is moved
+outside the publication lease; the corrected mechanism passes its concurrency
+fixtures and retains exact revalidation under the brief deletion transaction.
