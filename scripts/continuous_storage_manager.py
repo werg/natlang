@@ -207,10 +207,21 @@ def _mellum_status(policy):
 
 
 def _archive_command(policy, budget_bytes, protected_paths=(), *, apply=False):
-    budget_gb = max(0.1, min(float(budget_bytes) / GIB, 60.0))
+    batch_cap = int(policy.get('archive_batch_max_bytes', 60 * GIB))
+    budget_gb = max(0.1, min(float(min(budget_bytes, batch_cap)) / GIB, 60.0))
+    reserve = int(policy['external_floor_bytes']) + int(policy.get('external_archive_safety_bytes', 0))
+    pending_path = Path(policy.get('mellum_private_pointer', ''))
+    if pending_path.is_file():
+        pending = _json(pending_path)
+        if pending.get('local_copy_pending') is True:
+            pending_checkpoint = pending.get('checkpoint') or {}
+            pending_bytes = pending_checkpoint.get('bytes')
+            if type(pending_bytes) is not int or pending_bytes <= 0:
+                raise ValueError('pending Mellum local copy has no exact byte size')
+            reserve += pending_bytes
     command = [policy.get('project_python', sys.executable), policy['archive_script'], '--root', policy['archive_root'],
                '--budget-gb', str(budget_gb), '--min-age-hours', '0', '--idle-run-min-age-hours', '0', '--hdd-floor-gb',
-               str(int(policy['external_floor_bytes']) / GIB)]
+               str(reserve / GIB)]
     if policy.get('archive_destination'):
         command.extend(['--archive', policy['archive_destination']])
     for path in sorted(set(map(str, protected_paths))):

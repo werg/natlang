@@ -15,6 +15,8 @@
   "external_mount": "/mnt/external",
   "external_uuid": "b2d1c3f3-b59f-421f-9a61-39c84570684d",
   "external_floor_bytes": 85899345920,
+  "external_archive_safety_bytes": 1073741824,
+  "archive_batch_max_bytes": 17179869184,
   "archive_script": "/home/werg/natlang/scripts/archive_to_external.py",
   "archive_destination": "/mnt/external/natlang-development-data/archive",
   "archive_root": "/home/werg/data/lfm-local-recovery-20261024/rl/cycles",

@@ -133,6 +133,23 @@ def test_archive_command_is_cycle_scoped_floor_bound_and_preview_only(tmp_path, 
     assert seen[0][1]['timeout'] == 1800
 
 
+def test_archive_command_caps_batches_and_reserves_pending_mellum_copy(tmp_path):
+    policy, _, _ = _fixture(tmp_path)
+    pointer = tmp_path/'mellum-private.json'
+    pointer.write_text(json.dumps({'local_copy_pending': True,
+        'checkpoint': {'bytes': 48*1024**3, 'sha256': 'a'*64}}))
+    policy.update(project_python='/project/python', archive_script='/archive.py',
+                  external_floor_bytes=80*1024**3, external_archive_safety_bytes=1*1024**3,
+                  archive_batch_max_bytes=16*1024**3, mellum_private_pointer=str(pointer))
+    command = manager._archive_command(policy, 40*1024**3)
+    assert command[command.index('--budget-gb')+1] == '16.0'
+    assert command[command.index('--hdd-floor-gb')+1] == '129.0'
+    pointer.write_text(json.dumps({'local_copy_pending': True,
+        'checkpoint': {'bytes': 0, 'sha256': 'a'*64}}))
+    with pytest.raises(ValueError, match='exact byte size'):
+        manager._archive_command(policy, 40*1024**3)
+
+
 def test_archive_apply_is_opt_in_and_revalidates_current_owner_head_and_mount(tmp_path, monkeypatch):
     policy, usage, _ = _fixture(tmp_path, free=2)
     monkeypatch.setattr(manager.shutil, 'disk_usage', lambda _: usage)
