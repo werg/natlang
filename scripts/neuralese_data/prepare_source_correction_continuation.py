@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import re
 import shutil
 from pathlib import Path
 
@@ -90,8 +91,11 @@ def _mapped(path, mapping):
     return candidate
 
 
-def flatten(manifest, mapping, *, parents=()):
-    manifest = Path(manifest).resolve(strict=True)
+def flatten(manifest, mapping, *, parents=(), logical_manifest=None):
+    requested_manifest = Path(manifest)
+    if logical_manifest is None:
+        logical_manifest = str(requested_manifest)
+    manifest = requested_manifest.resolve(strict=True)
     if manifest in parents:
         raise ValueError('source manifest cycle')
     doc = jread(manifest)
@@ -99,14 +103,112 @@ def flatten(manifest, mapping, *, parents=()):
         raise ValueError(f'invalid native graph source manifest: {manifest}')
     output = []
     for source in doc['sources']:
-        path = _mapped(source['path'], mapping) if Path(source['path']).is_absolute() else (manifest.parent / source['path']).resolve(strict=True)
+        source_path = Path(source['path'])
+        logical_path = (source_path if source_path.is_absolute()
+                        else Path(logical_manifest).parent / source_path)
+        logical_text = str(logical_path)
+        path = (_mapped(source['path'], mapping) if source_path.is_absolute()
+                else (manifest.parent / source_path).resolve(strict=True))
         if sha256_file_hex_cached(path) != source.get('sha256'):
             raise ValueError(f'source binding differs for {source["path"]}')
         if path.suffix == '.json':
-            output.extend(flatten(path, mapping, parents=(*parents, manifest)))
+            output.extend(flatten(path, mapping, parents=(*parents, manifest),
+                                  logical_manifest=logical_text))
         else:
-            output.append(dict(source))
+            # Preserve an original logical path only when the explicit staged
+            # source map binds that exact name to these verified bytes. This
+            # keeps cloud manifests portable while preventing relative paths
+            # from being rebased under the new output directory.
+            mapped = mapping.get(logical_text)
+            output_path = (logical_text if mapped and Path(mapped).resolve() == path
+                           else str(path))
+            output.append({**source, 'path': output_path})
     return output
+
+
+def _declared_leaf_sources(manifest, mapping, *, parents=()):
+    """Walk only manifests named by the supplied source root, without loading graph rows."""
+    manifest = Path(manifest).resolve(strict=True)
+    if manifest in parents:
+        raise ValueError('source manifest cycle')
+    doc = jread(manifest)
+    if doc.get('schema') != 'natlang.native-graph-sources/1' or not isinstance(doc.get('sources'), list):
+        raise ValueError(f'invalid native graph source manifest: {manifest}')
+    for source in doc['sources']:
+        raw = Path(source['path'])
+        if raw.is_absolute():
+            candidate = Path(mapping.get(str(raw), str(raw)))
+        else:
+            candidate = manifest.parent / raw
+        if candidate.suffix == '.json':
+            # Existing staged maps must resolve nested manifests; no inferred
+            # registry relocation is allowed for control documents.
+            nested = candidate.resolve(strict=True)
+            if sha256_file_hex_cached(nested) != source.get('sha256'):
+                raise ValueError(f'nested source manifest binding differs: {source["path"]}')
+            yield from _declared_leaf_sources(nested, mapping, parents=(*parents, manifest))
+        else:
+            yield source
+
+
+def _relocate_declared_mellum_package_leaves(train_manifest, held_manifest, mapping, *, cfg,
+                                             registry_root=None):
+    """Resolve missing old cloud leaves only through their exact registry role binding."""
+    registry = (Path(registry_root) if registry_root is not None else
+        Path('/home/werg/data/natlang-internal-spool/teacher-qwen36-continuation-20261023/registered-packages'))
+    relocated = []
+    pattern = re.compile(r'^/work/resume/teacher-append-20261025/artifacts/runs/'
+        r'(?P<corpus>qwen36-verified-positive-native-graphs-20261023-internal-batch[0-9]{4}-tranche[0-9]{4}'
+        r'(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?)/'
+        r'(?P<role>mellum21)/(?P<split>train|test)/native-graphs\.jsonl\.zst$')
+    visited = set()
+    for manifest in (train_manifest, held_manifest):
+        for source in _declared_leaf_sources(manifest, mapping):
+            original = source['path']
+            candidate = Path(mapping.get(original, original)) if Path(original).is_absolute() else Path(original)
+            if candidate.is_file() or original in visited:
+                continue
+            match = pattern.fullmatch(original)
+            if match is None:
+                continue
+            corpus, role, split = match.group('corpus','role','split')
+            entry_path = registry / f'{corpus}.entry.json'
+            package_root = registry / corpus
+            if not entry_path.is_file():
+                raise FileNotFoundError(f'no local registered entry for declared Mellum source: {corpus}')
+            entry = jread(entry_path)
+            if entry.get('id') != corpus:
+                raise ValueError('registered Mellum source entry ID differs from manifest path')
+            selected = (entry.get('source_binding') or {}).get('models', {}).get(role)
+            declared = selected.get(split) if isinstance(selected, dict) else None
+            if (not isinstance(declared, dict) or selected.get('model_id') != cfg['model_id']
+                    or selected.get('tokenizer_fingerprint') != cfg['fingerprint']):
+                raise ValueError(f'{corpus} lacks matching registered Mellum role identity')
+            resolved = Path(declared.get('path','')).resolve(strict=True)
+            expected = {'path': str(package_root / role / split / 'native-graphs.jsonl.zst'),
+                        'sha256': source.get('sha256'), 'bytes': declared.get('bytes')}
+            if (resolved != (package_root / role / split / 'native-graphs.jsonl.zst').resolve(strict=True)
+                    or declared.get('sha256') != expected['sha256']
+                    or type(expected['bytes']) is not int or resolved.stat().st_size != expected['bytes']):
+                raise ValueError(f'{corpus} registry member differs from exact declared Mellum source')
+            _validate_registered_role(entry, role, split, resolved,
+                model_id=cfg['model_id'], fingerprint=cfg['fingerprint'])
+            mapping[original] = str(resolved)
+            receipt = selected.get('receipt') or {}
+            receipt_path = Path(receipt.get('path','')).resolve(strict=True)
+            if (receipt_path.stat().st_size != receipt.get('bytes')
+                    or sha256_file_hex_cached(receipt_path) != receipt.get('sha256')):
+                raise ValueError(f'{corpus} conversion receipt differs from registry entry')
+            relocated.append({'original_path': original, 'resolved_path': str(resolved),
+                'source_sha256': source['sha256'], 'bytes': expected['bytes'],
+                'registry_entry': str(entry_path.resolve()),
+                'registry_entry_sha256': sha256_file_hex_cached(entry_path),
+                'conversion_receipt': str(receipt_path),
+                'conversion_receipt_sha256': receipt['sha256'],
+                'model_id': cfg['model_id'], 'tokenizer_fingerprint': cfg['fingerprint'],
+                'role': role, 'split': split})
+            visited.add(original)
+    return relocated
 
 
 def add_source(path, *, kind, model=None, **extra):
@@ -132,9 +234,10 @@ def _bundle_input(model, role):
             ROOT / 'mellum-cloud-resume-20261025/packet/.natlang-source-map.json')
 
 
-def _merge_map(model, train_map_path, held_map_path, out):
+def _merge_map(model, train_manifest, held_manifest, train_map_path, held_map_path, out, cfg):
     mapping = _source_map(train_map_path)
     mapping.update(_source_map(held_map_path))
+    relocated = []
     if model == 'mellum':
         # The immutable cloud snapshot refers to /work/resume/inputs/payloads.
         # Route those exact content-addressed objects to the independently
@@ -150,6 +253,8 @@ def _merge_map(model, train_map_path, held_map_path, out):
         # Include the dedicated recovered teacher-v13 mappings.
         recovered = _source_map(ROOT / 'mellum-cloud-continuation-20261025-r2/teacher-v13-control-backup/recovered-source-map.json')
         mapping.update(recovered)
+        relocated = _relocate_declared_mellum_package_leaves(
+            train_manifest, held_manifest, mapping, cfg=cfg)
         # Keep the source receipt's future container identity stable while the
         # preparer validates bytes through its local staged path.
         mapping[str(MELLUM_REMOTE_ROOT / 'native-training-sources.json')] = str(out / 'native-training-sources.json')
@@ -157,7 +262,7 @@ def _merge_map(model, train_map_path, held_map_path, out):
     doc = {'schema': 'natlang.staged-source-map/1', 'paths': mapping}
     target = out / '.natlang-source-map.json'
     target.write_text(json.dumps(doc, sort_keys=True, indent=2) + '\n')
-    return target, mapping
+    return target, mapping, relocated
 
 
 def _replacement_sources(model_id):
@@ -335,12 +440,13 @@ def _origins(receipt, order):
 def build(model, out_root):
     from natlang_neuralese.data.native_sources import NativeGraphSource
     from natlang_neuralese.train.native_source_correction import SCHEMA
-    cfg = _current_config(model)
     train_old, train_map = _bundle_input(model, 'train')
     held_old, held_map = _bundle_input(model, 'held')
     out = out_root / model
     out.mkdir(parents=True, exist_ok=False)
-    map_path, mapping = _merge_map(model, train_map, held_map, out)
+    cfg = _current_config(model)
+    map_path, mapping, relocated_sources = _merge_map(
+        model, train_old, held_old, train_map, held_map, out, cfg)
     train_path, removed = _flatten_train_inputs(model, train_old, mapping, cfg['model_id'], out)
     held_path, held_changed, old_held_leaves = _flatten_held(model, held_old, mapping, cfg['model_id'], out)
     roles = _role_ids(cfg)
@@ -428,6 +534,31 @@ def build(model, out_root):
                 'new_source_sha256': new_held_origins[row_id], 'old_groups': old_groups_by_id[row_id],
                 'new_groups': new_groups_by_id[row_id], 'disposition': 'corrected'}, sort_keys=True) + '\n')
 
+    held_quality_rows = [row_id for row_id in old_held.ordered_ids()
+        if old_held_origins[row_id] in BAD_HELD]
+    held_quality_path = out / 'held-quality-hold-row-bindings.jsonl'
+    with held_quality_path.open('w') as f:
+        for row_id in held_quality_rows:
+            source_sha = old_held_origins[row_id]
+            if current_held.bindings[row_id] != old_held.bindings[row_id]:
+                raise ValueError('pending held quality row unexpectedly changed target binding')
+            f.write(json.dumps({'id':row_id, 'binding':current_held.bindings[row_id],
+                'source_sha256':source_sha, 'reason':BAD_HELD[source_sha],
+                'groups':new_groups_by_id[row_id]}, sort_keys=True) + '\n')
+    if len(held_quality_rows) != sum(item['rows'] for item in pending_held):
+        raise ValueError('held quality hold rows do not exactly cover pending faulty held sources')
+    held_quality_manifest = out / 'held-quality-hold.json'
+    held_quality_manifest.write_text(json.dumps({
+        'schema':'natlang.native-held-quality-hold/1',
+        'held_source':current_held_receipt,
+        'row_bindings_path':held_quality_path.name,
+        'row_bindings_sha256':sha256_file_hex(held_quality_path),
+        'excluded_rows':len(held_quality_rows),
+        'pending_sources':[{'sha256':item['source']['sha256'],'rows':item['rows'],
+                            'reason':item['reason']} for item in pending_held],
+        'purpose':'exclude known truncated targets from held loss/model selection while preserving protected membership; full-held qualification remains incomplete'},
+        sort_keys=True, indent=2)+'\n')
+
     proof_path = out / 'source-correction.json'
     evidence_dir = out / 'evidence'
     evidence_dir.mkdir()
@@ -447,6 +578,15 @@ def build(model, out_root):
         copy_evidence(held_old, evidence_dir, 'predecessor-held-manifest.json'),
         copy_evidence(train_map, evidence_dir, 'predecessor-training-source-map.json'),
         copy_evidence(held_map, evidence_dir, 'predecessor-held-source-map.json')))
+    evidence.extend((copy_evidence(held_quality_path, evidence_dir, 'held-quality-hold-row-bindings.jsonl'),
+                     copy_evidence(held_quality_manifest, evidence_dir, 'held-quality-hold.json')))
+    for item in relocated_sources:
+        entry_path = Path(item['registry_entry'])
+        receipt_path = Path(item['conversion_receipt'])
+        evidence.append(copy_evidence(entry_path, evidence_dir,
+            'registered-' + entry_path.name))
+        evidence.append(copy_evidence(receipt_path, evidence_dir,
+            'conversion-' + receipt_path.parent.parent.name + '-' + receipt_path.name))
     proof = {'schema': SCHEMA, 'model_id': cfg['model_id'], 'stage_id': 'native_full_sft',
         'prior_source': old_receipt, 'current_source': current_receipt,
         'row_bindings_path': row_path.name, 'row_bindings_sha256': sha256_file_hex(row_path),
@@ -454,7 +594,10 @@ def build(model, out_root):
             'prior_source': old_held_receipt, 'current_source': current_held_receipt,
             'row_bindings_path': held_row_path.name,
             'row_bindings_sha256': sha256_file_hex(held_row_path)},
+        'held_quality_hold': {'path':held_quality_manifest.name,
+            'sha256':sha256_file_hex(held_quality_manifest)},
         'source_map': {'path': map_path.name, 'sha256': sha256_file_hex(map_path)},
+        'registered_source_relocations': relocated_sources,
         'evidence': evidence,
         'pending_held_correction': {'remaining_original_sources': pending_held,
             'qualification_claim': False}}
@@ -503,7 +646,8 @@ def build(model, out_root):
         },
         'artifacts': {p.name: {'path': str(p.resolve()), 'bytes': p.stat().st_size,
                                'sha256': sha256_file_hex(p)} for p in
-                      (train_path, held_path, row_path, held_row_path, proof_path, map_path)}}
+                      (train_path, held_path, row_path, held_row_path, held_quality_path,
+                       held_quality_manifest, proof_path, map_path)}}
     (out / 'prepared.json').write_text(json.dumps(output, sort_keys=True, indent=2) + '\n')
     print(json.dumps(output, sort_keys=True))
 
@@ -513,10 +657,13 @@ def main():
     parser.add_argument('--output', required=True, type=Path)
     parser.add_argument('--model', choices=('lfm','mellum','both'), default='both')
     args=parser.parse_args()
-    if args.output.exists():
-        raise SystemExit(f'output directory already exists; preserve evidence: {args.output}')
-    args.output.mkdir(parents=True)
-    for model in (('lfm','mellum') if args.model=='both' else (args.model,)):
+    models = ('lfm','mellum') if args.model=='both' else (args.model,)
+    if args.output.exists() and not args.output.is_dir():
+        raise SystemExit(f'output path is not a directory: {args.output}')
+    if args.output.exists() and any((args.output / model).exists() for model in models):
+        raise SystemExit(f'model output already exists; preserve evidence: {args.output}')
+    args.output.mkdir(parents=True, exist_ok=True)
+    for model in models:
         build(model,args.output)
 
 

@@ -82,6 +82,41 @@ def test_decoded_parent_metadata_is_released_before_restored_model_checks(tmp_pa
     assert saved['optimizer'] and saved['rng']
 
 
+def test_quality_held_rows_are_skipped_and_full_held_qualification_stays_incomplete(monkeypatch):
+    from natlang_neuralese.train import native_state_sft as trainer
+    from natlang_neuralese.train.native_held import bind_held_quality_exclusions
+
+    entries=[{'id':'valid-a','binding':'a','communication':False,'forward_tokens':2},
+        {'id':'bad-known','binding':'bad','communication':True,'forward_tokens':3},
+        {'id':'valid-b','binding':'b','communication':True,'forward_tokens':2}]
+    class Source:
+        file_sha256='held-source'
+        def __len__(self):return len(entries)
+        def __iter__(self):return iter(entries)
+        def iter_indices(self,indices):
+            self.used=list(indices)
+            return (entries[i] for i in indices)
+    source=Source()
+    source.entries=entries
+    coverage=bind_held_quality_exclusions(entries,None,{'bad-known'},source_sha256='held-source')
+    coverage['quality_hold_binding']={'path':'/hold.json','sha256':'h'*64,
+        'row_bindings_path':'/hold-rows.jsonl','row_bindings_sha256':'r'*64}
+    monkeypatch.setattr(trainer,'_evaluate',lambda model, graphs, **kwargs:
+        {'examples':sum(1 for _ in graphs),'loss':0.25,'correct':1})
+    args=SimpleNamespace(held_eval_tokens=0,held_eval_graphs=0,held_final_policy='full',
+        foundation_qualification_request=None,checkpoint_layers=False,chunk_tokens=8,ce_supervision_policy=None)
+    result,after=trainer._evaluate_cadence(object(),source,args=args,coverage=coverage,final=True)
+    assert result['examples']==2 and source.used==[0,2]
+    assert result['scope']=='cadence-subset' and result['source_graphs']==3
+    assert result['held_quality_hold']=={'excluded_rows':1,
+        'excluded_ids_sha256':trainer.canonical_json_sha256_hex(['bad-known']),
+        'manifest_path':'/hold.json','manifest_sha256':'h'*64,
+        'row_bindings_path':'/hold-rows.jsonl','row_bindings_sha256':'r'*64,
+        'full_held_qualification':False,
+        'reason':'known truncated held targets remain protected but are not scored'}
+    assert after['completed_sweeps']==0
+
+
 def test_append_schedule_preserves_resumed_epoch_prefix_and_deterministic_next_epoch():
     rows = [SimpleNamespace(id=key) for key in ('old-a', 'old-b', 'new-a', 'new-b')]
     old_ids = {'old-a', 'old-b'}
@@ -572,8 +607,24 @@ def test_source_correction_resumes_real_native_optimizer_and_fresh_pair_exposure
         base_argv += ['--fp8-training', 'triton-experts']
     assert main([*base_argv, '--native-graphs', str(old_manifest), '--out', str(out)]) == 0
     checkpoint = out / 'checkpoint.pt'
+    first_parent = torch.load(checkpoint, map_location='cpu', weights_only=False)
+    first_training = first_parent['training']
+    # Advance a distinct stage so the checkpoint top-level frame is newer than
+    # native_full_sft. The correction must restore the saved full-SFT cursor
+    # while retaining this latest checkpoint's optimizer, RNG, and global step.
+    later_out = tmp_path / 'later-stage'
+    later_argv = list(base_argv)
+    stage_index = later_argv.index('--stage-id')
+    later_argv[stage_index + 1] = 'native_harness_repair_sft'
+    assert main([*later_argv, '--native-graphs', str(old_manifest), '--out', str(later_out),
+        '--continue-from', str(checkpoint)]) == 0
+    checkpoint = later_out / 'checkpoint.pt'
     parent = torch.load(checkpoint, map_location='cpu', weights_only=False)
     parent_training = parent['training']
+    assert parent_training['options']['stage_id'] == 'native_harness_repair_sft'
+    assert parent_training['global_step'] > first_training['global_step']
+    assert parent_training['sft_progress']['native_full_sft']['source_receipts'][0]['sha256'] == \
+        first_training['source_receipts'][0]['sha256']
     old_receipt = parent_training['source_receipts'][0]
 
     row_ledger = tmp_path / 'correction-rows.jsonl'
@@ -610,11 +661,12 @@ def test_source_correction_resumes_real_native_optimizer_and_fresh_pair_exposure
             'row_bindings_sha256': sha256_file_hex(held_row_ledger)},
     }, sort_keys=True))
 
-    assert main([*base_argv, '--native-graphs', str(new_manifest), '--held-native-graphs', str(new_held_path), '--out', str(out),
+    corrected_out = tmp_path / 'corrected-run'
+    assert main([*base_argv, '--native-graphs', str(new_manifest), '--held-native-graphs', str(new_held_path), '--out', str(corrected_out),
         '--continue-from', str(checkpoint), '--continued-native-graphs', str(old_manifest),
         '--continued-held-native-graphs', str(old_held_path),
         '--source-correction', str(proof)]) == 0
-    child = torch.load(checkpoint, map_location='cpu', weights_only=False)
+    child = torch.load(corrected_out / 'checkpoint.pt', map_location='cpu', weights_only=False)
     child_training = child['training']
     assert child_training['global_step'] == parent_training['global_step'] + 1
     assert child_training['source_row_bindings'] == new_source.bindings
@@ -628,9 +680,16 @@ def test_source_correction_resumes_real_native_optimizer_and_fresh_pair_exposure
     assert child_training['metrics']['held_coverage']['source_sha256'] == new_held_receipt['sha256']
     frame = child_training['sft_progress']['native_full_sft']
     assert frame['required_visits'][corrected_id] == 1
+    carried = child_training['sft_progress']['native_harness_repair_sft']
+    assert carried['source_row_bindings'][corrected_id] == new_source.bindings[corrected_id]
+    assert carried['source_receipts'][0]['sha256'] == new_source.file_sha256
+    assert carried['exposure_counts'][corrected_id] == 0
+    assert carried['required_visits'][corrected_id] == 1
     history = child_training['options']['source_correction_history']
     assert history[-1]['corrected_rows'][0]['prior_exposure'] == 1
     assert history[-1]['new_corrected_row_exposure_added'] == 0
+    assert history[-1]['carried_frame_transitions'][0]['stage_id'] == 'native_harness_repair_sft'
+    assert history[-1]['carried_frame_transitions'][0]['prior_exposure'][corrected_id] == 1
     assert history[-1]['optimizer_rng_weights'] == 'preserved'
     assert child_training['optimizer'] and child_training['rng']
     def equal(left, right):

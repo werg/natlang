@@ -6,6 +6,7 @@ import pytest
 
 from natlang_neuralese.train.native_source_correction import (
     SCHEMA, apply_source_correction, source_correction_dependencies,
+    validate_held_quality_hold,
 )
 
 
@@ -49,6 +50,28 @@ def _row(row_id, old_binding, new_binding, old_sha, new_sha, disposition, reason
     return {'id': row_id, 'old_binding': old_binding, 'new_binding': new_binding,
             'old_source_sha256': old_sha, 'new_source_sha256': new_sha,
             'disposition': disposition, 'reason': reason}
+
+
+def test_prior_receipt_path_change_requires_exact_authenticated_source_map(tmp_path):
+    from natlang_neuralese.train.native_source_correction import _receipt_matches_with_staged_relocation
+    staged=tmp_path/'staged-held.json';staged.write_bytes(b'authenticated held manifest bytes')
+    source_map=tmp_path/'source-map.json'
+    source_map.write_text(json.dumps({'schema':'natlang.staged-source-map/1',
+        'paths':{'/runtime/held.json':str(staged.resolve())}},sort_keys=True))
+    proof_path=tmp_path/'source-correction.json'
+    proof={'source_map':{'path':source_map.name,'sha256':_sha(source_map)},
+        'prior_held_relocation':{'schema':'natlang.staged-receipt-relocation/1',
+            'logical_path':'/runtime/held.json','staged_path':str(staged.resolve()),
+            'sha256':_sha(staged),'source_map_path':str(source_map.resolve()),
+            'source_map_sha256':_sha(source_map)}}
+    actual={'path':'/runtime/held.json','sha256':_sha(staged)}
+    expected={'path':str(staged),'sha256':_sha(staged)}
+    assert _receipt_matches_with_staged_relocation(expected,actual,proof,proof_path)
+    assert _receipt_matches_with_staged_relocation(actual,expected,proof,proof_path)
+    assert not _receipt_matches_with_staged_relocation(expected,
+        {'path':'/runtime/other-held.json','sha256':_sha(staged)},proof,proof_path)
+    assert not _receipt_matches_with_staged_relocation(expected,
+        {'path':'/runtime/held.json','sha256':'0'*64},proof,proof_path)
 
 
 def test_source_correction_preserves_state_and_resets_only_corrected_rows(tmp_path):
@@ -196,6 +219,35 @@ def test_source_correction_requires_every_new_row_in_the_proof_ledger(tmp_path):
             current_order=['edge', 'unreviewed'], current_communication_ids=['edge'])
 
 
+def test_source_correction_does_not_rebind_a_frame_from_another_source(tmp_path):
+    from natlang_neuralese.train.native_continuation import raw_communication_rows
+
+    prior = _receipt('/old/train.json', 'old', ['edge'], ['sha-edge'])
+    current = _receipt('/new/train.json', 'new', ['edge'], ['sha-edge-new'])
+    proof = _write_proof(tmp_path, prior, current, [
+        _row('edge', {'h': 'old'}, {'h': 'new'}, 'sha-edge', 'sha-edge-new', 'corrected')])
+    unrelated = _receipt('/unrelated/train.json', 'unrelated', ['edge'], ['sha-other'])
+    old_frame = {'source_receipts': [prior], 'source_row_bindings': {'edge': {'h': 'old'}},
+        'source_row_order': ['edge'], 'exposure_counts': {'edge': 1}, 'required_visits': {'edge': 1},
+        'options': {'epochs': 1, '_communication_ids': ['edge']}}
+    training = {'source_receipts': [prior], 'source_row_bindings': {'edge': {'h': 'old'}},
+        'source_row_order': ['edge'], 'exposure_counts': {'edge': 1}, 'required_visits': {'edge': 1},
+        'options': {'epochs': 1, '_communication_ids': ['edge']},
+        'sft_progress': {'native_full_sft': old_frame, 'other-source-stage': {
+            **old_frame, 'source_receipts': [unrelated]}}}
+
+    result, _ = apply_source_correction(training, proof, model_id='lfm2:inventory',
+        stage_id='native_full_sft', current_source_receipt=current,
+        current_bindings={'edge': {'h': 'new'}}, current_order=['edge'],
+        current_communication_ids=['edge'])
+
+    untouched = result['sft_progress']['other-source-stage']
+    assert untouched['source_receipts'] == [unrelated]
+    assert untouched['source_row_bindings'] == {'edge': {'h': 'old'}}
+    with pytest.raises(ValueError, match='carried communication row changed'):
+        raw_communication_rows(result['sft_progress'])
+
+
 def test_source_correction_rejects_replacement_that_is_no_longer_a_communication_graph(tmp_path):
     prior = _receipt('/old/train.json', 'old', ['edge'], ['sha-edge'])
     current = _receipt('/new/train.json', 'new', ['edge'], ['sha-edge-new'])
@@ -263,22 +315,94 @@ def test_protected_held_correction_keeps_membership_groups_and_exposure_unchange
     assert len(source_correction_dependencies({'path': str(proof), 'sha256': _sha(proof)})) == 4
 
 
+def test_held_quality_hold_authenticates_exact_pending_rows_and_is_carried_in_checkpoint(tmp_path):
+    prior_train = _receipt('/old/train.json', 'old-train', ['edge'], ['a'*64])
+    current_train = _receipt('/new/train.json', 'new-train', ['edge'], ['b'*64])
+    held = _receipt('/new/held.json', 'held-current', ['held:bad', 'held:good'], ['c'*64, 'd'*64])
+    entries = [
+        {'id':'held:bad','binding':{'graph':'bad'},'groups':['world:a'],'communication':False},
+        {'id':'held:good','binding':{'graph':'good'},'groups':['world:b'],'communication':False},
+    ]
+    rows_path=tmp_path/'quality-rows.jsonl'
+    rows_path.write_text(json.dumps({'id':'held:bad','binding':{'graph':'bad'},'source_sha256':'c'*64,
+        'reason':'truncated producer target','groups':['world:a']},sort_keys=True)+'\n')
+    hold_path=tmp_path/'held-quality-hold.json'
+    hold_path.write_text(json.dumps({'schema':'natlang.native-held-quality-hold/1',
+        'held_source':held,'row_bindings_path':rows_path.name,'row_bindings_sha256':_sha(rows_path),
+        'excluded_rows':1,'pending_sources':[{'sha256':'c'*64,'rows':1,
+        'reason':'truncated producer target'}]},sort_keys=True))
+    reference={'path':str(hold_path),'sha256':_sha(hold_path)}
+    quality=validate_held_quality_hold(reference,held_receipt=held,held_entries=entries)
+    assert quality['excluded_ids']=={'held:bad'}
+    bad_entries=[dict(entries[0],groups=['world:wrong']),entries[1]]
+    with pytest.raises(ValueError,match='exact source/binding/groups'):
+        validate_held_quality_hold(reference,held_receipt=held,held_entries=bad_entries)
+
+    correction_rows=tmp_path/'rows.jsonl'
+    correction_rows.write_text(json.dumps(_row('edge',{'graph':'old'},{'graph':'new'},
+        'a'*64,'b'*64,'corrected'),sort_keys=True)+'\n')
+    held_rows=tmp_path/'held-rows.jsonl';held_rows.write_text('')
+    proof_path=tmp_path/'source-correction.json'
+    proof={'schema':SCHEMA,'model_id':'lfm2:inventory','stage_id':'native_full_sft',
+        'prior_source':{'path':prior_train['path'],'sha256':prior_train['sha256']},
+        'current_source':{'path':current_train['path'],'sha256':current_train['sha256']},
+        'row_bindings_path':correction_rows.name,'row_bindings_sha256':_sha(correction_rows),
+        'protected_held_correction':{'schema':'natlang.native-protected-held-correction/1',
+            'prior_source':{'path':held['path'],'sha256':held['sha256']},
+            'current_source':{'path':held['path'],'sha256':held['sha256']},
+            'row_bindings_path':held_rows.name,'row_bindings_sha256':_sha(held_rows)},
+        'held_quality_hold':{'path':hold_path.name,'sha256':_sha(hold_path)},
+        'pending_held_correction':{'remaining_original_sources':[{'source':{'sha256':'c'*64},
+            'rows':1,'reason':'truncated producer target'}]}}
+    proof_path.write_text(json.dumps(proof,sort_keys=True))
+    training={'source_receipts':[prior_train,held],
+        'source_row_bindings':{'edge':{'graph':'old'}},'source_row_order':['edge'],
+        'held_row_bindings':{'held:bad':{'graph':'bad'},'held:good':{'graph':'good'}},
+        'exposure_counts':{'edge':1},'required_visits':{'edge':1},'pending_source_rows':{},
+        'options':{'epochs':1,'_communication_ids':['edge']},
+        'sft_progress':{'native_full_sft':{'source_receipts':[prior_train,held],
+            'source_row_bindings':{'edge':{'graph':'old'}},'source_row_order':['edge'],
+            'held_row_bindings':{'held:bad':{'graph':'bad'},'held:good':{'graph':'good'}},
+            'exposure_counts':{'edge':1},'required_visits':{'edge':1},'options':{}}}}
+    held_context={'prior_receipt':held,'current_receipt':held,
+        'prior_bindings':training['held_row_bindings'],'current_bindings':training['held_row_bindings'],
+        'prior_order':['held:bad','held:good'],'current_order':['held:bad','held:good'],
+        'prior_groups':{'world:a','world:b'},'current_groups':{'world:a','world:b'},
+        'prior_groups_by_id':{'held:bad':['world:a'],'held:good':['world:b']},
+        'current_groups_by_id':{'held:bad':['world:a'],'held:good':['world:b']},
+        'prior_entries':entries,'current_entries':entries}
+    result,_=apply_source_correction(training,proof_path,model_id='lfm2:inventory',
+        stage_id='native_full_sft',current_source_receipt=current_train,
+        current_bindings={'edge':{'graph':'new'}},current_order=['edge'],
+        current_communication_ids=['edge'],protected_held=held_context)
+    binding=result['options']['held_quality_hold_binding']
+    assert binding['excluded_rows']==1 and binding['source_sha256']=='held-current'
+    assert result['sft_progress']['native_full_sft']['options']['held_quality_hold_binding']==binding
+
+
 def test_protected_held_coverage_rebinds_only_after_exact_same_class_rows():
     from natlang_neuralese.train.native_held import rebind_held_coverage_after_exact_correction
-    previous=[{'id':'h1','binding':'old','communication':True},
-              {'id':'h2','binding':'same','communication':False}]
-    current=[{'id':'h1','binding':'new','communication':True},
-             {'id':'h2','binding':'same','communication':False}]
+    previous=[{'id':'h1','binding':'old','communication':True,'forward_tokens':3},
+              {'id':'h2','binding':'same','communication':False,'forward_tokens':2}]
+    current=[{'id':'h1','binding':'new','communication':True,'forward_tokens':3},
+             {'id':'h2','binding':'same','communication':False,'forward_tokens':2}]
     from natlang_neuralese.common.hashing import canonical_json_sha256_hex
-    coverage={'source_sha256':'old-source','classes':{
+    coverage={'source_sha256':'old-source','graph_visits':6,'completed_sweeps':2,
+        'forward_token_visits':16,'classes':{
         'communication':{'rows':1,'row_prefix_sha256':canonical_json_sha256_hex([['h1','old']]),
                          'visits':[4],'cursor':0},
         'ordinary':{'rows':1,'row_prefix_sha256':canonical_json_sha256_hex([['h2','same']]),
                     'visits':[2],'cursor':0}}}
     rebound=rebind_held_coverage_after_exact_correction(previous,current,coverage,source_sha256='new-source')
     assert rebound['source_sha256']=='new-source'
-    assert rebound['classes']['communication']['visits']==[4]
+    assert rebound['classes']['communication']['visits']==[0]
     assert rebound['classes']['communication']['row_prefix_sha256']==canonical_json_sha256_hex([['h1','new']])
+    assert rebound['classes']['ordinary']['visits']==[2]
+    assert rebound['graph_visits']==2 and rebound['completed_sweeps']==0
+    assert rebound['forward_token_visits']==4
+    assert rebound['retired_target_visit_history']==[{'id':'h1','class':'communication',
+        'old_binding_sha256':canonical_json_sha256_hex('old'),'visits':4,
+        'reason':'held target binding changed'}]
     moved=[{'id':'h1','binding':'new','communication':False},
            {'id':'h2','binding':'same','communication':False}]
     with pytest.raises(ValueError,match='class membership/order'):

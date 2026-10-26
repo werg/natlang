@@ -722,9 +722,11 @@ def _evaluate_cadence(model, source, *, args, coverage=None, final=False, backen
                       previous_result=None, objective=None, stop_requested=None):
     from .native_held import held_selection
     coverage = coverage or {}
+    quality_excluded_ids = set(coverage.get('quality_excluded_ids') or ())
     indices, next_coverage, selection = held_selection(source.entries, coverage,
         source_sha256=source.file_sha256, token_budget=args.held_eval_tokens,
-        graph_budget=args.held_eval_graphs, final=final and _full_held_requested(args), previous_result=previous_result)
+        graph_budget=args.held_eval_graphs, final=final and _full_held_requested(args),
+        previous_result=previous_result, excluded_ids=quality_excluded_ids)
     cursor = next_coverage['cursor']
     started = time.monotonic()
     result = _evaluate(model, source.iter_indices(indices), checkpoint_layers=args.checkpoint_layers,
@@ -738,13 +740,24 @@ def _evaluate_cadence(model, source, *, args, coverage=None, final=False, backen
         next_coverage,selection=commit_held_observations(source.entries,coverage,next_coverage,selection,observed)
         actual_count=len(observed);cursor=next_coverage['cursor']
     else:actual_count=len(indices)
-    result.update(scope='full' if actual_count == len(source) else 'cadence-subset',
+    result.update(scope='full' if actual_count == len(source) and not quality_excluded_ids else 'cadence-subset',
                   terminal_policy=getattr(args,'held_final_policy','budgeted'),
                   full_sweep_requested=bool(final and _full_held_requested(args)),
                   source_sha256=source.file_sha256,
                   source_graphs=len(source), cursor_before=int(coverage.get('cursor', 0)),
                   cursor_after=cursor, seconds=time.monotonic()-started,
                   selection=selection)
+    if quality_excluded_ids:
+        hold_binding = coverage.get('quality_hold_binding') or {}
+        result['held_quality_hold'] = {
+            'excluded_rows': len(quality_excluded_ids),
+            'excluded_ids_sha256': canonical_json_sha256_hex(sorted(quality_excluded_ids)),
+            'manifest_path': hold_binding.get('path'),
+            'manifest_sha256': hold_binding.get('sha256'),
+            'row_bindings_path': hold_binding.get('row_bindings_path'),
+            'row_bindings_sha256': hold_binding.get('row_bindings_sha256'),
+            'full_held_qualification': False,
+            'reason': 'known truncated held targets remain protected but are not scored'}
     declaration_path = getattr(args, 'ce_supervision_policy', None)
     if declaration_path is not None and objective is None:
         result['additional_ce_policy'] = {'path':str(declaration_path),
@@ -1846,6 +1859,26 @@ def _main(argv=None, *, requested_refresh):
                 for key in ('held', 'task_eval', 'task_checkpoint_sha256', 'task_native_identity'):
                     metrics.pop(key, None)
                 _retain_current_held_coverage(metrics,saved_training,held)
+        held_quality_binding = ((resume or saved_training or {}).get('options') or {}).get('held_quality_hold_binding')
+        held_quality_excluded_ids = set()
+        if held_quality_binding is not None:
+            from .native_source_correction import validate_held_quality_hold
+            if held_quality_binding.get('source_sha256') != source_receipts[1]['sha256']:
+                raise ValueError('held quality hold source differs from the active protected held receipt')
+            quality = validate_held_quality_hold(held_quality_binding,
+                held_receipt=source_receipts[1], held_entries=held.entries)
+            if (quality['row_bindings']['path'] != held_quality_binding.get('row_bindings_path')
+                    or quality['row_bindings']['sha256'] != held_quality_binding.get('row_bindings_sha256')
+                    or quality['excluded_rows'] != held_quality_binding.get('excluded_rows')):
+                raise ValueError('held quality hold binding differs from its authenticated row ledger')
+            held_quality_excluded_ids = quality['excluded_ids']
+            from .native_held import bind_held_quality_exclusions
+            metrics['held_coverage'] = bind_held_quality_exclusions(held.entries,
+                metrics.get('held_coverage'), held_quality_excluded_ids,
+                source_sha256=held.file_sha256,
+                allow_transition=bool(source_correction_result.get('changed')))
+            metrics['held_coverage']['quality_hold_binding'] = dict(held_quality_binding)
+            checkpoint_options['held_quality_hold_binding'] = dict(held_quality_binding)
         restore_training_rng_state(resume['rng'], args.device)
         resume['optimizer'] = None
         # Avoid locals(): its cached frame dictionary retains every setup
