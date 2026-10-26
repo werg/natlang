@@ -200,6 +200,16 @@ shared exact-source resume and publication-owner mechanism. Otherwise useful
 updates can remain invisible to the durable exporter. Preserve optimizer, RNG
 and exposure; do not reinterpret an older exported parent as newer earned work.
 
+Same-ID workspace resets (engineering finding, 2026-10-26): a sandbox can remain
+Running while restarting with a new boot identity and an empty workspace. Monitor
+the expected boot/PID/start identity, actual source/control files and optimizer
+progress together; missing workspace metadata is an explicit unavailable state,
+not a reason to keep displaying an old progress reading. Restore the newest
+independently verified full state. A stale drained controller backup must not
+replay an older round over its newer descendant: acknowledge only actual bound
+completed reports/receipts, verify checkpoint ancestry, and reserve fresh work
+namespaces while preserving the remaining schedule and all earned obligations.
+
 ## Neuralese architecture replacement (owner, 2026-10-15)
 
 The destination is shared positional KV and hybrid-state spans, replacing the

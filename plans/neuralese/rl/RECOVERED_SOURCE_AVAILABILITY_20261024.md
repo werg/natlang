@@ -458,3 +458,70 @@ benchmark, not measured end-to-end learner throughput. Full checks passed:
 2748 general Python,4871 Neuralese CPU,17 GPU and2177 TypeScript tests, plus
 build/layer/conformance checks. Running learners still use the frozenB0 package;
 a bound safe continuation is required before claiming deployed benefit.
+
+2026-10-26 01:20 Berlin: LFM's192-package append was independently reviewed,
+privately backed up and adopted through future-only configuration CAS at00:40.
+Its next full-SFT schedule declares1,618,603 active rows (24,249 new unique
+graphs). The current cycle's frozen full-SFT operation retained the previous
+source; declaration/adoption does not establish exposure to those new rows.
+The exact control/source/index supplement is110,076,195bytes, SHA
+b8128740ad7b3deb14aaca4e9c19ceab97382ae1521cd50a957ce54dd441daee.
+All192 packages were checked for actual private object presence before adoption.
+Mellum's own192 role views are staged and undergoing their independent
+prefix/deduplication/capacity preparation, not yet adopted. Shared preparation
+now preserves optional stage roles, explicit transported private-receipt custody,
+Mellum's recorded history default, external source symlinks and each bound memory
+request's capacity envelope. Root and Luna focused runs each passed18 tests;
+the integrated full check is still running.
+
+The original finite foundation headers were recovered from historical metadata
+exports, byte-identical to their original recipe bindings: LFM f3640c71cbcf13a738b6f8e5533d15ad4dc9ef756d3dfa1c4cef6d585c242c33,
+Mellum1781a87ebbb79fa48d2e37534a90ead641d5752dcf3210cc110535e8fa0595da.
+Both load their original26,312 genuine producer/consumer graphs and reproduce
+the historical cohort hashes. LFM's verified37586 full state and Mellum's
+original verified35223 per-row metadata each retain26,312/26,312 actual earned
+foundation visits. Evidence is under
+`/home/werg/data/lfm-local-recovery-20261024/source-rejoin/recovered-exact-original-foundation-20261026-v3`.
+Current recovery continuations disabled foundation scheduling and lost its
+declaration flag; an explicit ancestor-bound declaration-restoration mechanism
+is being implemented and independently reviewed. It must preserve all current
+weights, optimizer/RNG, exposure and pending obligations and must not grant
+runtime, gradient, task or shared-space readiness merely from recovered bytes.
+
+Mellum's real SFT updates reached35809, private full-state recovery35697;
+local LFM reached37663 and is collecting its next whole-graph RL round after
+seven committed rounds. The external Mellum mirror has verified35478 and is
+downloading35575. The second supplemental snapshot attempt failed with zero
+bytes; no READY/restore qualification is claimed. Independent private full-state
+exports continue. Exact pruning of two closed-session Mellum checkpoint exports
+reclaimed96,529,453,986remote bytes, with actual deletion verified and all current
+parents, inference/source dependencies and in-flight recovery exports retained.
+
+2026-10-26 01:50 Berlin: sandbox646f7e62 unexpectedly restarted around01:23,
+keeping the same sandbox ID and control-plane Running status while changing its
+boot identity from a9f6f815 to75dd8cc8 and losing the entire `/work/resume`
+workspace. No old processes remained. The cause is unconfirmed; the replacement
+cgroup's zero OOM counters do not establish what happened to the old instance.
+The in-flight35773 export ended137 and its private object returns404. Last
+observed training was35810; latest independently verified full state35697
+survives.113 observed updates were not recovered and must be repeated.
+
+The same already allocated sandbox now holds the full SHA-verified35697 state,
+restored runtime and all original static source/index bytes. An explicit leased
+recovery transaction verifies the real35575 RL completion/runtime report and
+private full-state receipt against the newer checkpoint's actual ancestry,
+acknowledges that already completed round, and selects35697 through the shared
+publication rule. Freshcycle2 resumes its remaining full-source SFT schedule;
+weights, optimizer/RNG and earned/pending row ledgers are preserved. The real
+controller is6819/start102035 onboot75dd8cc8. Its GPU is active in resumed entry
+validation, but no new optimizer step has yet been observed. Both independent
+export supervision and progress monitoring are restarted with the new exact
+owner identity. Workspace absence now produces an explicit unavailable status.
+The192 teacher packages were restored again and their Mellum append is being
+reprepared; none of that pending append was previously adopted or exposed.
+
+The explicit historical-foundation declaration restoration is independently
+reviewed and passes102 focused tests, including an in-place zero-update case
+that saves audit history while preserving exact weights, moments, RNG, exposure
+and quotas. Its full repository check remains in progress. Both learners still
+executeB0 until a reviewed, source-bound runtime continuation is adopted.
