@@ -305,7 +305,8 @@ def test_role_tick_exports_real_descendants_and_local_owner_adopts_them(tmp_path
             owner['optimizer'], sft_progress=owner['training']['sft_progress'], global_step=1,
             recipe_binding=rows['lfm' if name == ids['lfm'] else 'mellum']['receipt']['recipe'])
         participant.optimizer_options = owner['training']['identity']['optimizer_options']
-        participant.fp8_profile = {'kind': 'off', 'recipe': 'delayed', 'amax_history_len': 16}
+        participant.optimizer_state_storage = owner['training']['options']['optimizer_state_storage']
+        participant.fp8_profile = owner['training']['identity']['fp8']
         participant.source_rng = owner['training']['source_rng']
         participant.snapshot_ancestors = []
         return participant

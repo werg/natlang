@@ -31,6 +31,7 @@ def fixture(tmp_path,mode):
         # generic semantic-stage default.
         value.optimizer_options={'lr':1e-4,'weight_decay':.1,'latent_ns':'quintic',
             'learned_row_lr':None,'interface_row_lr':None}
+        value.optimizer_state_storage='device'
         value.fp8_profile={'kind':'off','recipe':'delayed','amax_history_len':16}
     optimizer=torch.optim.AdamW(channel.vae.parameters(),lr=1e-3)
     parent=tmp_path/'parent'

@@ -49,6 +49,7 @@ def _fixture(tmp_path, monkeypatch):
         fresh.optimizer = make_native_optimizer(fresh.model, lr=source_lr, latent_ns=source_ns, in_backward=False)[0]
         fresh.optimizer_options = {'lr':source_lr,'weight_decay':.1,'latent_ns':source_ns,
             'learned_row_lr':None,'interface_row_lr':None,'native_optimizer_migration':None}
+        fresh.optimizer_state_storage = 'device'
         fresh.fp8_profile = {'kind':'off','recipe':'delayed','amax_history_len':16}
         return fresh
     monkeypatch.setattr(stage, 'load_participant', load)

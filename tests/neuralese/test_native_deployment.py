@@ -147,8 +147,10 @@ def test_semantic_loader_relocates_exact_pinned_base_without_resetting_optimizer
     loss=sum(parameter.square().mean() for parameter in model.parameters() if parameter.requires_grad)
     loss.backward();optimizer.step()
     checkpoint=tmp_path/'trained.pt'
+    optimizer_options={'lr':.001,'weight_decay':.1,'latent_ns':'quintic'}
     torch.save({'schema':CHECKPOINT_SCHEMA,'model_config':config,**model_state(model),
-        'training':{'optimizer':optimizer.state_dict(),'step':1}},checkpoint)
+        'training':{'optimizer':optimizer.state_dict(),'step':1,
+                    'identity':{'optimizer_options':optimizer_options}}},checkpoint)
     identity=native_identity(model,config,checkpoint_sha256=binding(checkpoint)['sha256'])
     relocated=tmp_path/'resident-base';shutil.move(base,relocated)
     loaded=load_participant('student',{'checkpoint':binding(checkpoint),'native_identity':identity},

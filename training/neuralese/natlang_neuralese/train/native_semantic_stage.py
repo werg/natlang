@@ -499,18 +499,37 @@ def _native_modules(participants):
     return stack
 
 
+def _participant_execution_binding(entry, *, name):
+    optimizer_options = entry.optimizer_options
+    fp8_profile = entry.fp8_profile
+    storage = entry.optimizer_state_storage
+    if (not isinstance(optimizer_options, dict) or
+            any(key not in optimizer_options for key in ('lr', 'weight_decay', 'latent_ns'))):
+        raise ValueError('semantic participant cannot be saved without exact optimizer construction settings: '+name)
+    if (not isinstance(fp8_profile, dict) or set(fp8_profile) != {'kind', 'recipe', 'amax_history_len'} or
+            fp8_profile.get('kind') not in {'off', 'triton-experts'} or
+            not isinstance(fp8_profile.get('recipe'), str) or
+            type(fp8_profile.get('amax_history_len')) is not int or fp8_profile['amax_history_len'] < 1):
+        raise ValueError('semantic participant cannot be saved without an exact FP8 execution profile: '+name)
+    if storage not in {'device', 'cpu'}:
+        raise ValueError('semantic participant cannot be saved without its exact optimizer state placement: '+name)
+    return dict(optimizer_options), storage, dict(fp8_profile)
+
+
 def save_shared(policy, participants, vae, optimizer, *, training, device):
     from ..common.checkpoint_offload import checkpoint_input_storage_options
     with _native_modules(participants):
+        participant_options = {name: _participant_execution_binding(entry, name=name)
+                               for name, entry in participants.items()}
         state = {'schema': SHARED_CHECKPOINT_SCHEMA,
             'participants': {name: {'model_config': entry.config, 'model_state': model_state(entry.model),
                 'source_identity': entry.identity, 'optimizer': entry.optimizer.state_dict(),
                 'sft_progress': entry.sft_progress, 'global_step': entry.global_step,
                 'source_rng':getattr(entry,'source_rng',None),
                 'training_options': {**checkpoint_input_storage_options(entry.model.port),
-                    'optimizer_options':dict(entry.optimizer_options),
-                    'optimizer_state_storage':getattr(entry,'optimizer_state_storage','device'),
-                    'fp8_profile':dict(entry.fp8_profile),
+                    'optimizer_options':participant_options[name][0],
+                    'optimizer_state_storage':participant_options[name][1],
+                    'fp8_profile':participant_options[name][2],
                     'native_snapshot_ancestors':list(getattr(entry,'snapshot_ancestors',[])),
                     **({'ce_supervision_policy_binding':training['config_history'][-1]['config']['ce_supervision_policy']}
                        if (training.get('config_history') or [{}])[-1].get('config',{}).get('ce_supervision_policy') else {}),
@@ -954,13 +973,17 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
             participant.optimizer.zero_grad(set_to_none=True)
             if name in active:participant.model.port.checkpoint_layers=True
             # Generic curriculum backbone_lr is not an optimizer migration:
-            # preserve each participant's actual inherited settings unless the
-            # recipe names an explicit participant-specific rate override.
+            # preserve each participant's inherited backbone rate. Declared
+            # row-rate defaults and per-model overrides are applied explicitly.
             current_optimizer_options = participant.optimizer_options
             participant_override=(options.get('participant_optimizer_options') or {}).get(name,{})
             lr = participant_override.get('lr', current_optimizer_options['lr'])
-            learned_lr = participant_override.get('learned_row_lr', current_optimizer_options.get('learned_row_lr'))
-            interface_lr = participant_override.get('interface_row_lr', current_optimizer_options.get('interface_row_lr'))
+            learned_lr = participant_override.get('learned_row_lr',
+                options.get('learned_row_learning_rate',config.get('learned_row_learning_rate',
+                    current_optimizer_options.get('learned_row_lr'))))
+            interface_lr = participant_override.get('interface_row_lr',
+                options.get('interface_row_learning_rate',config.get('interface_row_learning_rate',
+                    current_optimizer_options.get('interface_row_lr'))))
             _adjust_lr(participant.optimizer, lr, learned_lr, interface_lr)
             participant.optimizer_options = {**current_optimizer_options,
                 'lr':lr, 'learned_row_lr':learned_lr, 'interface_row_lr':interface_lr}
