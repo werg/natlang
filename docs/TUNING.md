@@ -44,6 +44,17 @@ services, types) changed; `--incremental` prints which bindings changed and whic
 be refit. The report prints the time from invoking
 `tune` to the first tuned call, split by stage.
 
+## Edits and renames
+
+Named `.nl` definitions keep their identity by path. Unlabeled inline `nl` sites are identified by their file
+revision and position, so the tuner keeps its own persistent site registry (`.natlang/tune/sites.json`): an edit
+elsewhere in the file keeps a site (same text and contract), and an edited instruction keeps its site when it is the
+only candidate with that contract in its file. Ambiguous edits become new sites; nothing inherits another site's
+adapters. A renamed file, or an ambiguous edit you want carried over, goes in `tune.migrations.json` beside the
+program: `{ "<site ID from sites.json>": "<current component key>" }`. A site that only moved reuses its data and
+training; `natlang tune --incremental` reseals and revalidates the release for the new keys. Labeling a site
+(`/* @natlangSite name */`) makes its identity independent of edits.
+
 ## How calls use a release
 
 Each call runs its **own** definition's stack: its families, then its scope ancestry from the program root to its own
@@ -128,4 +139,4 @@ release store with compare-before-activate and rollback, `natlang tune` (collect
 activate, report, watch), managed llama.cpp serving with per-request stacks, the joint trainer with nested shared
 bases and free LoRA factors, per-node GGUF export, whole-stack PEFT export for vLLM, and soft instruction/skill states. Placement, sweeps and paired evaluation reports are implemented; large sweeps are run by operations. Not yet
 implemented: cross-program families (`tune --families`), full per-lambda fine-tuning arm, base distillation, wllama serving, on-policy repair
-rounds and refitting only dirty nodes (data reuse is incremental; training still refits the whole tree). These remain required work in the plan.
+rounds and refitting only dirty nodes (data and training receipts are reused; a semantic change still refits the whole tree). These remain required work in the plan.

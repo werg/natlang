@@ -21,6 +21,9 @@ export function sharedSourceHash(program: ProgramDescriptor): string {
 export type Invalidation = {
   /** Bindings whose semantics changed, that disappeared, appeared, or moved in the scope tree. */
   readonly changed: readonly string[]; readonly removed: readonly string[]; readonly added: readonly string[]; readonly moved: readonly string[];
+  /** Bindings whose site continues under a new component key with unchanged semantics: no refit, but the release must
+   * be resealed for the current keys (training receipts are reused). */
+  readonly rekeyed: readonly string[];
   /** Nodes to refit: the changed bindings' own nodes and every shared ancestor trained on changed semantics. */
   readonly dirty: readonly string[];
   /** Nodes fit against a dirty parent version: refit after their parents (reverse dependencies). */
@@ -33,11 +36,12 @@ export type Invalidation = {
 export function invalidation(previous: WeightManifest, current: WeightManifest): Invalidation {
   const before = new Map(previous.bindings.map(entry => [entry.id, entry]));
   const after = new Map(current.bindings.map(entry => [entry.id, entry]));
-  const changed: string[] = [], removed: string[] = [], added: string[] = [], moved: string[] = [];
+  const changed: string[] = [], removed: string[] = [], added: string[] = [], moved: string[] = [], rekeyed: string[] = [];
   for (const [id, entry] of before) {
     const now = after.get(id);
     if (!now) { removed.push(id); continue; }
     if (now.semanticHash !== entry.semanticHash) changed.push(id);
+    else if (now.component !== entry.component) rekeyed.push(id);
     if (JSON.stringify(now.ancestry) !== JSON.stringify(entry.ancestry)) moved.push(id);
   }
   for (const id of after.keys()) if (!before.has(id)) added.push(id);
@@ -54,8 +58,8 @@ export function invalidation(previous: WeightManifest, current: WeightManifest):
   for (const node of dirty) visit(node);
   const currentNodes = new Set(current.tree.map(node => node.id));
   const keep = (nodes: Iterable<string>) => [...nodes].filter(node => currentNodes.has(node)).sort();
-  return { changed: changed.sort(), removed: removed.sort(), added: added.sort(), moved: moved.sort(), dirty: keep(dirty), dependents: keep(dependents),
-    fresh: !changed.length && !removed.length && !added.length && !moved.length };
+  return { changed: changed.sort(), removed: removed.sort(), added: added.sort(), moved: moved.sort(), rekeyed: rekeyed.sort(),
+    dirty: keep(dirty), dependents: keep(dependents), fresh: !changed.length && !removed.length && !added.length && !moved.length && !rekeyed.length };
 }
 
 /** A root's collected trajectories stay valid while every binding they reached keeps its semantics and the shared
@@ -65,4 +69,12 @@ export function rootDataValid(record: { readonly bindings: Readonly<Record<strin
   if (record.sharedSources !== sharedSources) return false;
   const semantic = new Map(current.bindings.map(entry => [entry.id, entry.semanticHash]));
   return Object.entries(record.bindings).every(([id, hash]) => semantic.get(id) === hash);
+}
+
+/** What training depends on in a scaffold: the tree, bindings by persistent ID with their ancestry and semantics, and
+ * the declared scales/families. Component keys, definition IDs and the program build hash only bind a release to the
+ * current source, so an edit that only renames a site reuses its training receipt. */
+export function trainingScaffoldKey(manifest: WeightManifest): string {
+  const { digest: _digest, program: _program, bindings, ...rest } = manifest;
+  return sha([rest, bindings.map(({ component: _component, definitionId: _definition, site: _site, ...binding }) => binding)]);
 }

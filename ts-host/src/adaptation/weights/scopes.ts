@@ -13,6 +13,8 @@ import type { ScopeNode, WeightBindingEntry } from './manifest.js';
 export type ScopeOptions = {
   /** Directories (relative to the program root, `/`-separated) that root their own tree level. */
   readonly treeRoots?: readonly string[];
+  /** Persistent site IDs by current component key (tune/sites.ts); a component without one is its own site. */
+  readonly sites?: Readonly<Record<string, string>>;
 };
 
 export const ROOT_NODE = 'tree:';
@@ -41,11 +43,12 @@ export function compileScopeTree(program: ProgramDescriptor, options: ScopeOptio
       if (!nodes.has(id)) nodes.set(id, { id, level: trees.has(path) ? 'tree' : 'folder', path, parent: ancestry.at(-1)! });
       ancestry.push(id);
     }
-    const lambda = 'lambda:' + component.key;
+    const site = options.sites?.[component.key] ?? component.key;
+    const lambda = 'lambda:' + site;
     nodes.set(lambda, { id: lambda, level: 'lambda', path: component.source.path, parent: ancestry.at(-1)! });
     ancestry.push(lambda);
-    bindings.push({ id: fingerprint({ program: program.id, component: component.key, context: null }, 'natlang.weights-binding/v1').slice(0, 24),
-      component: component.key, definitionId: component.definitionId ?? null, contextId: null,
+    bindings.push({ id: fingerprint({ program: program.id, component: site, context: null }, 'natlang.weights-binding/v1').slice(0, 24),
+      component: component.key, ...(site !== component.key ? { site } : {}), definitionId: component.definitionId ?? null, contextId: null,
       origin: component.origin, ancestry, semanticHash: bindingSemanticHash(component) });
   }
   for (const root of trees) if (![...nodes.values()].some(node => node.level === 'tree' && node.path === root))

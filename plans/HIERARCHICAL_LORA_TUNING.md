@@ -845,7 +845,7 @@ independent work; a checked item needs its artifact and actual evidence.
   supervisor, separately from engineering helpers and without duplicate pools
 - [ ] Direct/weak evidence schema, confidence calibration and disagreement handling
 - [ ] Student-prefix corrections with verified continuations and graph provenance
-- [ ] Stable binding/inline-site IDs and explicit edit/rename migration
+- [x] Stable binding/inline-site IDs and explicit edit/rename migration (`ts-host/src/tune/sites.ts`)
 
 **Training**
 

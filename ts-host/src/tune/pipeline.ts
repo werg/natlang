@@ -15,7 +15,8 @@ import { sealManifest, type WeightArtifact, type WeightManifest, type FamilyVers
 import { stackServingName, WeightBinding } from '../adaptation/weights/binding.js';
 import { activateRelease, readActive, releaseFile, storeRelease, tuneDirectory, tuneJobLock } from '../adaptation/weights/release.js';
 import type { ModelDriver } from '../runtime/runtime.js';
-import { sharedSourceHash, rootDataValid } from './keys.js';
+import { sharedSourceHash, rootDataValid, trainingScaffoldKey } from './keys.js';
+import { programSites } from './sites.js';
 import { collect, readRootExamples, scaffoldManifest, splitExamples, type CollectedTurn, type SplitExample, type SplitReceipt } from './collect.js';
 import { evaluateRoots, type ArmResult } from './evaluate.js';
 import type { ScopeOptions } from '../adaptation/weights/scopes.js';
@@ -74,7 +75,7 @@ type TrainerResult = { artifacts: WeightArtifact[]; families?: FamilyVersion[]; 
   validatedReductions?: string[][]; receipt: Record<string, unknown> };
 
 /** Collected, split data of one program: everything a training variant needs. */
-export type TuneData = { readonly scaffold: WeightManifest; readonly examples: readonly SplitExample[]; readonly dataKey: string;
+export type TuneData = { readonly scaffold: WeightManifest; readonly sites: Readonly<Record<string, string>>; readonly examples: readonly SplitExample[]; readonly dataKey: string;
   readonly turns: readonly CollectedTurn[]; readonly trainRows: readonly CollectedTurn[]; readonly protectedCount: number; readonly total: number };
 
 /** The program's root examples split by component; the persisted receipt keeps every component on the side it was
@@ -92,7 +93,12 @@ export function currentSplit(root: string, examplesPath?: string): ReturnType<ty
 export async function prepareData(options: TuneOptions, timings: StageTiming[] = [], log: (line: string) => void = () => {},
   scopes: ScopeOptions = {}): Promise<TuneData> {
   const { root, program, student } = options;
-  const scaffold = await timed(timings, 'discover', log, () => scaffoldManifest(program, student.base, scopes));
+  const { scaffold, sites } = await timed(timings, 'discover', log, () => {
+    // Persistent site IDs keep an edited or moved inline site's binding, data and lambda node (tune/sites.ts).
+    const assignment = programSites(root, program);
+    for (const migration of assignment.migrations) log(`natlang tune: site ${migration.site} continues as ${migration.to} (${migration.how})`);
+    return { sites: assignment.sites, scaffold: scaffoldManifest(program, student.base, { ...scopes, sites: assignment.sites }) };
+  });
   const all = readRootExamples(root, options.examplesPath);
   const examples = currentSplit(root, options.examplesPath);
   if (!examples.some(example => example.partition === 'train'))
@@ -142,7 +148,7 @@ export async function prepareData(options: TuneOptions, timings: StageTiming[] =
     ? sha(records.get(example.id)) : null])]).slice(0, 24);
   // Binding IDs depend on program, component and context only, so rows stay valid for any tree-root variant.
   const trainRows = turns.filter(turn => turn.partition === 'train' && turn.binding && turn.evidence.enclosingSuccess && !turn.reply.truncated);
-  return { scaffold, examples, dataKey, turns, trainRows, protectedCount: all.filter(example => example.protected).length, total: all.length };
+  return { scaffold, sites, examples, dataKey, turns, trainRows, protectedCount: all.filter(example => example.protected).length, total: all.length };
 }
 
 /** One training variant: a scaffold (scales, tree roots), a recipe and optionally a row subset. */
@@ -156,7 +162,7 @@ export async function trainRelease(options: TuneOptions, data: TuneData, variant
   const rows = variant.rows ?? data.trainRows;
   if (!rows.length) throw new Error('the teacher produced no verified training trajectories; check the examples and teacher profile');
   const recipe = { seed: 0, ...options.settings.recipe, ...variant.recipe };
-  const trainKey = sha(['natlang.tune-train/v2', data.dataKey, variant.manifest.digest, student, recipe,
+  const trainKey = sha(['natlang.tune-train/v3', data.dataKey, trainingScaffoldKey(variant.manifest), student, recipe,
     variant.rows ? rows.map(row => [row.root, row.call, row.turn]) : null]).slice(0, 24);
   const jobDir = join(tuneDirectory(root), 'jobs', trainKey), out = join(jobDir, 'out');
   const reused = existsSync(join(out, 'result.json'));

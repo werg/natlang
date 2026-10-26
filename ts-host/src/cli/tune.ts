@@ -27,6 +27,7 @@ import { loadTuneSettings } from '../tune/settings.js';
 import { loadVllmStacks, uploadRelease } from './weights.js';
 import { invalidation } from '../tune/keys.js';
 import { scaffoldManifest } from '../tune/collect.js';
+import { programSites } from '../tune/sites.js';
 import { evaluateRelease, prepareData, saveArm, tuneProgram, type TuneOptions, type TuneReport } from '../tune/pipeline.js';
 import { evaluateRoots } from '../tune/evaluate.js';
 import { protectedExamples, readRootExamples } from '../tune/collect.js';
@@ -206,9 +207,10 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
     if (active) {
       const inventory = buildProject({ project: root, emit: false, write: false, runtimeModule: RUNTIME_MODULE });
       if (!inventory.ok) throw new Error(formatDiagnostics(inventory.diagnostics));
-      const change = invalidation(active, scaffoldManifest(inventory.manifest.adaptation!, active.base));
+      const program = inventory.manifest.adaptation!;
+      const change = invalidation(active, scaffoldManifest(program, active.base, { sites: programSites(root, program).sites }));
       if (change.fresh && active.program.buildHash === inventory.manifest.adaptation!.buildHash) { io.out('fresh: the active release matches the program; nothing to rebuild'); return 0; }
-      io.err(`natlang tune: changed ${change.changed.length}, added ${change.added.length}, removed ${change.removed.length}, moved ${change.moved.length} binding(s); ` +
+      io.err(`natlang tune: changed ${change.changed.length}, added ${change.added.length}, removed ${change.removed.length}, moved ${change.moved.length}, renamed ${change.rekeyed.length} binding(s); ` +
         `dirty nodes ${change.dirty.length}, dependent residuals ${change.dependents.length}; unchanged roots reuse their data`);
     }
   }

@@ -16,7 +16,10 @@ export type ScopeLevel = 'tree' | 'folder' | 'lambda';
 /** One node of the lexical adapter-scope tree; `parent` is null only for the program root. */
 export type ScopeNode = { readonly id: string; readonly level: ScopeLevel; readonly path: string; readonly parent: string | null };
 /** A bound definition: its component, its context binding (null: its file context) and ordered scope ancestry. */
-export type WeightBindingEntry = { readonly id: string; readonly component: string; readonly definitionId: string | null;
+export type WeightBindingEntry = { readonly id: string; readonly component: string;
+  /** The persistent site this component continues, when it differs from the component key (an edited inline site). */
+  readonly site?: string;
+  readonly definitionId: string | null;
   readonly contextId: string | null; readonly origin: 'named' | 'authored-inline';
   /** Root first, the binding's own lambda node last. */
   readonly ancestry: readonly string[];

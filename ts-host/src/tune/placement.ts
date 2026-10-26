@@ -120,7 +120,7 @@ export async function runPlacement(options: TuneOptions, data: TuneData, referen
   }
   for (const roots of config.treeRoots ?? []) {
     log(`natlang tune: placement candidate with tree roots ${roots.join(', ')}`);
-    const scaffold = scaffoldManifest(options.program, options.student.base, { treeRoots: roots });
+    const scaffold = scaffoldManifest(options.program, options.student.base, { treeRoots: roots, sites: data.sites });
     const { manifest } = await trainRelease(options, data, { manifest: scaffold, label: `tree-roots:${roots.join(',')}` }, [], log);
     frontier.push(candidate('tree-roots', [], roots, manifest, await measure(manifest, `tree-roots-${frontier.length}`)));
   }
