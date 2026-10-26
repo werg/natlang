@@ -1,0 +1,115 @@
+{
+  "schema": "natlang.application/1",
+  "id": "014",
+  "title": "Complex customer onboarding director",
+  "entrypoint": "directOnboarding.nl",
+  "interfaces": [
+    {
+      "name": "directOnboarding",
+      "path": "directOnboarding.nl",
+      "purpose": "Convert customer onboarding goals into approved outcomes, verified environment constraints, an executable task graph, measured progress, and controlled replanning."
+    }
+  ],
+  "persistence": [
+    "OnboardingOutcome",
+    "EnvironmentConstraint",
+    "OnboardingTask",
+    "ProgressFinding",
+    "OnboardingRevision"
+  ],
+  "effects": [
+    "transfer open work only to a verified successor and separately revoke departing credentials",
+    "stage representative production validation before bulk import",
+    "keep unavailable integrations visibly incomplete under an approved temporary path",
+    "separate contractual milestone amendments from internal target changes"
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "clarifyOutcomes",
+        "paths": [
+          "directOnboarding/confirmCustomerOutcomes.nl"
+        ]
+      },
+      {
+        "stage": "mapEnvironment",
+        "paths": [
+          "directOnboarding/mapOnboardingEnvironment.nl",
+          "directOnboarding/compareProductionSample.nl"
+        ]
+      },
+      {
+        "stage": "constructPlan",
+        "paths": [
+          "directOnboarding/constructOutcomeTaskPlan.nl",
+          "directOnboarding/transferDepartedOwner.nl"
+        ]
+      },
+      {
+        "stage": "interpretProgress",
+        "paths": [
+          "directOnboarding/measureEvidenceBackedProgress.nl",
+          "directOnboarding/verifyTaskOperators.nl"
+        ]
+      },
+      {
+        "stage": "replanAndAccept",
+        "paths": [
+          "directOnboarding/replanOnboardingDependencies.nl",
+          "directOnboarding/routeUnavailableIntegration.nl",
+          "directOnboarding/trackContractAndTargetDates.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "directOnboarding/transferDepartedOwner.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "directOnboarding/compareProductionSample.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "directOnboarding/routeUnavailableIntegration.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "directOnboarding/verifyTaskOperators.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "directOnboarding/trackContractAndTargetDates.nl"
+        ]
+      }
+    ]
+  },
+  "source_files": [
+    "natlang.json",
+    "directOnboarding.nl",
+    "directOnboarding/frameLaunch.nl",
+    "directOnboarding/transferDepartedOwner.nl",
+    "directOnboarding/compareProductionSample.nl",
+    "directOnboarding/routeUnavailableIntegration.nl",
+    "directOnboarding/verifyTaskOperators.nl",
+    "directOnboarding/trackContractAndTargetDates.nl",
+    "directOnboarding/selectGoverningTerms.nl",
+    "directOnboarding/confirmCustomerOutcomes.nl",
+    "directOnboarding/mapOnboardingEnvironment.nl",
+    "directOnboarding/constructOutcomeTaskPlan.nl",
+    "directOnboarding/measureEvidenceBackedProgress.nl",
+    "directOnboarding/replanOnboardingDependencies.nl",
+    "runCase/clarifyOutcomes/audit/qualify.nl",
+    "types.ts"
+  ]
+}

@@ -307,19 +307,23 @@
   },
   {
     "id": "015-workflow-01",
-    "root": "runCase.nl",
+    "root": "coordinatedExit.nl",
     "split_group": "design-brief-app-015",
     "inputs": {
       "request": {
         "caseId": "SYN-015-01",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
+        "customerId": "C-15",
+        "subscriptionIds": [
+          "CORE-K15",
+          "ADDON-A3"
+        ],
+        "requestedOutcome": "Cancel add-on A-3 after current term and retain core plan",
+        "requestedEffectiveDate": "2026-10-31",
         "requestedBy": "case owner",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "services": {
+        "subscriptions": [
           {
             "customerId": "C-15",
             "subscriptionIds": [
@@ -394,6 +398,84 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "entitlementReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "015-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Account holder K-15 asks to cancel add-on A-3 after the current term and explicitly keep the core plan; the authenticated request names both services."
+              },
+              {
+                "id": "E2",
+                "source": "015-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-21",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Authenticated cancellation request C-15 arrived at 23:58 on Oct 20; the renewal cutoff is midnight Oct 21 in the billing system’s declared timezone."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "billingReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "015-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Account holder K-15 asks to cancel add-on A-3 after the current term and explicitly keep the core plan; the authenticated request names both services."
+              },
+              {
+                "id": "E2",
+                "source": "015-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-21",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Authenticated cancellation request C-15 arrived at 23:58 on Oct 20; the renewal cutoff is midnight Oct 21 in the billing system’s declared timezone."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "mutationReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "015-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Account holder K-15 asks to cancel add-on A-3 after the current term and explicitly keep the core plan; the authenticated request names both services."
+              },
+              {
+                "id": "E2",
+                "source": "015-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-21",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Authenticated cancellation request C-15 arrived at 23:58 on Oct 20; the renewal cutoff is midnight Oct 21 in the billing system’s declared timezone."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },
@@ -416,19 +498,23 @@
   },
   {
     "id": "015-workflow-02",
-    "root": "runCase.nl",
+    "root": "coordinatedExit.nl",
     "split_group": "design-brief-app-015",
     "inputs": {
       "request": {
         "caseId": "SYN-015-02",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
+        "customerId": "C-15",
+        "subscriptionIds": [
+          "CORE-K15",
+          "ADDON-A3"
+        ],
+        "requestedOutcome": "Cancel add-on A-3 after current term and retain core plan",
+        "requestedEffectiveDate": "2026-10-31",
         "requestedBy": "case owner",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "services": {
+        "subscriptions": [
           {
             "customerId": "C-15",
             "subscriptionIds": [
@@ -503,6 +589,84 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "entitlementReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "015-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Account holder K-15 asks to cancel add-on A-3 after the current term and explicitly keep the core plan; the authenticated request names both services."
+              },
+              {
+                "id": "E2",
+                "source": "015-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Reseller R-15 administers product P-15; provider dashboard shows the required separate cancellation endpoint has not been used."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "billingReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "015-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Account holder K-15 asks to cancel add-on A-3 after the current term and explicitly keep the core plan; the authenticated request names both services."
+              },
+              {
+                "id": "E2",
+                "source": "015-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Reseller R-15 administers product P-15; provider dashboard shows the required separate cancellation endpoint has not been used."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "mutationReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "015-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Account holder K-15 asks to cancel add-on A-3 after the current term and explicitly keep the core plan; the authenticated request names both services."
+              },
+              {
+                "id": "E2",
+                "source": "015-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Reseller R-15 administers product P-15; provider dashboard shows the required separate cancellation endpoint has not been used."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },
@@ -525,19 +689,23 @@
   },
   {
     "id": "015-workflow-03",
-    "root": "runCase.nl",
+    "root": "coordinatedExit.nl",
     "split_group": "design-brief-app-015",
     "inputs": {
       "request": {
         "caseId": "SYN-015-03",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
+        "customerId": "C-15",
+        "subscriptionIds": [
+          "CORE-K15",
+          "ADDON-A3"
+        ],
+        "requestedOutcome": "Cancel add-on A-3 after current term and retain core plan",
+        "requestedEffectiveDate": "2026-10-31",
         "requestedBy": "case owner",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "services": {
+        "subscriptions": [
           {
             "customerId": "C-15",
             "subscriptionIds": [
@@ -612,6 +780,84 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "entitlementReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "015-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Account holder K-15 asks to cancel add-on A-3 after the current term and explicitly keep the core plan; the authenticated request names both services."
+              },
+              {
+                "id": "E2",
+                "source": "015-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Consent token T-15 was issued at 09:00 and customer withdrawal arrived at 09:18 before scheduled execution at 10:00."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "billingReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "015-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Account holder K-15 asks to cancel add-on A-3 after the current term and explicitly keep the core plan; the authenticated request names both services."
+              },
+              {
+                "id": "E2",
+                "source": "015-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Consent token T-15 was issued at 09:00 and customer withdrawal arrived at 09:18 before scheduled execution at 10:00."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "mutationReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "015-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Account holder K-15 asks to cancel add-on A-3 after the current term and explicitly keep the core plan; the authenticated request names both services."
+              },
+              {
+                "id": "E2",
+                "source": "015-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Consent token T-15 was issued at 09:00 and customer withdrawal arrived at 09:18 before scheduled execution at 10:00."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },
@@ -634,19 +880,23 @@
   },
   {
     "id": "015-workflow-04",
-    "root": "runCase.nl",
+    "root": "coordinatedExit.nl",
     "split_group": "design-brief-app-015",
     "inputs": {
       "request": {
         "caseId": "SYN-015-04",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
+        "customerId": "C-15",
+        "subscriptionIds": [
+          "CORE-K15",
+          "ADDON-A3"
+        ],
+        "requestedOutcome": "Cancel add-on A-3 after current term and retain core plan",
+        "requestedEffectiveDate": "2026-10-31",
         "requestedBy": "case owner",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "services": {
+        "subscriptions": [
           {
             "customerId": "C-15",
             "subscriptionIds": [
@@ -721,6 +971,84 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "entitlementReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "015-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Account holder K-15 asks to cancel add-on A-3 after the current term and explicitly keep the core plan; the authenticated request names both services."
+              },
+              {
+                "id": "E2",
+                "source": "015-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Refund R-15 remains pending in payment ledger after subscription S-15 changed to closed."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "billingReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "015-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Account holder K-15 asks to cancel add-on A-3 after the current term and explicitly keep the core plan; the authenticated request names both services."
+              },
+              {
+                "id": "E2",
+                "source": "015-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Refund R-15 remains pending in payment ledger after subscription S-15 changed to closed."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "mutationReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "015-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Account holder K-15 asks to cancel add-on A-3 after the current term and explicitly keep the core plan; the authenticated request names both services."
+              },
+              {
+                "id": "E2",
+                "source": "015-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Refund R-15 remains pending in payment ledger after subscription S-15 changed to closed."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },
@@ -743,19 +1071,23 @@
   },
   {
     "id": "015-workflow-05",
-    "root": "runCase.nl",
+    "root": "coordinatedExit.nl",
     "split_group": "design-brief-app-015",
     "inputs": {
       "request": {
         "caseId": "SYN-015-05",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
+        "customerId": "C-15",
+        "subscriptionIds": [
+          "CORE-K15",
+          "ADDON-A3"
+        ],
+        "requestedOutcome": "Cancel add-on A-3 after current term and retain core plan",
+        "requestedEffectiveDate": "2026-10-31",
         "requestedBy": "case owner",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "services": {
+        "subscriptions": [
           {
             "customerId": "C-15",
             "subscriptionIds": [
@@ -830,6 +1162,84 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "entitlementReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "015-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Account holder K-15 asks to cancel add-on A-3 after the current term and explicitly keep the core plan; the authenticated request names both services."
+              },
+              {
+                "id": "E2",
+                "source": "015-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Workspace W-15 lists owners A-15 and B-15; requester A-15 lacks admin authority to remove B-15's access."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "billingReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "015-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Account holder K-15 asks to cancel add-on A-3 after the current term and explicitly keep the core plan; the authenticated request names both services."
+              },
+              {
+                "id": "E2",
+                "source": "015-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Workspace W-15 lists owners A-15 and B-15; requester A-15 lacks admin authority to remove B-15's access."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "mutationReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "015-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Account holder K-15 asks to cancel add-on A-3 after the current term and explicitly keep the core plan; the authenticated request names both services."
+              },
+              {
+                "id": "E2",
+                "source": "015-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Workspace W-15 lists owners A-15 and B-15; requester A-15 lacks admin authority to remove B-15's access."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },

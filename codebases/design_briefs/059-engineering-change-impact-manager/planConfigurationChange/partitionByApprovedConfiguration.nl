@@ -2,4 +2,5 @@
 args: { change: DesignDelta, configurations: ConfigurationState[], edges: ConfigurationDependency[] }
 returns: ApplicabilityPartition
 ---
-Partition only by an explicit effective rule, approved revision, serial range, and configuration evidence. Preserve grandfathered units under their approved configuration and maintenance guidance. Detect a reference-number-only drawing update as documentationOnly when function and interface are unchanged; return unresolved units where evidence cannot establish applicability.
+Bind seeds = identifyDirectlyChangedConfigurations(change, configurations). Start the impact set only from explicitly changed functions or interfaces, and preserve grandfathered units on their approved revision. Bind closure = closeConfigurationDependencySet(seeds, edges). Traverse configuration dependencies using their supplied direction and evidence; do not turn a shared drawing or supplier into blanket applicability.
+Return separate changed, preserved, and unresolved configuration IDs. Set documentationOnly only when the evidence shows reference renumbering with unchanged function and interface. Record traversal evidence and any missing dependency evidence so downstream work can identify exactly where scope ends.

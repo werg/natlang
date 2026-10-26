@@ -89,9 +89,14 @@
     "qualification/normalizeBids.nl",
     "resolveTenderScope.nl",
     "resolveTenderScope/applyTenderClarifications.nl",
+    "resolveTenderScope/applyTenderClarifications/invalidateClarificationsAfterRevision.nl",
     "resolveTenderScope/assignTradeInterfaces.nl",
+    "resolveTenderScope/assignTradeInterfaces/compareTradeBoundaryAssumptions.nl",
+    "resolveTenderScope/assignTradeInterfaces/createUnownedConnectionAcceptanceTask.nl",
     "resolveTenderScope/checkCommissioningCoverage.nl",
     "resolveTenderScope/classifyBidCoverage.nl",
+    "resolveTenderScope/classifyBidCoverage/assessAllowanceBasis.nl",
+    "resolveTenderScope/classifyBidCoverage/selectCurrentBidRevisions.nl",
     "types.ts"
   ]
 }

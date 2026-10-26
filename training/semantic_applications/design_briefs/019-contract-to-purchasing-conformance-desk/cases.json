@@ -1,7 +1,7 @@
 [
   {
     "id": "019-interpretRequest-supported",
-    "root": "runCase/interpretRequest/audit/qualify.nl",
+    "root": "qualification/interpretRequest.nl",
     "split_group": "design-brief-app-019",
     "inputs": {
       "draft": {
@@ -98,7 +98,7 @@
   },
   {
     "id": "019-interpretRequest-contradictory",
-    "root": "runCase/interpretRequest/audit/qualify.nl",
+    "root": "qualification/interpretRequest.nl",
     "split_group": "design-brief-app-019",
     "inputs": {
       "draft": {
@@ -195,7 +195,7 @@
   },
   {
     "id": "019-interpretRequest-missing",
-    "root": "runCase/interpretRequest/audit/qualify.nl",
+    "root": "qualification/interpretRequest.nl",
     "split_group": "design-brief-app-019",
     "inputs": {
       "draft": {
@@ -292,19 +292,22 @@
   },
   {
     "id": "019-workflow-01",
-    "root": "runCase.nl",
+    "root": "reviewProcurement.nl",
     "split_group": "design-brief-app-019",
     "inputs": {
       "request": {
         "caseId": "SYN-019-01",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
+        "requesterId": "Operator Gomez",
+        "supplierId": "SUP-19",
+        "requestedItems": [
+          "80 filter cartridges F-4"
+        ],
+        "intendedUse": "Delta line, Bay 4, November service cycle",
+        "agreementId": "AGR-19",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "agreementFile": {
+        "purchases": [
           {
             "requesterId": "Operator Gomez",
             "supplierId": "SUP-19",
@@ -373,6 +376,136 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "relatedCommitments": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "019-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Operations requests 80 filter cartridges for the Delta line in Bay 4 for the November service cycle; the purchase request names quantity, function, and use location."
+              },
+              {
+                "id": "E2",
+                "source": "019-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Requests R-19A, R-19B, and R-19C name the same requester and equipment bundle; combined value is $18,400 above review threshold $10,000."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "bundlePriceSchedules": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "019-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Operations requests 80 filter cartridges for the Delta line in Bay 4 for the November service cycle; the purchase request names quantity, function, and use location."
+              },
+              {
+                "id": "E2",
+                "source": "019-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Requests R-19A, R-19B, and R-19C name the same requester and equipment bundle; combined value is $18,400 above review threshold $10,000."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "entityCoverageTerms": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "019-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Operations requests 80 filter cartridges for the Delta line in Bay 4 for the November service cycle; the purchase request names quantity, function, and use location."
+              },
+              {
+                "id": "E2",
+                "source": "019-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Requests R-19A, R-19B, and R-19C name the same requester and equipment bundle; combined value is $18,400 above review threshold $10,000."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "catalogVersions": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "019-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Operations requests 80 filter cartridges for the Delta line in Bay 4 for the November service cycle; the purchase request names quantity, function, and use location."
+              },
+              {
+                "id": "E2",
+                "source": "019-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Requests R-19A, R-19B, and R-19C name the same requester and equipment bundle; combined value is $18,400 above review threshold $10,000."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "waitingApprovals": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "019-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Operations requests 80 filter cartridges for the Delta line in Bay 4 for the November service cycle; the purchase request names quantity, function, and use location."
+              },
+              {
+                "id": "E2",
+                "source": "019-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Requests R-19A, R-19B, and R-19C name the same requester and equipment bundle; combined value is $18,400 above review threshold $10,000."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },
@@ -395,19 +528,22 @@
   },
   {
     "id": "019-workflow-02",
-    "root": "runCase.nl",
+    "root": "reviewProcurement.nl",
     "split_group": "design-brief-app-019",
     "inputs": {
       "request": {
         "caseId": "SYN-019-02",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
+        "requesterId": "Operator Gomez",
+        "supplierId": "SUP-19",
+        "requestedItems": [
+          "80 filter cartridges F-4"
+        ],
+        "intendedUse": "Delta line, Bay 4, November service cycle",
+        "agreementId": "AGR-19",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "agreementFile": {
+        "purchases": [
           {
             "requesterId": "Operator Gomez",
             "supplierId": "SUP-19",
@@ -476,6 +612,136 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "relatedCommitments": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "019-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Operations requests 80 filter cartridges for the Delta line in Bay 4 for the November service cycle; the purchase request names quantity, function, and use location."
+              },
+              {
+                "id": "E2",
+                "source": "019-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Bundle discount D-19 assumes three items at $900 each; removal of item 2 changes the signed quote to $2,100 total."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "bundlePriceSchedules": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "019-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Operations requests 80 filter cartridges for the Delta line in Bay 4 for the November service cycle; the purchase request names quantity, function, and use location."
+              },
+              {
+                "id": "E2",
+                "source": "019-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Bundle discount D-19 assumes three items at $900 each; removal of item 2 changes the signed quote to $2,100 total."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "entityCoverageTerms": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "019-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Operations requests 80 filter cartridges for the Delta line in Bay 4 for the November service cycle; the purchase request names quantity, function, and use location."
+              },
+              {
+                "id": "E2",
+                "source": "019-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Bundle discount D-19 assumes three items at $900 each; removal of item 2 changes the signed quote to $2,100 total."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "catalogVersions": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "019-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Operations requests 80 filter cartridges for the Delta line in Bay 4 for the November service cycle; the purchase request names quantity, function, and use location."
+              },
+              {
+                "id": "E2",
+                "source": "019-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Bundle discount D-19 assumes three items at $900 each; removal of item 2 changes the signed quote to $2,100 total."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "waitingApprovals": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "019-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Operations requests 80 filter cartridges for the Delta line in Bay 4 for the November service cycle; the purchase request names quantity, function, and use location."
+              },
+              {
+                "id": "E2",
+                "source": "019-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Bundle discount D-19 assumes three items at $900 each; removal of item 2 changes the signed quote to $2,100 total."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },
@@ -498,19 +764,22 @@
   },
   {
     "id": "019-workflow-03",
-    "root": "runCase.nl",
+    "root": "reviewProcurement.nl",
     "split_group": "design-brief-app-019",
     "inputs": {
       "request": {
         "caseId": "SYN-019-03",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
+        "requesterId": "Operator Gomez",
+        "supplierId": "SUP-19",
+        "requestedItems": [
+          "80 filter cartridges F-4"
+        ],
+        "intendedUse": "Delta line, Bay 4, November service cycle",
+        "agreementId": "AGR-19",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "agreementFile": {
+        "purchases": [
           {
             "requesterId": "Operator Gomez",
             "supplierId": "SUP-19",
@@ -579,6 +848,136 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "relatedCommitments": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "019-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Operations requests 80 filter cartridges for the Delta line in Bay 4 for the November service cycle; the purchase request names quantity, function, and use location."
+              },
+              {
+                "id": "E2",
+                "source": "019-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Affiliate AE-19 places the order using parent agreement C-19; coverage schedule lists the parent but not AE-19."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "bundlePriceSchedules": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "019-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Operations requests 80 filter cartridges for the Delta line in Bay 4 for the November service cycle; the purchase request names quantity, function, and use location."
+              },
+              {
+                "id": "E2",
+                "source": "019-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Affiliate AE-19 places the order using parent agreement C-19; coverage schedule lists the parent but not AE-19."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "entityCoverageTerms": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "019-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Operations requests 80 filter cartridges for the Delta line in Bay 4 for the November service cycle; the purchase request names quantity, function, and use location."
+              },
+              {
+                "id": "E2",
+                "source": "019-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Affiliate AE-19 places the order using parent agreement C-19; coverage schedule lists the parent but not AE-19."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "catalogVersions": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "019-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Operations requests 80 filter cartridges for the Delta line in Bay 4 for the November service cycle; the purchase request names quantity, function, and use location."
+              },
+              {
+                "id": "E2",
+                "source": "019-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Affiliate AE-19 places the order using parent agreement C-19; coverage schedule lists the parent but not AE-19."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "waitingApprovals": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "019-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Operations requests 80 filter cartridges for the Delta line in Bay 4 for the November service cycle; the purchase request names quantity, function, and use location."
+              },
+              {
+                "id": "E2",
+                "source": "019-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Affiliate AE-19 places the order using parent agreement C-19; coverage schedule lists the parent but not AE-19."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },
@@ -601,19 +1000,22 @@
   },
   {
     "id": "019-workflow-04",
-    "root": "runCase.nl",
+    "root": "reviewProcurement.nl",
     "split_group": "design-brief-app-019",
     "inputs": {
       "request": {
         "caseId": "SYN-019-04",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
+        "requesterId": "Operator Gomez",
+        "supplierId": "SUP-19",
+        "requestedItems": [
+          "80 filter cartridges F-4"
+        ],
+        "intendedUse": "Delta line, Bay 4, November service cycle",
+        "agreementId": "AGR-19",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "agreementFile": {
+        "purchases": [
           {
             "requesterId": "Operator Gomez",
             "supplierId": "SUP-19",
@@ -682,6 +1084,136 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "relatedCommitments": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "019-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Operations requests 80 filter cartridges for the Delta line in Bay 4 for the November service cycle; the purchase request names quantity, function, and use location."
+              },
+              {
+                "id": "E2",
+                "source": "019-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Catalog item 19-4 changed description from brass to plated alloy between v2 and v3; approval cites v2."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "bundlePriceSchedules": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "019-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Operations requests 80 filter cartridges for the Delta line in Bay 4 for the November service cycle; the purchase request names quantity, function, and use location."
+              },
+              {
+                "id": "E2",
+                "source": "019-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Catalog item 19-4 changed description from brass to plated alloy between v2 and v3; approval cites v2."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "entityCoverageTerms": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "019-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Operations requests 80 filter cartridges for the Delta line in Bay 4 for the November service cycle; the purchase request names quantity, function, and use location."
+              },
+              {
+                "id": "E2",
+                "source": "019-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Catalog item 19-4 changed description from brass to plated alloy between v2 and v3; approval cites v2."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "catalogVersions": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "019-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Operations requests 80 filter cartridges for the Delta line in Bay 4 for the November service cycle; the purchase request names quantity, function, and use location."
+              },
+              {
+                "id": "E2",
+                "source": "019-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Catalog item 19-4 changed description from brass to plated alloy between v2 and v3; approval cites v2."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "waitingApprovals": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "019-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Operations requests 80 filter cartridges for the Delta line in Bay 4 for the November service cycle; the purchase request names quantity, function, and use location."
+              },
+              {
+                "id": "E2",
+                "source": "019-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Catalog item 19-4 changed description from brass to plated alloy between v2 and v3; approval cites v2."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },
@@ -704,19 +1236,22 @@
   },
   {
     "id": "019-workflow-05",
-    "root": "runCase.nl",
+    "root": "reviewProcurement.nl",
     "split_group": "design-brief-app-019",
     "inputs": {
       "request": {
         "caseId": "SYN-019-05",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
+        "requesterId": "Operator Gomez",
+        "supplierId": "SUP-19",
+        "requestedItems": [
+          "80 filter cartridges F-4"
+        ],
+        "intendedUse": "Delta line, Bay 4, November service cycle",
+        "agreementId": "AGR-19",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "agreementFile": {
+        "purchases": [
           {
             "requesterId": "Operator Gomez",
             "supplierId": "SUP-19",
@@ -785,6 +1320,136 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "relatedCommitments": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "019-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Operations requests 80 filter cartridges for the Delta line in Bay 4 for the November service cycle; the purchase request names quantity, function, and use location."
+              },
+              {
+                "id": "E2",
+                "source": "019-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-11",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Agreement C-19 expired Oct 9 while approval waited; requested order release is Oct 11."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "bundlePriceSchedules": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "019-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Operations requests 80 filter cartridges for the Delta line in Bay 4 for the November service cycle; the purchase request names quantity, function, and use location."
+              },
+              {
+                "id": "E2",
+                "source": "019-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-11",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Agreement C-19 expired Oct 9 while approval waited; requested order release is Oct 11."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "entityCoverageTerms": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "019-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Operations requests 80 filter cartridges for the Delta line in Bay 4 for the November service cycle; the purchase request names quantity, function, and use location."
+              },
+              {
+                "id": "E2",
+                "source": "019-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-11",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Agreement C-19 expired Oct 9 while approval waited; requested order release is Oct 11."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "catalogVersions": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "019-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Operations requests 80 filter cartridges for the Delta line in Bay 4 for the November service cycle; the purchase request names quantity, function, and use location."
+              },
+              {
+                "id": "E2",
+                "source": "019-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-11",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Agreement C-19 expired Oct 9 while approval waited; requested order release is Oct 11."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "waitingApprovals": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "019-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Operations requests 80 filter cartridges for the Delta line in Bay 4 for the November service cycle; the purchase request names quantity, function, and use location."
+              },
+              {
+                "id": "E2",
+                "source": "019-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-11",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Agreement C-19 expired Oct 9 while approval waited; requested order release is Oct 11."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },

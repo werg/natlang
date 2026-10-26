@@ -2,4 +2,4 @@
 args: { requirements: FabricationRequirement[], measurements: ShopMeasurement[] }
 returns: MeasurementQualification
 ---
-Match each required feature to a measured value with unit, method, verified state, and tolerance narrow enough for the requirement. Keep approximate or missing measurements out of production dimensions and list each unresolved feature.
+Bind trace = verifyMeasurementTraceability(requirements, measurements). Bind tolerances = testRequiredToleranceFit(requirements, measurements, trace). Admit a measurement into production dimensions only when its feature, unit, method, verification status, and source all match the requirement. Return missing, unverified, and tolerance-conflict details separately; approximate dimensions remain provisional.

@@ -10,7 +10,7 @@
           "datasetId": "D-32",
           "variable": "pain_score",
           "construct": "Patient-reported pain intensity",
-          "collectionMethod": "Patient self-report, 0–10",
+          "collectionMethod": "Patient self-report, 0\u201310",
           "population": "Adults at baseline",
           "tenantId": "tenant-032",
           "id": "MeasureDefinition-032",
@@ -73,7 +73,7 @@
               "observedAt": "2026-10-10",
               "authority": "named case owner",
               "scope": "one named case, current period",
-              "text": "Dataset D-32 variable pain_score uses a 0–10 patient-reported scale at baseline; Dataset D-33 uses clinician-coded 1–5 categories after treatment, so the constructs are related but not interchangeable."
+              "text": "Dataset D-32 variable pain_score uses a 0\u201310 patient-reported scale at baseline; Dataset D-33 uses clinician-coded 1\u20135 categories after treatment, so the constructs are related but not interchangeable."
             }
           ],
           "searchedPartition": "case-folder-2026",
@@ -104,7 +104,7 @@
           "datasetId": "D-32",
           "variable": "pain_score",
           "construct": "Pain intensity and pain interference are equivalent because both use a pain score",
-          "collectionMethod": "Patient self-report, 0–10",
+          "collectionMethod": "Patient self-report, 0\u201310",
           "population": "Adults at baseline",
           "tenantId": "tenant-032",
           "id": "MeasureDefinition-032",
@@ -198,7 +198,7 @@
           "datasetId": "D-32",
           "variable": "pain_score",
           "construct": "Patient-reported pain intensity",
-          "collectionMethod": "Patient self-report, 0–10",
+          "collectionMethod": "Patient self-report, 0\u201310",
           "population": "Adults at baseline",
           "tenantId": "tenant-032",
           "id": "MeasureDefinition-032",
@@ -283,19 +283,23 @@
   },
   {
     "id": "032-workflow-01",
-    "root": "runCase.nl",
+    "root": "harmonizeMeasures.nl",
     "split_group": "design-brief-app-032",
     "inputs": {
       "request": {
         "caseId": "SYN-032-01",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
+        "datasetIds": [
+          "STUDY-A32",
+          "STUDY-B32"
+        ],
+        "targetConstruct": "Patient-reported pain intensity",
+        "intendedAnalysis": "Compare baseline pain distribution with missingness preserved",
+        "dataOwnerId": "Owner-32",
+        "protocolId": "PROTO-32",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "corpus": {
+        "harmonizations": [
           {
             "datasetIds": [
               "STUDY-A32",
@@ -334,7 +338,184 @@
                 "observedAt": "2026-10-01",
                 "authority": "named case owner",
                 "scope": "one named case, current period",
-                "text": "Dataset D-32 variable pain_score uses a 0–10 patient-reported scale at baseline; Dataset D-33 uses clinician-coded 1–5 categories after treatment, so the constructs are related but not interchangeable."
+                "text": "Dataset D-32 variable pain_score uses a 0\u201310 patient-reported scale at baseline; Dataset D-33 uses clinician-coded 1\u20135 categories after treatment, so the constructs are related but not interchangeable."
+              },
+              {
+                "id": "E2",
+                "source": "032-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Study A-32 encodes zero as a measured pain score; Study B-32 uses zero as missing-value sentinel in codebook v1."
+              },
+              {
+                "id": "E3",
+                "source": "032-source-3",
+                "version": "v3",
+                "observedAt": "2026-10-03",
+                "authority": "independent versioned record",
+                "scope": "one named case, current period",
+                "text": "The draft equates the two pain measures solely because both columns contain the word 'pain'."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "measureCatalog": [],
+        "rowCollectionVersions": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "032-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Dataset D-32 variable pain_score uses a 0\u201310 patient-reported scale at baseline; Dataset D-33 uses clinician-coded 1\u20135 categories after treatment, so the constructs are related but not interchangeable."
+              },
+              {
+                "id": "E2",
+                "source": "032-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Study A-32 encodes zero as a measured pain score; Study B-32 uses zero as missing-value sentinel in codebook v1."
+              },
+              {
+                "id": "E3",
+                "source": "032-source-3",
+                "version": "v3",
+                "observedAt": "2026-10-03",
+                "authority": "independent versioned record",
+                "scope": "one named case, current period",
+                "text": "The draft equates the two pain measures solely because both columns contain the word 'pain'."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "exactTransformReceipts": [],
+        "missingnessEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "032-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Dataset D-32 variable pain_score uses a 0\u201310 patient-reported scale at baseline; Dataset D-33 uses clinician-coded 1\u20135 categories after treatment, so the constructs are related but not interchangeable."
+              },
+              {
+                "id": "E2",
+                "source": "032-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Study A-32 encodes zero as a measured pain score; Study B-32 uses zero as missing-value sentinel in codebook v1."
+              },
+              {
+                "id": "E3",
+                "source": "032-source-3",
+                "version": "v3",
+                "observedAt": "2026-10-03",
+                "authority": "independent versioned record",
+                "scope": "one named case, current period",
+                "text": "The draft equates the two pain measures solely because both columns contain the word 'pain'."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "categoryDefinitions": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "032-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Dataset D-32 variable pain_score uses a 0\u201310 patient-reported scale at baseline; Dataset D-33 uses clinician-coded 1\u20135 categories after treatment, so the constructs are related but not interchangeable."
+              },
+              {
+                "id": "E2",
+                "source": "032-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Study A-32 encodes zero as a measured pain score; Study B-32 uses zero as missing-value sentinel in codebook v1."
+              },
+              {
+                "id": "E3",
+                "source": "032-source-3",
+                "version": "v3",
+                "observedAt": "2026-10-03",
+                "authority": "independent versioned record",
+                "scope": "one named case, current period",
+                "text": "The draft equates the two pain measures solely because both columns contain the word 'pain'."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "participantLinkageEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "032-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Dataset D-32 variable pain_score uses a 0\u201310 patient-reported scale at baseline; Dataset D-33 uses clinician-coded 1\u20135 categories after treatment, so the constructs are related but not interchangeable."
+              },
+              {
+                "id": "E2",
+                "source": "032-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Study A-32 encodes zero as a measured pain score; Study B-32 uses zero as missing-value sentinel in codebook v1."
+              },
+              {
+                "id": "E3",
+                "source": "032-source-3",
+                "version": "v3",
+                "observedAt": "2026-10-03",
+                "authority": "independent versioned record",
+                "scope": "one named case, current period",
+                "text": "The draft equates the two pain measures solely because both columns contain the word 'pain'."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "mappingRevisionEvents": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "032-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Dataset D-32 variable pain_score uses a 0\u201310 patient-reported scale at baseline; Dataset D-33 uses clinician-coded 1\u20135 categories after treatment, so the constructs are related but not interchangeable."
               },
               {
                 "id": "E2",
@@ -371,9 +552,6 @@
               "owner authority and evidence scope"
             ]
           }
-        ],
-        "searchedPartitions": [
-          "case-folder-2026"
         ]
       }
     },
@@ -382,7 +560,7 @@
     },
     "oracle": {
       "level": "judged",
-      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Hidden construct definitions, exact unit transformations, compatible subsets, and expected row-lineage manifests.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A zero is a valid response in one study but missing in another: preserve distinct missingness semantics. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A zero is a valid response in one study but missing in another: preserve distinct missingness semantics. Use only the facts in caseId=SYN-032-01, expectedVersion=v1, version=v1, id=HARMONIZATION-D32, version=1, id=E1, source=032-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—preserve distinct missingness semantics.—as a versioned proposal against caseId=SYN-032-01, expectedVersion=v1, version=v1, id=HARMONIZATION-D32, version=1, id=E1, source=032-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (preserve distinct missingness semantics.) against caseId=SYN-032-01, expectedVersion=v1, version=v1, id=HARMONIZATION-D32, version=1, id=E1, source=032-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Hidden construct definitions, exact unit transformations, compatible subsets, and expected row-lineage manifests.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A zero is a valid response in one study but missing in another: preserve distinct missingness semantics. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A zero is a valid response in one study but missing in another: preserve distinct missingness semantics. Use only the facts in caseId=SYN-032-01, expectedVersion=v1, version=v1, id=HARMONIZATION-D32, version=1, id=E1, source=032-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome\u2014preserve distinct missingness semantics.\u2014as a versioned proposal against caseId=SYN-032-01, expectedVersion=v1, version=v1, id=HARMONIZATION-D32, version=1, id=E1, source=032-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (preserve distinct missingness semantics.) against caseId=SYN-032-01, expectedVersion=v1, version=v1, id=HARMONIZATION-D32, version=1, id=E1, source=032-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
     },
     "scenario": "A zero is a valid response in one study but missing in another: preserve distinct missingness semantics.",
     "difficulty": "operational-workflow",
@@ -390,25 +568,29 @@
     "brief_detail": "A zero is a valid response in one study but missing in another: preserve distinct missingness semantics.",
     "boundary_assertions": {
       "view": "For the required user or reviewer view, make the disposition of this original condition explicit: A zero is a valid response in one study but missing in another: preserve distinct missingness semantics. Use only the facts in caseId=SYN-032-01, expectedVersion=v1, version=v1, id=HARMONIZATION-D32, version=1, id=E1, source=032-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
-      "durable_state": "For durable-state proposals, represent the required outcome—preserve distinct missingness semantics.—as a versioned proposal against caseId=SYN-032-01, expectedVersion=v1, version=v1, id=HARMONIZATION-D32, version=1, id=E1, source=032-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "durable_state": "For durable-state proposals, represent the required outcome\u2014preserve distinct missingness semantics.\u2014as a versioned proposal against caseId=SYN-032-01, expectedVersion=v1, version=v1, id=HARMONIZATION-D32, version=1, id=E1, source=032-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
       "effects": "For the effect ledger, propose only a concrete next step needed for this condition (preserve distinct missingness semantics.) against caseId=SYN-032-01, expectedVersion=v1, version=v1, id=HARMONIZATION-D32, version=1, id=E1, source=032-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
     }
   },
   {
     "id": "032-workflow-02",
-    "root": "runCase.nl",
+    "root": "harmonizeMeasures.nl",
     "split_group": "design-brief-app-032",
     "inputs": {
       "request": {
         "caseId": "SYN-032-02",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
+        "datasetIds": [
+          "STUDY-A32",
+          "STUDY-B32"
+        ],
+        "targetConstruct": "Patient-reported pain intensity",
+        "intendedAnalysis": "Compare baseline pain distribution with missingness preserved",
+        "dataOwnerId": "Owner-32",
+        "protocolId": "PROTO-32",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "corpus": {
+        "harmonizations": [
           {
             "datasetIds": [
               "STUDY-A32",
@@ -447,7 +629,139 @@
                 "observedAt": "2026-10-01",
                 "authority": "named case owner",
                 "scope": "one named case, current period",
-                "text": "Dataset D-32 variable pain_score uses a 0–10 patient-reported scale at baseline; Dataset D-33 uses clinician-coded 1–5 categories after treatment, so the constructs are related but not interchangeable."
+                "text": "Dataset D-32 variable pain_score uses a 0\u201310 patient-reported scale at baseline; Dataset D-33 uses clinician-coded 1\u20135 categories after treatment, so the constructs are related but not interchangeable."
+              },
+              {
+                "id": "E2",
+                "source": "032-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Category 'other pain' combines neuropathic and inflammatory conditions; no item-level source supports splitting the category."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "measureCatalog": [],
+        "rowCollectionVersions": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "032-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Dataset D-32 variable pain_score uses a 0\u201310 patient-reported scale at baseline; Dataset D-33 uses clinician-coded 1\u20135 categories after treatment, so the constructs are related but not interchangeable."
+              },
+              {
+                "id": "E2",
+                "source": "032-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Category 'other pain' combines neuropathic and inflammatory conditions; no item-level source supports splitting the category."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "exactTransformReceipts": [],
+        "missingnessEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "032-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Dataset D-32 variable pain_score uses a 0\u201310 patient-reported scale at baseline; Dataset D-33 uses clinician-coded 1\u20135 categories after treatment, so the constructs are related but not interchangeable."
+              },
+              {
+                "id": "E2",
+                "source": "032-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Category 'other pain' combines neuropathic and inflammatory conditions; no item-level source supports splitting the category."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "categoryDefinitions": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "032-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Dataset D-32 variable pain_score uses a 0\u201310 patient-reported scale at baseline; Dataset D-33 uses clinician-coded 1\u20135 categories after treatment, so the constructs are related but not interchangeable."
+              },
+              {
+                "id": "E2",
+                "source": "032-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Category 'other pain' combines neuropathic and inflammatory conditions; no item-level source supports splitting the category."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "participantLinkageEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "032-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Dataset D-32 variable pain_score uses a 0\u201310 patient-reported scale at baseline; Dataset D-33 uses clinician-coded 1\u20135 categories after treatment, so the constructs are related but not interchangeable."
+              },
+              {
+                "id": "E2",
+                "source": "032-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Category 'other pain' combines neuropathic and inflammatory conditions; no item-level source supports splitting the category."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "mappingRevisionEvents": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "032-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Dataset D-32 variable pain_score uses a 0\u201310 patient-reported scale at baseline; Dataset D-33 uses clinician-coded 1\u20135 categories after treatment, so the constructs are related but not interchangeable."
               },
               {
                 "id": "E2",
@@ -475,9 +789,6 @@
               "owner authority and evidence scope"
             ]
           }
-        ],
-        "searchedPartitions": [
-          "case-folder-2026"
         ]
       }
     },
@@ -486,7 +797,7 @@
     },
     "oracle": {
       "level": "judged",
-      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Hidden construct definitions, exact unit transformations, compatible subsets, and expected row-lineage manifests.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A category combines two concepts: do not invent a finer split without evidence. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A category combines two concepts: do not invent a finer split without evidence. Use only the facts in caseId=SYN-032-02, expectedVersion=v1, version=v1, id=HARMONIZATION-D32, version=1, id=E1, source=032-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—do not invent a finer split without evidence.—as a versioned proposal against caseId=SYN-032-02, expectedVersion=v1, version=v1, id=HARMONIZATION-D32, version=1, id=E1, source=032-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (do not invent a finer split without evidence.) against caseId=SYN-032-02, expectedVersion=v1, version=v1, id=HARMONIZATION-D32, version=1, id=E1, source=032-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Hidden construct definitions, exact unit transformations, compatible subsets, and expected row-lineage manifests.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A category combines two concepts: do not invent a finer split without evidence. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A category combines two concepts: do not invent a finer split without evidence. Use only the facts in caseId=SYN-032-02, expectedVersion=v1, version=v1, id=HARMONIZATION-D32, version=1, id=E1, source=032-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome\u2014do not invent a finer split without evidence.\u2014as a versioned proposal against caseId=SYN-032-02, expectedVersion=v1, version=v1, id=HARMONIZATION-D32, version=1, id=E1, source=032-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (do not invent a finer split without evidence.) against caseId=SYN-032-02, expectedVersion=v1, version=v1, id=HARMONIZATION-D32, version=1, id=E1, source=032-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
     },
     "scenario": "A category combines two concepts: do not invent a finer split without evidence.",
     "difficulty": "operational-workflow",
@@ -494,25 +805,29 @@
     "brief_detail": "A category combines two concepts: do not invent a finer split without evidence.",
     "boundary_assertions": {
       "view": "For the required user or reviewer view, make the disposition of this original condition explicit: A category combines two concepts: do not invent a finer split without evidence. Use only the facts in caseId=SYN-032-02, expectedVersion=v1, version=v1, id=HARMONIZATION-D32, version=1, id=E1, source=032-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
-      "durable_state": "For durable-state proposals, represent the required outcome—do not invent a finer split without evidence.—as a versioned proposal against caseId=SYN-032-02, expectedVersion=v1, version=v1, id=HARMONIZATION-D32, version=1, id=E1, source=032-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "durable_state": "For durable-state proposals, represent the required outcome\u2014do not invent a finer split without evidence.\u2014as a versioned proposal against caseId=SYN-032-02, expectedVersion=v1, version=v1, id=HARMONIZATION-D32, version=1, id=E1, source=032-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
       "effects": "For the effect ledger, propose only a concrete next step needed for this condition (do not invent a finer split without evidence.) against caseId=SYN-032-02, expectedVersion=v1, version=v1, id=HARMONIZATION-D32, version=1, id=E1, source=032-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
     }
   },
   {
     "id": "032-workflow-03",
-    "root": "runCase.nl",
+    "root": "harmonizeMeasures.nl",
     "split_group": "design-brief-app-032",
     "inputs": {
       "request": {
         "caseId": "SYN-032-03",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
+        "datasetIds": [
+          "STUDY-A32",
+          "STUDY-B32"
+        ],
+        "targetConstruct": "Patient-reported pain intensity",
+        "intendedAnalysis": "Compare baseline pain distribution with missingness preserved",
+        "dataOwnerId": "Owner-32",
+        "protocolId": "PROTO-32",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "corpus": {
+        "harmonizations": [
           {
             "datasetIds": [
               "STUDY-A32",
@@ -551,7 +866,139 @@
                 "observedAt": "2026-10-01",
                 "authority": "named case owner",
                 "scope": "one named case, current period",
-                "text": "Dataset D-32 variable pain_score uses a 0–10 patient-reported scale at baseline; Dataset D-33 uses clinician-coded 1–5 categories after treatment, so the constructs are related but not interchangeable."
+                "text": "Dataset D-32 variable pain_score uses a 0\u201310 patient-reported scale at baseline; Dataset D-33 uses clinician-coded 1\u20135 categories after treatment, so the constructs are related but not interchangeable."
+              },
+              {
+                "id": "E2",
+                "source": "032-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Dataset D-32 changes weight unit from grams to kilograms at row 1001; collection-version IDs identify the boundary."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "measureCatalog": [],
+        "rowCollectionVersions": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "032-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Dataset D-32 variable pain_score uses a 0\u201310 patient-reported scale at baseline; Dataset D-33 uses clinician-coded 1\u20135 categories after treatment, so the constructs are related but not interchangeable."
+              },
+              {
+                "id": "E2",
+                "source": "032-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Dataset D-32 changes weight unit from grams to kilograms at row 1001; collection-version IDs identify the boundary."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "exactTransformReceipts": [],
+        "missingnessEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "032-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Dataset D-32 variable pain_score uses a 0\u201310 patient-reported scale at baseline; Dataset D-33 uses clinician-coded 1\u20135 categories after treatment, so the constructs are related but not interchangeable."
+              },
+              {
+                "id": "E2",
+                "source": "032-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Dataset D-32 changes weight unit from grams to kilograms at row 1001; collection-version IDs identify the boundary."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "categoryDefinitions": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "032-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Dataset D-32 variable pain_score uses a 0\u201310 patient-reported scale at baseline; Dataset D-33 uses clinician-coded 1\u20135 categories after treatment, so the constructs are related but not interchangeable."
+              },
+              {
+                "id": "E2",
+                "source": "032-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Dataset D-32 changes weight unit from grams to kilograms at row 1001; collection-version IDs identify the boundary."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "participantLinkageEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "032-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Dataset D-32 variable pain_score uses a 0\u201310 patient-reported scale at baseline; Dataset D-33 uses clinician-coded 1\u20135 categories after treatment, so the constructs are related but not interchangeable."
+              },
+              {
+                "id": "E2",
+                "source": "032-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Dataset D-32 changes weight unit from grams to kilograms at row 1001; collection-version IDs identify the boundary."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "mappingRevisionEvents": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "032-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Dataset D-32 variable pain_score uses a 0\u201310 patient-reported scale at baseline; Dataset D-33 uses clinician-coded 1\u20135 categories after treatment, so the constructs are related but not interchangeable."
               },
               {
                 "id": "E2",
@@ -579,9 +1026,6 @@
               "owner authority and evidence scope"
             ]
           }
-        ],
-        "searchedPartitions": [
-          "case-folder-2026"
         ]
       }
     },
@@ -590,7 +1034,7 @@
     },
     "oracle": {
       "level": "judged",
-      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Hidden construct definitions, exact unit transformations, compatible subsets, and expected row-lineage manifests.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A unit changes within a dataset: bind transformations to row-level collection versions. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A unit changes within a dataset: bind transformations to row-level collection versions. Use only the facts in caseId=SYN-032-03, expectedVersion=v1, version=v1, id=HARMONIZATION-D32, version=1, id=E1, source=032-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—bind transformations to row-level collection versions.—as a versioned proposal against caseId=SYN-032-03, expectedVersion=v1, version=v1, id=HARMONIZATION-D32, version=1, id=E1, source=032-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (bind transformations to row-level collection versions.) against caseId=SYN-032-03, expectedVersion=v1, version=v1, id=HARMONIZATION-D32, version=1, id=E1, source=032-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Hidden construct definitions, exact unit transformations, compatible subsets, and expected row-lineage manifests.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A unit changes within a dataset: bind transformations to row-level collection versions. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A unit changes within a dataset: bind transformations to row-level collection versions. Use only the facts in caseId=SYN-032-03, expectedVersion=v1, version=v1, id=HARMONIZATION-D32, version=1, id=E1, source=032-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome\u2014bind transformations to row-level collection versions.\u2014as a versioned proposal against caseId=SYN-032-03, expectedVersion=v1, version=v1, id=HARMONIZATION-D32, version=1, id=E1, source=032-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (bind transformations to row-level collection versions.) against caseId=SYN-032-03, expectedVersion=v1, version=v1, id=HARMONIZATION-D32, version=1, id=E1, source=032-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
     },
     "scenario": "A unit changes within a dataset: bind transformations to row-level collection versions.",
     "difficulty": "operational-workflow",
@@ -598,25 +1042,29 @@
     "brief_detail": "A unit changes within a dataset: bind transformations to row-level collection versions.",
     "boundary_assertions": {
       "view": "For the required user or reviewer view, make the disposition of this original condition explicit: A unit changes within a dataset: bind transformations to row-level collection versions. Use only the facts in caseId=SYN-032-03, expectedVersion=v1, version=v1, id=HARMONIZATION-D32, version=1, id=E1, source=032-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
-      "durable_state": "For durable-state proposals, represent the required outcome—bind transformations to row-level collection versions.—as a versioned proposal against caseId=SYN-032-03, expectedVersion=v1, version=v1, id=HARMONIZATION-D32, version=1, id=E1, source=032-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "durable_state": "For durable-state proposals, represent the required outcome\u2014bind transformations to row-level collection versions.\u2014as a versioned proposal against caseId=SYN-032-03, expectedVersion=v1, version=v1, id=HARMONIZATION-D32, version=1, id=E1, source=032-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
       "effects": "For the effect ledger, propose only a concrete next step needed for this condition (bind transformations to row-level collection versions.) against caseId=SYN-032-03, expectedVersion=v1, version=v1, id=HARMONIZATION-D32, version=1, id=E1, source=032-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
     }
   },
   {
     "id": "032-workflow-04",
-    "root": "runCase.nl",
+    "root": "harmonizeMeasures.nl",
     "split_group": "design-brief-app-032",
     "inputs": {
       "request": {
         "caseId": "SYN-032-04",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
+        "datasetIds": [
+          "STUDY-A32",
+          "STUDY-B32"
+        ],
+        "targetConstruct": "Patient-reported pain intensity",
+        "intendedAnalysis": "Compare baseline pain distribution with missingness preserved",
+        "dataOwnerId": "Owner-32",
+        "protocolId": "PROTO-32",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "corpus": {
+        "harmonizations": [
           {
             "datasetIds": [
               "STUDY-A32",
@@ -655,7 +1103,139 @@
                 "observedAt": "2026-10-01",
                 "authority": "named case owner",
                 "scope": "one named case, current period",
-                "text": "Dataset D-32 variable pain_score uses a 0–10 patient-reported scale at baseline; Dataset D-33 uses clinician-coded 1–5 categories after treatment, so the constructs are related but not interchangeable."
+                "text": "Dataset D-32 variable pain_score uses a 0\u201310 patient-reported scale at baseline; Dataset D-33 uses clinician-coded 1\u20135 categories after treatment, so the constructs are related but not interchangeable."
+              },
+              {
+                "id": "E2",
+                "source": "032-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Participant tokens P-32A and P-32B may overlap; linkage score is inconclusive and no identity join is approved."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "measureCatalog": [],
+        "rowCollectionVersions": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "032-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Dataset D-32 variable pain_score uses a 0\u201310 patient-reported scale at baseline; Dataset D-33 uses clinician-coded 1\u20135 categories after treatment, so the constructs are related but not interchangeable."
+              },
+              {
+                "id": "E2",
+                "source": "032-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Participant tokens P-32A and P-32B may overlap; linkage score is inconclusive and no identity join is approved."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "exactTransformReceipts": [],
+        "missingnessEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "032-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Dataset D-32 variable pain_score uses a 0\u201310 patient-reported scale at baseline; Dataset D-33 uses clinician-coded 1\u20135 categories after treatment, so the constructs are related but not interchangeable."
+              },
+              {
+                "id": "E2",
+                "source": "032-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Participant tokens P-32A and P-32B may overlap; linkage score is inconclusive and no identity join is approved."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "categoryDefinitions": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "032-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Dataset D-32 variable pain_score uses a 0\u201310 patient-reported scale at baseline; Dataset D-33 uses clinician-coded 1\u20135 categories after treatment, so the constructs are related but not interchangeable."
+              },
+              {
+                "id": "E2",
+                "source": "032-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Participant tokens P-32A and P-32B may overlap; linkage score is inconclusive and no identity join is approved."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "participantLinkageEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "032-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Dataset D-32 variable pain_score uses a 0\u201310 patient-reported scale at baseline; Dataset D-33 uses clinician-coded 1\u20135 categories after treatment, so the constructs are related but not interchangeable."
+              },
+              {
+                "id": "E2",
+                "source": "032-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Participant tokens P-32A and P-32B may overlap; linkage score is inconclusive and no identity join is approved."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "mappingRevisionEvents": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "032-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Dataset D-32 variable pain_score uses a 0\u201310 patient-reported scale at baseline; Dataset D-33 uses clinician-coded 1\u20135 categories after treatment, so the constructs are related but not interchangeable."
               },
               {
                 "id": "E2",
@@ -683,9 +1263,6 @@
               "owner authority and evidence scope"
             ]
           }
-        ],
-        "searchedPartitions": [
-          "case-folder-2026"
         ]
       }
     },
@@ -694,7 +1271,7 @@
     },
     "oracle": {
       "level": "judged",
-      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Hidden construct definitions, exact unit transformations, compatible subsets, and expected row-lineage manifests.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: Participant overlap exists across studies: retain linkage uncertainty for downstream analysis. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: Participant overlap exists across studies: retain linkage uncertainty for downstream analysis. Use only the facts in caseId=SYN-032-04, expectedVersion=v1, version=v1, id=HARMONIZATION-D32, version=1, id=E1, source=032-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—retain linkage uncertainty for downstream analysis.—as a versioned proposal against caseId=SYN-032-04, expectedVersion=v1, version=v1, id=HARMONIZATION-D32, version=1, id=E1, source=032-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (retain linkage uncertainty for downstream analysis.) against caseId=SYN-032-04, expectedVersion=v1, version=v1, id=HARMONIZATION-D32, version=1, id=E1, source=032-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Hidden construct definitions, exact unit transformations, compatible subsets, and expected row-lineage manifests.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: Participant overlap exists across studies: retain linkage uncertainty for downstream analysis. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: Participant overlap exists across studies: retain linkage uncertainty for downstream analysis. Use only the facts in caseId=SYN-032-04, expectedVersion=v1, version=v1, id=HARMONIZATION-D32, version=1, id=E1, source=032-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome\u2014retain linkage uncertainty for downstream analysis.\u2014as a versioned proposal against caseId=SYN-032-04, expectedVersion=v1, version=v1, id=HARMONIZATION-D32, version=1, id=E1, source=032-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (retain linkage uncertainty for downstream analysis.) against caseId=SYN-032-04, expectedVersion=v1, version=v1, id=HARMONIZATION-D32, version=1, id=E1, source=032-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
     },
     "scenario": "Participant overlap exists across studies: retain linkage uncertainty for downstream analysis.",
     "difficulty": "operational-workflow",
@@ -702,25 +1279,29 @@
     "brief_detail": "Participant overlap exists across studies: retain linkage uncertainty for downstream analysis.",
     "boundary_assertions": {
       "view": "For the required user or reviewer view, make the disposition of this original condition explicit: Participant overlap exists across studies: retain linkage uncertainty for downstream analysis. Use only the facts in caseId=SYN-032-04, expectedVersion=v1, version=v1, id=HARMONIZATION-D32, version=1, id=E1, source=032-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
-      "durable_state": "For durable-state proposals, represent the required outcome—retain linkage uncertainty for downstream analysis.—as a versioned proposal against caseId=SYN-032-04, expectedVersion=v1, version=v1, id=HARMONIZATION-D32, version=1, id=E1, source=032-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "durable_state": "For durable-state proposals, represent the required outcome\u2014retain linkage uncertainty for downstream analysis.\u2014as a versioned proposal against caseId=SYN-032-04, expectedVersion=v1, version=v1, id=HARMONIZATION-D32, version=1, id=E1, source=032-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
       "effects": "For the effect ledger, propose only a concrete next step needed for this condition (retain linkage uncertainty for downstream analysis.) against caseId=SYN-032-04, expectedVersion=v1, version=v1, id=HARMONIZATION-D32, version=1, id=E1, source=032-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
     }
   },
   {
     "id": "032-workflow-05",
-    "root": "runCase.nl",
+    "root": "harmonizeMeasures.nl",
     "split_group": "design-brief-app-032",
     "inputs": {
       "request": {
         "caseId": "SYN-032-05",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
+        "datasetIds": [
+          "STUDY-A32",
+          "STUDY-B32"
+        ],
+        "targetConstruct": "Patient-reported pain intensity",
+        "intendedAnalysis": "Compare baseline pain distribution with missingness preserved",
+        "dataOwnerId": "Owner-32",
+        "protocolId": "PROTO-32",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "corpus": {
+        "harmonizations": [
           {
             "datasetIds": [
               "STUDY-A32",
@@ -759,7 +1340,139 @@
                 "observedAt": "2026-10-01",
                 "authority": "named case owner",
                 "scope": "one named case, current period",
-                "text": "Dataset D-32 variable pain_score uses a 0–10 patient-reported scale at baseline; Dataset D-33 uses clinician-coded 1–5 categories after treatment, so the constructs are related but not interchangeable."
+                "text": "Dataset D-32 variable pain_score uses a 0\u201310 patient-reported scale at baseline; Dataset D-33 uses clinician-coded 1\u20135 categories after treatment, so the constructs are related but not interchangeable."
+              },
+              {
+                "id": "E2",
+                "source": "032-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-10",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Mapping rule MR-32 changes on Oct 10; only derived slice DS-32 cites that rule version."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "measureCatalog": [],
+        "rowCollectionVersions": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "032-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Dataset D-32 variable pain_score uses a 0\u201310 patient-reported scale at baseline; Dataset D-33 uses clinician-coded 1\u20135 categories after treatment, so the constructs are related but not interchangeable."
+              },
+              {
+                "id": "E2",
+                "source": "032-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-10",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Mapping rule MR-32 changes on Oct 10; only derived slice DS-32 cites that rule version."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "exactTransformReceipts": [],
+        "missingnessEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "032-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Dataset D-32 variable pain_score uses a 0\u201310 patient-reported scale at baseline; Dataset D-33 uses clinician-coded 1\u20135 categories after treatment, so the constructs are related but not interchangeable."
+              },
+              {
+                "id": "E2",
+                "source": "032-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-10",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Mapping rule MR-32 changes on Oct 10; only derived slice DS-32 cites that rule version."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "categoryDefinitions": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "032-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Dataset D-32 variable pain_score uses a 0\u201310 patient-reported scale at baseline; Dataset D-33 uses clinician-coded 1\u20135 categories after treatment, so the constructs are related but not interchangeable."
+              },
+              {
+                "id": "E2",
+                "source": "032-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-10",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Mapping rule MR-32 changes on Oct 10; only derived slice DS-32 cites that rule version."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "participantLinkageEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "032-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Dataset D-32 variable pain_score uses a 0\u201310 patient-reported scale at baseline; Dataset D-33 uses clinician-coded 1\u20135 categories after treatment, so the constructs are related but not interchangeable."
+              },
+              {
+                "id": "E2",
+                "source": "032-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-10",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Mapping rule MR-32 changes on Oct 10; only derived slice DS-32 cites that rule version."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "mappingRevisionEvents": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "032-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Dataset D-32 variable pain_score uses a 0\u201310 patient-reported scale at baseline; Dataset D-33 uses clinician-coded 1\u20135 categories after treatment, so the constructs are related but not interchangeable."
               },
               {
                 "id": "E2",
@@ -787,9 +1500,6 @@
               "owner authority and evidence scope"
             ]
           }
-        ],
-        "searchedPartitions": [
-          "case-folder-2026"
         ]
       }
     },
@@ -798,7 +1508,7 @@
     },
     "oracle": {
       "level": "judged",
-      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Hidden construct definitions, exact unit transformations, compatible subsets, and expected row-lineage manifests.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A mapping is revised: invalidate only derived slices using that rule. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A mapping is revised: invalidate only derived slices using that rule. Use only the facts in caseId=SYN-032-05, expectedVersion=v1, version=v1, id=HARMONIZATION-D32, version=1, id=E1, source=032-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—invalidate only derived slices using that rule.—as a versioned proposal against caseId=SYN-032-05, expectedVersion=v1, version=v1, id=HARMONIZATION-D32, version=1, id=E1, source=032-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (invalidate only derived slices using that rule.) against caseId=SYN-032-05, expectedVersion=v1, version=v1, id=HARMONIZATION-D32, version=1, id=E1, source=032-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Hidden construct definitions, exact unit transformations, compatible subsets, and expected row-lineage manifests.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A mapping is revised: invalidate only derived slices using that rule. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A mapping is revised: invalidate only derived slices using that rule. Use only the facts in caseId=SYN-032-05, expectedVersion=v1, version=v1, id=HARMONIZATION-D32, version=1, id=E1, source=032-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome\u2014invalidate only derived slices using that rule.\u2014as a versioned proposal against caseId=SYN-032-05, expectedVersion=v1, version=v1, id=HARMONIZATION-D32, version=1, id=E1, source=032-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (invalidate only derived slices using that rule.) against caseId=SYN-032-05, expectedVersion=v1, version=v1, id=HARMONIZATION-D32, version=1, id=E1, source=032-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
     },
     "scenario": "A mapping is revised: invalidate only derived slices using that rule.",
     "difficulty": "operational-workflow",
@@ -806,7 +1516,7 @@
     "brief_detail": "A mapping is revised: invalidate only derived slices using that rule.",
     "boundary_assertions": {
       "view": "For the required user or reviewer view, make the disposition of this original condition explicit: A mapping is revised: invalidate only derived slices using that rule. Use only the facts in caseId=SYN-032-05, expectedVersion=v1, version=v1, id=HARMONIZATION-D32, version=1, id=E1, source=032-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
-      "durable_state": "For durable-state proposals, represent the required outcome—invalidate only derived slices using that rule.—as a versioned proposal against caseId=SYN-032-05, expectedVersion=v1, version=v1, id=HARMONIZATION-D32, version=1, id=E1, source=032-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "durable_state": "For durable-state proposals, represent the required outcome\u2014invalidate only derived slices using that rule.\u2014as a versioned proposal against caseId=SYN-032-05, expectedVersion=v1, version=v1, id=HARMONIZATION-D32, version=1, id=E1, source=032-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
       "effects": "For the effect ledger, propose only a concrete next step needed for this condition (invalidate only derived slices using that rule.) against caseId=SYN-032-05, expectedVersion=v1, version=v1, id=HARMONIZATION-D32, version=1, id=E1, source=032-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
     }
   }

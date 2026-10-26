@@ -91,7 +91,14 @@ export type CertificateRequirement = { scope: string; requiredStandard: string; 
 export type FabricationRevision = { revisionId: ID; changedFeatureIds: ID[]; toolingAffected: boolean; customerApproved: boolean };
 export type QuoteFeasibility = { missingMeasurements: string[]; conceptBlockers: string[]; capabilityGaps: string[]; finishAcceptanceGaps: string[]; certificationGaps: string[]; provisional: boolean };
 export type CustomQuoteProposal = { caseId: ID; selectedConceptId: ID | null; feasibility: QuoteFeasibility; productionRoute: string[]; materialCostBasis: string[]; toolingCostChanges: string[]; quoteExpiry: string; quoteStatus: string; scopeConfirmation: string[]; commitAllowed: boolean };
-export type MeasurementQualification = { acceptedMeasurements: ShopMeasurement[]; missingMeasurements: string[] };
+export type MeasurementQualification = { acceptedMeasurements: ShopMeasurement[]; missingMeasurements: string[]; unverifiedMeasurementIds: ID[]; toleranceConflicts: string[] };
 export type ConceptSelection = { conceptId: ID | null; blockers: string[]; finishAcceptanceGaps: string[]; concept: ShopConcept | null };
-export type ShopRouteAssessment = { steps: string[]; capabilityGaps: string[]; certificationGaps: string[]; specialistTasks: string[] };
-export type MaterialPriceReview = { costBasis: string[]; expiredMaterialIds: ID[]; toolingChanges: string[]; earliestExpiry: string };
+export type ShopRouteAssessment = { steps: string[]; capabilityGaps: string[]; certificationGaps: string[]; specialistTasks: string[]; scopedCertificates: string[] };
+export type MaterialPriceReview = { costBasis: string[]; expiredMaterialIds: ID[]; toolingChanges: string[]; toolingRouteImpact: string[]; staleCostLines: ID[]; earliestExpiry: string };
+
+export type MeasurementTrace = { matches: string[]; unverifiedIds: ID[]; missingFeatures: string[] };
+export type FinishAcceptanceReview = { acceptedReferenceIds: Ref[]; unacceptedConceptIds: ID[]; unresolvedConceptIds: ID[] };
+export type CapabilityMatch = { supportedProcesses: string[]; unsupportedProcesses: string[]; routeSteps: string[] };
+export type CertificationMatch = { acceptedScopes: string[]; missingScopes: string[]; specialistTasks: string[] };
+export type CurrentMaterialOffers = { acceptedOffers: MaterialOffer[]; expiredMaterialIds: ID[]; incompatibleOfferIds: ID[] };
+export type ToolingRevisionImpact = { toolingChanges: string[]; routeChanges: string[]; staleCostLineIds: ID[] };

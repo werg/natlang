@@ -87,9 +87,14 @@ export type ProcessHistory = { processId: ID; lotId: ID; routeVersion: string; o
 export type InspectionMethod = { methodId: ID; revision: string; detectionThreshold: string; coverage: string; activeFrom: string; activeUntil: string | null };
 export type UnitHold = { lotId: ID; unitIds: ID[]; scope: string; disposition: string; evidenceRef: Ref };
 export type CorrectiveActionRecord = { actionId: ID; targetLotIds: ID[]; change: string; completed: boolean; verificationRefs: Ref[] };
-export type EscapeTrace = { affectedLots: ID[]; reworkedBranches: ID[]; exposureBoundaries: string[]; preservedHistories: ID[] };
-export type DefectRateComparison = { comparable: boolean; methodChanges: string[]; defectEvidence: string[]; detectionChange: string; rateClaim: string };
-export type CausalReview = { mechanisms: string[]; supportingRefs: Ref[]; contraryRefs: Ref[]; discriminatingTests: string[]; blameInferenceBlocked: boolean };
+export type EscapeTrace = { affectedLots: ID[]; reworkedBranches: ID[]; exposureBoundaries: string[]; preservedHistories: ID[]; invalidEdges: string[] };
+export type DefectRateComparison = { comparable: boolean; methodChanges: string[]; sampleFrame: SampleFrameReview; defectEvidence: string[]; detectionChange: string; rateClaim: string };
+export type CausalReview = { mechanisms: string[]; supportingRefs: Ref[]; contraryRefs: Ref[]; discriminatingTests: string[]; blameInferenceBlocked: boolean; rivalTests: MechanismTest[] };
 export type ContainmentDisposition = { heldUnitIds: ID[]; releasableUnitIds: ID[]; unresolvedLotIds: ID[]; releaseBasis: string[] };
 export type EffectivenessReview = { reopened: boolean; failedActionIds: ID[]; recurrenceEvidence: Ref[]; nextVerification: string; closurePermitted: boolean };
 export type QualityEscapeProposal = { caseId: ID; trace: EscapeTrace; comparison: DefectRateComparison; causes: CausalReview; containment: ContainmentDisposition; effectiveness: EffectivenessReview; commitAllowed: boolean };
+
+export type GenealogyEdgeAudit = { verifiedEdges: string[]; invalidEdges: string[]; missingParentIds: ID[] };
+export type SampleFrameReview = { denominators: string[]; methodVersions: string[]; seasonalWindows: string[]; comparablePairs: string[]; incomparablePairs: string[] };
+export type MechanismSet = { mechanisms: string[]; predictedPatterns: string[]; discriminatingTests: string[] };
+export type MechanismTest = { mechanism: string; supportingRefs: Ref[]; contraryRefs: Ref[]; predictionsMatched: string[]; remainingUnknowns: string[] };

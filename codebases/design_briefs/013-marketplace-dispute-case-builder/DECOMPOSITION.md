@@ -1,4 +1,16 @@
-# Marketplace dispute case builder — semantic decomposition
+# Marketplace dispute case builder
+
+The central risk in this application is narrative collapse: the purchase-time listing, a later edit, delivery evidence, and each party's statement can refer to different events and different authorities. The application anchors review to transaction identity and policy effective time, reconstructs attributed events, and asks only questions that could alter the rule outcome. Plausible conditional outcomes remain visible whenever a dispositive premise is unresolved.
+
+## Domain call structure
+
+`marketplaceDispute.nl` accepts a dispute-specific request and source bundle. It verifies transaction parties, selects policy only by transaction date and scope, and calls five typed procedures. Timeline events and contradictions feed neutral dispositive questions. Evidence findings are question-specific and separate authenticity from semantic support. Rule application branches on unresolved premises instead of treating uncertainty as an adverse fact. The dossier assembles both parties' positions, a response window, redaction references, and a separately tracked appeal path.
+
+The root has explicit branches for each operating condition: a post-purchase listing edit makes the transaction-time edition controlling; a public address prompts scoped restriction while retaining provenance; an outage requires a configured extension and bilateral notice; an external payment reversal requires ledger reconciliation before a second remedy; and new appeal evidence reopens only findings that depend on it while preserving the original disposition. No branch claims that the proposed restriction, extension, notice, ledger change, or adjudication has already occurred.
+
+## Evidence and effect boundary
+
+Evidence pages carry searched partition and completeness. An absent match in an incomplete partition remains unknown. Stage gates require source-linked facts and resist treating a private party's detailed submission as conclusive. Sensitive values are not copied into the dossier; references needed to contest the evidence survive redaction. The result is a review proposal with `commitAllowed: false`; an authorized host must separately enforce access, deadline, money, and messaging effects and record receipts.
 
 **Brief:** `applications/03-customer-service-and-commercial-casework/013-marketplace-dispute-case-builder.md`
 **Domain:** `Customer service and commercial casework`

@@ -85,7 +85,12 @@ export type TenderRevision = { bidderId: ID; revisionId: ID; receivedAt: string;
 export type TenderClarification = { clarificationId: ID; bidderId: ID; requirementId: ID; response: string; issuedAt: string; authorityRef: Ref; affectsInterfaceIds: ID[] };
 export type TradeInterface = { interfaceId: ID; tradeA: ID; tradeB: ID; connection: string; acceptanceOwner: ID | null; acceptanceEvidence: Ref | null };
 export type TenderCoverageCell = { bidderId: ID; requirementId: ID; status: string; priceBasis: string; revisionId: ID; evidenceRefs: Ref[] };
-export type TenderSeam = { interfaceId: ID; responsibleBidderId: ID | null; acceptanceTask: string; gap: string };
+export type TenderSeam = { interfaceId: ID; responsibleBidderId: ID | null; acceptanceTask: string; gap: string; supportingCellIds: ID[]; unresolvedBoundary: string };
 export type TenderComparison = { cells: TenderCoverageCell[]; seams: TenderSeam[]; uncertainAllowanceIds: ID[]; functionalOmissions: ID[]; invalidatedCellIds: ID[]; rankable: boolean; blockers: string[] };
-export type ClassifiedBidCells = { cells: TenderCoverageCell[]; uncertainAllowanceIds: ID[]; blockers: string[] };
-export type ClarificationResult = { cells: TenderCoverageCell[]; uncertainAllowanceIds: ID[]; invalidatedCellIds: ID[]; blockers: string[] };
+export type ClassifiedBidCells = { cells: TenderCoverageCell[]; uncertainAllowanceIds: ID[]; blockers: string[]; revisionPins: BidRevisionPin[]; allowanceAudit: AllowanceAssessment[] };
+export type ClarificationResult = { cells: TenderCoverageCell[]; uncertainAllowanceIds: ID[]; invalidatedCellIds: ID[]; blockers: string[]; appliedClarificationIds: ID[] };
+
+export type BidRevisionPin = { bidderId: ID; currentRevisionId: ID | null; supersededRevisionIds: ID[]; conflict: string };
+export type AllowanceAssessment = { bidderId: ID; requirementId: ID; allowanceId: ID; quantityBasis: string; firmCoverage: boolean; uncertainty: string };
+export type TradeBoundaryAssessment = { interfaceId: ID; bidderAssumptions: string[]; ownerCandidateIds: ID[]; unassigned: boolean };
+export type ClarificationInvalidation = { invalidatedCellIds: ID[]; affectedClarificationIds: ID[]; staleRevisionIds: ID[] };

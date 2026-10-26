@@ -1,0 +1,107 @@
+{
+  "schema": "natlang.application/1",
+  "id": "009",
+  "title": "Experiment interpretation workbench",
+  "entrypoint": "interpretExperiment.nl",
+  "interfaces": [
+    {
+      "name": "interpretExperiment",
+      "path": "interpretExperiment.nl",
+      "purpose": "Assess approved experiment outputs against effective design history, measurement comparability, estimands, counterexperience, and follow-up evidence."
+    }
+  ],
+  "persistence": [
+    "ExperimentDesign",
+    "MeasurementFinding",
+    "ResultClaim",
+    "MechanismFinding",
+    "AnalysisOrder"
+  ],
+  "effects": [
+    "version recommendation changes after late results",
+    "withhold untrustworthy rates pending exposure reconstruction",
+    "keep exploratory subgroup searches separate from confirmatory follow-up",
+    "preserve design and analysis version history"
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "recoverDesign",
+        "paths": [
+          "runCase/recoverDesign/orderPlanAmendments.nl"
+        ]
+      },
+      {
+        "stage": "auditMeasurement",
+        "paths": [
+          "runCase/auditMeasurement/checkMeasurementComparability.nl"
+        ]
+      },
+      {
+        "stage": "interpretResults",
+        "paths": [
+          "runCase/interpretResults/checkEstimandAndSearchHistory.nl"
+        ]
+      },
+      {
+        "stage": "reconcileFeedback",
+        "paths": [
+          "runCase/reconcileFeedback/seekContraryExperience.nl"
+        ]
+      },
+      {
+        "stage": "compileFollowups",
+        "paths": [
+          "experimentCore/deriveFollowupQuestions.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "runCase/recoverDesign/orderPlanAmendments.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "runCase/auditMeasurement/checkMeasurementComparability.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "runCase/interpretResults/checkEstimandAndSearchHistory.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "runCase/reconcileFeedback/seekContraryExperience.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "runCase/reconcileFeedback/seekContraryExperience.nl",
+          "experimentCore/collectReviewQuestions.nl"
+        ]
+      }
+    ]
+  },
+  "source_files": [
+    "interpretExperiment.nl",
+    "types.ts",
+    "natlang.json",
+    "runCase/recoverDesign/audit/qualify.nl",
+    "experimentCore/frameExperimentQuestion.nl",
+    "experimentCore/selectAnalysisPolicy.nl",
+    "experimentCore/deriveFollowupQuestions.nl",
+    "runCase/recoverDesign/orderPlanAmendments.nl",
+    "runCase/auditMeasurement/checkMeasurementComparability.nl",
+    "runCase/interpretResults/checkEstimandAndSearchHistory.nl",
+    "runCase/reconcileFeedback/seekContraryExperience.nl",
+    "experimentCore/collectReviewQuestions.nl"
+  ]
+}

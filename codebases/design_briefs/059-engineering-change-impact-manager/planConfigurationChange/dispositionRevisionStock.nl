@@ -2,4 +2,4 @@
 args: { inventory: PartInventory[], shipments: SupplierShipment[], applicability: ApplicabilityPartition }
 returns: InventoryDisposition
 ---
-Bind rule = assignRevisionUseByConfiguration(inventory, applicability). Include rule as the useByConfiguration allowlist. Allocate stock only to configurations explicitly compatible with that revision. For a shipped obsolete part, retain shipment identity and require an owner-recorded accept, return, rework, or quarantine disposition; do not infer the supplier action.
+Bind allowlist = assignRevisionUseByConfiguration(inventory, applicability). Bind shipmentReview = classifyShippedObsoleteRevisions(shipments, allowlist). Use the exact revision-to-configuration allowlist for each inventory allocation. A shipment of an old revision stays explicitly disposition-pending until the owner selects accept, return, rework, or quarantine; do not infer what happened.

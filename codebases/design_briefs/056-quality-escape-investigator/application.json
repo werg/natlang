@@ -87,10 +87,16 @@
   "source_files": [
     "investigateQualityEscape.nl",
     "investigateQualityEscape/compareInspectionRegimes.nl",
+    "investigateQualityEscape/compareInspectionRegimes/compareMethodValidityWindows.nl",
+    "investigateQualityEscape/compareInspectionRegimes/compareSamplingFrame.nl",
     "investigateQualityEscape/reconcileUnitHoldScope.nl",
     "investigateQualityEscape/retestPriorClosure.nl",
     "investigateQualityEscape/reviewCausalMechanisms.nl",
+    "investigateQualityEscape/reviewCausalMechanisms/formCompetingMechanisms.nl",
+    "investigateQualityEscape/reviewCausalMechanisms/testRivalMechanismsAgainstEvidence.nl",
     "investigateQualityEscape/traceReworkedLotExposure.nl",
+    "investigateQualityEscape/traceReworkedLotExposure/expandValidatedLotBranches.nl",
+    "investigateQualityEscape/traceReworkedLotExposure/validateGenealogyEdges.nl",
     "qualification/normalizeDefects.nl",
     "types.ts"
   ]

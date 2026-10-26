@@ -2,5 +2,5 @@
 args: { lineage: LotLineage[], histories: ProcessHistory[] }
 returns: EscapeTrace
 ---
-Start from the observed defect lots. Traverse parentLotId and reworkRef links in both directions only where the supplied lot genealogy supports the relation. Retain each process route version and expose unknown lineage boundaries. Identify possible affected descendants without merging separately reworked histories.
-Bind trail = validateGenealogyEdges(lineage, histories). Use invalid or missing edges to widen the uncertainty boundary, never to assert that a lot was unaffected.
+Bind audit = validateGenealogyEdges(lineage, histories). Start only from observed defect lots. Trace parents and rework descendants across verified edges, preserving every process route version. If an edge is invalid or a parent is missing, widen only that boundary and keep the implicated branch precautionary.
+Bind branches = expandValidatedLotBranches(lineage, histories, audit). Return the exact affected and reworked branch IDs, retained history IDs, unresolved edges, and exposure boundary.

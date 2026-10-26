@@ -1,7 +1,7 @@
 [
   {
     "id": "018-linkReports-supported",
-    "root": "runCase/linkReports/audit/qualify.nl",
+    "root": "qualification/linkReports.nl",
     "split_group": "design-brief-app-018",
     "inputs": {
       "draft": {
@@ -100,7 +100,7 @@
   },
   {
     "id": "018-linkReports-contradictory",
-    "root": "runCase/linkReports/audit/qualify.nl",
+    "root": "qualification/linkReports.nl",
     "split_group": "design-brief-app-018",
     "inputs": {
       "draft": {
@@ -198,7 +198,7 @@
   },
   {
     "id": "018-linkReports-missing",
-    "root": "runCase/linkReports/audit/qualify.nl",
+    "root": "qualification/linkReports.nl",
     "split_group": "design-brief-app-018",
     "inputs": {
       "draft": {
@@ -297,19 +297,22 @@
   },
   {
     "id": "018-workflow-01",
-    "root": "runCase.nl",
+    "root": "coordinateSupplierIncident.nl",
     "split_group": "design-brief-app-018",
     "inputs": {
       "request": {
         "caseId": "SYN-018-01",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
+        "supplierId": "SUP-18",
+        "affectedOrderIds": [
+          "O-18"
+        ],
+        "reportedProblem": "Seal degradation after cleaning-agent exposure in lot 18A",
+        "incidentOwnerId": "Nia Patel",
+        "severity": "customer-use interruption",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "trace": {
+        "incidents": [
           {
             "supplierId": "SUP-18",
             "affectedOrderIds": [
@@ -378,6 +381,136 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "lotAliasEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "018-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Reports S-18 and S-19 both show seal failure on lot L-18 after the same cleaning agent was applied; lot labels and maintenance logs are linked."
+              },
+              {
+                "id": "E2",
+                "source": "018-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Supplier label LOT-18B now maps to original LOT-18A by signed renumber notice RN-18; package scans retain both IDs."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "splitStockTrace": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "018-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Reports S-18 and S-19 both show seal failure on lot L-18 after the same cleaning agent was applied; lot labels and maintenance logs are linked."
+              },
+              {
+                "id": "E2",
+                "source": "018-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Supplier label LOT-18B now maps to original LOT-18A by signed renumber notice RN-18; package scans retain both IDs."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "responseDeadlineEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "018-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Reports S-18 and S-19 both show seal failure on lot L-18 after the same cleaning agent was applied; lot labels and maintenance logs are linked."
+              },
+              {
+                "id": "E2",
+                "source": "018-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Supplier label LOT-18B now maps to original LOT-18A by signed renumber notice RN-18; package scans retain both IDs."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "recurrenceEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "018-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Reports S-18 and S-19 both show seal failure on lot L-18 after the same cleaning agent was applied; lot labels and maintenance logs are linked."
+              },
+              {
+                "id": "E2",
+                "source": "018-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Supplier label LOT-18B now maps to original LOT-18A by signed renumber notice RN-18; package scans retain both IDs."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "noticeCorrectionEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "018-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Reports S-18 and S-19 both show seal failure on lot L-18 after the same cleaning agent was applied; lot labels and maintenance logs are linked."
+              },
+              {
+                "id": "E2",
+                "source": "018-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Supplier label LOT-18B now maps to original LOT-18A by signed renumber notice RN-18; package scans retain both IDs."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },
@@ -400,19 +533,22 @@
   },
   {
     "id": "018-workflow-02",
-    "root": "runCase.nl",
+    "root": "coordinateSupplierIncident.nl",
     "split_group": "design-brief-app-018",
     "inputs": {
       "request": {
         "caseId": "SYN-018-02",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
+        "supplierId": "SUP-18",
+        "affectedOrderIds": [
+          "O-18"
+        ],
+        "reportedProblem": "Seal degradation after cleaning-agent exposure in lot 18A",
+        "incidentOwnerId": "Nia Patel",
+        "severity": "customer-use interruption",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "trace": {
+        "incidents": [
           {
             "supplierId": "SUP-18",
             "affectedOrderIds": [
@@ -481,6 +617,136 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "lotAliasEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "018-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Reports S-18 and S-19 both show seal failure on lot L-18 after the same cleaning agent was applied; lot labels and maintenance logs are linked."
+              },
+              {
+                "id": "E2",
+                "source": "018-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Order O-18 contains 40 affected units and 60 verified unaffected units; lot scan assigns each pallet separately."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "splitStockTrace": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "018-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Reports S-18 and S-19 both show seal failure on lot L-18 after the same cleaning agent was applied; lot labels and maintenance logs are linked."
+              },
+              {
+                "id": "E2",
+                "source": "018-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Order O-18 contains 40 affected units and 60 verified unaffected units; lot scan assigns each pallet separately."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "responseDeadlineEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "018-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Reports S-18 and S-19 both show seal failure on lot L-18 after the same cleaning agent was applied; lot labels and maintenance logs are linked."
+              },
+              {
+                "id": "E2",
+                "source": "018-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Order O-18 contains 40 affected units and 60 verified unaffected units; lot scan assigns each pallet separately."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "recurrenceEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "018-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Reports S-18 and S-19 both show seal failure on lot L-18 after the same cleaning agent was applied; lot labels and maintenance logs are linked."
+              },
+              {
+                "id": "E2",
+                "source": "018-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Order O-18 contains 40 affected units and 60 verified unaffected units; lot scan assigns each pallet separately."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "noticeCorrectionEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "018-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Reports S-18 and S-19 both show seal failure on lot L-18 after the same cleaning agent was applied; lot labels and maintenance logs are linked."
+              },
+              {
+                "id": "E2",
+                "source": "018-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Order O-18 contains 40 affected units and 60 verified unaffected units; lot scan assigns each pallet separately."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },
@@ -503,19 +769,22 @@
   },
   {
     "id": "018-workflow-03",
-    "root": "runCase.nl",
+    "root": "coordinateSupplierIncident.nl",
     "split_group": "design-brief-app-018",
     "inputs": {
       "request": {
         "caseId": "SYN-018-03",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
+        "supplierId": "SUP-18",
+        "affectedOrderIds": [
+          "O-18"
+        ],
+        "reportedProblem": "Seal degradation after cleaning-agent exposure in lot 18A",
+        "incidentOwnerId": "Nia Patel",
+        "severity": "customer-use interruption",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "trace": {
+        "incidents": [
           {
             "supplierId": "SUP-18",
             "affectedOrderIds": [
@@ -584,6 +853,136 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "lotAliasEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "018-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Reports S-18 and S-19 both show seal failure on lot L-18 after the same cleaning agent was applied; lot labels and maintenance logs are linked."
+              },
+              {
+                "id": "E2",
+                "source": "018-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-10",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Supplier response deadline passed Oct 8; explanation EX-18 arrived Oct 10 without supporting production records."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "splitStockTrace": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "018-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Reports S-18 and S-19 both show seal failure on lot L-18 after the same cleaning agent was applied; lot labels and maintenance logs are linked."
+              },
+              {
+                "id": "E2",
+                "source": "018-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-10",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Supplier response deadline passed Oct 8; explanation EX-18 arrived Oct 10 without supporting production records."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "responseDeadlineEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "018-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Reports S-18 and S-19 both show seal failure on lot L-18 after the same cleaning agent was applied; lot labels and maintenance logs are linked."
+              },
+              {
+                "id": "E2",
+                "source": "018-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-10",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Supplier response deadline passed Oct 8; explanation EX-18 arrived Oct 10 without supporting production records."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "recurrenceEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "018-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Reports S-18 and S-19 both show seal failure on lot L-18 after the same cleaning agent was applied; lot labels and maintenance logs are linked."
+              },
+              {
+                "id": "E2",
+                "source": "018-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-10",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Supplier response deadline passed Oct 8; explanation EX-18 arrived Oct 10 without supporting production records."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "noticeCorrectionEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "018-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Reports S-18 and S-19 both show seal failure on lot L-18 after the same cleaning agent was applied; lot labels and maintenance logs are linked."
+              },
+              {
+                "id": "E2",
+                "source": "018-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-10",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Supplier response deadline passed Oct 8; explanation EX-18 arrived Oct 10 without supporting production records."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },
@@ -606,19 +1005,22 @@
   },
   {
     "id": "018-workflow-04",
-    "root": "runCase.nl",
+    "root": "coordinateSupplierIncident.nl",
     "split_group": "design-brief-app-018",
     "inputs": {
       "request": {
         "caseId": "SYN-018-04",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
+        "supplierId": "SUP-18",
+        "affectedOrderIds": [
+          "O-18"
+        ],
+        "reportedProblem": "Seal degradation after cleaning-agent exposure in lot 18A",
+        "incidentOwnerId": "Nia Patel",
+        "severity": "customer-use interruption",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "trace": {
+        "incidents": [
           {
             "supplierId": "SUP-18",
             "affectedOrderIds": [
@@ -687,6 +1089,136 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "lotAliasEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "018-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Reports S-18 and S-19 both show seal failure on lot L-18 after the same cleaning agent was applied; lot labels and maintenance logs are linked."
+              },
+              {
+                "id": "E2",
+                "source": "018-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-10",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Incident I-18 recurred on Oct 9 after closure; causal claim C-18 names coating failure and awaits verification."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "splitStockTrace": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "018-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Reports S-18 and S-19 both show seal failure on lot L-18 after the same cleaning agent was applied; lot labels and maintenance logs are linked."
+              },
+              {
+                "id": "E2",
+                "source": "018-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-10",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Incident I-18 recurred on Oct 9 after closure; causal claim C-18 names coating failure and awaits verification."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "responseDeadlineEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "018-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Reports S-18 and S-19 both show seal failure on lot L-18 after the same cleaning agent was applied; lot labels and maintenance logs are linked."
+              },
+              {
+                "id": "E2",
+                "source": "018-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-10",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Incident I-18 recurred on Oct 9 after closure; causal claim C-18 names coating failure and awaits verification."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "recurrenceEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "018-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Reports S-18 and S-19 both show seal failure on lot L-18 after the same cleaning agent was applied; lot labels and maintenance logs are linked."
+              },
+              {
+                "id": "E2",
+                "source": "018-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-10",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Incident I-18 recurred on Oct 9 after closure; causal claim C-18 names coating failure and awaits verification."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "noticeCorrectionEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "018-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Reports S-18 and S-19 both show seal failure on lot L-18 after the same cleaning agent was applied; lot labels and maintenance logs are linked."
+              },
+              {
+                "id": "E2",
+                "source": "018-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-10",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Incident I-18 recurred on Oct 9 after closure; causal claim C-18 names coating failure and awaits verification."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },
@@ -709,19 +1241,22 @@
   },
   {
     "id": "018-workflow-05",
-    "root": "runCase.nl",
+    "root": "coordinateSupplierIncident.nl",
     "split_group": "design-brief-app-018",
     "inputs": {
       "request": {
         "caseId": "SYN-018-05",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
+        "supplierId": "SUP-18",
+        "affectedOrderIds": [
+          "O-18"
+        ],
+        "reportedProblem": "Seal degradation after cleaning-agent exposure in lot 18A",
+        "incidentOwnerId": "Nia Patel",
+        "severity": "customer-use interruption",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "trace": {
+        "incidents": [
           {
             "supplierId": "SUP-18",
             "affectedOrderIds": [
@@ -790,6 +1325,136 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "lotAliasEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "018-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Reports S-18 and S-19 both show seal failure on lot L-18 after the same cleaning agent was applied; lot labels and maintenance logs are linked."
+              },
+              {
+                "id": "E2",
+                "source": "018-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-08",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Customer notice N-18 was delivered Oct 7 with lot range 18A-18C; a signed correction received Oct 8 narrows the affected range to 18A only."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "splitStockTrace": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "018-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Reports S-18 and S-19 both show seal failure on lot L-18 after the same cleaning agent was applied; lot labels and maintenance logs are linked."
+              },
+              {
+                "id": "E2",
+                "source": "018-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-08",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Customer notice N-18 was delivered Oct 7 with lot range 18A-18C; a signed correction received Oct 8 narrows the affected range to 18A only."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "responseDeadlineEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "018-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Reports S-18 and S-19 both show seal failure on lot L-18 after the same cleaning agent was applied; lot labels and maintenance logs are linked."
+              },
+              {
+                "id": "E2",
+                "source": "018-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-08",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Customer notice N-18 was delivered Oct 7 with lot range 18A-18C; a signed correction received Oct 8 narrows the affected range to 18A only."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "recurrenceEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "018-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Reports S-18 and S-19 both show seal failure on lot L-18 after the same cleaning agent was applied; lot labels and maintenance logs are linked."
+              },
+              {
+                "id": "E2",
+                "source": "018-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-08",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Customer notice N-18 was delivered Oct 7 with lot range 18A-18C; a signed correction received Oct 8 narrows the affected range to 18A only."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "noticeCorrectionEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "018-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Reports S-18 and S-19 both show seal failure on lot L-18 after the same cleaning agent was applied; lot labels and maintenance logs are linked."
+              },
+              {
+                "id": "E2",
+                "source": "018-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-08",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Customer notice N-18 was delivered Oct 7 with lot range 18A-18C; a signed correction received Oct 8 narrows the affected range to 18A only."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },

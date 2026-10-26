@@ -1,0 +1,111 @@
+{
+  "schema": "natlang.application/1",
+  "id": "008",
+  "title": "Product opportunity portfolio manager",
+  "entrypoint": "planPortfolio.nl",
+  "interfaces": [
+    {
+      "name": "planPortfolio",
+      "path": "planPortfolio.nl",
+      "purpose": "Translate evidence-backed outcomes into distinct mechanisms, shared dependency packages, learning tests, and an explicit solver-receipt review state."
+    }
+  ],
+  "persistence": [
+    "CustomerNeed",
+    "Intervention",
+    "OpportunityEstimate",
+    "PortfolioOption",
+    "OpportunityExperiment"
+  ],
+  "effects": [
+    "preserve approved portfolio baselines and priority-scenario forks",
+    "request authorized estimates for work packages",
+    "propose reversible experiment tasks before irreversible dependencies",
+    "retain unresolved cost and capacity constraints"
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "reconstructNeeds",
+        "paths": [
+          "runCase/reconstructNeeds/separateUnderlyingNeed.nl"
+        ]
+      },
+      {
+        "stage": "generateInterventions",
+        "paths": [
+          "runCase/generateInterventions/proposeDistinctMechanisms.nl"
+        ]
+      },
+      {
+        "stage": "estimateDependencies",
+        "paths": [
+          "runCase/estimateDependencies/decomposeOpportunityWork.nl",
+          "runCase/estimateDependencies/identifySharedPortfolioWork.nl"
+        ]
+      },
+      {
+        "stage": "constructPortfolios",
+        "paths": [
+          "portfolioCore/reviewExactPortfolioReceipt.nl",
+          "portfolioCore/compareReceiptedOptions.nl"
+        ]
+      },
+      {
+        "stage": "planLearning",
+        "paths": [
+          "portfolioCore/selectDecisionTestForMechanism.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "runCase/reconstructNeeds/separateUnderlyingNeed.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "runCase/generateInterventions/proposeDistinctMechanisms.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "runCase/estimateDependencies/identifySharedPortfolioWork.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "planPortfolio.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "portfolioCore/reviewExactPortfolioReceipt.nl",
+          "portfolioCore/compareReceiptedOptions.nl"
+        ]
+      }
+    ]
+  },
+  "source_files": [
+    "planPortfolio.nl",
+    "types.ts",
+    "natlang.json",
+    "runCase/reconstructNeeds/audit/qualify.nl",
+    "portfolioCore/framePortfolioDecision.nl",
+    "portfolioCore/selectPortfolioPolicy.nl",
+    "portfolioCore/forkPriorityScenario.nl",
+    "portfolioCore/selectDecisionTestForMechanism.nl",
+    "runCase/reconstructNeeds/separateUnderlyingNeed.nl",
+    "runCase/generateInterventions/proposeDistinctMechanisms.nl",
+    "runCase/estimateDependencies/decomposeOpportunityWork.nl",
+    "runCase/estimateDependencies/identifySharedPortfolioWork.nl",
+    "portfolioCore/reviewExactPortfolioReceipt.nl",
+    "portfolioCore/compareReceiptedOptions.nl"
+  ]
+}

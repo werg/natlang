@@ -2,4 +2,4 @@
 args: { variant: WorkfloorInstructionDraft, restarts: RestartCondition[], exceptions: LocalException[] }
 returns: ReplayFinding
 ---
-For every interrupted step, replay the transition from the recorded interruption state and require each isolation and repeat check before resuming. Verify every exception leaves its named inspection guard intact. List exact failed steps and the instruction fragments requiring revision.
+Bind invariants = verifyRestartAndGuardCoverage(variant.restartProtocols, variant.inspectionGuards, restarts, exceptions). Replay each interruption from its recorded state, requiring every isolation and repeat check before resuming. Report exact failed steps and preserve inspection guards under each exception; incomplete restart or a missing guard blocks release.

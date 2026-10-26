@@ -307,19 +307,20 @@
   },
   {
     "id": "008-workflow-01",
-    "root": "runCase.nl",
+    "root": "planPortfolio.nl",
     "split_group": "design-brief-app-008",
     "inputs": {
       "request": {
         "caseId": "SYN-008-01",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
+        "planningQuestion": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "strategyId": "STRATEGY-RETENTION",
+        "planningHorizon": "Q4 2026",
+        "sponsorId": "Mara Bell",
+        "expectedPortfolioVersion": "v1"
       },
-      "snapshot": {
+      "evidenceState": {
         "version": "v1",
-        "caseRecords": [
+        "planningFrames": [
           {
             "strategyId": "STRATEGY-RETENTION",
             "planningHorizon": "Q4 2026",
@@ -349,7 +350,7 @@
             "retentionPolicyId": "retention-008"
           }
         ],
-        "evidencePages": [
+        "customerSignals": [
           {
             "evidence": [
               {
@@ -375,7 +376,33 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "costAndCapacityEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "008-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Interviewee P-3 says she needs a way to export a monthly invoice without losing line-item notes; the interview record identifies her role and evidence span."
+              },
+              {
+                "id": "E2",
+                "source": "008-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Sponsor portfolio v2 raises reliability above expansion; approved baseline v1 remains signed and unchanged for comparison."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "strategyRules": [
           {
             "id": "POL-008",
             "authority": "named case owner",
@@ -388,9 +415,36 @@
             ]
           }
         ],
+        "sponsorPriorityEvents": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "008-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Interviewee P-3 says she needs a way to export a monthly invoice without losing line-item notes; the interview record identifies her role and evidence span."
+              },
+              {
+                "id": "E2",
+                "source": "008-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Sponsor portfolio v2 raises reliability above expansion; approved baseline v1 remains signed and unchanged for comparison."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
         "searchedPartitions": [
           "case-folder-2026"
-        ]
+        ],
+        "exactSolverResults": []
       }
     },
     "expected": {
@@ -398,7 +452,7 @@
     },
     "oracle": {
       "level": "judged",
-      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Hidden benefit overlap and costs with exact feasible portfolios; human comparison of intervention diversity and usefulness.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A sponsor changes priorities mid-cycle: fork the scenario and preserve the approved baseline. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A sponsor changes priorities mid-cycle: fork the scenario and preserve the approved baseline. Use only the facts in caseId=SYN-008-01, expectedVersion=v1, version=v1, id=PORTFOLIO-RETENTION-8, version=1, id=E1, source=008-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—fork the scenario and preserve the approved baseline.—as a versioned proposal against caseId=SYN-008-01, expectedVersion=v1, version=v1, id=PORTFOLIO-RETENTION-8, version=1, id=E1, source=008-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (fork the scenario and preserve the approved baseline.) against caseId=SYN-008-01, expectedVersion=v1, version=v1, id=PORTFOLIO-RETENTION-8, version=1, id=E1, source=008-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Hidden benefit overlap and costs with exact feasible portfolios; human comparison of intervention diversity and usefulness.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A sponsor changes priorities mid-cycle: fork the scenario and preserve the approved baseline. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A sponsor changes priorities mid-cycle: fork the scenario and preserve the approved baseline. Use only the facts in caseId=SYN-008-01, expectedVersion=v1, version=v1, id=PORTFOLIO-RETENTION-8, version=1, id=E1, source=008-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome\u2014fork the scenario and preserve the approved baseline.\u2014as a versioned proposal against caseId=SYN-008-01, expectedVersion=v1, version=v1, id=PORTFOLIO-RETENTION-8, version=1, id=E1, source=008-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (fork the scenario and preserve the approved baseline.) against caseId=SYN-008-01, expectedVersion=v1, version=v1, id=PORTFOLIO-RETENTION-8, version=1, id=E1, source=008-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
     },
     "scenario": "A sponsor changes priorities mid-cycle: fork the scenario and preserve the approved baseline.",
     "difficulty": "operational-workflow",
@@ -406,25 +460,26 @@
     "brief_detail": "A sponsor changes priorities mid-cycle: fork the scenario and preserve the approved baseline.",
     "boundary_assertions": {
       "view": "For the required user or reviewer view, make the disposition of this original condition explicit: A sponsor changes priorities mid-cycle: fork the scenario and preserve the approved baseline. Use only the facts in caseId=SYN-008-01, expectedVersion=v1, version=v1, id=PORTFOLIO-RETENTION-8, version=1, id=E1, source=008-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
-      "durable_state": "For durable-state proposals, represent the required outcome—fork the scenario and preserve the approved baseline.—as a versioned proposal against caseId=SYN-008-01, expectedVersion=v1, version=v1, id=PORTFOLIO-RETENTION-8, version=1, id=E1, source=008-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "durable_state": "For durable-state proposals, represent the required outcome\u2014fork the scenario and preserve the approved baseline.\u2014as a versioned proposal against caseId=SYN-008-01, expectedVersion=v1, version=v1, id=PORTFOLIO-RETENTION-8, version=1, id=E1, source=008-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
       "effects": "For the effect ledger, propose only a concrete next step needed for this condition (fork the scenario and preserve the approved baseline.) against caseId=SYN-008-01, expectedVersion=v1, version=v1, id=PORTFOLIO-RETENTION-8, version=1, id=E1, source=008-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
     }
   },
   {
     "id": "008-workflow-02",
-    "root": "runCase.nl",
+    "root": "planPortfolio.nl",
     "split_group": "design-brief-app-008",
     "inputs": {
       "request": {
         "caseId": "SYN-008-02",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
+        "planningQuestion": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "strategyId": "STRATEGY-RETENTION",
+        "planningHorizon": "Q4 2026",
+        "sponsorId": "Mara Bell",
+        "expectedPortfolioVersion": "v1"
       },
-      "snapshot": {
+      "evidenceState": {
         "version": "v1",
-        "caseRecords": [
+        "planningFrames": [
           {
             "strategyId": "STRATEGY-RETENTION",
             "planningHorizon": "Q4 2026",
@@ -454,7 +509,7 @@
             "retentionPolicyId": "retention-008"
           }
         ],
-        "evidencePages": [
+        "customerSignals": [
           {
             "evidence": [
               {
@@ -480,7 +535,33 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "costAndCapacityEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "008-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Interviewee P-3 says she needs a way to export a monthly invoice without losing line-item notes; the interview record identifies her role and evidence span."
+              },
+              {
+                "id": "E2",
+                "source": "008-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Projects P-8A and P-8B both claim the same $240k retention benefit from customer set C-8."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "strategyRules": [
           {
             "id": "POL-008",
             "authority": "named case owner",
@@ -493,9 +574,36 @@
             ]
           }
         ],
+        "sponsorPriorityEvents": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "008-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Interviewee P-3 says she needs a way to export a monthly invoice without losing line-item notes; the interview record identifies her role and evidence span."
+              },
+              {
+                "id": "E2",
+                "source": "008-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Projects P-8A and P-8B both claim the same $240k retention benefit from customer set C-8."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
         "searchedPartitions": [
           "case-folder-2026"
-        ]
+        ],
+        "exactSolverResults": []
       }
     },
     "expected": {
@@ -503,7 +611,7 @@
     },
     "oracle": {
       "level": "judged",
-      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Hidden benefit overlap and costs with exact feasible portfolios; human comparison of intervention diversity and usefulness.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: Two projects claim the same benefit: identify overlap instead of summing both estimates. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: Two projects claim the same benefit: identify overlap instead of summing both estimates. Use only the facts in caseId=SYN-008-02, expectedVersion=v1, version=v1, id=PORTFOLIO-RETENTION-8, version=1, id=E1, source=008-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—identify overlap instead of summing both estimates.—as a versioned proposal against caseId=SYN-008-02, expectedVersion=v1, version=v1, id=PORTFOLIO-RETENTION-8, version=1, id=E1, source=008-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (identify overlap instead of summing both estimates.) against caseId=SYN-008-02, expectedVersion=v1, version=v1, id=PORTFOLIO-RETENTION-8, version=1, id=E1, source=008-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Hidden benefit overlap and costs with exact feasible portfolios; human comparison of intervention diversity and usefulness.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: Two projects claim the same benefit: identify overlap instead of summing both estimates. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: Two projects claim the same benefit: identify overlap instead of summing both estimates. Use only the facts in caseId=SYN-008-02, expectedVersion=v1, version=v1, id=PORTFOLIO-RETENTION-8, version=1, id=E1, source=008-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome\u2014identify overlap instead of summing both estimates.\u2014as a versioned proposal against caseId=SYN-008-02, expectedVersion=v1, version=v1, id=PORTFOLIO-RETENTION-8, version=1, id=E1, source=008-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (identify overlap instead of summing both estimates.) against caseId=SYN-008-02, expectedVersion=v1, version=v1, id=PORTFOLIO-RETENTION-8, version=1, id=E1, source=008-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
     },
     "scenario": "Two projects claim the same benefit: identify overlap instead of summing both estimates.",
     "difficulty": "operational-workflow",
@@ -511,25 +619,26 @@
     "brief_detail": "Two projects claim the same benefit: identify overlap instead of summing both estimates.",
     "boundary_assertions": {
       "view": "For the required user or reviewer view, make the disposition of this original condition explicit: Two projects claim the same benefit: identify overlap instead of summing both estimates. Use only the facts in caseId=SYN-008-02, expectedVersion=v1, version=v1, id=PORTFOLIO-RETENTION-8, version=1, id=E1, source=008-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
-      "durable_state": "For durable-state proposals, represent the required outcome—identify overlap instead of summing both estimates.—as a versioned proposal against caseId=SYN-008-02, expectedVersion=v1, version=v1, id=PORTFOLIO-RETENTION-8, version=1, id=E1, source=008-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "durable_state": "For durable-state proposals, represent the required outcome\u2014identify overlap instead of summing both estimates.\u2014as a versioned proposal against caseId=SYN-008-02, expectedVersion=v1, version=v1, id=PORTFOLIO-RETENTION-8, version=1, id=E1, source=008-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
       "effects": "For the effect ledger, propose only a concrete next step needed for this condition (identify overlap instead of summing both estimates.) against caseId=SYN-008-02, expectedVersion=v1, version=v1, id=PORTFOLIO-RETENTION-8, version=1, id=E1, source=008-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
     }
   },
   {
     "id": "008-workflow-03",
-    "root": "runCase.nl",
+    "root": "planPortfolio.nl",
     "split_group": "design-brief-app-008",
     "inputs": {
       "request": {
         "caseId": "SYN-008-03",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
+        "planningQuestion": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "strategyId": "STRATEGY-RETENTION",
+        "planningHorizon": "Q4 2026",
+        "sponsorId": "Mara Bell",
+        "expectedPortfolioVersion": "v1"
       },
-      "snapshot": {
+      "evidenceState": {
         "version": "v1",
-        "caseRecords": [
+        "planningFrames": [
           {
             "strategyId": "STRATEGY-RETENTION",
             "planningHorizon": "Q4 2026",
@@ -559,7 +668,7 @@
             "retentionPolicyId": "retention-008"
           }
         ],
-        "evidencePages": [
+        "customerSignals": [
           {
             "evidence": [
               {
@@ -585,7 +694,33 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "costAndCapacityEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "008-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Interviewee P-3 says she needs a way to export a monthly invoice without losing line-item notes; the interview record identifies her role and evidence span."
+              },
+              {
+                "id": "E2",
+                "source": "008-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Dependency estimate D-8 for migration staffing is absent; two portfolio options differ only on the unverified staffing assumption."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "strategyRules": [
           {
             "id": "POL-008",
             "authority": "named case owner",
@@ -598,9 +733,36 @@
             ]
           }
         ],
+        "sponsorPriorityEvents": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "008-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Interviewee P-3 says she needs a way to export a monthly invoice without losing line-item notes; the interview record identifies her role and evidence span."
+              },
+              {
+                "id": "E2",
+                "source": "008-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Dependency estimate D-8 for migration staffing is absent; two portfolio options differ only on the unverified staffing assumption."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
         "searchedPartitions": [
           "case-folder-2026"
-        ]
+        ],
+        "exactSolverResults": []
       }
     },
     "expected": {
@@ -608,7 +770,7 @@
     },
     "oracle": {
       "level": "judged",
-      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Hidden benefit overlap and costs with exact feasible portfolios; human comparison of intervention diversity and usefulness.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A dependency estimate is missing: show a contingent portfolio, not false feasibility. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A dependency estimate is missing: show a contingent portfolio, not false feasibility. Use only the facts in caseId=SYN-008-03, expectedVersion=v1, version=v1, id=PORTFOLIO-RETENTION-8, version=1, id=E1, source=008-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—show a contingent portfolio, not false feasibility.—as a versioned proposal against caseId=SYN-008-03, expectedVersion=v1, version=v1, id=PORTFOLIO-RETENTION-8, version=1, id=E1, source=008-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (show a contingent portfolio, not false feasibility.) against caseId=SYN-008-03, expectedVersion=v1, version=v1, id=PORTFOLIO-RETENTION-8, version=1, id=E1, source=008-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Hidden benefit overlap and costs with exact feasible portfolios; human comparison of intervention diversity and usefulness.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A dependency estimate is missing: show a contingent portfolio, not false feasibility. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A dependency estimate is missing: show a contingent portfolio, not false feasibility. Use only the facts in caseId=SYN-008-03, expectedVersion=v1, version=v1, id=PORTFOLIO-RETENTION-8, version=1, id=E1, source=008-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome\u2014show a contingent portfolio, not false feasibility.\u2014as a versioned proposal against caseId=SYN-008-03, expectedVersion=v1, version=v1, id=PORTFOLIO-RETENTION-8, version=1, id=E1, source=008-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (show a contingent portfolio, not false feasibility.) against caseId=SYN-008-03, expectedVersion=v1, version=v1, id=PORTFOLIO-RETENTION-8, version=1, id=E1, source=008-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
     },
     "scenario": "A dependency estimate is missing: show a contingent portfolio, not false feasibility.",
     "difficulty": "operational-workflow",
@@ -616,25 +778,26 @@
     "brief_detail": "A dependency estimate is missing: show a contingent portfolio, not false feasibility.",
     "boundary_assertions": {
       "view": "For the required user or reviewer view, make the disposition of this original condition explicit: A dependency estimate is missing: show a contingent portfolio, not false feasibility. Use only the facts in caseId=SYN-008-03, expectedVersion=v1, version=v1, id=PORTFOLIO-RETENTION-8, version=1, id=E1, source=008-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
-      "durable_state": "For durable-state proposals, represent the required outcome—show a contingent portfolio, not false feasibility.—as a versioned proposal against caseId=SYN-008-03, expectedVersion=v1, version=v1, id=PORTFOLIO-RETENTION-8, version=1, id=E1, source=008-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "durable_state": "For durable-state proposals, represent the required outcome\u2014show a contingent portfolio, not false feasibility.\u2014as a versioned proposal against caseId=SYN-008-03, expectedVersion=v1, version=v1, id=PORTFOLIO-RETENTION-8, version=1, id=E1, source=008-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
       "effects": "For the effect ledger, propose only a concrete next step needed for this condition (show a contingent portfolio, not false feasibility.) against caseId=SYN-008-03, expectedVersion=v1, version=v1, id=PORTFOLIO-RETENTION-8, version=1, id=E1, source=008-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
     }
   },
   {
     "id": "008-workflow-04",
-    "root": "runCase.nl",
+    "root": "planPortfolio.nl",
     "split_group": "design-brief-app-008",
     "inputs": {
       "request": {
         "caseId": "SYN-008-04",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
+        "planningQuestion": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "strategyId": "STRATEGY-RETENTION",
+        "planningHorizon": "Q4 2026",
+        "sponsorId": "Mara Bell",
+        "expectedPortfolioVersion": "v1"
       },
-      "snapshot": {
+      "evidenceState": {
         "version": "v1",
-        "caseRecords": [
+        "planningFrames": [
           {
             "strategyId": "STRATEGY-RETENTION",
             "planningHorizon": "Q4 2026",
@@ -664,7 +827,7 @@
             "retentionPolicyId": "retention-008"
           }
         ],
-        "evidencePages": [
+        "customerSignals": [
           {
             "evidence": [
               {
@@ -690,7 +853,33 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "costAndCapacityEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "008-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Interviewee P-3 says she needs a way to export a monthly invoice without losing line-item notes; the interview record identifies her role and evidence span."
+              },
+              {
+                "id": "E2",
+                "source": "008-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Interview Q-8 supports needs N-1 and N-2; both cite the same source span and one participant."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "strategyRules": [
           {
             "id": "POL-008",
             "authority": "named case owner",
@@ -703,9 +892,36 @@
             ]
           }
         ],
+        "sponsorPriorityEvents": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "008-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Interviewee P-3 says she needs a way to export a monthly invoice without losing line-item notes; the interview record identifies her role and evidence span."
+              },
+              {
+                "id": "E2",
+                "source": "008-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Interview Q-8 supports needs N-1 and N-2; both cite the same source span and one participant."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
         "searchedPartitions": [
           "case-folder-2026"
-        ]
+        ],
+        "exactSolverResults": []
       }
     },
     "expected": {
@@ -713,7 +929,7 @@
     },
     "oracle": {
       "level": "judged",
-      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Hidden benefit overlap and costs with exact feasible portfolios; human comparison of intervention diversity and usefulness.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A customer quote supports several needs: preserve one source and avoid multiplying evidence strength. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A customer quote supports several needs: preserve one source and avoid multiplying evidence strength. Use only the facts in caseId=SYN-008-04, expectedVersion=v1, version=v1, id=PORTFOLIO-RETENTION-8, version=1, id=E1, source=008-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—preserve one source and avoid multiplying evidence strength.—as a versioned proposal against caseId=SYN-008-04, expectedVersion=v1, version=v1, id=PORTFOLIO-RETENTION-8, version=1, id=E1, source=008-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (preserve one source and avoid multiplying evidence strength.) against caseId=SYN-008-04, expectedVersion=v1, version=v1, id=PORTFOLIO-RETENTION-8, version=1, id=E1, source=008-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Hidden benefit overlap and costs with exact feasible portfolios; human comparison of intervention diversity and usefulness.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A customer quote supports several needs: preserve one source and avoid multiplying evidence strength. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A customer quote supports several needs: preserve one source and avoid multiplying evidence strength. Use only the facts in caseId=SYN-008-04, expectedVersion=v1, version=v1, id=PORTFOLIO-RETENTION-8, version=1, id=E1, source=008-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome\u2014preserve one source and avoid multiplying evidence strength.\u2014as a versioned proposal against caseId=SYN-008-04, expectedVersion=v1, version=v1, id=PORTFOLIO-RETENTION-8, version=1, id=E1, source=008-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (preserve one source and avoid multiplying evidence strength.) against caseId=SYN-008-04, expectedVersion=v1, version=v1, id=PORTFOLIO-RETENTION-8, version=1, id=E1, source=008-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
     },
     "scenario": "A customer quote supports several needs: preserve one source and avoid multiplying evidence strength.",
     "difficulty": "operational-workflow",
@@ -721,25 +937,26 @@
     "brief_detail": "A customer quote supports several needs: preserve one source and avoid multiplying evidence strength.",
     "boundary_assertions": {
       "view": "For the required user or reviewer view, make the disposition of this original condition explicit: A customer quote supports several needs: preserve one source and avoid multiplying evidence strength. Use only the facts in caseId=SYN-008-04, expectedVersion=v1, version=v1, id=PORTFOLIO-RETENTION-8, version=1, id=E1, source=008-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
-      "durable_state": "For durable-state proposals, represent the required outcome—preserve one source and avoid multiplying evidence strength.—as a versioned proposal against caseId=SYN-008-04, expectedVersion=v1, version=v1, id=PORTFOLIO-RETENTION-8, version=1, id=E1, source=008-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "durable_state": "For durable-state proposals, represent the required outcome\u2014preserve one source and avoid multiplying evidence strength.\u2014as a versioned proposal against caseId=SYN-008-04, expectedVersion=v1, version=v1, id=PORTFOLIO-RETENTION-8, version=1, id=E1, source=008-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
       "effects": "For the effect ledger, propose only a concrete next step needed for this condition (preserve one source and avoid multiplying evidence strength.) against caseId=SYN-008-04, expectedVersion=v1, version=v1, id=PORTFOLIO-RETENTION-8, version=1, id=E1, source=008-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
     }
   },
   {
     "id": "008-workflow-05",
-    "root": "runCase.nl",
+    "root": "planPortfolio.nl",
     "split_group": "design-brief-app-008",
     "inputs": {
       "request": {
         "caseId": "SYN-008-05",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
+        "planningQuestion": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "strategyId": "STRATEGY-RETENTION",
+        "planningHorizon": "Q4 2026",
+        "sponsorId": "Mara Bell",
+        "expectedPortfolioVersion": "v1"
       },
-      "snapshot": {
+      "evidenceState": {
         "version": "v1",
-        "caseRecords": [
+        "planningFrames": [
           {
             "strategyId": "STRATEGY-RETENTION",
             "planningHorizon": "Q4 2026",
@@ -769,7 +986,7 @@
             "retentionPolicyId": "retention-008"
           }
         ],
-        "evidencePages": [
+        "customerSignals": [
           {
             "evidence": [
               {
@@ -795,7 +1012,33 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "costAndCapacityEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "008-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Interviewee P-3 says she needs a way to export a monthly invoice without losing line-item notes; the interview record identifies her role and evidence span."
+              },
+              {
+                "id": "E2",
+                "source": "008-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Experiment X-8 has a wide interval spanning positive and negative effects; no evidence establishes benefit or harm."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "strategyRules": [
           {
             "id": "POL-008",
             "authority": "named case owner",
@@ -808,9 +1051,36 @@
             ]
           }
         ],
+        "sponsorPriorityEvents": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "008-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Interviewee P-3 says she needs a way to export a monthly invoice without losing line-item notes; the interview record identifies her role and evidence span."
+              },
+              {
+                "id": "E2",
+                "source": "008-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Experiment X-8 has a wide interval spanning positive and negative effects; no evidence establishes benefit or harm."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
         "searchedPartitions": [
           "case-folder-2026"
-        ]
+        ],
+        "exactSolverResults": []
       }
     },
     "expected": {
@@ -818,7 +1088,7 @@
     },
     "oracle": {
       "level": "judged",
-      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Hidden benefit overlap and costs with exact feasible portfolios; human comparison of intervention diversity and usefulness.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: An experiment is inconclusive: retain the uncertainty rather than treating it as a failed idea. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: An experiment is inconclusive: retain the uncertainty rather than treating it as a failed idea. Use only the facts in caseId=SYN-008-05, expectedVersion=v1, version=v1, id=PORTFOLIO-RETENTION-8, version=1, id=E1, source=008-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—retain the uncertainty rather than treating it as a failed idea.—as a versioned proposal against caseId=SYN-008-05, expectedVersion=v1, version=v1, id=PORTFOLIO-RETENTION-8, version=1, id=E1, source=008-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (retain the uncertainty rather than treating it as a failed idea.) against caseId=SYN-008-05, expectedVersion=v1, version=v1, id=PORTFOLIO-RETENTION-8, version=1, id=E1, source=008-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Hidden benefit overlap and costs with exact feasible portfolios; human comparison of intervention diversity and usefulness.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: An experiment is inconclusive: retain the uncertainty rather than treating it as a failed idea. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: An experiment is inconclusive: retain the uncertainty rather than treating it as a failed idea. Use only the facts in caseId=SYN-008-05, expectedVersion=v1, version=v1, id=PORTFOLIO-RETENTION-8, version=1, id=E1, source=008-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome\u2014retain the uncertainty rather than treating it as a failed idea.\u2014as a versioned proposal against caseId=SYN-008-05, expectedVersion=v1, version=v1, id=PORTFOLIO-RETENTION-8, version=1, id=E1, source=008-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (retain the uncertainty rather than treating it as a failed idea.) against caseId=SYN-008-05, expectedVersion=v1, version=v1, id=PORTFOLIO-RETENTION-8, version=1, id=E1, source=008-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
     },
     "scenario": "An experiment is inconclusive: retain the uncertainty rather than treating it as a failed idea.",
     "difficulty": "operational-workflow",
@@ -826,7 +1096,7 @@
     "brief_detail": "An experiment is inconclusive: retain the uncertainty rather than treating it as a failed idea.",
     "boundary_assertions": {
       "view": "For the required user or reviewer view, make the disposition of this original condition explicit: An experiment is inconclusive: retain the uncertainty rather than treating it as a failed idea. Use only the facts in caseId=SYN-008-05, expectedVersion=v1, version=v1, id=PORTFOLIO-RETENTION-8, version=1, id=E1, source=008-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
-      "durable_state": "For durable-state proposals, represent the required outcome—retain the uncertainty rather than treating it as a failed idea.—as a versioned proposal against caseId=SYN-008-05, expectedVersion=v1, version=v1, id=PORTFOLIO-RETENTION-8, version=1, id=E1, source=008-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "durable_state": "For durable-state proposals, represent the required outcome\u2014retain the uncertainty rather than treating it as a failed idea.\u2014as a versioned proposal against caseId=SYN-008-05, expectedVersion=v1, version=v1, id=PORTFOLIO-RETENTION-8, version=1, id=E1, source=008-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
       "effects": "For the effect ledger, propose only a concrete next step needed for this condition (retain the uncertainty rather than treating it as a failed idea.) against caseId=SYN-008-05, expectedVersion=v1, version=v1, id=PORTFOLIO-RETENTION-8, version=1, id=E1, source=008-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
     }
   }

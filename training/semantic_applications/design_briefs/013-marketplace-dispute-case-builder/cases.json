@@ -271,18 +271,22 @@
   },
   {
     "id": "013-workflow-01",
-    "root": "runCase.nl",
+    "root": "adjudicateDispute.nl",
     "split_group": "design-brief-app-013",
     "inputs": {
       "request": {
         "caseId": "SYN-013-01",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
+        "parties": [
+          "B-13",
+          "S-13"
+        ],
         "requestedBy": "case owner",
+        "disputedOutcome": "Whether listing edition v3 described the purchased item",
+        "transactionId": "T-13",
+        "requiredDisclosures": [],
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
+      "records": {
         "caseRecords": [
           {
             "buyerId": "B-13",
@@ -350,7 +354,14 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
-        ]
+        ],
+        "transactionListingEditRefs": [
+          "E2"
+        ],
+        "paymentReversalRefs": [],
+        "outageDeadlineRefs": [],
+        "publicAddressRefs": [],
+        "appealEvidenceRefs": []
       }
     },
     "expected": {
@@ -372,18 +383,22 @@
   },
   {
     "id": "013-workflow-02",
-    "root": "runCase.nl",
+    "root": "adjudicateDispute.nl",
     "split_group": "design-brief-app-013",
     "inputs": {
       "request": {
         "caseId": "SYN-013-02",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
+        "parties": [
+          "B-13",
+          "S-13"
+        ],
         "requestedBy": "case owner",
+        "disputedOutcome": "Whether listing edition v3 described the purchased item",
+        "transactionId": "T-13",
+        "requiredDisclosures": [],
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
+      "records": {
         "caseRecords": [
           {
             "buyerId": "B-13",
@@ -451,7 +466,12 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
-        ]
+        ],
+        "transactionListingEditRefs": [],
+        "paymentReversalRefs": [],
+        "outageDeadlineRefs": [],
+        "publicAddressRefs": [],
+        "appealEvidenceRefs": []
       }
     },
     "expected": {
@@ -473,18 +493,22 @@
   },
   {
     "id": "013-workflow-03",
-    "root": "runCase.nl",
+    "root": "adjudicateDispute.nl",
     "split_group": "design-brief-app-013",
     "inputs": {
       "request": {
         "caseId": "SYN-013-03",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
+        "parties": [
+          "B-13",
+          "S-13"
+        ],
         "requestedBy": "case owner",
+        "disputedOutcome": "Whether listing edition v3 described the purchased item",
+        "transactionId": "T-13",
+        "requiredDisclosures": [],
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
+      "records": {
         "caseRecords": [
           {
             "buyerId": "B-13",
@@ -552,7 +576,14 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
-        ]
+        ],
+        "transactionListingEditRefs": [],
+        "paymentReversalRefs": [],
+        "outageDeadlineRefs": [
+          "E2"
+        ],
+        "publicAddressRefs": [],
+        "appealEvidenceRefs": []
       }
     },
     "expected": {
@@ -574,18 +605,22 @@
   },
   {
     "id": "013-workflow-04",
-    "root": "runCase.nl",
+    "root": "adjudicateDispute.nl",
     "split_group": "design-brief-app-013",
     "inputs": {
       "request": {
         "caseId": "SYN-013-04",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
+        "parties": [
+          "B-13",
+          "S-13"
+        ],
         "requestedBy": "case owner",
+        "disputedOutcome": "Whether listing edition v3 described the purchased item",
+        "transactionId": "T-13",
+        "requiredDisclosures": [],
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
+      "records": {
         "caseRecords": [
           {
             "buyerId": "B-13",
@@ -653,7 +688,12 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
-        ]
+        ],
+        "transactionListingEditRefs": [],
+        "paymentReversalRefs": [],
+        "outageDeadlineRefs": [],
+        "publicAddressRefs": [],
+        "appealEvidenceRefs": []
       }
     },
     "expected": {
@@ -675,18 +715,22 @@
   },
   {
     "id": "013-workflow-05",
-    "root": "runCase.nl",
+    "root": "adjudicateDispute.nl",
     "split_group": "design-brief-app-013",
     "inputs": {
       "request": {
         "caseId": "SYN-013-05",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
+        "parties": [
+          "B-13",
+          "S-13"
+        ],
         "requestedBy": "case owner",
+        "disputedOutcome": "Whether listing edition v3 described the purchased item",
+        "transactionId": "T-13",
+        "requiredDisclosures": [],
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
+      "records": {
         "caseRecords": [
           {
             "buyerId": "B-13",
@@ -754,6 +798,13 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "transactionListingEditRefs": [],
+        "paymentReversalRefs": [],
+        "outageDeadlineRefs": [],
+        "publicAddressRefs": [],
+        "appealEvidenceRefs": [
+          "E2"
         ]
       }
     },

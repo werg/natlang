@@ -87,7 +87,11 @@ export type FieldedConfiguration = { unitId: ID; configurationId: ID; installedP
 export type SupplierShipment = { shipmentId: ID; partRevision: string; quantity: number; received: boolean; ownerDecision: string };
 export type RetrofitProgress = { unitId: ID; fromConfiguration: ID; targetConfiguration: ID; completedSteps: string[]; verifiedSteps: string[] };
 export type ConfigurationDependency = { sourceId: ID; targetId: ID; dependencyKind: string; evidenceRef: Ref };
-export type ApplicabilityPartition = { changedConfigurations: ID[]; preservedGrandfatheredUnits: ID[]; unresolvedConfigurations: ID[]; documentationOnly: boolean; affectedDependencies: ConfigurationDependency[] };
-export type InventoryDisposition = { useByConfiguration: string[]; quarantineShipments: ID[]; fieldedOldRevisionUnits: ID[]; unaffectedStock: string[]; unresolvedItems: string[] };
+export type ApplicabilityPartition = { changedConfigurations: ID[]; preservedGrandfatheredUnits: ID[]; unresolvedConfigurations: ID[]; documentationOnly: boolean; affectedDependencies: ConfigurationDependency[]; closureEvidence: ID[]; closureBlockers: string[] };
+export type InventoryDisposition = { useByConfiguration: string[]; quarantineShipments: ID[]; fieldedOldRevisionUnits: ID[]; unaffectedStock: string[]; unresolvedItems: string[]; unresolvedShipments: ID[] };
 export type RetrofitFence = { completeUnitIds: ID[]; partialUnitIds: ID[]; mixedStateConstraints: string[]; nextStepsByUnit: string[] };
 export type EngineeringChangePlan = { changeId: ID; applicability: ApplicabilityPartition; inventory: InventoryDisposition; retrofit: RetrofitFence; affectedDownstream: ID[]; verificationRequirements: string[]; planDisposition: string; commitAllowed: boolean };
+
+export type ConfigSeedSet = { directConfigurationIds: ID[]; unresolvedConfigurationIds: ID[]; documentationOnly: boolean };
+export type ConfigImpactClosure = { changedConfigurationIds: ID[]; preservedConfigurationIds: ID[]; traversalEvidence: ID[]; missingDependencyEvidence: string[] };
+export type ShipmentDispositionReview = { unresolvedShipmentIds: ID[]; oldRevisionUnitIds: ID[]; dispositionTasks: string[] };

@@ -1,0 +1,111 @@
+{
+  "schema": "natlang.application/1",
+  "id": "016",
+  "title": "Tender response factory",
+  "entrypoint": "assembleTenderResponse.nl",
+  "interfaces": [
+    {
+      "name": "assembleTenderResponse",
+      "path": "assembleTenderResponse.nl",
+      "purpose": "Prepare a supported, internally consistent tender response and a hash-bound review bundle for authorized submission."
+    }
+  ],
+  "persistence": [
+    "TenderRequirement",
+    "CapabilityMatch",
+    "ContributionTask",
+    "ResponseSection",
+    "SubmissionManifest"
+  ],
+  "effects": [
+    "freeze team approvals to exact response hash",
+    "upload only through authorized tender portal adapter",
+    "retry timed-out submission only after portal status reconciliation"
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "parseObligations",
+        "paths": [
+          "assembleTenderResponse/parseTenderObligations.nl",
+          "runCase/parseObligations/audit/qualify.nl"
+        ]
+      },
+      {
+        "stage": "mapCapabilities",
+        "paths": [
+          "assembleTenderResponse/matchVerifiedCapabilities.nl"
+        ]
+      },
+      {
+        "stage": "commissionInputs",
+        "paths": [
+          "assembleTenderResponse/commissionRequirementEvidence.nl"
+        ]
+      },
+      {
+        "stage": "composeResponse",
+        "paths": [
+          "assembleTenderResponse/writeEvidenceBoundResponse.nl"
+        ]
+      },
+      {
+        "stage": "validateSubmission",
+        "paths": [
+          "assembleTenderResponse/checkPortalLimits.nl",
+          "assembleTenderResponse/freezeTenderBundlePreview.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "assembleTenderResponse/assessAddendumImpact.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "assembleTenderResponse/checkPortalLimits.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "assembleTenderResponse/confirmCertificateWindow.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "assembleTenderResponse/reconcileQuantitySchedule.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "assembleTenderResponse/recoverPortalTimeout.nl"
+        ]
+      }
+    ]
+  },
+  "source_files": [
+    "natlang.json",
+    "assembleTenderResponse.nl",
+    "assembleTenderResponse/frameTender.nl",
+    "assembleTenderResponse/assessAddendumImpact.nl",
+    "assembleTenderResponse/reconcileQuantitySchedule.nl",
+    "assembleTenderResponse/confirmCertificateWindow.nl",
+    "assembleTenderResponse/recoverPortalTimeout.nl",
+    "assembleTenderResponse/selectTenderPolicy.nl",
+    "assembleTenderResponse/parseTenderObligations.nl",
+    "assembleTenderResponse/matchVerifiedCapabilities.nl",
+    "assembleTenderResponse/commissionRequirementEvidence.nl",
+    "assembleTenderResponse/writeEvidenceBoundResponse.nl",
+    "assembleTenderResponse/checkPortalLimits.nl",
+    "assembleTenderResponse/freezeTenderBundlePreview.nl",
+    "runCase/parseObligations/audit/qualify.nl",
+    "types.ts"
+  ]
+}

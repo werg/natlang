@@ -87,10 +87,15 @@
   "source_files": [
     "adaptWorkInstruction.nl",
     "adaptWorkInstruction/assembleLocalVariant.nl",
+    "adaptWorkInstruction/assembleLocalVariant/bindWarningAssertionsToSteps.nl",
+    "adaptWorkInstruction/assembleLocalVariant/buildRestartProtocols.nl",
     "adaptWorkInstruction/assembleLocalVariant/mapProcedureStepsToVerifiedControls.nl",
+    "adaptWorkInstruction/assembleLocalVariant/preserveInspectionGuardMap.nl",
     "adaptWorkInstruction/enumerateFloorCopyWithdrawal.nl",
     "adaptWorkInstruction/preserveWarningMeaning.nl",
+    "adaptWorkInstruction/preserveWarningMeaning/mapTranslationCoverage.nl",
     "adaptWorkInstruction/replayRestartAndExceptions.nl",
+    "adaptWorkInstruction/replayRestartAndExceptions/verifyRestartAndGuardCoverage.nl",
     "adaptWorkInstruction/resolveFloorTerminology.nl",
     "qualification/recoverProcedure.nl",
     "types.ts"

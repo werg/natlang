@@ -2,4 +2,4 @@
 args: { interfaces: TradeInterface[], cells: TenderCoverageCell[] }
 returns: TenderSeam[]
 ---
-For each physical or functional connection, inspect both trade cells and their explicit boundary assumptions. Where neither accepts ownership, create a named acceptance task, keep owner unresolved, and block completeness until a bidder or accountable owner accepts it.
+Bind boundaries = compareTradeBoundaryAssumptions(interfaces, cells). For a connection neither trade accepts, bind task = createUnownedConnectionAcceptanceTask(boundaries). Do not infer ownership from trade names or adjacency. Preserve an unresolved owner and block completeness until acceptance is explicit.

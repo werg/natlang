@@ -82,13 +82,17 @@ export type CaseStageSet = { recoverProcedure: StageResultProcedureRequirement; 
 
 export type InstructionAdaptationCase = { caseId: ID; baseline: ProcedureRequirement; sourceVersion: string; localTerminology: TerminologyEntry[]; translations: WarningTranslation[]; equipmentReferences: EquipmentAlias[]; interruptionRules: RestartCondition[]; localExceptions: LocalException[]; floorCopies: FloorCopy[]; evidence: Evidence[]; changeNote: string };
 export type TerminologyEntry = { term: string; meaning: string; locale: string; evidenceRef: Ref };
-export type WarningTranslation = { sourceText: string; renderedText: string; locale: string; preservedHazards: string[]; omittedHazards: string[]; evidenceRef: Ref };
+export type WarningTranslation = { appliesToSteps: ID[]; sourceText: string; renderedText: string; locale: string; preservedHazards: string[]; omittedHazards: string[]; evidenceRef: Ref };
 export type EquipmentAlias = { localName: string; assetIds: ID[]; controlIds: ID[]; verifiedRef: Ref | null };
 export type RestartCondition = { stepId: ID; interruptionState: string; requiredIsolationChecks: string[]; repeatChecks: string[]; evidenceRef: Ref };
 export type LocalException = { stepId: ID; waivedConstraint: string; preservedInspections: string[]; authorityRef: Ref };
 export type FloorCopy = { copyId: ID; version: string; location: string; owner: string; withdrawn: boolean };
 export type AmbiguitySet = { ambiguousTerms: string[]; equipmentConflicts: string[]; unresolvedRefs: string[] };
-export type WarningIntegrity = { safe: boolean; missingHazards: string[]; untranslatedConditions: string[]; evidenceRefs: Ref[] };
-export type WorkfloorInstructionDraft = { sourceVersion: string; localSteps: string[]; equipmentIds: ID[]; preservedInspectionGates: string[]; restartText: string[]; warningText: string[]; blockedReason: string[] };
+export type WarningIntegrity = { safe: boolean; missingHazards: string[]; untranslatedConditions: string[]; evidenceRefs: Ref[]; stepBindings: WarningStepBinding[] };
+export type WorkfloorInstructionDraft = { sourceVersion: string; localSteps: string[]; equipmentIds: ID[]; preservedInspectionGates: string[]; restartText: string[]; warningText: string[]; stepWarnings: WarningStepBinding[]; inspectionGuards: InspectionGuardMap[]; restartProtocols: RestartProtocol[]; blockedReason: string[] };
 export type ReplayFinding = { passedSteps: string[]; failedSteps: string[]; interruptionFailures: string[]; requiredRevisions: string[] };
 export type InstructionReleasePacket = { variant: WorkfloorInstructionDraft; replay: ReplayFinding; withdrawalTasks: string[]; applicableCopyIds: ID[]; releasable: boolean; approvalRequired: boolean };
+
+export type WarningStepBinding = { stepId: ID; translationRefs: Ref[]; missingHazards: string[]; missingConditions: string[]; safeToRelease: boolean };
+export type InspectionGuardMap = { stepId: ID; mandatoryInspections: string[]; waivedConstraint: string | null; authorityRef: Ref | null };
+export type RestartProtocol = { stepId: ID; resumeState: string; isolationChecks: string[]; repeatVerifications: string[]; incomplete: boolean };

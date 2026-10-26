@@ -1,5 +1,5 @@
 ---
-args: { selectedId: ID | null, concepts: ShopConcept[], measurements: MeasurementQualification }
+args: { selectedId: ID | null, concepts: ShopConcept[], measurements: MeasurementQualification, finishes: FinishReference[], samples: Ref[] }
 returns: ConceptSelection
 ---
-Select only the requested concept ID when it exists. Identify features with missing or unaccepted measurement and require an accepted physical sample or approved reference for finish; a screen rendering alone is not customer acceptance.
+Select only the requested concept when it exists. Bind finish = confirmPhysicalFinishReference(concepts, finishes, samples). A feature lacking accepted measurement or physical/reference approval remains a blocker; a screen rendering alone is not acceptance.

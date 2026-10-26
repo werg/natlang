@@ -2,4 +2,5 @@
 args: { baseline: ProcedureRequirement, ambiguity: AmbiguitySet, warnings: WarningIntegrity, exceptions: LocalException[], restarts: RestartCondition[] }
 returns: WorkfloorInstructionDraft
 ---
-Bind mappedControls = mapProcedureStepsToVerifiedControls(baseline, ambiguity). Use mappedControls for the variant local step identifiers. Carry all baseline safety controls forward. Apply a local exception only to its stated step and constraint, leaving listed inspections as mandatory. Attach translated warning text only when its warning integrity is safe. Write restart instructions from the exact interruption state and required rechecks.
+Bind mappedControls = mapProcedureStepsToVerifiedControls(baseline, ambiguity). Bind guards = preserveInspectionGuardMap(baseline, exceptions, mappedControls). Bind restartPlans = buildRestartProtocols(restarts, mappedControls, guards). Bind stepWarnings = bindWarningAssertionsToSteps(warnings.stepBindings, mappedControls).
+Use mappedControls as exact local step identifiers. Carry every baseline safety control into guards; permit a waiver only for its named step and constraint while preserving each inspection explicitly. Attach warning language only to steps named by its evidence and omit unsafe translations. Each restart protocol starts from its recorded interruption state and carries the required isolation and repeat checks.

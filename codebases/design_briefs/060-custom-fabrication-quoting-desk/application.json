@@ -87,9 +87,16 @@
   "source_files": [
     "composeFabricationQuote.nl",
     "composeFabricationQuote/matchCertifiedShopRoute.nl",
+    "composeFabricationQuote/matchCertifiedShopRoute/matchRequiredShopProcesses.nl",
+    "composeFabricationQuote/matchCertifiedShopRoute/verifyRequiredCertificateScopes.nl",
     "composeFabricationQuote/qualifyShopMeasurements.nl",
+    "composeFabricationQuote/qualifyShopMeasurements/testRequiredToleranceFit.nl",
+    "composeFabricationQuote/qualifyShopMeasurements/verifyMeasurementTraceability.nl",
     "composeFabricationQuote/selectFabricationConcept.nl",
+    "composeFabricationQuote/selectFabricationConcept/confirmPhysicalFinishReference.nl",
     "composeFabricationQuote/validateMaterialPricing.nl",
+    "composeFabricationQuote/validateMaterialPricing/reconcileToolingRevisionImpact.nl",
+    "composeFabricationQuote/validateMaterialPricing/separateCurrentMaterialOffers.nl",
     "qualification/recoverRequirements.nl",
     "types.ts"
   ]

@@ -271,19 +271,18 @@
   },
   {
     "id": "016-workflow-01",
-    "root": "runCase.nl",
+    "root": "assembleTenderResponse.nl",
     "split_group": "design-brief-app-016",
     "inputs": {
       "request": {
-        "caseId": "SYN-016-01",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
+        "responseCaseId": "SYN-016-01",
+        "tenderId": "T-16",
         "requestedBy": "case owner",
+        "deadline": "2026-10-31T17:00:00Z",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "room": {
+        "responses": [
           {
             "tenderId": "T-16",
             "customerId": "CITY-16",
@@ -350,7 +349,138 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
-        ]
+        ],
+        "addenda": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "016-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Tender section 4.2 requires a 24-hour support desk; response slot R-4.2 names the requirement and contains a sourced service commitment."
+              },
+              {
+                "id": "E2",
+                "source": "016-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Addendum AD-16 adds mandatory encryption row 4.7 after draft v2; only response sections 4.7 and 8 cite affected material."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "bundleConstraints": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "016-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Tender section 4.2 requires a 24-hour support desk; response slot R-4.2 names the requirement and contains a sourced service commitment."
+              },
+              {
+                "id": "E2",
+                "source": "016-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Addendum AD-16 adds mandatory encryption row 4.7 after draft v2; only response sections 4.7 and 8 cite affected material."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "certificates": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "016-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Tender section 4.2 requires a 24-hour support desk; response slot R-4.2 names the requirement and contains a sourced service commitment."
+              },
+              {
+                "id": "E2",
+                "source": "016-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Addendum AD-16 adds mandatory encryption row 4.7 after draft v2; only response sections 4.7 and 8 cite affected material."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "pricingSchedules": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "016-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Tender section 4.2 requires a 24-hour support desk; response slot R-4.2 names the requirement and contains a sourced service commitment."
+              },
+              {
+                "id": "E2",
+                "source": "016-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Addendum AD-16 adds mandatory encryption row 4.7 after draft v2; only response sections 4.7 and 8 cite affected material."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "portalReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "016-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Tender section 4.2 requires a 24-hour support desk; response slot R-4.2 names the requirement and contains a sourced service commitment."
+              },
+              {
+                "id": "E2",
+                "source": "016-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Addendum AD-16 adds mandatory encryption row 4.7 after draft v2; only response sections 4.7 and 8 cite affected material."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "bundleValidations": []
       }
     },
     "expected": {
@@ -358,7 +488,7 @@
     },
     "oracle": {
       "level": "judged",
-      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Generated requirement matrix, capability truth set, addendum precedence, and exact submission manifest checks.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: An addendum arrives after drafting: compute its impact and invalidate only affected approvals. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: An addendum arrives after drafting: compute its impact and invalidate only affected approvals. Use only the facts in caseId=SYN-016-01, expectedVersion=v1, version=v1, id=TENDER-T16, version=1, id=E1, source=016-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—compute its impact and invalidate only affected approvals.—as a versioned proposal against caseId=SYN-016-01, expectedVersion=v1, version=v1, id=TENDER-T16, version=1, id=E1, source=016-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (compute its impact and invalidate only affected approvals.) against caseId=SYN-016-01, expectedVersion=v1, version=v1, id=TENDER-T16, version=1, id=E1, source=016-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Generated requirement matrix, capability truth set, addendum precedence, and exact submission manifest checks.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: An addendum arrives after drafting: compute its impact and invalidate only affected approvals. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: An addendum arrives after drafting: compute its impact and invalidate only affected approvals. Use only the facts in caseId=SYN-016-01, expectedVersion=v1, version=v1, id=TENDER-T16, version=1, id=E1, source=016-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome\u2014compute its impact and invalidate only affected approvals.\u2014as a versioned proposal against caseId=SYN-016-01, expectedVersion=v1, version=v1, id=TENDER-T16, version=1, id=E1, source=016-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (compute its impact and invalidate only affected approvals.) against caseId=SYN-016-01, expectedVersion=v1, version=v1, id=TENDER-T16, version=1, id=E1, source=016-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
     },
     "scenario": "An addendum arrives after drafting: compute its impact and invalidate only affected approvals.",
     "difficulty": "operational-workflow",
@@ -366,25 +496,24 @@
     "brief_detail": "An addendum arrives after drafting: compute its impact and invalidate only affected approvals.",
     "boundary_assertions": {
       "view": "For the required user or reviewer view, make the disposition of this original condition explicit: An addendum arrives after drafting: compute its impact and invalidate only affected approvals. Use only the facts in caseId=SYN-016-01, expectedVersion=v1, version=v1, id=TENDER-T16, version=1, id=E1, source=016-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
-      "durable_state": "For durable-state proposals, represent the required outcome—compute its impact and invalidate only affected approvals.—as a versioned proposal against caseId=SYN-016-01, expectedVersion=v1, version=v1, id=TENDER-T16, version=1, id=E1, source=016-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "durable_state": "For durable-state proposals, represent the required outcome\u2014compute its impact and invalidate only affected approvals.\u2014as a versioned proposal against caseId=SYN-016-01, expectedVersion=v1, version=v1, id=TENDER-T16, version=1, id=E1, source=016-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
       "effects": "For the effect ledger, propose only a concrete next step needed for this condition (compute its impact and invalidate only affected approvals.) against caseId=SYN-016-01, expectedVersion=v1, version=v1, id=TENDER-T16, version=1, id=E1, source=016-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
     }
   },
   {
     "id": "016-workflow-02",
-    "root": "runCase.nl",
+    "root": "assembleTenderResponse.nl",
     "split_group": "design-brief-app-016",
     "inputs": {
       "request": {
-        "caseId": "SYN-016-02",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
+        "responseCaseId": "SYN-016-02",
+        "tenderId": "T-16",
         "requestedBy": "case owner",
+        "deadline": "2026-10-31T17:00:00Z",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "room": {
+        "responses": [
           {
             "tenderId": "T-16",
             "customerId": "CITY-16",
@@ -451,7 +580,138 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
-        ]
+        ],
+        "addenda": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "016-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Tender section 4.2 requires a 24-hour support desk; response slot R-4.2 names the requirement and contains a sourced service commitment."
+              },
+              {
+                "id": "E2",
+                "source": "016-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Tender portal rejects filenames over 50 characters and files over 20 MiB; prepared file F-16 is 54 characters and 8 MiB."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "bundleConstraints": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "016-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Tender section 4.2 requires a 24-hour support desk; response slot R-4.2 names the requirement and contains a sourced service commitment."
+              },
+              {
+                "id": "E2",
+                "source": "016-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Tender portal rejects filenames over 50 characters and files over 20 MiB; prepared file F-16 is 54 characters and 8 MiB."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "certificates": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "016-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Tender section 4.2 requires a 24-hour support desk; response slot R-4.2 names the requirement and contains a sourced service commitment."
+              },
+              {
+                "id": "E2",
+                "source": "016-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Tender portal rejects filenames over 50 characters and files over 20 MiB; prepared file F-16 is 54 characters and 8 MiB."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "pricingSchedules": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "016-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Tender section 4.2 requires a 24-hour support desk; response slot R-4.2 names the requirement and contains a sourced service commitment."
+              },
+              {
+                "id": "E2",
+                "source": "016-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Tender portal rejects filenames over 50 characters and files over 20 MiB; prepared file F-16 is 54 characters and 8 MiB."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "portalReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "016-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Tender section 4.2 requires a 24-hour support desk; response slot R-4.2 names the requirement and contains a sourced service commitment."
+              },
+              {
+                "id": "E2",
+                "source": "016-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Tender portal rejects filenames over 50 characters and files over 20 MiB; prepared file F-16 is 54 characters and 8 MiB."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "bundleValidations": []
       }
     },
     "expected": {
@@ -459,7 +719,7 @@
     },
     "oracle": {
       "level": "judged",
-      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Generated requirement matrix, capability truth set, addendum precedence, and exact submission manifest checks.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: The portal limits filenames or file sizes: validate before the deadline rather than during submission. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: The portal limits filenames or file sizes: validate before the deadline rather than during submission. Use only the facts in caseId=SYN-016-02, expectedVersion=v1, version=v1, id=TENDER-T16, version=1, id=E1, source=016-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—validate before the deadline rather than during submission.—as a versioned proposal against caseId=SYN-016-02, expectedVersion=v1, version=v1, id=TENDER-T16, version=1, id=E1, source=016-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (validate before the deadline rather than during submission.) against caseId=SYN-016-02, expectedVersion=v1, version=v1, id=TENDER-T16, version=1, id=E1, source=016-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Generated requirement matrix, capability truth set, addendum precedence, and exact submission manifest checks.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: The portal limits filenames or file sizes: validate before the deadline rather than during submission. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: The portal limits filenames or file sizes: validate before the deadline rather than during submission. Use only the facts in caseId=SYN-016-02, expectedVersion=v1, version=v1, id=TENDER-T16, version=1, id=E1, source=016-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome\u2014validate before the deadline rather than during submission.\u2014as a versioned proposal against caseId=SYN-016-02, expectedVersion=v1, version=v1, id=TENDER-T16, version=1, id=E1, source=016-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (validate before the deadline rather than during submission.) against caseId=SYN-016-02, expectedVersion=v1, version=v1, id=TENDER-T16, version=1, id=E1, source=016-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
     },
     "scenario": "The portal limits filenames or file sizes: validate before the deadline rather than during submission.",
     "difficulty": "operational-workflow",
@@ -467,25 +727,24 @@
     "brief_detail": "The portal limits filenames or file sizes: validate before the deadline rather than during submission.",
     "boundary_assertions": {
       "view": "For the required user or reviewer view, make the disposition of this original condition explicit: The portal limits filenames or file sizes: validate before the deadline rather than during submission. Use only the facts in caseId=SYN-016-02, expectedVersion=v1, version=v1, id=TENDER-T16, version=1, id=E1, source=016-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
-      "durable_state": "For durable-state proposals, represent the required outcome—validate before the deadline rather than during submission.—as a versioned proposal against caseId=SYN-016-02, expectedVersion=v1, version=v1, id=TENDER-T16, version=1, id=E1, source=016-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "durable_state": "For durable-state proposals, represent the required outcome\u2014validate before the deadline rather than during submission.\u2014as a versioned proposal against caseId=SYN-016-02, expectedVersion=v1, version=v1, id=TENDER-T16, version=1, id=E1, source=016-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
       "effects": "For the effect ledger, propose only a concrete next step needed for this condition (validate before the deadline rather than during submission.) against caseId=SYN-016-02, expectedVersion=v1, version=v1, id=TENDER-T16, version=1, id=E1, source=016-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
     }
   },
   {
     "id": "016-workflow-03",
-    "root": "runCase.nl",
+    "root": "assembleTenderResponse.nl",
     "split_group": "design-brief-app-016",
     "inputs": {
       "request": {
-        "caseId": "SYN-016-03",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
+        "responseCaseId": "SYN-016-03",
+        "tenderId": "T-16",
         "requestedBy": "case owner",
+        "deadline": "2026-10-31T17:00:00Z",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "room": {
+        "responses": [
           {
             "tenderId": "T-16",
             "customerId": "CITY-16",
@@ -552,7 +811,138 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
-        ]
+        ],
+        "addenda": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "016-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Tender section 4.2 requires a 24-hour support desk; response slot R-4.2 names the requirement and contains a sourced service commitment."
+              },
+              {
+                "id": "E2",
+                "source": "016-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Certificate CERT-16 expires Oct 30; contract service begins Dec 1 and renewal request has no supplier commitment receipt."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "bundleConstraints": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "016-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Tender section 4.2 requires a 24-hour support desk; response slot R-4.2 names the requirement and contains a sourced service commitment."
+              },
+              {
+                "id": "E2",
+                "source": "016-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Certificate CERT-16 expires Oct 30; contract service begins Dec 1 and renewal request has no supplier commitment receipt."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "certificates": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "016-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Tender section 4.2 requires a 24-hour support desk; response slot R-4.2 names the requirement and contains a sourced service commitment."
+              },
+              {
+                "id": "E2",
+                "source": "016-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Certificate CERT-16 expires Oct 30; contract service begins Dec 1 and renewal request has no supplier commitment receipt."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "pricingSchedules": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "016-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Tender section 4.2 requires a 24-hour support desk; response slot R-4.2 names the requirement and contains a sourced service commitment."
+              },
+              {
+                "id": "E2",
+                "source": "016-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Certificate CERT-16 expires Oct 30; contract service begins Dec 1 and renewal request has no supplier commitment receipt."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "portalReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "016-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Tender section 4.2 requires a 24-hour support desk; response slot R-4.2 names the requirement and contains a sourced service commitment."
+              },
+              {
+                "id": "E2",
+                "source": "016-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Certificate CERT-16 expires Oct 30; contract service begins Dec 1 and renewal request has no supplier commitment receipt."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "bundleValidations": []
       }
     },
     "expected": {
@@ -560,7 +950,7 @@
     },
     "oracle": {
       "level": "judged",
-      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Generated requirement matrix, capability truth set, addendum precedence, and exact submission manifest checks.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A certificate expires before contract start: disclose the timing and require an approved renewal commitment. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A certificate expires before contract start: disclose the timing and require an approved renewal commitment. Use only the facts in caseId=SYN-016-03, expectedVersion=v1, version=v1, id=TENDER-T16, version=1, id=E1, source=016-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—disclose the timing and require an approved renewal commitment.—as a versioned proposal against caseId=SYN-016-03, expectedVersion=v1, version=v1, id=TENDER-T16, version=1, id=E1, source=016-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (disclose the timing and require an approved renewal commitment.) against caseId=SYN-016-03, expectedVersion=v1, version=v1, id=TENDER-T16, version=1, id=E1, source=016-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Generated requirement matrix, capability truth set, addendum precedence, and exact submission manifest checks.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A certificate expires before contract start: disclose the timing and require an approved renewal commitment. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A certificate expires before contract start: disclose the timing and require an approved renewal commitment. Use only the facts in caseId=SYN-016-03, expectedVersion=v1, version=v1, id=TENDER-T16, version=1, id=E1, source=016-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome\u2014disclose the timing and require an approved renewal commitment.\u2014as a versioned proposal against caseId=SYN-016-03, expectedVersion=v1, version=v1, id=TENDER-T16, version=1, id=E1, source=016-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (disclose the timing and require an approved renewal commitment.) against caseId=SYN-016-03, expectedVersion=v1, version=v1, id=TENDER-T16, version=1, id=E1, source=016-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
     },
     "scenario": "A certificate expires before contract start: disclose the timing and require an approved renewal commitment.",
     "difficulty": "operational-workflow",
@@ -568,25 +958,24 @@
     "brief_detail": "A certificate expires before contract start: disclose the timing and require an approved renewal commitment.",
     "boundary_assertions": {
       "view": "For the required user or reviewer view, make the disposition of this original condition explicit: A certificate expires before contract start: disclose the timing and require an approved renewal commitment. Use only the facts in caseId=SYN-016-03, expectedVersion=v1, version=v1, id=TENDER-T16, version=1, id=E1, source=016-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
-      "durable_state": "For durable-state proposals, represent the required outcome—disclose the timing and require an approved renewal commitment.—as a versioned proposal against caseId=SYN-016-03, expectedVersion=v1, version=v1, id=TENDER-T16, version=1, id=E1, source=016-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "durable_state": "For durable-state proposals, represent the required outcome\u2014disclose the timing and require an approved renewal commitment.\u2014as a versioned proposal against caseId=SYN-016-03, expectedVersion=v1, version=v1, id=TENDER-T16, version=1, id=E1, source=016-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
       "effects": "For the effect ledger, propose only a concrete next step needed for this condition (disclose the timing and require an approved renewal commitment.) against caseId=SYN-016-03, expectedVersion=v1, version=v1, id=TENDER-T16, version=1, id=E1, source=016-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
     }
   },
   {
     "id": "016-workflow-04",
-    "root": "runCase.nl",
+    "root": "assembleTenderResponse.nl",
     "split_group": "design-brief-app-016",
     "inputs": {
       "request": {
-        "caseId": "SYN-016-04",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
+        "responseCaseId": "SYN-016-04",
+        "tenderId": "T-16",
         "requestedBy": "case owner",
+        "deadline": "2026-10-31T17:00:00Z",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "room": {
+        "responses": [
           {
             "tenderId": "T-16",
             "customerId": "CITY-16",
@@ -653,7 +1042,138 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
-        ]
+        ],
+        "addenda": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "016-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Tender section 4.2 requires a 24-hour support desk; response slot R-4.2 names the requirement and contains a sourced service commitment."
+              },
+              {
+                "id": "E2",
+                "source": "016-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Pricing sheet quantity is 500 units while technical response says 5,000; signed quantity schedule QS-16 says 500."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "bundleConstraints": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "016-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Tender section 4.2 requires a 24-hour support desk; response slot R-4.2 names the requirement and contains a sourced service commitment."
+              },
+              {
+                "id": "E2",
+                "source": "016-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Pricing sheet quantity is 500 units while technical response says 5,000; signed quantity schedule QS-16 says 500."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "certificates": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "016-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Tender section 4.2 requires a 24-hour support desk; response slot R-4.2 names the requirement and contains a sourced service commitment."
+              },
+              {
+                "id": "E2",
+                "source": "016-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Pricing sheet quantity is 500 units while technical response says 5,000; signed quantity schedule QS-16 says 500."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "pricingSchedules": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "016-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Tender section 4.2 requires a 24-hour support desk; response slot R-4.2 names the requirement and contains a sourced service commitment."
+              },
+              {
+                "id": "E2",
+                "source": "016-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Pricing sheet quantity is 500 units while technical response says 5,000; signed quantity schedule QS-16 says 500."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "portalReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "016-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Tender section 4.2 requires a 24-hour support desk; response slot R-4.2 names the requirement and contains a sourced service commitment."
+              },
+              {
+                "id": "E2",
+                "source": "016-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Pricing sheet quantity is 500 units while technical response says 5,000; signed quantity schedule QS-16 says 500."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "bundleValidations": []
       }
     },
     "expected": {
@@ -661,7 +1181,7 @@
     },
     "oracle": {
       "level": "judged",
-      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Generated requirement matrix, capability truth set, addendum precedence, and exact submission manifest checks.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: Pricing and technical teams assume different quantities: reconcile one authoritative quantity schedule. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: Pricing and technical teams assume different quantities: reconcile one authoritative quantity schedule. Use only the facts in caseId=SYN-016-04, expectedVersion=v1, version=v1, id=TENDER-T16, version=1, id=E1, source=016-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—reconcile one authoritative quantity schedule.—as a versioned proposal against caseId=SYN-016-04, expectedVersion=v1, version=v1, id=TENDER-T16, version=1, id=E1, source=016-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (reconcile one authoritative quantity schedule.) against caseId=SYN-016-04, expectedVersion=v1, version=v1, id=TENDER-T16, version=1, id=E1, source=016-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Generated requirement matrix, capability truth set, addendum precedence, and exact submission manifest checks.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: Pricing and technical teams assume different quantities: reconcile one authoritative quantity schedule. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: Pricing and technical teams assume different quantities: reconcile one authoritative quantity schedule. Use only the facts in caseId=SYN-016-04, expectedVersion=v1, version=v1, id=TENDER-T16, version=1, id=E1, source=016-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome\u2014reconcile one authoritative quantity schedule.\u2014as a versioned proposal against caseId=SYN-016-04, expectedVersion=v1, version=v1, id=TENDER-T16, version=1, id=E1, source=016-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (reconcile one authoritative quantity schedule.) against caseId=SYN-016-04, expectedVersion=v1, version=v1, id=TENDER-T16, version=1, id=E1, source=016-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
     },
     "scenario": "Pricing and technical teams assume different quantities: reconcile one authoritative quantity schedule.",
     "difficulty": "operational-workflow",
@@ -669,25 +1189,24 @@
     "brief_detail": "Pricing and technical teams assume different quantities: reconcile one authoritative quantity schedule.",
     "boundary_assertions": {
       "view": "For the required user or reviewer view, make the disposition of this original condition explicit: Pricing and technical teams assume different quantities: reconcile one authoritative quantity schedule. Use only the facts in caseId=SYN-016-04, expectedVersion=v1, version=v1, id=TENDER-T16, version=1, id=E1, source=016-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
-      "durable_state": "For durable-state proposals, represent the required outcome—reconcile one authoritative quantity schedule.—as a versioned proposal against caseId=SYN-016-04, expectedVersion=v1, version=v1, id=TENDER-T16, version=1, id=E1, source=016-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "durable_state": "For durable-state proposals, represent the required outcome\u2014reconcile one authoritative quantity schedule.\u2014as a versioned proposal against caseId=SYN-016-04, expectedVersion=v1, version=v1, id=TENDER-T16, version=1, id=E1, source=016-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
       "effects": "For the effect ledger, propose only a concrete next step needed for this condition (reconcile one authoritative quantity schedule.) against caseId=SYN-016-04, expectedVersion=v1, version=v1, id=TENDER-T16, version=1, id=E1, source=016-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
     }
   },
   {
     "id": "016-workflow-05",
-    "root": "runCase.nl",
+    "root": "assembleTenderResponse.nl",
     "split_group": "design-brief-app-016",
     "inputs": {
       "request": {
-        "caseId": "SYN-016-05",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
+        "responseCaseId": "SYN-016-05",
+        "tenderId": "T-16",
         "requestedBy": "case owner",
+        "deadline": "2026-10-31T17:00:00Z",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "room": {
+        "responses": [
           {
             "tenderId": "T-16",
             "customerId": "CITY-16",
@@ -754,7 +1273,138 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
-        ]
+        ],
+        "addenda": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "016-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Tender section 4.2 requires a 24-hour support desk; response slot R-4.2 names the requirement and contains a sourced service commitment."
+              },
+              {
+                "id": "E2",
+                "source": "016-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Portal upload U-16 timed out at 16:02; portal status query by tender ID T-16 shows accepted at 16:03."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "bundleConstraints": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "016-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Tender section 4.2 requires a 24-hour support desk; response slot R-4.2 names the requirement and contains a sourced service commitment."
+              },
+              {
+                "id": "E2",
+                "source": "016-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Portal upload U-16 timed out at 16:02; portal status query by tender ID T-16 shows accepted at 16:03."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "certificates": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "016-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Tender section 4.2 requires a 24-hour support desk; response slot R-4.2 names the requirement and contains a sourced service commitment."
+              },
+              {
+                "id": "E2",
+                "source": "016-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Portal upload U-16 timed out at 16:02; portal status query by tender ID T-16 shows accepted at 16:03."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "pricingSchedules": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "016-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Tender section 4.2 requires a 24-hour support desk; response slot R-4.2 names the requirement and contains a sourced service commitment."
+              },
+              {
+                "id": "E2",
+                "source": "016-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Portal upload U-16 timed out at 16:02; portal status query by tender ID T-16 shows accepted at 16:03."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "portalReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "016-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Tender section 4.2 requires a 24-hour support desk; response slot R-4.2 names the requirement and contains a sourced service commitment."
+              },
+              {
+                "id": "E2",
+                "source": "016-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Portal upload U-16 timed out at 16:02; portal status query by tender ID T-16 shows accepted at 16:03."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "bundleValidations": []
       }
     },
     "expected": {
@@ -762,7 +1412,7 @@
     },
     "oracle": {
       "level": "judged",
-      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Generated requirement matrix, capability truth set, addendum precedence, and exact submission manifest checks.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A portal upload times out: inspect submission status before sending a duplicate response. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A portal upload times out: inspect submission status before sending a duplicate response. Use only the facts in caseId=SYN-016-05, expectedVersion=v1, version=v1, id=TENDER-T16, version=1, id=E1, source=016-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—inspect submission status before sending a duplicate response.—as a versioned proposal against caseId=SYN-016-05, expectedVersion=v1, version=v1, id=TENDER-T16, version=1, id=E1, source=016-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (inspect submission status before sending a duplicate response.) against caseId=SYN-016-05, expectedVersion=v1, version=v1, id=TENDER-T16, version=1, id=E1, source=016-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Generated requirement matrix, capability truth set, addendum precedence, and exact submission manifest checks.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A portal upload times out: inspect submission status before sending a duplicate response. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A portal upload times out: inspect submission status before sending a duplicate response. Use only the facts in caseId=SYN-016-05, expectedVersion=v1, version=v1, id=TENDER-T16, version=1, id=E1, source=016-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome\u2014inspect submission status before sending a duplicate response.\u2014as a versioned proposal against caseId=SYN-016-05, expectedVersion=v1, version=v1, id=TENDER-T16, version=1, id=E1, source=016-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (inspect submission status before sending a duplicate response.) against caseId=SYN-016-05, expectedVersion=v1, version=v1, id=TENDER-T16, version=1, id=E1, source=016-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
     },
     "scenario": "A portal upload times out: inspect submission status before sending a duplicate response.",
     "difficulty": "operational-workflow",
@@ -770,7 +1420,7 @@
     "brief_detail": "A portal upload times out: inspect submission status before sending a duplicate response.",
     "boundary_assertions": {
       "view": "For the required user or reviewer view, make the disposition of this original condition explicit: A portal upload times out: inspect submission status before sending a duplicate response. Use only the facts in caseId=SYN-016-05, expectedVersion=v1, version=v1, id=TENDER-T16, version=1, id=E1, source=016-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
-      "durable_state": "For durable-state proposals, represent the required outcome—inspect submission status before sending a duplicate response.—as a versioned proposal against caseId=SYN-016-05, expectedVersion=v1, version=v1, id=TENDER-T16, version=1, id=E1, source=016-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "durable_state": "For durable-state proposals, represent the required outcome\u2014inspect submission status before sending a duplicate response.\u2014as a versioned proposal against caseId=SYN-016-05, expectedVersion=v1, version=v1, id=TENDER-T16, version=1, id=E1, source=016-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
       "effects": "For the effect ledger, propose only a concrete next step needed for this condition (inspect submission status before sending a duplicate response.) against caseId=SYN-016-05, expectedVersion=v1, version=v1, id=TENDER-T16, version=1, id=E1, source=016-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
     }
   }

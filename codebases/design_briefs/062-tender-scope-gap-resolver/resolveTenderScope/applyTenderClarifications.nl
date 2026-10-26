@@ -2,4 +2,4 @@
 args: { cells: TenderCoverageCell[], clarifications: TenderClarification[], revisions: TenderRevision[] }
 returns: ClarificationResult
 ---
-Apply a clarification only to its bidder, requirement, issue date, and current revision. When a later revision removes that inclusion or changes its exclusion, invalidate the earlier cell and all dependent clarification findings rather than carrying the old positive result forward.
+Bind invalidation = invalidateClarificationsAfterRevision(cells, clarifications, revisions). Recompute only cells supported by an active bidder revision and an applicable clarification issued to that bidder and requirement. Preserve stale result IDs so an earlier inclusion cannot remain active after a late bid revision removes it.

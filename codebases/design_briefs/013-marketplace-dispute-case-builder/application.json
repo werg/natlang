@@ -1,0 +1,107 @@
+{
+  "schema": "natlang.application/1",
+  "id": "013",
+  "title": "Marketplace dispute case builder",
+  "entrypoint": "adjudicateDispute.nl",
+  "interfaces": [
+    {
+      "name": "marketplaceDispute",
+      "path": "adjudicateDispute.nl",
+      "purpose": "Prepare a transaction-bound, balanced dispute recommendation with conditional outcomes, protected evidence provenance, and a scoped appeal record."
+    }
+  ],
+  "persistence": [
+    "DisputeEvent",
+    "DisputedQuestion",
+    "EvidenceFinding",
+    "DisputeRecommendation",
+    "ReviewDossier"
+  ],
+  "effects": [
+    "propose scoped restriction of exposed personal data while preserving evidence provenance",
+    "propose bilateral deadline notice only after an evidenced configured extension",
+    "withhold additional payment remedy until current external ledger reconciliation"
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "reconstructTimeline",
+        "paths": [
+          "adjudicateDispute/reconstructPurchaseChronology.nl",
+          "runCase/reconstructTimeline/audit/qualify.nl"
+        ]
+      },
+      {
+        "stage": "identifyQuestions",
+        "paths": [
+          "adjudicateDispute/deriveDecisiveQuestions.nl"
+        ]
+      },
+      {
+        "stage": "assessEvidence",
+        "paths": [
+          "adjudicateDispute/evaluateQuestionEvidence.nl"
+        ]
+      },
+      {
+        "stage": "applyRules",
+        "paths": [
+          "adjudicateDispute/applyConditionalDisposition.nl",
+          "adjudicateDispute/selectTransactionRules.nl"
+        ]
+      },
+      {
+        "stage": "prepareDisputeDossier",
+        "paths": [
+          "adjudicateDispute/assembleContestableDossier.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "adjudicateDispute/reconstructPurchaseChronology.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "adjudicateDispute/assembleContestableDossier.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "adjudicateDispute/applyConditionalDisposition.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "adjudicateDispute/applyConditionalDisposition.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "adjudicateDispute/assembleContestableDossier.nl"
+        ]
+      }
+    ]
+  },
+  "source_files": [
+    "natlang.json",
+    "adjudicateDispute.nl",
+    "adjudicateDispute/bindTransactionScope.nl",
+    "adjudicateDispute/selectTransactionRules.nl",
+    "adjudicateDispute/reconstructPurchaseChronology.nl",
+    "adjudicateDispute/deriveDecisiveQuestions.nl",
+    "adjudicateDispute/evaluateQuestionEvidence.nl",
+    "adjudicateDispute/applyConditionalDisposition.nl",
+    "adjudicateDispute/assembleContestableDossier.nl",
+    "runCase/reconstructTimeline/audit/qualify.nl",
+    "types.ts"
+  ],
+  "uses": []
+}

@@ -280,19 +280,19 @@
   },
   {
     "id": "009-workflow-01",
-    "root": "runCase.nl",
+    "root": "interpretExperiment.nl",
     "split_group": "design-brief-app-009",
     "inputs": {
-      "request": {
+      "question": {
         "caseId": "SYN-009-01",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
+        "experimentId": "EXP-9",
+        "decisionQuestion": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "decisionOwnerId": "Dr Eli Morgan",
+        "expectedReviewVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "bundle": {
+        "reviewVersion": "v1",
+        "reviews": [
           {
             "experimentId": "EXP-9",
             "originalPlanId": "PLAN-V7",
@@ -318,7 +318,7 @@
             "retentionPolicyId": "retention-009"
           }
         ],
-        "evidencePages": [
+        "plansAndAmendments": [
           {
             "evidence": [
               {
@@ -344,7 +344,163 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "metricSchemasAndEvents": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "009-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Plan v7 assigns 120 clinics to treatment or control by clinic, defines first-response time from ticket creation to first human reply, and stops at 2026-11-15."
+              },
+              {
+                "id": "E2",
+                "source": "009-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Event schema event_checkout changed from v2 to v3 on Oct 1; metric query M-9 combines both names without a version join."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "missingnessReports": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "009-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Plan v7 assigns 120 clinics to treatment or control by clinic, defines first-response time from ticket creation to first human reply, and stops at 2026-11-15."
+              },
+              {
+                "id": "E2",
+                "source": "009-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Event schema event_checkout changed from v2 to v3 on Oct 1; metric query M-9 combines both names without a version join."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "approvedAnalyses": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "009-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Plan v7 assigns 120 clinics to treatment or control by clinic, defines first-response time from ticket creation to first human reply, and stops at 2026-11-15."
+              },
+              {
+                "id": "E2",
+                "source": "009-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Event schema event_checkout changed from v2 to v3 on Oct 1; metric query M-9 combines both names without a version join."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "qualitativeAccounts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "009-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Plan v7 assigns 120 clinics to treatment or control by clinic, defines first-response time from ticket creation to first human reply, and stops at 2026-11-15."
+              },
+              {
+                "id": "E2",
+                "source": "009-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Event schema event_checkout changed from v2 to v3 on Oct 1; metric query M-9 combines both names without a version join."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "searchHistory": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "009-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Plan v7 assigns 120 clinics to treatment or control by clinic, defines first-response time from ticket creation to first human reply, and stops at 2026-11-15."
+              },
+              {
+                "id": "E2",
+                "source": "009-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Event schema event_checkout changed from v2 to v3 on Oct 1; metric query M-9 combines both names without a version join."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "followupSchemas": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "009-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Plan v7 assigns 120 clinics to treatment or control by clinic, defines first-response time from ticket creation to first human reply, and stops at 2026-11-15."
+              },
+              {
+                "id": "E2",
+                "source": "009-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Event schema event_checkout changed from v2 to v3 on Oct 1; metric query M-9 combines both names without a version join."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "policies": [
           {
             "id": "POL-009",
             "authority": "named case owner",
@@ -359,7 +515,8 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
-        ]
+        ],
+        "analysisOutputs": []
       }
     },
     "expected": {
@@ -367,7 +524,7 @@
     },
     "oracle": {
       "level": "judged",
-      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Synthetic assignment and observation processes with planted instrumentation faults; independently computed statistics and claim-scope labels.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: An event name changes halfway through: bind metrics to schema versions before aggregation. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: An event name changes halfway through: bind metrics to schema versions before aggregation. Use only the facts in caseId=SYN-009-01, expectedVersion=v1, version=v1, id=EXPERIMENT-SUPPORT-9, version=1, id=E1, source=009-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—bind metrics to schema versions before aggregation.—as a versioned proposal against caseId=SYN-009-01, expectedVersion=v1, version=v1, id=EXPERIMENT-SUPPORT-9, version=1, id=E1, source=009-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (bind metrics to schema versions before aggregation.) against caseId=SYN-009-01, expectedVersion=v1, version=v1, id=EXPERIMENT-SUPPORT-9, version=1, id=E1, source=009-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Synthetic assignment and observation processes with planted instrumentation faults; independently computed statistics and claim-scope labels.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: An event name changes halfway through: bind metrics to schema versions before aggregation. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: An event name changes halfway through: bind metrics to schema versions before aggregation. Use only the facts in caseId=SYN-009-01, expectedVersion=v1, version=v1, id=EXPERIMENT-SUPPORT-9, version=1, id=E1, source=009-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome\u2014bind metrics to schema versions before aggregation.\u2014as a versioned proposal against caseId=SYN-009-01, expectedVersion=v1, version=v1, id=EXPERIMENT-SUPPORT-9, version=1, id=E1, source=009-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (bind metrics to schema versions before aggregation.) against caseId=SYN-009-01, expectedVersion=v1, version=v1, id=EXPERIMENT-SUPPORT-9, version=1, id=E1, source=009-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
     },
     "scenario": "An event name changes halfway through: bind metrics to schema versions before aggregation.",
     "difficulty": "operational-workflow",
@@ -375,25 +532,25 @@
     "brief_detail": "An event name changes halfway through: bind metrics to schema versions before aggregation.",
     "boundary_assertions": {
       "view": "For the required user or reviewer view, make the disposition of this original condition explicit: An event name changes halfway through: bind metrics to schema versions before aggregation. Use only the facts in caseId=SYN-009-01, expectedVersion=v1, version=v1, id=EXPERIMENT-SUPPORT-9, version=1, id=E1, source=009-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
-      "durable_state": "For durable-state proposals, represent the required outcome—bind metrics to schema versions before aggregation.—as a versioned proposal against caseId=SYN-009-01, expectedVersion=v1, version=v1, id=EXPERIMENT-SUPPORT-9, version=1, id=E1, source=009-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "durable_state": "For durable-state proposals, represent the required outcome\u2014bind metrics to schema versions before aggregation.\u2014as a versioned proposal against caseId=SYN-009-01, expectedVersion=v1, version=v1, id=EXPERIMENT-SUPPORT-9, version=1, id=E1, source=009-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
       "effects": "For the effect ledger, propose only a concrete next step needed for this condition (bind metrics to schema versions before aggregation.) against caseId=SYN-009-01, expectedVersion=v1, version=v1, id=EXPERIMENT-SUPPORT-9, version=1, id=E1, source=009-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
     }
   },
   {
     "id": "009-workflow-02",
-    "root": "runCase.nl",
+    "root": "interpretExperiment.nl",
     "split_group": "design-brief-app-009",
     "inputs": {
-      "request": {
+      "question": {
         "caseId": "SYN-009-02",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
+        "experimentId": "EXP-9",
+        "decisionQuestion": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "decisionOwnerId": "Dr Eli Morgan",
+        "expectedReviewVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "bundle": {
+        "reviewVersion": "v1",
+        "reviews": [
           {
             "experimentId": "EXP-9",
             "originalPlanId": "PLAN-V7",
@@ -419,7 +576,7 @@
             "retentionPolicyId": "retention-009"
           }
         ],
-        "evidencePages": [
+        "plansAndAmendments": [
           {
             "evidence": [
               {
@@ -445,7 +602,163 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "metricSchemasAndEvents": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "009-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Plan v7 assigns 120 clinics to treatment or control by clinic, defines first-response time from ticket creation to first human reply, and stops at 2026-11-15."
+              },
+              {
+                "id": "E2",
+                "source": "009-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Analyst searched 46 subgroups; subgroup S-9 showed a low p-value after those searches and was not preregistered."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "missingnessReports": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "009-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Plan v7 assigns 120 clinics to treatment or control by clinic, defines first-response time from ticket creation to first human reply, and stops at 2026-11-15."
+              },
+              {
+                "id": "E2",
+                "source": "009-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Analyst searched 46 subgroups; subgroup S-9 showed a low p-value after those searches and was not preregistered."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "approvedAnalyses": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "009-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Plan v7 assigns 120 clinics to treatment or control by clinic, defines first-response time from ticket creation to first human reply, and stops at 2026-11-15."
+              },
+              {
+                "id": "E2",
+                "source": "009-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Analyst searched 46 subgroups; subgroup S-9 showed a low p-value after those searches and was not preregistered."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "qualitativeAccounts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "009-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Plan v7 assigns 120 clinics to treatment or control by clinic, defines first-response time from ticket creation to first human reply, and stops at 2026-11-15."
+              },
+              {
+                "id": "E2",
+                "source": "009-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Analyst searched 46 subgroups; subgroup S-9 showed a low p-value after those searches and was not preregistered."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "searchHistory": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "009-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Plan v7 assigns 120 clinics to treatment or control by clinic, defines first-response time from ticket creation to first human reply, and stops at 2026-11-15."
+              },
+              {
+                "id": "E2",
+                "source": "009-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Analyst searched 46 subgroups; subgroup S-9 showed a low p-value after those searches and was not preregistered."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "followupSchemas": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "009-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Plan v7 assigns 120 clinics to treatment or control by clinic, defines first-response time from ticket creation to first human reply, and stops at 2026-11-15."
+              },
+              {
+                "id": "E2",
+                "source": "009-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Analyst searched 46 subgroups; subgroup S-9 showed a low p-value after those searches and was not preregistered."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "policies": [
           {
             "id": "POL-009",
             "authority": "named case owner",
@@ -460,7 +773,8 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
-        ]
+        ],
+        "analysisOutputs": []
       }
     },
     "expected": {
@@ -468,7 +782,7 @@
     },
     "oracle": {
       "level": "judged",
-      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Synthetic assignment and observation processes with planted instrumentation faults; independently computed statistics and claim-scope labels.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A subgroup looks exceptional after many searches: label it exploratory and preserve the search history. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A subgroup looks exceptional after many searches: label it exploratory and preserve the search history. Use only the facts in caseId=SYN-009-02, expectedVersion=v1, version=v1, id=EXPERIMENT-SUPPORT-9, version=1, id=E1, source=009-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—label it exploratory and preserve the search history.—as a versioned proposal against caseId=SYN-009-02, expectedVersion=v1, version=v1, id=EXPERIMENT-SUPPORT-9, version=1, id=E1, source=009-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (label it exploratory and preserve the search history.) against caseId=SYN-009-02, expectedVersion=v1, version=v1, id=EXPERIMENT-SUPPORT-9, version=1, id=E1, source=009-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Synthetic assignment and observation processes with planted instrumentation faults; independently computed statistics and claim-scope labels.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A subgroup looks exceptional after many searches: label it exploratory and preserve the search history. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A subgroup looks exceptional after many searches: label it exploratory and preserve the search history. Use only the facts in caseId=SYN-009-02, expectedVersion=v1, version=v1, id=EXPERIMENT-SUPPORT-9, version=1, id=E1, source=009-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome\u2014label it exploratory and preserve the search history.\u2014as a versioned proposal against caseId=SYN-009-02, expectedVersion=v1, version=v1, id=EXPERIMENT-SUPPORT-9, version=1, id=E1, source=009-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (label it exploratory and preserve the search history.) against caseId=SYN-009-02, expectedVersion=v1, version=v1, id=EXPERIMENT-SUPPORT-9, version=1, id=E1, source=009-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
     },
     "scenario": "A subgroup looks exceptional after many searches: label it exploratory and preserve the search history.",
     "difficulty": "operational-workflow",
@@ -476,25 +790,25 @@
     "brief_detail": "A subgroup looks exceptional after many searches: label it exploratory and preserve the search history.",
     "boundary_assertions": {
       "view": "For the required user or reviewer view, make the disposition of this original condition explicit: A subgroup looks exceptional after many searches: label it exploratory and preserve the search history. Use only the facts in caseId=SYN-009-02, expectedVersion=v1, version=v1, id=EXPERIMENT-SUPPORT-9, version=1, id=E1, source=009-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
-      "durable_state": "For durable-state proposals, represent the required outcome—label it exploratory and preserve the search history.—as a versioned proposal against caseId=SYN-009-02, expectedVersion=v1, version=v1, id=EXPERIMENT-SUPPORT-9, version=1, id=E1, source=009-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "durable_state": "For durable-state proposals, represent the required outcome\u2014label it exploratory and preserve the search history.\u2014as a versioned proposal against caseId=SYN-009-02, expectedVersion=v1, version=v1, id=EXPERIMENT-SUPPORT-9, version=1, id=E1, source=009-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
       "effects": "For the effect ledger, propose only a concrete next step needed for this condition (label it exploratory and preserve the search history.) against caseId=SYN-009-02, expectedVersion=v1, version=v1, id=EXPERIMENT-SUPPORT-9, version=1, id=E1, source=009-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
     }
   },
   {
     "id": "009-workflow-03",
-    "root": "runCase.nl",
+    "root": "interpretExperiment.nl",
     "split_group": "design-brief-app-009",
     "inputs": {
-      "request": {
+      "question": {
         "caseId": "SYN-009-03",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
+        "experimentId": "EXP-9",
+        "decisionQuestion": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "decisionOwnerId": "Dr Eli Morgan",
+        "expectedReviewVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "bundle": {
+        "reviewVersion": "v1",
+        "reviews": [
           {
             "experimentId": "EXP-9",
             "originalPlanId": "PLAN-V7",
@@ -520,7 +834,7 @@
             "retentionPolicyId": "retention-009"
           }
         ],
-        "evidencePages": [
+        "plansAndAmendments": [
           {
             "evidence": [
               {
@@ -546,7 +860,163 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "metricSchemasAndEvents": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "009-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Plan v7 assigns 120 clinics to treatment or control by clinic, defines first-response time from ticket creation to first human reply, and stops at 2026-11-15."
+              },
+              {
+                "id": "E2",
+                "source": "009-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Experiment randomizes by team but report treats each user row as an independent assignment."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "missingnessReports": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "009-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Plan v7 assigns 120 clinics to treatment or control by clinic, defines first-response time from ticket creation to first human reply, and stops at 2026-11-15."
+              },
+              {
+                "id": "E2",
+                "source": "009-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Experiment randomizes by team but report treats each user row as an independent assignment."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "approvedAnalyses": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "009-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Plan v7 assigns 120 clinics to treatment or control by clinic, defines first-response time from ticket creation to first human reply, and stops at 2026-11-15."
+              },
+              {
+                "id": "E2",
+                "source": "009-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Experiment randomizes by team but report treats each user row as an independent assignment."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "qualitativeAccounts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "009-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Plan v7 assigns 120 clinics to treatment or control by clinic, defines first-response time from ticket creation to first human reply, and stops at 2026-11-15."
+              },
+              {
+                "id": "E2",
+                "source": "009-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Experiment randomizes by team but report treats each user row as an independent assignment."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "searchHistory": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "009-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Plan v7 assigns 120 clinics to treatment or control by clinic, defines first-response time from ticket creation to first human reply, and stops at 2026-11-15."
+              },
+              {
+                "id": "E2",
+                "source": "009-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Experiment randomizes by team but report treats each user row as an independent assignment."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "followupSchemas": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "009-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Plan v7 assigns 120 clinics to treatment or control by clinic, defines first-response time from ticket creation to first human reply, and stops at 2026-11-15."
+              },
+              {
+                "id": "E2",
+                "source": "009-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Experiment randomizes by team but report treats each user row as an independent assignment."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "policies": [
           {
             "id": "POL-009",
             "authority": "named case owner",
@@ -561,7 +1031,8 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
-        ]
+        ],
+        "analysisOutputs": []
       }
     },
     "expected": {
@@ -569,7 +1040,7 @@
     },
     "oracle": {
       "level": "judged",
-      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Synthetic assignment and observation processes with planted instrumentation faults; independently computed statistics and claim-scope labels.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: Assignment is by team but rows are users: reject analyses with the wrong independence unit. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: Assignment is by team but rows are users: reject analyses with the wrong independence unit. Use only the facts in caseId=SYN-009-03, expectedVersion=v1, version=v1, id=EXPERIMENT-SUPPORT-9, version=1, id=E1, source=009-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—reject analyses with the wrong independence unit.—as a versioned proposal against caseId=SYN-009-03, expectedVersion=v1, version=v1, id=EXPERIMENT-SUPPORT-9, version=1, id=E1, source=009-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (reject analyses with the wrong independence unit.) against caseId=SYN-009-03, expectedVersion=v1, version=v1, id=EXPERIMENT-SUPPORT-9, version=1, id=E1, source=009-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Synthetic assignment and observation processes with planted instrumentation faults; independently computed statistics and claim-scope labels.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: Assignment is by team but rows are users: reject analyses with the wrong independence unit. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: Assignment is by team but rows are users: reject analyses with the wrong independence unit. Use only the facts in caseId=SYN-009-03, expectedVersion=v1, version=v1, id=EXPERIMENT-SUPPORT-9, version=1, id=E1, source=009-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome\u2014reject analyses with the wrong independence unit.\u2014as a versioned proposal against caseId=SYN-009-03, expectedVersion=v1, version=v1, id=EXPERIMENT-SUPPORT-9, version=1, id=E1, source=009-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (reject analyses with the wrong independence unit.) against caseId=SYN-009-03, expectedVersion=v1, version=v1, id=EXPERIMENT-SUPPORT-9, version=1, id=E1, source=009-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
     },
     "scenario": "Assignment is by team but rows are users: reject analyses with the wrong independence unit.",
     "difficulty": "operational-workflow",
@@ -577,25 +1048,25 @@
     "brief_detail": "Assignment is by team but rows are users: reject analyses with the wrong independence unit.",
     "boundary_assertions": {
       "view": "For the required user or reviewer view, make the disposition of this original condition explicit: Assignment is by team but rows are users: reject analyses with the wrong independence unit. Use only the facts in caseId=SYN-009-03, expectedVersion=v1, version=v1, id=EXPERIMENT-SUPPORT-9, version=1, id=E1, source=009-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
-      "durable_state": "For durable-state proposals, represent the required outcome—reject analyses with the wrong independence unit.—as a versioned proposal against caseId=SYN-009-03, expectedVersion=v1, version=v1, id=EXPERIMENT-SUPPORT-9, version=1, id=E1, source=009-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "durable_state": "For durable-state proposals, represent the required outcome\u2014reject analyses with the wrong independence unit.\u2014as a versioned proposal against caseId=SYN-009-03, expectedVersion=v1, version=v1, id=EXPERIMENT-SUPPORT-9, version=1, id=E1, source=009-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
       "effects": "For the effect ledger, propose only a concrete next step needed for this condition (reject analyses with the wrong independence unit.) against caseId=SYN-009-03, expectedVersion=v1, version=v1, id=EXPERIMENT-SUPPORT-9, version=1, id=E1, source=009-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
     }
   },
   {
     "id": "009-workflow-04",
-    "root": "runCase.nl",
+    "root": "interpretExperiment.nl",
     "split_group": "design-brief-app-009",
     "inputs": {
-      "request": {
+      "question": {
         "caseId": "SYN-009-04",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
+        "experimentId": "EXP-9",
+        "decisionQuestion": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "decisionOwnerId": "Dr Eli Morgan",
+        "expectedReviewVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "bundle": {
+        "reviewVersion": "v1",
+        "reviews": [
           {
             "experimentId": "EXP-9",
             "originalPlanId": "PLAN-V7",
@@ -621,7 +1092,7 @@
             "retentionPolicyId": "retention-009"
           }
         ],
-        "evidencePages": [
+        "plansAndAmendments": [
           {
             "evidence": [
               {
@@ -647,7 +1118,163 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "metricSchemasAndEvents": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "009-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Plan v7 assigns 120 clinics to treatment or control by clinic, defines first-response time from ticket creation to first human reply, and stops at 2026-11-15."
+              },
+              {
+                "id": "E2",
+                "source": "009-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Recommendation R-9 was approved in meeting M-9 at noon; result packet arrived at 14:30 and uses the same experiment ID with new data."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "missingnessReports": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "009-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Plan v7 assigns 120 clinics to treatment or control by clinic, defines first-response time from ticket creation to first human reply, and stops at 2026-11-15."
+              },
+              {
+                "id": "E2",
+                "source": "009-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Recommendation R-9 was approved in meeting M-9 at noon; result packet arrived at 14:30 and uses the same experiment ID with new data."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "approvedAnalyses": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "009-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Plan v7 assigns 120 clinics to treatment or control by clinic, defines first-response time from ticket creation to first human reply, and stops at 2026-11-15."
+              },
+              {
+                "id": "E2",
+                "source": "009-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Recommendation R-9 was approved in meeting M-9 at noon; result packet arrived at 14:30 and uses the same experiment ID with new data."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "qualitativeAccounts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "009-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Plan v7 assigns 120 clinics to treatment or control by clinic, defines first-response time from ticket creation to first human reply, and stops at 2026-11-15."
+              },
+              {
+                "id": "E2",
+                "source": "009-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Recommendation R-9 was approved in meeting M-9 at noon; result packet arrived at 14:30 and uses the same experiment ID with new data."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "searchHistory": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "009-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Plan v7 assigns 120 clinics to treatment or control by clinic, defines first-response time from ticket creation to first human reply, and stops at 2026-11-15."
+              },
+              {
+                "id": "E2",
+                "source": "009-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Recommendation R-9 was approved in meeting M-9 at noon; result packet arrived at 14:30 and uses the same experiment ID with new data."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "followupSchemas": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "009-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Plan v7 assigns 120 clinics to treatment or control by clinic, defines first-response time from ticket creation to first human reply, and stops at 2026-11-15."
+              },
+              {
+                "id": "E2",
+                "source": "009-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Recommendation R-9 was approved in meeting M-9 at noon; result packet arrived at 14:30 and uses the same experiment ID with new data."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "policies": [
           {
             "id": "POL-009",
             "authority": "named case owner",
@@ -662,7 +1289,8 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
-        ]
+        ],
+        "analysisOutputs": []
       }
     },
     "expected": {
@@ -670,7 +1298,7 @@
     },
     "oracle": {
       "level": "judged",
-      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Synthetic assignment and observation processes with planted instrumentation faults; independently computed statistics and claim-scope labels.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A result arrives after the decision meeting: version the recommendation rather than silently editing minutes. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A result arrives after the decision meeting: version the recommendation rather than silently editing minutes. Use only the facts in caseId=SYN-009-04, expectedVersion=v1, version=v1, id=EXPERIMENT-SUPPORT-9, version=1, id=E1, source=009-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—version the recommendation rather than silently editing minutes.—as a versioned proposal against caseId=SYN-009-04, expectedVersion=v1, version=v1, id=EXPERIMENT-SUPPORT-9, version=1, id=E1, source=009-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (version the recommendation rather than silently editing minutes.) against caseId=SYN-009-04, expectedVersion=v1, version=v1, id=EXPERIMENT-SUPPORT-9, version=1, id=E1, source=009-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Synthetic assignment and observation processes with planted instrumentation faults; independently computed statistics and claim-scope labels.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A result arrives after the decision meeting: version the recommendation rather than silently editing minutes. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A result arrives after the decision meeting: version the recommendation rather than silently editing minutes. Use only the facts in caseId=SYN-009-04, expectedVersion=v1, version=v1, id=EXPERIMENT-SUPPORT-9, version=1, id=E1, source=009-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome\u2014version the recommendation rather than silently editing minutes.\u2014as a versioned proposal against caseId=SYN-009-04, expectedVersion=v1, version=v1, id=EXPERIMENT-SUPPORT-9, version=1, id=E1, source=009-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (version the recommendation rather than silently editing minutes.) against caseId=SYN-009-04, expectedVersion=v1, version=v1, id=EXPERIMENT-SUPPORT-9, version=1, id=E1, source=009-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
     },
     "scenario": "A result arrives after the decision meeting: version the recommendation rather than silently editing minutes.",
     "difficulty": "operational-workflow",
@@ -678,25 +1306,25 @@
     "brief_detail": "A result arrives after the decision meeting: version the recommendation rather than silently editing minutes.",
     "boundary_assertions": {
       "view": "For the required user or reviewer view, make the disposition of this original condition explicit: A result arrives after the decision meeting: version the recommendation rather than silently editing minutes. Use only the facts in caseId=SYN-009-04, expectedVersion=v1, version=v1, id=EXPERIMENT-SUPPORT-9, version=1, id=E1, source=009-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
-      "durable_state": "For durable-state proposals, represent the required outcome—version the recommendation rather than silently editing minutes.—as a versioned proposal against caseId=SYN-009-04, expectedVersion=v1, version=v1, id=EXPERIMENT-SUPPORT-9, version=1, id=E1, source=009-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "durable_state": "For durable-state proposals, represent the required outcome\u2014version the recommendation rather than silently editing minutes.\u2014as a versioned proposal against caseId=SYN-009-04, expectedVersion=v1, version=v1, id=EXPERIMENT-SUPPORT-9, version=1, id=E1, source=009-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
       "effects": "For the effect ledger, propose only a concrete next step needed for this condition (version the recommendation rather than silently editing minutes.) against caseId=SYN-009-04, expectedVersion=v1, version=v1, id=EXPERIMENT-SUPPORT-9, version=1, id=E1, source=009-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
     }
   },
   {
     "id": "009-workflow-05",
-    "root": "runCase.nl",
+    "root": "interpretExperiment.nl",
     "split_group": "design-brief-app-009",
     "inputs": {
-      "request": {
+      "question": {
         "caseId": "SYN-009-05",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
+        "experimentId": "EXP-9",
+        "decisionQuestion": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "decisionOwnerId": "Dr Eli Morgan",
+        "expectedReviewVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "bundle": {
+        "reviewVersion": "v1",
+        "reviews": [
           {
             "experimentId": "EXP-9",
             "originalPlanId": "PLAN-V7",
@@ -722,7 +1350,7 @@
             "retentionPolicyId": "retention-009"
           }
         ],
-        "evidencePages": [
+        "plansAndAmendments": [
           {
             "evidence": [
               {
@@ -748,7 +1376,163 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "metricSchemasAndEvents": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "009-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Plan v7 assigns 120 clinics to treatment or control by clinic, defines first-response time from ticket creation to first human reply, and stops at 2026-11-15."
+              },
+              {
+                "id": "E2",
+                "source": "009-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Metric query reports 8% conversion but exposure table has missing assignment counts for 119 users."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "missingnessReports": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "009-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Plan v7 assigns 120 clinics to treatment or control by clinic, defines first-response time from ticket creation to first human reply, and stops at 2026-11-15."
+              },
+              {
+                "id": "E2",
+                "source": "009-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Metric query reports 8% conversion but exposure table has missing assignment counts for 119 users."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "approvedAnalyses": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "009-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Plan v7 assigns 120 clinics to treatment or control by clinic, defines first-response time from ticket creation to first human reply, and stops at 2026-11-15."
+              },
+              {
+                "id": "E2",
+                "source": "009-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Metric query reports 8% conversion but exposure table has missing assignment counts for 119 users."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "qualitativeAccounts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "009-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Plan v7 assigns 120 clinics to treatment or control by clinic, defines first-response time from ticket creation to first human reply, and stops at 2026-11-15."
+              },
+              {
+                "id": "E2",
+                "source": "009-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Metric query reports 8% conversion but exposure table has missing assignment counts for 119 users."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "searchHistory": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "009-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Plan v7 assigns 120 clinics to treatment or control by clinic, defines first-response time from ticket creation to first human reply, and stops at 2026-11-15."
+              },
+              {
+                "id": "E2",
+                "source": "009-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Metric query reports 8% conversion but exposure table has missing assignment counts for 119 users."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "followupSchemas": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "009-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Plan v7 assigns 120 clinics to treatment or control by clinic, defines first-response time from ticket creation to first human reply, and stops at 2026-11-15."
+              },
+              {
+                "id": "E2",
+                "source": "009-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Metric query reports 8% conversion but exposure table has missing assignment counts for 119 users."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "policies": [
           {
             "id": "POL-009",
             "authority": "named case owner",
@@ -763,7 +1547,8 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
-        ]
+        ],
+        "analysisOutputs": []
       }
     },
     "expected": {
@@ -771,7 +1556,7 @@
     },
     "oracle": {
       "level": "judged",
-      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Synthetic assignment and observation processes with planted instrumentation faults; independently computed statistics and claim-scope labels.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A metric has no trustworthy denominator: withhold the rate and request exposure reconstruction. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A metric has no trustworthy denominator: withhold the rate and request exposure reconstruction. Use only the facts in caseId=SYN-009-05, expectedVersion=v1, version=v1, id=EXPERIMENT-SUPPORT-9, version=1, id=E1, source=009-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—withhold the rate and request exposure reconstruction.—as a versioned proposal against caseId=SYN-009-05, expectedVersion=v1, version=v1, id=EXPERIMENT-SUPPORT-9, version=1, id=E1, source=009-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (withhold the rate and request exposure reconstruction.) against caseId=SYN-009-05, expectedVersion=v1, version=v1, id=EXPERIMENT-SUPPORT-9, version=1, id=E1, source=009-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Synthetic assignment and observation processes with planted instrumentation faults; independently computed statistics and claim-scope labels.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A metric has no trustworthy denominator: withhold the rate and request exposure reconstruction. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A metric has no trustworthy denominator: withhold the rate and request exposure reconstruction. Use only the facts in caseId=SYN-009-05, expectedVersion=v1, version=v1, id=EXPERIMENT-SUPPORT-9, version=1, id=E1, source=009-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome\u2014withhold the rate and request exposure reconstruction.\u2014as a versioned proposal against caseId=SYN-009-05, expectedVersion=v1, version=v1, id=EXPERIMENT-SUPPORT-9, version=1, id=E1, source=009-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (withhold the rate and request exposure reconstruction.) against caseId=SYN-009-05, expectedVersion=v1, version=v1, id=EXPERIMENT-SUPPORT-9, version=1, id=E1, source=009-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
     },
     "scenario": "A metric has no trustworthy denominator: withhold the rate and request exposure reconstruction.",
     "difficulty": "operational-workflow",
@@ -779,7 +1564,7 @@
     "brief_detail": "A metric has no trustworthy denominator: withhold the rate and request exposure reconstruction.",
     "boundary_assertions": {
       "view": "For the required user or reviewer view, make the disposition of this original condition explicit: A metric has no trustworthy denominator: withhold the rate and request exposure reconstruction. Use only the facts in caseId=SYN-009-05, expectedVersion=v1, version=v1, id=EXPERIMENT-SUPPORT-9, version=1, id=E1, source=009-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
-      "durable_state": "For durable-state proposals, represent the required outcome—withhold the rate and request exposure reconstruction.—as a versioned proposal against caseId=SYN-009-05, expectedVersion=v1, version=v1, id=EXPERIMENT-SUPPORT-9, version=1, id=E1, source=009-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "durable_state": "For durable-state proposals, represent the required outcome\u2014withhold the rate and request exposure reconstruction.\u2014as a versioned proposal against caseId=SYN-009-05, expectedVersion=v1, version=v1, id=EXPERIMENT-SUPPORT-9, version=1, id=E1, source=009-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
       "effects": "For the effect ledger, propose only a concrete next step needed for this condition (withhold the rate and request exposure reconstruction.) against caseId=SYN-009-05, expectedVersion=v1, version=v1, id=EXPERIMENT-SUPPORT-9, version=1, id=E1, source=009-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
     }
   }

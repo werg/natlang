@@ -1,0 +1,113 @@
+{
+  "schema": "natlang.application/1",
+  "id": "017",
+  "title": "Functional substitution sourcing desk",
+  "entrypoint": "evaluateSubstitute.nl",
+  "interfaces": [
+    {
+      "name": "evaluateSubstitute",
+      "path": "evaluateSubstitute.nl",
+      "purpose": "Evaluate functional substitutions through revision-bound evidence, exact unit comparison, lot acceptance, adapter total cost, and machine-specific approval."
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "recoverFunction",
+        "paths": [
+          "sourcingDesk/recoverFunctionalConstraints.nl"
+        ]
+      },
+      {
+        "stage": "generateCandidates",
+        "paths": [
+          "sourcingDesk/generateMechanismCandidates.nl"
+        ]
+      },
+      {
+        "stage": "assessCompatibility",
+        "paths": [
+          "sourcingDesk/compareCandidateRequirements.nl"
+        ]
+      },
+      {
+        "stage": "requestQualification",
+        "paths": [
+          "sourcingDesk/designBoundedQualification.nl"
+        ]
+      },
+      {
+        "stage": "packageSubstitution",
+        "paths": [
+          "sourcingDesk/assembleUseBoundPacket.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "sourcingDesk/invalidateRevisionMatch.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "sourcingDesk/validateUnitConversion.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "sourcingDesk/verifyLotAcceptance.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "sourcingDesk/priceRequiredAdapter.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "sourcingDesk/scopeUseApproval.nl"
+        ]
+      }
+    ]
+  },
+  "persistence": {
+    "records": [
+      "FunctionalRequirement",
+      "SubstituteCandidate",
+      "CompatibilityFinding",
+      "QualificationTask",
+      "SubstitutionPacket"
+    ],
+    "writes": "proposal only; no purchasing or supplier test completion claim"
+  },
+  "effects": [
+    "supplier qualification request",
+    "technical and commercial approval packet"
+  ],
+  "source_files": [
+    "evaluateSubstitute.nl",
+    "natlang.json",
+    "qualification/recoverFunction.nl",
+    "sourcingDesk/assembleUseBoundPacket.nl",
+    "sourcingDesk/compareCandidateRequirements.nl",
+    "sourcingDesk/compareCandidateRequirements/scoreInteractingCandidateProperties.nl",
+    "sourcingDesk/designBoundedQualification.nl",
+    "sourcingDesk/extractRevisionPropertyClaims.nl",
+    "sourcingDesk/frameUse.nl",
+    "sourcingDesk/generateMechanismCandidates.nl",
+    "sourcingDesk/invalidateRevisionMatch.nl",
+    "sourcingDesk/priceRequiredAdapter.nl",
+    "sourcingDesk/recoverFunctionalConstraints.nl",
+    "sourcingDesk/scopeUseApproval.nl",
+    "sourcingDesk/selectSourcingPolicy.nl",
+    "sourcingDesk/validateUnitConversion.nl",
+    "sourcingDesk/verifyLotAcceptance.nl",
+    "types.ts"
+  ]
+}

@@ -280,19 +280,18 @@
   },
   {
     "id": "014-workflow-01",
-    "root": "runCase.nl",
+    "root": "directOnboarding.nl",
     "split_group": "design-brief-app-014",
     "inputs": {
       "request": {
         "caseId": "SYN-014-01",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
         "requestedBy": "case owner",
-        "expectedVersion": "v1"
+        "scope": "one named case",
+        "expectedVersion": "v1",
+        "excludedScope": []
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "implementation": {
+        "onboardingRecords": [
           {
             "customerId": "T-14",
             "objectives": [
@@ -347,7 +346,7 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "governingTerms": [
           {
             "id": "POL-014",
             "authority": "named case owner",
@@ -362,6 +361,136 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "accountTransferReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "014-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Customer Dana Cho and onboarding owner Luis agree that onboarding is complete when the test webhook returns a signed 2xx receipt for tenant T-14."
+              },
+              {
+                "id": "E2",
+                "source": "014-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-04",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Administrator AD-14 left tenant T-14 on Oct 3; access ledger assigns task queue to new admin Lee Wu without copying credentials."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "productionSampleComparisons": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "014-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Customer Dana Cho and onboarding owner Luis agree that onboarding is complete when the test webhook returns a signed 2xx receipt for tenant T-14."
+              },
+              {
+                "id": "E2",
+                "source": "014-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-04",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Administrator AD-14 left tenant T-14 on Oct 3; access ledger assigns task queue to new admin Lee Wu without copying credentials."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "integrationFallbackApprovals": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "014-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Customer Dana Cho and onboarding owner Luis agree that onboarding is complete when the test webhook returns a signed 2xx receipt for tenant T-14."
+              },
+              {
+                "id": "E2",
+                "source": "014-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-04",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Administrator AD-14 left tenant T-14 on Oct 3; access ledger assigns task queue to new admin Lee Wu without copying credentials."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "operatorCapabilityEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "014-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Customer Dana Cho and onboarding owner Luis agree that onboarding is complete when the test webhook returns a signed 2xx receipt for tenant T-14."
+              },
+              {
+                "id": "E2",
+                "source": "014-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-04",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Administrator AD-14 left tenant T-14 on Oct 3; access ledger assigns task queue to new admin Lee Wu without copying credentials."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "contractualDateAmendments": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "014-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Customer Dana Cho and onboarding owner Luis agree that onboarding is complete when the test webhook returns a signed 2xx receipt for tenant T-14."
+              },
+              {
+                "id": "E2",
+                "source": "014-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-04",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Administrator AD-14 left tenant T-14 on Oct 3; access ledger assigns task queue to new admin Lee Wu without copying credentials."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },
@@ -384,19 +513,18 @@
   },
   {
     "id": "014-workflow-02",
-    "root": "runCase.nl",
+    "root": "directOnboarding.nl",
     "split_group": "design-brief-app-014",
     "inputs": {
       "request": {
         "caseId": "SYN-014-02",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
         "requestedBy": "case owner",
-        "expectedVersion": "v1"
+        "scope": "one named case",
+        "expectedVersion": "v1",
+        "excludedScope": []
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "implementation": {
+        "onboardingRecords": [
           {
             "customerId": "T-14",
             "objectives": [
@@ -451,7 +579,7 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "governingTerms": [
           {
             "id": "POL-014",
             "authority": "named case owner",
@@ -466,6 +594,136 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "accountTransferReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "014-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Customer Dana Cho and onboarding owner Luis agree that onboarding is complete when the test webhook returns a signed 2xx receipt for tenant T-14."
+              },
+              {
+                "id": "E2",
+                "source": "014-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Sample import I-14 succeeds on 40 rows; production extract includes 18 null account IDs not present in sample."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "productionSampleComparisons": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "014-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Customer Dana Cho and onboarding owner Luis agree that onboarding is complete when the test webhook returns a signed 2xx receipt for tenant T-14."
+              },
+              {
+                "id": "E2",
+                "source": "014-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Sample import I-14 succeeds on 40 rows; production extract includes 18 null account IDs not present in sample."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "integrationFallbackApprovals": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "014-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Customer Dana Cho and onboarding owner Luis agree that onboarding is complete when the test webhook returns a signed 2xx receipt for tenant T-14."
+              },
+              {
+                "id": "E2",
+                "source": "014-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Sample import I-14 succeeds on 40 rows; production extract includes 18 null account IDs not present in sample."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "operatorCapabilityEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "014-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Customer Dana Cho and onboarding owner Luis agree that onboarding is complete when the test webhook returns a signed 2xx receipt for tenant T-14."
+              },
+              {
+                "id": "E2",
+                "source": "014-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Sample import I-14 succeeds on 40 rows; production extract includes 18 null account IDs not present in sample."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "contractualDateAmendments": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "014-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Customer Dana Cho and onboarding owner Luis agree that onboarding is complete when the test webhook returns a signed 2xx receipt for tenant T-14."
+              },
+              {
+                "id": "E2",
+                "source": "014-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Sample import I-14 succeeds on 40 rows; production extract includes 18 null account IDs not present in sample."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },
@@ -488,19 +746,18 @@
   },
   {
     "id": "014-workflow-03",
-    "root": "runCase.nl",
+    "root": "directOnboarding.nl",
     "split_group": "design-brief-app-014",
     "inputs": {
       "request": {
         "caseId": "SYN-014-03",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
         "requestedBy": "case owner",
-        "expectedVersion": "v1"
+        "scope": "one named case",
+        "expectedVersion": "v1",
+        "excludedScope": []
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "implementation": {
+        "onboardingRecords": [
           {
             "customerId": "T-14",
             "objectives": [
@@ -555,7 +812,7 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "governingTerms": [
           {
             "id": "POL-014",
             "authority": "named case owner",
@@ -570,6 +827,136 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "accountTransferReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "014-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Customer Dana Cho and onboarding owner Luis agree that onboarding is complete when the test webhook returns a signed 2xx receipt for tenant T-14."
+              },
+              {
+                "id": "E2",
+                "source": "014-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Vendor endpoint V-14 returned 503 for 2 hours; documented CSV route CSV-14 is approved only for provisional data exchange."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "productionSampleComparisons": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "014-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Customer Dana Cho and onboarding owner Luis agree that onboarding is complete when the test webhook returns a signed 2xx receipt for tenant T-14."
+              },
+              {
+                "id": "E2",
+                "source": "014-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Vendor endpoint V-14 returned 503 for 2 hours; documented CSV route CSV-14 is approved only for provisional data exchange."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "integrationFallbackApprovals": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "014-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Customer Dana Cho and onboarding owner Luis agree that onboarding is complete when the test webhook returns a signed 2xx receipt for tenant T-14."
+              },
+              {
+                "id": "E2",
+                "source": "014-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Vendor endpoint V-14 returned 503 for 2 hours; documented CSV route CSV-14 is approved only for provisional data exchange."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "operatorCapabilityEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "014-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Customer Dana Cho and onboarding owner Luis agree that onboarding is complete when the test webhook returns a signed 2xx receipt for tenant T-14."
+              },
+              {
+                "id": "E2",
+                "source": "014-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Vendor endpoint V-14 returned 503 for 2 hours; documented CSV route CSV-14 is approved only for provisional data exchange."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "contractualDateAmendments": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "014-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Customer Dana Cho and onboarding owner Luis agree that onboarding is complete when the test webhook returns a signed 2xx receipt for tenant T-14."
+              },
+              {
+                "id": "E2",
+                "source": "014-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Vendor endpoint V-14 returned 503 for 2 hours; documented CSV route CSV-14 is approved only for provisional data exchange."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },
@@ -592,19 +979,18 @@
   },
   {
     "id": "014-workflow-04",
-    "root": "runCase.nl",
+    "root": "directOnboarding.nl",
     "split_group": "design-brief-app-014",
     "inputs": {
       "request": {
         "caseId": "SYN-014-04",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
         "requestedBy": "case owner",
-        "expectedVersion": "v1"
+        "scope": "one named case",
+        "expectedVersion": "v1",
+        "excludedScope": []
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "implementation": {
+        "onboardingRecords": [
           {
             "customerId": "T-14",
             "objectives": [
@@ -659,7 +1045,7 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "governingTerms": [
           {
             "id": "POL-014",
             "authority": "named case owner",
@@ -674,6 +1060,136 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "accountTransferReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "014-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Customer Dana Cho and onboarding owner Luis agree that onboarding is complete when the test webhook returns a signed 2xx receipt for tenant T-14."
+              },
+              {
+                "id": "E2",
+                "source": "014-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Training attendance lists six analysts; system role register grants production write to two different users."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "productionSampleComparisons": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "014-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Customer Dana Cho and onboarding owner Luis agree that onboarding is complete when the test webhook returns a signed 2xx receipt for tenant T-14."
+              },
+              {
+                "id": "E2",
+                "source": "014-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Training attendance lists six analysts; system role register grants production write to two different users."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "integrationFallbackApprovals": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "014-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Customer Dana Cho and onboarding owner Luis agree that onboarding is complete when the test webhook returns a signed 2xx receipt for tenant T-14."
+              },
+              {
+                "id": "E2",
+                "source": "014-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Training attendance lists six analysts; system role register grants production write to two different users."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "operatorCapabilityEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "014-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Customer Dana Cho and onboarding owner Luis agree that onboarding is complete when the test webhook returns a signed 2xx receipt for tenant T-14."
+              },
+              {
+                "id": "E2",
+                "source": "014-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Training attendance lists six analysts; system role register grants production write to two different users."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "contractualDateAmendments": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "014-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Customer Dana Cho and onboarding owner Luis agree that onboarding is complete when the test webhook returns a signed 2xx receipt for tenant T-14."
+              },
+              {
+                "id": "E2",
+                "source": "014-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Training attendance lists six analysts; system role register grants production write to two different users."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },
@@ -696,19 +1212,18 @@
   },
   {
     "id": "014-workflow-05",
-    "root": "runCase.nl",
+    "root": "directOnboarding.nl",
     "split_group": "design-brief-app-014",
     "inputs": {
       "request": {
         "caseId": "SYN-014-05",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
         "requestedBy": "case owner",
-        "expectedVersion": "v1"
+        "scope": "one named case",
+        "expectedVersion": "v1",
+        "excludedScope": []
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "implementation": {
+        "onboardingRecords": [
           {
             "customerId": "T-14",
             "objectives": [
@@ -763,7 +1278,7 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "governingTerms": [
           {
             "id": "POL-014",
             "authority": "named case owner",
@@ -778,6 +1293,136 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "accountTransferReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "014-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Customer Dana Cho and onboarding owner Luis agree that onboarding is complete when the test webhook returns a signed 2xx receipt for tenant T-14."
+              },
+              {
+                "id": "E2",
+                "source": "014-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Contract start date is Nov 1; internal target calendar now shows Nov 15 after the launch delay."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "productionSampleComparisons": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "014-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Customer Dana Cho and onboarding owner Luis agree that onboarding is complete when the test webhook returns a signed 2xx receipt for tenant T-14."
+              },
+              {
+                "id": "E2",
+                "source": "014-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Contract start date is Nov 1; internal target calendar now shows Nov 15 after the launch delay."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "integrationFallbackApprovals": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "014-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Customer Dana Cho and onboarding owner Luis agree that onboarding is complete when the test webhook returns a signed 2xx receipt for tenant T-14."
+              },
+              {
+                "id": "E2",
+                "source": "014-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Contract start date is Nov 1; internal target calendar now shows Nov 15 after the launch delay."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "operatorCapabilityEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "014-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Customer Dana Cho and onboarding owner Luis agree that onboarding is complete when the test webhook returns a signed 2xx receipt for tenant T-14."
+              },
+              {
+                "id": "E2",
+                "source": "014-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Contract start date is Nov 1; internal target calendar now shows Nov 15 after the launch delay."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "contractualDateAmendments": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "014-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Customer Dana Cho and onboarding owner Luis agree that onboarding is complete when the test webhook returns a signed 2xx receipt for tenant T-14."
+              },
+              {
+                "id": "E2",
+                "source": "014-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Contract start date is Nov 1; internal target calendar now shows Nov 15 after the launch delay."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },

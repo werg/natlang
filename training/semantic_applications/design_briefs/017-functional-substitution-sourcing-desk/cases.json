@@ -1,7 +1,7 @@
 [
   {
     "id": "017-recoverFunction-supported",
-    "root": "runCase/recoverFunction/audit/qualify.nl",
+    "root": "qualification/recoverFunction.nl",
     "split_group": "design-brief-app-017",
     "inputs": {
       "draft": {
@@ -96,7 +96,7 @@
   },
   {
     "id": "017-recoverFunction-contradictory",
-    "root": "runCase/recoverFunction/audit/qualify.nl",
+    "root": "qualification/recoverFunction.nl",
     "split_group": "design-brief-app-017",
     "inputs": {
       "draft": {
@@ -191,7 +191,7 @@
   },
   {
     "id": "017-recoverFunction-missing",
-    "root": "runCase/recoverFunction/audit/qualify.nl",
+    "root": "qualification/recoverFunction.nl",
     "split_group": "design-brief-app-017",
     "inputs": {
       "draft": {
@@ -286,19 +286,19 @@
   },
   {
     "id": "017-workflow-01",
-    "root": "runCase.nl",
+    "root": "evaluateSubstitute.nl",
     "split_group": "design-brief-app-017",
     "inputs": {
       "request": {
         "caseId": "SYN-017-01",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
+        "originalItemId": "V-17",
+        "intendedUse": "Deliver at least 20 L/min at 3 bar in corrosive washdown on machine M-17",
+        "requiredBy": "2026-11-15",
         "requestedBy": "case owner",
-        "expectedVersion": "v1"
+        "approvalOwnerId": "Process Safety Board"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "catalog": {
+        "requests": [
           {
             "originalItemId": "V-17",
             "intendedUse": "Deliver at least 20 L/min at 3 bar in corrosive washdown on machine M-17",
@@ -365,6 +365,136 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "revisionChanges": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "017-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Valve V-17 must deliver 20 L/min at 3 bar in a corrosive washdown area; the process engineer identifies corrosion resistance as essential and stainless color as incidental."
+              },
+              {
+                "id": "E2",
+                "source": "017-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Functional requirement F-17 needs 20 L/min at 3 bar in corrosive washdown; catalog revision V2 lists 5 US gal/min and only 2.5 bar."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "conversionReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "017-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Valve V-17 must deliver 20 L/min at 3 bar in a corrosive washdown area; the process engineer identifies corrosion resistance as essential and stainless color as incidental."
+              },
+              {
+                "id": "E2",
+                "source": "017-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Functional requirement F-17 needs 20 L/min at 3 bar in corrosive washdown; catalog revision V2 lists 5 US gal/min and only 2.5 bar."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "lotAcceptanceRules": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "017-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Valve V-17 must deliver 20 L/min at 3 bar in a corrosive washdown area; the process engineer identifies corrosion resistance as essential and stainless color as incidental."
+              },
+              {
+                "id": "E2",
+                "source": "017-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Functional requirement F-17 needs 20 L/min at 3 bar in corrosive washdown; catalog revision V2 lists 5 US gal/min and only 2.5 bar."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "adapterQuotes": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "017-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Valve V-17 must deliver 20 L/min at 3 bar in a corrosive washdown area; the process engineer identifies corrosion resistance as essential and stainless color as incidental."
+              },
+              {
+                "id": "E2",
+                "source": "017-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Functional requirement F-17 needs 20 L/min at 3 bar in corrosive washdown; catalog revision V2 lists 5 US gal/min and only 2.5 bar."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "useApprovals": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "017-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Valve V-17 must deliver 20 L/min at 3 bar in a corrosive washdown area; the process engineer identifies corrosion resistance as essential and stainless color as incidental."
+              },
+              {
+                "id": "E2",
+                "source": "017-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Functional requirement F-17 needs 20 L/min at 3 bar in corrosive washdown; catalog revision V2 lists 5 US gal/min and only 2.5 bar."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },
@@ -387,19 +517,19 @@
   },
   {
     "id": "017-workflow-02",
-    "root": "runCase.nl",
+    "root": "evaluateSubstitute.nl",
     "split_group": "design-brief-app-017",
     "inputs": {
       "request": {
         "caseId": "SYN-017-02",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
+        "originalItemId": "V-17",
+        "intendedUse": "Deliver at least 20 L/min at 3 bar in corrosive washdown on machine M-17",
+        "requiredBy": "2026-11-15",
         "requestedBy": "case owner",
-        "expectedVersion": "v1"
+        "approvalOwnerId": "Process Safety Board"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "catalog": {
+        "requests": [
           {
             "originalItemId": "V-17",
             "intendedUse": "Deliver at least 20 L/min at 3 bar in corrosive washdown on machine M-17",
@@ -466,6 +596,136 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "revisionChanges": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "017-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Valve V-17 must deliver 20 L/min at 3 bar in a corrosive washdown area; the process engineer identifies corrosion resistance as essential and stainless color as incidental."
+              },
+              {
+                "id": "E2",
+                "source": "017-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Supplier revision C replaces bronze body with plastic; old compatibility result COMP-17 applies only to revision B."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "conversionReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "017-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Valve V-17 must deliver 20 L/min at 3 bar in a corrosive washdown area; the process engineer identifies corrosion resistance as essential and stainless color as incidental."
+              },
+              {
+                "id": "E2",
+                "source": "017-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Supplier revision C replaces bronze body with plastic; old compatibility result COMP-17 applies only to revision B."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "lotAcceptanceRules": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "017-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Valve V-17 must deliver 20 L/min at 3 bar in a corrosive washdown area; the process engineer identifies corrosion resistance as essential and stainless color as incidental."
+              },
+              {
+                "id": "E2",
+                "source": "017-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Supplier revision C replaces bronze body with plastic; old compatibility result COMP-17 applies only to revision B."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "adapterQuotes": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "017-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Valve V-17 must deliver 20 L/min at 3 bar in a corrosive washdown area; the process engineer identifies corrosion resistance as essential and stainless color as incidental."
+              },
+              {
+                "id": "E2",
+                "source": "017-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Supplier revision C replaces bronze body with plastic; old compatibility result COMP-17 applies only to revision B."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "useApprovals": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "017-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Valve V-17 must deliver 20 L/min at 3 bar in a corrosive washdown area; the process engineer identifies corrosion resistance as essential and stainless color as incidental."
+              },
+              {
+                "id": "E2",
+                "source": "017-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Supplier revision C replaces bronze body with plastic; old compatibility result COMP-17 applies only to revision B."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },
@@ -488,19 +748,19 @@
   },
   {
     "id": "017-workflow-03",
-    "root": "runCase.nl",
+    "root": "evaluateSubstitute.nl",
     "split_group": "design-brief-app-017",
     "inputs": {
       "request": {
         "caseId": "SYN-017-03",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
+        "originalItemId": "V-17",
+        "intendedUse": "Deliver at least 20 L/min at 3 bar in corrosive washdown on machine M-17",
+        "requiredBy": "2026-11-15",
         "requestedBy": "case owner",
-        "expectedVersion": "v1"
+        "approvalOwnerId": "Process Safety Board"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "catalog": {
+        "requests": [
           {
             "originalItemId": "V-17",
             "intendedUse": "Deliver at least 20 L/min at 3 bar in corrosive washdown on machine M-17",
@@ -567,6 +827,136 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "revisionChanges": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "017-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Valve V-17 must deliver 20 L/min at 3 bar in a corrosive washdown area; the process engineer identifies corrosion resistance as essential and stainless color as incidental."
+              },
+              {
+                "id": "E2",
+                "source": "017-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Sample S-17 passed 20 L/min, but production lot L-17A includes a 17 L/min unit; acceptance protocol requires lot-level testing."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "conversionReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "017-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Valve V-17 must deliver 20 L/min at 3 bar in a corrosive washdown area; the process engineer identifies corrosion resistance as essential and stainless color as incidental."
+              },
+              {
+                "id": "E2",
+                "source": "017-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Sample S-17 passed 20 L/min, but production lot L-17A includes a 17 L/min unit; acceptance protocol requires lot-level testing."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "lotAcceptanceRules": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "017-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Valve V-17 must deliver 20 L/min at 3 bar in a corrosive washdown area; the process engineer identifies corrosion resistance as essential and stainless color as incidental."
+              },
+              {
+                "id": "E2",
+                "source": "017-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Sample S-17 passed 20 L/min, but production lot L-17A includes a 17 L/min unit; acceptance protocol requires lot-level testing."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "adapterQuotes": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "017-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Valve V-17 must deliver 20 L/min at 3 bar in a corrosive washdown area; the process engineer identifies corrosion resistance as essential and stainless color as incidental."
+              },
+              {
+                "id": "E2",
+                "source": "017-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Sample S-17 passed 20 L/min, but production lot L-17A includes a 17 L/min unit; acceptance protocol requires lot-level testing."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "useApprovals": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "017-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Valve V-17 must deliver 20 L/min at 3 bar in a corrosive washdown area; the process engineer identifies corrosion resistance as essential and stainless color as incidental."
+              },
+              {
+                "id": "E2",
+                "source": "017-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Sample S-17 passed 20 L/min, but production lot L-17A includes a 17 L/min unit; acceptance protocol requires lot-level testing."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },
@@ -589,19 +979,19 @@
   },
   {
     "id": "017-workflow-04",
-    "root": "runCase.nl",
+    "root": "evaluateSubstitute.nl",
     "split_group": "design-brief-app-017",
     "inputs": {
       "request": {
         "caseId": "SYN-017-04",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
+        "originalItemId": "V-17",
+        "intendedUse": "Deliver at least 20 L/min at 3 bar in corrosive washdown on machine M-17",
+        "requiredBy": "2026-11-15",
         "requestedBy": "case owner",
-        "expectedVersion": "v1"
+        "approvalOwnerId": "Process Safety Board"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "catalog": {
+        "requests": [
           {
             "originalItemId": "V-17",
             "intendedUse": "Deliver at least 20 L/min at 3 bar in corrosive washdown on machine M-17",
@@ -668,6 +1058,136 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "revisionChanges": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "017-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Valve V-17 must deliver 20 L/min at 3 bar in a corrosive washdown area; the process engineer identifies corrosion resistance as essential and stainless color as incidental."
+              },
+              {
+                "id": "E2",
+                "source": "017-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Candidate V-17C costs $18 less but needs adapter AD-17 ($12), adds 3 weeks, and changes the flange interface."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "conversionReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "017-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Valve V-17 must deliver 20 L/min at 3 bar in a corrosive washdown area; the process engineer identifies corrosion resistance as essential and stainless color as incidental."
+              },
+              {
+                "id": "E2",
+                "source": "017-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Candidate V-17C costs $18 less but needs adapter AD-17 ($12), adds 3 weeks, and changes the flange interface."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "lotAcceptanceRules": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "017-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Valve V-17 must deliver 20 L/min at 3 bar in a corrosive washdown area; the process engineer identifies corrosion resistance as essential and stainless color as incidental."
+              },
+              {
+                "id": "E2",
+                "source": "017-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Candidate V-17C costs $18 less but needs adapter AD-17 ($12), adds 3 weeks, and changes the flange interface."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "adapterQuotes": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "017-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Valve V-17 must deliver 20 L/min at 3 bar in a corrosive washdown area; the process engineer identifies corrosion resistance as essential and stainless color as incidental."
+              },
+              {
+                "id": "E2",
+                "source": "017-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Candidate V-17C costs $18 less but needs adapter AD-17 ($12), adds 3 weeks, and changes the flange interface."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "useApprovals": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "017-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Valve V-17 must deliver 20 L/min at 3 bar in a corrosive washdown area; the process engineer identifies corrosion resistance as essential and stainless color as incidental."
+              },
+              {
+                "id": "E2",
+                "source": "017-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Candidate V-17C costs $18 less but needs adapter AD-17 ($12), adds 3 weeks, and changes the flange interface."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },
@@ -690,19 +1210,19 @@
   },
   {
     "id": "017-workflow-05",
-    "root": "runCase.nl",
+    "root": "evaluateSubstitute.nl",
     "split_group": "design-brief-app-017",
     "inputs": {
       "request": {
         "caseId": "SYN-017-05",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
+        "originalItemId": "V-17",
+        "intendedUse": "Deliver at least 20 L/min at 3 bar in corrosive washdown on machine M-17",
+        "requiredBy": "2026-11-15",
         "requestedBy": "case owner",
-        "expectedVersion": "v1"
+        "approvalOwnerId": "Process Safety Board"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "catalog": {
+        "requests": [
           {
             "originalItemId": "V-17",
             "intendedUse": "Deliver at least 20 L/min at 3 bar in corrosive washdown on machine M-17",
@@ -769,6 +1289,136 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "revisionChanges": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "017-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Valve V-17 must deliver 20 L/min at 3 bar in a corrosive washdown area; the process engineer identifies corrosion resistance as essential and stainless color as incidental."
+              },
+              {
+                "id": "E2",
+                "source": "017-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Approval APR-17 names Machine M-17 only; unrelated Machine M-18 has a different pressure profile."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "conversionReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "017-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Valve V-17 must deliver 20 L/min at 3 bar in a corrosive washdown area; the process engineer identifies corrosion resistance as essential and stainless color as incidental."
+              },
+              {
+                "id": "E2",
+                "source": "017-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Approval APR-17 names Machine M-17 only; unrelated Machine M-18 has a different pressure profile."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "lotAcceptanceRules": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "017-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Valve V-17 must deliver 20 L/min at 3 bar in a corrosive washdown area; the process engineer identifies corrosion resistance as essential and stainless color as incidental."
+              },
+              {
+                "id": "E2",
+                "source": "017-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Approval APR-17 names Machine M-17 only; unrelated Machine M-18 has a different pressure profile."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "adapterQuotes": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "017-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Valve V-17 must deliver 20 L/min at 3 bar in a corrosive washdown area; the process engineer identifies corrosion resistance as essential and stainless color as incidental."
+              },
+              {
+                "id": "E2",
+                "source": "017-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Approval APR-17 names Machine M-17 only; unrelated Machine M-18 has a different pressure profile."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "useApprovals": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "017-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Valve V-17 must deliver 20 L/min at 3 bar in a corrosive washdown area; the process engineer identifies corrosion resistance as essential and stainless color as incidental."
+              },
+              {
+                "id": "E2",
+                "source": "017-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Approval APR-17 names Machine M-17 only; unrelated Machine M-18 has a different pressure profile."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },
