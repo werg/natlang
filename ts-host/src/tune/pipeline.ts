@@ -37,6 +37,8 @@ export type TuneOptions = {
   root: string; program: ProgramDescriptor; settings: TuneSettings; student: StudentSettings & { name: string };
   /** The authorized teacher's driver and identity. */
   teacher: ModelDriver; teacherId: string;
+  /** The native serving endpoint must be checked against student.base before collection or any evaluation/rollout. */
+  assertStudentBase?: () => Promise<void>;
   /** Serves a release for validation: returns a driver that applies the release's adapters, and its loaded set. */
   /** `capture` asks the backend for exact sampling receipts on every turn (RL rollouts; native backend only). */
   serve: (release: { manifest: WeightManifest; directory: string; capture?: boolean }) => Promise<{ driver: ModelDriver; loaded: ReadonlySet<string>;
@@ -47,6 +49,12 @@ export type TuneOptions = {
    * Collection journals every call so repairs replay the same world (world.ts). */
   services?: (example: SplitExample) => Services;
 };
+
+async function assertStudentBackendIdentity(options: TuneOptions): Promise<void> {
+  if (options.settings.backend !== 'native') return;
+  if (!options.assertStudentBase) throw new Error('native tune backend requires a live student.base identity preflight');
+  await options.assertStudentBase();
+}
 
 /** Persist an evaluated arm for reports: `.natlang/tune/evaluations/<partition>/<arm>.json`. */
 export function saveArm(root: string, arm: ArmResult): void {
@@ -114,6 +122,9 @@ export function validRootRecord(root: string, example: SplitExample, scaffold: W
     const path = rootRecordPath(root, example, teacher);
     if (!existsSync(path)) continue;
     const record = JSON.parse(readFileSync(path, 'utf8')) as RootRecord;
+    if (record.imported && (typeof record.imported.result_row_sha256 !== 'string' ||
+        !(record.imported.campaign as Record<string, unknown> | undefined)?.plan ||
+        !(record.imported.campaign as Record<string, unknown> | undefined)?.runtime_receipt)) continue;
     if (rootDataValid(record, scaffold, shared)) return record;
   }
   return undefined;
@@ -122,6 +133,7 @@ export function validRootRecord(root: string, example: SplitExample, scaffold: W
 /** Discover the scope tree, split root examples before expansion, collect or reuse teacher trajectories. */
 export async function prepareData(options: TuneOptions, timings: StageTiming[] = [], log: (line: string) => void = () => {},
   scopes: ScopeOptions = {}): Promise<TuneData> {
+  await assertStudentBackendIdentity(options);
   const { root, program, student } = options;
   const { scaffold, sites } = await timed(timings, 'discover', log, () => {
     // Persistent site IDs keep an edited or moved inline site's binding, data and lambda node (tune/sites.ts).
@@ -306,6 +318,7 @@ export async function runStudentModule(student: TuneOptions['student'], module: 
 /** Load a stored release on the backend and evaluate it (and optionally other arms) over examples, strictly. */
 export async function evaluateRelease(options: TuneOptions, data: TuneData, manifest: WeightManifest | null,
   examples: readonly SplitExample[], arm: string, partition: string): Promise<ArmResult> {
+  await assertStudentBackendIdentity(options);
   // The untuned arm serves the scaffold: no artifacts to load.
   const directory = manifest ? dirname(releaseFile(options.root, manifest.digest)) : tuneDirectory(options.root);
   const served = await options.serve({ manifest: manifest ?? data.scaffold, directory });
