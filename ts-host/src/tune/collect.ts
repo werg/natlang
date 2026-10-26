@@ -75,6 +75,12 @@ export function splitExamples(examples: readonly RootExample[]): SplitExample[] 
   });
 }
 
+/** Protected roots for final reporting only (never collected, trained on or used for selection). */
+export function protectedExamples(examples: readonly RootExample[]): SplitExample[] {
+  return examples.filter(example => example.protected).map(example => ({ ...example, partition: 'confirmation' as const,
+    component: example.group ?? digest([example.function, example.input]), id: digest([example.function, example.input, example.expected ?? null]).slice(0, 16) }));
+}
+
 /** A manifest with the program's bindings and no artifacts: every call resolves its binding, all run the base. */
 export function scaffoldManifest(program: ProgramDescriptor, base: NativeModelIdentity, scopes: ScopeOptions = {}): WeightManifest {
   const { tree, bindings } = compileScopeTree(program, scopes);

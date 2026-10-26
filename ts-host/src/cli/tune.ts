@@ -6,6 +6,11 @@
  *   natlang tune <program> --watch         rebuild in the background on edits; the run/call path keeps serving
  *   natlang tune <program> --report        the latest report, status and the active release
  *   natlang tune <program> --rollback      reactivate the previous coherent release
+ *   natlang tune <program> --evaluate <development|confirmation|protected> [--with-teacher]
+ *                                          paired arms (untuned, active release, teacher reference) for reports
+ *   natlang tune <program> --placement     measured removals/refits on development roots; activates the cheapest
+ *                                          candidate within the declared success envelope
+ *   natlang tune <program> --sweep <spec>  resumable rank/penalty/data-size sweep journal (sweep.ts)
  *   natlang tune --families                cross-program family discovery and refits
  */
 import { existsSync, readdirSync, readFileSync, watch } from 'node:fs';
@@ -14,12 +19,17 @@ import { fileURLToPath } from 'node:url';
 import { buildProject } from '../compiler/node-project.js';
 import { formatDiagnostics } from '../compiler/project.js';
 import { createResolvedModelSession, executorIdentityForChoice, loadModelConfiguration } from '../model/index.js';
-import { readActive, rollbackRelease, tuneDirectory, tuneStatus } from '../adaptation/weights/release.js';
+import { activateRelease, currentManifest, readActive, readRelease, rollbackRelease, tuneDirectory, tuneStatus } from '../adaptation/weights/release.js';
 import type { ModelDriver } from '../runtime/runtime.js';
 import type { DecisionRequest, ModelTurnRequest, ModelTurnOptions } from '../contracts.js';
 import { loadTuneSettings } from '../tune/settings.js';
 import { uploadRelease } from './weights.js';
-import { tuneProgram, type TuneReport } from '../tune/pipeline.js';
+import { evaluateRelease, prepareData, saveArm, tuneProgram, type TuneOptions, type TuneReport } from '../tune/pipeline.js';
+import { evaluateRoots } from '../tune/evaluate.js';
+import { protectedExamples, readRootExamples } from '../tune/collect.js';
+import { runPlacement } from '../tune/placement.js';
+import { runSweep, type SweepSpec } from '../tune/sweep.js';
+import { formatOverview, loadOverview } from '../tune/report.js';
 
 const RUNTIME_MODULE = { url: new URL('../index.js', import.meta.url).href, path: fileURLToPath(new URL('../index.js', import.meta.url)),
   types: fileURLToPath(new URL('../index.d.ts', import.meta.url)), specifiers: ['@natlang/node'] };
@@ -43,11 +53,12 @@ function formatReport(report: TuneReport): string {
 
 export async function tuneCommand(argv: readonly string[], io: { out: (text: string) => void; err: (text: string) => void } =
   { out: text => process.stdout.write(text + '\n'), err: text => process.stderr.write(text + '\n') }): Promise<number> {
-  const flags = new Set(argv.filter(arg => arg.startsWith('--') && !['--examples', '--student', '--teacher'].includes(arg)));
+  const valuedNames = ['--examples', '--student', '--teacher', '--evaluate', '--sweep', '--partition'];
+  const flags = new Set(argv.filter(arg => arg.startsWith('--') && !valuedNames.includes(arg)));
   const value = (name: string) => { const index = argv.indexOf(name); return index >= 0 ? argv[index + 1] : undefined; };
-  const valued = new Set(['--examples', '--student', '--teacher'].flatMap(name => { const i = argv.indexOf(name); return i >= 0 ? [i, i + 1] : []; }));
+  const valued = new Set(valuedNames.flatMap(name => { const i = argv.indexOf(name); return i >= 0 ? [i, i + 1] : []; }));
   const words = argv.filter((arg, index) => !arg.startsWith('--') && !valued.has(index));
-  const known = new Set(['--incremental', '--watch', '--report', '--rollback', '--families', '--json']);
+  const known = new Set(['--incremental', '--watch', '--report', '--rollback', '--families', '--json', '--placement', '--with-teacher']);
   for (const flag of flags) if (!known.has(flag)) throw new Error(`natlang tune: unknown option ${flag}`);
   if (flags.has('--families'))
     throw new Error('natlang tune --families: cross-program family training is not implemented yet (plans/HIERARCHICAL_LORA_TUNING.md §5.5); program tunes run with no family level');
@@ -57,14 +68,15 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
   if (flags.has('--report')) {
     const reports = join(tuneDirectory(root), 'reports');
     const latest = existsSync(reports) ? readdirSync(reports).sort().at(-1) : undefined;
-    const status = tuneStatus(root);
+    const status = tuneStatus(root), overview = loadOverview(root, value('--partition') ?? 'development');
     if (flags.has('--json')) io.out(JSON.stringify({ status, active: readActive(root) ?? null,
-      report: latest ? JSON.parse(readFileSync(join(reports, latest), 'utf8')) : null }, null, 2));
+      report: latest ? JSON.parse(readFileSync(join(reports, latest), 'utf8')) : null, overview }, null, 2));
     else io.out([`status: ${status.status}${status.reason ? ` (${status.reason})` : ''}`,
-      latest ? formatReport(JSON.parse(readFileSync(join(reports, latest), 'utf8')) as TuneReport) : 'no tune report yet'].join('\n'));
+      latest ? formatReport(JSON.parse(readFileSync(join(reports, latest), 'utf8')) as TuneReport) : 'no tune report yet',
+      formatOverview(overview)].join('\n'));
     return 0;
   }
-  const once = async (): Promise<TuneReport> => {
+  const withOptions = async <T>(fn: (options: TuneOptions) => Promise<T>): Promise<T> => {
     const { settings, student } = loadTuneSettings(process.env, { student: value('--student'), teacher: value('--teacher') });
     const inventory = buildProject({ project: root, emit: false, write: false, runtimeModule: RUNTIME_MODULE });
     if (!inventory.ok) throw new Error(formatDiagnostics(inventory.diagnostics));
@@ -72,7 +84,7 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
     const teacherConfig = loadModelConfiguration(settings.teacher);
     const teacherSession = createResolvedModelSession(teacherConfig.choice, process.env, process.stderr);
     try {
-      return await tuneProgram({ root, program, settings, student, teacher: driverOf(teacherSession),
+      return await fn({ root, program, settings, student, teacher: driverOf(teacherSession),
         teacherId: executorIdentityForChoice(teacherConfig.choice).id, examplesPath: value('--examples'), log: io.err,
         serve: async ({ manifest, directory }) => {
           if (settings.backend === 'native') {
@@ -93,6 +105,52 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
         } });
     } finally { await teacherSession.close(); }
   };
+  const once = () => withOptions(options => tuneProgram(options));
+  const partition = value('--evaluate');
+  if (partition !== undefined) {
+    if (!['development', 'confirmation', 'protected'].includes(partition)) throw new Error('--evaluate takes development, confirmation or protected');
+    await withOptions(async options => {
+      const data = await prepareData(options, [], io.err);
+      const examples = partition === 'protected' ? protectedExamples(readRootExamples(root, options.examplesPath))
+        : data.examples.filter(example => example.partition === partition);
+      if (!examples.length) throw new Error(`no ${partition} roots to evaluate`);
+      const current = currentManifest(root);
+      const arms = [await evaluateRelease(options, data, null, examples, 'untuned', partition)];
+      if (current) arms.push(await evaluateRelease(options, data, current, examples, String(current.receipts.variant ?? '').startsWith('placement') ? 'placed' : 'hierarchy', partition));
+      // The teacher reference runs as an isolated evaluator: its answers are never training data.
+      if (flags.has('--with-teacher')) arms.push(await evaluateRoots({ root, program: options.program, driver: options.teacher, weights: [], examples,
+        arm: 'teacher', release: null, partition }));
+      for (const arm of arms) saveArm(root, arm);
+    });
+    io.out(formatOverview(loadOverview(root, partition)));
+    return 0;
+  }
+  if (flags.has('--placement')) {
+    const result = await withOptions(async options => {
+      const reference = currentManifest(root);
+      if (!reference) throw new Error('placement starts from an active release; run natlang tune first');
+      const data = await prepareData(options, [], io.err);
+      const placed = await runPlacement(options, data, reference, { log: io.err });
+      if (placed.selected.release !== reference.digest && placed.selected.exercised) {
+        const loaded = readRelease(root, placed.selected.release).artifacts.map(item => item.artifact);
+        activateRelease(root, placed.selected.release, { backend: { kind: options.settings.backend, loaded, identity: options.student.base },
+          readiness: { definition: data.examples.find(example => example.partition === 'development')!.function, ok: true,
+            effectiveIdentity: placed.selected.exercised, ms: placed.selected.meanMs } }, readActive(root)?.release ?? null);
+      }
+      return placed;
+    });
+    io.out(flags.has('--json') ? JSON.stringify(result, null, 2) : formatOverview(loadOverview(root, 'development')));
+    return 0;
+  }
+  const sweepPath = value('--sweep');
+  if (sweepPath !== undefined) {
+    const spec = JSON.parse(readFileSync(resolve(sweepPath), 'utf8')) as SweepSpec;
+    const result = await withOptions(async options => runSweep(options, await prepareData(options, [], io.err), spec, io.err));
+    io.out(flags.has('--json') ? JSON.stringify(result, null, 2) : `sweep ${spec.name}: ${result.cells.length} cells; selected ` +
+      (result.selected ? `${result.selected.arm} ${result.selected.recipe} size ${result.selected.size} (development ${(result.selected.development!.success * 100).toFixed(1)}%)` : 'none') +
+      `\njournal: ${result.journal}`);
+    return 0;
+  }
   if (!flags.has('--watch')) {
     const report = await once();
     io.out(flags.has('--json') ? JSON.stringify(report, null, 2) : formatReport(report));

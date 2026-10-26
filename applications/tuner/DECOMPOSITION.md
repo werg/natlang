@@ -64,9 +64,10 @@ Decisions: **fn** (its own natural-language function), **inline** (one instructi
 | Joint objective and per-binding path routing | crisp | `tune/objective.py` + shared native trainer | Autodiff and loss normalization. |
 | Family gates and amplitude convention | crisp | `tune/gates.py` | Exact projection and norms. |
 | Propose families from effective-delta similarity | fn over crisp evidence | `proposeFamilies.nl` reading `tune/similarity.py` output | Similarity is exact; naming and grouping candidates by meaning is a judgment. Membership is published crisply as a version. |
-| Propose placement removals, subtree roots, rank changes | fn | `proposePlacement.nl` | Choosing what to try next from ablation evidence is policy. Execution, refit and paired measurement are crisp. |
+| Propose placement removals, subtree roots, rank changes | pluggable | `runPlacement({ propose, treeRoots })` in `ts-host/src/tune/placement.ts`; crisp default `deepestFirst`, NL `proposePlacement.nl` to be measured live before adoption | Choosing what to try next from ablation evidence is policy. Execution, refit and paired measurement are crisp. |
 | Accept a placement candidate | crisp | quality-envelope rule in the manifest | The rule (lowest measured cost within the declared success envelope) is exact once measured. |
-| Rank/penalty sweep scheduling | host | shared recipe scheduler | Operational. |
+| Rank/penalty sweep scheduling | host | `ts-host/src/tune/sweep.ts` (resumable journal, development-only selection) | Operational; structural arms map onto recipe ranks. |
+| Paired evaluation and reports | crisp | `ts-host/src/tune/evaluate.ts`, `stats.ts` (component-clustered bootstrap), `report.ts` | Exact measurement and arithmetic. |
 | Distillation into each base | crisp + existing recipe | shared production SFT recipe admission | Uses the existing admission/exposure mechanism. |
 
 ### SFT and RL (plan §5.1a)

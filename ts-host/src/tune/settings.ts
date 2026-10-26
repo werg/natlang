@@ -42,7 +42,16 @@ export type TuneSettings = {
   /** A model profile name: the authorized teacher that executes the program during collection. */
   readonly teacher: string;
   readonly backend: 'managed-local' | 'native';
+  /** Default trainer recipe fields (natlang_neuralese.tune.trainer.Recipe), shared across programs. */
+  readonly recipe?: Readonly<Record<string, unknown>>;
+  /** Placement envelope (plan §5.2). */
+  readonly placement?: PlacementSettings;
 };
+/** Accept the cheapest measured candidate whose development success is at most `maxSuccessLoss` below the unpruned
+ * stack; cost = weighted active ranks, exported bytes, distinct stacks and measured latency. */
+export type PlacementSettings = { readonly maxSuccessLoss: number;
+  readonly costWeights: { readonly rank: number; readonly bytes: number; readonly stack: number; readonly latencyMs: number } };
+export const DEFAULT_PLACEMENT: PlacementSettings = { maxSuccessLoss: 0.02, costWeights: { rank: 1, bytes: 1e-6, stack: 4, latencyMs: 0.01 } };
 
 export class TuneSetupError extends Error {
   constructor(message: string) { super(`tune-setup: ${message}; run natlang setup or edit the tune block of ${configPath()}`); this.name = 'TuneSetupError'; }
@@ -69,5 +78,7 @@ export function loadTuneSettings(environment: NodeJS.ProcessEnv = process.env, o
   if (!config.profiles?.[teacher]) throw new TuneSetupError(`teacher profile ${teacher} does not exist`);
   const backend = tune.backend ?? 'managed-local';
   if (backend === 'managed-local' && !student.baseGgufSha256) throw new TuneSetupError(`tune.students.${name}.baseGgufSha256 is required for the managed-local backend`);
-  return { settings: { student: name, students: tune.students!, teacher, backend }, student: { ...student, name } };
+  return { settings: { student: name, students: tune.students!, teacher, backend, ...(tune.recipe ? { recipe: tune.recipe } : {}),
+    placement: { ...DEFAULT_PLACEMENT, ...tune.placement, costWeights: { ...DEFAULT_PLACEMENT.costWeights, ...tune.placement?.costWeights } } },
+    student: { ...student, name } };
 }
