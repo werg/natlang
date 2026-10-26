@@ -170,17 +170,13 @@ h1 em { display: block; font: italic 400 94px/1.05 "Libre Caslon Text", Georgia,
 .pillbtn.primary { background: var(--vermilion); border-color: var(--vermilion); color: var(--cream); }
 .smallnote { font-size: 15px; font-style: italic; color: var(--text-2); }
 
-.tape {
-  display: flex; flex-wrap: wrap; gap: 14px 10px; justify-content: space-between; padding: 20px 24px; margin-top: 18px;
-  background-color: var(--cream); color: var(--navy);
-  background-image: radial-gradient(circle, var(--navy) 3.2px, transparent 3.8px); background-size: 22px 22px; background-position: 0 50%; background-repeat: repeat-x;
-  border-radius: 4px; box-shadow: var(--shadow);
-}
-.tape div { flex: 1 1 140px; min-width: 0; padding: 10px 12px; background: var(--cream); font-size: 15px; line-height: 1.4; }
-.tape b { display: block; font: 700 24px/1.2 Jost, sans-serif; }
-.tape i { display: block; }
-.tape .now { background: var(--vermilion); color: var(--cream); }
-.tape .who { font-size: 13px; letter-spacing: 0.04em; }
+.codeplate .fname { display: block; padding: 14px 20px 6px; font: 700 12px/1.2 "Courier Prime", monospace; color: var(--sky); }
+.codeplate pre.code { margin: 0 20px; background: #14203a; box-shadow: none; font-size: 13.5px; }
+.codeplate .plate-cap { margin-top: 18px; }
+.facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; margin-top: 56px; }
+.facts div { padding: 16px 18px 16px; border-radius: 4px; background: var(--card); color: var(--card-ink); box-shadow: var(--shadow), 0 0 0 1px var(--plate-edge), inset 0 6px 0 var(--fc); padding-top: 22px; font-size: 16px; line-height: 1.5; }
+.facts b { display: block; font: 700 15px/1.3 Jost, sans-serif; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 6px; }
+.facts a { display: inline-block; margin-top: 6px; font: 700 12px/1 Jost, sans-serif; letter-spacing: 0.14em; text-transform: uppercase; color: var(--vermilion-ink); }
 
 .sechead { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 30px; border-bottom: 3px solid var(--rule); padding-bottom: 12px; margin-bottom: 24px; }
 .sechead h2 { margin: 0; font: 700 34px/1.05 Jost, sans-serif; text-transform: uppercase; }
@@ -522,7 +518,6 @@ footer { margin-top: 80px; border-top: 3px solid var(--rule); padding: 22px 0 60
   .jit { grid-template-columns: minmax(0, 1fr); }
   .jit > div + div { border-left: 0; border-top: 2px solid var(--line); }
   .read { max-width: none; }
-  .hero .htext { order: -1; }
 }
 @media (max-width: 640px) {
   body { font-size: 17px; }

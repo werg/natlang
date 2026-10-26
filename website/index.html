@@ -105,7 +105,7 @@
     <a href="#policy" style="--c: #efb02e" aria-label="IX. Policy and mechanism"></a>
   </nav>
   <nav class="barlinks" aria-label="Site">
-    <a href="#plates">Plates</a>
+    <a href="#plates">Contents</a>
     <a href="https://github.com/werg/natlang/blob/main/spec/SPEC.md">Spec</a>
     <a href="#try">Try it</a>
   </nav>
@@ -120,46 +120,54 @@
 <!-- ================================================================ HOME -->
 <section class="wrap home">
   <div class="hero">
-    <div class="plate" style="--pb: #1d2840; --pt: #f2e9d6">
-      <div class="plate-top"><span class="plate-title">A function with a prose body</span></div>
-      <svg class="emblem" viewBox="0 0 520 400" role="img" aria-label="A large lambda over a grid of core memory. Its variable is ticket and its body is a paragraph on a card. A row of console lamps runs below.">
-        <g stroke="#2f9c92" stroke-width="1.6"><path d="M30 60 H490 M30 120 H490 M30 180 H490 M30 240 H490 M30 300 H490"/><path d="M60 30 V330 M140 30 V330 M220 30 V330 M300 30 V330 M380 30 V330 M460 30 V330"/></g>
-        <g fill="none" stroke="#f2e9d6" stroke-width="2.6"><ellipse cx="60" cy="60" rx="11" ry="5" transform="rotate(45 60 60)"/><ellipse cx="140" cy="60" rx="11" ry="5" transform="rotate(-45 140 60)"/><ellipse cx="460" cy="60" rx="11" ry="5" transform="rotate(45 460 60)"/><ellipse cx="60" cy="180" rx="11" ry="5" transform="rotate(-45 60 180)"/><ellipse cx="60" cy="300" rx="11" ry="5" transform="rotate(45 60 300)"/><ellipse cx="460" cy="300" rx="11" ry="5" transform="rotate(-45 460 300)"/><ellipse cx="380" cy="300" rx="11" ry="5" transform="rotate(45 380 300)"/></g>
-        <g fill="#efb02e" stroke="#efb02e" stroke-width="2.6"><ellipse cx="220" cy="60" rx="11" ry="5" transform="rotate(45 220 60)"/><ellipse cx="60" cy="120" rx="11" ry="5" transform="rotate(45 60 120)"/><ellipse cx="460" cy="180" rx="11" ry="5" transform="rotate(-45 460 180)"/><ellipse cx="140" cy="300" rx="11" ry="5" transform="rotate(-45 140 300)"/></g>
-        <path d="M84 70 H138 L296 330" fill="none" stroke="#c4421f" stroke-width="44"/>
-        <path d="M214 196 L116 330" fill="none" stroke="#c4421f" stroke-width="44"/>
-        <text x="268" y="112" font-family="Courier Prime, monospace" font-weight="700" font-size="28" fill="#f2e9d6">ticket.</text>
-        <rect x="270" y="132" width="216" height="150" rx="3" fill="#f2e9d6"/>
-        <text x="286" y="156" font-family="Jost, sans-serif" font-weight="700" font-size="11" letter-spacing="2.5" fill="#a8381a">BODY</text>
-        <g font-family="Libre Caslon Text, serif" font-style="italic" font-size="15" fill="#1d2840"><text x="286" y="182">A ticket is urgent when</text><text x="286" y="204">many customers are</text><text x="286" y="226">affected right now, money</text><text x="286" y="248">is being lost, or security</text><text x="286" y="270">is at risk. Requests …</text></g>
-        <g><circle cx="60" cy="370" r="9" fill="#efb02e"/><circle cx="100" cy="370" r="9" fill="#33426a"/><circle cx="140" cy="370" r="9" fill="#efb02e"/><circle cx="180" cy="370" r="9" fill="#efb02e"/><circle cx="220" cy="370" r="9" fill="#33426a"/><circle cx="260" cy="370" r="9" fill="#9cc8d6"/><circle cx="300" cy="370" r="9" fill="#33426a"/><circle cx="340" cy="370" r="9" fill="#efb02e"/><circle cx="380" cy="370" r="9" fill="#33426a"/><circle cx="420" cy="370" r="9" fill="#efb02e"/><circle cx="460" cy="370" r="9" fill="#33426a"/></g>
-      </svg>
-      <p class="plate-cap"><b>0</b><span>isUrgent ≡ λticket. ⟨a paragraph⟩ : string → boolean</span></p>
-    </div>
-
     <div class="htext">
-      <h1>Functions whose bodies are <em>paragraphs.</em></h1>
-      <p class="lead">natlang is TypeScript with natural-language functions. A natural-language function has an ordinary, checked TypeScript signature, and its body is instructions. A model, possibly a small local one, executes the instructions inside a persistent TypeScript scope, and the value it returns must match the signature.</p>
+      <h1>TypeScript with <em>natural-language functions.</em></h1>
+      <p class="lead">natlang lets you write the parts of a program that need judgment, such as labelling a support ticket or summarizing a report, as typed functions whose bodies are instructions in plain English. A model, often a small local one, carries out the instructions. The compiler fixes each function's types before the model runs, and the runtime checks that what comes back has those types. Everything else is ordinary TypeScript.</p>
       <div class="actions">
-        <a class="pillbtn primary" href="#contract">Start with plate I</a>
+        <a class="pillbtn primary" href="#contract">Start with chapter I</a>
         <a class="pillbtn" href="https://github.com/werg/natlang/blob/main/spec/SPEC.md">Read the specification</a>
       </div>
-      <p class="smallnote">Each exhibit on this page is a small JavaScript model of one rule from the specification and runs in your browser. No language model is called; where an exhibit shows a model's answer, the answer is an example and is marked as one. The specification is a draft, version 0.5.</p>
+      <p class="smallnote">The page has nine short chapters. Each ends with an exhibit you can operate: a small JavaScript model of one rule from the specification (version 0.5, a draft). No language model is called.</p>
+    </div>
+
+    <div class="plate codeplate" style="--pb: #1d2840; --pt: #f2e9d6">
+      <div class="plate-top"><span class="plate-title">A natlang program</span></div>
+      <span class="fname">examples/triage/classify.nl</span>
+      <pre class="code" data-hl="nl">---
+description: Label one ticket using the rubric.
+args:
+  ticket: string
+  rubric: string
+returns: Label
+---
+Pick the label from rubric that fits ticket. If no
+rule in the rubric covers the ticket, report an
+error saying what is missing.</pre>
+      <span class="fname">examples/triage/triage.ts</span>
+      <pre class="code" data-hl>import classify from './classify.nl';
+
+export async function triage(
+  tickets: string[], rubric: string,
+) {
+  const labels = await Promise.all(
+    tickets.map(ticket =&gt; classify(ticket, rubric)));
+  // labels: Label[], checked before this line runs
+  …
+}</pre>
+      <p class="plate-cap"><b>0</b><span>classify.nl is a natural-language function. triage.ts imports it and calls it like any other async function.</span></p>
     </div>
   </div>
 
-  <p style="margin: 56px 0 0">natlang builds on ideas from the first decades of computing:</p>
-  <div class="tape">
-    <div><b>1936</b><i>The λ-calculus describes all computation with functions.</i><span class="who">Church</span></div>
-    <div><b>1936</b><i>A machine reads and writes a tape one square at a time.</i><span class="who">Turing</span></div>
-    <div><b>1943</b><i>A neuron is modelled as a logical threshold unit.</i><span class="who">McCulloch &amp; Pitts</span></div>
-    <div><b>1956</b><i>A summer research project is named “artificial intelligence”.</i><span class="who">Dartmouth</span></div>
-    <div><b>1958</b><i>LISP uses λ to compute with symbols.</i><span class="who">McCarthy</span></div>
-    <div><b>1978</b><i>Types are inferred from how values are used.</i><span class="who">Milner</span></div>
-    <div class="now"><b>Now</b><i>The body of the λ is a paragraph.</i><span class="who">natlang</span></div>
+  <div class="facts">
+    <div style="--fc: #efb02e"><b>Model calls are typed function calls.</b> The compiler works out each call's argument and result types before the model runs. A wrong-shaped answer goes back to the model as an error, never to your code. <a href="#contract">Chapters I and II</a></div>
+    <div style="--fc: #2f9c92"><b>Small models are enough.</b> The program holds the algorithm and the data flow. Each natural-language function makes one narrow judgment, which a small local model can carry out. <a href="#policy">Chapter IX</a></div>
+    <div style="--fc: #9cc8d6"><b>Programs end by construction.</b> There are no while loops and no recursion between natural-language functions, and open-ended loops need a decreasing measure or an English stopping test. No token budgets are needed. <a href="#termination">Chapter V</a></div>
+    <div style="--fc: #c4421f"><b>Variables are captured by name.</b> Mention a variable in the instructions and the function reads its current value. Text from outside the program can be marked untrusted, and then it can never become instructions. <a href="#captures">Chapter III</a></div>
+    <div style="--fc: #1d2840"><b>Every call is recorded.</b> Traces show what the model did. Inputs that always lead to the same code are compiled into plain TypeScript cases that answer without the model. <a href="#jit">Chapters IV and VII</a></div>
+    <div style="--fc: #6a4c93"><b>Judgments are measurable.</b> Finite answers come back as probability distributions, and a type can carry an English predicate that is checked at run time. <a href="#judgment">Chapter VI</a></div>
   </div>
 
-  <p style="margin: 56px 0 0; max-width: 46em">Here is a complete natural-language function from the repository's support-ticket example. Its signature takes a string and returns a boolean; its body is the paragraph a model executes. You can switch the body to ordinary code, or to shadow mode, which runs both and shows where they disagree. Click a ticket to call the function on it.</p>
+  <p style="margin: 56px 0 0; max-width: 46em">Another function from the same example decides whether a ticket is urgent. Click a ticket to call it. You can also replace its English body with a regular expression, or run both side by side in shadow mode to see where they disagree; the caller's code does not change.</p>
   <div class="panel exa">
     <div class="panel-h" style="flex: 1 1 100%"><span class="lamps"><i></i><i></i><i></i></span><span id="swap-file">is_urgent.nl</span><span class="right sim">code runs for real · prose answers are examples</span></div>
     <div class="main swap" id="swap">
@@ -175,20 +183,19 @@
       </div>
     </div>
     <div class="side">
-      <span class="label" style="color: #9cc8d6; margin: 0">The same function written in LISP</span>
-<pre>(define is-urgent
-  (lambda (ticket)      <span class="c1">; string</span>
-    <span class="c2">"A ticket is urgent when many
-     customers are affected right
-     now, money is being lost, …"</span>))
-                         <span class="c1">; → boolean</span></pre>
-      <p style="margin: 0; font-style: italic; font-size: 16px">In LISP the body of a λ is an expression that the machine evaluates. In natlang it is a paragraph that a model executes.</p>
+      <span class="label" style="color: #9cc8d6; margin: 0">The caller</span>
+<pre>import isUrgent from './is_urgent.nl';
+
+const flags = await Promise.all(
+  tickets.map(t =&gt; isUrgent(t)));
+<span class="c1">// boolean[], whichever body runs</span></pre>
+      <p style="margin: 0; font-size: 16px">The body can be swapped without touching callers because both versions have the same signature. natlang provides this as <code style="background: #33426a">pluggable({ crisp, nl }, mode)</code>, described in chapter IX.</p>
     </div>
   </div>
 </section>
 
 <section class="wrap" id="plates">
-  <div class="sechead"><h2>Nine plates</h2><p>Each plate is one chapter with one working exhibit.</p></div>
+  <div class="sechead"><h2>Contents</h2><p>Nine chapters, each with an exhibit you can operate.</p></div>
   <div class="plates">
     <a class="plate" href="#contract" style="--pb: #1d2840; --pt: #f2e9d6"><div class="plate-top"><span class="plate-title">The contract</span></div><svg class="emblem" viewBox="0 0 300 180" aria-hidden="true"><use href="#em-1"/></svg><p class="plate-cap"><b>I</b><span>How a natural-language call is typed and checked.</span></p></a>
     <a class="plate" href="#inference" style="--pb: #efb02e; --pt: #1d2840"><div class="plate-top"><span class="plate-title">Typed holes</span></div><svg class="emblem" viewBox="0 0 300 180" aria-hidden="true"><use href="#em-2"/></svg><p class="plate-cap"><b>II</b><span>How the compiler infers a result type from later uses.</span></p></a>
@@ -277,7 +284,7 @@ the ticket, report an error saying what is missing.</pre>
     </div>
     <div class="ex stack">
       <div class="panel" id="infer">
-        <div class="panel-h"><span class="lamps"><i></i><i></i><i></i></span><span>The inference machine</span><span class="right sim">same rules, simplified</span></div>
+        <div class="panel-h"><span class="lamps"><i></i><i></i><i></i></span><span>Inference from later uses</span><span class="right sim">same rules, simplified</span></div>
         <div class="panel-b">
           <pre class="code" data-hl>const r = await nl`Judge how bad ticket is.`(ticket);</pre>
           <span class="label" style="margin-top: 14px">Later uses of r: throw a lever to add or remove one</span>
@@ -664,7 +671,7 @@ the ticket, report an error saying what is missing.</pre>
   <div class="cols">
     <div class="read">
       <p>The project's design rule is to start every component as a natlang program: typed natural-language functions, callable folders, and services for the outside world, with ordinary code only where exactness or the outside world requires it. Any component that makes a decision, such as which model serves a call, what to fuse, what to promote or how to recover, is a natlang program, including parts of natlang's own runtime and compiler. TypeScript handles services, the command line, atomic commits, exact checks of what the natural-language stages produce, and plumbing.</p>
-      <p>When a decision is on a hot path, it gets one interface with both implementations behind a setting. Exhibit A on the home section uses this primitive:</p>
+      <p>When a decision is on a hot path, it gets one interface with both implementations behind a setting. The <code>isUrgent</code> example at the top of the page uses this primitive:</p>
       <pre class="code" data-hl>import { pluggable } from '@natlang/node';
 const choose = pluggable(
   { crisp: chooseTierCrisp, nl: chooseTier },

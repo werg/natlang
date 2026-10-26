@@ -9,7 +9,7 @@ python3 -m http.server -d website 8000   # then open http://localhost:8000
 
 | File | Contents |
 |---|---|
-| `index.html` | The page: a home section and nine chapters. Each chapter opens with a poster plate, explains one part of the language and ends in a working exhibit |
+| `index.html` | The page: an introduction with a complete example, then nine chapters. Each chapter opens with a poster plate, explains one part of the language and ends in a working exhibit |
 | `style.css` | Flat poster palette with fixed meanings (mustard is prose, sky is types, plum is soft values, vermilion is the λ, actions and errors), light and dark themes, layout |
 | `app.js` | The exhibits. Each one is a small re-implementation of one rule from the specification |
 
