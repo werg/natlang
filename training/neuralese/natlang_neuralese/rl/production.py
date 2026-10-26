@@ -610,6 +610,10 @@ def collect_with_actor(config, values, **kwargs):
             receipt=next(iter(saved['actor_receipts'].values()))
             binding=saved.get('coefficient_policy') or {}
             _bind_collected_coefficient_policy(values,kwargs,{key:binding.get(key) for key in ('path','sha256')},receipt['native_identity'])
+        continuation = (config.get('sealed_collection_continuations') or {}).get(str(Path(kwargs['out']).resolve()))
+        if continuation is not None:
+            from .sealed_collection import resume_sealed_collection
+            return resume_sealed_collection(continuation, kwargs, validate_actors=validate_actor_receipts)
         return collect(**kwargs)  # sealed packet already owns exact durable blocks
     control = kwargs.get('control')
     template = config.get('actor_command')
